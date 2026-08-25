@@ -1459,3 +1459,36 @@ a current risk and the design's registers are its statement of current risk.
 
 *Column layout matches the source registers; the C-register rows carry three columns
 rather than four, as they did there.*
+
+
+---
+
+## Author working session — presence record scope (2026-08-25)
+
+**References as-of-filing**, per this file's standing rule.
+
+| # | Item | Disposition |
+|---|---|---|
+| 1 | `Participant.locator` | **REMOVED.** Nothing reads it; sweep of eleven consuming exchanges recorded at design §7.2.1 |
+| 2 | Selective disclosure (§14.5.3, proposed 14 days) | **ADOPTED, rescoped.** Salted digest list, not a Merkle tree. Design §7.2.1, `wire-format.md` §4.5.1–2 |
+| 3 | Merkle tree vs digest list | **FIXED-DIFFERENTLY.** At nine leaves a tree adds hazards and saves nothing |
+| 4 | "Only lever that addresses composition directly" | **NOT-A-FINDING → corrected.** Wrong in both halves; P2 and C2 are untouched by any field-level measure |
+| 5 | Over-asking hazard (drafter-raised) | **WITHDRAWN by the author.** Policy is pluggable; interfaces are not (§1.1). Coercing a degraded client is out-of-protocol |
+| 6 | `AbuseReport.reporter` | **REMOVED.** Synonymous with `resource`; signer-binding MUST added in its place |
+
+### The finding worth carrying forward
+
+**The legitimate use of location and the leak are the same computation.** §7.1.7's
+impossible-travel check and P21 both require a *series* of coarse geohashes; neither
+works on one. So no field-level mechanism can separate them — it can only choose who
+receives the series. That was not visible until the consuming exchanges were enumerated,
+and it is the reason §7.2.1 states the trade rather than claiming a mitigation.
+
+### Method note
+
+**The sweep changed the answer twice.** Asked to cost a mechanism, enumerating its
+consumers found (a) a field with no consumer at all, better deleted than made optional,
+and (b) that the mechanism could not do the thing it was proposed for. **Costing a
+proposal by enumerating who consumes the data is cheaper than building it**, and it is
+the second time in two days that a §18.2 item dissolved against its source sections
+rather than against the summary.

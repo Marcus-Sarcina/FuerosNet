@@ -517,6 +517,10 @@ describes** — in an adoption, field 1, the adopted node (field 5).
 [D] Otherwise a sender could present one identity's keyhash alongside another's
 key material, and a recipient pinning from the transaction would pin the wrong key.
 
+**A dereferenced proof-of-presence record needs none of §4.5.1's disclosable fields.**
+[D] The check is that the record exists and names these two parties, both of which are
+body fields. A fully withheld record satisfies it.
+
 **Structural verification does not dereference `proof_of_presence`.** [D] The field
 names a presence record by txid; confirming that record exists, and that it names
 this node and this patron, requires fetching it. **That is an evaluation step, not a
@@ -628,7 +632,7 @@ accepting an unverified object.
 | 4 | Peering | both infra nodes | Topology |
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
 | 6 | Resource registration | owner only | Topology |
-| 7 | Abuse report | reporter only | Attestation (point-to-point, never broadcast) |
+| 7 | Abuse report | the reporting resource only | Attestation (point-to-point, never broadcast) |
 
 Type 6 carries a `CatalogEntry` (design §9.5) and registers a resource; type 7
 carries an `AbuseReport` (design §9.6) addressed to a resource owner.
@@ -983,19 +987,18 @@ Field-for-field per design §7.2.
 
 ```
 {
-  1: timestamp,        ; started_at
   2: timestamp,        ; finalized_at
-                       ; duration is derivable and no longer carried; an
-                       ; earlier field 3 duplicated finalized_at - started_at
-                       ; and could disagree with it
+                       ; FIELD 1 (started_at) is DISCLOSABLE — see §4.5.1
+                       ; FIELD 3 WITHDRAWN: duration, derivable from the two
+                       ;   timestamps and able to disagree with them
   4: [ Participant, Participant ],
-  5: Proximity,
-  6: Capture,
-  7: LocationEvidence,
   8: [ * Witness ],
   9: [ * VerifierResponse ],
-  10: uint,            ; record subtype: 0 = normal, 1 = formation (design §10.8.2)
-  11: uint             ; seed window ordinal = floor(unix_seconds / 86400)
+  11: uint,            ; seed window ordinal = floor(unix_seconds / 86400)
+  12: bstr .size 32    ; disclosure root (§4.5.1) — commits to every disclosable
+                       ;   field. Fields 1, 5, 6, 7 and 10, and Participant
+                       ;   fields 4 and 5, moved out of the body and are
+                       ;   committed here instead
 
   ; key 0 (chain back-pointers) is common to all bodies (see §3.1).
   ; NOTE: no patron signature appears in a presence record. Patrons do not
@@ -1003,12 +1006,16 @@ Field-for-field per design §7.2.
 }
 
 Participant = {
-  1: keyhash,
-  2: Locator,
-                       ; disclosure policy removed 2026-08-16 — superseded by
-                       ; per-query subject countersignature (design §7.1.4)
-  4: [ uint, uint ],   ; retention: [photo_years, template_years]
-  5: ? ClientIntegrity
+  1: keyhash
+                       ; FIELD 2 WITHDRAWN [2026-08-25]: a locator recording
+                       ;   "position at meeting time". Nothing read it, and it
+                       ;   was the historical half of design §14.5.1's worked
+                       ;   example. Number not reused
+                       ; FIELD 3 WITHDRAWN [2026-08-16]: disclosure policy,
+                       ;   superseded by the per-query subject countersignature
+                       ;   (design §7.1.4). Number not reused
+                       ; Fields 4 and 5 are DISCLOSABLE and are carried in the
+                       ;   disclosure set, not here (§4.5.1)
 }
 
 ClientIntegrity = { 1: bool, 2: uint, 3: ? bstr }   ; attested, scheme, evidence
@@ -1106,6 +1113,115 @@ latency samples, precise coordinates. Everything identifying stays on the
 participants' devices.
 
 ---
+
+### 4.5.1 Selective disclosure
+
+**A holder can present a presence record without the fields a given recipient has no
+use for.** [D — 2026-08-25] Scoped deliberately: this hides **location, position,
+retention, client integrity, capture parameters, proximity channels, start time and
+subtype**, and hides **nothing else**. See design §7.2.1 for what it does not reach
+and why.
+
+#### The construction is a digest list, not a tree
+
+**Each disclosable field becomes a salted digest; the body commits to the sorted
+list of digests.** [D]
+
+```
+Disclosure   = [ bstr .size 16, tstr .size (1..32), any ]
+                 ; salt, label, value
+digest(D)    = SHA-256( 0x00 || deterministic CBOR of D )
+root         = SHA-256( 0x01 || concatenation of all digests, ascending by label )
+```
+
+`root` is body field 12. **Labels are the field's path**, so a decoder knows what it
+is looking at without a table: `started_at`, `proximity`, `capture`, `location`,
+`subtype`, `p0.retention`, `p0.integrity`, `p1.retention`, `p1.integrity`.
+
+**Why not a Merkle tree.** design §14.5.3 proposed one, following SD-JWT loosely. At
+the leaf count here — nine for a typical record — a tree buys nothing: inclusion
+proofs would cost four hashes each where sending every digest costs nine, and a tree
+adds real hazards a flat list does not have, **odd-node handling and the
+duplicated-node second-preimage class**. SD-JWT's own construction is a digest array
+for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
+digest can never be reinterpreted as a root or the reverse.
+
+#### Salts are mandatory
+
+**Every disclosure carries a fresh 16-byte salt.** [D] Without one, an undisclosed
+field is recovered by brute force from its digest: `subtype` has two values,
+`liveness` three, a precision-3 geohash about 32,000, and a timestamp is guessable
+within the ceremony window. **A salted digest is the only thing that makes withholding
+mean anything here.**
+
+**Salts are agreed during the ceremony**, because both participants sign one body and
+must therefore compute one root. They are ordinary record state afterwards, held by
+both participants and by anyone given a full record.
+
+#### What travels
+
+| Form | Carries |
+|---|---|
+| **Full record** | body + every `Disclosure` |
+| **Minimised** | body + the revealed `Disclosure`s + the **digests** of the withheld ones |
+| **Fully withheld** | body + all nine digests |
+
+**A recipient verifies by recomputing `root`** from what it holds — revealed
+disclosures hashed, withheld digests taken as given — and checking it equals field 12,
+which the envelope signature covers. A mismatch means the presentation is malformed,
+not that a field is missing.
+
+**Withholding is visible, and that is deliberate.** The digest count and the labels
+are always present, so a recipient always knows a field exists and was withheld. This
+is the same posture as §4.6.5's `pending` and `unavailable` verifier responses:
+absence is legible rather than silent, and a policy may weight it.
+
+#### Cost
+
+**+16 bytes per disclosable field at rest** — about 144 bytes on a ~35 KB record,
+**0.4%**. A minimised presentation carries 32 bytes per withheld field, at most 288
+bytes. **Presentation size does not otherwise fall**: a presence record is ~96%
+signatures and the envelope requires exactly the required signer set, so a minimised
+record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
+
+#### What a decoder MUST do
+
+- **Reject a record whose recomputed root does not equal field 12.**
+- **Reject duplicate labels**, and a label outside the set above.
+- **Reject a `Disclosure` whose salt is not exactly 16 bytes.**
+- **Accept any subset of disclosures, including none.** A minimised record is
+  well-formed; only a root mismatch is malformed.
+- **Never treat a withheld field as a default value.** Withheld is not zero, not
+  absent, and not `unavailable` — it is unknown, and §4.5.2 says which recipients may
+  require it.
+
+### 4.5.2 Which exchanges see the disclosable fields
+
+**Stated per exchange, because a holder needs to know what a given recipient will be
+able to read.** design §7.2.1 carries the same table with the reasoning.
+
+| Exchange | Disclosable fields |
+|---|---|
+| Ceremony, at creation (design §7.1.1) | **All.** Both parties construct the body |
+| Witness signing (design §7.1.1) | **Location only**, which the witness corroborates |
+| Verification by query (§4.6.6, design §7.1.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
+| Verifier-selection recomputation (§4.6) | **None.** Seed inputs are body fields 4, 8, 11 |
+| Finalization threshold (§4.6.5) | **None.** Counts field 9 |
+| Structural verification (§3.2) | **None.** Signatures, back-pointers, timestamps, participant distinctness |
+| Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
+| Archive fetch by a prospective patron (§5.8) | **Holder's choice.** The only exchange with a use for location |
+| Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
+| Late verifier response (§5.3b) | **None.** References `txid` |
+| Segment key grant (§5.3a) | **None.** References `txid` |
+
+**Ten of eleven exchanges need none of it**, which is what makes the mechanism worth
+its 0.4%. **A conforming client withholds by default and reveals on the holder's
+instruction**, rather than the reverse.
+
+**No exchange may demand a disclosable field as a condition of proceeding.** [D] The
+interface for each exchange above is fixed, and design §1.1 makes the evidence schema
+the one thing that is not pluggable — a recipient weights what it receives, and cannot
+make an interface carry what the interface does not define.
 
 ### 4.6 Verifier selection — recomputation
 
@@ -1434,8 +1550,11 @@ a matter between the owner and whoever relied on it.
 ```
 
 AbuseReport = {
-  1: keyhash,        ; resource
-  2: keyhash,        ; reporter
+  1: keyhash,        ; resource — and the signer. A resource reports; its owner
+                     ;   receives (design §9.6)
+                     ; FIELD 2 WITHDRAWN [2026-08-25]: a separate `reporter`.
+                     ;   With the direction settled it named the same party as
+                     ;   field 1. Number not reused
   3: timestamp,
   4: uint,           ; 0 unavailable | 1 malfunction | 2 excessive-load
                      ; 3 unauthorised-access-attempt | 4 content | 5 other
@@ -1443,11 +1562,18 @@ AbuseReport = {
                      ; the network. **Bounded, and deliberately small.** The
                      ; report goes to the resource's own owner, who already holds
                      ; the context, so the bound is not about what the recipient
-                     ; learns — it is that a signed object is **portable**, and a
-                     ; reporter may hand it to anyone (design §9.6, P27). A
+                     ; learns — it is that a signed object is **portable** and the
+                     ; owner may hand it to anyone (design §9.6, P27). A
                      ; resource needing more should reference its own record
-                     ; rather than inline it
-  6: COSE_Sign1      ; by the reporter
+                     ; rather than inline it.
+                     ; An application wanting to name which of ITS users
+                     ; complained puts that in here, as its own schema. It is
+                     ; application data: the network has no user-signed report,
+                     ; because that would require a user's network client to
+                     ; interoperate with arbitrary third-party applications
+  6: COSE_Sign1      ; BY THE RESOURCE named in field 1. The signing key's
+                     ;   keyhash MUST equal field 1 — otherwise the object
+                     ;   attributes a complaint to a party that did not make one
 }
 ```
 
@@ -2122,6 +2248,12 @@ protecting against — draining a victim's pool to force them onto the last-reso
 key — without requiring anyone to prove why they asked.
 
 ### 5.8 Archive fetch
+
+**A presence record arrives in whatever form its holder chose** (§4.5.1). The
+disclosable fields may be revealed or withheld, withholding is visible in the digest
+list, and the record verifies either way. **This is the only fetch path with a use for
+location**, so it is the only one where the choice carries information (§4.5.2).
+
 
 **A patron given an archive head (§4.1 field 7) walks the chain backward.** Doing
 that one record per round trip would be prohibitive, so fetching is batched.
@@ -2910,10 +3042,15 @@ classical column applies only to session-layer traffic.
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |
 | Peering | — | **~8 KB** |
-| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65 [D — design §5, design §7.3] |
+| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65 [D — design §5, design §7.3]. Includes ~144 B of disclosure salts, **0.4%** (§4.5.1) |
 | Presence record (maximum signers) | ~5 KB | **~65 KB** — 18 logical signers × (64 + 3,309), plus 32 verifier responses at 2 classical signatures each |
 | Currency attestation | ~150 B | ~2.6 KB |
 | Anchor entry | ~60 B | ~60 B (hashes only) |
+
+**Selective disclosure does not reduce a presentation.** A minimised record replaces
+each withheld field with a 32-byte digest, at most ~288 B, against ~34 KB of signatures
+that cannot be omitted — the envelope requires exactly the required signer set. It buys
+disclosure control, not bandwidth (§4.5.1).
 
 Presence records are the deliberate PQ exception: rare, and they must remain
 verifiable for decades. A few hundred per user per decade is under 10 MB lifetime.

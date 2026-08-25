@@ -1317,6 +1317,10 @@ face-to-face encounter as evidence of identity continuity, its client must
 automatically ask a sample of that claimed identity's prior counterparties
 whether the person now present matches the person they previously encountered.*
 
+**A verifier receives no part of the record.** [D] The query carries a fuzzed profile
+and a query id; the record does not exist yet, and none of §7.2.1's disclosable fields
+reaches the verifier at any point.
+
 **This is detection, not prevention, and only works if querying is routine** —
 which is why it is a client obligation rather than a user action. Present
 encoding: query by default on every presence transaction, against several prior
@@ -2004,6 +2008,21 @@ Field-level specification. **`wire-format.md` is authoritative on encoding**; th
 shapes here are for reading alongside the rationale and will drift if edited
 independently. All signature fields are **COSE structures** (RFC 9052), see
 
+**A participant's locator is no longer carried.** [D — 2026-08-25] It recorded
+*position at meeting time*, and a sweep of every event that transmits or evaluates a
+presence record (§7.2.1) found nothing that reads it. It was also stale by
+construction — `wire-format.md` §2.3's strictly-greater rule means any later locator
+supersedes it and nothing resolves against an old one — while being the field that
+made §14.5.1's worked example work.
+
+**What its removal does and does not do.** It removes the **historical** position
+series, so a set of records no longer traces where a participant sat over time. It
+does **not** remove position inference: the participants' keyhashes remain, and an
+observer holding topology can look up where those keys sit **now**. Witnesses are
+named and are neighbourhood members by cross-nomination (§7.1.1), so the witness set
+still discloses a neighbourhood. The gain is that trajectory is gone and only a
+current snapshot remains.
+
 **They have drifted already, and in a way worth naming**: the shapes below give
 witnesses and corroborations their own `COSE_Sign1`, while the wire schema has
 witnesses authenticate as **envelope signers** and gives corroborations no
@@ -2015,27 +2034,28 @@ signature placement.**
 PresenceRecord {
   # --- header ---
   type              : "presence"
-  subtype           : enum{normal, formation}    # §10.8.2 — PERMANENT, never
-                                                 # rewritten; a formation record
-                                                 # must never age into looking
-                                                 # like a normal one
+  subtype           : enum{normal, formation}    # DISCLOSABLE. §10.8.2 —
+                                                 # PERMANENT, never rewritten; a
+                                                 # formation record must never age
+                                                 # into looking like a normal one
   schema_version    : uint16
   txid              : H(canonical body)          # content-addressed
-  started_at        : timestamp
-  finalized_at      : timestamp
+  started_at        : timestamp                  # DISCLOSABLE
+  finalized_at      : timestamp                  # body — window checks need it
+  disclosure_root   : bstr[32]                   # §7.2.1
 
   # --- participants (exactly 2) ---
   participants[2] {
     identity        : keyhash                    # permanent
-    locator         : { anchor, path, sequence } # position at meeting time
-    retention       : { photo_years, template_years }          # §7.1.5.1
-                    # disclosure_policy removed 2026-08-16 — superseded by
-                    # per-query subject countersignature (§7.1.4)
-    client_integrity: { attested: bool, scheme: enum, evidence: opaque }  # §7.1.8
     signature       : COSE_Signature within the envelope's COSE_Sign
+    # retention and client_integrity are DISCLOSABLE (§7.2.1) and travel in the
+    # disclosure set rather than the body
+    # locator removed 2026-08-25 — see below
+    # disclosure_policy removed 2026-08-16 — superseded by the per-query
+    #   subject countersignature (§7.1.4)
   }
 
-  # --- proximity evidence ---
+  # --- proximity evidence --- DISCLOSABLE
   proximity {
     channels[]      : { kind: enum{uwb, nfc, optical, latency},
                         result: enum{pass, fail, unavailable},
@@ -2044,7 +2064,7 @@ PresenceRecord {
     strongest       : enum                        # highest-ranked channel passed
   }
 
-  # --- capture evidence (NO biometric data) ---
+  # --- capture evidence (NO biometric data) --- DISCLOSABLE
   capture {
     modality        : enum{still, stereo, depth}  # §7.1.5, forward-compat
     image_count     : uint8                       # 3-5, guided variation
@@ -2052,7 +2072,7 @@ PresenceRecord {
     liveness_version: uint16
   }
 
-  # --- location ---
+  # --- location --- DISCLOSABLE
   location {
     asserted[]      : { method: enum{gnss, cell_id},
                         geohash: string(3..4),    # ~156 km at p3, ~39x19.5 km at p4; §7.1.7
@@ -2137,6 +2157,86 @@ A brand-new identity has n=0 and needs none; an established one caps at ten, so
 the check never scales with history. Non-responsive verifiers are noticed and
 de-trusted **separately**, as a fact about the verifier, rather than blocking the
 transaction.
+
+#### 7.2.1 Selective disclosure, and what it reaches
+
+**A holder can withhold the fields a given recipient has no use for.** [D —
+2026-08-25] Each disclosable field is committed as a salted digest and the body
+commits to the list; the envelope signature covers the body, so a recipient verifies a
+partial presentation against the same signature. Encoding: `wire-format.md` §4.5.1.
+
+**Disclosable:** location evidence, per-participant retention tiers, client integrity,
+capture parameters, proximity channels, `started_at`, and record subtype.
+
+**This was scoped by a sweep, not by preference.** Eleven exchanges transmit or
+evaluate a presence record, and what each actually reads decides what may be withheld:
+
+| Exchange | Reads | Location? |
+|---|---|---|
+| Ceremony, at creation (§7.1.1) | everything | were there |
+| Witness signing (§7.1.1) | its own corroboration | **contributes it** |
+| Verification by query (§7.1.3) | a fuzzed profile and a query id — **not the record**, which does not exist yet | no |
+| Verifier-selection recomputation (§7.2.2) | nonces, seed, candidate set | no |
+| Finalization threshold (§7.1.4) | verifier responses | no |
+| Structural verification (`wire-format.md` §3.2) | signatures, back-pointers, timestamps, participant distinctness | no |
+| Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
+| Archive presentation to a prospective patron (§13.7) | signatures, and counterparties the patron already knows (§8.1) | **benefits** |
+| Trust metric (§13.2) | graph edges, which come from adoptions | no |
+| Presence-based recovery (§7.4.1) | verifier responses | no |
+| Late response, segment key grant (`wire-format.md` §5.3a–b) | `txid` | no |
+
+**Ten of eleven have no use for it.** The mechanism exists because a record currently
+reaches all of them whole.
+
+##### What it does not reach, and why
+
+**Not the signer set.** `kid` sits in the COSE protected header, on the envelope,
+outside the body — so **every participant and witness keyhash is on the record however
+little the body discloses.** Worse, `wire-format.md` §3 infers signer role by comparing
+each `kid` to the body's fields, so withholding the participant or witness lists would
+break role inference: a correctness failure, not a privacy limit. That inference was
+itself a deliberate choice, and a signer-role field was rejected as redundant and
+forgeable.
+
+**So P2 and C2 are untouched** — the verifier and witness graph is the High finding
+this cannot help with. §14.5.2 records the only direction that would, threshold or
+aggregate signatures, and what it costs: the visible-absence property.
+
+**Nor the verification machinery.** Chain back-pointers, participant and witness
+keyhashes, `finalized_at`, the seed window ordinal and the verifier responses all stay
+in the body, because §7.2.2's recomputability invariant depends on them — *if B cannot
+recompute the selection A performed, B can never clear themselves.*
+
+##### The use and the harm are the same computation
+
+**Location's one legitimate consumer needs a series, and so does the leak.** §7.1.7
+gives the checks as impossible travel by rigorous induction and statistical divergence
+from a user's typical patterns — both longitudinal, neither supported by a single
+geohash. P21 says the harm is longitudinal for the same reason: a time series of coarse
+cells reveals commuting, travel, employment and residence.
+
+**So field-level disclosure cannot separate the use from the harm. It separates
+audiences.** The party that legitimately runs impossible travel is a prospective patron
+reading an archive prefix — the same party P19 flags for receiving an intelligible
+history and C4 flags for reading it against local knowledge. **That is the trade this
+mechanism offers and the whole of it**: the one recipient with a use for location is
+also the most dangerous holder of it, and everyone else stops receiving it.
+
+##### Withholding is visible
+
+The digest count and labels always travel, so a recipient knows a field exists and was
+withheld. Same posture as `pending` and `unavailable` verifier responses: absence is
+legible and a policy may weight it, rather than being silently indistinguishable from a
+field that was never there.
+
+**Over-asking is not available.** A recipient can weight what it receives however it
+likes — §13.1 makes policy pluggable — but it cannot make an exchange carry a field the
+exchange does not define. §1.1: the evidence schema is the one thing that is not
+pluggable, because the schema is the interface and policy is only the interpretation.
+
+**Cost: 16 bytes per disclosable field at rest**, about 144 bytes on a ~35 KB record,
+**0.4%**. Presentation size does not otherwise fall — a presence record is ~96%
+signatures — so this buys disclosure control and not bandwidth.
 
 #### 7.2.2 Verifier selection
 
@@ -3393,12 +3493,12 @@ and durable, not because it traverses the network in the ordinary case.
 
 ```
 AbuseReport = {
-  resource     : keyhash
-  reporter     : keyhash
+  resource     : keyhash           ; and the signer; there is no separate reporter
   occurred_at  : timestamp
   category     : uint              ; small enumeration, below
   detail       : ? opaque          ; resource-defined, uninterpreted
-  signature    : COSE_Sign1        ; by the reporter
+  signature    : COSE_Sign1        ; by the resource. Its keyhash MUST equal
+                                   ;   `resource`
 }
 ```
 
@@ -3409,24 +3509,33 @@ Categories are deliberately few and structural rather than judgemental:
 **The protocol defines no response.** What happens next is determined by the
 policy object at the owner's node (§12.1).
 
-> **Open, and small: `reporter` may now be redundant.** With the resource as sender,
-> `reporter` and `resource` name the same party. The field may be a leftover from a
-> reading in which users filed reports, or it may distinguish a reporting instance
-> from the registered resource identity. **Not removed pending the author's call**,
-> because deleting a schema field is a protocol change rather than a cleanup.
+**There is no separate reporter field.** [D — 2026-08-25] It named the same party as
+`resource`, and the rule that keeps the object honest is that **the signing key's
+keyhash MUST equal `resource`** — checkable from the object alone, so a genuine MUST
+under §1.1. Without it, an object could attribute a complaint to a party that did not
+make one.
 
-**Two findings shrink as a consequence of the direction being settled**, and are
-restated rather than left describing a shape the object no longer has: P16 and P27
-both assumed a reporter outside the owner's control.
+**An application wanting to name which of its own users complained puts that in
+`detail`, as application data.** There is no user-signed abuse report, because
+producing one would require a user's network client to interoperate with arbitrary
+third-party applications — a blurring of the network and application layers that the
+resource boundary exists to prevent (§9.0.3). The network's contribution stays what
+§9.6 says it is: a way for a resource to tell its owner.
+
+**Two consequences for the registers.** C16 stays withdrawn on firmer ground — the
+object now demonstrably has no subject and no second party — and P27's portability
+residual shrinks again, since the only signer is the resource whose owner already holds
+the report.
 
 **Enforceable at the sender:** *a party submitting a private complaint for action
 by a responsible decision-maker MUST address it only to that decision-maker, and
 MUST NOT broadcast it as reputation evidence.* The sender controls this completely. Nothing is being asked of
-anyone else. Present encoding: the report is addressed to the resource owner.
+anyone else. Present encoding: the report is addressed to the resource owner, and the
+signer is the resource itself.
 
 **Not enforceable, and not attempted:** what an unrelated party does with a copy
-it obtains anyway. A reporter can hand the signed object to anyone, and no shared
-state lets the owner govern a foreign implementation's storage or trust
+it obtains anyway. The owner can hand the signed object to anyone, and no shared
+state lets any rule govern a foreign implementation's storage or trust
 calculation. §7.1.4 already states this limit for biometric disclosure — *a holder
 who simply tells someone what they know is beyond any protocol rule* — and it
 applies identically here.
@@ -5170,6 +5279,13 @@ than a formal one, and should be an explicit design commitment.
 opaque in one subnet may name known people in another, so *where* an archive is
 presented changes what it discloses.
 
+**This is the one exchange with a use for location** (§7.2.1), and therefore the one
+where the presenter has a choice to make. A prospective patron running §7.1.7's
+impossible-travel check needs the geohash series; a presenter withholding it is
+declining to offer that evidence rather than concealing a defect, and the withholding
+is visible either way. Everything else disclosable — retention, client integrity,
+capture parameters, proximity, `started_at`, subtype — has no consumer here.
+
 **Presentation is a single head txid** (`wire-format.md` §4.1 field 7), from which
 the patron walks the chain backward and fetches what it wants
 (`wire-format.md` §5.8, archive fetch). **The patron chooses its own depth.** The presenter picks the head and
@@ -5399,10 +5515,16 @@ intersection recreates the sensitive fact each minimisation was meant to prevent
 with timestamp, location and graph position, and then applies it nowhere else.
 It is a general rule.
 
-**Worked example.** Presence record A says key K met X near region R under patron
-P. Record B says K met Y two hours later on the same path. P's subtree
-corresponds to a known organisation. None of the three identifies anyone; the
-intersection gives identity, affiliation, movement and social relationships.
+**Worked example.** Presence record A says key K met X near region R, witnessed by
+two members of P's subtree. Record B says K met Y two hours later, witnessed by two
+more. P's subtree corresponds to a known organisation. None of the three identifies
+anyone; the intersection gives identity, affiliation, movement and social
+relationships.
+
+*This example originally read position off each record's participant locator. That
+field is removed (§7.2), so the affiliation half now comes from the witness set —
+weaker, because witnesses are a sample rather than a statement of position, and
+still sufficient to make the point.*
 
 **Practical consequence for future work:** any proposal to add a field, expose an
 attribute, or publish an attestation must be assessed against what an observer
@@ -5547,35 +5669,40 @@ verifiers answered `match` without naming them, but that sacrifices the
 "absence of an expected verifier is visible" property (§7.2), which is doing real
 work. **Open.**
 
-### 14.5.3 Selective disclosure — proposed direction
+### 14.5.3 Selective disclosure — adopted, and what it does not cover
 
-The presence record is signed as a whole, so presenting it means presenting all
-of it: identity, time, coarse geography, graph position, witness set, verifier
-set, client-integrity attributes. An evaluator who needs one fact receives all of
-them.
+**Specified at §7.2.1 and `wire-format.md` §4.5.1.** [D — 2026-08-25] A presence
+record's disclosable fields are committed as salted digests, so a holder can present
+the record to a recipient without the fields that recipient has no use for, and the
+recipient still verifies against the same signature.
 
-**Proposal: build the record body as a Merkle tree over its fields**, with the
-signature over the root. A holder can then present any subset with inclusion
-proofs, and the recipient verifies against the same signature. This is the
-mechanism behind SD-JWT and similar selective-disclosure credentials, and it
-composes with COSE.
+**What it covers:** location evidence, retention tiers, client integrity, capture
+parameters, proximity channels, `started_at`, subtype. Ten of the eleven exchanges that
+transmit or evaluate a record read none of them (§7.2.1).
 
-**Not to be confused with record-level disclosure, which is now constrained.**
-§8's chain makes *which records* you show a matter of prefix only — arbitrary
-subsets of the archive are no longer constructible, precisely because that was an
-attack (§8). This proposal concerns *which fields within a record* you show,
-and is a privacy measure rather than a security hole. The two are independent and
-point in opposite directions: records constrained, fields liberalised.
+**What it does not cover, and this is the part to keep in view.** It cannot hide the
+signer set, because `kid` is on the envelope rather than in the body, and because
+signer role is inferred by comparing `kid` against body fields. **So P2 and C2 stand
+untouched** — the verifier and witness graph is the disclosure §14.5.1's composition
+argument keeps arriving at, and this is not the lever for it. §14.5.2 records the only
+direction that would be, and what it costs.
 
-Cost: a larger record and a more complex canonicalisation rule. Benefit: field-level
-minimisation becomes possible at all, which under §14.5.1 is the only lever that
-addresses composition directly.
+**An earlier form of this section called it "the only lever that addresses composition
+directly."** That was wrong in both halves: it addresses one axis of composition, and
+it is not the only one available. **P1 is reduced rather than closed** — geography is
+withholdable and graph position is gone with the participant locator (§7.2), while
+identity, time and the social graph remain by construction.
 
-**Status: proposed by the drafter, never put to the author, and not adopted.** It is
-recorded because §14.5.1's composition argument keeps arriving at it, and because
-the alternative — leaving the record all-or-nothing — should be a decision rather
-than an omission. **Nothing in the design depends on it**, and §14.5.4's P1 and P19
-name it as an available direction rather than a planned one.
+**Two constructions were considered and the simpler one chosen.** A Merkle tree over
+fields, following SD-JWT loosely, and a flat list of salted digests, which is what
+SD-JWT actually does. At nine leaves a tree buys nothing and adds odd-node handling and
+the duplicated-node second-preimage class. The flat list is specified.
+
+**Not to be confused with record-level disclosure, which is constrained.** §8's chain
+makes *which records* you show a matter of prefix only — arbitrary subsets of an
+archive are not constructible, precisely because that was an attack. This concerns
+*which fields within a record* you show. The two are independent and point in opposite
+directions: records constrained, fields liberalised.
 
 ### 14.5.4 Findings requiring action
 
@@ -5586,7 +5713,7 @@ and a citation to a missing number resolves in that file.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| P1 | Presence-record composition — durable correlatable tuple of identity, time, social graph, graph position, geography | High | §14.5.3 is the proposed lever |
+| P1 | Presence-record composition — durable correlatable tuple of identity, time, social graph and geography | **Medium, reduced 2026-08-25** | **Graph position is gone**: the participant locator is removed (§7.2), so records no longer trace a trajectory. **Geography is withholdable** from ten of eleven exchanges (§7.2.1). **Identity, time and the social graph remain by construction** — `kid` is on the envelope and signer role is inferred from body fields, so no field-level measure reaches them. See P2 and C2 |
 | P2 | Verifier/witness graph leakage | High | §14.5.2 — open, genuine tension |
 | P3 | **A single-identity client** correlates across subnets: anyone present in two of a user's subnets links them | High for such a client, **absent for a multi-identity one** | **Not a protocol limitation.** The protocol permits multiple identities already (§10.8.7); v1 clients omit the key management and interface work, so this ships as a **client** scope decision rather than a design defect. No wire change separates the two cases |
 | P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§11.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, and operator logging, which §1.1 cannot reach |
@@ -5600,14 +5727,14 @@ and a citation to a missing number resolves in that file.
 | P16 | **The resource owner accumulates signed reports about its own resources** (§9.6) | Low | Never broadcast, so no public accusation is created — that was deliberate (§6.2.2). Because the resource reports and the owner receives (§9.6), these are records of the owner's own operation rather than of who complained about whom. **The residual is what a report describes**, not who filed it |
 | **P17** | **A direct payload connection reveals each peer's IP address to the other** (§11.1.1) | Low–Medium | New with direct-first payload, and **bounded by limiting direct connection to the horizon** (§10.6.3), the set that already holds your locator and topology, so IP is incremental rather than novel there. Residual: the horizon is up to 111 nodes at or below plus siblings and cousins a user may never have met, so exposure is *bounded* rather than *chosen*. §7.1.6 establishes IP gives coarse location, so an in-horizon party gains an ongoing location signal. **Both defaults must be overridable**, and the reference client must say what each option discloses |
 | **P18** | **A verification query tells a prior counterparty that the subject is *right now* in a witnessed ceremony with someone** (§7.1.3) | Medium | Intrinsic to verification, and never analysed as a cost, the oracle protections address what a verifier *learns about the biometric*, not what they learn about the subject's current activity. Repeated queries reveal activity cadence. Bounded by deterministic selection sampling only a subset of prior counterparties per event |
-| **P19** | **Archive presentation hands a new patron an intelligible history of prior relationships** (§13.7) | High | The prefix is chosen by the user, but the chain forbids arbitrary omission, so the choice is coarse. Selective disclosure within records (§14.5.3) remains proposed. See also C4 in §14.5.8, which is worse |
+| **P19** | **Archive presentation hands a new patron an intelligible history of prior relationships** (§13.7) | High | The prefix is chosen by the user, but the chain forbids arbitrary omission, so the choice is coarse. Selective disclosure within records (§14.5.3) is now specified, and does not help here: what a prospective patron reads is counterparty identity, which no field-level measure withholds (§7.2.1). See also C4 in §14.5.8, which is worse |
 | **P20** | **Resource access logs, where an implementation creates them, bind network identity to application actions** (§9.7) | High for sensitive resources | Flagged as unfinished but never analysed. A resource already authenticates by network identity and topological scope, so a log connects *who* to *what they did, when, and under which organisational relationship* |
-| **P21** | **Coarse location becomes behavioural location under temporal correlation** (§7.1.7) | Medium; High for at-risk users | A single precision-3 geohash is ~156 km. A *time series* of them, plus graph position and counterparties, reveals commuting, travel, conference attendance, employment and residence. Coarsening reduces precision, not longitudinal inference |
+| **P21** | **Coarse location becomes behavioural location under temporal correlation** (§7.1.7) | **Medium, mitigated 2026-08-25**; High for at-risk users | A single precision-3 geohash is ~156 km. A *time series* of them plus counterparties reveals commuting, travel, conference attendance, employment and residence, and coarsening reduces precision rather than longitudinal inference. **Location is now withholdable** (§7.2.1) and ten of eleven exchanges never receive it. **The residual is structural**: §7.1.7's impossible-travel check and this leak are the same computation over the same series, so the one recipient with a legitimate use — a prospective patron — is also the dangerous holder. Graph position no longer compounds it (§7.2) |
 | **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§14.5.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. Corrected as a reference-client obligation, not yet a demonstrated one |
 | **P24** | **A gateway operator sees their subnet's external traffic** (§9.7), accepted rather than open: the user's protection is the signed `CatalogEntry` binding the service to what the owner published, and beyond that their remedy is not to use the resource | High | Socially trusted is not accountable. The design ensures no patron sees payload content (§11.2); a gateway hands a subnet member exactly that one layer up, and §9's permission model gives the *user* no way to evaluate the operator they are routing through |
 | **P25** | **A hosted operator can invert a pairwise principal identifier** (§9.0.2) | Low | They know the resource identity and their own org's keyhashes, so one hash per member recovers the mapping. Deliberate, the scheme withholds network identity from parties who do not already know you, not from the operator you chose |
 | **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §5.6) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
-| P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§9.6) | **Low, reduced 2026-08-25** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and with the direction settled the reporter is the owner's own resource — so the object does not leave the owner's control unless the owner chooses to release it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed: a signature still makes forwarded particulars credible in a way an unsigned account would not. Bounded at 1 KB (`wire-format.md` §4.7), which limits volume rather than kind |
+| P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§9.6) | **Low, reduced 2026-08-25** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §4.7), which limits volume rather than kind |
 | P28 | **Source photographs may carry EXIF and contextual background** (§7.1.5) | Low | See C17. Encryption under the subject's keystream (§7.1.5.2) means a compliant client holds nothing readable; stripping still applies because a legitimate decryption during verification puts plaintext in the holder's hands |
 | **P29** | **A ceremony counterparty holds the victim's raw capture indefinitely** (§7.1.5) — **substantially answered by §7.1.5.2** for compliant clients, where the capture is ciphertext the subject holds the key to | Medium–High | Retention is a client commitment with no detection mechanism (P13). An adversary attending one meeting acquires a biometric sample joined to a record naming time, coarse place and social position. The ceremony is a collection event as much as an evidence event, and the victim consents to the second |
 | P30 | **A brokered external session may outlive a user's membership** (§9.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
@@ -5661,8 +5788,8 @@ never told. It is a commitment by the implementer and the only lever available.
 
 Several units score badly on LINDDUN's Unawareness/Unintervenability axis for the
 same reason: a participant understands "prove we met" without appreciating that
-the record durably names witnesses and verifiers, fixes their graph position, and
-will be fetched by evaluators for years. The schema cannot fix this. **The
+the record durably names witnesses and verifiers and will be fetched by evaluators for
+years. The schema cannot fix this. **The
 reference client must disclose at capture time what the record will contain and
 who will be able to read it.** Not in a policy document, at the moment of the
 ceremony.
@@ -5725,7 +5852,7 @@ acknowledged and whose join is not.
 
 | # | Composition | What it yields | Severity |
 |---|---|---|---|
-| **C1** | Locator + presence timestamp + coarse location | *Who, where, when, and with which organisation* — where a subtree maps to a recognisable employer or group. §14.5.1's worked example | High |
+| **C1** | Witness set + presence timestamp + coarse location | *Who, where, when, and with which organisation* — where a subtree maps to a recognisable employer or group. §14.5.1's worked example. **Reduced 2026-08-25**: the participant locator is removed (§7.2), so the affiliation half now comes from the witness set — a sample rather than a statement of position — and coarse location is withholdable from ten of eleven exchanges (§7.2.1) | **Medium–High** |
 | **C2** | Witness set + verifier set, in **one** record | A miniature **temporal social graph**: the subject's present neighbourhood (witnesses) *and* a sample of their past counterparties (verifiers). Repeated records turn samples into a map | High |
 | **C3** | Forwarding record + old locator | Departure becomes a **trackable move.** The two are individually necessary, and the forwarding record is what joins them for 90 days | Medium–High |
 | **C4** | Archive prefix + the **new** patron's local topology | **The same archive means different things to different observers.** A counterparty opaque in the old subnet may be a known person in the new one, so *moving* an archive changes which entries are legible and can disclose relationships that were effectively private at origin. **Archive portability therefore has a privacy cost that depends on the destination.** Which nothing in the design said | High |

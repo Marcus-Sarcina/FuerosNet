@@ -51,6 +51,16 @@ that is noted in place.
   answers** (`wire-format.md` §5.3a). A grant arriving unattached to a query the
   subject countersigned is an unsolicited key release; treat one as malformed rather
   than opening your store.
+- **Withhold a presence record's disclosable fields by default** (design §7.2.1),
+  revealing them only on the user's instruction. Ten of the eleven exchanges that
+  receive a record need none of them, so the default is the correct one and the
+  reverse would make the mechanism decorative.
+- **Tell the user what revealing location means** at the one exchange where it has a
+  use — presenting an archive to a prospective patron. Revealing offers the geohash
+  series that supports an impossible-travel check; withholding is visible and declines
+  to offer that evidence. **Both are legitimate**, and the same series is what P21
+  turns into a behavioural record, so the user is choosing between being checkable and
+  being trackable rather than between honest and evasive.
 - **Keep one sealed capture per presence record**, ageing each independently, and
   prefer the most recent eligible one when answering (design §7.1.5.2).
 - **Report a decryption failure as `inconclusive`, never as `no-match`.** Truncated or

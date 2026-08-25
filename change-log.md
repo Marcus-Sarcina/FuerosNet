@@ -3186,3 +3186,66 @@ nothing happened. Ordering was always correct; the dates were not.
   reader might otherwise re-propose: no activity summary, no veto delegation, no notice
   period, no cold lookup. Those are not history; they are the third thing the design is
   for.
+- **2026-08-25 (participant locator removed; selective disclosure adopted; abuse-report
+  reporter removed)** — Three changes from one question: what does a presence record
+  actually need to carry, to whom.
+
+  **`Participant.locator` is gone.** It recorded *position at meeting time*. A sweep of
+  the eleven exchanges that transmit or evaluate a presence record found **nothing that
+  reads it**, and it was stale by construction — any later locator supersedes it under
+  §2.3's strictly-greater rule and nothing resolves against an old one. It was also the
+  field that made §14.5.1's worked example work. **Deleting it is a better answer than
+  making it withholdable**, and costs nothing rather than 0.4%. What it removes is the
+  *historical* position series, so records no longer trace a trajectory; it does not
+  remove position inference, since the keyhashes remain and the witness set still
+  discloses a neighbourhood. The worked example is rebuilt on the witness set and says
+  so.
+
+  **Selective disclosure is specified**, at design §7.2.1 and `wire-format.md` §4.5.1,
+  after fourteen days as a proposal nobody had costed. **Scope came from the sweep, not
+  from preference**: location evidence, retention tiers, client integrity, capture
+  parameters, proximity channels, `started_at` and subtype leave the body and are
+  committed as salted digests; **ten of eleven exchanges read none of them.**
+  `wire-format.md` §4.5.2 and design §7.2.1 both state the per-exchange visibility, and
+  each consuming section now says what it sees.
+
+  **A flat digest list, not a Merkle tree.** §14.5.3 proposed a tree, following SD-JWT
+  loosely; SD-JWT's actual construction is a digest array, and at nine leaves a tree
+  buys nothing while adding odd-node handling and the duplicated-node second-preimage
+  class. Domain-separating prefixes are still required so a digest cannot be
+  reinterpreted as a root. **Salts are mandatory** — without them `subtype`, `liveness`
+  and a precision-3 geohash are brute-forced straight out of their digests.
+
+  **The envelope is untouched.** Disclosable fields travel *beside* the body rather
+  than inside it, and the body carries a 32-byte root, so `txid` and the COSE payload
+  keep their existing definitions. An earlier framing that made the body itself a tree
+  would have changed both for one transaction type.
+
+  **What it cannot do, recorded because the proposal implied otherwise.** `kid` sits in
+  the COSE protected header, outside the body, so **every participant and witness
+  keyhash is on the record however little the body discloses** — and §3 infers signer
+  role by comparing `kid` to body fields, so withholding those lists would break
+  inference outright. **P2 and C2 are untouched.** §14.5.3's claim to be "the only lever
+  that addresses composition directly" was wrong in both halves and is corrected.
+
+  **And the trade it actually offers.** §7.1.7's impossible-travel check and P21's
+  behavioural-location leak are **the same computation over the same series**. Field-level
+  disclosure cannot separate them; it separates audiences. The one recipient with a use
+  for location — a prospective patron reading an archive prefix — is the same party P19
+  and C4 flag as the dangerous holder. Everyone else stops receiving it. Stated plainly
+  in §7.2.1 rather than left for a reviewer.
+
+  **Registers.** P1 reduced to Medium, P21 mitigated, C1 reduced to Medium–High, P19
+  restated to say this does not help it. **Over-asking was raised as a hazard and
+  withdrawn**: §1.1 makes the evidence schema the one non-pluggable thing, so a
+  recipient weights what it receives and cannot make an interface carry what the
+  interface does not define.
+
+  **`AbuseReport.reporter` removed.** With the resource as sender it named the same
+  party as `resource`. The rule that keeps the object honest is that **the signing key's
+  keyhash MUST equal `resource`**, checkable from the object alone. There is no
+  user-signed abuse report: producing one would require a user's network client to
+  interoperate with arbitrary third-party applications, blurring the boundary the
+  resource layer exists to keep. An application naming which of its own users complained
+  puts that in `detail`, as application data. C16 stays withdrawn on firmer ground and
+  P27 reduces again.
