@@ -70,13 +70,6 @@ remain unset** (§16.1), sorted by how provisional they actually are in §16.1.1
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until a review cycle runs clean.
 
-**Specified on 2026-08-25**, closing everything else that blocked a subsystem:
-topology propagation has an encoding (`wire-format.md` §7.2a), a rootward memo carries
-membership changes to the subnet root and answers cycle prevention (§12.2, §6.2.5),
-infra nodes publish signed endpoint records so a patron can refer (`wire-format.md`
-§5.3d), queue policy is settled (§11.1.6), and the general owner-movement rule is
-stated where it belongs (§9.2).
-
 **Everything currently open is consolidated at §18.2**, classified by what it
 blocks.
 
@@ -102,13 +95,9 @@ here (read that before trusting any quantitative claim).
 **Requirements documents contain no protocol facts.** They cite sections here
 rather than restating them, because a restated fact is one that will drift.
 
-**Appendix A** records alternatives considered and declined read it before
+**Appendix A** records alternatives considered and declined; read it before
 re-proposing anything. The chronological history is in **`change-log.md`**, and is
 not needed to understand the design as it stands.
-
-> This document is the working context for the project. It records what has been
-> decided, what has been ruled out and why, and what remains open. It is written
-> to be handed to a fresh session (Claude Code or otherwise) as a starting brief.
 
 ---
 
@@ -118,73 +107,32 @@ not needed to understand the design as it stands.
 
 **A security or fairness invariant is stated in role terms in this document; the
 wire format states its encoding.** Both are needed, and they are not
-interchangeable.
+interchangeable. A rule expressed only in terms of a message type or field name
+dies silently when the identifier is renamed or the taxonomy changes. The test:
+**would the rule still be true and still findable if every identifier in the
+document were renamed?** The usual shape is *invariant in italics, then "Present
+encoding: …"*.
 
-A rule expressed in terms of a message type, field name, or transaction name is
-correct *in the wire format* — that is where identifiers live. It becomes a
-hazard when it is the **only** statement of the rule, because a rename, merge, or
-taxonomy change then removes the invariant and nothing looks wrong afterwards.
-
-> "Transfer is exempt from patron veto" evaporated when transfer collapsed into
-> adoption. Its replacement named departure and adoption, one type name swapped
-> for two, no more durable. Only the role formulation survived: *a party with
-> authority over another may never block an action whose sole effect is to end
-> that authority.*
->
-> *(The veto mechanism was itself later withdrawn, a patron shares no state with
-> a subordinate's client and can block nothing, §7.4.2. The naming lesson stands
-> regardless, and is why the rule outlasted two taxonomy changes before its
-> subject turned out not to exist.)*
-
-**Generalising a rule can break §1.1, and has.** Abstraction widens scope, and a
-wider rule may reach past the enforcement boundary that the narrower one respected.
-§9.6's abuse-report rule began as *"addressed to the owner and not broadcast"* —
-a delivery property the sender controls completely. Its role-level rewrite added
-*"intermediaries must neither receive nor retain it as reputation evidence"*, which
-governs foreign storage and is unenforceable. **The generalisation was more elegant
-and less true.**
-
-So the two conventions must be applied together, in order: state the property, then
-**ask who would enforce the restated version against whom** (§1.1). If the answer
-has changed, split the rule — keep the enforceable part as a MUST and represent the
-rest as a visible distinction.
-
-The test when writing a rule: **would this still be true and still findable if
-every identifier in the document were renamed?** If not, state the property, then
-give the encoding as its present implementation. The usual shape is *invariant in
-italics, then "Present encoding: …"*.
-
-**Status.** All eighteen identified rules now carry role-level
-statements. This convention was itself introduced in an edit that left ten of
-those eighteen unfixed, a stated discipline with known exceptions is worse than
-none, and the verification pass caught it. Any future rule added without its role
-statement is a defect, not a deferral.
+**Generalising a rule can break §1.1.** Abstraction widens scope, and a wider rule
+may reach past the enforcement boundary the narrower one respected. So apply the two
+conventions in order: state the property, then **ask who would enforce the restated
+version against whom** (§1.1). If the answer has changed, split the rule — keep the
+enforceable part as a MUST and represent the rest as a visible distinction.
 
 ### The force of client requirements
 
-The three requirements documents state obligations that **no party can check**.
-Whether an implementation discards what it was told to discard, warns before an
-irreversible action, or keeps a promise about local storage is invisible to
-everyone else (§1.1's diagnostic returns *no enforcement available* almost
-everywhere in them.
-
-**They are commitments, not enforceable rules.** A conforming label means the
-author asserts them, not that anyone verified them. Where a requirement does leave
-a visible artifact, an absent verifier response, a malformed record, a signature
-that fails. That is noted in place, and those are the only ones a counterparty can
-act on.
-
-**They are stated as requirements anyway**, because a specification that omitted
+The three requirements documents state obligations that **no party can check**
+(§1.1's diagnostic returns *no enforcement available* almost everywhere in them).
+**They are commitments, not enforceable rules**: a conforming label means the author
+asserts them, not that anyone verified them. Where a requirement does leave a
+visible artifact — an absent verifier response, a malformed record, a failing
+signature — that is noted in place, and those are the only ones a counterparty can
+act on. They are stated as requirements anyway, because a specification that omitted
 them would leave an implementer to reinvent each decision, usually worse.
-Carefulness is the enforcement mechanism.
 
 ### Normative vocabulary
 
-§1.1 says the protocol can only compel where shared state exists. Review pass
-0.5.2 found **nine places where this document wrote MUST anyway.** Several of
-them added *after* §1.1 was written. "Must" is the natural register for a
-specification, and staying inside the enforcement boundary requires active
-attention rather than good intentions. Hence a fixed vocabulary:
+§1.1 says the protocol can only compel where shared state exists, so:
 
 | Term | Meaning | Test |
 |---|---|---|
@@ -222,6 +170,29 @@ The metering choice and the autonomy commitment reinforce each other. Because th
 meter is a physical meeting, evidence is produced by the people who were there
 rather than by an authority observing them, and there is no one standing above the
 participants to appeal to even if someone wanted one.
+
+Our security and privacy model aims to track that of physical-world affiliation:
+people belong to subnets roughly as they belong to companies, clubs, churches and
+families — public but not centrally registered. Someone determined enough can
+profile your physical-world affiliations, and it is expensive, manual, per-target
+work that no single breach short-circuits. That is the level being aimed at. Not
+anonymity, which §2 rejects outright, and not the stronger guarantees a network for
+evading a state would need.
+
+We see this as a security win rather than a compromise. It lets people affiliate in
+digitally legible ways, and so to get the benefits of modern computing, without a
+central platform operator existing as both attack surface and potential attacker.
+Moving your affiliations and services off commercial platforms makes you a
+materially harder target even if the replacement is only as private as the physical
+world, because the replacement has no honeypot.
+
+We see this as a win for democracy and self-determination because centralized
+platforms capture margin in most cases by displacing more local and accountable
+intermediaries (small businesses, local institutions, families, friend groups,
+third places, civil society) and retaining value that used to sit there. Rebuilding
+intermediating institutions in a post-internet era requires a network whose
+structure follows human relationships and physical proximity while supporting
+services competitive with centralized alternatives.
 
 The guiding idea: *strong interfaces can replace shared truth*. Any number of
 incompatible interpretations of reality can coexist productively so long as the
@@ -306,15 +277,7 @@ joined**, and membership in one is not exclusive of others.
   closer to using the same password on two mutually non-interacting sites, then
   changing it on one. See §7.4.0.2.
 
-### 1.2 What level of privacy and security this targets
-
-**Stated because §14.5 accumulated 23 findings without one.** Absent a target,
-every finding reads as a deficiency; with one, most are correctly-scoped accepted
-costs and a few are genuine misses. The target is also falsifiable, which is what
-makes it useful: it can be tested by asking *does this make bulk profiling cheap?* and
-*does this create a point whose compromise yields many people?*
-
-**Three tiers, deliberately different:**
+### 1.2 Security Expectation Tiers
 
 | Layer | Target |
 |---|---|
@@ -322,54 +285,46 @@ makes it useful: it can be tested by asking *does this make bulk profiling cheap
 | **Transactions visible within a subnet** | Moderately secure, protected principally by **disaggregation** rather than by cryptography |
 | **The global network** | **No more secure than the internet itself.** Nothing here assumes the wire is private |
 
-**The benchmark is physical-world affiliation.** People belong to subnets roughly
-as they belong to companies, clubs, churches and families: **public but not
-centrally registered.** Someone determined enough can profile your physical-world
-affiliations, and it is expensive, manual, per-target work that no single breach
-short-circuits. **That is the level being aimed at.** Not anonymity, which §2
-rejects outright, and not the stronger guarantees a network for evading a state
-would need.
-
-**Why this is a security win rather than a compromise.** It lets people affiliate
-in digitally legible ways, and so to get the benefits of modern computing, **without
-a central platform operator existing as both attack surface and potential
-attacker.** Moving your affiliations and services off commercial platforms makes
-you a materially harder target even if the replacement is only as private as the
-physical world, because the replacement has no honeypot.
-
-**Why it is a freedom win.** Centralised platforms capture margin substantially by
-displacing more local and accountable intermediaries (small businesses, local
-institutions, families, friend groups, third places, civil society) and retaining
-value that used to sit there. *(Not wholly: search, matching and discovery at scale
-are genuine efficiencies, and the argument does not need to deny them.)* Rebuilding
-those things needs a network whose structure **follows human relationships and
-physical proximity** while supporting services competitive with centralised
-alternatives.
+Security expectations follow physical-world affiliations as described in §1.
 
 #### 1.2.1 Three honest limits on that target
 
-**The layering argument fails for the users who need it most.** The claim that
-sensitive activity lives at the resource layer, where an application can add its
-own protections, holds for ordinary use. It does not hold where **affiliation is
-itself the incriminating fact.** Under a hostile government, knowing which subnet
-someone belongs to may be sufficient, and no amount of resource-layer obfuscation
-helps, because the exposure is one layer below it. §14.5.1's V6 already names those
-populations; this is the mechanism by which the design fails them.
+**Where affiliation is itself the incriminating fact, this design offers no more
+protection than the physical world — and no less.** The attacker who punishes
+affiliation alone is §1.2.2's second class, indiscriminate-but-targeted, and to that
+class cryptographic attestation adds nothing. What such a user's exposure turns on
+is *discoverability*, and the network makes subnet membership discoverable roughly
+as a church or club is — visible to members and neighbours, enumerable by no
+stranger (§10.4). The regulator is therefore the same one the physical world
+offers: circumspection about which subnets you visibly join. Users needing more
+than circumspection need anonymity, which §2 rejects; this is not a cryptoanarchy
+platform. The residual delta — signed records are durable and machine-readable once
+obtained — is the third limit below, and it is spendable only by §1.2.2's third
+class.
+
+**Strong security lives at the resource layer.** Network- and resource-layer
+security protects the interests of organisations that run resources, and is less
+provable from the perspective of an individual who reaches the network and its
+hosted services through someone else's infrastructure. The middle tier is the
+weakest, and so a user's security posture is managed primarily by their own
+behavior: which subnets they choose to join, and which activities they trust to
+each subnet.
 
 **Physical affiliation is discoverable but deniable; this is discoverable and
-not.** Your church membership is expensive to establish *and* arguable: presence
-in a building is fuzzy, unattested, contestable. A presence record is
-cryptographically attested, machine-readable and durable for decades. **The target
-covers discovery cost, not deniability**, and non-repudiation is accepted
-separately (§14.5.7). On the axis that matters under persecution, this is worse
-than the physical world, not equivalent to it.
+signed.** The security of a user's affiliations then reduces back to the security
+of their key and their disclosure choices. The benchmark is therefore not quite
+met, insofar as a disclosed record or a compromised key means the network
+reproduces the discoverability of physical affiliation while removing its
+deniability. Non-repudiation is accepted as a cost separately (§14.5.7), and
+§1.2.2 narrows this: the cost lands on the classes least able to exploit it.
 
 **Disaggregation defeats bulk collection, not targeted assembly.** Physical-world
 profiling is expensive both in bulk and per target. This design is expensive in
-bulk and **comparatively cheap per target once an observer is inside the relevant
-horizon**, which is what C4 and C7 in §14.5.8 describe. Compatible with the goal
-above;
-not identical to it.
+bulk and comparatively cheap per target once an observer is inside the relevant
+horizon, which is what C4 and C7 in §14.5.8 describe. The per-target cost is real;
+the per-record processing cost is near zero. An adversary who solves acquisition
+solves everything downstream — but the compromise extends only to the compromised
+user's activity within the subnets the adversary can see into.
 
 #### 1.2.2 Three properties the design relies on and does not otherwise state
 
@@ -823,8 +778,7 @@ decision, so it carries both components like any other identity operation
 only until the receiving party decides; afterwards what an evaluator relies on is
 *"the patron accepted this"*, attested by the patron's own hybrid signature.
 
-**That justification fails where the decision is a permanent identity change.** [D —
-corrected 2026-08-24] A patron's hybrid signature preserves *that the patron
+**That justification fails where the decision is a permanent identity change.** [D] A patron's hybrid signature preserves *that the patron
 decided*, not *that the evidence was true*. Once the classical primitive is
 forgeable, an attacker forges the one `match` a recovery structurally requires,
 induces a patron to accept it, and **the forgery is sealed inside an authentic
@@ -907,9 +861,8 @@ PoP, the new patron is inside the old one's replication horizon and already
 holds the history, which is the whole point of that case. Recovery adoptions have
 their own evidence requirement (§7.4.1).
 
-**This was previously assumed but unstated.** §10.8.1 requires a ceremony before
-the formation adoption, §7.4.1's recovery depends on prior ones, and Vignette V3
-takes it for granted, while §6.1 said nothing.
+§10.8.1 requires a ceremony before the formation adoption, and §7.4.1's recovery
+depends on prior ones.
 
 ### 6.2 Ending a patron relationship
 
@@ -981,7 +934,7 @@ fraudster genuinely accumulated, and burning it is a one-time move.
 **The reason code is information for the next patron**, not a broadcast to the
 network. That is what determines whether re-adoption elsewhere is unremarkable.
 
-**There is no notice period.** [D — 2026-08-25] A disavowal takes effect when it is
+**There is no notice period.** [D] A disavowal takes effect when it is
 signed. The idea was raised, never decided, and acquired a wire field and a parameter
 row while the design still recorded it as an open question — machinery built on a
 speculation. **It could not have been enforced anyway**: a disavowal is the issuer's
@@ -1079,7 +1032,7 @@ transactions, except departures.
 **A party with authority over a participant must not authenticate or gate evidence
 of an event it did not observe and that occurred outside its authority**, where
 doing so would let it suppress evidence the participant may later present under a
-different authority. [D — 2026-08-16]
+different authority. [D]
 
 Present encoding: **patrons do not countersign proof-of-presence records.**
 Three reasons, any one sufficient:
@@ -1358,7 +1311,7 @@ detection rate is high.
     permission (below) when probing is detected. That is not global state; it is
     one node with standing.
 
-    **The aggregate is a lock, not a log.** [D — 2026-08-22] What the subject holds
+    **The aggregate is a lock, not a log.** [D] What the subject holds
     is a counter per requester and per ceremony window, kept **only for the
     enforced ceremony duration** — a few minutes. It exists to refuse the next
     query, not to record that a previous one happened.
@@ -1581,7 +1534,7 @@ expect elevated `inconclusive` responses in this population.
 
 **Each participant gives the other a 32-byte seed during the ceremony, and each
 seals its captures of the other party under keys derived from the seed that party
-supplied.** [D — 2026-08-22]
+supplied.** [D]
 
 So A's images sit on B's device sealed under keys **only A can derive**. B
 stores ciphertext. A stores the seed, privately, in its own record of the
@@ -1696,7 +1649,7 @@ visible.**
 ##### Construction: two segments, two derived keys
 
 **The store is two independently sealed segments, not one keystream with a
-prefix.** [D — revised 2026-08-23] The first attempt described supplying *N bytes of
+prefix.** [D] The first attempt described supplying *N bytes of
 keystream*, which left three things unspecified and one of them dangerous.
 
 ```
@@ -1706,7 +1659,7 @@ k_template  =   HKDF(seed, "rhtn/1:capture:template" || subject || holder || cer
 k_images    =   HKDF(seed, "rhtn/1:capture:images"   || subject || holder || ceremony_id)
 ```
 
-**Bound to the ceremony, not the transaction.** [D — corrected 2026-08-23] An
+**Bound to the ceremony, not the transaction.** [D] An
 earlier version derived from `txid`, which is circular: `txid` hashes the finalized
 body **including verifier responses**, and sealing happens at capture, before either
 exists. The pre-commitment is fixed before capture begins, is countersigned by both
@@ -2008,20 +1961,13 @@ Field-level specification. **`wire-format.md` is authoritative on encoding**; th
 shapes here are for reading alongside the rationale and will drift if edited
 independently. All signature fields are **COSE structures** (RFC 9052), see
 
-**A participant's locator is no longer carried.** [D — 2026-08-25] It recorded
-*position at meeting time*, and a sweep of every event that transmits or evaluates a
-presence record (§7.2.1) found nothing that reads it. It was also stale by
+**A record carries no participant locator.** [D] Nothing that transmits or evaluates
+a presence record reads one (§7.2.1), and a historical position would be stale by
 construction — `wire-format.md` §2.3's strictly-greater rule means any later locator
-supersedes it and nothing resolves against an old one — while being the field that
-made §14.5.1's worked example work.
-
-**What its removal does and does not do.** It removes the **historical** position
-series, so a set of records no longer traces where a participant sat over time. It
-does **not** remove position inference: the participants' keyhashes remain, and an
-observer holding topology can look up where those keys sit **now**. Witnesses are
-named and are neighbourhood members by cross-nomination (§7.1.1), so the witness set
-still discloses a neighbourhood. The gain is that trajectory is gone and only a
-current snapshot remains.
+supersedes it. The absence removes the **historical** position series: records do not
+trace where a participant sat over time. It does **not** remove position inference —
+the keyhashes remain, an observer holding topology can look up where those keys sit
+now, and the witness set still discloses a neighbourhood (§7.1.1).
 
 **They have drifted already, and in a way worth naming**: the shapes below give
 witnesses and corroborations their own `COSE_Sign1`, while the wire schema has
@@ -2049,10 +1995,8 @@ PresenceRecord {
     identity        : keyhash                    # permanent
     signature       : COSE_Signature within the envelope's COSE_Sign
     # retention and client_integrity are DISCLOSABLE (§7.2.1) and travel in the
-    # disclosure set rather than the body
-    # locator removed 2026-08-25 — see below
-    # disclosure_policy removed 2026-08-16 — superseded by the per-query
-    #   subject countersignature (§7.1.4)
+    # disclosure set rather than the body. No locator: see below. Disclosure
+    # consent is the per-query subject countersignature (§7.1.4)
   }
 
   # --- proximity evidence --- DISCLOSABLE
@@ -2160,8 +2104,7 @@ transaction.
 
 #### 7.2.1 Selective disclosure, and what it reaches
 
-**A holder can withhold the fields a given recipient has no use for.** [D —
-2026-08-25] Each disclosable field is committed as a salted digest and the body
+**A holder can withhold the fields a given recipient has no use for.** [D] Each disclosable field is committed as a salted digest and the body
 commits to the list; the envelope signature covers the body, so a recipient verifies a
 partial presentation against the same signature. Encoding: `wire-format.md` §4.5.1.
 
@@ -2585,7 +2528,7 @@ holds, no protocol change, no shared state.
   gap**: per-observer trust (§13.1) says an observer who holds no history extends
   no credit. A shortcut around it would be a shortcut around the model.
 
-**Patron-signed activity summaries are withdrawn.** [D — 2026-08-22] The mechanism
+**Patron-signed activity summaries are withdrawn.** [D] The mechanism
 was a patron publishing transaction counts and counterparty diversity for a
 subordinate, so a stranger could compute a baseline without history of their own.
 
@@ -2609,7 +2552,7 @@ had never dealt with.
 **When a participant under another party's authority authorises an action that
 materially changes an authority binding, or establishes a cross-tree infrastructure
 relationship, its client makes that action visible to the party currently vouching
-for it.** [D — 2026-08-22] **The notification is observational only**: it must
+for it.** [D] **The notification is observational only**: it must
 neither gate nor delay the action.
 
 That criterion, not a list of transaction names, is what determines whether a future
@@ -2824,9 +2767,8 @@ git is: concurrent authors, no coordination available, reconcile afterwards rath
 than prevent divergence.
 
 **What is lost is cross-branch ordering, and it costs nothing.** The archive was
-built to prove **no intermediate records are missing**, not to order events. This
-is the same argument made in Appendix A.3 for cross-identity ordering: nothing in this
-design consumes a total order. Completeness arguments need reachability;
+built to prove **no intermediate records are missing**, not to order events. Nothing in
+this design consumes a total order, within or across identities. Completeness arguments need reachability;
 impossible-travel detection needs comparable timestamps (§7.1.7); neither needs a
 sequence.
 
@@ -2983,7 +2925,7 @@ Three properties follow, none of which was designed for:
 
 - **Every user's access is administered by someone they have a real relationship
   with.** No distant operator decides whether you may use the subnet-wide service;
-  your patron does. §1.2's freedom argument appears here as an **architectural
+  your patron does. §1's freedom argument appears here as an **architectural
   property** rather than a claim.
 - **The gate holds at every hop.** A wider system cannot reach past a patron to
   that patron's members, and a patron may deny access the wider system would
@@ -3027,8 +2969,7 @@ Org, which is the region a node holds topology for (§12.1). Consequences:
 #### 9.2.1 Membership is necessary, not sufficient, above the patron
 
 **A new subordinate reaches its patron's resources on adoption. It reaches
-resources higher in the tree only once the grandpatron countersigns.** [D —
-2026-08-22] The countersignature is carried as a `SubtreeAck` (`wire-format.md` §5.3c).
+resources higher in the tree only once the grandpatron countersigns.** [D] The countersignature is carried as a `SubtreeAck` (`wire-format.md` §5.3c).
 
 Adoption puts a node inside its grandpatron's Dunbar Org, so the §9.2 gate opens
 automatically, and a patron can therefore admit arbitrary strangers to their own
@@ -3103,8 +3044,7 @@ infra client shows which a resource is, since that follows from where it runs.
 
 #### When an owner moves
 
-**The general rule: there is no grant object for a move to invalidate.** [D —
-2026-08-25] Access is a **predicate evaluated at request time** against current
+**The general rule: there is no grant object for a move to invalidate.** [D] Access is a **predicate evaluated at request time** against current
 topology, never a durable grant recorded at the moment of authorisation
 (`resource-requirements.md` §7.1). So a change of the owner's position changes what
 the predicates match, and access changes with it at the next evaluation. Nothing
@@ -3123,11 +3063,6 @@ propagates, nothing is revoked, and no reconciliation runs.
   that service's terms, which is what choosing that service means. §1.1 is why: the
   network can stop new establishment and cannot reach into a session running
   elsewhere.
-
-*This rule was stated only in `resource-requirements.md` §7.1 and §7.1.1 and was
-consequently recorded as unwritten in §9.8 and §18.2 for nine days. §0's convention
-is that requirements documents carry no protocol facts; the general statement
-belongs here and the requirements document now cites it.*
 
 **Permissions follow the owner's new position**, since predicates are relative to
 the owner (§9.4):
@@ -3231,7 +3166,7 @@ are reserved because the catalog needs them:
 - `discover` — the resource appears in the requester's catalog view
 - `connect` — the requester may open a session with it
 
-**Neither is ever forwarded to the resource.** [D — 2026-08-23] Both are consumed by
+**Neither is ever forwarded to the resource.** [D] Both are consumed by
 the owner's node when it evaluates its role table, and a resource's role set carries
 **application actions only**.
 
@@ -3255,7 +3190,7 @@ invent a role after installation, and an operator cannot grant one the package d
 not understand.
 
 **Role assignment is a materialised table, and predicates are a macro over it.**
-[D — 2026-08-23] The node holds, per resource, a row for each member of the owner's
+[D] The node holds, per resource, a row for each member of the owner's
 Dunbar Org and the roles that member has. **Authorisation at request time is a
 lookup**, not an evaluation.
 
@@ -3355,7 +3290,7 @@ CatalogEntry = {
 **Signed by the owner**, because the owner is the party staking standing on the
 resource's existence and behaviour.
 
-**`data_practice` is a declaration, not a control** [D — 2026-08-25]. The protocol
+**`data_practice` is a declaration, not a control** [D]. The protocol
 says nothing about what a resource may log — that is the resource's business (§9.0.3)
 — which left a user with no way to weigh one resource against another and a deployment
 hosting sensitive resources with no guidance (P20). §1.1's answer where enforcement is
@@ -3400,7 +3335,7 @@ asker at query time rather than replicated toward it.
 simple reason: those are the nodes you can ask. Composability is free, since the
 union is computed where it is used.
 
-**The hosting node answers, and the owner signs.** [D — 2026-08-23] A light client
+**The hosting node answers, and the owner signs.** [D] A light client
 cannot answer queries — it is not always reachable and holds no static address — so
 a resource owned by a light client is **registered with, and answered by, the infra
 node hosting it** (§9.0.1). The entry still carries the owner's signature and the
@@ -3438,7 +3373,7 @@ gateway may carry a marginal licence cost or the application may assume one inst
 already in**, times the reliability of whoever hosts the gateway — no worse, and
 familiar to anyone choosing to deploy that way.
 
-**A client caches its view and refreshes it deliberately.** [D — 2026-08-23] The
+**A client caches its view and refreshes it deliberately.** [D] The
 sweep runs on joining a subnet, periodically, after a failed connection, and when
 the user asks. **Between sweeps the view is stale and that is fine.**
 
@@ -3452,7 +3387,7 @@ socially announced anyway.
 **This also bounds the session cost.** A sweep holds one session at a time and
 closes it; browsing opens nothing (`wire-format.md` §7.3.1).
 
-**The catalog is answered, not published.** [D — 2026-08-23] A node asks an infra
+**The catalog is answered, not published.** [D] A node asks an infra
 node within its horizon what it has; the infra node returns the entries it **owns**
 and that the asker may see. **There is no propagation, no relay and no cached
 authority** — so the enforcement question that earlier drafts wrestled with does not
@@ -3480,7 +3415,7 @@ scoping this design already has for other reasons (§10.4).
 will typically be a full application with its own notion of misuse. The protocol
 contributes exactly one thing: a way to tell the owner.
 
-**The resource reports; the owner receives.** [D — 2026-08-25] The owner may be the
+**The resource reports; the owner receives.** [D] The owner may be the
 host or the gateway to the host, and in either case **it is the owner that holds the
 interface between the network and the resource**, so the owner's node is where such a
 message is both created and consumed. A resource cannot emit one itself — it asserts
@@ -3509,7 +3444,7 @@ Categories are deliberately few and structural rather than judgemental:
 **The protocol defines no response.** What happens next is determined by the
 policy object at the owner's node (§12.1).
 
-**There is no separate reporter field.** [D — 2026-08-25] It named the same party as
+**There is no separate reporter field.** [D] It named the same party as
 `resource`, and the rule that keeps the object honest is that **the signing key's
 keyhash MUST equal `resource`** — checkable from the object alone, so a genuine MUST
 under §1.1. Without it, an object could attribute a complaint to a party that did not
@@ -3700,7 +3635,7 @@ referral or a meeting for. **You cannot search for a person.** Discovery is
 social, which is the intended behaviour, but it should be stated as a product
 property because it is a visible difference from DNS.
 
-**One exception, and it is directional** [D — 2026-08-25]. §12.2's rootward memo
+**One exception, and it is directional** [D]. §12.2's rootward memo
 lets an ancestor accumulate a key→position index for its own subtree, so a node
 **can** look up any descendant, and a subnet's root can look up any member. The
 rejection above was argued on *global* grounds — the DHT, and 12.5 GB of Bloom
@@ -3736,7 +3671,7 @@ independently reachable (§11.1.1). Resolution descends through **infra nodes** 
 terminates at the target's **serving infra node** — its nearest infrastructure
 ancestor, the node it attaches to (§11.1.2).
 
-**Resolution is iterative with referrals, in the shape of DNS.** [D — 2026-08-22]
+**Resolution is iterative with referrals, in the shape of DNS.** [D]
 A requester holds out-of-band knowledge of at least one anchor's address, queries
 it, and receives either the answer or **a referral naming the next hop and its
 address**. It repeats until it reaches the serving node, caching what it learns.
@@ -3795,8 +3730,7 @@ argument behind §4.2 and §10.2, and it bounds what a node *must* keep rather t
 what it *may*.
 
 **An infra node publishes its endpoints as a signed record** (`wire-format.md`
-§5.3d), carried in the topology class and therefore reaching its patron. [D —
-2026-08-25] A light client's address arrives when it attaches (§11.1.2); an infra
+§5.3d), carried in the topology class and therefore reaching its patron. [D] A light client's address arrives when it attaches (§11.1.2); an infra
 child serves itself and never attaches, so without this nothing delivered its address
 to its patron — and **without that the patron cannot refer**.
 
@@ -4263,8 +4197,7 @@ person, so it can prompt rotation across all of them on compromise.
 
 ### 10.8.7 Two consequences of the postal model
 
-**Multiple identities is a client capability the protocol already permits.** [D —
-restated 2026-08-23] Nothing in the wire format or the topology binds a device to
+**Multiple identities is a client capability the protocol already permits.** [D] Nothing in the wire format or the topology binds a device to
 one key: an identity *is* a key, adoptions are per-identity, and a client holding
 several is running several identities as far as the network can tell. **What is
 deferred is the client work** — key management and the interface for choosing
@@ -4560,7 +4493,7 @@ not be cached as immutable identifiers.
 ### 11.1.6 The patron as mailbox
 
 **Undelivered messages queue indefinitely at the direct patron, bounded by a
-per-subordinate storage cap.** [D — 2026-08-22] No time limit; a space limit.
+per-subordinate storage cap.** [D] No time limit; a space limit.
 
 **Two reasons, and the second is the stronger one.**
 
@@ -4839,7 +4772,7 @@ honest about what the network is.
 - **Best-effort delivery.** Offline recipients receive on reconnect (§11.1.4); the
   caller is not told when, or whether.
 - **No atomicity.** Partial delivery is normal, not an error.
-- **No ordering** between recipients, and none is recoverable (Appendix A.3).
+- **No ordering** between recipients, and none is recoverable (§8.3).
 - **No implicit group identity.** A fanout is a set of messages, not a channel.
   Recipients cannot reply to the group.
 
@@ -4950,7 +4883,7 @@ other things. Anyone proposing to tune *h* should be shown this table.
 ### 12.2 The rootward memo
 
 **Full transactions flood within the horizon; a minified memo of every membership
-change travels up the patron chain to its subnet's root.** [D — 2026-08-25] That is
+change travels up the patron chain to its subnet's root.** [D] That is
 what *ancestors* means in §12's class table, and the memo is the only topology
 object that leaves the horizon. Encoding: `wire-format.md` §7.2b.
 
@@ -5238,7 +5171,7 @@ policy parameter computed locally, so it requires no protocol change.
 Infrastructure status is open to anyone, no restriction on running a node. An
 infra node is required to exceed **110** subordinates (f=10, L=2 (§4.3), and a
 single infra node spans up to **1,110** non-infra subordinates across three tiers
-(Appendix A.2). But any user may launch a
+(§15.2). But any user may launch a
 server instance and sign it with their key; having one does not cause or require
 a thousand people to follow them. Cost is a low-spec VM plus a static IP, roughly
 $20/month at retail, a figure that only holds because payload takes the direct
@@ -5313,7 +5246,7 @@ identities** = 1,000 at f=10, L=2.
 This is the **asymptotic** figure. A single infra node actually spans 1,110
 non-infra subordinates; the yield falls to 1,000 in a large tree because infra
 nodes must also patronise other infra nodes, and those carry no non-infra subtree
-(Appendix A.2). Convergence is fast — 1,009 by D=1, so 1,000 is the right number for
+(§15.2). Convergence is fast — 1,009 by D=1, so 1,000 is the right number for
 any attack at meaningful scale, and small-scale attacks get a ~11% discount that
 changes nothing.
 
@@ -5474,7 +5407,7 @@ mechanism touches it.**
 
 **A finding must add something membership does not already carry.** An attacker
 holding a subnet's topology is a horizon member, and membership discloses a known
-package: who is in the org, its shape, and what its members run (§1.2). **A
+package: who is in the org, its shape, and what its members run (§1.2's middle tier). **A
 mechanism that reaches only that package is not a separate vulnerability**, however
 it is framed — the former P8 was withdrawn on exactly this ground, and any finding
 whose precondition is *"an attacker inside the horizon"* should be checked against
@@ -5490,13 +5423,6 @@ available to that class by other means.
 attacker holding a device sees the local archive is not by itself a defect — the
 question is whether it costs more than reading an ordinary phone. Findings that
 clear the floor are recorded because they are real, not because they are failures.
-
-**Coverage.** A full LINDDUN re-run was performed on 2026-08-16 over 28 flows and
-stored artifacts, covering the resource layer, payload confidentiality, archive
-merges and per-query consent — all specified after the first pass. It returned 31
-threats and 10 correlation findings. The individually-flagged threats mapped
-almost entirely onto P1–P17; **the new material was compositional**, and is
-recorded in §14.5.8.
 
 ### 14.5.1 The composition invariant
 
@@ -5520,11 +5446,6 @@ two members of P's subtree. Record B says K met Y two hours later, witnessed by 
 more. P's subtree corresponds to a known organisation. None of the three identifies
 anyone; the intersection gives identity, affiliation, movement and social
 relationships.
-
-*This example originally read position off each record's participant locator. That
-field is removed (§7.2), so the affiliation half now comes from the witness set —
-weaker, because witnesses are a sample rather than a statement of position, and
-still sufficient to make the point.*
 
 **Practical consequence for future work:** any proposal to add a field, expose an
 attribute, or publish an attestation must be assessed against what an observer
@@ -5671,7 +5592,7 @@ work. **Open.**
 
 ### 14.5.3 Selective disclosure — adopted, and what it does not cover
 
-**Specified at §7.2.1 and `wire-format.md` §4.5.1.** [D — 2026-08-25] A presence
+**Specified at §7.2.1 and `wire-format.md` §4.5.1.** [D] A presence
 record's disclosable fields are committed as salted digests, so a holder can present
 the record to a recipient without the fields that recipient has no use for, and the
 recipient still verifies against the same signature.
@@ -5687,16 +5608,9 @@ untouched** — the verifier and witness graph is the disclosure §14.5.1's comp
 argument keeps arriving at, and this is not the lever for it. §14.5.2 records the only
 direction that would be, and what it costs.
 
-**An earlier form of this section called it "the only lever that addresses composition
-directly."** That was wrong in both halves: it addresses one axis of composition, and
-it is not the only one available. **P1 is reduced rather than closed** — geography is
-withholdable and graph position is gone with the participant locator (§7.2), while
-identity, time and the social graph remain by construction.
-
-**Two constructions were considered and the simpler one chosen.** A Merkle tree over
-fields, following SD-JWT loosely, and a flat list of salted digests, which is what
-SD-JWT actually does. At nine leaves a tree buys nothing and adds odd-node handling and
-the duplicated-node second-preimage class. The flat list is specified.
+**The construction is a flat list of salted digests, not a Merkle tree** — at nine
+leaves a tree buys nothing and adds odd-node handling and the duplicated-node
+second-preimage class (`wire-format.md` §4.5.1).
 
 **Not to be confused with record-level disclosure, which is constrained.** §8's chain
 makes *which records* you show a matter of prefix only — arbitrary subsets of an
@@ -5765,8 +5679,7 @@ alone would have read as complete.
 
 ### 14.5.6 Unawareness is a product obligation, not a schema one
 
-**The obligation extends to witnesses and verifiers, not only participants.** A
-scope error, corrected 2026-08-16.
+**The obligation extends to witnesses and verifiers, not only participants.**
 
 A **verifier** who answers a query permanently proves they previously met the
 subject; the response is signed and lives in someone else's record for decades
@@ -5899,7 +5812,7 @@ what to test first, and it is why the register is worth reading. It is not a cla
 that the rest are supported.
 
 What the design rests on that is not established here. §15.1 records claims
-made without a source; Appendix A.2 records claims whose failure would change a design
+made without a source; §15.2 records claims whose failure would change a design
 decision. **The two are orthogonal.** A claim can be both, and the six that are
 (A14–A19) are the highest-priority items in the document.
 
@@ -5915,10 +5828,10 @@ established results.
 |---|---|---|
 | 7.1.4 | Hill-climbing against binary-output matchers needs "thousands to tens of thousands" of queries | Query counts depend on modality, matcher, and information exposed. **Needs a specific cited attack** if used as a security-cost input |
 | 7.1.4 | Cross-device face matching gives "a few percent" false-reject rate | NIST evaluations show error rates vary strongly with algorithm, image quality, pose and threshold. **No externally valid figure exists** until matcher, dataset, threshold and capture conditions are specified |
-| 1.2 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1.2). No comparative investigation-cost study supports it |
-| 1.2 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
-| 1.2 | Centralised platforms "capture margin substantially by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
-| 1.2.1 | Physical affiliation is expensive to establish **and** deniable, where protocol affiliation is neither | The stated limit on the privacy target. The deniability half is argued; the relative cost half is not |
+| 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it |
+| 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
+| 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
+| 1.2.1 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |
 | 7.1.6.3 | UWB is "the strongest available proximity channel" | The channel ranking (§7.1.6.3). Comparative claim with no comparison against the other handset-available channels under a stated attacker |
 | 10.6.5 | Carriers aggregate traffic through a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; carrier topology varies and is not published |
 | 7.1.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by radio generation, load and core placement |
@@ -5986,18 +5899,14 @@ targets for the Stage 1 simulations in the review plan.
 | **A30** | **A remote evaluator cannot distinguish a synthesised subnet from a real one** | The same property, and §1.2.2's claim that the discount falls hardest on the classes least able to defeat it | Follows from A29 plus the absence of cold lookup. Untested against an evaluator applying statistical structure analysis rather than key-checking |
 | **A31** | **To an attacker accountable to no evidentiary standard, cryptographic attestation adds nothing** | §1.2.2's three-class taxonomy, and the conclusion that on-device encryption is the whole defence against that class | A claim about how such parties actually decide, asserted rather than observed. If signed evidence does shift their behaviour, the archive's non-repudiability costs more than recorded |
 
-**§15.1 and Appendix A.2 are orthogonal registers.**
-§15.1 records what is **unsourced**; Appendix A.2 records what is **load-bearing**. A
+**§15.1 and §15.2 are orthogonal registers.**
+§15.1 records what is **unsourced**; §15.2 records what is **load-bearing**. A
 claim can be both, and **A14–A19 are.** Which makes them the highest-priority
 items in the document, since they are simultaneously unvalidated and structural.
 Neither register subsumes the other.
 
-**Vignettes citing these assumptions** (§0): A1 → V4 · A2 → V2 · A8 → V4 ·
-A11 → V5 · A12 → V6. V1, V3, V7 and V8 illustrate mechanisms rather than
-assumptions and cite none.
-Changing an assumption above obliges a check of every vignette citing it, and
-vice versa. Assumptions with no vignette yet — A3, A5, A7, A9, A10 — are
-candidates for one.
+**Vignettes citing these assumptions**: A1 → V4 · A2 → V2 · A8 → V4 · A11 → V5 ·
+A12 → V6. Changing an assumption obliges a check of every vignette citing it.
 
 **A4 and A6 are different in kind from the rest.** They are things the reference
 client can be *built* to satisfy rather than facts about the world. Converting an
@@ -6049,9 +5958,7 @@ are all **chosen**, not derived.
 
 ### 16.1 Unset parameters, the implementation checklist
 
-**From the 2026-08-16 parameter inventory (0.4), which found 30.** Consolidated
-here because they were scattered across sixteen sections and no single place
-showed what still has to be decided. Grouped by what settling them requires.
+Grouped by what settling each requires.
 
 **Needs a security argument.** Each of the following bounds an attacker, so a value chosen
 for convenience buys convenience at the cost of the bound, and because an attacker
@@ -6099,12 +6006,10 @@ negative-evidence threshold, replication depth beyond the floor, cache TTLs, and
 the **queue's per-subordinate storage cap**. These are §13.1's pluggable-policy
 territory and were never going to be fixed.
 
-**Two entries were removed from that list rather than reclassified.** *Query-log
-retention* has no subject — there is no durable query log, only an anti-oracle
-counter expiring with the ceremony window (§7.1.4). And **queue retention is not
-tunable at all**: it is indefinite at the direct patron by decision (§11.1.6), and
-what a node chooses is the storage cap, which is a different quantity. Listing a
-settled value among the freely tunable ones invites an operator to change it.
+**Not on that list, deliberately.** There is no durable query log to set retention
+for — only an anti-oracle counter expiring with the ceremony window (§7.1.4) — and
+**queue retention is not tunable at all**: it is indefinite by decision (§11.1.6),
+and what a node chooses is the storage cap, a different quantity.
 
 **Set by one side, obeyed by the other.** Heartbeat interval (the serving node
 states it in `AttachAck`), pending verifier-response deadline. Changeable per
@@ -6115,29 +6020,18 @@ than its chooser depends on its value**, and hardens hardest when that party is 
 adversary who can select which deployment to attack — because then the weakest value
 deployed anywhere is the one that matters, and choosing well locally buys nothing.
 
-**No unset parameter is currently in that class**, which is a change worth noting
-rather than a permanent property. The three that were — the challenge-window delay,
-the down-line revocation threshold and peering replication units — are gone because
-the mechanisms they governed were withdrawn or settled, not because the hazard was
-addressed. Capability parameter ids were the fourth, resolved by deriving ids from
-namespaced names so that nobody assigns them (`wire-format.md` §6.1).
-
-**The rule stays because the next parameter added may fall into it.** The test is
-whether **someone other than its chooser depends on it** — an attacker choosing
-where to attack, a peer parsing a number, a consumer reading a published figure.
-Local performance knobs stay soft indefinitely.
-
-**Array bounds were also unset** despite `wire-format.md` §1 requiring every array to have a
-maximum; eleven were added on 2026-08-16, and the envelope signer bound is now
-**derived** from the per-role bounds rather than asserted, since an earlier
-independent value contradicted them.
+**No unset parameter is currently in that class** — a current fact, not a permanent
+property. The test for the next parameter added: **does someone other than its
+chooser depend on it** — an attacker choosing where to attack, a peer parsing a
+number, a consumer reading a published figure? Local performance knobs stay soft
+indefinitely.
 
 ---
 
 ## 17. Open questions
 
-**Currently open only.** Resolved, dissolved and drafted items have moved to
-Appendix A.3, so an entry appearing here means the question is live.
+**Currently open only.** Resolved and dissolved questions are recorded in
+`change-log.md`; an entry appearing here means the question is live.
 
 **Two are deferred by decision rather than unanswered.** Autonomous participation
 and the attention question that depends on it. They are kept here rather than in
@@ -6205,20 +6099,7 @@ where an appendix entry reads as settled history.
 ## 18. Unspecified areas — features not yet described
 
 Distinct from §17. Those are **open questions about specified mechanisms**; these
-are **areas the design does not address at all**. Resources (§9) and payload
-confidentiality (§11.2) both sat here until 2026-08-16 despite being close to the
-point of the network, which is the pattern to watch for.
-
-**Status after review on 2026-08-16:** of nine candidate gaps, **five dissolved**
-— succession, group operations, resource abuse and
-cross-identity ordering all turned out to be answered by existing mechanisms or by
-scope. **Two remain real**: multi-device and intra-subnet discovery. **Two are
-product rather than protocol**: state synchronisation and invitation flow.
-
-That five of nine dissolved is worth noting about the method: a list of apparent
-gaps written by one party is substantially a list of things that party has not
-connected, and testing each against the existing design is cheaper than building
-anything.
+are **areas the design does not address at all**.
 
 ### 18.1 Multi-device
 
@@ -6303,9 +6184,7 @@ devices has three places to lose it from.**
 
 ### 18.2 Everything currently open, in one place
 
-**Consolidated so a reviewer need not reassemble it from six registers.** Rebuilt
-2026-08-25 after the propagation edit round; the previous version had drifted from
-four of the registers it summarises.
+**Consolidated so a reviewer need not reassemble it from six registers.**
 
 **The identity, presence, routing and messaging layers are specified. The resource
 layer is partly specified.** Every transaction, record, signature rule and encoding is
@@ -6446,8 +6325,6 @@ routing on purely local policy, including its failure modes).
 
 ## Appendix A. Decision log
 
-| **A published trust-policy descriptor** | Rejected twice, and the second time more firmly. A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts. An intermediate version carried **bad news only** — a node may declare its policy *fails* the soundness condition, silence meaning nothing — on the grounds that a deliberately crippled mechanism documents its own reasoning by existing. **That was withdrawn too**: it generated attack surface in review (adversaries reasoning about shopping across published policies) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally. Anyone proposing one should start here |
-
 Alternatives considered and declined, and conflicts resolved. Standing record —
 read before re-proposing anything here.
 
@@ -6471,24 +6348,11 @@ read before re-proposing anything here.
 | **Delegated verification authority** | Verification is evidence, not authority; a signed "same person" fact is an input to an adoption someone else signs (§7.4.0) |
 | **A second veto keypair per identity** | Superseded: there is no veto at all (§7.4.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. Down-line threshold covers roots **that have a sufficient down-line**, with small and Genesis roots an acknowledged open gap (§7.4.2); departure is self-punishing for a thief |
 | **Biometrics in network state** | Irrevocable, fuzzing does not survive combination with timestamp and location, and it would invert the design's own metadata-resistance property (§7.1.2) |
+| **A published trust-policy descriptor** | A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts; a bad-news-only variant generated attack surface (policy shopping) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally |
 
 ---
 
-### A.2 Parameter conflicts found and resolved
-
-Recorded because
-each arose the same way, a value corrected in one place and left stale in
-another, and the pattern will recur.
-
-| Conflict | Resolution |
-|---|---|
-| Presence record size: ~35 KB (§5, §16) vs ~40 KB (§7.3) | **~35 KB at ML-DSA-65.** §7.3 was stale from before the parameter set was pinned |
-| Geohash cell sizes: corrected in §7.1.7, stale in the §7.2 schema comment | **~156 km at p3, ~39 × 19.5 km at p4** |
-| Infra threshold: 110 subordinates (§4.3) vs ~1000 (§13.6) | **110.** The 1,000 figure is f^(L+1) — *fake identities per infra node* from the Sybil analysis (§14.1), not a subordinate threshold. **See the open question below** |
-| Anchor threshold: protocol constant S (§10.2, §16) vs per-node policy (§10.7.3) | **S is a guideline, not a status boundary.** Any ancestor may serve as a node's anchor; caching is per-node policy. §10.2 reworded |
-| Notation collision: `n` meant both query count (§7.1.3) and prior-meeting count (§7.2) | Query count renamed **q** |
-
-### Resolved: 110, 1,110 and 1,000 are three different quantities
+### A.2 110, 1,110 and 1,000 are three different quantities
 
 These look like competing answers to one question and are not. **There is no
 choice between L=2 and L=3 here.** All three figures are correct, at different
@@ -6515,216 +6379,3 @@ therefore slightly *more* infrastructure-efficient per user than large ones.
 
 **L = 2 stands.** §13.6's original "~1000 subordinates" was a rough statement of
 the 1,110 capacity figure, not a different threshold.
-
----
-
-
----
-
----
-
-
-### A.3 Questions closed during design
-
-Recorded so a reader can see what was asked and where it landed, without those
-entries making §17 look busier than it is.
-
-1. **Face-to-face attestation mechanism.** RESOLVED, see §7. Ceremony,
-   evidence channels, record format, and recovery are specified. Remaining
-   sub-items are noted in place.
-2. **What presence left for the network layer.** Three items to take up when
-   returning to §10 and §11:
-   Rotation *is* adoption, propagates as a topology-class message, and uses the
-   "push near, redirect far" pattern already built for stale locators, so no fifth
-   message class is needed (§7.4.0, §12). **Left behind: identity can fork.** Two
-   competing recovery claims are two valid adoptions of two distinct keys, and
-   nothing declares a single heir (§7.4.0.2).
-5. **Transaction and evidence schema.** DRAFTED, see the companion file
-   `wire-format.md`, which covers all seven transaction types —
-   adoption, departure, disavowal, peering, presence, resource registration and
-   abuse report — plus the supporting attestations, session frames and the QUIC
-   binding. CBOR with deterministic encoding
-   (RFC 8949 §4.2) plus real RFC 9052 COSE signatures is **agreed.** Protobuf's
-   serialization is explicitly non-canonical and every object here is signed.
-   Two items remain open in that file's §9: the queue cap value and canonical test
-   vectors. The disavowal enumeration and version-mismatch behaviour are resolved
-   there, and veto delegation is withdrawn.
-6. **Session establishment.** RESOLVED, see §11.1: QUIC transport with an
-   `X25519MLKEM768` handshake, dial-out attach with
-   heartbeat, sibling failover in a declared degraded state, and store-and-forward
-   by default with content-free push opt-in. The patron-as-mailbox queue policy is
-   settled (§11.1.6); only its cap value is per-node policy.
-7. **Aggregation mechanics.** RESOLVED (see §10.6). Self-routing addresses give
-   constant per-node state; stale paths repair during resolution at the point of
-   divergence; infra nodes carry no payload except for the tier serving a light
-   client. Remaining sub-item: cache placement (endpoint / resolver-chain /
-   anchor-adjacent) is an unmade engineering choice.
-8. **Soft-fork consequences.** DISSOLVED (see §4.1.1). Subnet plurality is a
-   power the protocol does not model, not a feature it must represent. Within a
-   subnet the structure is a tree; the edge between a user's presence in two
-   subnets passes outside the network entirely. No multi-position locator, no
-   cross-subnet accounting, no change to §10.6. Down-line credit was in any case
-   vestigial (§14.2 neutralised down-line size as a trust signal, and the only
-   surviving use of subtree size is anchor status (§10.2), which is routing and
-   per-subnet.
-9. **Bootstrap.** RESOLVED (see §10.8). It is not a genesis procedure but a
-   recurring **subnet formation** path: two identities, at least one infra
-   instance, a witnessless and verifierless presence ceremony, then one adopts
-   the other. Formation records are permanently typed as such and are evidence
-   only to their participants. Remaining sub-item: the first *anchor* in a young
-   subnet is governed by per-node caching policy (§10.7.3), which needs a
-   recommended early-network default.
-12. **Resource layer.** RESOLVED. §9 specifies the object, permission scopes,
-    catalog, abuse reporting and owner movement; `resource-requirements.md`
-    §2–§3 specify the credential and the HTTP request framing. §9.8's small items are
-    closed; what remains is a second implementation attempt against the frames as
-    drafted (§18.2).
-
-
-#### Areas closed after being listed as gaps
-
-**Succession — resolved as graceful degradation.**
-
-The absence of a succession mechanism looks like a gap. Checking what actually
-survives a permanently absent patron shows it is degradation, not failure.
-
-| Function | Patron permanently gone |
-|---|---|
-| Currency attestations | **Works.** Sibling, then grandpatron issuance (§10.6.5.1) |
-| Routing and session | **Works.** Sibling failover (§11.1.2) |
-| Adoption elsewhere | **Works.** No patron gate (§6.2) |
-| Proof of presence | **Works.** Patrons do not countersign PoP (§6.4) |
-| Payload | **Works.** Relays, not the patron specifically (§11.2) |
-| Subnet-scoped countersigning | **Degraded.** The only real loss; subordinates must eventually re-adopt |
-
-**No new mechanism is needed.** When a person dies, those who knew them
-reconfigure their social graphs gradually; that is what this produces. A node
-retains full capacity to reconstitute its position because the two operations that
-matter for reconstitution — adoption and PoP — are ungated.
-
-**One specific consequence worth recording.** If the departed node was an
-**anchor**, its subtree fragments into up to *f* subtrees, each re-rooting on a
-child (§10.7.7). §10.7.7 assumes the old anchor publishes a forwarding record, and a
-dead node publishes nothing. So cached locators into that subtree fail with no
-redirect until the anchor-set gossip carries the new anchors and callers
-re-resolve. **A period of failed lookups, not permanent breakage**, and the one case where the
-forwarding-record mechanism does not apply.
-
-**Intra-subnet discovery, specified at §9.5.**
-
-A **service catalog**: subsettable and composable, so a user sees the aggregate of
-services within range. Service description and connection information form part of
-the local state replicated between adjacent nodes.
-
-**Prior art maps almost directly: DNS-SD (RFC 6763)**, commonly paired with mDNS
-(RFC 6762) as "Bonjour". Service
-instances carry a *type*, an *instance name* and *TXT* metadata holding connection
-details; browsing is per-domain and composes across domains. The mapping:
-
-| DNS-SD | Here |
-|---|---|
-| Domain | Subnet / neighbourhood |
-| Service type | Resource class (§9) |
-| Instance name | Resource identifier under its owner |
-| **SRV record** | Connection endpoint — host and port |
-| TXT record | Additional service metadata and the permission requirement. RFC 6763 says host and port MUST NOT be duplicated here |
-| Browse | Enumerate the union of catalogs within horizon |
-
-Two adaptations this design forces:
-
-- **Reach follows the horizon** (§12.1): you can ask the nodes you can see, so a
-  catalog view is the union of what they answer. Nothing replicates, and freshness
-  is inherent rather than maintained.
-- **Entries should carry their permission requirement**, so browsing shows what
-  you can actually use rather than everything that exists. This is capability-style
-  cataloguing and it keeps §9's access control legible at discovery time instead
-  of only at request time.
-
-**Instructive failure to avoid: UDDI**, the SOAP-era universal registry, which
-died of centralisation and of describing services nobody wanted to find. The
-lesson is that a catalog is useful at neighbourhood scale and worthless at global
-scale, which is the scoping this design already has for other reasons (§10.4).
-
-**This is compatible with §1.1 in a way global discovery is not.** Within a
-neighbourhood the shared state exists, so a directory can be maintained without
-any global claim. It becomes urgent with resources: **a resource nobody can find
-is not a resource.**
-
-**Contained gaps, since resolved or scoped.**
-
-**Group operations — SPECIFIED (§11.3).** An abstraction over pairwise
-operations in a client library, not a protocol-level primitive. A standard library offering *"message all subordinates
-to recursion depth n"* and *"message up-line patrons to depth n"* composes the
-pairwise message primitive and stays honest about the network it runs on. The
-alternative — protocol-level group semantics — would mean attempting ACID-shaped
-updates across a network built around extensive caching and forwarding, which it
-cannot support and should not pretend to. §7.4.2's threshold revocation remains
-the one genuinely multi-party primitive, and it is a *counting* operation over
-independent signatures rather than a coordinated one.
-
-**Resource abuse — SPECIFIED (§9.6).** Resources
-will be diverse and most will be fully-fledged applications in their own right, so
-**abuse detection and response belong to each resource**, not to the protocol. The
-protocol's contribution is a single **abuse-report event type** addressed to the
-resource owner. The response is defined by whatever policy object governs access
-to that resource, which resides at the owner's node — consistent with §9.1,
-where the owner is the one party that can genuinely enforce.
-
-**Time and ordering — DISSOLVED.** Cross-identity total ordering is unavailable
-without a global clock or a shared log, both refused. It is also **not required by
-any mechanism here**:
-
-- §8's archive gives **ancestor reachability within one identity.** Every
-  record's predecessors are provably present, which is what completeness
-  arguments actually need. It does **not** give a total order: the archive is a
-  DAG and cross-branch ordering is deliberately not recovered (§8.3).
-- Presence records carry **witness-corroborated timestamps.** Witnesses were
-  present and sign what they observed, which is what impossible-travel detection
-  (§7.1.7) needs, since that compares two timestamps rather than ordering a
-  sequence.
-
-Per-identity reachability plus locally corroborated timestamps is sufficient. **No
-total order is provided at any scope**, and none is needed.
-
-**State synchronisation — REAL but contained.** An infra node returning from a
-long outage, or a new one joining, needs to catch up on topology and on
-attestations it should hold. §10.6.5.1 covers *currency* during an outage but says
-nothing about state afterwards. Bounded by the horizon (§12.1), so the volume is
-known; the protocol for requesting and serving a catch-up is not.
-
-**Invitation flow — clarified, and probably product.** The concrete sequence by
-which a person not on the network becomes a participant. §10.8 covers two people
-bootstrapping a subnet and §6.1 covers joining an existing one, but the *social*
-path is undescribed: how Alice tells Bob this exists, what Bob installs, what Bob
-can see before he holds any identity, how they arrange to meet, and what the first
-ceremony looks like to someone who has never seen one. Likely product rather than
-protocol, but it is the path **every** user takes exactly once, and at present
-nobody owns it.
-
----
-
----
-
-## Appendix B. Change log
-
-**Moved to `change-log.md`.** It had grown to roughly a third of this file, which
-made full-text search noisier without helping anyone find a current decision. The
-ordering and provenance notes are unchanged.
-
-**Appendix A remains here**, because a rejected alternative is something you need
-*before* re-proposing it. It belongs beside the specification, where the change
-log does not.
-- **2026-08-16 (0.9 organisation)** — Structural pass over the five documents.
-  **The resource-document cross-references were broken**: `infra-client` and the
-  design still cited `R0`–`R7` after that file was renumbered §§1–13, so following
-  a reference reached nothing. Repaired first, since it made every other finding
-  harder to check. **§10 had outgrown its heading** — "Addressing and resolution" had
-  accumulated session establishment, NAT traversal, mobile behaviour, payload
-  confidentiality, key agreement and group operations, none of which a reader
-  seeking them would look for there. Split: §10 keeps addressing, **new §11 is
-  "Sessions and payload"**, and everything after shifts by one. **Appendix B is now
-  `change-log.md`.** It had grown to roughly a third of the design document, making
-  full-text search noisier without helping anyone find a current decision. Appendix
-  A stays, because a rejected alternative is something you need *before*
-  re-proposing it. **The conformance preamble was near-verbatim in all three
-  requirements documents**; it is now stated once in §0 and referenced.

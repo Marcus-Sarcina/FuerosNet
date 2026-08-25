@@ -3249,3 +3249,33 @@ nothing happened. Ordering was always correct; the dates were not.
   resource layer exists to keep. An application naming which of its own users complained
   puts that in `detail`, as application data. C16 stays withdrawn on firmer ground and
   P27 reduces again.
+- **2026-08-25 (aggressive minification of the specification documents)** — At the
+  author's direction: review ingestion was drowning in descriptive residue, and the
+  chosen posture is *describe the minimum active feature set, repair any
+  erroneously-deleted justification in the author's own voice later*. Normative
+  content untouched; everything cut is recoverable from git and this log.
+
+  **Cut from `network-design.md`** (~6,600 → ~5,900 lines): all eight vignettes and
+  their cross-reference map; every date qualifier in decision markers (`[D — date]` →
+  `[D]`, 79 across both documents); §0 rewritten to the three conventions without
+  their origin stories; the preface's dated status paragraph and working-context
+  note; review-pass narration in §14.5, §16.1, §16.1.1 and §18 ("a re-run on
+  2026-08-16 found…", "pass 0.4 found 30…"); the locator-removal and
+  worked-example provenance notes from the previous round; **Appendix A.2 (parameter
+  conflicts) and A.3 (questions closed during design) deleted** — history, already
+  duplicated here — with A.1 kept, the orphaned trust-policy row folded into its
+  table, and the 110/1,110/1,000 disambiguation kept as the new A.2. Stale
+  references that had pointed at the old A.2/A.3 redirected to §15.2, §8.3 and this
+  file (several had been silently resolving to the wrong content since the
+  assumptions register moved into §15.2).
+
+  **Cut from `wire-format.md`** (~3,000 → ~2,880): "previously unspecified"
+  paragraphs; §9's resolved-items history; field tombstones shrunk to one-line
+  "key N unused, not reused" comments — **numbering itself unchanged**, since
+  renumbering is a normative change reserved for a publication pass.
+
+  **`authoring-conventions.md`**: the vignette convention removed with the vignettes.
+
+  **Kept deliberately**: §14's findings and correlation registers (current risk),
+  §15 (assumptions), A.1 (rejected alternatives — the anti-re-proposal register),
+  §17/§18 (open items), and every forward-stated "why not".

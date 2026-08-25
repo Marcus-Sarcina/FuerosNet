@@ -25,63 +25,14 @@ claims were computed and which were felt.
 
 ### Vignettes
 
-Sections where the design **anticipates or scaffolds human behaviour** carry a
-numbered vignette: a short passage in an informal voice giving a physical-world
-analogy or a worked use case. They are set off as blockquotes and prefixed
-`**Vignette Vn**` so they can be found mechanically.
-
-**What they are:** illustrations of intent. They communicate the gestalt of how
-the system is meant to be used, which a dry specification conveys badly, and they
-are the right input for later work that needs the feel of the thing — user
-documentation, interface design, art direction.
-
-**What they are not:** evidence. A vivid story is not a workload study. Where a
-vignette dramatises one of the load-bearing assumptions in Appendix A.2, it says so, and
-that cross-reference means the assumption remains unvalidated no matter how
-plausible the scene reads.
-
-**A vignette states the base case plainly, then notes its limits separately.**
-Hedging inside the narration produces prose that is technically careful and
-rhetorically dead — *"somebody spent four minutes proving they were where I was"*
-teaches a reader less than *"we met"*, and the reader who needs the caveat is not
-the reader the vignette is for.
-
-So: **write the optimistic case in the vignette's own voice, then append the
-reservations in italics with their section references.** The limits belong in the
-document and belong visible; they do not belong woven through a scene until it
-argues with itself. Most people leak far more than this network asks them to and
-are untroubled by it — writing for the most security-anxious reader misinforms the
-ordinary one, who is who these are for.
-
-**One vignette is persuasive rather than illustrative.** V6 argues for accepting
-a known cost rather than describing intended use. That genre carries a risk illustration does not: it can be quoted to wave away a
-future finding. Any persuasive vignette must
-carry its own counter-argument in the body and an explicit statement of what it
-may not be used for — V6 does both. **Prefer illustration; use persuasion
-sparingly and mark it.**
-
-**Extraction produced three of the eight vignettes here.** V1, V7 and V8 were already in the document as
-formal-voiced prose doing informal-voiced work — the teams analogy, jury
-nullification, the postal model. Finding those is usually more productive than
-writing new ones, and §4.1.1 held two of them for two days after this convention
-was written. **When adding a vignette, first check whether the section already
-contains one in the wrong register.**
-
-**Three rules:**
-
-1. **Vignettes belong only where behaviour is being assumed.** Never beside
-   arithmetic, wire formats, or derivations — putting a story next to the min-cut
-   argument blurs exactly the line this convention exists to draw.
-2. **A mismatch between vignette and specification is a required conversation,
-   not an errand.** Neither wins automatically. This document's postal and
-   jury-nullification analogies each *corrected* the spec rather than
-   illustrating it, and that is a normal outcome.
-3. **Any change to a section obliges a check of its vignette**, and any change to
-   a Appendix A.2 assumption obliges a check of every vignette citing it.
-
----
-
----
+Sections whose behaviour depends on human judgment may carry a numbered vignette:
+a short passage in an informal voice giving a physical-world picture of the
+mechanism. Headed `**Vignette Vn**` so they can be found mechanically. They are
+illustrative, never normative — a mismatch between vignette and specification is a
+required conversation, not a bug in either. Write the optimistic case in the
+vignette's own voice, then append its limits separately. Vignettes belong only
+where behaviour is being assumed, never beside pure encoding. Any change to a
+section obliges a check of its vignette.
 
 ## Where invariants live
 

@@ -206,7 +206,7 @@ likely have produced:
 
 - **Every user's access is administered by someone they have a real relationship
   with.** No distant operator decides whether you may use the subnet-wide service;
-  your patron does. design §1.2's freedom argument appears here as an **architectural
+  your patron does. design §1's freedom argument appears here as an **architectural
   property** rather than a claim — local accountable intermediaries are structurally
   required, not merely hoped for.
 - **The gate holds at every hop.** A wider system cannot reach past a patron to
@@ -226,7 +226,7 @@ already asks to run infrastructure.
 > around it; this is the same claim one layer up, about operators rather than
 > participants. If patrons will not administer resources, the federation pattern
 > does not happen and applications either stay local or route around the network —
-> and if they route around it, the network's whole product argument (design §1.2) goes
+> and if they route around it, the network's whole product argument (design §1) goes
 > with them. **Belongs in design §15.2 when this propagates.**
 
 ## 5. Conformance: extension support is not arbitrary-program support
