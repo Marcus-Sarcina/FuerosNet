@@ -287,7 +287,115 @@ joined**, and membership in one is not exclusive of others.
 
 Security expectations follow physical-world affiliations as described in §1.
 
-#### 1.2.1 Three honest limits on that target
+#### 1.2.1 Three properties the design relies on and does not otherwise state
+
+Load-bearing and emergent rather than mechanisms: nothing enforces them, and
+several arguments elsewhere assume them.
+
+**Cheap fabrication is a privacy feature, not only a weakness.** Because fully
+convincing fictitious subnets are possible, even a solidly documented package of
+correlated evidence remains deniable — Sybil attackers inadvertently contribute to
+the deniability of every record. The boundary that keeps this from contradicting
+§14.3: **forging evidence about a specific real person is hard** — it needs their
+signature, and the ceremony machinery exists to keep it hard — while **fabricating
+a whole fictitious graph is easy.** The deniability therefore lies in the graph,
+not in any signature: a package showing that someone met fifty people is
+indistinguishable from one where forty-nine are fictitious, unless the evaluator
+can reach those people independently. A distant evaluator cannot; a local one can —
+the same asymmetry §13.1 builds trust on.
+
+**Trust emanates from the user, so a subject's confidence in their own evidence is
+better founded than an attacker's, even when both hold the same information.** A
+participant knows which meetings happened; a holder of identical records knows only
+what the records say, with no way to separate real from fabricated without
+independent reach into the graph. This is why trust is per-observer (§13.1) rather
+than a global score: the same evidence genuinely supports different conclusions for
+differently-placed parties, and a global number would have to discard that
+difference.
+
+**A user's baseline exposure to surveillance is the floor of their overall
+security.** The design does not aim at absolute confidentiality. It treats the
+exposure a person already accepts as the level to beat, and attempts to be at least
+marginally more secure along each vector of attack than a non-user's equivalent
+activity:
+
+| Attack | Conventional cost | Here |
+|---|---|---|
+| Read someone's photographs | Take their unlocked phone | Take their phone, defeat archive encryption, **and obtain a segment key from each person depicted** (§7.1.5.2) |
+| Log someone's whereabouts | Follow them and photograph them in public | Gain enough trust to be admitted to their subnet, then attend a ceremony |
+| Learn who someone associates with | Read their social platforms | Reach inside their horizon, or compromise a party who already holds it |
+
+**This is what makes the privacy findings sortable.** "An attacker with the device
+sees everything" reads as a defect against a hypothetical zero-disclosure system;
+against the floor, the question is whether that attacker sees more than they would
+from any other phone, and mostly they do not. §14.5's register should be read
+against this floor.
+
+#### 1.2.2 Whom the floor protects against, and where it does not
+
+Surveillance is not one activity, and a design that treats it as one will defend
+the wrong thing. Three classes are worth separating, because the network stands
+differently against each and because the difference is not a matter of degree.
+
+**Indiscriminate and untargeted.** Bulk collection for research, advertising,
+sentiment analysis or market intelligence. Nobody here is looking for a particular
+person; the value is in volume. This is the class the network resists most
+naturally, because there is no store to collect from. The possibility of
+synthesised subnets further devalues whatever is gathered, since the collector
+cannot tell fabricated activity from real.
+
+**Indiscriminate but targeted.** Intelligence services, secret police, immigration
+officers, employment screeners. This class wants information about a **specific
+subject** and is **accountable to no fixed evidentiary standard**. An officer will
+refuse you entry because your device holds photographs of you somewhere
+compromising, and will refuse you exactly as readily whether or not those
+photographs are signed and witnessed. **To this class, cryptographic attestation
+adds nothing**; on-device encryption is a real defence and attestation is not an
+enhancement.
+
+**Discriminate.** A police department or investigator building a case that must
+survive examination under rules of evidence, with some standard of due process.
+This is the only class for whom attestation adds value, and it is also the class
+that suffers from the reduced epistemic value of network data, since the same
+fabricability that devalues bulk collection is available to a defence.
+
+**The design's exposure differs sharply across them:**
+
+| Class | Who | What defends | Does attestation help them? |
+|---|---|---|---|
+| **Indiscriminate, untargeted** | Bulk collection for research, advertising, sentiment or market intelligence | **Disaggregation.** There is no store to walk (§14.5.1.1), and the fabricability discount further devalues whatever is collected | **No.** Bulk collectors do not verify signatures |
+| **Indiscriminate, targeted** | Intelligence services, secret police, immigration officers, employment screeners — wanting a specific subject, accountable to no evidentiary standard | **On-device encryption**, and nothing else. The decision is not evidentiary | **No.** An officer refuses entry over unsigned photographs exactly as readily as over signed ones |
+| **Discriminate** | Police, investigators, litigants — needing a conclusion that withstands examination under rules of evidence | Disaggregation, plus the **fabricability discount** (§1.2.1), which is a defence that operates *inside* their standard | **Yes, and only here** |
+
+**So the evidentiary-weight cost is narrower than it first appears.** An archive is
+durable and non-repudiable where a camera roll is not, and that is a real
+difference, but one **only the third class can spend**. Against the
+second, which is where most people's realistic fear lies, a signature adds nothing
+an unsigned photograph did not already supply, and encryption is the whole defence
+either way.
+
+**The discount also applies to the classes least able to defeat it.** A signature
+proves a key signed, not that a person exists, so a subject can say a subnet was
+synthesised, and a **remote** examiner cannot distinguish that from a real one.
+Classes one and two are remote from the subject's graph almost by definition. Class
+three can reach counterparties and defeat the discount, and is also the only class
+bound by rules that constrain what it may do with the result.
+
+**Where the cost is real and unoffset**: an attacker in class three who obtains an
+archive gets **signed assertions about who someone met**, which no camera roll
+provides, and who can afford to check them. §1.2.4's concession stands for that
+case and should not be read more broadly.
+
+#### 1.2.3 Not a platform for evading the state
+
+This is not built for crime or insurgency, so the threat model of an anonymity
+network does not apply. Someone committing crimes on this network would not be
+doing it at the layer this document specifies; it would be inside a resource,
+which can implement whatever additional obfuscation its authors choose. **The
+network layer's job is identity and trust, cheaply enough that resources can build
+strong security on top of it.**
+
+#### 1.2.4 Three honest limits on that target
 
 **Where affiliation is itself the incriminating fact, this design offers no more
 protection than the physical world — and no less.** The attacker who punishes
@@ -326,124 +434,7 @@ the per-record processing cost is near zero. An adversary who solves acquisition
 solves everything downstream — but the compromise extends only to the compromised
 user's activity within the subnets the adversary can see into.
 
-#### 1.2.2 Three properties the design relies on and does not otherwise state
-
-These are load-bearing and emergent rather than mechanisms. Nothing enforces them;
-they follow from choices made for other reasons, and several arguments elsewhere
-assume them.
-
-**Cheap fabrication is a privacy feature, not only a weakness.**
-
-The ease with which fictitious subnets and their artifacts can be produced lends
-deniability to legitimate records. Because fully convincing fictitious histories
-are possible, even a solidly documented package of correlated evidence remains
-somewhat untrustworthy and therefore deniable. **Sybil attackers inadvertently
-contribute to the global deniability of the network**, which inverts the usual
-relationship between fabrication and trust: the cheaper forgery becomes, the less
-any single record can be made to prove.
-
-The boundary matters, or this reads as contradicting §14.3. **Forging evidence
-about a specific real person is hard**: it needs their signature, and the ceremony
-machinery exists to keep it hard. **Fabricating a whole fictitious graph is easy.**
-So the deniability does not lie in any individual signature, since a participant
-cannot disown their own key. It lies **in the graph**. A package showing that someone met fifty
-people is indistinguishable from one where forty-nine are fictitious, unless the
-evaluator can reach those people independently. A distant evaluator cannot; a local
-one can, which is the same asymmetry §13.1 builds trust on.
-
-**Trust emanates from the user, so a subject's confidence in their own evidence is
-better founded than an attacker's, even when both hold the same information.**
-
-A participant knows which meetings happened. Someone holding the identical records
-knows only what the records say, and has no way to separate the real from the
-fabricated without independent reach into the graph. This is why
-trust is per-observer (§13.1) rather than a global score: **the same evidence
-genuinely supports different conclusions for differently-placed parties**, and a
-global reputation number would have to discard that difference.
-
-**A user's baseline exposure to surveillance is the floor of their overall
-security.**
-
-The design does not aim at absolute confidentiality. It treats the exposure a
-person already accepts as the level to beat, and attempts to be **at least
-marginally more secure along each vector of attack than a non-user's equivalent
-activity**.
-
-An attacker holding someone's device can always view their pictures and video
-captures along with the EXIF data. Viewing those same images inside the light
-client's encrypted archive is no easier, and still requires physically acquiring
-the device. Logging a subject's presence at a ceremony means gaining enough trust
-to join their local subnet and attending in person, which is at least as much
-effort as following them and photographing them in a public place.
-
-| Attack | Conventional cost | Here |
-|---|---|---|
-| Read someone's photographs | Take their unlocked phone | Take their phone, defeat archive encryption, **and obtain a segment key from each person depicted** (§7.1.5.2) |
-| Log someone's whereabouts | Follow them and photograph them in public | Gain enough trust to be admitted to their subnet, then attend a ceremony |
-| Learn who someone associates with | Read their social platforms | Reach inside their horizon, or compromise a party who already holds it |
-
-**This is what makes the privacy findings sortable.** Without it, "an attacker with
-the device sees everything" reads as a defect; with it, the question is whether that
-attacker sees more than they would from any other phone, and mostly they do not.
-§14.5's register should be read against this floor rather than against a
-hypothetical zero-disclosure system.
-
-##### Whom the floor protects against, and where it does not
-
-Surveillance is not one activity, and a design that treats it as one will defend
-the wrong thing. Three classes are worth separating, because the network stands
-differently against each and because the difference is not a matter of degree.
-
-**Indiscriminate and untargeted.** Bulk collection for research, advertising,
-sentiment analysis or market intelligence. Nobody here is looking for a particular
-person; the value is in volume. This is the class the network resists most
-naturally, because there is no store to collect from. The possibility of
-synthesised subnets further devalues whatever is gathered, since the collector
-cannot tell fabricated activity from real.
-
-**Indiscriminate but targeted.** Intelligence services, secret police, immigration
-officers, employment screeners. This class wants information about a **specific
-subject** and is **accountable to no fixed evidentiary standard**. An officer will
-refuse you entry because your device holds photographs of you somewhere
-compromising, and will refuse you exactly as readily whether or not those
-photographs are signed and witnessed. **To this class, cryptographic attestation
-adds nothing**; on-device encryption is a real defence and attestation is not an
-enhancement.
-
-**Discriminate.** A police department or investigator building a case that must
-survive examination under rules of evidence, with some standard of due process.
-This is the only class for whom attestation adds value, and it is also the class
-that suffers from the reduced epistemic value of network data, since the same
-fabricability that devalues bulk collection is available to a defence.
-
-**The design's exposure differs sharply across them:**
-
-| Class | Who | What defends | Does attestation help them? |
-|---|---|---|---|
-| **Indiscriminate, untargeted** | Bulk collection for research, advertising, sentiment or market intelligence | **Disaggregation.** There is no store to walk (§14.5.1.1), and the fabricability discount further devalues whatever is collected | **No.** Bulk collectors do not verify signatures |
-| **Indiscriminate, targeted** | Intelligence services, secret police, immigration officers, employment screeners — wanting a specific subject, accountable to no evidentiary standard | **On-device encryption**, and nothing else. The decision is not evidentiary | **No.** An officer refuses entry over unsigned photographs exactly as readily as over signed ones |
-| **Discriminate** | Police, investigators, litigants — needing a conclusion that withstands examination under rules of evidence | Disaggregation, plus the **fabricability discount** (§1.2.2), which is a defence that operates *inside* their standard | **Yes, and only here** |
-
-**So the evidentiary-weight cost is narrower than it first appears.** An archive is
-durable and non-repudiable where a camera roll is not, and that is a real
-difference, but one **only the third class can spend**. Against the
-second, which is where most people's realistic fear lies, a signature adds nothing
-an unsigned photograph did not already supply, and encryption is the whole defence
-either way.
-
-**The discount also applies to the classes least able to defeat it.** A signature
-proves a key signed, not that a person exists, so a subject can say a subnet was
-synthesised, and a **remote** examiner cannot distinguish that from a real one.
-Classes one and two are remote from the subject's graph almost by definition. Class
-three can reach counterparties and defeat the discount, and is also the only class
-bound by rules that constrain what it may do with the result.
-
-**Where the cost is real and unoffset**: an attacker in class three who obtains an
-archive gets **signed assertions about who someone met**, which no camera roll
-provides, and who can afford to check them. §1.2.1's concession stands for that
-case and should not be read more broadly.
-
-#### 1.2.3 The adoption path is cheaper than it looks
+### 1.3 The adoption path is cheaper than it looks
 
 Consuming subnet membership as a credential is **structurally identical to
 enterprise single sign-on**: an identity provider asserts a user with roles or
@@ -463,16 +454,7 @@ cheapest cases to reach. *"Vendors must build for us"* and *"vendors need only t
 SSO they already support"* are very different propositions, and the adoption
 argument should not be made without saying which one applies.
 
-#### 1.2.4 Not a platform for evading the state
-
-This is not built for crime or insurgency, so the threat model of an anonymity
-network does not apply. Someone committing crimes on this network would not be
-doing it at the layer this document specifies; it would be inside a resource,
-which can implement whatever additional obfuscation its authors choose. **The
-network layer's job is identity and trust, cheaply enough that resources can build
-strong security on top of it.**
-
-### Primary use case
+### 1.4 Primary use case
 
 Most traffic is expected to be **non-logged activity within a user's ±2 tier
 "Dunbar Org"**, using the network as a **DNS and SSL replacement** for naming and
@@ -1469,66 +1451,47 @@ enforces both tiers by choosing which segment key to release, template or images
 
 #### 7.1.5.1 Retention rationale and the ageing/detection tension
 
-Three justifications, in ascending order of strength:
+**The retention window is a default the subject enforces, not a commitment the
+holder makes.** Captures are sealed under the subject's keys (§7.1.5.2), so a
+holder retains nothing it can open, and the window is enforced by declining to
+release a segment key. Two years is the value both parties can expect without it
+needing to bind anyone. *(Breach surface, once the leading argument for a short
+window, mostly dissolved with the same change: a seized store is ciphertext.)*
 
-1. **Resource requirement for running a node.** Weakest of the three — storage
-   is not binding. Five crops per meeting is a few hundred KB; even a thousand
-   meetings is well under half a gigabyte. **The better version of this argument
-   is breach surface**: a smaller store is a smaller disclosure when a device is
-   compromised or seized. Shorter retention also reduces regulatory exposure —
-   though liability is not simply proportional to duration, since destruction and
-   storage-limitation obligations turn on more than how long material is held. Same policy, stronger reason.
+Two justifications carry the value:
 
-   **§7.1.5.2 changes what this window is**, which is worth noticing. If a
-   compliant client's store is ciphertext it cannot open, breach surface shrinks
-   toward zero and the argument above stops carrying the weight assigned to it. More
-   importantly the window ceases to be a commitment the *holder* makes: the subject
-   enforces it by declining to release a segment key (§7.1.5.2). **Two years becomes
-   a default, not a rule.** And its value is that both parties know what to expect
-   without it needing to bind anyone.
-2. **A Schelling point for excusable non-retention.** This is the load-bearing
-   one, and **§7.1.5.2 strengthens it** where it weakened the argument above: once
-   a subject can enforce the window by withholding, a coordinated default is what
-   tells both parties which requests to expect and which refusals are ordinary. With a universal default, "older than the retention window" is a
-   *coordinated and checkable* excuse rather than an idiosyncratic claim, and —
-   more importantly — **deviation becomes conspicuous**. An identity whose
-   counterparties all declare unusually short windows is visibly anomalous. With
-   no default, every policy is idiosyncratic and nothing stands out, which is
+1. **A Schelling point for excusable non-retention.** With a universal default,
+   "older than the retention window" is a coordinated and checkable excuse rather
+   than an idiosyncratic claim — and deviation becomes conspicuous. An identity
+   whose counterparties all declare unusually short windows is visibly anomalous.
+   With no default, every policy is idiosyncratic and nothing stands out, which is
    precisely the cover a shared-identity scheme needs.
-3. **Limiting damage from subject ageing.** Real: face-recognition accuracy
-   degrades with elapsed time between enrolment and probe. Modest for adults
-   over a few years, severe for minors and adolescents, whose faces change
-   substantially in 24 months.
+2. **Limiting damage from subject ageing.** Face-recognition accuracy degrades
+   with time between enrolment and probe: modest for adults over a few years,
+   severe for minors, whose faces change substantially in 24 months.
 
 **These pull against each other.** Longer retention improves detection of
-slow-burn shared-identity schemes; shorter retention reduces false rejection
-from ageing, and false rejection is the more common failure (§7.1.4). Two years
-is therefore a **compromise, not an optimum on any single axis**, and should be
-recorded as such rather than defended as derived.
+slow-burn shared-identity schemes; shorter retention reduces false rejection from
+ageing, and false rejection is the more common failure (§7.1.4). Two years is a
+**compromise, not an optimum on any axis**, and is recorded as chosen, not derived
+(§16).
 
-**The cliff problem.** A hard 2-year expiry makes meetings older than the window
-permanently unverifiable, which is exactly the regime a patient attacker would
-target. **Two-tier retention** (chosen; §16), source photographs deleted
-at 2 years, derived templates retained to 5, then nothing. Both numbers declared
-in the record, so the Schelling point survives (two standard values rather than
-one). Templates are far smaller and less harmful on breach than photographs,
-though still biometric and still irrevocable, so this is a mitigation rather
-than a fix. Fuzzy commitments / secure sketches are the theoretically correct
-tool for retaining verification capability without retaining the biometric, but
-face entropy is low enough that their security margins are weak; not recommended
-as a primary mechanism.
+**A hard expiry is a cliff**: meetings older than the window become permanently
+unverifiable, which is the regime a patient attacker would target. **Two-tier
+retention softens it**: source photographs deleted at 2 years, derived templates
+retained to 5, both values declared in the record so the Schelling point survives
+as two standard values rather than one. Templates are smaller and less harmful on
+breach, though still biometric and still irrevocable — a mitigation, not a fix.
 
-**Re-enrolment substantially defuses the ageing concern.** When two parties meet
-again, each refreshes its stored record of the other. Ageing therefore only
-degrades verification for identities met exactly once and never again, which is
-the low-value case anyway. Active relationships never accumulate a stale
-reference image. The reference client should refresh on every subsequent
-meeting.
+**Re-enrolment defuses most of the ageing concern.** Parties who meet again
+refresh each other's stored reference, so ageing degrades verification only for
+identities met exactly once and never again — the low-value case. The reference
+client refreshes on every subsequent meeting.
 
-**Minors.** The ageing argument is far stronger for young subjects, and their
-inconclusive rate will be higher regardless of policy. Rather than storing age
-(more PII), rely on the subject-set retention policy already in §7.1.4 and
-expect elevated `inconclusive` responses in this population.
+**Minors.** The ageing argument is strongest for young subjects and their
+`inconclusive` rate will be higher under any policy. Rather than storing age —
+more PII — rely on §7.1.4's subject-set retention policy and expect elevated
+`inconclusive` responses in this population.
 
 #### 7.1.5.2 Keystream-encrypted captures: the subject holds the key
 
@@ -2832,7 +2795,7 @@ and network data it holds anyway, the identifier scheme is not what stands betwe
 them (C15). Pairwise derivation addresses cross-*operator* linkage, not
 cross-*service* linkage within one operator.
 
-**That is accepted rather than unaddressed** (§14.5.7 item 10). Resources differ in
+**That is accepted rather than unaddressed** (§14.5.7 item 11). Resources differ in
 what anonymity they offer, and which ones a subnet admits is part of how it sets its
 security posture; a user may decline a service their organisation accepts. Handing out the network keyhash instead would let any
 two services discover they share a user, which is **P3's cross-context linkage
@@ -5413,13 +5376,13 @@ it is framed — the former P8 was withdrawn on exactly this ground, and any fin
 whose precondition is *"an attacker inside the horizon"* should be checked against
 it before it is entered here.
 
-**Read this register against §1.2.2's baseline-exposure floor, and against its
+**Read this register against §1.2.1's baseline-exposure floor, and against its
 three surveillance classes.** A finding's severity depends on which class can use
 it: most of what an endpoint attacker learns is unusable to anyone needing their
 conclusion to survive examination, and most of what survives examination is
 available to that class by other means.
 
-**Read this register against §1.2.2's baseline-exposure floor.** A finding that an
+**Read this register against §1.2.1's baseline-exposure floor.** A finding that an
 attacker holding a device sees the local archive is not by itself a defect — the
 question is whether it costs more than reading an ordinary phone. Findings that
 clear the floor are recorded because they are real, not because they are failures.
@@ -5707,10 +5670,7 @@ reference client must disclose at capture time what the record will contain and
 who will be able to read it.** Not in a policy document, at the moment of the
 ceremony.
 
-### 14.5.7 Deliberately accepted costs, not findings
-
-Consolidated here because they were previously scattered and a reader could not
-tell an accepted cost from an unexamined one:
+### 14.5.7 Accepted costs
 
 1. **No anonymity or pseudonymity.** Real identity and physical presence are the
    trust mechanism (§2).
@@ -5718,8 +5678,10 @@ tell an accepted cost from an unexamined one:
    introduction; intrinsic, because graph position *is* the evidence (§10.1).
 3. **Recovery destroys unlinkability.** Rotation publishes the predecessor link;
    a fresh Genesis identity is the privacy-preserving alternative (§10.8.7).
-4. **Source-photo retention.** Full local photographs rather than templates, for
-   algorithm migration, with breach risk recognised (§7.1.2).
+4. **Source-photo retention.** Full photographs rather than templates alone, for
+   algorithm migration — sealed under the subject's keystream (§7.1.5.2), so the
+   accepted residual is the release window and the non-compliant holder (P13),
+   not storage breach.
 5. **Persistent encounter evidence.** Presence facts are immutable; only derived
    standing decays (§13.5).
 6. **Visible infrastructure placement** — ASN and prefix are exposed *so that*
@@ -5727,7 +5689,7 @@ tell an accepted cost from an unexamined one:
 7. **Optional platform-vendor metadata.** Push is opt-in and declared a
    degradation of the trust model (§11.1.5).
 8. **Patron as communications-metadata chokepoint** (§10.6.3).
-8b. **No erasure at the evidence layer.** Once distributed among participants,
+9. **No erasure at the evidence layer.** Once distributed among participants,
    patrons and witnesses, a signed record cannot be withdrawn anywhere. Only
    *derived standing* decays (§13.5). This is architecturally intentional and
    inseparable from what presence evidence is for, but it is a **compliance
@@ -5735,11 +5697,8 @@ tell an accepted cost from an unexamined one:
    or purpose-limitation requirements it likely needs a documented lawful basis
    for immutable evidence rather than a technical deletion mechanism. Less
    developed than the biometric-retention analysis beside it (§7.1.2).
-9. **No cold lookup.** Discovery is social rather than searchable (§10.4).
-
----
-
-10. **A single vendor correlates its own resources.** Pairwise identifiers
+10. **No cold lookup.** Discovery is social rather than searchable (§10.4).
+11. **A single vendor correlates its own resources.** Pairwise identifiers
    (§9.0.2) stop two *independent* vendors comparing identifiers for the same
    person. They do nothing about one vendor running several services, which
    correlates them from account, device and network data it already holds — the
@@ -5776,9 +5735,9 @@ acknowledged and whose join is not.
 | **C9** | Local face archive + transaction archive, on one device | **§7.1.5.2 breaks this for compliant clients.** A seized device yields an archive and ciphertext, and the join requires per-counterparty cooperation from the depicted person. **A face-to-key-to-social-history database.** Either store alone is far less sensitive: photos identify faces without network history, the archive identifies keys without biometrics. On a compromised device they coexist and join. **This is the central consequence of P5**, not a separate risk | Critical |
 | **C10** | Stable key + catalog + multi-subnet membership | The same person's **services** followed across socially independent contexts — P3's linkage plus P15's fingerprint. **Conditional on a single-identity client**, since the linkage half disappears when a user presents different identities in different subnets | High for such a client |
 | C11 | **One-time key request** + queue and routing metadata | **Largely addressed** (§11.2.4). Reusable prekey material is prefetched across the Dunbar Org as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal — and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the on-demand one-time key request, which is made when a session is actually being opened and therefore precedes its message by a short interval: a node sees a request followed by traffic or by nothing, so an abandoned contact still leaves a trace. Depletion is bounded by per-requester rate limiting rather than by policing motive | Low–Medium |
-| C15 | Pairwise principal + vendor account data + several resource ids | **Accepted, not open** (§14.5.7 item 10). Pairwise identifiers address cross-*operator* linkage; one vendor running several resources correlates them from account, device and network data it holds anyway, and no identifier scheme changes that. **Which resources a subnet offers is part of how it sets its security posture**, and a user may decline one their organisation accepts | — |
+| C15 | Pairwise principal + vendor account data + several resource ids | **Accepted, not open** (§14.5.7 item 11). Pairwise identifiers address cross-*operator* linkage; one vendor running several resources correlates them from account, device and network data it holds anyway, and no identifier scheme changes that. **Which resources a subnet offers is part of how it sets its security posture**, and a user may decline one their organisation accepts | — |
 | **C19** | **Memo table + per-node `seqno`** | A durable, subtree-wide index of **out-of-subnet activity** for every member. Each ingredient is registered — the table at P35, the counter at P36 — and the join is what turns an incidental gap into a longitudinal series an ancestor holds for everyone below it. **Bounded by what a memo carries**: positions and keys, never addresses (§12.2) | Medium |
-| C17 | Source photograph + archive or locator | **Largely obviated by §7.1.5.2.** A compliant client holds captures as ciphertext under the *subject's* keystream, so retained EXIF and background are unreadable. **A non-compliant client keeps plaintext — and that is the baseline**: the same bad actor with an ordinary camera app obtains the same thing, which is the test §1.2.2 sets. **Residual**: a compliant holder decrypts legitimately during a later verification, and has the plaintext in hand for that window, which is why stripping remains a client obligation | Low |
+| C17 | Source photograph + archive or locator | **Largely obviated by §7.1.5.2.** A compliant client holds captures as ciphertext under the *subject's* keystream, so retained EXIF and background are unreadable. **A non-compliant client keeps plaintext — and that is the baseline**: the same bad actor with an ordinary camera app obtains the same thing, which is the test §1.2.1 sets. **Residual**: a compliant holder decrypts legitimately during a later verification, and has the plaintext in hand for that window, which is why stripping remains a client obligation | Low |
 
 **C4 is the most instructive.** Every other entry composes artifacts held by one
 observer. C4 composes an artifact with *the observer's own knowledge*, so the
@@ -5831,7 +5790,7 @@ established results.
 | 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it |
 | 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
 | 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
-| 1.2.1 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |
+| 1.2.4 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |
 | 7.1.6.3 | UWB is "the strongest available proximity channel" | The channel ranking (§7.1.6.3). Comparative claim with no comparison against the other handset-available channels under a stated attacker |
 | 10.6.5 | Carriers aggregate traffic through a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; carrier topology varies and is not published |
 | 7.1.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by radio generation, load and core placement |
@@ -5846,7 +5805,7 @@ established results.
 | 7.1.1 | Randomised motion prompts "constitute the liveness check" against print, replay and generated video | Presentation-attack detection is method- and attack-dependent. Motion and parallax are **inputs** to a PAD system, not a defence in themselves. **Needs evaluation of a named algorithm against a specified attack suite**, particularly for generated video |
 | 7.1.5 | A face crop runs 30–80 KB | Depends entirely on dimensions, codec and quality. **State the assumptions and derive** |
 | 7.1.5.1 | Ageing is modest for adults, severe for minors, "substantial in 24 months" | Degradation with age and particular difficulty with children are supported; the sharp threshold and the 24-month figure are not. **Recast qualitatively** unless a longitudinal study is cited |
-| 7.1.5.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
+| A.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
 | 7.1.6 | Radio access latency runs 20–80 ms | Varies by generation, radio state, operator and load, and the term is ambiguous between one-way, RTT and access procedure. **Tie to a specific technology and measurement** |
 | 7.1.6 | Carriers aggregate to a small number of regional gateways | A documented deployment pattern, not a universal property of cellular networks |
 | 9.6 | Infra costs ~$20/month retail, ~$5–7 marginal to an attacker | Budgeting assumptions. Cloud pricing varies by provider, region and commitment. **Specify configuration and date if used as threat-model inputs** |
@@ -5883,7 +5842,7 @@ targets for the Stage 1 simulations in the review plan.
 | **A14** | Reconstruction against a binary-output matcher needs **thousands to tens of thousands of queries** | §7.1.4's whole oracle-hardening argument — ceremony binding turns that count into weeks of staged meetings | Also §15.1. If the true count is orders lower, ceremony binding and rate limits do not price the attack out |
 | **A15** | **"A substantial minority"** of connections fall back to TURN relay | §13.6's infra economics via §10.6.3's direct path | Also §15.1. Two mobile peers behind CGNAT is worst case *and* common case here; a high fraction collapses the cost model |
 | **A16** | Randomised motion prompts **constitute** a liveness check | Presentation-attack resistance for the whole ceremony (§7.1.1) | Also §15.1. They are *inputs* to a PAD system; if no algorithm delivers the property, print and replay attacks pass |
-| **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (§7.1.5.1) | Also §15.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
+| **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (Appendix A.1) | Also §15.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
 | **A18** | Ageing is modest for adults, severe for minors, **substantial in 24 months** | The two-year photo retention tier (§7.1.5.1) | Also §15.1 |
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §14.2–14.3's attack economics and the whole Sybil cost comparison | Also §15.1 |
 | **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | §13.3's low default flow capacity for peering edges | Both the superlative ("the cheapest route") and the "trust ceiling" framing were withdrawn 2026-08-16. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
@@ -5895,7 +5854,7 @@ targets for the Stage 1 simulations in the review plan.
 | **A26** | A fuzzed profile discriminating **~99% of humans** is the right privacy/utility point | The biometric query representation (§7.1.5) | Too specific and it approaches court-grade evidence; too vague and verification stops working |
 | **A27** | A normal presence record carries **~10 logical signers, around 8 of them witnesses** | The ~35 KB record figure and the storage arithmetic that follows from it (§7.3) | Witness counts are a social artifact of how ceremonies actually run. Materially more witnesses and the size estimate moves proportionally; materially fewer and the corroboration the record claims is thinner than modelled |
 | **A28** | **Package authors' incentive runs toward breadth** in permission defaults | The requirement that templates be inspectable in the predicate language (`resource-requirements.md` §7.3) | An economic claim about a party's motivation, asserted rather than argued. If authors default conservatively instead, the inspectability requirement addresses a problem that does not arise |
-| **A29** | **Fabricating a whole fictitious graph is easy**, and convincing synthetic histories are within reach of a motivated party | §1.2.2's deniability property — if fabrication is harder than assumed, correlated evidence is *more* probative and the deniability shrinks | Asserted from the observation that a fabricator holds every key. Nobody has built one, and a graph that survives an evaluator with local reach may be considerably harder than one that survives a distant reader |
+| **A29** | **Fabricating a whole fictitious graph is easy**, and convincing synthetic histories are within reach of a motivated party | §1.2.1's deniability property — if fabrication is harder than assumed, correlated evidence is *more* probative and the deniability shrinks | Asserted from the observation that a fabricator holds every key. Nobody has built one, and a graph that survives an evaluator with local reach may be considerably harder than one that survives a distant reader |
 | **A30** | **A remote evaluator cannot distinguish a synthesised subnet from a real one** | The same property, and §1.2.2's claim that the discount falls hardest on the classes least able to defeat it | Follows from A29 plus the absence of cold lookup. Untested against an evaluator applying statistical structure analysis rather than key-checking |
 | **A31** | **To an attacker accountable to no evidentiary standard, cryptographic attestation adds nothing** | §1.2.2's three-class taxonomy, and the conclusion that on-device encryption is the whole defence against that class | A claim about how such parties actually decide, asserted rather than observed. If signed evidence does shift their behaviour, the archive's non-repudiability costs more than recorded |
 
@@ -6349,6 +6308,7 @@ read before re-proposing anything here.
 | **A second veto keypair per identity** | Superseded: there is no veto at all (§7.4.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. Down-line threshold covers roots **that have a sufficient down-line**, with small and Genesis roots an acknowledged open gap (§7.4.2); departure is self-punishing for a thief |
 | **Biometrics in network state** | Irrevocable, fuzzing does not survive combination with timestamp and location, and it would invert the design's own metadata-resistance property (§7.1.2) |
 | **A published trust-policy descriptor** | A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts; a bad-news-only variant generated attack surface (policy shopping) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally |
+| **Fuzzy commitments / secure sketches for retained verification capability** | The theoretically correct tool for verifying without retaining the biometric, and face entropy is low enough that their security margins are weak. Would have served §7.1.5.1's retention problem |
 
 ---
 
