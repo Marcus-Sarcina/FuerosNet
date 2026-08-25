@@ -1,0 +1,124 @@
+# Working context
+
+You are helping A. Marcus Zuech develop the Reconfigurable-Hierarchic Trust
+Network — a peer-to-peer trust protocol metered against physical presence. He is
+the author and sole decision-maker. Nothing is implemented; this is a design under
+review.
+
+Read `network-design.md` §§0–1 first. §0 carries the conventions this document
+assumes, and §1 states what the network is for.
+
+---
+
+## The documents
+
+| File | What it is |
+|---|---|
+| `network-design.md` | Authoritative on protocol facts and rationale |
+| `wire-format.md` | Authoritative on encoding. The design wins on any disagreement |
+| `light-client-requirements.md` | Participant client obligations |
+| `infra-client-requirements.md` | Operator obligations |
+| `resource-requirements.md` | Resource package obligations |
+| `authoring-conventions.md` | How to write and review these. **Read this.** |
+| `review-plan.md` | The staged external review programme |
+| `review-tracking.md` | Per-finding dispositions. References are as-of-filing and are not remapped |
+| `change-log.md` | History. Not needed to understand the design, useful for tracing a decision |
+
+---
+
+## How the work goes
+
+The author writes external review passes against these documents using a
+different model, brings back the findings, and they get applied here. Most
+sessions are: ingest a review response, verify each finding against the actual
+text, apply what holds, record what does not.
+
+**Verify before applying.** Reviewers are frequently right and sometimes wrong,
+and a wrong finding applied is worse than one missed. Check the claim against the
+document before changing anything.
+
+---
+
+## Failure modes to expect in yourself
+
+These are drawn from a fortnight of this work. Each cost real time.
+
+**Fixing the instance rather than the claim.** A reviewer quotes one passage; the
+same claim appears in four other places. Sweep by search, not by section. A
+contradiction was corrected three separate times before someone searched for it.
+
+**Inventing justifications.** The author often makes decisions without stating a
+reason. Filling that gap with a plausible-sounding rationale creates a dependency
+nobody chose, and it can displace a better argument he actually had. An
+explanatory sentence is fine; a load-bearing justification must come from him.
+Ask.
+
+**Asserting a sweep is complete without running it.** Say what was checked and
+show the output. "All references resolve" is a claim, and it was false for
+nineteen references while a checker reported clean — because the checker carried
+exemptions added to silence earlier false positives.
+
+**Elaborating where the answer is to remove something.** See below.
+
+**Over-propagating.** A change lands in five places, one of which is a historical
+record or a different mechanism with a similar name. Read what you are about to
+edit.
+
+**Mechanical substitution without reading the output.** Regex against remembered
+text silently matches nothing; line-spanning phrases mangle; an opened parenthesis
+does not close itself. Verify the applied count and read a sample.
+
+---
+
+## The author's corrections are usually simplifications
+
+The pattern is consistent: a mechanism gets built, and he removes the need for
+it. Roles, the role table, the resource catalog, the policy descriptor, reserved
+actions, the veto, activity summaries — each was machinery that dissolved once he
+described what he actually meant.
+
+**"Does this propagate?" is almost always answered no.** Three separate mechanisms
+were simplified this way in one day, each after machinery had been specified to
+keep distributed copies honest. Ask before building for distribution.
+
+**When a finding assumes a component, ask whether the component is required** —
+not whether it can be made safe. That framing takes the component as given and
+generates work. Two findings were closed by deleting the thing they were about.
+
+---
+
+## Rules that keep being relearned
+
+**No shared state anywhere.** Not trust, not horizons, not "the local trust
+table". Every node's view is its own. A reading that assumes a common frame of
+reference is wrong, and several review findings have rested on that assumption.
+
+**§1.1's test: can this be enforced?** A rule aimed at a party you share no state
+with is a wish. Where a rule is unenforceable, say so plainly rather than issuing
+it as a MUST — the documents state their obligations as commitments for this
+reason.
+
+**State rules by role, not by identifier.** A rule naming a transaction type dies
+when the type is renamed. `authoring-conventions.md` has the test.
+
+**Numbers in registers are never reused.** A withdrawn finding keeps a tombstone
+row so a citation resolves to *withdrawn* rather than silently to a different
+finding.
+
+---
+
+## Operational
+
+**Reference checking runs with no exemptions.** Every `§N` in every document, in
+every direction, against actual headings. Exemptions are permanent blind spots
+bought to silence temporary false positives.
+
+**Counts drift.** Parameter counts, register sizes, "three items" above four
+headings. Whenever a row is removed, check the sentence that counts them.
+
+**Report numbers, not states.** "281 em-dashes in the design, 466 across the set",
+not "the style pass is complete". A count is checkable later.
+
+**Consolidating sections decay fastest.** Any section that summarises state
+elsewhere is stale the moment something it summarises changes. Re-read §18.2 after
+closing anything.
