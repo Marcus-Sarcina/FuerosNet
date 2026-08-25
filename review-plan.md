@@ -127,7 +127,7 @@ The second concern is real, but it is an **instruction** problem, not a
 
 **The decisive argument: only a reviewer who sees our reasoning can tell us the
 reasoning is wrong.** §10.4 accepts patron eclipse because identities are cheap
-and there is no token to steal. §14.5.7 accepts nine privacy costs, each for a
+and there is no token to steal. §14.5.7 accepts its privacy costs, each for a
 stated reason. If any of those reasons is bad, that is among the most valuable
 findings available — and stripping the section makes it structurally impossible
 to find. It hides precisely the arguments most in need of adversarial reading.

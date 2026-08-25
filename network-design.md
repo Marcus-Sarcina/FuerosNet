@@ -6062,84 +6062,40 @@ are **areas the design does not address at all**.
 
 ### 18.1 Multi-device
 
-**Storage is solved, and durability is the part that is not.** §10.8.7.1 already
-specifies envelope encryption precisely so the archive is safe in untrusted
-storage, which means existing password managers and consumer cloud sync can carry
-it as an opaque encrypted blob.
+**Storage is solved; durability is a host property.** §10.8.7.1's envelope
+encryption makes the archive safe in untrusted storage, so password managers and
+consumer cloud sync carry it as an opaque blob — building private replication would
+add new attack surface to duplicate a solved problem. Durability varies by host:
+native storage persists until deleted; a WASM runtime persists only as the host
+configured it, since WASI confers no ambient filesystem access; browser storage
+(OPFS, IndexedDB) is evictable under pressure unless persistence is granted.
+Because the archive is a second factor (§8.2), a client that can be silently
+evicted must treat §10.8.7.1's backup as mandatory rather than advisory, and tell
+the user so. Practical limits: photo stores reach hundreds of MB, awkward for
+attachment quotas, and backups must honour declared retention.
 
-**Durability varies by host, and the archive is a second factor** (§8.2), so
-losing it costs a security property rather than only convenience. A native host gives
-storage that persists until deleted. **A WASM runtime does so only where the host
-grants it**: WASI is capability-oriented and confers no ambient filesystem access,
-so persistence there is a property of how the runtime was configured rather than of
-WASI itself — and a client cannot assume it. **Browser storage does not**: OPFS and
-IndexedDB are subject to eviction under storage pressure unless persistent storage
-is granted. A client that can be silently evicted needs the backup path of
-§10.8.7.1 to be mandatory rather than advisory, and needs to tell the user so. There is no
-reason to build a private replication system, and good reason not to: it would be
-new attack surface duplicating a solved problem. Practical limits are size (photo
-stores reach hundreds of MB, awkward for password-manager attachment quotas) and
-the §10.8.7.1 requirement that backups honour declared retention.
+**Concurrent devices fork the user's own chain, and the fork is repaired by merge
+rather than prevented.** §8 makes the archive a hash chain, so two devices
+appending concurrently fork it silently — a semantic conflict no generic sync tool
+can resolve, since back-pointers are countersigned and cannot be rewritten into one
+sequence. The hazard is unintentional loss — a ceremony performed on one device
+absent from the branch later presented — not deliberate partition, which §10.8.7
+permits. §8.3's merge resolves it: a transaction following a fork carries
+back-pointers to both heads, so concurrency is legal, **offline signing works**,
+and the merge is self-describing — an evaluator learns the structure from the
+record itself. Devices may share a key or hold their own; the choice is ordinary
+key management, not an archive constraint. *(Three prevention shapes — a single
+primary device, a head-check before signing, published per-device key bindings —
+are superseded; Appendix A.1.)*
 
-**Chain semantics are the actual problem, and the problem is accidental, not
-adversarial.** §8 makes the archive a hash chain. Two devices appending
-concurrently **fork the user's own chain silently**. No generic sync tool resolves that, because it is a
-semantic conflict rather than a file-merge conflict — back-pointers are already
-signed by counterparties, so a sync tool cannot rewrite them into a single
-sequence. **A protocol-level merge can and does resolve it** (§8.3); what is
-impossible is merging *by editing existing records*, not merging as such.
-
-**Deliberate forking is not the concern.** A user may always present different
-histories to different subnets (§10.8.7 disclaims cross-subnet accountability, and
-the archive exists to inform a new subnet rather than to bind a user across all of
-them. What matters is the **unintentional** case: you perform a ceremony on your
-phone, later present your laptop's branch, and the ceremony is simply absent.
-**Silent loss of your own history**, plus a counterparty holding a signed record
-that now dangles off an abandoned branch.
-
-Three shapes:
-
-1. **One primary device extends the chain**; others are read-only replicas.
-   Prevents forking structurally, but only the primary can perform a ceremony or
-   transact — backwards for a phone-plus-laptop user whose *phone* does the
-   ceremonies.
-2. **Devices share the key and must hold the current head before signing.**
-   Preserves capability everywhere, but **a device cannot sign while offline**,
-   which defeats the mobile case the network is built around. An offline device
-   that signs anyway forks, which is the failure this was meant to prevent.
-3. **Per-device keypairs bound to one identity, each with its own chain**, and the
-   bindings published as a signed declaration of the user's devices.
-
-**Resolved by merging (§8.3), which supersedes all three shapes.** Divergence
-does not have to be prevented; it has to be *reconcilable*. A transaction following
-a fork carries back-pointers to both heads, committing to both branches — so
-concurrent device use produces a temporary fork that a later transaction repairs,
-and nothing is silently lost.
-
-This removes the reason to choose among the shapes:
-
-- No primary device is needed (shape 1), because concurrency is legal.
-- No head-check before signing is needed (shape 2), so **offline signing works**.
-- No published device-binding declaration is needed (shape 3), because **the merge
-  is self-describing**: it names both branch heads, so an evaluator learns the
-  structure from the record rather than from a prior declaration that would itself
-  need maintaining and revoking.
-
-Devices may share a key or hold their own; either works, and the choice becomes an
-ordinary key-management question rather than a constraint imposed by the archive.
-
-**Residual:** a user who never merges leaves branches outstanding, and an evaluator
-seeing only one branch sees a valid truncation. That is permitted and
-self-defeating (§8), so no rule is required, but the reference client should
-merge automatically when it notices divergence, since the user has no reason to
-want otherwise.
-
-**Interacts with the second-factor property** (§8.2): the more devices hold a
-copy of the archive, the weaker "key without archive yields nothing" becomes.
-Merging does not change that. It is a consequence of replication, not of chain
-structure, so it is now an ordinary key-management tradeoff for the user rather
-than a constraint imposed by the design. **A user who syncs their archive to three
-devices has three places to lose it from.**
+**Residual.** A user who never merges leaves branches outstanding, and an evaluator
+seeing one branch sees a valid truncation — permitted and self-defeating (§8), so
+no rule is needed; the reference client merges automatically on noticing
+divergence, since the user has no reason to want otherwise. Replication weakens the
+second factor arithmetically, and merging does not change that: **a user who syncs
+their archive to three devices has three places to lose it from** (§8.2). What
+remains open is which devices hold seeds, sealed captures and deletion state (P33),
+tracked at §18.2.
 
 ### 18.2 Everything currently open, in one place
 
@@ -6309,6 +6265,7 @@ read before re-proposing anything here.
 | **Biometrics in network state** | Irrevocable, fuzzing does not survive combination with timestamp and location, and it would invert the design's own metadata-resistance property (§7.1.2) |
 | **A published trust-policy descriptor** | A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts; a bad-news-only variant generated attack surface (policy shopping) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally |
 | **Fuzzy commitments / secure sketches for retained verification capability** | The theoretically correct tool for verifying without retaining the biometric, and face entropy is low enough that their security margins are weak. Would have served §7.1.5.1's retention problem |
+| **Multi-device fork prevention** (single primary device; head-check before signing; published per-device key bindings) | Superseded by archive merge (§8.3): divergence need not be prevented, only reconcilable. Each also broke a property the design needs — a primary can't do phone ceremonies, head-checks forbid offline signing, published bindings need maintenance and revocation |
 
 ---
 
