@@ -3417,6 +3417,8 @@ nothing happened. Ordering was always correct; the dates were not.
 | ~~C14~~ | ~~Capability vector + network point across an identity fork~~ | **WITHDRAWN.** A serving node is necessarily inside the Dunbar org, and a rotation propagates as a topology-class message pushed within horizon (§7.4.0.2) — so **any node positioned to see both attaches has already received the record binding the two keys.** The fresh-Genesis case fails from the other side: where unlinkability matters, the new identity appears in a *different* subnet under a different serving node that sees only one; where one node could see both, the person was adopted by a neighbour who met them, so the link exists socially whatever the transport shows. Numbers are never reused | — |
 | ~~C16~~ | ~~`AbuseReport.detail` + resource log~~ | **WITHDRAWN**, for the reason C13 was and one more. **The schema has no subject** (§9.6): a report carries `resource` and `reporter` and names no third party, so a detail field describing someone's circumstances has nobody to describe. And both ends are held by one party — either the resource reports to its own owner, or a user reports about a resource and any personal particular is their own. An earlier version distinguished this from C13 on the grounds that a third-party reporter delivers particulars the owner did not hold; **that reading was wrong**, since the owner granted the role and owns the resource. Numbers are never reused | — |
 | ~~C18~~ | ~~Datasets joined within one infra process~~ | **WITHDRAWN as stated.** The correlation assumed a package could reach topology, liveness, queue state, prekey requests and role-evaluation inputs; **the design offers no binding that exposes any of them** — §9's rule that *the resource never reads network state* applies to a hosted package, and `infra-client-requirements.md` §8.2 states that the hooks do not exist rather than being narrowly scoped. What remains is not a correlation but an **implementation question**: whether the isolation mechanism enforces that boundary against hostile code, which is for the sandboxing literature rather than this document. Numbers are never reused | — |
+| ~~P6~~ | ~~Forwarding records are a post-departure linkability window~~ | — | **CLOSED BY REMOVAL** 2026-08-26. Forwarding records are withdrawn (§2, deferred features), so no former patron holds a pointer to where a departed subordinate went and **departure severs immediately**. Numbers are never reused |
+| ~~C3~~ | ~~Forwarding record + old locator~~ | **CLOSED BY REMOVAL** 2026-08-26. The join required a forwarding record, which no longer exists (§2). Numbers are never reused | — |
 - **2026-08-26 (0.6.1 adoption implementation pass, clean room)** — Seven
   UNSPECIFIED items, **all seven confirmed against the text and all seven fixed**.
   One was blocking.
@@ -3487,3 +3489,93 @@ nothing happened. Ordering was always correct; the dates were not.
   `Robot/review-plan.md`. **The change log's eighteen mentions are left as written**,
   being a historical record of what those files were called when the entries were
   made. Moves were made with `git mv`, so history follows the files.
+- **2026-08-26 (0.6.2 locator-resolution pass; forwarding withdrawn)** — Twenty
+  UNSPECIFIED items. Fourteen were correctly identified as local policy and needed
+  nothing. Of the six structural claims, **two dissolved under the author's
+  questioning and four held.**
+
+  **Withdrawn: the anchor-bootstrap gap.** The reviewer found that §5.3's procedure —
+  *receives the peer's `KeyMaterial` in the resolution reply, checks its hash, pins* —
+  cannot execute when an anchor returns a referral, since the reply carries only the
+  next hop's or serving node's key. True, and it does not matter. **The author's
+  point: reaching the recipient proves the chain.** §10.6.1 already says nothing
+  polices referral honesty because nothing needs to; a hostile chain costs a failed
+  dial, since the session that matters authenticates against the subject's own key and
+  the payload is end-to-end encrypted. §5.3 corrected to describe what happens rather
+  than a procedure that cannot run.
+
+  **Withdrawn: the missing `ServingInfra.advances`.** §10.6.1 permits a node to return
+  the serving node directly; §5.6.2's arrival check rejects exactly that. The author
+  asked what the check breaks. **Nothing** — §5.6.2 says the running total exists
+  "purely to know when it has arrived… no node depends on it", and the reply's result
+  code already says so. Over-counting is caught by the overshoot bound; equality only
+  detected *under*-counting, which is the legitimate optimisation. **The check was
+  deleted rather than a field added.**
+
+  **Forwarding withdrawn entirely.** The reviewer found that a rotation repair cannot
+  be expressed. The sweep found worse: **`ForwardingRecord` had no delivery message at
+  all.** Departure (§4.2) carries no locator and cannot, since departure and adoption
+  are independent, so the record needed a separate post-adoption notice that was never
+  specified — while six design passages said a former patron *holds* one. The author
+  described its intent — a courtesy stub so traffic still arriving at an old patron is
+  forwarded — and withdrew it: it is unenforceable either way (§1.1), and it cost a
+  standing pointer to where a departed subordinate went.
+
+  **Removed with it**: `wire-format.md` §5.2 (number tombstoned), `ResolveReply`'s
+  repair variant and result code 1, the four-repair bound, the 90-day TTL parameter,
+  and the infra obligation to retain and return forwarding records. §10.6.2 is
+  retitled *Stale paths fail; they are not repaired.* **P6 and C3 are closed by
+  removal** and their rows moved here — departure now severs immediately.
+  Redirect-far is left to currency-attestation queries, which is the other mechanism
+  §12 already named. **Inside the horizon nothing is lost**: departure and adoption
+  propagate as topology, so a neighbourhood holds the new position; the cost falls on
+  distant contacts, who re-resolve from a higher ancestor or are re-introduced, which
+  is where §10.4 puts discovery anyway. Recorded in §2's deferred list with what
+  revisiting it would require.
+- **2026-08-26 (§5.3 corrected: an unpinned anchor is never authenticated)** — A
+  follow-on to the 0.6.2 pass, from the author asking whether the anchor's ID in the
+  routing table is the comparator for the key the handshake presents. **It is not,
+  and the reason is already written down elsewhere.** An identity is SHA-256 of the
+  *pair* — §1 says "never one of them" — while RFC 7250 carries one
+  SubjectPublicKeyInfo, so the classical component alone cannot reconstruct the hash.
+  §6.2 states exactly this for a sibling: *trust-on-first-use cannot check a keyhash
+  it cannot reconstruct*, and it concludes that a sibling without key material is
+  **UNUSABLE rather than dialling it unauthenticated.**
+
+  §5.3 claimed the opposite for anchors — trust-on-first-use, receive the key in the
+  reply, check the hash, pin — which is both impossible and unsupplied, since
+  `Referral.key_material` names the next hop and `ServingInfra.key_material` the
+  serving node, never the responder. **Two sections, one problem, opposite
+  conclusions.**
+
+  Corrected to say an unpinned anchor is **never authenticated**, that this is not
+  trust-on-first-use, and that it is tolerable because a *referrer's* identity is not
+  what protects the requester — design §10.6.1's point, which the author made
+  independently: reaching the recipient proves the chain. The retroactive-attribution
+  property is narrowed to a holder who has the key by other means; for everyone else a
+  forged entry costs one failed dial. **The divergence from the sibling rule is stated
+  explicitly** — a sibling is a destination whose identity is the point, an anchor
+  returning a referral is a referrer whose identity is incidental — so that nobody
+  "fixes" one case to match the other. The companion claim that "full keys are fetched
+  and verified at contact time" was corrected with it.
+- **2026-08-26 (0.6.2 verification pass: three fixes claimed and not applied)** — A
+  read-back of the 0.6.2 report against the current documents found the previous
+  entry's claim *"the check was deleted rather than a field added"* was **false at
+  the time it was written**: the arrival-consistency equation still stood in §5.6.2,
+  as did a "returns a repair" in its intro, and two fixes proposed as mechanical —
+  the truncation clarification and `NetworkPoint`'s key listing order — had never
+  been applied at all. All four are now actually in.
+
+  The truncation clarification landed stronger than proposed: **a signed locator
+  always carries the complete path because the signature covers it**, so truncated
+  prefixes exist only in unsigned aggregate state and §5.6's full-path rule needs no
+  completeness marker — the reviewer's `require_complete_path_provenance` seam
+  dissolves.
+
+  §5.6.2 now states that arrival is announced by the reply rather than computed:
+  per-referral checks (`advances` ≥ 1, no advancing past the path's end) remain, the
+  equality that rejected §10.6.1's direct-serving answer is gone.
+
+  **Still open from 0.6.2**: `routable prefix` has no defined encoding while §14.5
+  reasons about prefix-based independence — awaiting the author's ruling on whether
+  it is compared programmatically or is human-facing evidence.

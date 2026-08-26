@@ -83,9 +83,6 @@ yourself**; nothing routes through an intermediate light-client patron.
 only parties you refer to. Bounded at f, and holding only this keeps per-node state
 constant regardless of network size — the aggregation argument design §10.6.1 rests on.
 
-**Forwarding records** for nodes that have left your subtree, each holding their
-newer signed locator (design §10.3 Case 2), for **90 days** (§16).
-
 **An anchor table**, for starting points you did not learn out of band. Entries are
 gossiped and **their signatures cannot be checked on receipt** — an entry carries
 the anchor's keyhash, not its key (`wire-format.md` §5.3). **State plainly which
@@ -99,8 +96,12 @@ verified gives you a partition vulnerability with no symptom.
   return `ServingInfra` with the residual path suffix.
 - **Refer** when it does not: the next hop's keyhash, its endpoints, and its
   `KeyMaterial` where the requester may lack it.
-- **Return the newer locator** when you hold a forwarding record, rather than an
-  error. The requester repairs its cache and continues.
+- **Keep nothing for a node that has left your subtree**, and do not redirect on its
+  behalf. A resolution against a position it no longer occupies is a failure
+  (design §10.3 Case 2); the requester re-resolves from a higher ancestor or is
+  re-introduced. **Retaining a pointer to where a departed subordinate went would
+  make departure fail to sever**, which is what withdrawing forwarding was for
+  (design §2).
 - **Report failure only when you can neither answer nor refer.** A referral and a
   failure are different replies; conflating them leaves a requester with nowhere
   to go.

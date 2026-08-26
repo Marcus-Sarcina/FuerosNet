@@ -509,6 +509,22 @@ Resources and payload confidentiality both sat there until 2026-08-16 despite
 being close to the point of the network.
 
 ### Explicitly deferred
+- **Hard-fork departure and forwarding.** A departing node tells its former patron
+  where it went, and the patron forwards traffic still arriving for it — a courtesy
+  stub with a bounded lifetime, so contacts *outside* the departing node's horizon
+  keep reaching it across a move instead of failing. **Withdrawn 2026-08-26 rather
+  than built.** It never had a delivery message: departure (`wire-format.md` §4.2)
+  carries no locator and cannot, since departure and adoption are independent
+  (§6.2), so the record would need a separate post-adoption notice that was never
+  specified. **And it is unenforceable either way** — a former patron may simply not
+  forward, and a departing node may never send it (§1.1). Against that, it cost a
+  standing pointer to where a departed subordinate went, answerable to anyone who
+  asked for the record's lifetime, which is the opposite of what departure is for.
+  **Inside the horizon nothing is lost**: departure and adoption propagate as
+  topology (§12), so a neighbourhood already holds the new position. The cost falls
+  on distant contacts, who re-resolve from a higher ancestor (§10.3 Case 3) or are
+  re-introduced — which is where §10.4 puts discovery anyway. *Revisit only with a
+  delivery message and an accepted linkability window.*
 - Transaction types beyond those listed above
 - Multiple identities per client — **a v1 client-scope exclusion, not a protocol
   limit.** The protocol permits them already (§10.8.7); what v1 omits is the key
@@ -573,9 +589,6 @@ being close to the point of the network.
     connectivity graph. That is the entire point: a subtree hanging off one
     vertex has cut 1, and peering is what raises it (§4.4, §13.3). "Acyclic" would
     be a defect here, not a guarantee.
-  - **Forwarding records** (§10.3): transient pointers left at a node's former
-    position.
-
   So: **acyclic authority, deliberately cyclic connectivity.** Any statement that
   the structure "is a tree" refers to the first.
 - Root nodes are **emergent, not a special class**. Today's root may sign on to
@@ -2344,10 +2357,9 @@ The old key's availability distinguishes two cases:
 
 Rotation propagates as a **topology-class** message (§12): pushed within horizon,
 aggregated beyond. Parties outside the horizon holding a cached key binding are
-handled by the mechanism §10.3 Case 2 already defines for stale locators — a
-**forwarding record** at the last known location redirects callers, who learn
-lazily on contact. So the gap §12 appeared to have is **not a fifth message
-class**; it is a propagation *pattern*, "push near, redirect far", available to
+handled by a **currency-attestation query** addressed using the anchor and path the
+introduction already carries (§10.6.5); callers learn lazily on contact. So the gap
+§12 appeared to have is **not a fifth message class**; it is a propagation *pattern*, "push near, redirect far", available to
 topology-class messages.
 
 **Forwarding-record authority** cannot come from the old key, which may be
@@ -3494,7 +3506,9 @@ A locator is four fields, **signed by the node itself**:
 - **anchor.** Key hash of the anchor whose subtree contains the node
 - **path.** Position beneath the anchor; **truncatable** to a prefix
   sufficient to route to the right region (this is where aggregation savings
-  come from)
+  come from). Truncation lives in distant nodes' unsigned aggregate state only —
+  **a signed locator always carries the complete path**, since the signature
+  covers it (`wire-format.md` §2.1)
 - **sequence.** The monotonic counter from §6.2; detects stale cache entries
 - **signature.** Non-optional. **Any routing information presented as
   specifying where a participant can be reached must be authenticated by that
@@ -3567,14 +3581,13 @@ thereafter.
    currently offline (§11.1.6).
 
 **Case 2 — Cached locator stale (Alice moved).**
-6. Alice's former patron holds a **forwarding record**: Alice's newer signed
-   locator, bearing a higher sequence number.
-7. Bob verifies the signature and the sequence increase, replaces his cache
-   entry, and retries.
-8. Chains are collapsed at the source: a former patron follows the chain and
-   returns the terminal record, not the next hop. Forwarding records carry a TTL
-   (90 days, chosen; §16), after which resolution fails rather than growing
-   unboundedly.
+6. **Resolution fails.** Nothing redirects on Alice's behalf, and no party holds a
+   pointer to where she went.
+7. Bob's recourse is Case 3 — re-resolve from a higher ancestor Alice can name — or
+   re-establish socially (§10.4). **Inside Alice's horizon this does not arise**:
+   her departure and adoption propagate as topology (§12), so her neighbourhood
+   already holds her new position. The cost falls on contacts outside it, which is
+   where the design puts discovery anyway.
 
 **Case 3 — Alice's anchor is no longer usable to Bob.**
 9. Either the anchor's subtree shrank below Bob's caching threshold, or Bob's
@@ -3707,22 +3720,18 @@ an infra node that neither peers nor serves as an anchor — a supported state
 own attached clients (§10.6.3). Once resolved, the requester contacts the serving
 node directly; the chain it walked to find that node carries nothing afterwards.
 
-### 10.6.2 Stale paths are repaired during resolution
-A resolution walking a stale path reaches the moved node's **old patron**, which
-holds a forwarding record (§10.3 Case 2) and returns the newer locator instead of
-an error. The requester replaces its cached entry and continues.
-
-**Repair happens only at the point of divergence.** Nodes above it refer correctly
-and know nothing is wrong; they cannot repair a path they hold no information
-about, and giving them that information would require the per-node table this
-design exists to avoid.
+### 10.6.2 Stale paths fail; they are not repaired
+A resolution walking a stale path fails at the point of divergence. **No node
+redirects on the subject's behalf**, because none holds a pointer to where they went
+(§2, deferred features).
 
 Invalidation cost is low in expectation: most nodes are leaves, and mean subtree
 size in an f-ary tree is f/(f−1) ≈ 1.11, so an average move invalidates about one
-cached locator. The tail is worse — a low-tier move invalidates its whole subtree —
-but repair during resolution degrades that to **extra round trips rather than
-delivery failure**, and the requester's cache absorbs the correction for subsequent
-contacts.
+cached locator. The tail is worse — a low-tier move invalidates its whole subtree,
+and every distant holder of one of those locators must re-resolve from a higher
+anchor or be re-introduced. **Inside the horizon the move propagates as topology
+(§12) and nothing is invalidated at all**, so the cost falls entirely on contacts
+outside it.
 
 **Merges do not invalidate paths at all.** Paths are expressed relative to the
 anchor, so when an anchor acquires a patron its descendants' relative paths are
@@ -3804,8 +3813,7 @@ Cache TTLs are mostly performance knobs to be tuned under load. **One is not.**
 
 | TTL | Kind | Guidance |
 |---|---|---|
-| Locator / resolution cache | Performance | Can be generous — repair-in-transit (§10.6.2) makes a stale locator cost extra hops, not a failure |
-| Forwarding record (90d) | Performance | Bounds chain growth (§10.3) |
+| Locator / resolution cache | Performance | **Not generous.** A stale locator costs delivery failure and a re-resolve from a higher anchor (§10.6.2), so the TTL trades staleness against re-resolution load |
 | **Currency attestation** | **Security** | **Derive from the maximum acceptable exposure window after credential compromise, never from performance or cache-efficiency considerations.** This is how long a compromised key keeps working for parties who cached before rotation — hours, not days. See §10.6.5. |
 
 ### 10.6.5 Key currency: adopt the PKI revocation playbook
@@ -4068,9 +4076,11 @@ deliberately sets low. Internal cohesion retained, external standing reduced.
 
 ### 10.7.7 Re-rooting cost
 The disavowed node's subtree had anchor-relative paths (§10.6.2). Those paths
-re-root on the node itself, so every locator beneath it changes. Handled by the
-existing machinery: the old anchor holds a forwarding record and repairs in
-transit (§10.3 Case 2, §10.6.2). One forwarding record, no flood.
+re-root on the node itself, so every locator beneath it changes. **Within the
+horizon the disavowal propagates as topology** (§12) and neighbours re-resolve from
+what they already hold. Beyond it, cached locators into that subtree fail and their
+holders re-resolve from a higher anchor (§10.3 Case 3). No flood, and no pointer
+left behind.
 
 ---
 
@@ -4773,9 +4783,10 @@ are in use:
   above, and it is the only thing that leaves the horizon.
 - **Push near, redirect far.** The *delta* is pushed within horizon, where
   neighbours need it to keep routing; beyond the horizon the *state* is pulled on
-  contact, via a forwarding record or a currency-attestation query addressed using the
-  anchor and path the introduction already carries. Callers learn lazily. Used by
-  locator changes (§10.3 Case 2) and key rotation (§7.4.0.2). This is what lets
+  contact, via a currency-attestation query addressed using the anchor and path the
+  introduction already carries. Callers learn lazily. Used by key rotation
+  (§7.4.0.2); a locator change beyond the horizon is **not** redirected and the
+  stale holder re-resolves or is re-introduced (§10.3 Case 2). This is what lets
   rotation propagate like control despite being attestation-derived, without a
   fifth class, and it keeps standing assertions off the control plane entirely.
 
@@ -5593,7 +5604,6 @@ and a citation to a missing number resolves there.
 | P3 | **A single-identity client** correlates across subnets: anyone present in two of a user's subnets links them | High for such a client, **absent for a multi-identity one** | **Not a protocol limitation.** The protocol permits multiple identities already (§10.8.7); v1 clients omit the key management and interface work, so this ships as a **client** scope decision rather than a design defect. No wire change separates the two cases |
 | P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§11.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, and operator logging, which §1.1 cannot reach |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§10.8.7, §10.8.7.1). The device is the global correlation point the network architecture otherwise avoids |
-| P6 | Forwarding records are a **post-departure linkability window** | Medium–High | The 90-day TTL (§10.3) was chosen to bound chain growth; it also bounds how long a former patron holds a live pointer to where a departed subordinate went. **Departure does not fully sever for 90 days.** Now stated, and the TTL is a privacy parameter as well as an operational one |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§12) materially helps; the residual risk is implementations that log what the protocol discards |
 | **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §11.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |
 | **P13** | **Retention promises are undetectable against hostile clients**, though §7.1.5.2's keystream encryption makes a *compliant* client structurally unable to retain, a client that retains photographs past its declared window runs the match and reports `basis = personal_knowledge` | Medium | §10.8.7.1. No protocol fix exists, and the mechanism is not detectable by its own use |
@@ -5724,7 +5734,6 @@ acknowledged and whose join is not.
 |---|---|---|---|
 | **C1** | Witness set + presence timestamp + coarse location | *Who, where, when, and with which organisation* — where a subtree maps to a recognisable employer or group. §14.5.1's worked example. **Reduced 2026-08-25**: the participant locator is removed (§7.2), so the affiliation half now comes from the witness set — a sample rather than a statement of position — and coarse location is withholdable from ten of eleven exchanges (§7.2.1) | **Medium–High** |
 | **C2** | Witness set + verifier set, in **one** record | A miniature **temporal social graph**: the subject's present neighbourhood (witnesses) *and* a sample of their past counterparties (verifiers). Repeated records turn samples into a map | High |
-| **C3** | Forwarding record + old locator | Departure becomes a **trackable move.** The two are individually necessary, and the forwarding record is what joins them for 90 days | Medium–High |
 | **C4** | Archive prefix + the **new** patron's local topology | **The same archive means different things to different observers.** A counterparty opaque in the old subnet may be a known person in the new one, so *moving* an archive changes which entries are legible and can disclose relationships that were effectively private at origin. **Archive portability therefore has a privacy cost that depends on the destination.** Which nothing in the design said | High |
 | **C5** | Queue metadata + heartbeat state | *When someone came online to retrieve a particular message.* Distinguishes daily routine from exceptional activity, and both ingredients sit with the same party | High for a patron keeping logs |
 | **C6** | Push timestamps + patron queue state | The patron knows what is queued and sends the push; the platform vendor sees the push event. A party obtaining both **aligns network identity with a platform device account** more confidently than either dataset allows alone | High under legal process or platform compromise |
@@ -5906,7 +5915,6 @@ are all **chosen**, not derived.
 | — | Images per capture | 3–5 | Guided variation, not burst; doubles as liveness (§7.1.5) |
 | — | Location precision | geohash 3 (default) | ~156 × 156 km; precision 4 is ~39 × 19.5 km (§7.1.7) |
 | — | Presence record size | ~35 KB | 10 ML-DSA-65 signatures + body; 26–48 KB across parameter sets (§5, §7.3) |
-| — | Forwarding record TTL | 90 days | Bounds locator chain growth (§10.3) **and** bounds the post-departure linkability window, a former patron holds a live pointer to where a departed subordinate went for this long (§14.5.4 P6) |
 | — | Currency attestation lifetime | ~10 h | Security parameter, not a cache knob; Kerberos-anchored (§10.6.5) |
 | — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§11.1.2) |
@@ -6154,6 +6162,10 @@ second run before it was sound, and this one has not had it.
   someone other than the author writes them.
 - **Transaction types beyond the seven**, and **multiple identities per client** (§2) —
   a v1 client-scope exclusion, not a protocol limit.
+- **Hard-fork departure and forwarding** (§2). Withdrawn with the mechanism rather
+  than left unbuilt: it had no delivery message, is unenforceable, and cost a
+  post-departure pointer. Revisiting it means specifying the notice and accepting the
+  linkability window.
 
 ---
 

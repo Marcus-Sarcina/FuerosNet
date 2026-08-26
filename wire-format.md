@@ -256,6 +256,13 @@ nibble length is required because **paths are truncatable** [D, design §7.1]: a
 node receives only the prefix needed to route to the right region, and truncation
 must be expressible at nibble granularity rather than byte granularity.
 
+**A signed locator always carries the subject's complete path.** [D — 2026-08-26]
+The signature covers the path — standalone via `SignedLocator`, in a transaction via
+the envelope — so no intermediary can truncate one without breaking it. Truncated
+prefixes exist only in **unsigned aggregate routing state** held by distant nodes,
+and are never what a resolution starts from: §5.6's *full, unmodified path* is
+guaranteed by the input being signed, not by a completeness marker.
+
 ### 2.2 Key material
 
 Identity keys are a **COSE_KeySet** (RFC 9052 §7) of exactly two entries in fixed
@@ -365,7 +372,7 @@ SignedLocator = {
 
 - **Inside a transaction body**, a bare `Locator` suffices, the enclosing
   envelope signature authenticates it.
-- **Standalone**, as at introduction or in a forwarding repair, a `SignedLocator`
+- **Standalone**, as at introduction, a `SignedLocator`
   is required. A bare `Locator` presented alone MUST be rejected.
 
 A bare locator carries no
@@ -993,8 +1000,8 @@ legible without making the *particulars* so.
 NetworkPoint = {
   1: bstr,             ; IP address, 4 or 16 bytes
   2: ? uint,           ; ASN. U32 RANGE per RFC 6793 4-byte ASNs
-  4: ? uint,           ; UDP port, u16 range. Absent means the default 7431
-  3: ? bstr            ; routable prefix
+  3: ? bstr,           ; routable prefix
+  4: ? uint            ; UDP port, u16 range. Absent means the default 7431
 }
 
 Audit = {
@@ -1793,23 +1800,12 @@ encodes: attestations are **issued fresh, never extended stale.** There is no
 recipient verifies locally rather than querying. Genesis identities omit it
 entirely — currency is vacuous with no history [D].
 
-### 5.2 Forwarding record
+### 5.2 — number not reused
 
-```
-ForwardingRecord = {
-  1: keyhash,          ; subject
-  2: Locator,          ; terminal position, chains already collapsed
-  3: ? keyhash,        ; new key, when the move included a rotation
-  4: timestamp         ; expiry — 90 day TTL (design §10.3)
-}
-```
-
-[D] Held at the subject's former position; **repairs in transit**
-rather than returning an error, and only at the point of divergence.
-
-Authority comes from the adopting patron and its verifier attestations, **not
-from the old key.** The old key may be precisely what was compromised
-[D].
+**No object occupies it.** A forwarding record left at a departed node's former
+position was withdrawn 2026-08-26 along with resolution repair; it had no delivery
+message and cost a 90-day post-departure linkability window. Reasoning at design §2,
+under deferred features.
 
 ### 5.3 Anchor table entry
 
@@ -1819,24 +1815,40 @@ be *named* as an anchor in a locator (design §10.2), but an anchor **table** en
 requires routable endpoints, so a locator naming a light-client anchor cannot enter
 this protocol — its holder must present one naming a reachable ancestor instead.
 
-**First contact with an unpinned anchor is trust-on-first-use over an
-unauthenticated identity.** [D] The requester has a keyhash from the table and no
-key material — `AnchorEntry` carries neither. It dials, receives the peer's
-`KeyMaterial` in the resolution reply (§5.6.2), checks its hash equals the intended
-keyhash, and pins. **Until that check the peer is unauthenticated**, so a first
-contact must disclose nothing beyond the query itself.
+**An unpinned anchor is never authenticated, and this is not trust-on-first-use.**
+[D — 2026-08-26] The requester has a keyhash from the table and no key material —
+`AnchorEntry` carries neither — and **a keyhash cannot be checked against what the
+handshake presents.** An identity is SHA-256 of the *pair* (§1), while RFC 7250
+carries one SubjectPublicKeyInfo, so the classical component alone cannot reconstruct
+the hash. This is the same impossibility §6.2 states for a sibling arriving without
+`KeyMaterial`. **Nor does the reply supply it**: `Referral.key_material` names the
+next hop and `ServingInfra.key_material` the serving node, never the responder
+itself, so an anchor that refers you onward is never pinned at all.
 
-**Anchor entries are self-signed, and the signature is verifiable only once the
-anchor's key is known** [D]. An entry carries the anchor's *keyhash*,
-not its key, so **nothing in the entry lets a recipient check the signature on
-receipt.** The key arrives at contact time (design §10.2, the table is an index,
-not a credential store).
+**It does not need to be, because a referrer's identity is not what protects you.**
+design §10.6.1: a referral cannot be usefully falsified, since the requester
+authenticates the *subject* it intended to reach and a wrong address produces a
+handshake failure rather than a silent misdirection. A hostile chain costs a failed
+dial. **Disclose nothing beyond the query itself** to a party you cannot
+authenticate.
 
-**So the signature gives retroactive attribution, not prior authentication.** A
-node that reaches an address and obtains the key can then confirm the entry was
-genuine, and if it was not, knows which gossip source supplied a forged one. That
-makes injection **attributable** rather than **prevented**, which is a weaker claim
-than an earlier draft made.
+> **Why this differs from the sibling rule, which an implementer will notice.** §6.2
+> makes a sibling with no key material **UNUSABLE** rather than dialling it
+> unauthenticated. The cases are genuinely different: a sibling is a **destination**,
+> and its identity is the whole point of contacting it; an anchor returning a referral
+> is a **referrer**, whose identity is incidental to an answer validated by reaching
+> someone else. Do not "fix" the anchor case to match the sibling one.
+
+**Anchor entries are self-signed, and the signature is verifiable only by a party
+that already holds the anchor's key** [D] — from having attached to it, or from a
+transaction naming it. An entry carries the *keyhash*, not the key, so **nothing in
+the entry lets a recipient check the signature on receipt, and resolution never
+supplies what would.**
+
+**So the signature gives retroactive attribution to a holder who has the key by other
+means, and nothing to anyone else.** Where it can be checked, a forged entry is
+**attributable** rather than **prevented** — the gossip source that supplied it is
+identifiable. Where it cannot, a forged entry costs one failed dial.
 
 **The ingestion boundary must therefore be explicit.** An implementation that
 treats "present in the table" as "verified" while its ingestion path does not
@@ -1859,8 +1871,9 @@ AnchorEntry = {
 ```
 
 [D, design §7.2] **Key hashes, not keys.** Full PQ keys would blow the table by ~18×.
-The table is an index, not a credential store; full keys are fetched and
-verified at contact time.
+The table is an index, not a credential store. **Full keys are not fetched during
+resolution** — they arrive from attaching, from a transaction naming the node, or not
+at all (above).
 
 Which anchors a node caches is **per-node policy, never a protocol constant**
 [D].
@@ -2082,9 +2095,11 @@ ResolveRequest = {
 
 ResolveReply = {
   1: bstr .size 16,     ; echoes the request nonce
-  2: uint,              ; 0 serving | 1 repair | 2 failure | 3 referral
+  2: uint,              ; 0 serving | 2 failure | 3 referral.
+                        ;   VALUE 1 (repair) IS WITHDRAWN and not reused, along
+                        ;   with field 4 — there is no forwarding record to
+                        ;   repair from (design §2)
   3: ? ServingInfra,    ; present iff field 2 = 0
-  4: ? SignedLocator,   ; present iff field 2 = 1 (design §10.3 case 2 repair)
   5: ? uint,            ; present iff field 2 = 2; see codes below
   6: ? Referral         ; present iff field 2 = 3
 }
@@ -2123,25 +2138,26 @@ ServingInfra = {
 }
 ```
 
-**Resolution is iterative with referrals** (design §10.6.1). [D] A node answers authoritatively, **refers the requester onward**, returns
-a repair, or reports failure. It never carries the request itself, so no progress or
+**Resolution is iterative with referrals** (design §10.6.1). [D] A node answers
+authoritatively, **refers the requester onward**, or reports failure. It never carries the request itself, so no progress or
 consumed-prefix state exists: each request carries its own anchor and full path, and
 every reply is interpretable without knowing what came before.
 
 **Each node interprets the path from its own position.** [D] A request carries the
 anchor and the **full, unmodified path** every time; it holds no consumed-prefix
 field, and none is added. A node knows its own anchor-relative position, so it knows
-which portion of the path is still ahead of it. **The requester accumulates progress
-locally** by summing `advances`, purely to know when it has arrived — that running
-total is never transmitted and no node depends on it.
+which portion of the path is still ahead of it. **Arrival is announced by the reply, not computed by the requester.** [D —
+2026-08-26] A `ServingInfra` answer says the resolution is done; no running total
+of `advances` needs to be kept, and **no arrival-consistency equation is checked** —
+an earlier version required accumulated `advances` to equal path length minus
+residual length, which rejected exactly the direct-serving answer design §10.6.1
+permits, for no gain: the total was never transmitted and no node depended on it.
+What remains checkable per referral: `advances` MUST be ≥ 1, and a referral
+advancing past the path's end is malformed.
 
 **Why not carry the consumed prefix:** a field the requester computes and every node
 must trust is state an intermediary could misreport. Deriving position from a node's
 own place in the tree removes the question.
-
-**Consistency the requester checks on arrival:** the accumulated `advances` must
-equal the full path length minus the returned `residual_path` length. A mismatch
-means some node miscounted, and the resolution is unsound rather than merely slow.
 
 **A referral names the next hop and gives its endpoints**, so the requester
 continues from there. A node may refer past several indices at once where it knows
@@ -2175,20 +2191,17 @@ node.** [D] That is a caller-side condition, not a wire failure: no request is s
 because there is nowhere to send it. The caller needs an address for that anchor
 from some other source — an introduction, a cached entry, a peer's referral.
 
-**Repair responses are bounded.** A resolver MUST NOT follow more than **4**
-`forwarded` replies for one resolution. design §10.3 requires the source to return
-the *terminal* forwarding record rather than the next hop, so a well-behaved chain
-never exceeds one; the bound exists against a hostile or broken peer.
+**A stale locator is not repaired in transit; it fails.** [D — 2026-08-26] A
+resolution against a position the subject has left returns failure code 0 or 1, and
+the requester re-resolves from a higher anchor (design §10.3) or re-establishes
+socially (design §10.4). **No party redirects a resolution to a different position on
+the subject's behalf** — that is the redirection mechanism this rule existed to
+prevent, and removing forwarding removed the thing that needed the guard.
 
-**A party supplying replacement routing information for a stale claim MUST NOT
-change the identity being resolved, and the replacement MUST be demonstrably newer
-than the claim it supersedes** — strictly greater `seqno`, never equal. **Equal
-`seqno` with different contents is malformed**, not a tie to break: a subject
-advances its own counter, so two distinct locators at one value means one of them
-was not produced by the subject. Otherwise repair becomes a redirection mechanism,
-or stale information displaces fresh. Present encoding: a forwarded reply names the
-same subject, with `seqno` strictly greater than the locator being repaired
-(§2.3).
+**`seqno` comparison still governs locator freshness** wherever two locators for one
+subject are compared: strictly greater to replace, and **equal `seqno` with different
+contents is malformed** rather than a tie to break, since a subject advances its own
+counter (§2.3).
 
 ### 5.7 Prekey distribution
 
@@ -2396,7 +2409,7 @@ extension point; an enumerated field is a closed vocabulary.
 **Values, not flags.** A parameter carries an opaque value rather than mere
 presence, because several natural capabilities are quantities: the largest archive
 batch a peer will serve (§5.8), which prekey construction it implements (§5.7),
-what it will accept as a resolution repair depth (§5.6). A bitfield could express
+what it will accept as a resolution referral depth (§5.6). A bitfield could express
 none of these, and would cap the space at 64.
 
 **Absence of a capability is never a connection failure.** Parameters set limits;
