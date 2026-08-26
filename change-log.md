@@ -3608,3 +3608,90 @@ nothing happened. Ordering was always correct; the dates were not.
   but different data centres are no longer distinguishable by prefix — *"we aren't
   relying on the independence measurement for trust"*, which the wire note now
   states: independence is a visible signal, not a trust input.
+- **2026-08-26 (0.6.3 presence-validation pass: eleven items; two disclosure fields
+  return to the body)** — All eleven verified; ten held, one (U-11) was the text
+  being confusing rather than contradictory.
+
+  **The central finding was self-inflicted.** §4.5.2 claimed structural verification
+  needs no disclosures while §3.2's structural rules consume three disclosable
+  fields — `started_at` (monotonicity, the 730-day window), `subtype` (formation
+  rules), `proximity` (the strongest-channel rule). A minimised record could not be
+  structurally validated or threshold-checked at all, and the reviewer's
+  UNVERIFIABLE third state was the only honest output.
+
+  **Checking what withholding protected settled it.** `started_at`: `finalized_at`
+  and the seed-window ordinal are body fields, so the ceremony's *day* was already
+  public in every presentation — withholding hid only time-of-day while breaking four
+  checks. `subtype`: a formation record's absent evidence arrays announce it, so the
+  label hid nothing. **Both return to the body** (keys 1 and 10, subtype's 0/1
+  assignment restored — closing U-5, which the move had orphaned). `proximity` stays
+  disclosable — genuinely private — and the strongest rule is the one structural rule
+  checked only on reveal, stated in §3.2, §4.5.1's decoder rules and both exchange
+  tables. The disclosure set is seven; salts ~112 B, 0.3%.
+
+  **A presentation now has a schema** (U-1, blocking): `PresentedRecord = [Envelope,
+  [7 DisclosureSlot]]`, slots ascending by label, each a full `Disclosure` or a bare
+  32-byte digest — **position supplies the label**, so withheld digests carry
+  nothing. Seven slots always; a revealed label differing from its slot is malformed.
+
+  **Value schemas restored** (U-6): each label's value is the CBOR its field carried
+  in the body, tabulated in §4.5.1 — the move had orphaned retention's `[uint, uint]`
+  entirely.
+
+  **Formation records carry the genesis value, not an absent back-pointer** (U-7):
+  key 0 is `[SHA-256(signer keyhash)]` per signer, as for every first record. "MUST
+  be absent" contradicted §3.1 and left three incompatible encodings open. U-11's
+  confusion resolved in the same block by separating the claims: a *conforming*
+  established key cannot produce one honestly; a *cheating* one can, undetectably to
+  a history-less validator, and the design accepts that as evidentiary weakness —
+  detection arrives with anyone holding the real chain.
+
+  **The monotonicity comparison uses the predecessor's effective time** (U-8) —
+  `finalized_at` for presence, the §1 transaction timestamp otherwise, every merge
+  predecessor checked.
+
+  ***n* is scoped to participation** (U-9): a record the subject signed as a witness
+  is in their chain and is not their meeting — counting it would raise *n* without
+  adding a candidate. Candidates are the other participant of counted records.
+  **And only verified history counts** (U-10): canonical, content-addressed,
+  signature-checked; an unfetchable record leaves the chain incomplete, not smaller.
+- **2026-08-26 (0.6.3 re-run: previous fixes held; twelve new items, all applied)** —
+  The re-run validated the seven-slot presentation, genesis back-pointers,
+  participation-scoped *n*, verified-history admission and effective-time rules
+  cleanly, including the holder-relative half-verified case. Twelve new items, all
+  confirmed real.
+
+  **Two were more than encoding gaps.** `query_id` was defined self-referentially —
+  SHA-256 of a map that contains the hash — and is now the hash of fields 1–4 with
+  field 5 absent. And the bidirectional frame bound inherited stream 0's 64 KB while
+  the size table's maximum presence record is ~65 KB: **the largest legal object was
+  untransmittable.** Bidirectional streams now bound at 256 KB; control stays 64 KB.
+
+  **The location-method registry was stranded as a comment under `Channel.3`**,
+  where the reviewer correctly refused to apply it. Relocated to
+  `Asserted`/`Corroboration` as a shared registry, 0–3, **deliberately open** like
+  the disavowal bands — evidence channels grow, and rejecting an unknown method
+  would make each a flag day. Geohash pinned to 3–4 bytes of canonical lowercase
+  base32, one cell one encoding.
+
+  **Rules stated rather than left to divergent inference**: threshold traversal may
+  prune a verified branch at the 730-day boundary (monotonic effective time makes
+  anything past it irrelevant — without this one missing genesis-era record blocks
+  every recomputation forever); response arrays have no canonical order and are
+  evaluated as (subject, verifier) sets; there is no aggregate verdict — malformed
+  is terminal, every other dimension reports independently, and collapsing them is
+  a policy act (§13.1); client-integrity evidence has no structural tie to
+  attested/scheme; channel resolution and binding are syntactically optional with
+  no presence condition; `nominated_by`'s wire comment now matches §3.2's checkable
+  rule rather than restating the uncheckable ceremony claim.
+
+  **The design/wire disagreement on location assertions resolved toward the wire**:
+  "at least two assertion methods are required" meant the *registry* defines two so
+  the ceremony survives one being unavailable, not that a record carries two — a
+  record may carry none, and sufficiency is the evaluator's policy.
+
+  **Ranging mode and receiver implementation are deferred** (§2): carrying them
+  would let policy weight a UWB pass by defeatability, but the fields fingerprint
+  hardware, need a registry nobody can populate, and disclosures are not extension
+  points. Until then a UWB pass is weighted as the weakest deployed mode. Bounds
+  added while there: integrity evidence ≤1024 B, channel binding ≤128 B.

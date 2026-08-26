@@ -470,26 +470,29 @@ claimed first transaction is checkable rather than assertable.
 - **`strongest` MUST appear among the channels with `result = pass`, and no
   higher-ranked channel may appear with `pass`.** Ranking is UWB > NFC > optical >
   latency (design §7.1.6.3). Without the second half the field is not
-  deterministic.
-- **A key may appear in at most one formation record: its first.** [D]
-  A formation record's back-pointer for each signer MUST be absent, which is only
-  true of a signer's first record. **An established key cannot sign one**, because
-  its key 0 entry names a predecessor.
+  deterministic. *Proximity is disclosable (§4.5.1), so this is the one structural
+  rule checked only when its field is revealed — withheld, it reports
+  unverifiable, never valid and never malformed.*
+- **A key may appear in at most one formation record: its first.** [D — restated
+  2026-08-26] A formation record's key 0 list for each signer MUST be exactly
+  **the genesis value, `[ SHA-256(signer keyhash) ]`** — the same encoding every
+  first transaction carries (above). *An earlier wording said the back-pointer
+  "MUST be absent", which contradicted §3.1's requirement that every body carry
+  key 0 and left three incompatible encodings open: omission, an empty list, and
+  the genesis hash.*
 
-  **This is what bounds the population.** Without it, an identity with standing could
-  manufacture formation records against arbitrary fresh keys — cheap, since formation
-  needs no witnesses and no verifiers — and flood its own candidate pool. **With it,
-  the attacker's thousand keys can only form with each other**, and a set of mutually
-  formed strangers has no standing with anyone and is a candidate for nobody real.
+  **Two distinct claims, easy to conflate.** *Structurally*: a validator checks the
+  subtype, the absent evidence arrays, and the genesis back-pointers — all local to
+  the record. *Honestly*: a conforming established key cannot produce one, since its
+  true chain has a predecessor. **A cheating established key can** — it simply omits
+  its history and signs — and a validator holding no history cannot tell. The design
+  accepts that: the forgery's weakness is evidentiary (design §10.8.2), a formation
+  record attests nothing anyway, and detection arrives with anyone who holds the
+  key's real chain, against which the fork is visible.
 
-- **Beyond that, `formation` is an evidence label rather than a further
-  history-dependent precondition.** A validator checks the subtype, the absent
-  evidence arrays and the absent back-pointers; it does not evaluate what the
-  participants did afterwards. Established
-  identities can therefore mint formation records, which the design accepts —
-  their weakness is evidentiary (design §10.8.2), and making eligibility a
-  structural rule would require every validator to hold both participants'
-  histories.
+  **The structural rule is what bounds the population.** An identity with standing
+  minting formation records against fresh keys gets a set of mutually formed
+  strangers with no standing with anyone — a candidate for nobody real.
 - **Formation records omit fields 8 and 9 entirely** rather than encoding empty
   arrays, per §1's rule. Absence means empty.
 - **Witness identities MUST be distinct**, and **MUST NOT include either
@@ -516,7 +519,11 @@ claimed first transaction is checkable rather than assertable.
 to check against and inventing one would make validity depend on the reader.
 
 **But `started_at` is not merely evidentiary, and MUST be monotonic against the
-committed back-pointer.** [D] For each signer, `started_at` MUST be
+committed back-pointer.** [D] The predecessor's time is its **effective time** —
+`finalized_at` for a presence record, the transaction `timestamp` (§1) for every
+other type, stated because a predecessor need not be a presence record and only
+presence records carry `finalized_at`. Every predecessor in a merge list is
+checked. For each signer, `started_at` MUST be
 greater than or equal to the `finalized_at` of the record its key 0 back-pointer
 names, and `finalized_at` MUST be greater than or equal to `started_at`. **A record
 violating either is malformed.**
@@ -1027,17 +1034,25 @@ Field-for-field per design §7.2.
 
 ```
 {
+  1: timestamp,        ; started_at. IN THE BODY, not disclosable [D — 2026-08-26]:
+                       ;   §3.2's monotonicity and §4.6.3's 730-day window need the
+                       ;   exact value, and withholding it hid almost nothing —
+                       ;   finalized_at and key 11 already expose the ceremony's
+                       ;   day in every presentation
   2: timestamp,        ; finalized_at
-                       ; key 1 (started_at) is DISCLOSABLE — see §4.5.1.
                        ; key 3 unused, not reused
   4: [ Participant, Participant ],
   8: [ * Witness ],
   9: [ * VerifierResponse ],
-  11: uint,            ; seed window ordinal = floor(unix_seconds / 86400)
-  12: bstr .size 32    ; disclosure root (§4.5.1) — commits to every disclosable
-                       ;   field. Fields 1, 5, 6, 7 and 10, and Participant
-                       ;   fields 4 and 5, moved out of the body and are
-                       ;   committed here instead
+  10: uint,            ; record subtype: 0 = normal, 1 = formation (design
+                       ;   §10.8.2). IN THE BODY, not disclosable [D — 2026-08-26]:
+                       ;   structurally load-bearing, and withholding it hid
+                       ;   nothing — a formation record's absent fields 8 and 9
+                       ;   announce it regardless
+  11: uint,            ; seed window ordinal = floor(started_at / 86400)
+  12: bstr .size 32    ; disclosure root (§4.5.1) — commits to the seven
+                       ;   disclosable fields: body keys 5, 6 and 7, and each
+                       ;   Participant's retention and client integrity
 
   ; key 0 (chain back-pointers) is common to all bodies (see §3.1).
   ; NOTE: no patron signature appears in a presence record. Patrons do not
@@ -1051,7 +1066,12 @@ Participant = {
                        ;   disclosure set (§4.5.1)
 }
 
-ClientIntegrity = { 1: bool, 2: uint, 3: ? bstr }   ; attested, scheme, evidence
+ClientIntegrity = { 1: bool, 2: uint, 3: ? bstr .size (1..1024) }
+                     ; attested, scheme, evidence. No structural relation ties
+                     ; field 3's presence to fields 1-2 [D — 2026-08-26]: an
+                     ; unattested client may still carry scheme evidence and an
+                     ; attested one may omit it. Policy reads the combination
+                     ; (design §7.1.8); a validator checks only the shapes
 
 Proximity = {
   1: [ + Channel ],
@@ -1060,11 +1080,12 @@ Proximity = {
 Channel = {
   1: uint,             ; 1 uwb, 2 nfc, 3 optical, 4 latency
   2: uint,             ; 0 pass, 1 fail, 2 unavailable
-  3: ? uint,           ; claimed resolution, metres
-                       ; method values: 0 GNSS, 1 serving-cell, 2 network egress,
-                       ; 3 latency bound. Unassigned values are retained and left
-                       ; uninterpreted, the list is open (§1)
-  4: ? bstr            ; session-key binding, where the channel provides one
+  3: ? uint,           ; claimed resolution, metres. Syntactically optional with
+                       ;   no presence condition: whether a kind carries one is
+                       ;   the client's claim, and policy weighs it
+  4: ? bstr .size (1..128)
+                       ; session-key binding, where the channel provides one.
+                       ;   Optionality is syntactic only, as field 3
 }
 
 Capture = {
@@ -1078,12 +1099,28 @@ LocationEvidence = {
   1: [ * Asserted ],
   2: [ * Corroboration ]
 }
-Asserted      = { 1: uint, 2: tstr }              ; method, geohash (3–4 chars)
+Asserted      = { 1: uint, 2: tstr }              ; method, geohash
 Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km
+
+; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2 [D —
+; 2026-08-26, relocated from a comment stranded under Channel.3]:
+;   0 GNSS · 1 serving-cell · 2 network egress · 3 latency bound.
+; DELIBERATELY OPEN, like §4.3's disavowal codes and unlike §1's default:
+; evidence channels will grow, and rejecting an unknown method would make every
+; new channel a flag day. Unassigned values are retained and left uninterpreted.
+
+; GEOHASH: 3 or 4 ASCII bytes from the canonical lowercase geohash base32
+; alphabet 0123456789bcdefghjkmnpqrstuvwxyz [D — 2026-08-26]. Upper case, other
+; text, or other lengths are malformed — one logical cell, one encoding, the
+; same rule as path-nibble padding.
 
 Witness = {
   1: keyhash,
-  2: keyhash,          ; nominated_by — MUST be the counterparty (design §7.1.1)
+  2: keyhash,          ; nominated_by — MUST be one of the two participants
+                       ;   (§3.2). That it is the witness's counterparty is the
+                       ;   ceremony's cross-nomination claim (design §7.1.1),
+                       ;   not checkable from the record; evaluation is the
+                       ;   reader's
   3: uint,             ; attestation bitfield:
                        ;   bit 0 protocol_ran
                        ;   bit 1 both_responsive
@@ -1099,7 +1136,11 @@ VerificationQuery = {
   2: keyhash,          ; querier
   3: bstr .size 32,    ; ceremony pre-commitment (design §7.1.4)
   4: bstr .size (1..4096),   ; fuzzed profile
-  5: bstr .size 32     ; query_id
+  5: bstr .size 32     ; query_id — SHA-256 of the canonical CBOR of THIS MAP
+                       ;   WITH FIELD 5 ABSENT (fields 1-4 only), then stored
+                       ;   here. [D — 2026-08-26] Stated because the earlier
+                       ;   definition hashed "the VerificationQuery", which
+                       ;   includes field 5 and is self-referential
 }
 
 VerifierResponse = {
@@ -1157,10 +1198,11 @@ participants' devices.
 ### 4.5.1 Selective disclosure
 
 **A holder can present a presence record without the fields a given recipient has no
-use for.** [D] Scoped deliberately: this hides **location, position,
-retention, client integrity, capture parameters, proximity channels, start time and
-subtype**, and hides **nothing else**. See design §7.2.1 for what it does not reach
-and why.
+use for.** [D] Scoped deliberately: this hides **location, retention, client
+integrity, capture parameters and proximity channels**, and hides **nothing else**.
+See design §7.2.1 for what it does not reach and why. *`started_at` and `subtype`
+are body fields, not disclosable — the structural rules consume them, and
+withholding them concealed nothing the body does not already show (§4.5).*
 
 #### The construction is a digest list, not a tree
 
@@ -1175,12 +1217,24 @@ root         = SHA-256( 0x01 || concatenation of all digests, ascending by label
 ```
 
 `root` is body field 12. **Labels are the field's path**, so a decoder knows what it
-is looking at without a table: `started_at`, `proximity`, `capture`, `location`,
-`subtype`, `p0.retention`, `p0.integrity`, `p1.retention`, `p1.integrity`.
+is looking at without a table. **Exactly seven, in ascending byte order**:
+`capture`, `location`, `p0.integrity`, `p0.retention`, `p1.integrity`,
+`p1.retention`, `proximity`. A label outside this set is malformed.
+
+**Each label's value is the CBOR the field carried when it lived in the body** [D —
+2026-08-26], stated because the move otherwise orphans the schemas:
+
+| Label | Value |
+|---|---|
+| `proximity` | the `Proximity` map (§4.5) |
+| `capture` | the `Capture` map (§4.5) |
+| `location` | the `LocationEvidence` map (§4.5) |
+| `pN.retention` | `[ uint, uint ]` — [photo_years, template_years] (design §7.1.5.1) |
+| `pN.integrity` | `{ 1: bool, 2: uint, 3: ? bstr }` — attested, scheme, evidence (design §7.1.8) |
 
 **Why not a Merkle tree.** design §14.5.3 proposed one, following SD-JWT loosely. At
 the leaf count here — nine for a typical record — a tree buys nothing: inclusion
-proofs would cost four hashes each where sending every digest costs nine, and a tree
+proofs would cost four hashes each where sending every digest costs seven, and a tree
 adds real hazards a flat list does not have, **odd-node handling and the
 duplicated-node second-preimage class**. SD-JWT's own construction is a digest array
 for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
@@ -1198,28 +1252,40 @@ mean anything here.**
 must therefore compute one root. They are ordinary record state afterwards, held by
 both participants and by anyone given a full record.
 
-#### What travels
+#### What travels: the presentation
 
-| Form | Carries |
-|---|---|
-| **Full record** | body + every `Disclosure` |
-| **Minimised** | body + the revealed `Disclosure`s + the **digests** of the withheld ones |
-| **Fully withheld** | body + all nine digests |
+**A presented record is the envelope plus exactly seven disclosure slots, in
+ascending label order.** [D — 2026-08-26] Stated as a schema because prose alone left
+encoders free to invent containers that could not interoperate:
+
+```
+PresentedRecord = [
+  Envelope,                  ; the signed transaction (§3), untouched
+  [ 7*7 DisclosureSlot ]     ; one per label, ascending by label byte order
+]
+DisclosureSlot = Disclosure / bstr .size 32   ; revealed, or the withheld digest
+```
+
+**Position supplies the label.** Slot *i* belongs to label *i* of §4.5.1's sorted
+set, so a withheld digest needs no label of its own — a revealed `Disclosure` whose
+embedded label differs from its slot's is malformed. Exactly seven slots always: a
+shorter or longer array is malformed, and a fully-withheld presentation is seven
+digests.
 
 **A recipient verifies by recomputing `root`** from what it holds — revealed
-disclosures hashed, withheld digests taken as given — and checking it equals field 12,
-which the envelope signature covers. A mismatch means the presentation is malformed,
-not that a field is missing.
+disclosures hashed, withheld digests taken as given — and checking it equals body
+field 12, which the envelope signature covers. A mismatch means the presentation is
+malformed, not that a field is missing.
 
-**Withholding is visible, and that is deliberate.** The digest count and the labels
-are always present, so a recipient always knows a field exists and was withheld. This
-is the same posture as §4.6.5's `pending` and `unavailable` verifier responses:
-absence is legible rather than silent, and a policy may weight it.
+**Withholding is visible, and that is deliberate.** All seven slots are always
+present, so a recipient always knows a field exists and was withheld. This is the
+same posture as §4.6.5's `pending` and `unavailable` verifier responses: absence is
+legible rather than silent, and a policy may weight it.
 
 #### Cost
 
-**+16 bytes per disclosable field at rest** — about 144 bytes on a ~35 KB record,
-**0.4%**. A minimised presentation carries 32 bytes per withheld field, at most 288
+**+16 bytes per disclosable field at rest** — about 112 bytes on a ~35 KB record,
+**0.3%**. A minimised presentation carries 32 bytes per withheld field, at most 224
 bytes. **Presentation size does not otherwise fall**: a presence record is ~96%
 signatures and the envelope requires exactly the required signer set, so a minimised
 record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
@@ -1227,13 +1293,25 @@ record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 #### What a decoder MUST do
 
 - **Reject a record whose recomputed root does not equal field 12.**
-- **Reject duplicate labels**, and a label outside the set above.
+- **Reject a slot count other than seven**, a revealed label differing from its
+  slot's position, and a label outside the set above.
 - **Reject a `Disclosure` whose salt is not exactly 16 bytes.**
+- **Reject a revealed value that does not match its label's schema** (the table
+  above) — a disclosure is not an extension point.
+- **The `strongest`-channel rule (§3.2) is checked when `proximity` is revealed**,
+  and reported as unverifiable — not valid, not malformed — when it is withheld.
+  It is the one structural rule living in a disclosable field.
 - **Accept any subset of disclosures, including none.** A minimised record is
   well-formed; only a root mismatch is malformed.
 - **Never treat a withheld field as a default value.** Withheld is not zero, not
   absent, and not `unavailable` — it is unknown, and §4.5.2 says which recipients may
   require it.
+- **There is no aggregate verdict.** [D — 2026-08-26] *Malformed* is terminal;
+  everything else — missing keys, unavailable history, a withheld field, each
+  subject's half — is an independent dimension a validator reports separately.
+  **Collapsing them into one boolean is a policy act** (design §13.1), not a
+  validation result: one evaluator may treat any unverifiable dimension as
+  disqualifying while another accepts a verified half, and both read the same bytes.
 
 ### 4.5.2 Which exchanges see the disclosable fields
 
@@ -1247,7 +1325,7 @@ able to read.** design §7.2.1 carries the same table with the reasoning.
 | Verification by query (§4.6.6, design §7.1.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier-selection recomputation (§4.6) | **None.** Seed inputs are body fields 4, 8, 11 |
 | Finalization threshold (§4.6.5) | **None.** Counts field 9 |
-| Structural verification (§3.2) | **None.** Signatures, back-pointers, timestamps, participant distinctness |
+| Structural verification (§3.2) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§5.8) | **Holder's choice.** The only exchange with a use for location |
 | Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
@@ -1255,7 +1333,7 @@ able to read.** design §7.2.1 carries the same table with the reasoning.
 | Segment key grant (§5.3a) | **None.** References `txid` |
 
 **Ten of eleven exchanges need none of it**, which is what makes the mechanism worth
-its 0.4%. **A conforming client withholds by default and reveals on the holder's
+its 0.3%. **A conforming client withholds by default and reveals on the holder's
 instruction**, rather than the reverse.
 
 **No exchange may demand a disclosable field as a condition of proceeding.** [D] The
@@ -1406,11 +1484,38 @@ Six definitions the selection rule depends on and did not carry. [D]
 ### 4.6.4 Candidate set and sampling
 
 ***n* counts distinct presence transactions reachable from the back-pointer this
-record commits for that subject**, each once. [D] The archive is
-a Merkle DAG after a merge (design §8.3), so a transaction reachable by several
-merge paths is still one transaction — traverse the reachable predecessor set and
-count each `txid` once. An implementation written when the archive was a chain would
-double-count across merged branches and derive a different threshold.
+record commits for that subject, in which the subject is one of the two
+participants**, each once. [D — scoped 2026-08-26] **A record the subject signed
+only as a witness is in their chain and is not their meeting** — it names them in
+field 8, not field 4 — and counting it would raise *n* without adding a candidate,
+since a witnessed ceremony's participants met each other, not the witness. The same
+rule scopes the candidate set: a candidate is the *other participant* of a counted
+record. The archive is a Merkle DAG after a merge (design §8.3), so a transaction
+reachable by several merge paths is still one transaction — traverse the reachable
+predecessor set and count each `txid` once. An implementation written when the
+archive was a chain would double-count across merged branches and derive a
+different threshold.
+
+**Only verified history is counted.** [D — 2026-08-26] A record feeds *n* and the
+candidate set only if it is canonical, its content address checks, and its
+signatures verify — reachability alone admits nothing. Counting
+parseable-but-unverified records would let forged history move thresholds and
+steer samples. A reachable record that cannot be fetched leaves the chain
+**incomplete, not smaller**: the traversal reports unverifiable rather than
+returning a lower *n* (§3.2's unavailable-predecessor rule).
+
+**Traversal may prune a verified branch at the window boundary.** [D — 2026-08-26]
+Effective time is monotonic along every verified chain (§3.2), so once a branch
+reaches a verified record at or before `started_at − 730d`, nothing beyond it can
+fall inside the window — an unavailable record *past* that point leaves the full
+archive incomplete without making this record's *n* or candidate set unverifiable.
+Without this rule, one missing genesis-era record would block every threshold
+recomputation forever.
+
+**Responses have no canonical array order.** [D — 2026-08-26] Deterministic CBOR
+orders map keys, not array elements. A validator evaluates field 9 as a set of
+`(subject, verifier)` slots and MUST NOT reject an order; different orders are
+different signed bodies and different txids, all valid.
 
 **The root of that traversal is the committed back-pointer, not the subject's
 current head.** [D] The record's key 0 fixes each signer's predecessor at signing
@@ -1488,7 +1593,9 @@ cannot place as unverifiable rather than invalid.
 
 ### 4.6.6 Consent is signed over the query id
 
-`query_id = SHA-256(canonical CBOR of the VerificationQuery)`.
+`query_id = SHA-256(canonical CBOR of the VerificationQuery with field 5 absent)` —
+the map of fields 1–4, hashed, then stored as field 5. Hashing a map that contains
+the hash is unconstructible.
 
 The subject's `COSE_Sign1` (field 7 of `VerifierResponse`) signs **`query_id`**,
 not the query itself. The query, which carries a fuzzed profile up to 4 KB — is
@@ -2693,9 +2800,13 @@ protocol.
 frame = u32-be length || deterministic CBOR of [ uint request_type, body ]
 ```
 
-Same framing as stream 0 (§6.0), same bound, same rule: **unknown request types are
-rejected on a bidirectional stream**, unlike unknown control frames which are
-skipped. A control frame arrives on a shared stream where skipping preserves the
+Same framing as stream 0 (§6.0), same rule — **unknown request types are rejected
+on a bidirectional stream**, unlike unknown control frames which are skipped — but
+**a larger bound: 256 KB.** [D — 2026-08-26] Stream 0's 64 KB cannot carry what
+bidirectional streams exist to fetch: a maximum-signer presence record is ~65 KB
+before its presentation slots, and a recovery adoption ~42 KB. *An earlier "same
+bound" made the largest legal objects untransmittable.* Control frames stay at
+64 KB — nothing on stream 0 approaches it. A control frame arrives on a shared stream where skipping preserves the
 session; a bidirectional stream *is* the request, so a type nobody understands has
 no continuation to preserve.
 
@@ -3073,7 +3184,7 @@ classical column applies only to session-layer traffic.
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |
 | Peering | — | **~8 KB** |
-| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65 [D]. Includes ~144 B of disclosure salts, **0.4%** (§4.5.1) |
+| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65 [D]. Includes ~112 B of disclosure salts, **0.3%** (§4.5.1) |
 | Presence record (maximum signers) | ~5 KB | **~65 KB** — 18 logical signers × (64 + 3,309), plus 32 verifier responses at 2 classical signatures each |
 | Currency attestation | ~150 B | ~2.6 KB |
 | Anchor entry | ~60 B | ~60 B (hashes only) |

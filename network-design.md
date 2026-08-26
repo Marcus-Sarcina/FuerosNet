@@ -509,6 +509,15 @@ Resources and payload confidentiality both sat there until 2026-08-16 despite
 being close to the point of the network.
 
 ### Explicitly deferred
+- **Ranging mode and receiver implementation in proximity evidence.** §7.1.6.3's
+  known UWB attacks turn on HRP-versus-alternative modes and specific receiver
+  designs, so carrying them would let policy weight a `pass` by how defeatable it
+  was. **Not carried in v1**: the fields would fingerprint hardware (P15's shape
+  one layer down), the values need a registry nobody can populate yet, and
+  `wire-format.md` §4.5.1's disclosures are not extension points — an ad-hoc addition is malformed.
+  Until then a UWB pass is weighted as the weakest deployed mode. Revisiting means
+  a `Channel` field with a mode registry, and deciding whether it joins the
+  proximity disclosure or stays body-visible.
 - **IPv6 endpoints, and prefix-based reputation with them.** v1 demands IPv4
   (§14.3): routable IPv4 is genuinely scarce and metered, which is the second leg
   of Sybil cost, and a 16-byte address in a `NetworkPoint` is malformed. IPv6
@@ -1811,8 +1820,12 @@ there is simply nothing to scan.
 #### 7.1.6.2 Location evidence: assertion plus corroboration
 
 **No single channel is authoritative.** Location is *asserted* by participants
-and *corroborated* by independent channels. At least two assertion methods are
-required so the ceremony survives cellular unavailability.
+and *corroborated* by independent channels. The protocol defines **at least two
+assertion methods** so the ceremony survives any one being unavailable — a
+property of the method registry, not a per-record minimum: **a record may carry
+any number of assertions, including none** (`wire-format.md` §4.5), and how much
+location evidence a record needs is the evaluator's policy. *An earlier wording
+read as requiring two assertions per record, which the wire schema never did.*
 
 | Channel | Type | Resolution | Notes |
 |---|---|---|---|
@@ -1866,10 +1879,11 @@ imperfect ones", which changes the confidence a policy should place in a record,
 not the architecture.
 
 **Practical consequences:**
-- `Proximity` (§7.2) already records which channel was achieved; it should
-  additionally record **the ranging mode and, where available, the implementation**,
-  since HRP-versus-alternative modes and specific receiver designs are what the
-  known attacks turn on.
+- `Proximity` (§7.2) records which channel was achieved and **deliberately not the
+  ranging mode or receiver implementation** — deferred (§2). The consequence for
+  v1 evaluators: a UWB `pass` cannot be distinguished by mode, so policy must
+  weight it as the *weakest* mode in deployment (HRP), since the known attacks
+  turn on exactly that distinction.
 - No implementation should treat any single channel as proof that a counterparty's
   key is physically present. Combining channels raises attacker cost; nothing here
   makes it prohibitive.
@@ -1970,13 +1984,14 @@ signature placement.**
 PresenceRecord {
   # --- header ---
   type              : "presence"
-  subtype           : enum{normal, formation}    # DISCLOSABLE. §10.8.2 —
+  subtype           : enum{normal, formation}    # body — structural. §10.8.2:
                                                  # PERMANENT, never rewritten; a
                                                  # formation record must never age
                                                  # into looking like a normal one
   schema_version    : uint16
   txid              : H(canonical body)          # content-addressed
-  started_at        : timestamp                  # DISCLOSABLE
+  started_at        : timestamp                  # body — monotonicity and the
+                                                 # 730-day window need it
   finalized_at      : timestamp                  # body — window checks need it
   disclosure_root   : bstr[32]                   # §7.2.1
 
@@ -2098,8 +2113,12 @@ transaction.
 commits to the list; the envelope signature covers the body, so a recipient verifies a
 partial presentation against the same signature. Encoding: `wire-format.md` §4.5.1.
 
-**Disclosable:** location evidence, per-participant retention tiers, client integrity,
-capture parameters, proximity channels, `started_at`, and record subtype.
+**Disclosable — seven fields:** location evidence, per-participant retention tiers,
+client integrity, capture parameters, and proximity channels. *`started_at` and
+`subtype` returned to the body 2026-08-26: the structural rules consume them, and
+withholding them concealed nothing — `finalized_at` and the seed-window ordinal
+already show the ceremony's day, and a formation record's absent evidence arrays
+announce its subtype regardless.*
 
 **This was scoped by a sweep, not by preference.** Eleven exchanges transmit or
 evaluate a presence record, and what each actually reads decides what may be withheld:
@@ -2111,7 +2130,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Verification by query (§7.1.3) | a fuzzed profile and a query id — **not the record**, which does not exist yet | no |
 | Verifier-selection recomputation (§7.2.2) | nonces, seed, candidate set | no |
 | Finalization threshold (§7.1.4) | verifier responses | no |
-| Structural verification (`wire-format.md` §3.2) | signatures, back-pointers, timestamps, participant distinctness | no |
+| Structural verification (`wire-format.md` §3.2) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§13.7) | signatures, and counterparties the patron already knows (§8.1) | **benefits** |
 | Trust metric (§13.2) | graph edges, which come from adoptions | no |
@@ -2167,8 +2186,8 @@ likes — §13.1 makes policy pluggable — but it cannot make an exchange carry
 exchange does not define. §1.1: the evidence schema is the one thing that is not
 pluggable, because the schema is the interface and policy is only the interpretation.
 
-**Cost: 16 bytes per disclosable field at rest**, about 144 bytes on a ~35 KB record,
-**0.4%**. Presentation size does not otherwise fall — a presence record is ~96%
+**Cost: 16 bytes per disclosable field at rest**, about 112 bytes on a ~35 KB record,
+**0.3%**. Presentation size does not otherwise fall — a presence record is ~96%
 signatures — so this buys disclosure control and not bandwidth.
 
 #### 7.2.2 Verifier selection
@@ -5204,7 +5223,7 @@ where the presenter has a choice to make. A prospective patron running §7.1.7's
 impossible-travel check needs the geohash series; a presenter withholding it is
 declining to offer that evidence rather than concealing a defect, and the withholding
 is visible either way. Everything else disclosable — retention, client integrity,
-capture parameters, proximity, `started_at`, subtype — has no consumer here.
+capture parameters, proximity — has no consumer here.
 
 **Presentation is a single head txid** (`wire-format.md` §4.1 field 7), from which
 the patron walks the chain backward and fetches what it wants
@@ -5583,7 +5602,7 @@ the record to a recipient without the fields that recipient has no use for, and 
 recipient still verifies against the same signature.
 
 **What it covers:** location evidence, retention tiers, client integrity, capture
-parameters, proximity channels, `started_at`, subtype. Ten of the eleven exchanges that
+parameters, proximity channels. Ten of the eleven exchanges that
 transmit or evaluate a record read none of them (§7.2.1).
 
 **What it does not cover, and this is the part to keep in view.** It cannot hide the
