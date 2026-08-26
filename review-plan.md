@@ -54,7 +54,7 @@ those: they do not parse as references at all.
 **A clean pass means the discipline has moved into the documents.** The earlier runs
 corrected instances; this one found the corrections holding, including the
 abuse-report rule the register keeps as its worked example. Expect a pass to go
-clean once its lesson is written into §0 rather than applied case by case — and
+clean once its lesson is written into design §0 rather than applied case by case — and
 expect it to stop being clean the moment a large new mechanism lands.
 
 ## Prompt construction principles
@@ -97,7 +97,7 @@ These matter more than the specific wording below. Adapt freely, but preserve:
 
 ## What to supply, and what to withhold
 
-**Strip the change log (design §15) from every purged pass.** It is the design
+**Strip the change log (`change-log.md`) from every purged pass.** It is the design
 reasoning in condensed form — it says not only what changed but why, including
 already-formed conclusions about privacy, threat models and tradeoffs. Feeding it
 to a reviewer violates the "give the artifact, withhold the reasoning" rule more
@@ -126,8 +126,8 @@ The second concern is real, but it is an **instruction** problem, not a
 **withholding** problem — and withholding costs something specific.
 
 **The decisive argument: only a reviewer who sees our reasoning can tell us the
-reasoning is wrong.** §10.4 accepts patron eclipse because identities are cheap
-and there is no token to steal. §14.5.7 accepts its privacy costs, each for a
+reasoning is wrong.** design §14.4 accepts patron eclipse because identities are cheap
+and there is no token to steal. design §14.5.7 accepts its privacy costs, each for a
 stated reason. If any of those reasons is bad, that is among the most valuable
 findings available — and stripping the section makes it structurally impossible
 to find. It hides precisely the arguments most in need of adversarial reading.
@@ -139,7 +139,7 @@ known finding teaches nothing.
 
 ### Rule
 
-**Supply everything to every pass, including §15 and the weakness registers.**
+**Supply everything to every pass, including `change-log.md` and the weakness registers.**
 Handle anchoring in the prompt, by naming what a worthless finding looks like.
 
 The one exception remains `review-tracking.md`, which is not specification but a
@@ -149,7 +149,7 @@ found but what was decided, which is process, not artifact.
 **Supply `wire-format.md` alongside the design document for 0.8.** Encoding-level
 attacks — canonicalisation, malleability, bounds, seed grinding — are invisible
 from the design document alone, and the one attack of that class found so far
-(§7.2's grinding attack) came from an implementation attempt rather than from
+(design §7.2.2's grinding attack) came from an implementation attempt rather than from
 adversarial review.
 
 **On re-running a pass at higher effort:** if you hold results from a lower-effort
@@ -238,7 +238,7 @@ in response to them.
 [paste document here]
 ```
 
-**The change-log guard is load-bearing.** Design document §15 records what each fix was
+**The change-log guard is load-bearing.** `change-log.md` records what each fix was
 *intended* to do. A reviewer skimming it can mark findings ADDRESSED on the
 strength of the author's own description rather than the rule text — which makes
 the pass worthless in precisely the cases where a rewrite went wrong.
@@ -409,7 +409,7 @@ the enforcement boundary a narrower one respected — both findings in the
 Second extraction, same pass — **unenforceable mandates**:
 
 ```
-The attached document states as a design principle (§1.1) that a network can
+The attached document states as a design principle (design §1.1) that a network can
 only enforce where there is shared state, and that beyond that boundary the
 correct move is to make a distinction VISIBLE in the evidence schema rather than
 to require behaviour.
@@ -571,7 +571,7 @@ storage is subject to eviction under storage pressure unless persistent storage 
 granted; a native filesystem is not. Design document §8.2 makes the archive a **second
 factor**, and A13 assumes users retain it — so silent eviction would cost portable
 history and weaken a security property, not merely inconvenience the user. That
-bears on retention enforcement (§10.8.7.1's scan-on-import) and on recovery.
+bears on retention enforcement (design §10.8.7.1's scan-on-import) and on recovery.
 
 ## 0.7 Privacy threat modelling (LINDDUN)
 
@@ -626,6 +626,18 @@ exceeds what one response can carry — this is a length problem, not a refusal;
 a refusal would say so rather than stopping partway. Splitting also improves
 depth, since each adversary gets the whole budget, and makes a failure cost one
 role rather than all of them.
+
+### Adversary roles
+
+One per session. The prompt below takes exactly one of these.
+
+1. A participant's own patron
+2. A witness at a presence ceremony
+3. A well-funded commercial operator wanting fake standing at scale (budget:
+   $100k/month)
+4. A state actor with legal compulsion over one cloud provider
+5. A malicious counterparty at a single in-person meeting
+6. Someone who has stolen a device, including its keys and archive
 
 ### Prompt
 
@@ -730,7 +742,7 @@ argument.
 
 **Tool:** a graph simulator, not a model checker.
 
-**Targets:** the flow-metric claims in §9.2 and §10.2 — that a fake subtree's
+**Targets:** the flow-metric claims in design §13.2 and §14.1 — that a fake subtree's
 claim is bounded by its cut regardless of size; that λ < 1/f is necessary; the
 detection probability arithmetic for shared identities; hub formation around
 infra operators. All of these are currently argued analytically and none has been
@@ -796,7 +808,7 @@ Stated plainly so it is not over-trusted:
 |---|---|---|---|
 | 1 | **0.5-verify** | Purge session; **paste the 18 findings + current doc** | Certify the seven rule rewrites while "what changed" is still unambiguous. After 0.6 that instruction stops being usable |
 | 2 | **0.6** | Purge | Implementation gaps. Start with *encode, sign and verify an adoption transaction* — build-order step 2, and it exercises deterministic CBOR, COSE multi-signature, key material vs key hash, the locator, the PoP reference and archive-subset references. Expect the most edits from this pass |
-| 3 | **0.5.2** | Purge | Unenforceable mandates. Deliberately separated from 0.5.1 — near-neighbour frames contaminate. Likely cheap now that §1.1 states the principle |
+| 3 | **0.5.2** | Purge | Unenforceable mandates. Deliberately separated from 0.5.1 — near-neighbour frames contaminate. Likely cheap now that design §1.1 states the principle |
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
 | 6 | **0.8b** | Purge | Vignette/spec agreement. Late, once content has stabilised |
@@ -832,7 +844,7 @@ fixing those before the interpretive passes means the expensive reviews are not
 spent rediscovering typos. Organisation last so it does not churn against content
 edits.
 
-**Then**, once the open items in design §13 are closed, re-run 0.2 and 0.4 only —
+**Then**, once the open items in design §17 are closed, re-run 0.2 and 0.4 only —
 those are the two that decay fastest as the document changes.
 
 **Then** Stage 1, before writing much code. The formal models are cheapest to

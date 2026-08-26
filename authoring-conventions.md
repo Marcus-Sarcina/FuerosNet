@@ -49,23 +49,23 @@ correct *in the wire format* — that is where identifiers live. It becomes a
 hazard when it is the **only** statement of the rule, because a rename, merge, or
 taxonomy change then removes the invariant and nothing looks wrong afterwards.
 
-> The veto exemption in §7.4.2 has been restated twice for exactly this reason.
+> The veto exemption in design §7.4.2 has been restated twice for exactly this reason.
 > "Transfer is exempt from patron veto" evaporated when transfer collapsed into
 > adoption. Its replacement named departure and adoption — one type name swapped
 > for two, no more durable. Only *"a party with authority over another may never
 > veto an action whose sole effect is to end that authority"* survives a
 > refactor.
 
-**Generalising a rule can break §1.1, and has.** Abstraction widens scope, and a
+**Generalising a rule can break design §1.1, and has.** Abstraction widens scope, and a
 wider rule may reach past the enforcement boundary that the narrower one respected.
-§9.6's abuse-report rule began as *"addressed to the owner and not broadcast"* —
+design §9.6's abuse-report rule began as *"addressed to the owner and not broadcast"* —
 a delivery property the sender controls completely. Its role-level rewrite added
 *"intermediaries must neither receive nor retain it as reputation evidence"*, which
 governs foreign storage and is unenforceable. **The generalisation was more elegant
 and less true.**
 
 So the two conventions must be applied together, in order: state the property, then
-**ask who would enforce the restated version against whom** (§1.1). If the answer
+**ask who would enforce the restated version against whom** (design §1.1). If the answer
 has changed, split the rule — keep the enforceable part as a MUST and represent the
 rest as a visible distinction.
 
@@ -148,7 +148,7 @@ rationales here are better than the original intuition behind the decision.
 *"custody obligations are otherwise a real barrier to hosting"* and the queue policy
 by *"a time window forces a choice nobody wants to make"*. Both entered the
 assumptions register. Neither was the author's reasoning, and the queue's real
-argument was better: an expired verification query cannot be answered, and §7.1.4
+argument was better: an expired verification query cannot be answered, and design §7.1.4
 counts a missing answer against **the subject**, so expiry penalises a third party
 for their verifier's connection habits.
 

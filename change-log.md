@@ -3279,3 +3279,26 @@ nothing happened. Ordering was always correct; the dates were not.
   **Kept deliberately**: §14's findings and correlation registers (current risk),
   §15 (assumptions), A.1 (rejected alternatives — the anti-re-proposal register),
   §17/§18 (open items), and every forward-stated "why not".
+- **2026-08-25 (0.8's adversary roles restored; a verbatim prompt repaired after
+  being edited)** — Two corrections to the review plan, both about §0.8.
+
+  **The six adversary roles were missing** and the author recovered them from an
+  early download: a participant's own patron; a witness at a ceremony; a funded
+  commercial operator at $100k/month; a state actor with legal compulsion over one
+  cloud provider; a malicious counterparty at a single meeting; a device thief
+  holding keys and archive. **They were absent before version control began**, so
+  the loss is not in the history — the likely moment is the 2026-08-23 restoration,
+  which recovered the section's prose and prompt but not the table the prompt
+  selects from. The section had been self-contradicting since: the prompt says
+  *[ONE ROLE FROM THE TABLE]* and the rubric assumes six constructions, with no
+  table in the file. All six map onto existing findings — §14.4's eclipse, §14.1's
+  fake-subtree cost, C8, P29, P5/C9 — which is what corroborated the recovery.
+
+  **And an edit to the prompt was reverted.** The 2026-08-25 reference sweep
+  remapped the weakness-register citations inside §0.8's prompt to current
+  numbering. The 2026-08-23 entry states that those numbers are stale *deliberately*
+  — it is the text that ran, preserved as such — so the remap was a change to a
+  known-good prompt made incidentally rather than as a decision. Reverted; §0.8 now
+  diffs identical to the baseline commit. **The lesson for future sweeps: a
+  reference can be stale on purpose, and a mechanical repair cannot tell.** §0.8's
+  *nine privacy costs* is wrong against §14.5.7 for the same reason and stays wrong.
