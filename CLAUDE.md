@@ -19,10 +19,20 @@ assumes, and §1 states what the network is for.
 | `light-client-requirements.md` | Participant client obligations |
 | `infra-client-requirements.md` | Operator obligations |
 | `resource-requirements.md` | Resource package obligations |
-| `authoring-conventions.md` | How to write and review these. **Read this.** |
-| `review-plan.md` | The staged external review programme |
-| `review-tracking.md` | Per-finding dispositions. References are as-of-filing and are not remapped |
+| `Robot/authoring-conventions.md` | How to write and review these. **Read this.** |
+| `Robot/review-plan.md` | The staged external review programme |
+| `Robot/review-tracking.md` | Assistant scratchpad: per-finding dispositions and working queues. References are as-of-filing and are not remapped. **Nothing in the root may cite it** |
 | `change-log.md` | History. Not needed to understand the design, useful for tracing a decision |
+
+**The root holds the six documents that constitute the design, plus this file.**
+Everything process-facing lives in `Robot/`. A document in the root may cite another
+root document; **no root document may cite anything in `Robot/`** — the design must
+not depend on a working file for its own integrity.
+
+`Robot/resource-interaction-requirements.md` and
+`Robot/network-design-checkpoint-2026-08-12.md` are closed records: the first a
+working brief whose answers moved into the design, the second a frozen snapshot. Both
+carry as-of-filing section numbers and neither is edited.
 
 ---
 
@@ -99,7 +109,7 @@ it as a MUST — the documents state their obligations as commitments for this
 reason.
 
 **State rules by role, not by identifier.** A rule naming a transaction type dies
-when the type is renamed. `authoring-conventions.md` has the test.
+when the type is renamed. `Robot/authoring-conventions.md` has the test.
 
 **Numbers in registers are never reused.** A withdrawn finding keeps a tombstone
 row so a citation resolves to *withdrawn* rather than silently to a different

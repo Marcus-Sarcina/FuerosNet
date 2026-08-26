@@ -1461,3 +1461,45 @@ and (b) that the mechanism could not do the thing it was proposed for. **Costing
 proposal by enumerating who consumes the data is cheaper than building it**, and it is
 the second time in two days that a §18.2 item dissolved against its source sections
 rather than against the summary.
+
+
+---
+
+## Pass 0.6.1 — implementation attempt, adoption (clean room, 2026-08-26)
+
+**Seven UNSPECIFIED items, all seven confirmed against the text.** No false
+positives — the first pass of this size with none.
+
+| # | Finding | Disposition |
+|---|---|---|
+| U1 | Adoption field 4 `timestamp` has a range but no stated event semantics | **FIXED** — author's rule: a transaction's timestamp is **when it takes effect**. Stated at the type definition in §1 so it governs every transaction type, not adoption alone |
+| U2 | Back-pointer lists ordered "as the required signer set", which is unordered | **FIXED** — signer order is the order each type's schema introduces its required signers, now enumerated per type in §3.1. Author: no practical valence either way, but there must be a rule |
+| U3 | `rhtn/1:recovery` orphaned in the domain-separation table | **FIXED** — row deleted. Residue from when field 3 signed the Recovery map, corrected 2026-08-24 |
+| U4 | Field 9 is `COSE_Sign1` and must be hybrid — jointly unsatisfiable | **FIXED** — field 9 is `COSE_Sign1` in a presence record and hybrid `COSE_Sign` inside a Recovery. **Was blocking for recovery interoperability** |
+| U5 | Which signature hybridises — field 7, field 9, or both | **FIXED** — field 9 only, stated explicitly rather than derivable from a KB figure |
+| U6 | "Signs `query_id`" — raw bytes or CBOR bstr | **FIXED** — raw 32 bytes. Every other payload in the document names its encoding; this one alone did not |
+| U7 | The 1024-byte extension bound does not say what it measures | **FIXED** — complete encoded CBOR slice for the value |
+
+### What the reviewer supplied and what was added
+
+**U5's cost arithmetic was right and is not the best argument.** The reviewer inferred
+field-9-only from *~34 KB for a typical recovery* equalling one Ed25519+ML-DSA pair
+per response rather than two. Correct — and design §5.1's own arithmetic says the same.
+The stronger reason now in the text: a recovery response's `subject` MUST equal the
+newly adopted node, so **field 7 is signed by the very key an attacker mounting a
+fraudulent recovery already controls.** Hybridising it protects nothing. Field 9 forges
+a *verifier's* attestation, which is the attack.
+
+**U2 is broader than reported.** The reviewer raised it for adoption; the rule was
+missing for every type, and a presence record has 2 participants plus 16 witnesses
+with no stated order at all.
+
+**One consequence found while applying.** With field 9's hybrid case explicit, a
+recovery adoption is ~42 KB — the second-largest object in the protocol — and the size
+table had no row for it. Added.
+
+### Method note
+
+**Nothing in part (d) changed the design.** The crate-maturity findings restate §5.2's
+existing position; the `getrandom` `wasm_js` requirement was already recorded. That is
+the expected result for a re-run and is not a criticism of the pass.

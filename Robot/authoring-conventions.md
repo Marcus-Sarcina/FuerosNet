@@ -85,7 +85,7 @@ statement is a defect, not a deferral.
 ## Review programme
 
 The staged review plan, per-finding dispositions and pass history live in
-`review-plan.md` and `review-tracking.md`. **Findings and their reasoning belong
+`Robot/review-plan.md` and `Robot/review-tracking.md`. **Findings and their reasoning belong
 there, not in the design.** Where a review changed a decision, the design states
 the decision as it now stands and `change-log.md` records that it changed.
 

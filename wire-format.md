@@ -82,7 +82,6 @@ Present encoding: `external_aad` holds the ASCII role tag.
 | Role | `external_aad` |
 |---|---|
 | Transaction envelope | `rhtn/1:envelope` |
-| Old-key recovery proof (§4.1) | `rhtn/1:recovery` |
 | Verifier response (§4.5) | `rhtn/1:verifier` |
 | Subject consent to a query (§4.5) | `rhtn/1:consent` |
 | VerificationQuery, canonical form | see §4.5 |
@@ -159,7 +158,7 @@ context rather than content also makes the check free.
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 64 |
 | Unknown extension keys per map | 16 |
-| Unknown extension value, bytes | 1024 |
+| Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
 | `Capabilities` value, bytes | 1024 |
 | SiblingRef entries in `AttachAck` **or `SiblingUpdate`** | 9 (f − 1), the update replaces the same logical list |
@@ -208,7 +207,18 @@ rather than down.
 keyhash   = bstr .size 32          ; SHA-256 of the deterministic CBOR encoding
                                    ; of KeyMaterial (§2.2), the fixed-order
                                    ; PAIR of COSE_Keys, never one of them
-timestamp = uint                   ; seconds since Unix epoch; u64 RANGE
+timestamp = uint                   ; seconds since Unix epoch; u64 RANGE.
+                                   ; **A transaction's timestamp is when it TAKES
+                                   ; EFFECT** — not when it was drafted and not
+                                   ; when either signature was applied. The body
+                                   ; is fixed before anyone signs and signatures
+                                   ; may be gathered with any delay (§3.2), so
+                                   ; the value is the effective time the parties
+                                   ; agreed at assembly, not an observed moment.
+                                   ; Never checked against a local clock at
+                                   ; structural verification (§3.2); a recipient
+                                   ; reads it as the parties' claim about when
+                                   ; the relationship or event began
 seqno     = uint                   ; per-node monotonic counter; u64 RANGE
 
 ; NOTE: `.size 8` was removed 2026-08-16. It read as a fixed eight-byte
@@ -386,11 +396,28 @@ builds around it. [D]
 **Every transaction body carries key 0**, reserved across all types:
 
 ```
-0: [ + [ + bstr .size 32 ] ]  ; chain back-pointers, one LIST per signer, in the same
-                     ; order as the transaction type's required signer set.
+0: [ + [ + bstr .size 32 ] ]  ; chain back-pointers, one LIST per required signer,
+                     ; in SIGNER ORDER as defined below.
                      ; Each list holds SHA-256 of that signer's previous
                      ; transaction(s), length 1 normally, longer at a merge.
 ```
+
+**Signer order is the order the type's own schema introduces its required signers**,
+and it must be stated because *"the required signer set"* names an unordered thing.
+[D — 2026-08-26]
+
+| Type | Signer order |
+|---|---|
+| Adoption (§4.1) | node (field 1), then patron (field 2) |
+| Departure (§4.2) | the departing node |
+| Disavowal (§4.3) | the issuing patron |
+| Peering (§4.4) | endpoint A, then endpoint B, as fields 1 and 2 |
+| Presence (§4.5) | the two participants in field 4's order, then witnesses in field 8's order |
+| Resource registration, abuse report (§4.7) | the single signer |
+
+**Getting this wrong is silent.** Every hash and signature still verifies while each
+predecessor is attributed to the wrong signer, so a mismatch surfaces only when
+someone walks a chain and finds it does not reach back.
 
 [D] Each participant's archive is a hash chain, so sequence
 position is as trustworthy as the record itself. Because the back-pointer sits in
@@ -700,11 +727,19 @@ placing it in a signed object would hand every reader the key.
 **Consistency rules for a Recovery block.** [D] Each closes a case where every
 signature verifies and the assembly still means something other than it claims:
 
-- **Verifier responses inside a `Recovery` block are HYBRID**, not classical. [D] Every other embedded signature is classical because its relevance
-expires; **a recovery's does not** — it induces a permanent identity change that a
-later evaluator cannot revisit, so a forged classical `match` would sit inside an
-authentic post-quantum record indefinitely (design §5.1). Cost is ~34 KB for a
-typical recovery.
+- **A verifier's authentication inside a `Recovery` block is HYBRID**, not
+classical — **field 9 only.** [D] Every other embedded signature is classical because
+its relevance expires; **a recovery's does not** — it induces a permanent identity
+change that a later evaluator cannot revisit, so a forged classical `match` would sit
+inside an authentic post-quantum record indefinitely (design §5.1). Field 9 becomes an
+untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.5).
+
+  **Field 7 stays classical**, and the reason is not cost. A recovery response's
+  `subject` MUST equal the newly adopted node, so **field 7 is signed by the very key
+  an attacker mounting a fraudulent recovery already controls** — hybridising it
+  protects nothing. Field 9 forges a *verifier's* attestation, which is the attack.
+  Field 7's protection is anti-oracle and expires with the ceremony window; field 9's
+  is permanent. Cost follows: ~10 responses at 3,373 B is ~34 KB, one pair each.
 
 **Every response's field 8 MUST equal `prior_key`** — otherwise evidence about
   one old identity is embeddable under a claim about another.
@@ -1065,9 +1100,11 @@ VerifierResponse = {
   6: ? uint,           ; template version. REQUIRED when basis is 0 or 2;
                        ; MUST be absent when basis = 1. The optional marker is
                        ; syntax; the basis determines presence
-  7: COSE_Sign1,       ; SUBJECT's countersignature. Payload: query_id (field 3),
-                       ; NOT the query itself (see §4.6.6).
+  7: COSE_Sign1,       ; SUBJECT's countersignature. Payload: the RAW 32 BYTES of
+                       ; query_id (field 3) — not a CBOR bstr wrapping them, and
+                       ; not the query itself (see §4.6.6).
                        ; external_aad = "rhtn/1:consent".
+                       ; ALWAYS CLASSICAL, including inside a Recovery (§4.1).
                        ; A verifier MUST reject a query lacking it, and MUST reject
                        ; one whose fuzzed profile differs from another countersigned
                        ; under the same ceremony pre-commitment
@@ -1079,8 +1116,13 @@ VerifierResponse = {
                        ; identity Y, and every signature still verifies. Without it the verifier's signature never
                        ; names the old identity it is attesting continuity with,
                        ; and the assertion the recovery rests on is unsigned
-  9: COSE_Sign1        ; BY THE VERIFIER. Payload: canonical CBOR of fields 1-8 of
-                       ; THIS map. External_aad = "rhtn/1:verifier"
+  9: COSE_Sign1 / COSE_Sign
+                       ; BY THE VERIFIER. Payload: canonical CBOR of fields 1-8 of
+                       ; THIS map. External_aad = "rhtn/1:verifier".
+                       ; **COSE_Sign1, classical, in a presence record.**
+                       ; **COSE_Sign, hybrid, inside a Recovery block** (§4.1) —
+                       ; untagged, detached, one Ed25519 and one ML-DSA-65 entry.
+                       ; The field's type is fixed by where the response sits
 }
 
 **Both signatures here are `COSE_Sign1` and classical-only**, unlike envelope
@@ -3009,6 +3051,7 @@ classical column applies only to session-layer traffic.
 | Object | Classical | Post-quantum |
 |---|---|---|
 | Adoption | — | **~8 KB** |
+| Adoption carrying a recovery (~10 responses) | — | **~42 KB** — ~8 KB plus ~34 KB of hybrid verifier authentications (§4.1, §4.5). The second-largest object in the protocol, and rare by construction |
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |
 | Peering | — | **~8 KB** |

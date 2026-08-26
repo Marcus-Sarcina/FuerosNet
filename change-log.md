@@ -3417,3 +3417,73 @@ nothing happened. Ordering was always correct; the dates were not.
 | ~~C14~~ | ~~Capability vector + network point across an identity fork~~ | **WITHDRAWN.** A serving node is necessarily inside the Dunbar org, and a rotation propagates as a topology-class message pushed within horizon (§7.4.0.2) — so **any node positioned to see both attaches has already received the record binding the two keys.** The fresh-Genesis case fails from the other side: where unlinkability matters, the new identity appears in a *different* subnet under a different serving node that sees only one; where one node could see both, the person was adopted by a neighbour who met them, so the link exists socially whatever the transport shows. Numbers are never reused | — |
 | ~~C16~~ | ~~`AbuseReport.detail` + resource log~~ | **WITHDRAWN**, for the reason C13 was and one more. **The schema has no subject** (§9.6): a report carries `resource` and `reporter` and names no third party, so a detail field describing someone's circumstances has nobody to describe. And both ends are held by one party — either the resource reports to its own owner, or a user reports about a resource and any personal particular is their own. An earlier version distinguished this from C13 on the grounds that a third-party reporter delivers particulars the owner did not hold; **that reading was wrong**, since the owner granted the role and owns the resource. Numbers are never reused | — |
 | ~~C18~~ | ~~Datasets joined within one infra process~~ | **WITHDRAWN as stated.** The correlation assumed a package could reach topology, liveness, queue state, prekey requests and role-evaluation inputs; **the design offers no binding that exposes any of them** — §9's rule that *the resource never reads network state* applies to a hosted package, and `infra-client-requirements.md` §8.2 states that the hooks do not exist rather than being narrowly scoped. What remains is not a correlation but an **implementation question**: whether the isolation mechanism enforces that boundary against hostile code, which is for the sandboxing literature rather than this document. Numbers are never reused | — |
+- **2026-08-26 (0.6.1 adoption implementation pass, clean room)** — Seven
+  UNSPECIFIED items, **all seven confirmed against the text and all seven fixed**.
+  One was blocking.
+
+  **The blocker: `VerifierResponse` field 9 could not satisfy both rules.** §4.5
+  fixed it as `COSE_Sign1`, which carries exactly one signature, while §4.1 requires
+  verifier responses inside a `Recovery` to be hybrid, which needs two. Two rules
+  individually correct and jointly unsatisfiable — the class §0.6 exists to find.
+  Field 9 is now `COSE_Sign1` in a presence record and an untagged detached
+  `COSE_Sign` inside a Recovery, and the field's type is fixed by where the response
+  sits.
+
+  **Which signature hybridises is now stated rather than derivable from a size
+  figure.** Field 9 only; field 7 stays classical. The reviewer inferred this
+  correctly from *~34 KB per typical recovery* being one Ed25519+ML-DSA pair per
+  response rather than two, and §5.1's arithmetic agrees — but the load-bearing reason
+  is different and is now in the text: **a recovery response's `subject` MUST equal
+  the newly adopted node, so field 7 is signed by the very key an attacker mounting a
+  fraudulent recovery already controls.** Hybridising it protects nothing. Field 9
+  forges a *verifier's* attestation, which is the attack; field 7's protection is
+  anti-oracle and expires with the ceremony window.
+
+  **A transaction's timestamp is when it takes effect** [author] — not when it was
+  drafted, not when either signature was applied. Stated at §1's type definition so it
+  governs every transaction rather than adoption alone, with the constraint that
+  §3.2 fixes the body before anyone signs and permits any delay in gathering
+  signatures: the value is the parties' agreed effective time, not an observed moment,
+  and nothing checks it against a clock.
+
+  **Back-pointer lists have a signer order.** §3.1 said "the same order as the
+  transaction type's required signer set", and a set has no order. Now enumerated per
+  type — adoption is node then patron [author: no practical valence either way, but
+  there must be a rule] — with the hazard stated: **getting it wrong is silent**, since
+  every hash and signature still verifies while each predecessor attaches to the wrong
+  signer.
+
+  **Three smaller fixes.** `rhtn/1:recovery` deleted from the domain-separation table,
+  orphaned since field 3 stopped signing the Recovery map on 2026-08-24 — §4.1 defines
+  one old-key proof and it signs under `rhtn/1:successor`. Subject consent signs the
+  **raw 32 bytes** of `query_id`, not a CBOR bstr wrapping them; every other payload in
+  the document names its encoding and this one alone did not. The 1024-byte extension
+  bound measures the **complete encoded CBOR slice** for the value, which is measurable
+  for every value type and is what bounds parser work.
+
+  **One consequence found while applying**: with field 9's hybrid case explicit, a
+  recovery adoption is ~42 KB — the second-largest object in the protocol — and the
+  size table had no row for it.
+- **2026-08-26 (root reserved for the design; process files moved to `Robot/`)** —
+  The root now holds exactly the six documents that constitute the design —
+  `network-design.md`, `wire-format.md`, the three requirements documents and this
+  log — plus `CLAUDE.md`. Moved to `Robot/`: `authoring-conventions.md`,
+  `review-plan.md`, `review-tracking.md`, `resource-interaction-requirements.md` and
+  `network-design-checkpoint-2026-08-12.md`.
+
+  **`CLAUDE.md` stays in the root because it must.** A root `CLAUDE.md` is loaded at
+  session start; a subdirectory one loads only when files in that directory are
+  touched. Every instruction in it is a start-of-session instruction — sweep by
+  search, do not invent justifications, ask whether the component is required — and
+  those are worth nothing arriving late.
+
+  **The invariant this encodes:** a root document may cite another root document;
+  **no root document may cite anything in `Robot/`.** The design must not depend on a
+  working file for its own integrity — the failure the 2026-08-25 register move
+  produced and this layout now makes structurally visible. Verified: zero citations
+  from the five root design documents into `Robot/`.
+
+  Live cross-references updated in `CLAUDE.md`, `Robot/authoring-conventions.md` and
+  `Robot/review-plan.md`. **The change log's eighteen mentions are left as written**,
+  being a historical record of what those files were called when the entries were
+  made. Moves were made with `git mv`, so history follows the files.

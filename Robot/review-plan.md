@@ -78,7 +78,7 @@ These matter more than the specific wording below. Adapt freely, but preserve:
 6. **Run twice, compare.** Findings appearing in two independent runs are
    materially higher confidence than findings appearing in one.
 7. **Track every enumerated finding to an explicit disposition.** Keep
-   `review-tracking.md`: one row per finding, one of FIXED / FIXED-DIFFERENTLY /
+   `Robot/review-tracking.md`: one row per finding, one of FIXED / FIXED-DIFFERENTLY /
    ACCEPTED / DEFERRED / REJECTED / NOT-A-FINDING, before an edit round is called
    complete. This exists because pass 0.5 was answered by engaging its framing
    and fixing seven of eighteen items, with the other eleven neither fixed nor
@@ -142,7 +142,7 @@ known finding teaches nothing.
 **Supply everything to every pass, including `change-log.md` and the weakness registers.**
 Handle anchoring in the prompt, by naming what a worthless finding looks like.
 
-The one exception remains `review-tracking.md`, which is not specification but a
+The one exception remains `Robot/review-tracking.md`, which is not specification but a
 record of dispositions — supplying it would tell a reviewer not only what was
 found but what was decided, which is process, not artifact.
 
