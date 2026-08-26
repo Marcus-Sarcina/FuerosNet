@@ -3579,3 +3579,32 @@ nothing happened. Ordering was always correct; the dates were not.
   **Still open from 0.6.2**: `routable prefix` has no defined encoding while §14.5
   reasons about prefix-based independence — awaiting the author's ruling on whether
   it is compared programmatically or is human-facing evidence.
+- **2026-08-26 (v1 is IPv4-only; IPv6 and prefix-based reputation deferred with
+  their design worked out)** — Following the routable-prefix encoding question from
+  0.6.2, the author asked what else in the specification indicated IPv6 in the
+  initial design — and §14.3 had already decided the matter: *demand IPv4 for now
+  and take the security as a bonus.* Two sites contradicted the decision.
+
+  **`NetworkPoint` accepted 16-byte addresses**, wire surface no v1 implementation
+  could exercise — the ossification pattern §6.1's greasing argument warns about.
+  Field 1 is now `bstr .size 4` and a 16-byte address is malformed in v1. Widening
+  later is an ordinary versioned change; nothing is precluded.
+
+  **The routable-prefix field was IPv6 machinery in an IPv4 release.** It exists to
+  answer the counting problem IPv6 creates; under IPv4 the address itself is the
+  scarce unit and ASN carries concentration. Key 3 withdrawn, not reused — **and the
+  0.6.2 open question closes by removal**, the second time in two days a component
+  question dissolved because the component was not required.
+
+  **The deferral carries its design so revisiting imports rather than re-derives**:
+  /64 as the one-subscriber reputation unit (RFC 6177's assignment floor; Spamhaus
+  lists at /64, M3AAWG recommends it for rate-limiting), BGP NLRI encoding
+  (RFC 4271 §4.3) with zero trailing bits, self-asserted and weighed under §1.1,
+  checkable against public routing data.
+
+  **Swept**: peering records now carry ASN only (§4.4, §6.3, §4.4's redundancy
+  bullet), §14.5.7 item 6 and C8 narrowed to ASN, §14.3's IPv6 leg points at the
+  deferred entry. The author accepted the one cost named: two IPv4 peers in one ASN
+  but different data centres are no longer distinguishable by prefix — *"we aren't
+  relying on the independence measurement for trust"*, which the wire note now
+  states: independence is a visible signal, not a trust input.

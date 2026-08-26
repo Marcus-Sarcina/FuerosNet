@@ -998,9 +998,13 @@ legible without making the *particulars* so.
 }
 
 NetworkPoint = {
-  1: bstr,             ; IP address, 4 or 16 bytes
+  1: bstr .size 4,     ; IPv4 address. v1 demands IPv4 (design §14.3);
+                       ;   IPv6 endpoints are deferred by decision (design §2),
+                       ;   and a 16-byte address here is malformed in v1
   2: ? uint,           ; ASN. U32 RANGE per RFC 6793 4-byte ASNs
-  3: ? bstr,           ; routable prefix
+                       ; KEY 3 WITHDRAWN [2026-08-26], not reused: a routable
+                       ;   prefix, deferred with IPv6 — under IPv4 the address
+                       ;   is the scarce unit and ASN carries concentration
   4: ? uint            ; UDP port, u16 range. Absent means the default 7431
 }
 
@@ -1011,8 +1015,9 @@ Audit = {
 }
 ```
 
-[D] ASN and prefix are exposed deliberately so policies can weight
-network diversity, and so concentration (many nodes in one ASN) is observable.
+[D] ASN is exposed deliberately so policies can weight network diversity, and so
+concentration (many nodes in one ASN) is observable. **Independence is a visible
+signal, not a trust input** — nothing in the metric consumes it.
 [D] The audit list is pruned to the most recent few; peering is a status
 rather than a trust-bearing history.
 
@@ -2827,7 +2832,7 @@ the horizon; only memos travel further up.**
 **Restricted to membership operations — adoption, departure and disavowal — and the
 restriction is load-bearing.** [D] Peering is topology class and is **excluded from
 rootward travel**: a peering record carries `NetworkPoint` for both endpoints plus
-ASN and routable prefix (§4.4), and design §14.5.8 C8 maps that composition to a
+ASN (§4.4), and design §14.5.8 C8 maps that composition to a
 natural person. A memo carries keys and positions and no address, which is what
 makes a root's accumulated view tolerable; adding peering for symmetry would
 silently remove that property.

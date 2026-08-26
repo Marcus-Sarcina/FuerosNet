@@ -509,6 +509,20 @@ Resources and payload confidentiality both sat there until 2026-08-16 despite
 being close to the point of the network.
 
 ### Explicitly deferred
+- **IPv6 endpoints, and prefix-based reputation with them.** v1 demands IPv4
+  (§14.3): routable IPv4 is genuinely scarce and metered, which is the second leg
+  of Sybil cost, and a 16-byte address in a `NetworkPoint` is malformed. IPv6
+  dissolves per-address scarcity — a /64 holds 2^64 addresses — so admitting it
+  means counting infrastructure by **delegated prefix** rather than address.
+  **The package to adopt when revisiting, worked out 2026-08-26 rather than
+  re-derived**: the reputation unit is the /64, per RFC 6177's assignment floor
+  and standing anti-abuse practice (Spamhaus lists IPv6 at /64; M3AAWG recommends
+  it as the rate-limiting unit), with larger delegations a per-observer policy
+  choice (§13.1); the encoding is BGP NLRI form (RFC 4271 §4.3) — `[length_bits,
+  truncated address bytes]`, trailing bits zero, one logical prefix one encoding;
+  the assertion is self-made and weighed, not verified (§1.1), checkable against
+  public routing data (RouteViews, RIPE RIS). Withdrawn with it until then:
+  `NetworkPoint` key 3, the routable prefix.
 - **Hard-fork departure and forwarding.** A departing node tells its former patron
   where it went, and the patron forwards traffic still arriving for it — a courtesy
   stub with a bounded lifetime, so contacts *outside* the departing node's horizon
@@ -693,7 +707,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   voluntary (§6.3), zero peers is a supported configuration, and a node with none
   simply does not have the property. §16 records the same figure as a
   recommendation for that reason.
-- **The peering record carries ASN and prefix for both endpoints** (§6.3), so an
+- **The peering record carries the ASN for both endpoints** (§6.3), so an
   observer can see whether two peers are actually independent. **Independence is
   adversarial, not only operational**: a party with legal compulsion over one
   provider reaches every node hosted there at once, so concentration bears on
@@ -1013,7 +1027,7 @@ consequence of subnet plurality, not a gap in this mechanism.
 ### 6.3 Peering (cross-tree)
 - **Voluntary and ad-hoc.** Unlike adoption, not required to participate.
 - **The record carries each endpoint's network point.** Address, and where
-  available ASN and routable prefix, so independence and concentration are
+  available the ASN, so independence and concentration are
   observable rather than asserted (§4.4, §14.3).
 - Two signatures, between infra nodes in different subtrees.
 - Attests investment in the network and therefore contributes to trust, but at
@@ -4865,7 +4879,7 @@ removed, and the subject's own sequence number.** It carries no address.
 
 **Restricted to membership operations, and the restriction is load-bearing.**
 Adoption, departure and disavowal travel rootward; **peering does not.** A peering
-record carries each endpoint's network point plus ASN and routable prefix (§6.3), and
+record carries each endpoint's network point plus ASN (§6.3), and
 C8 maps that composition to a natural person. A memo carries keys and positions, so
 an ancestor accumulating them holds structure and no routable or identifying
 information — and adding peering for symmetry would silently remove that property.
@@ -5261,15 +5275,14 @@ globally.
    public IPv4 address, roughly $3.65/month, indicative of major cloud pricing
    rather than a universal market rate; 1,000 addresses is a real bill, and
    unlike RAM it cannot be optimised away.
-   - **IPv6 dissolves this.** A /64 holds 2^64 addresses. Whether one costs
-     anything is **provider policy, not a property of IPv6.** Commonly free, but
-     not guaranteed and not generalisable. Count
-     by **routable prefix** rather than address. Prefix-based reputation is
-     established anti-abuse practice; choosing /64 specifically as one identity
-     is this design's policy, not a standardised rule.
-   - **Expose ASN and prefix** as attributes of the infra attestation.
+   - **IPv6 dissolves this.** A /64 holds 2^64 addresses, and whether one costs
+     anything is **provider policy, not a property of IPv6** — commonly free, but
+     not guaranteed and not generalisable. The answer, when IPv6 is admitted, is
+     to count by **routable prefix** rather than address; the unit, encoding and
+     prior art are recorded with the deferral (§2).
+   - **Expose the ASN** as an attribute of the infra attestation.
      Concentration (1,000 nodes in one ASN) is observable and is a signal
-     policies can weight.
+     policies can weight — a visible signal, not a trust input.
    - Decision: demand IPv4 for now and take the security as a bonus, while
      making no engineering decision that precludes IPv6 later.
 3. **Flow-limited trust** bounds what any single-entry region can claim
@@ -5692,7 +5705,7 @@ ceremony.
    not storage breach.
 5. **Persistent encounter evidence.** Presence facts are immutable; only derived
    standing decays (§13.5).
-6. **Visible infrastructure placement** — ASN and prefix are exposed *so that*
+6. **Visible infrastructure placement** — the ASN is exposed *so that*
    concentration is observable (§14.3).
 7. **Optional platform-vendor metadata.** Push is opt-in and declared a
    degradation of the trust model (§11.1.5).
@@ -5738,7 +5751,7 @@ acknowledged and whose join is not.
 | **C5** | Queue metadata + heartbeat state | *When someone came online to retrieve a particular message.* Distinguishes daily routine from exceptional activity, and both ingredients sit with the same party | High for a patron keeping logs |
 | **C6** | Push timestamps + patron queue state | The patron knows what is queued and sends the push; the platform vendor sees the push event. A party obtaining both **aligns network identity with a platform device account** more confidently than either dataset allows alone | High under legal process or platform compromise |
 | **C7** | Catalog entry + resource access log + topology | *Role and occupation inference.* A clinical service, code-review tool, family datastore or specialist tracker makes an otherwise pseudonymous subtree **semantically identifiable** | High |
-| **C8** | Peering ASN/prefix + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §4.3's rule that each server corresponds to a user. The placement disclosure is accepted (§14.5.7); this identification consequence was not worked through | Medium–High |
+| **C8** | Peering ASN + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §4.3's rule that each server corresponds to a user. The placement disclosure is accepted (§14.5.7); this identification consequence was not worked through | Medium–High |
 | **C9** | Local face archive + transaction archive, on one device | **§7.1.5.2 breaks this for compliant clients.** A seized device yields an archive and ciphertext, and the join requires per-counterparty cooperation from the depicted person. **A face-to-key-to-social-history database.** Either store alone is far less sensitive: photos identify faces without network history, the archive identifies keys without biometrics. On a compromised device they coexist and join. **This is the central consequence of P5**, not a separate risk | Critical |
 | **C10** | Stable key + catalog + multi-subnet membership | The same person's **services** followed across socially independent contexts — P3's linkage plus P15's fingerprint. **Conditional on a single-identity client**, since the linkage half disappears when a user presents different identities in different subnets | High for such a client |
 | C11 | **One-time key request** + queue and routing metadata | **Largely addressed** (§11.2.4). Reusable prekey material is prefetched across the Dunbar Org as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal — and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the on-demand one-time key request, which is made when a session is actually being opened and therefore precedes its message by a short interval: a node sees a request followed by traffic or by nothing, so an abandoned contact still leaves a trace. Depletion is bounded by per-requester rate limiting rather than by policing motive | Low–Medium |
@@ -6162,6 +6175,8 @@ second run before it was sound, and this one has not had it.
   someone other than the author writes them.
 - **Transaction types beyond the seven**, and **multiple identities per client** (§2) —
   a v1 client-scope exclusion, not a protocol limit.
+- **IPv6 endpoints and prefix-based reputation** (§2). v1 demands IPv4; the
+  /64 unit, NLRI encoding and prior art are recorded with the deferral.
 - **Hard-fork departure and forwarding** (§2). Withdrawn with the mechanism rather
   than left unbuilt: it had no delivery message, is unenforceable, and cost a
   post-departure pointer. Revisiting it means specifying the notice and accepting the
