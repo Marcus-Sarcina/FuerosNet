@@ -470,8 +470,10 @@ below.)*
 1. Encode, sign and verify an adoption transaction, including the optional recovery
    branch.
 2. Resolve a locator to a serving infra node given an anchor table.
-3. Validate a presence record, including the finalization threshold and
-   verifier-selection seeding.
+3. Validate a presence record, including the finalization threshold,
+   verifier-selection seeding, and **a minimised record** — recompute the
+   disclosure root from revealed disclosures plus withheld digests
+   (`wire-format.md` §4.5.1).
 4. Client attach with sibling failover.
 5. Run a capture and a verifier query, including sealed-capture handling and
    segment-key release.
@@ -483,9 +485,21 @@ below.)*
    `resource-requirements.md` §7.1 makes refusal the normal outcome for most
    requesters rather than the exceptional one — access is a predicate evaluated at
    request time, so most evaluations return nothing.
+9. **Flood a topology transaction and publish an endpoint record**
+   (`wire-format.md` §7.2a, §5.3d): receive a `TopologyPush`, decide whether to
+   store and forward it, suppress the duplicate that arrives back through a peering
+   cycle, and build the child table a patron refers from. Exercises the body-kind
+   tag, forward-if-stored, `txid` versus `(keyhash, seqno)` identity, and a record
+   that supersedes rather than accumulates.
+10. **Forward a rootward memo and detect a cycle** (`wire-format.md` §7.2b): apply
+    a memo to a table keyed on the subject's own `seqno`, forward it to your patron,
+    and fire the in-path check when one arrives naming your own position. Exercises
+    ordering under out-of-order arrival, the malformed equal-`seqno` case, and the
+    rule that a memo is a hint requiring the underlying transaction to be fetched
+    before acting.
 
 **Coverage matters as much as novelty.** Targets 1–4 exercise identity and presence,
-5 the capture path, 6–8 the resource layer. **A layer nobody has built against
+5 the capture path, 6–8 the resource layer, 9 and 10 propagation. **A layer nobody has built against
 tends to produce a construction change rather than a list of encoding corrections**
 — targets 5, 6 and 7 each did on their first run, and each needed a second.
 
@@ -655,8 +669,10 @@ Your adversary role for this session, and the only one to consider:
     [ONE ROLE FROM THE TABLE]
 
 You have been given everything, deliberately — including the designers' own
-register of known weaknesses (§10.4, §10.5.4, §10.5.7, §11.1, §11.3) and their
-change log. A real attacker would have all of this, so you do too.
+register of known weaknesses (design §14.4 accepted risks, §14.5.4 findings
+requiring action, §14.5.7 accepted costs, §14.5.8 correlations, §15.1 unsourced
+assumptions, §15.2 load-bearing assumptions) and their change log. A real
+attacker would have all of this, so you do too.
 
 Describe the best attacks you can construct in that role. For each: the
 preconditions, the steps, what you gain, what defence the design states, and
@@ -668,10 +684,11 @@ Classify every finding into exactly one of:
   EXTENDS    — a known weakness, but a worse consequence or an attack path
                they did not describe
   NOVEL      — not in the registers at all
-  REASONING  — an accepted risk whose stated JUSTIFICATION is wrong. They
-               accept patron eclipse because "identities are cheap and there
-               is no token to steal", and accept nine privacy costs each for
-               a stated reason. If a reason does not hold, show why.
+  REASONING  — an accepted risk whose stated JUSTIFICATION is wrong. Every
+               entry in design §14.4 and §14.5.7 carries a reason: a Potemkin
+               region "harms nobody who is not engaging with it"; locator
+               topology leakage is "intrinsic, because graph position IS the
+               evidence". If a reason does not hold, show why.
 
 RESTATES findings are worthless — give the count and move on. REASONING
 findings are the most valuable, being the only ones the designers cannot

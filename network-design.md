@@ -5581,10 +5581,10 @@ directions: records constrained, fields liberalised.
 
 ### 14.5.4 Findings requiring action
 
-**Current findings only.** Withdrawn, closed and not-a-finding entries live in
-`review-tracking.md`, so this register states what is open or accepted rather than the
+**Current findings only.** Withdrawn, closed and not-a-finding entries are in
+`change-log.md`, so this register states what is open or accepted rather than the
 history of what was asked. **Numbers are never reused**, so the gaps below are real
-and a citation to a missing number resolves in that file.
+and a citation to a missing number resolves there.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
@@ -5718,7 +5718,7 @@ almost entirely compositional.** Pairs and triples whose ingredients are each
 acknowledged and whose join is not.
 
 **Current entries only**, on the same rule as §14.5.4: withdrawn compositions are in
-`review-tracking.md` and their numbers are not reused.
+`change-log.md` and their numbers are not reused.
 
 | # | Composition | What it yields | Severity |
 |---|---|---|---|

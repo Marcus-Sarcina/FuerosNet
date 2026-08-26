@@ -1432,37 +1432,6 @@ was being used as a work list.
 
 
 ---
-
-## Withdrawn and closed register entries (moved here 2026-08-25)
-
-**These were rows in design §14.5.4 and §14.5.8.** They are kept so a citation to a
-withdrawn number resolves to *withdrawn* rather than silently to a different finding,
-and they are kept **here** rather than in the design because a withdrawn finding is not
-a current risk and the design's registers are its statement of current risk.
-
-**Numbers are never reused.** The gaps in §14.5.4's and §14.5.8's sequences are these.
-
-| # | Finding | Severity | Disposition |
-|---|---|---|---|
-| ~~P7~~ | ~~Activity summaries export a behavioural baseline to strangers~~ | — | **WITHDRAWN** with the mechanism (§7.4.2). Numbers are never reused |
-| ~~P8~~ | ~~Topology deanonymisation by association~~ | — | **WITHDRAWN**, folded into P15: identification yields a member's job, not a label for any of their subtrees. **The withdrawal originally rested on a second leg — *the attacker described is a horizon member already* — which stopped holding on 2026-08-25**, when §12.2's memo gave ancestors topology for parties far outside their horizon. The conclusion survives on the first leg alone: what labels a subtree is its catalog, and the catalog is answered on request within horizon (§9.5), so a distant ancestor cannot obtain the labels at all. Numbers are never reused |
-| ~~P9~~ | ~~Divergence-notification fan-out~~ | — | **WITHDRAWN.** The exposure it named predates the recovery: a thief holding the key already reads everything addressed to it, so an inquirer's loss dates from the theft, not the notification. And the disclosure runs the **right** way — see §7.4.0.2. Numbers are never reused |
-| ~~P10~~ | ~~Policy-descriptor fingerprinting~~ | — | **CLOSED by removal.** Nothing publishes a trust policy (§13.2), so there are no published parameters to fingerprint. Numbers are never reused |
-| ~~P22~~ | ~~Verification-query logs have no retention rule~~ | — | **CLOSED** (§7.1.4). There is no log: the anti-oracle aggregate is a **lock**, a per-requester and per-window counter held only for the enforced ceremony duration. A durable queryable history was never needed for the defence and is not kept. Numbers are never reused |
-| ~~P34~~ | ~~A subject controls their own verification threshold~~ | — | **NOT A FINDING.** It treats *n* as a score a subject understates. **An archive answers specific questions rather than supplying a total** (§13.1): an evaluator looking for interactions with people they know either finds them or does not, so **volume proves nothing and manufacturing volume gains nothing**. Partitioned identity is a designed property; forking divides what can be demonstrated rather than concealing a total. Numbers are never reused |
-| ~~N3~~ | ~~Veto delegation cannot be privacy-assessed~~ **CLOSED by withdrawal.** The mechanism does not exist (§7.4.2), so there is no object to assess and no audience to determine | — | — |
-| ~~C12~~ | ~~Verification-query log + the subject's own archive~~ | **CLOSED** (§7.1.4). The correlation required a retained query history to join against the archive; the aggregate is now an ephemeral lock expiring with the ceremony window, so there is nothing to join. Numbers are never reused | — |
-| ~~C13~~ | ~~Disavowal reason code + resource access history~~ | **WITHDRAWN.** The join needs one party holding both halves, and only the disavowing patron does — resource-grant state is local to the owner's node, and that patron already knows their own reasoning. An observer with the code alone gets the band, which is what the enumeration was designed to give them; anyone holding the owner's role assignments already knows more than a reason code adds. **The scenario is also unreachable**: disavowal ends the relationship, so the membership gate (§9.2) revokes all access as a consequence, and there is no separately-dated grant revocation to correlate against. Numbers are never reused | — |
-| ~~C14~~ | ~~Capability vector + network point across an identity fork~~ | **WITHDRAWN.** A serving node is necessarily inside the Dunbar org, and a rotation propagates as a topology-class message pushed within horizon (§7.4.0.2) — so **any node positioned to see both attaches has already received the record binding the two keys.** The fresh-Genesis case fails from the other side: where unlinkability matters, the new identity appears in a *different* subnet under a different serving node that sees only one; where one node could see both, the person was adopted by a neighbour who met them, so the link exists socially whatever the transport shows. Numbers are never reused | — |
-| ~~C16~~ | ~~`AbuseReport.detail` + resource log~~ | **WITHDRAWN**, for the reason C13 was and one more. **The schema has no subject** (§9.6): a report carries `resource` and `reporter` and names no third party, so a detail field describing someone's circumstances has nobody to describe. And both ends are held by one party — either the resource reports to its own owner, or a user reports about a resource and any personal particular is their own. An earlier version distinguished this from C13 on the grounds that a third-party reporter delivers particulars the owner did not hold; **that reading was wrong**, since the owner granted the role and owns the resource. Numbers are never reused | — |
-| ~~C18~~ | ~~Datasets joined within one infra process~~ | **WITHDRAWN as stated.** The correlation assumed a package could reach topology, liveness, queue state, prekey requests and role-evaluation inputs; **the design offers no binding that exposes any of them** — §9's rule that *the resource never reads network state* applies to a hosted package, and `infra-client-requirements.md` §8.2 states that the hooks do not exist rather than being narrowly scoped. What remains is not a correlation but an **implementation question**: whether the isolation mechanism enforces that boundary against hostile code, which is for the sandboxing literature rather than this document. Numbers are never reused | — |
-
-*Column layout matches the source registers; the C-register rows carry three columns
-rather than four, as they did there.*
-
-
----
-
 ## Author working session — presence record scope (2026-08-25)
 
 **References as-of-filing**, per this file's standing rule.
