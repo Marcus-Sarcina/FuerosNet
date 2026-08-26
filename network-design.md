@@ -2838,7 +2838,7 @@ addressable so it can initiate contact. Such traffic is payload — opaque to th
 network, carrying no protocol meaning.
 
 **Consequence: the request path carries no trust**, so how a request is framed is a
-plumbing decision rather than a design one (§9.8).
+plumbing decision rather than a design one (§9.7).
 
 #### 9.0.4 Credentials do not cross the boundary twice
 
@@ -2866,7 +2866,7 @@ Three categories, one mechanism:
 | Category | Example |
 |---|---|
 | **Local application** | Team datastore or tracker, using the node's own storage and compute |
-| **Gateway** | Homeserver bridging to another distributed system see §9.8 |
+| **Gateway** | Homeserver bridging to another distributed system, see §9.7 |
 | **External service** | Commercial SaaS. **The vendor need not join the network**, or know it exists |
 
 Implementation requirements — package format, sandboxing, supply chain, the
@@ -2893,7 +2893,7 @@ Three properties follow, none of which was designed for:
 - **The gate holds at every hop.** A wider system cannot reach past a patron to
   that patron's members, and a patron may deny access the wider system would
   grant.
-- **It is the same shape as a gateway** (§9.8) at a different scale. One
+- **It is the same shape as a gateway** (§9.7) at a different scale. One
   mechanism, not two.
 
 **The cost: every patron becomes an operator.** Holding a connection to the wider
@@ -3261,13 +3261,17 @@ unavailable is to make the distinction visible and let policy weight it, which i
 same move as client-integrity attributes (§7.1.8). Because the field sits inside the
 owner's signature, a declaration is a claim the owner staked standing on.
 
-**Its reach is bounded by the catalog's**, and that bound should be stated plainly: an
-entry is served on request to askers the owner's `discover_scope` admits, so **you
-learn a resource's declared posture if and when you already have access to it and
-think to ask.** It is not a discovery surface and it does not help anyone deciding
-whether to join an organisation. What it does cover is the user deciding whether to
-*use* a resource they can already reach — including a gateway operator (P24), where
-the user is inside the scope by construction.
+**It arrives before any connection, because the catalog lookup is how a user learns
+the resource exists at all.** An entry is served on request to askers the owner's
+`discover_scope` admits, and a user must query the catalog to know there is anything
+there to address — so the declared posture is in hand at the moment the decision to
+connect is made, not after it. `discover_scope` gates the answer; `connect_scope`
+gates the session; they are different gates and the first one comes first.
+
+**Its reach is bounded by the catalog's**, which costs nothing: a user the owner does
+not admit never sees the entry, and also cannot use the resource, so there is no
+evaluation they were denied. It is not a discovery surface across organisations and
+does not help anyone deciding whether to *join* one.
 
 **A `CatalogEntry` is optional.** It is a network-layer *registration* that makes a
 resource addressable — reachable point-to-point, or able to call out to nodes. A
@@ -3463,23 +3467,18 @@ bind sessions to client credentials or fingerprints — under proxying every use
 a subnet arrives from one address, which reads as exactly the pattern anti-fraud
 systems exist to flag, **and gets worse the more successful the subnet is**.
 
-**§9's permission model runs owner-to-user throughout**, and the user's protection
-is correspondingly narrow: they can confirm that **the service they reach is the one
-the trusted owner published**, because the `CatalogEntry` is signed (§9.5). That is
-an identity binding, and it is what the network owes them.
+**§9's permission model runs owner-to-user throughout**, and the user's protection is
+what the signed `CatalogEntry` carries (§9.5): that **the service they reach is the one
+the trusted owner published**, and the owner's declared `data_practice`. Both arrive at
+catalog lookup, before any connection, so the user evaluates rather than discovers
+afterwards. That is an identity binding plus a staked claim, and it is what the network
+owes them.
 
 **Beyond it they are where an employee is with their employer's SaaS vendors.** The
 gateway operator sees their external traffic, and the remedy is not to use the
 resource. **A user who does not trust a resource in their subnet is free to avoid
 it**, and asking the protocol for more would be asking it to adjudicate a vendor
 relationship it is not party to (§1.1).
-
-### 9.8 Open
-
-- **Whether a user can evaluate a gateway operator** before routing external traffic
-  through them (P24). §9.5's `data_practice` declaration reaches a user who already
-  has access to a resource; it does nothing for one deciding whether to route through
-  a gateway they cannot yet query.
 
 ---
 
@@ -5340,9 +5339,8 @@ globally.
 
 ### 14.5 Privacy analysis
 
-Privacy is analysed here under LINDDUN's seven categories.
-it was argued locally at each mechanism and never assembled. That absence is
-itself why the finding below went unnoticed.
+Privacy is analysed here under LINDDUN's seven categories, and **under composition
+rather than mechanism by mechanism** — §14.5.1 states why.
 
 **Numbers are not reused.** A withdrawn finding keeps its row as a tombstone, so a
 citation elsewhere resolves to *withdrawn* rather than silently to a different
@@ -5608,7 +5606,7 @@ and a citation to a missing number resolves in that file.
 | **P20** | **Resource access logs, where an implementation creates them, bind network identity to application actions** (§9.7) | High for sensitive resources | Flagged as unfinished but never analysed. A resource already authenticates by network identity and topological scope, so a log connects *who* to *what they did, when, and under which organisational relationship* |
 | **P21** | **Coarse location becomes behavioural location under temporal correlation** (§7.1.7) | **Medium, mitigated 2026-08-25**; High for at-risk users | A single precision-3 geohash is ~156 km. A *time series* of them plus counterparties reveals commuting, travel, conference attendance, employment and residence, and coarsening reduces precision rather than longitudinal inference. **Location is now withholdable** (§7.2.1) and ten of eleven exchanges never receive it. **The residual is structural**: §7.1.7's impossible-travel check and this leak are the same computation over the same series, so the one recipient with a legitimate use — a prospective patron — is also the dangerous holder. Graph position no longer compounds it (§7.2) |
 | **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§14.5.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. Corrected as a reference-client obligation, not yet a demonstrated one |
-| **P24** | **A gateway operator sees their subnet's external traffic** (§9.7), accepted rather than open: the user's protection is the signed `CatalogEntry` binding the service to what the owner published, and beyond that their remedy is not to use the resource | High | Socially trusted is not accountable. The design ensures no patron sees payload content (§11.2); a gateway hands a subnet member exactly that one layer up, and §9's permission model gives the *user* no way to evaluate the operator they are routing through |
+| **P24** | **A gateway operator sees their subnet's external traffic** (§9.7) | **Medium, reduced 2026-08-25** | Socially trusted is not accountable, and the design ensures no patron sees payload content (§11.2) while a gateway hands a subnet member exactly that one layer up. **The user can now evaluate before routing**: the signed `CatalogEntry` binds the service to what the owner published and carries a declared `data_practice`, and it reaches them at catalog lookup — which precedes any connection (§9.5). **The residual is that a declaration is a claim, not a guarantee** (§1.1), and the operator sees the traffic whatever they declared. Beyond that the remedy is not to use the resource |
 | **P25** | **A hosted operator can invert a pairwise principal identifier** (§9.0.2) | Low | They know the resource identity and their own org's keyhashes, so one hash per member recovers the mapping. Deliberate, the scheme withholds network identity from parties who do not already know you, not from the operator you chose |
 | **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §5.6) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
 | P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§9.6) | **Low, reduced 2026-08-25** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §4.7), which limits volume rather than kind |
@@ -6113,32 +6111,13 @@ does block.
 
 #### Blocks a subsystem — one item
 
-**Resource interaction — drafted, not settled (§9.8)**
-
-**Recorded as closed before anything was built against it.** An implementation attempt
-on 2026-08-23 could authorise a user end to end — membership gate, subtree
-acknowledgement, predicate evaluation, pairwise derivation, credential construction —
-and **could not carry the request**, because the frames were named and never defined.
-Three further runs settled most of it.
-
-**What is now specified**: request and response frames with a normative evaluation
-order and the catalog query and reply (`wire-format.md` §§7.3, 4.7), entry lifecycle as
-local state, role assignment as a materialised table, and — closed rather than answered
-— reaching a node you are not attached to, which §10.6.3's direct-connection-within-
-horizon rule already covered.
-
-**What is left**: a second implementation attempt against the frames as drafted, since
-every mechanism in this layer has needed one. **Suggested target: a request that is
-refused.** Every prior implementation pass took a success path, and
-`resource-requirements.md` §7.1 makes refusal the normal outcome for most requesters
-rather than the exceptional one.
+**Resource interaction has no second implementation attempt against it.** The frames
+are drafted: request and response with a normative evaluation order, the catalog query
+and reply (`wire-format.md` §§7.3, 4.7), entry lifecycle as local state, and role
+assignment as a materialised table. Every other mechanism in this layer needed a
+second run before it was sound, and this one has not had it.
 
 **What it blocks:** parts of the resource layer. Nothing above it.
-
-**Why it went unnoticed:** every prior target exercised identity or presence. **A layer
-nobody builds against accumulates prose that reads as specification**, and the *closed*
-status was assigned when the interaction protocol's **design** questions were settled,
-which is a different claim from its encoding being complete.
 
 ---
 
@@ -6155,9 +6134,6 @@ which is a different claim from its encoding being complete.
   closed: any channel carries 32 bytes.*
 - **Whether a subject may re-derive and re-release a capture key after a device
   restore** (§7.1.5.2).
-- **Whether a user can evaluate a gateway operator** before routing through them (P24).
-  §9.5's `data_practice` covers the user who already has access and not the one
-  deciding whether to acquire it.
 - **Peering audit calibration** and **replication distance** (§17), both tuning problems
   over working mechanisms.
 - **Divergence-notice object** (§17), which would make fork detection a durable artifact

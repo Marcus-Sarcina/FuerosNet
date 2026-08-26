@@ -425,8 +425,7 @@ warning to a wider surface. None of it produces an event anyone sees.
 
 **Design §9.2 states the general rule**, including what happens to in-flight state
 when an owner moves. It is a protocol fact and belongs there; this section describes
-what an implementation does with it. *Until 2026-08-25 the general statement existed
-only here, and was consequently recorded as unwritten in design §9.8 and §18.2.*
+what an implementation does with it.
 
 #### 7.1.1 Membership is the outer gate
 

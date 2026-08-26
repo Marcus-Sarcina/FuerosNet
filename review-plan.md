@@ -478,9 +478,14 @@ below.)*
 6. Register a resource and answer a catalog query for it.
 7. Authorise a user to a hosted resource, from the incoming request through to the
    framing handed to the resource.
+8. **Carry a resource request that is refused**, from the incoming request to the
+   response the requester receives. Every prior target took a success path, and
+   `resource-requirements.md` §7.1 makes refusal the normal outcome for most
+   requesters rather than the exceptional one — access is a predicate evaluated at
+   request time, so most evaluations return nothing.
 
 **Coverage matters as much as novelty.** Targets 1–4 exercise identity and presence,
-5 the capture path, 6 and 7 the resource layer. **A layer nobody has built against
+5 the capture path, 6–8 the resource layer. **A layer nobody has built against
 tends to produce a construction change rather than a list of encoding corrections**
 — targets 5, 6 and 7 each did on their first run, and each needed a second.
 

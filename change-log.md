@@ -3302,3 +3302,48 @@ nothing happened. Ordering was always correct; the dates were not.
   diffs identical to the baseline commit. **The lesson for future sweeps: a
   reference can be stale on purpose, and a mechanical repair cannot tell.** §0.8's
   *nine privacy costs* is wrong against §14.5.7 for the same reason and stays wrong.
+- **2026-08-25 (P24 reduced; §9.8 closed; a reach claim corrected)** — The author
+  corrected a mistake in the previous round's §9.5 text. `data_practice` was
+  described as reaching "a user who already has access", which conflated the two
+  scopes: **`discover_scope` gates catalog answers and `connect_scope` gates
+  sessions, and the first comes first.** A user must query the catalog to know a
+  resource exists at all, so the declaration is in hand at the moment the decision
+  to connect is made — not after it. The reach paragraph is rewritten and §9.7's
+  narrow-protection paragraph, which predates the field, now says the user evaluates
+  rather than discovers afterwards.
+
+  **P24 reduced from High to Medium** in consequence: the finding was that §9's
+  permission model gave a user *no way to evaluate the operator they route through*,
+  and the signed entry plus its declared posture, delivered pre-connection, is that
+  way. Residual: a declaration is a claim and not a guarantee (§1.1), and the
+  operator sees the traffic whatever they declared.
+
+  **§9.8 deleted** — the gateway-evaluation item was its only entry. Three
+  citations of §9.8 elsewhere in §9 turned out to mean **gateways**, which are §9.7,
+  and were stale from an earlier renumber; repointed. §18.2's citation of §9.8 for
+  the resource-interaction blocker was stale in the other direction — §9.8 stopped
+  carrying that status when it was reduced to one item — and is removed rather than
+  repointed, since §18.2 already states the blocker in full.
+- **2026-08-25 (incident narration removed from §18.2; §14.5's intro repaired)** —
+  §18.2's resource-interaction entry told the story of an authoring error: a status
+  assigned before anything was built, an implementation attempt that could not carry
+  a request, and why nobody had noticed. **None of that is an open item.** The error
+  surfaced no structural problem and no decision about the design — only that a
+  mistake once existed — so the change log is the whole record it needs. The entry
+  now states the open item and what it blocks, and nothing else. **The general rule: a
+  lessons-learned belongs in the log even when it is a genuine lesson, and never in a
+  register of open items.**
+
+  **The suggested target moved to where targets live.** *Carry a resource request that
+  is refused* is now review plan 0.6 target 8, alongside the other seven, rather than
+  sitting in the design's open register — the design says what is unfinished, the
+  review plan says how to attack it. Its rationale travels with it: every prior target
+  took a success path, and `resource-requirements.md` §7.1 makes refusal the normal
+  outcome for most requesters, since access is a predicate evaluated at request time.
+
+  **§14.5's intro was damaged**, and the damage predates version control — identical
+  at the baseline commit. A sentence had lost its subject, leaving *"…under LINDDUN's
+  seven categories. it was argued locally at each mechanism and never assembled"*
+  followed by a claim about why an unnamed finding went unnoticed. Repaired to state
+  the surviving point — privacy is assessed under composition rather than mechanism
+  by mechanism — and to cite §14.5.1, which argues it in full.
