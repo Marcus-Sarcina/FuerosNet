@@ -292,12 +292,24 @@ session secrecy. The client implements them; it does not reinvent them.
 
 ## 8. Resources
 
+- **Register a resource with your serving node, not with the network**
+  (`wire-format.md` §4.7, request type 7). You sign the entry, your host answers for
+  it, and the `discover_scope` you send is a request the host may narrow — an
+  owner delegating hosting delegates that filtering. **Check the returned `txid`
+  against the one you computed**: a mismatch means you and your host disagree about
+  the body bytes, and this is the only exchange where both of you hold the object.
 - **Build your catalog view by sweeping the horizon, and cache it** (design §9.5).
   Refresh on joining a subnet, periodically, after a failed connection, and when the
   user asks. **Do not query per UI interaction.**
 - **Treat an unreachable node as staleness in its portion of the view**, not as a
   general catalog failure. The other nodes' answers are unaffected, and telling the
   user which part is unknown is more useful than declaring the whole view suspect.
+- **A repeated continuation means truncation, not another page.** If a reply fills
+  the entry bound and its continuation names a service type you have already
+  filtered on, the answering node holds more entries of that type than the bound
+  and asking again returns the same page (`wire-format.md` §4.7). Record that
+  node's portion as truncated, as you would an unreachable one, and do not follow
+  the hint again.
 - **Give the user a refresh control** and let a stale view be stale. A new resource
   is normally mentioned by the person who added it, so deliberate lookup is the
   expected path rather than a fallback.

@@ -3819,3 +3819,103 @@ nothing happened. Ordering was always correct; the dates were not.
   **From here the rule is prospective**: a withdrawal edits the text to its final
   state and this log carries the reasoning; nothing in a specification marks where
   something used to be.
+
+- **2026-08-27 (0.6.6 resource registration and catalog query: reply bound raised to
+  111, registration given request type 7, two broken code fences repaired)** — The
+  clean-room pass reported one blocking defect, nine unspecified questions and a
+  classification conflict.
+
+  **The classification conflict was the serious one.** `wire-format.md` §4's table
+  gave type 6 the class `Topology` while design §12's Topology row says in bold that
+  resource registration is **not** in that class — so an implementer reading only the
+  wire table floods the catalog and undoes the discovery model. Type 6 previously
+  belonged to no class at all, having been excluded from the only one that named it.
+  §12 gained a **Catalog** row (five classes → six) and the wire cell now reads
+  `Catalog — never propagated`.
+
+  **The pagination defect was real and the author's repair was cheaper than the one
+  proposed.** The continuation names a service type, not a position, so 65 visible
+  entries of one type left the 65th unreachable and an asker following the hint
+  looping forever — the exact failure §4.7's "truncation must make progress"
+  paragraph claims to prevent, since ordering makes the answer *stable* and stability
+  is what causes the loop. A position-carrying cursor was proposed and dropped in
+  favour of **raising the reply bound to 111 = 1 + f + f²**, the Dunbar Org
+  population at or below, on the author's observation that the horizon is the
+  practical ceiling on same-type services. The limits table already authorised this:
+  its maxima are DoS ceilings, not capacity claims, and it says a ceiling a
+  legitimate use approaches is wrong and should move. Expressing the bound in terms
+  of `f` follows the sibling row's `9 (f − 1)`. **The frame bound caps the field at
+  127** — at 2 KB an entry, 128 no longer fit one 256 KB frame — and that is recorded
+  so nobody raises it again by reflex. The residual loop, reachable only where a node
+  hosts more than the bound of one type, is now detectable by the asker at no wire
+  cost: a full page plus a continuation naming a type already filtered on means
+  truncation, not another page.
+
+  **Registration was given carriage.** Type 6 was excluded from flooding and was not
+  among the bidirectional request tags, so nothing said how an owner hands a signed
+  entry to its host, who may submit one, or how `discover_scope` is configured —
+  leaving the one act that makes a resource discoverable to a proprietary management
+  interface, while `Attach` to that same host is fully specified. **Request type 7**
+  carries `ResourceRegistration` (the envelope, a requested `discover_scope`, a
+  nonce) and returns `ResourceRegistrationReply` (status, and the recorded `txid`).
+  **The authenticated peer MUST be the owner**: an owner-signed entry is relayable by
+  anyone, so accepting one from any peer accepts a replayed earlier envelope, which
+  silently reverts the current entry under apply-last. The echoed `txid` is a layout
+  check — a mismatch means the two implementations disagree about the body bytes.
+  The requested scope is a request the host may narrow, which is what "an owner
+  delegating hosting delegates that filtering" now means concretely. Withdrawal by a
+  non-answering owner needs no new message: re-register with a `discover_scope` of
+  self, which no asker satisfies.
+
+  **Two broken code fences, invisible to the reviewer and to a parity check.** §4's
+  `Scope` block was never closed, so `### 4.1 Adoption (type 1)` and its prose
+  rendered inside a code block; §5.2 had a stray opening fence putting five prose
+  paragraphs in a block while `AnchorEntry`'s own opener was missing. The file held
+  78 fences — an even count, which is why the check run after the compaction pass
+  reported clean. **Even parity is not pairing.** The check now walks the pairs and
+  looks for headings trapped in blocks; all 82 fences pair and none is.
+
+  **Four more the review did not reach.** §4.7 mandated the keyhash order, then said
+  which 64 are returned is the node's choice, then argued that requiring an order
+  would be "a sorting obligation with no consumer" — an argument against the rule the
+  section had already made. "Concurrent re-registration" was stated twice in two
+  wordings six lines apart. `infra-client-requirements.md` §10 told operators to
+  **sign every entry they return**, contradicting "the owner alone signs" and the
+  single owner signature `CatalogEntry` actually carries. And the sort key was not
+  total — §4.7 states two owners may register the same resource keyhash — so the
+  stability the truncation argument rests on did not hold; the key is now (resource,
+  owner).
+
+  **Applied from the register of unspecified questions**: the type-6 body layout is
+  now stated to be the `CatalogEntry` map itself with key 0 added, not a wrapper (the
+  wrapper reading changes body bytes, `txid` and envelope signatures); and the
+  explicit-scope keyhash list is ascending and distinct, matching every comparable
+  list in the document — it is signed, so two decoders disagreeing means one rejects
+  bytes the other accepts on an object neither may re-encode. **Not applied**:
+  apply-last needs no linearization point, which §4.7 already says outright; and the
+  crate-maturity findings restate design §5.2, which already records the unaudited
+  notices and the wasm transport gap.
+
+  **The consistency sweep that followed found six more.** Two stale ordinals: §7.4.0
+  and §12 both argued that "push near, redirect far" is *not a fifth message class*,
+  written when there were four and now wrong by one — restated by role, as *not a
+  further class* and *without a class of its own*, so the claim survives the next
+  row. **§16.1 lists eleven parameters and two places said thirteen**; the count had
+  already been corrected once, from sixteen to fourteen, and drifted again as rows
+  collapsed. Three sites still called `discover_scope` local-and-never-on-the-wire,
+  true of the entry and false once a registration can request one — the design's
+  illustrative schema listed it as a member of `CatalogEntry` annotated *never on the
+  wire*, and §9.5 said it is evaluated "at the owner's node" when for a hosted
+  resource the owner is not who answers. §18.2's blocking item said resource
+  interaction had **no** implementation attempt against it; the catalog half now has
+  one and the §7.3 request/response half does not, so the item is narrowed rather
+  than closed. And §7's prose list of what bidirectional streams carry had been
+  drifting from the tag table above it since before this pass — it omitted catalog
+  queries and prekeys — so it now points at the table instead of restating it.
+
+  **One asymmetry made explicit rather than repaired.** Type 7 has no request tag
+  either, and needs none: design §9.6 already says an abuse report is created and
+  consumed at the owner's node, signed because it is portable rather than because it
+  travels. Type 6 is the opposite case, which is why it gets a tag — an entry must
+  cross from the owner who signs it to the host that answers for it. §4.7 now says so,
+  because the question will be asked again.

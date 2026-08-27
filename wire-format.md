@@ -156,7 +156,7 @@ context rather than content also makes the check free.
 
 | NetworkPoint entries per anchor, peering endpoint or endpoint record (§5.6) | 8 |
 | `CatalogEntry`, total encoded bytes | 2048 |
-| `CatalogReply` entries | 64 |
+| `CatalogReply` entries | 111 — **1 + f + f²**, the Dunbar Org population at or below (design §3). The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
 | Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
@@ -668,7 +668,7 @@ accepting an unverified object.
 | 3 | Disavowal | patron only | Topology |
 | 4 | Peering | both infra nodes | Topology |
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
-| 6 | Resource registration | owner only | Topology |
+| 6 | Resource registration | owner only | Catalog — **never propagated** |
 | 7 | Abuse report | the reporting resource only | Attestation (point-to-point, never broadcast) |
 
 Type 6 carries a `CatalogEntry` (design §9.5) and registers a resource; type 7
@@ -686,6 +686,11 @@ Scope = uint / [uint, uint] / [uint, [ + keyhash ]]
       ; 0 self | 1 down(n) | 2 up(n) | 3 sub(n) | 4 siblings
       ; 5 dunbar | 6 list([keyhash])
       ; forms taking a depth encode as [tag, n]; list encodes as [6, [...]]
+      ; the list is in ASCENDING KEYHASH ORDER WITH NO DUPLICATES, and
+      ;   violating either is malformed. The list is signed, so a decoder
+      ;   that accepted an unordered or repeating one would accept bytes
+      ;   another decoder rejects, on an object neither may re-encode
+```
 
 ### 4.1 Adoption (type 1)
 
@@ -1625,6 +1630,15 @@ verify signatures, structure and the seed, but cannot determine which verifiers
 
 ### 4.7 Resource registration (type 6), the catalog, and abuse reports
 
+**The type-6 body *is* the `CatalogEntry` map**, with the common key 0 (§3.1)
+added — not a wrapper carrying an entry at some key of its own. [D] A query reply
+returns the same map with key 0 removed, and that is why field 8's signature covers
+fields 1–7 and 9 and nothing else: **the same bytes must verify inside a transaction
+and standing alone.** A wrapper would put the entry one level down, changing the body
+bytes, the `txid` and the envelope signatures — so the layout is stated rather than
+inferred.
+
+```
 CatalogEntry = {
   1: keyhash,        ; resource identity
   2: keyhash,        ; owner
@@ -1691,8 +1705,47 @@ a policy can weight it, which is design §1.1's move where enforcement is unavai
 the same as client-integrity attributes. **A false declaration is undetectable** and is
 a matter between the owner and whoever relied on it.
 
+**Submitting one: bidirectional request type 7.** [D] A light client cannot serve
+its own catalog (design §9.5), so it hands the signed transaction to the node
+hosting it. Without a message for that, the single act which makes a resource
+discoverable would be the one thing an attached client cannot say to the node it is
+already attached to, and every implementation would invent its own.
+
+```
+ResourceRegistration = {
+  1: Envelope,       ; the complete type-6 transaction
+  2: ? Scope,        ; the REQUESTED discover_scope. A request and not an
+                     ;   instruction: the host composes the answer and may
+                     ;   narrow or ignore this, and the owner cannot check
+                     ;   (design §9.5). Absent leaves the host's existing rule
+                     ;   for this resource in place
+  3: bstr .size 16   ; nonce, echoed in the reply
+}
+
+ResourceRegistrationReply = {
+  1: bstr .size 16,  ; echoes the request nonce
+  2: uint,           ; 0 recorded | 1 refused
+  3: ? txid          ; present iff field 2 is 0 — the txid the host recorded
+}
 ```
 
+**The authenticated peer MUST be the owner named in the entry.** [D] An entry is
+owner-signed and so may be relayed by anyone, which means a host accepting one from
+any peer would also accept a **replayed earlier envelope** — and since the node keeps
+whichever it applied last, a stale registration would silently supersede the current
+one. Binding submission to the owner's own session is the check that costs nothing:
+the owner is attached already and the host has its identity from the handshake.
+
+**The echoed `txid` is a layout check, not a receipt.** The owner computed the same
+hash before sending, so a mismatch means the two implementations disagree about the
+body bytes — the wrapper-versus-inline hazard this section opens by fixing — and it
+is worth catching at the one exchange where both parties hold the same object.
+
+**Refusal names no reason.** [D] A host declines for capacity, for policy, or for
+reasons of its own, and saying which would describe the host's state to an owner who
+can do nothing differently with it. Ask again, or ask elsewhere.
+
+```
 AbuseReport = {
   1: keyhash,        ; resource — and the signer. A resource reports; its owner
                      ;   receives (design §9.6)
@@ -1718,6 +1771,12 @@ AbuseReport = {
 }
 ```
 
+**An abuse report has no carriage, and needs none.** [D] It is created and consumed
+at the owner's node (design §9.6) — signed because it is portable and durable, not
+because it traverses the network. **A registration is the opposite case** and that is
+why it has a request tag: an entry must cross from the owner who signs it to the host
+that answers for it.
+
 **The query and its answer.** [D]
 
 ```
@@ -1732,8 +1791,9 @@ CatalogQuery = {
 
 CatalogReply = {
   1: bstr .size 16,    ; echoes the query nonce
-  2: [ * CatalogEntry ],  ; bounded at 64; an owner with more than 64 visible
-                       ;   entries for one asker returns 64 and sets field 3
+  2: [ * CatalogEntry ],  ; bounded at 111; an answering node with more than
+                       ;   111 visible entries for one asker returns 111 and
+                       ;   sets field 3
   3: ? tstr .size (1..64)  ; TRUNCATION CONTINUATION: present iff entries were
                        ;   omitted, carrying a service type to ask for next.
                        ;   Lets an asker drain the catalog without knowing the
@@ -1743,14 +1803,34 @@ CatalogReply = {
 ```
 
 **Truncation must make progress, so selection is not free.** [D] An answering node
-**orders qualifying entries by resource keyhash and returns the first 64**, and the
-continuation names the type of the first entry it withheld. Without an order, two
-queries could return the same 64 and the same hint forever — **an asker following
-the continuation would loop rather than drain.** The order is arbitrary and that is
-fine; it only has to be *stable*.
+**orders qualifying entries by resource keyhash, then by owner keyhash, and returns
+the first 111**, and the continuation names the type of the first entry it withheld.
+Without an order, two queries could return the same 111 and the same hint forever.
+The order is arbitrary and that is fine; it only has to be *total*. **Resource
+keyhash alone is not total** — two owners may register the same one, below — so the
+owner breaks the tie, and without that a node could return a different 111 each time
+it was asked the same question.
 
 **A filtered query is answered from the same order**, so a type filter narrows the
 qualifying set and the asker makes progress within it.
+
+**The bound sits above the population, so truncation is the exception and not the
+mechanism.** [D] An asker's horizon holds at most 1 + f + f² = 111 nodes at or below
+it (design §3), and a single answering node hosts at most f = 10 subordinates
+(design §4.1) — so a reply that truncates comes from a node holding more entries of
+one service type than its horizon has members to run them. **The continuation is a hint for an
+unusual case, not the normal path through a catalog.** It is also near its own
+ceiling: at 2 KB an entry, 128 maximum-sized entries no longer fit one 256 KB frame
+(§7), so 127 is the highest this field can go without moving the frame bound.
+
+**Where a node does exceed the bound, the asker can detect it and MUST NOT loop.**
+[D] The continuation names a *type*, not a position, so an asker that has already
+filtered on that type and received a full page will receive the same page again.
+**That is the signal: a full page plus a continuation naming a type already
+exhausted means the node holds more than the bound**, and the asker's view of that
+node is truncated. Treating it as truncated is right; following the hint again is a
+loop. Nothing on the wire reports the condition, and nothing needs to — the asker
+holds both facts already.
 
 **Carried on a bidirectional stream** (§7.2) tagged request type 5, a query per
 stream, with the reply closing it. **A response larger than the frame bound is sent as a sequence.** [D] Field 1 = 0
@@ -1761,9 +1841,9 @@ case the sequence exists for.
 
 **A non-zero status ends the exchange** and may not be followed by further frames.
 
-**Nothing distinguishes a truncated set by rank**: when more than 64
-qualify, which 64 are returned is the answering node's choice, and an asker must not
-infer priority from inclusion.
+**Inclusion in a truncated set is not a ranking.** The order below is by resource
+keyhash — arbitrary, chosen because it is stable rather than because it is
+meaningful — so an asker must not read the first 111 as the most relevant 111.
 
 **Preserved unknown keys are bounded like anything else.** [D] §1 requires unknown
 map keys to survive re-serialisation, which makes them attacker-supplied storage on
@@ -1783,9 +1863,7 @@ unsigned message is accepting unbounded input from an unauthenticated peer.
 reply.** [D] Close the stream; do not return an empty `CatalogReply`. **An empty
 reply is a true statement — nothing is visible to you — and it is the wrong one**,
 because it is indistinguishable from a node that hosts nothing, and it invites an
-asker to conclude the catalog was answered. A node
-answering from a map has no natural order to offer, and requiring one would be a
-sorting obligation with no consumer.
+asker to conclude the catalog was answered.
 
 **An entry is signed once, at registration, and that signature is reused for every
 answer.** [D] No field varies per query, so re-signing buys nothing — and a
@@ -1796,13 +1874,6 @@ defeats the attributability that signing is for.
 node asks an infra node within its horizon what it has; the infra node replies with
 the entries it **owns** and that the asker may see. **Nothing floods, nothing is
 cached authoritatively, and nothing needs invalidating.**
-
-**Concurrent re-registration is resolved by the answering node, not by ordering.**
-[D] Two registrations for one resource keyhash arriving close together have no total
-order to appeal to — nothing timestamps them authoritatively. **The node holding the
-entry keeps whichever it applied last and answers with that**, and since nobody else
-holds a copy there is nothing to reconcile. An owner who cares about which won can
-query and see.
 
 **Concurrent re-registration is settled by the answering node, not by ordering.**
 [D] Two registrations for one resource keyhash have no authoritative total order —
@@ -1818,17 +1889,25 @@ needs to express the replacement, because nobody else holds a copy to reconcile.
 
 **So there is no propagation lifecycle to specify, and no `seqno` or withdraw
 operation.** Those would exist to handle supersession, stale copies and competing
-registrations, and **none of those conditions arise**: an owner that has withdrawn a
-resource simply stops returning it, and the next query gets the truth.
+registrations, and **none of those conditions arise**: the node holding the entry
+stops returning it, and the next query gets the truth.
+
+**An owner who is not the answering node still has to ask, and needs no new
+message.** [D] It re-registers the resource with a requested `discover_scope` of
+self, which no asker satisfies, so the entry stops being returned to anyone. What
+remains is the host's own state to keep or drop — the archive keeps the transactions
+either way, and no asker can distinguish an entry withdrawn this way from one that
+was never registered.
 
 **Freshness is inherent rather than maintained.** Each answer is computed when
 asked, by the party that knows.
 
-**`discover_scope` is gone from the schema.** It decided which entries an owner
-returns to which asker — a filtering rule evaluated **at the answering node**, never
-read by the recipient, since receiving an entry is what qualifying looks like. Like
-the role table (design §9.4), it is local state, and a field carrying it would be
-telling the asker how they were selected.
+**`discover_scope` is no part of the entry.** It decides which entries an answering
+node returns to which asker — a filtering rule evaluated where the answer is
+composed, never read by the recipient, since receiving an entry is what qualifying
+looks like. Like the role table (design §9.4), it is local state, and carrying it *in
+an entry* would be telling the asker how they were selected. **It travels in one
+direction only**: an owner requests one at registration, above.
 
 **`connect_scope` remains and is advisory.** It lets a client show whether a
 connection is likely to succeed rather than presenting every entry identically. The
@@ -1911,7 +1990,6 @@ entirely — currency is vacuous with no history [D].
 
 ### 5.2 Anchor table entry
 
-```
 **An entry may only name a contactable infrastructure node.** [D] Any ancestor may
 be *named* as an anchor in a locator (design §10.2), but an anchor **table** entry
 requires routable endpoints, so a locator naming a light-client anchor cannot enter
@@ -1961,6 +2039,7 @@ contact.
 
 Freshness is by `seqno`, strictly greater to replace.
 
+```
 AnchorEntry = {
   1: keyhash,          ; 32
   2: [ + NetworkPoint ],
@@ -2844,15 +2923,14 @@ no continuation to preserve.
 | 4 | `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's consent (§4.6) |
 | 5 | `CatalogQuery` (§4.7) |
 | 6 | `ResourceRequest` (§7.3) |
+| 7 | `ResourceRegistration` (§4.7) |
 
 **The reply carries no type tag and is framed identically otherwise** — the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
 chose, on a stream it opened, so a tag would restate what the requester already
 knows.
 
-- Bidirectional streams: request/response — resolution, attestation pull, resource
-  requests (§7.3),
-  verifier queries
+- Bidirectional streams: request/response — the request types tabled above
 - Unidirectional streams: payload delivery, queue drain
 - Connection migration relied upon for mobile IP change; 0-RTT resumption for
   reattachment, which permits a lazy heartbeat and saves battery

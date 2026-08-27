@@ -65,7 +65,7 @@ operations. Encoding for all of it is in
 drafted and no second implementation has been run against them (§18.2). That is now
 the only item blocking a subsystem. End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§11.2.4) rather than designed here, with four integration
-decisions open. Multi-device beyond archive merge (§18.1). **Thirteen parameters
+decisions open. Multi-device beyond archive merge (§18.1). **Eleven parameters
 remain unset** (§16.1), sorted by how provisional they actually are in §16.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until a review cycle runs clean.
@@ -2413,8 +2413,8 @@ Rotation propagates as a **topology-class** message (§12): pushed within horizo
 aggregated beyond. Parties outside the horizon holding a cached key binding are
 handled by a **currency-attestation query** addressed using the anchor and path the
 introduction already carries (§10.6.5); callers learn lazily on contact. So the gap
-§12 appeared to have is **not a fifth message class**; it is a propagation *pattern*, "push near, redirect far", available to
-topology-class messages.
+§12 appeared to have is **not a further message class**; it is a propagation
+*pattern*, "push near, redirect far", available to topology-class messages.
 
 **Forwarding-record authority** cannot come from the old key, which may be
 precisely what was compromised. It comes from the adopting patron's signature
@@ -3292,8 +3292,10 @@ CatalogEntry = {
   type            : tstr           ; service type, DNS-SD style
   instance        : tstr           ; human-readable instance name
   connection      : opaque         ; how to reach it; resource-defined
-  discover_scope  : Scope          ; LOCAL: which askers the owner returns this
-                                   ;   entry to. Never on the wire (§9.5)
+  discover_scope  : Scope          ; NOT PART OF THE ENTRY. The answering node's
+                                   ;   rule for which askers it returns this entry
+                                   ;   to — requested at registration, never sent
+                                   ;   to an asker (§9.5)
   connect_scope   : Scope          ; who may open a session
   data_practice   : ? uint         ; declared logging and retention posture.
                                    ;   OPTIONAL; absent means undeclared, which
@@ -3364,7 +3366,9 @@ the whole hosting model rests on.
 
 **Consequence worth stating.** The hosting node decides the `discover_scope`
 filtering in practice, because it composes the answer — so an owner delegating
-hosting delegates that filtering too, and should be told so.
+hosting delegates that filtering too, and should be told so. The owner **requests** a
+scope when it registers and cannot check that the request was honoured, which is the
+ordinary shape here: the party that acts is the party that knows.
 
 ##### When a hosting node goes down
 
@@ -3415,10 +3419,12 @@ arise. **The owner is the only party that ever discloses an entry**, and filteri
 at the source is not a rule imposed on anyone else; it is the only thing that
 happens.
 
-**`discover_scope` is therefore local.** It decides which entries the owner returns
-to which asker, is evaluated at the owner's node, and never travels — the same shape
-as the role table (§9.4). An asker does not check it, because **receiving an entry
-is what qualifying looks like.**
+**`discover_scope` is therefore local to whoever answers.** It decides which entries
+that node returns to which asker, is evaluated where the answer is composed, and
+**never reaches an asker** — the same shape as the role table (§9.4). An owner
+requests one when it registers and cannot check that the request was honoured; an
+asker does not check it either, because **receiving an entry is what qualifying
+looks like.**
 
 **Browsing shows what you can plausibly use rather than everything that exists**,
 which is a property of who answers rather than of who forwards. This is capability-style cataloguing: §12's access
@@ -4799,13 +4805,14 @@ a coordinated one, which is why it works here and a coordinated one would not.
 
 ## 12. Control plane / data plane
 
-Five message classes with different reach and different persistence — point-to-point
+Six message classes with different reach and different persistence — point-to-point
 attestation is separated from ordinary attestation because its audience is one party,
 not the usual participants-patrons-witnesses set:
 
 | Class | Contents | Reach | Persistence |
 |---|---|---|---|
 | **Topology** | adoption (incl. Rotation/recovery and former transfer, §7.4.0), departure, disavowal, peering, node endpoint records (`wire-format.md` §5.6). **Resource registration is NOT in this class** — a type-6 transaction goes to the hosting node and is answered on request, never propagated (§9.5) | **horizon** as the full transaction; **ancestors** as a memo only (§12.2) | stored within horizon, folded into aggregate state beyond |
+| **Catalog** | resource registrations (§9.5) | **the hosting node alone**, answered on request | stored and archive-retained by the host; **never propagated, and no copy exists to reconcile** |
 | **Attestation** | presence records (§7.2), verifier responses, other trust-bearing transactions | **pull, not push** | stored by participants, their patrons, and witnesses; fetched on demand by evaluators |
 | **Attestation, point-to-point** | abuse reports (§9.6) | delivered to the addressed party only, never broadcast | stored by the resource owner alone. **Not** by patrons or witnesses, an abuse report is a private complaint, and giving it the generic attestation audience would make it the public accusation §6.2.2 declines to build |
 | **Liveness / routing state** | heartbeats, route updates | horizon | **process and discard.** Keep the table, not the update history (as BGP keeps the RIB) |
@@ -4827,7 +4834,7 @@ are in use:
   (§7.4.0.2); a locator change beyond the horizon is **not** redirected and the
   stale holder re-resolves or is re-introduced (§10.3 Case 2). This is what lets
   rotation propagate like control despite being attestation-derived, without a
-  fifth class, and it keeps standing assertions off the control plane entirely.
+  class of its own, and it keeps standing assertions off the control plane entirely.
 
 **Attestation is pull, and solicitation is made visible rather than mandated.**
 
@@ -6130,11 +6137,13 @@ does block.
 
 #### Blocks a subsystem — one item
 
-**Resource interaction has no second implementation attempt against it.** The frames
-are drafted: request and response with a normative evaluation order, the catalog query
-and reply (`wire-format.md` §§7.3, 4.7), entry lifecycle as local state, and role
-assignment as a materialised table. Every other mechanism in this layer needed a
-second run before it was sound, and this one has not had it.
+**Half of resource interaction has had an implementation attempt.** The catalog path
+— registration, query and reply, and entry lifecycle as local state
+(`wire-format.md` §4.7) — has been implemented against and repaired. **The
+request/response path has not**: §7.3's normative evaluation order and refusal
+behaviour, and role assignment as a materialised table, are drafted and unattempted.
+Every other mechanism in this layer needed a second run before it was sound, and
+these have not had one.
 
 **What it blocks:** parts of the resource layer. Nothing above it.
 
@@ -6142,7 +6151,7 @@ second run before it was sound, and this one has not had it.
 
 #### Decide during implementation — no blocking effect
 
-- **Thirteen unset parameters** (§16.1), sorted in §16.1.1 by how provisional they
+- **Eleven unset parameters** (§16.1), sorted in §16.1.1 by how provisional they
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
 - **`§11.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid

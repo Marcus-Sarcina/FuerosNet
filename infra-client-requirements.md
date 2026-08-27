@@ -441,6 +441,15 @@ should simply know which they are getting.
 horizon asks what you have; you return the entries you **own** and that asker may
 see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
+- **Accept registrations only from the owner's own session** (`wire-format.md`
+  §4.7, request type 7). An entry is owner-signed and therefore relayable by
+  anyone, so accepting one from any peer means accepting a **replayed earlier
+  envelope** — and because you keep whichever you applied last, that silently
+  reverts the owner's current entry. The check is free: the owner is attached to
+  you and the handshake already named it.
+- **The requested `discover_scope` is a request.** You compose the answer, so you
+  may narrow it or ignore it, and the owner cannot check. An owner who delegates
+  hosting delegates this, and should be told so rather than discovering it.
 - **Filter at answer time.** `discover_scope` is your local rule for which entries
   go to which asker. **It never leaves your node** — receiving an entry is what
   qualifying looks like, and a field carrying it would tell the asker how they were
@@ -451,14 +460,19 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 - **Append and replace together.** A crash between the archive append and the local
   replacement leaves either a transaction with no queryable entry or an entry whose
   transaction is missing, and both are wrong in ways a later reader cannot detect.
-- **Withdrawal is not a message.** Stop returning the entry; the next query gets
-  the truth. There are no copies to invalidate because you never sent any that
-  claimed to be authoritative.
+- **Withdrawal is not a propagated message.** Stop returning the entry and the next
+  query gets the truth; there are no copies to invalidate, because you never sent
+  any that claimed to be authoritative. **An owner who is not you still has to ask**,
+  and does so by re-registering the resource with a requested `discover_scope` of
+  self — which no asker satisfies. What is left is your state to keep or drop.
 - **A cached answer is the asker's business.** It was true when given, and nothing
   grants access on the strength of it — access is decided by the owner at request
   time (§9.1).
-- **Sign every entry you return.** A cached or forwarded entry stays attributable
-  to you, which is what makes a stale one recognisable rather than merely wrong.
+- **Return the owner's signature unchanged, and add none of your own.** An entry is
+  signed once at registration and that signature is reused for every answer
+  (`wire-format.md` §4.7). It keeps the entry attributable **to its owner** wherever
+  it travels; a per-answer signature from you would make one entry's bytes differ
+  between askers and would attribute the claim to the wrong party.
 
 ---
 
