@@ -183,3 +183,37 @@ bearing depends on intent that is frequently unwritten, so the judgement belongs
 with the author and the question costs one exchange. Reasoning about how to protect
 something nobody needs is the expensive alternative, and it is invisible while it
 is happening — the register looks like it is working.
+
+## Register discipline for privacy findings
+
+Moved from design §14.5 (2026-08-27): method rules for the findings register,
+illustrated by its own history. The design keeps only the registers themselves.
+
+**When a finding assumes a component, ask whether the component is required.**
+Not whether it can be made safe — that question takes the component as given and
+generates work. The former C12 and P22 both reasoned about protecting a
+verification-query log that turned out not to be needed at all: the anti-oracle
+defence is rate limiting, which wants a lock that expires, not a history that
+persists. **A finding can entrench the thing it is about**, and the entrenchment is
+invisible because the register looks like it is doing its job.
+
+**A finding whose mechanism is withdrawn is closed, not merely stale.** The former
+P10 described fingerprinting a policy descriptor's published parameters, and design §13.2
+now publishes nothing at all. **When a mechanism is removed, its findings go with it** —
+leaving them makes the register describe a system nobody is building.
+
+**A finding must name a loss the design causes.** Two entries were withdrawn for
+failing this: the former P8 reached only what horizon membership already discloses,
+and the former P9 named an exposure that **predates the mechanism it blamed** — a
+thief already reads what is addressed to the key they hold, so a later notification
+adds nothing to the loss. **Check when the harm occurs, not only whether the
+mechanism touches it.**
+
+**A finding must add something membership does not already carry.** An attacker
+holding a subnet's topology is a horizon member, and membership discloses a known
+package: who is in the org, its shape, and what its members run (design §1.2's middle tier). **A
+mechanism that reaches only that package is not a separate vulnerability**, however
+it is framed — the former P8 was withdrawn on exactly this ground, and any finding
+whose precondition is *"an attacker inside the horizon"* should be checked against
+it before it is entered here.
+

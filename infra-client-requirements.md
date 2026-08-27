@@ -70,7 +70,7 @@ that is noted in place.
 ## 4. Resolution
 
 You are the party that answers resolution queries. This is the network's primary
-operation (design §10.6.1, `wire-format.md` §5.6).
+operation (design §10.6.1, `wire-format.md` §5.7).
 
 ### 4.1 What you must hold
 
@@ -85,7 +85,7 @@ constant regardless of network size — the aggregation argument design §10.6.1
 
 **An anchor table**, for starting points you did not learn out of band. Entries are
 gossiped and **their signatures cannot be checked on receipt** — an entry carries
-the anchor's keyhash, not its key (`wire-format.md` §5.3). **State plainly which
+the anchor's keyhash, not its key (`wire-format.md` §5.2). **State plainly which
 model you implement**: entries verified on acceptance, possible only where the key
 is already pinned, or an unverified cache checked at contact. Treating gossip as
 verified gives you a partition vulnerability with no symptom.
@@ -123,7 +123,7 @@ guarantee, which is a floor rather than a ceiling.
 
 ### 4.4 How you learn an infra child's endpoints
 
-**An infra node publishes a signed endpoint record** (`wire-format.md` §5.3d), carried
+**An infra node publishes a signed endpoint record** (`wire-format.md` §5.6), carried
 in the topology class, so its address reaches its patron and the rest of its horizon.
 A light client's endpoints arrive when it attaches (§1); an infra child does not
 attach to you — it serves itself — so without this record nothing delivered its
@@ -171,7 +171,7 @@ design §11.2.4 adopts PQXDH, whose asynchronous property depends on someone
 holding a subject's prekeys while that subject is offline. That someone is the
 serving node.
 
-- **Hold and serve prekey bundles for attached clients** (`wire-format.md` §5.7).
+- **Hold and serve prekey bundles for attached clients** (`wire-format.md` §5.8).
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
   carries no intent signal (design §11.2.4).
@@ -297,7 +297,7 @@ enumerates what you host by watching which lookups differ.
 **Above the patron level, membership alone does not admit.** A node adopted into
 your subtree lands inside your Dunbar Org automatically, which means **a subordinate
 can put strangers inside your gate without asking you**. Require your own
-`SubtreeAck` (`wire-format.md` §5.3c) before granting such a node access to
+`SubtreeAck` (`wire-format.md` §5.5) before granting such a node access to
 resources you host (design §9.2.1).
 
 - **Prompt the operator, do not auto-sign.** The point of the acknowledgement is

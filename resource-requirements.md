@@ -37,10 +37,9 @@ holding roles, exactly as a SaaS product sees a user arriving through a corporat
 gateway. A compromised resource therefore leaks its own data, not the owner's
 archive.
 
-This dissolves the read-surface question rather than answering it. An earlier
-framing had resources reading owner state directly, which would have required
-scoping what a resource may read, a security-sensitive interface that now does
-not exist.
+This dissolves the read-surface question rather than answering it: a resource
+never reads owner state directly, so no read-scoping interface — a
+security-sensitive surface — needs to exist at all.
 
 ---
 

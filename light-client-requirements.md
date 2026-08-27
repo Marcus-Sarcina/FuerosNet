@@ -48,7 +48,7 @@ that is noted in place.
   unlock your likeness everywhere, in the same way and for the same reason as losing
   portable standing (design §8.2).
 - **Send a segment key as a `KeyGrant` naming both the record and the query it
-  answers** (`wire-format.md` §5.3a). A grant arriving unattached to a query the
+  answers** (`wire-format.md` §5.3). A grant arriving unattached to a query the
   subject countersigned is an unsolicited key release; treat one as malformed rather
   than opening your store.
 - **Withhold a presence record's disclosable fields by default** (design §7.2.1),
@@ -151,7 +151,7 @@ job.
   Presenting less history means presenting an *earlier* head; there is no other way
   to truncate, and none is needed. Present encoding: a single head txid on adoption
   (`wire-format.md` §4.1).
-- **Serve archive requests for your own archive** (`wire-format.md` §5.8). The
+- **Serve archive requests for your own archive** (`wire-format.md` §5.9). The
   subject holds their archive, so a patron evaluating you fetches from you — this
   is peer-to-peer payload, not something an infra node serves on your behalf.
 - **When fetching someone else's archive, verify the chain yourself.** Each
@@ -173,14 +173,14 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Publish a prekey bundle and keep it stocked.** A subject with no one-time
   prekeys left falls back to the last-resort key, which is a **declared reduction
   in forward secrecy.** Not a state to remain in. Replenish
-  well before exhaustion (`wire-format.md` §5.7).
+  well before exhaustion (`wire-format.md` §5.8).
 - **Rotate the signed prekey on a policy interval**, and never reuse a one-time
   prekey.
 - **Only leaf-to-leaf needs this.** Sessions to a patron or a resource terminate at
   an endpoint that is online by definition and are already covered by the transport
   handshake (design §11.2.4).
 - **Prefetch reusable prekey material for the whole Dunbar Org as a batch request**
-  (`wire-format.md` §5.7), which is structurally distinct from a targeted fetch —
+  (`wire-format.md` §5.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
   someone rotated — rather than intent to message. Fetching on demand instead
   announces each intended conversation to whoever serves the bundle (design
@@ -226,10 +226,11 @@ session secrecy. The client implements them; it does not reinvent them.
   **It is not encoded in the locator**, because a light client that gains
   subordinates becomes infra without moving, and an address asserting terminal type
   would then be silently wrong in every cached copy.
-- **Accumulate referral progress locally and check it on arrival.** Sum each
-  referral's `advances`; the total must equal the full path length minus the
-  returned residual (`wire-format.md` §5.6). A mismatch means a node miscounted and
-  the result is unsound, not merely slow.
+- **Check each referral, not an arrival total.** A referral's `advances` must be at
+  least 1 and must not advance past the path's end; arrival is announced by the
+  `ServingInfra` reply itself, and no arrival-consistency equation is checked
+  (`wire-format.md` §5.7) — it would reject the direct-serving answer a
+  deeper-cached node is permitted to give.
 - **Retry and endpoint-selection policy is yours**, with two floors: treat a node's
   endpoint list as alternatives rather than stopping at the first failure, and treat
   a policy refusal as that node's answer rather than that endpoint's — trying its

@@ -3695,3 +3695,127 @@ nothing happened. Ordering was always correct; the dates were not.
   hardware, need a registry nobody can populate, and disclosures are not extension
   points. Until then a UWB pass is weighted as the weakest deployed mode. Bounds
   added while there: integrity evidence ≤1024 B, channel binding ≤128 B.
+- **2026-08-27 (0.6.4 attach/failover pass: twenty-three items — nine wire
+  clarifications, three small wire rules, a 0.6.2 leftover)** — Fourteen of the
+  twenty-three were local policy, correctly identified and left local. The rest:
+
+  **The heartbeat counter is one independent sequence per sender.** "Per-session,
+  from 0" plus both-sides-send left the namespace ambiguous, and the reviewer rated
+  it blocking: a peer expecting one shared alternating sequence treats every valid
+  heartbeat as a gap. A shared sequence is unimplementable — neither side can know
+  the interleaving — and the schema now says so.
+
+  **Refusal has a carrier: QUIC application close code 1 (`refused`).** [author]
+  `light-client-requirements.md` required treating a policy refusal as the node's
+  answer rather than the endpoint's, while the wire said close, reset and timeout
+  are indistinguishable failures — a rule with no carrier, and the reviewer's
+  clean-close heuristic was honestly marked unreliable. One registered code closes
+  it; every other outcome stays an endpoint failure.
+
+  **The heartbeat interval is bounded 1–3600 s.** [author, after prior-art check]
+  Unbounded, it let a hostile server hold clients in never-failing sessions and made
+  QUIC idle timeouts unconfigurable. Prior art brackets the cap comfortably — MQTT
+  mobile practice 30–300 s with an 18-hour protocol ceiling, XMPP pings 60–300 s,
+  RFC 4787 UDP NAT expiries 30–120 s — and the NAT fact is noted in the schema: a
+  server advertising near the cap loses its push path long before liveness fails.
+
+  **A server MUST NOT process an `Attach` from 0-RTT early data.** [author] Early
+  data is replayable and a replayed `Attach` re-binds session state; stated
+  server-side because that is where it is checkable. Resumption keeps its latency
+  benefit for everything after the handshake.
+
+  **Nine clarifications**: 64 KB is exactly 65,536 bytes (and 256 KB is 262,144);
+  unknown frames may precede `AttachAck` but any known frame other than the ack
+  fails the attempt, and repeated `Attach`/`AttachAck` after it is a protocol
+  error; a receiver may authenticate a sibling with any validated pin matching the
+  keyhash, provenance being the sender's obligation; an invalid currency
+  attestation is treated as absent, never as an authentication failure — currency
+  gates trust operations, not connectivity; `queued_messages` counts the responding
+  node's queue only and a degraded client must not present it as global; a
+  malformed `SiblingUpdate` is ignored whole on the malformed-heartbeat posture;
+  misses are counted by elapsed full monotonic intervals, not delivered timer
+  callbacks; heartbeat timestamps are advisory; a greased id avoids locally-known
+  ids and a collision is accepted at its probability.
+
+  **A 0.6.2 leftover surfaced**: `light-client-requirements.md` still instructed
+  clients to check the arrival equation deleted from §5.6.2 — replaced with the
+  per-referral checks. And design §5.2 now states the browser-wasm constraint
+  precisely: the gap is the transport stack, not the primitives, and native and
+  browser conformance are separate targets.
+- **2026-08-27 (0.6.5 capture and verifier query: twenty-six items — three jointly
+  unsatisfiable, one security restatement, one four-day-old stale sentence)** —
+  Fourteen were local or implementation behaviour and stay local, consistent with
+  the author's earlier ruling that the sealed store's AEAD suite waits for
+  implementation.
+
+  **Three pairs of rules could not both be satisfied.** `KeyGrant.query_id` was 16
+  bytes while the query and response define the same identifier as 32-byte SHA-256
+  — now 32. Field 7's rule required a verifier to reject a query lacking subject
+  consent while request type 4's body was `VerificationQuery` alone, which cannot
+  carry it — the body is now `[ VerificationQuery, COSE_Sign1 ]`, consent beside
+  the query and never inside it, since it signs the hash of fields 1–4 and placing
+  it in the map it authorises recreates §4.6.6's circularity one level up. And
+  `basis` was required on every response while `unavailable` and `pending` assert
+  no evidence — no truthful value existed, photo bases demanding a version that may
+  not exist and personal_knowledge as a sentinel being structurally valid and
+  false. Basis is now required for results 0–2 and absent for 3–4.
+
+  **§7.1.4's probe-pricing encoding was restated to what actually holds.** It
+  claimed queries carry the ceremony pre-commitment "countersigned by the
+  witnesses" — an object that was never defined, and that would prove nothing: a
+  distant verifier cannot tell real witnesses from an attacker's keys, the same
+  impossibility as authenticating an unpinned anchor. **The proof that the
+  encounter is live is the subject's own consent over `query_id`**, minted by the
+  subject's client during the ceremony — each probe requires the subject's live
+  cooperation, checkable by any verifier from the identity the query itself names.
+
+  **Smaller**: a retention year is 365 fixed days, matching the 730-day window's
+  arithmetic; a grant may arrive before its query and is buffered unopened,
+  briefly, bound locally; §7.1.5.2's key-derivation prose bound `txid` in one
+  sentence four days after the correction to `ceremony_id` — flagged in review on
+  2026-08-25 and only now actually fixed. §18.2's template-length item broadened to
+  **the canonical biometric profile** — extractor, format, fuzzer, matcher,
+  registry — since cross-client verification depends on the whole set; §11.2.4's
+  open list gains payload-type demultiplexing, grants and late responses riding
+  the end-to-end channel with nothing to tell them from application payload.
+
+  **Left for the author**: the `pending` deadline. Design §13.6 has a patron
+  returning pending *with a deadline* and §16.1.1 classes the deadline as set by
+  one side and obeyed by the other, but `VerifierResponse` has no field, and a
+  deadline inside a permanently archived response would be stale noise. Options:
+  a transport-level notice outside the signed response, or reclassifying the
+  deadline as the querier's local patience.
+- **2026-08-27 (pending deadline is the querier's patience; every tombstone removed;
+  wire numbering compacted)** — Three author directives in one round.
+
+  **The `pending` deadline is not transmitted.** §13.6 now says a queued query
+  resolves when the client reconnects and how long to wait is the querier's own
+  patience parameter; §16.1.1 reclassifies it as local policy, leaving the heartbeat
+  interval as the only set-by-one-side value. Nothing carries a deadline — a promise
+  inside a permanently archived response would be stale noise the moment it passed.
+
+  **No tombstones, no withdrawn-feature explanations, anywhere in the
+  specifications.** Twenty-odd prose asides — "an earlier version said…", "no such
+  object", "withdrawn 2026-08-26…" — deleted or converted to forward statements
+  where the why-not is load-bearing (no activity summaries, no veto, no notice
+  period, witness countersignatures deliberately not carried). §14.5's
+  register-method paragraphs, which taught discipline by citing withdrawn findings,
+  moved to `Robot/authoring-conventions.md`; the design keeps one functional line —
+  numbers are not reused, missing ones resolve here.
+
+  **Wire numbering compacted, feasible precisely because nothing is published**:
+  Disavowal reason code is field 4; AbuseReport is keys 1–5; NetworkPoint's port is
+  key 3; the presence body is contiguous keys 0–8 (participants 3, witnesses 4,
+  responses 5, subtype 6, ordinal 7, disclosure root 8); ResolveReply is fields 1–5
+  with result codes 0 serving / 1 failure / 2 referral; TopologyPush and
+  TopologyMemo are frame types 5 and 6; and wire §5 renumbers to a clean 5.1–5.9 —
+  anchor entry 5.2, segment grant 5.3, late response 5.4, subtree ack 5.5, endpoint
+  record 5.6, resolution 5.7 with subsections 5.7.1–3, prekeys 5.8, archive fetch
+  5.9. The lettered 5.3a–d sections and the three stub sections are gone. Every
+  cross-reference swept cluster by cluster and verified by the checker after each;
+  the P/C/A register numbers are deliberately untouched, being identifiers this log
+  cross-references rather than features.
+
+  **From here the rule is prospective**: a withdrawal edits the text to its final
+  state and this log carries the reasoning; nothing in a specification marks where
+  something used to be.
