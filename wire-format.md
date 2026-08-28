@@ -1138,15 +1138,21 @@ VerificationQuery = {
   2: keyhash,          ; querier
   3: bstr .size 32,    ; ceremony pre-commitment (design §7.1.4)
   4: bstr .size (1..4096),   ; fuzzed profile
-  5: bstr .size 32     ; query_id — SHA-256 of the canonical CBOR of THIS MAP
-                       ;   WITH FIELD 5 ABSENT (fields 1-4 only), then stored
+  5: uint,             ; TEMPLATE VERSION the profile in field 4 was produced
+                       ;   under (design §7.1.4). A verifier that cannot compare
+                       ;   under this version answers `3 unavailable` with no
+                       ;   basis — it has not evaluated. Without it a mismatched
+                       ;   engine compares anyway and signs a `no-match`
+                       ;   indistinguishable from an identity mismatch
+  6: bstr .size 32     ; query_id — SHA-256 of the canonical CBOR of THIS MAP
+                       ;   WITH FIELD 6 ABSENT (fields 1-5 only), then stored
                        ;   here: a map cannot contain its own hash
 }
 
 VerifierResponse = {
   1: keyhash,          ; verifier
   2: keyhash,          ; subject
-  3: bstr .size 32,    ; query_id — matches VerificationQuery field 5
+  3: bstr .size 32,    ; query_id — matches VerificationQuery field 6
   4: uint,             ; 0 match, 1 no-match, 2 inconclusive,
                        ; 3 unavailable, 4 pending
   5: ? uint,           ; basis: 0 photo_match, 1 personal_knowledge, 2 both.
@@ -1343,10 +1349,18 @@ able to read.** design §7.2.1 carries the same table with the reasoning.
 its 0.3%. **A conforming client withholds by default and reveals on the holder's
 instruction**, rather than the reverse.
 
-**No exchange may demand a disclosable field as a condition of proceeding.** [D] The
-interface for each exchange above is fixed, and design §1.1 makes the evidence schema
-the one thing that is not pluggable — a recipient weights what it receives, and cannot
-make an interface carry what the interface does not define.
+**No exchange has a slot in which to demand a disclosable field.** [D — restated
+2026-08-28] The interface for each exchange above is fixed, and design §1.1 makes the
+evidence schema the one thing that is not pluggable, so there is nowhere for
+*disclose this or we stop* to be expressed: an implementation that tried would be
+non-conforming at the wire, which is checkable.
+
+**This is a statement about the schema, not an instruction to recipients.** A
+recipient may refuse for any reason, and nothing here compels it to proceed — that
+would be a rule aimed at a party whose acceptance policy is private, which §1.1 calls
+a wish. What the fixed interface buys is that a refusal is **the recipient's policy
+rather than the protocol's**, and that every disclosure subset stays structurally
+valid.
 
 ### 4.6 Verifier selection — recomputation
 
@@ -1595,9 +1609,14 @@ cannot place as unverifiable rather than invalid.
 
 ### 4.6.6 Consent is signed over the query id
 
-`query_id = SHA-256(canonical CBOR of the VerificationQuery with field 5 absent)` —
-the map of fields 1–4, hashed, then stored as field 5. Hashing a map that contains
+`query_id = SHA-256(canonical CBOR of the VerificationQuery with field 6 absent)` —
+the map of fields 1–5, hashed, then stored as field 6. Hashing a map that contains
 the hash is unconstructible.
+
+**The template version is inside the hash, deliberately** [D — 2026-08-28]. The
+subject consents to a comparison, and *under which scheme* is part of what they are
+consenting to: a version outside the id could be altered after signing, so the
+subject would have countersigned a comparison and not the terms of it.
 
 The subject's `COSE_Sign1` (field 7 of `VerifierResponse`) signs **`query_id`**,
 not the query itself. The query, which carries a fuzzed profile up to 4 KB — is
@@ -1610,7 +1629,7 @@ for no verification benefit.
 **How consent reaches the verifier** [D — 2026-08-27]: request type 4's body is the
 two-element array `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's
 consent beside it, never inside it. It cannot be a query field: the consent signs
-`query_id`, which hashes fields 1–4, so placing it in the map it authorises would be
+`query_id`, which hashes fields 1–5, so placing it in the map it authorises would be
 the §4.6.6 circularity again one level up. The verifier checks the consent against
 the query's own `query_id` before anything else; **a query arriving without consent
 is rejected**, which is what field 7's rule already required and the wire could not
@@ -2082,7 +2101,7 @@ KeyGrant = {
   1: txid,             ; the presence record whose capture is being unsealed —
                        ;   the holder may hold several for this subject
   2: bstr .size 32,    ; query_id this grant answers, binding it to one query.
-                       ;   the full SHA-256 value from VerificationQuery field 5
+                       ;   the full SHA-256 value from VerificationQuery field 6
   3: bstr .size 32,    ; k_template
   4: ? bstr .size 32   ; k_images, absent for a template-only grant
 }

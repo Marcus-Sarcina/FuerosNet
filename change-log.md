@@ -4404,3 +4404,50 @@ nothing happened. Ordering was always correct; the dates were not.
   than the target.
 
   **The 0.6 programme closes with nothing open in it.**
+
+- **2026-08-28 (0.5.2 unenforceable mandates: two of five held, and the three that
+  did not are evidence the §0 vocabulary is working)** — The pass looked for rules
+  aimed at parties the issuer shares no state with.
+
+  **A sentence that read as two rules, one of them a wish.** `wire-format.md` §4.5.2
+  said *no exchange may demand a disclosable field as a condition of proceeding*,
+  which is true as a claim about the schema and unenforceable as an instruction to
+  recipients — a recipient may always refuse, and its acceptance policy is private.
+  The structural reading is the one the author has already stated (*policy is
+  pluggable, interfaces are not*), so the sentence now says it outright: **there is
+  nowhere in a fixed interface for "disclose this or we stop" to be expressed**, an
+  implementation that tried would be non-conforming at the wire, and what that buys
+  is that a refusal is the recipient's policy rather than the protocol's.
+
+  **One bare `must` where its own sibling site got it right.** §18.1's *backups must
+  honour declared retention* is the same obligation as §10.8.7.1's scan-on-import,
+  which is correctly written as *the reference client must* and followed by an
+  explicit honest-scope paragraph. §18.1 now matches.
+
+  **Three findings did not hold, and why is worth recording.** The retention scan,
+  the queue's crash-copy rule and §12's ban on background scoring were all flagged as
+  unenforceable mandates. They are unenforceable, and each is **already typed that
+  way**: two use §0's sanctioned *the reference client…* form, and the third sits in
+  `infra-client-requirements.md`, whose header states that its contents are
+  commitments rather than enforceable rules. §10.8.7.1 goes further and says so in
+  place. **The vocabulary §0 introduced is doing its job** — a reviewer reading for
+  over-strong mandates found the form and read it as one, which is the failure mode
+  the form exists to prevent, one level up.
+
+  **The one real defect was a wire gap wearing a mandate's clothes.** §7.1.4 required
+  template formats to be canonical and versioned, but `VerificationQuery` carried the
+  fuzzed profile with **no indication of which scheme produced it**, while
+  `VerifierResponse` field 6 carries the version the *verifier* used. The version was
+  named on the way back and not on the way out, so a verifier running a different
+  extractor could not know it could not compare: it compared anyway and signed a
+  `no-match` indistinguishable from an identity mismatch, permanently portable.
+  **The version is now query field 5**, and `query_id` renumbers to field 6 and
+  hashes fields 1–5. No new result code was needed — a verifier that cannot compare
+  answers `3 unavailable` with no basis, which the schema already permits and which
+  §7.1.4's *a verifier who has not evaluated asserts no evidence basis* already
+  describes.
+
+  **Inside the hash, deliberately.** A version outside `query_id` could be altered
+  after signing, so the subject would have countersigned a comparison without
+  consenting to the terms of it. Placing it at field 5 rather than appending it keeps
+  the scheme within what consent covers.

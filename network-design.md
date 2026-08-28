@@ -1551,9 +1551,15 @@ detection rate is high.
   expose the count and
   the `inconclusive` rate, and let policy set the threshold. A generous
   `inconclusive` band is also privacy-protective, since it blunts hill-climbing.
-- **Template format must be canonical and versioned.** Cross-client comparison
-  requires a common extractor and fuzzing scheme. This is the one part of the
-  presence layer that cannot be pluggable; everything above it can be.
+- **Template format must be canonical and versioned, and the version travels with
+  the query.** Cross-client comparison requires a common extractor and fuzzing
+  scheme. This is the one part of the presence layer that cannot be pluggable;
+  everything above it can be. **The requirement is only checkable because the version
+  is carried** (`wire-format.md` §4.5, query field 5): a verifier that cannot compare
+  under it answers *unavailable* and asserts no basis, where a verifier left to guess
+  would compare under its own scheme and sign a `no-match` indistinguishable from an
+  identity mismatch. The subject's consent covers the version, so it is the terms of
+  the comparison they countersigned and not merely the fact of one.
 - **Local photo stores are themselves a hazard.** Device compromise or seizure
   exposes photos of everyone the user has met. Encrypt at rest under a key not
   held in normal working state; honour declared retention with automatic
@@ -6242,7 +6248,9 @@ configured it, since WASI confers no ambient filesystem access; browser storage
 Because the archive is a second factor (§8.2), a client that can be silently
 evicted must treat §10.8.7.1's backup as mandatory rather than advisory, and tell
 the user so. Practical limits: photo stores reach hundreds of MB, awkward for
-attachment quotas, and backups must honour declared retention.
+attachment quotas, and **the reference client honours declared retention across
+backup and restore** (§10.8.7.1's scan-on-import) — client behaviour, not a
+guarantee anyone can check.
 
 **Concurrent devices fork the user's own chain, and the fork is repaired by merge
 rather than prevented.** §8 makes the archive a hash chain, so two devices
