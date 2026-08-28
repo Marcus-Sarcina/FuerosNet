@@ -83,7 +83,7 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 
 | Leg | Transport | Framing |
 |---|---|---|
-| **Client → node** | The existing `rhtn/1` QUIC session | An rhtn control frame carrying the request (`wire-format.md` §6.0). No HTTP |
+| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §7.3) — not a stream-0 control frame. No HTTP |
 | **Node → resource** | **Not the network's business.** A local socket for a hosted package, ordinary HTTPS for an external service | **Ordinary HTTP**, carrying the headers below |
 
 **The node is a reverse proxy that authenticates; the resource is an origin server
@@ -96,7 +96,9 @@ to be the same, and requiring it was the error.
 | Header | Contents |
 |---|---|
 | `rhtn-principal` | Pairwise identifier, base64url (§2) |
-| `rhtn-roles` | Role names held, comma-separated |
+| `rhtn-roles` | Role names held, comma-separated. **May be empty** |
+| `rhtn-audience` | This resource's keyhash, a request naming another MUST be rejected |
+| `rhtn-session` | Session identifier, so a resource can correlate requests and notice a session ending |
 
 **The roles you receive are application actions.** `discover` and `connect` are
 reserved for the node's own evaluation (design §9.4) and never appear here — a
@@ -104,18 +106,32 @@ request reaching you is what a `connect` grant looks like, and you are not prese
 for a discovery decision. **Do not expect them, and do not treat their absence as a
 missing grant.**
 
-| `rhtn-audience` | This resource's keyhash, a request naming another MUST be rejected |
-| `rhtn-session` | Session identifier, so a resource can correlate requests and notice a session ending |
+**So `rhtn-roles` may be empty, and that is not an error.** [D] `connect` is the
+gate and it is spent getting the request to you; the application roles are what you
+were given on top of it. **An empty list means a caller the node admitted and to whom
+the operator has granted nothing further** — decide for yourself what that principal
+may do, exactly as you would for any role set you do not recognise. It does not mean
+the node failed to populate the header.
 
 **Header encoding.** All four are `token`/`base64url` and carry no characters
 needing escaping: `rhtn-principal` and `rhtn-audience` are base64url keyhashes,
 `rhtn-session` is a base64url opaque identifier, `rhtn-roles` is a comma-separated
-list of role names. **Role names are `[a-z0-9_-]`, 1–32 bytes, matched
-byte-for-byte** — no case folding, no escaping, and no comma admitted.
+list of role names. **base64url here is RFC 4648 §5 without padding** — no trailing
+`=`, since a strict parser given the other spelling rejects bytes that decode
+identically, and one of the two had to be named. **Role names are `[a-z0-9_-]`, 1–32 bytes, matched
+byte-for-byte** — no case folding, no escaping, and no comma admitted. **Their
+order is not significant and carries no information**, so do not key a cache on the
+header's bytes; match names, not the string.
 
 **A session identifier is opaque to you and unique within the issuing node.** Do not
 parse it, do not assume a width, and do not treat it as globally unique — it
 identifies one node's session and nothing else.
+
+**It is also per resource.** [D] One caller's session with a node yields a
+*different* identifier for each resource it reaches, on the same reasoning as the
+pairwise principal (design §9.0.2): an identifier common to two resources would
+re-link the same caller across them and undo the separation the principal was
+derived to create. Two resources comparing notes learn nothing from it.
 
 **You are not notified when a session ends.** There is no teardown message on the
 hosting path; you observe it as requests ceasing to arrive under that identifier

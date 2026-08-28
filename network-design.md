@@ -3061,11 +3061,13 @@ infra client shows which a resource is, since that follows from where it runs.
 
 #### When an owner moves
 
-**The general rule: there is no grant object for a move to invalidate.** [D] Access is a **predicate evaluated at request time** against current
-topology, never a durable grant recorded at the moment of authorisation
-(`resource-requirements.md` §7.1). So a change of the owner's position changes what
-the predicates match, and access changes with it at the next evaluation. Nothing
-propagates, nothing is revoked, and no reconciliation runs.
+**The general rule: there is no grant object for a move to invalidate.** [D] Access
+is **a row the node re-derives**, never a durable grant recorded at the moment of
+authorisation (`resource-requirements.md` §7.1). A change of the owner's position
+changes what the predicates match, so the rows change with it — and the next request
+is answered from whatever the row says then. **The request itself is still a lookup**
+(§9.4): re-derivation happens when the topology changes, not while a caller waits.
+Nothing propagates, nothing is revoked, and no reconciliation runs.
 
 **Three consequences, all of them absences:**
 

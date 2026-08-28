@@ -281,16 +281,20 @@ changes mid-request terminates the *session* (§9.4), which stops the next reque
 it does not reach into one already running, and a node that tried would be tearing
 down work whose result the resource may already have committed.
 
-**Evaluate in the order `wire-format.md` §7.3 gives**: membership, existence,
-acknowledgement, roles, then availability. **Availability last is the load-bearing
-part** — a role-holder learns the service is down, and someone with no role never
-does, which keeps operational information about the owner inside the set entitled
-to it.
+**Evaluate in the order `wire-format.md` §7.3 gives**: existence, membership,
+acknowledgement, the role row, the carried request's own well-formedness, then
+availability. **Existence comes first because membership is owner-relative** — a
+keyhash you do not host has no owner, so there is no membership question to ask
+about it — and it is answered with the same `refused` either way. **Availability
+last is the load-bearing part**: a role-holder learns the service is down, and
+someone with no role never does, which keeps operational information about the
+owner inside the set entitled to it.
 
 **Answer a member specifically and a stranger opaquely.** The gate has already told
-you which you are talking to, so use it: a member lacking a `SubtreeAck` or matching
-no role predicate gets the reason (`wire-format.md` §7.3), because they can act on
-it and already hold the topology it describes. **A non-member gets `refused` for
+you which you are talking to, so use it: a member lacking a `SubtreeAck`, or whose
+role row grants no `connect`, gets the reason (`wire-format.md` §7.3), because they
+can act on it and already hold the topology it describes. **You answer from the row,
+not by evaluating a predicate** (§9.2). **A non-member gets `refused` for
 everything**, including a resource keyhash that names nothing — otherwise a stranger
 enumerates what you host by watching which lookups differ.
 
@@ -351,6 +355,12 @@ audience, session (`resource-requirements.md` §2). It must be **legible to any
 implementation**, so a package reads the same credential wherever it runs — that is
 portability, not interoperability, and it binds you to the packages you host rather
 than to another node.
+
+**Mint the session identifier per resource, not per connection.** One caller
+reaching three resources over one session gets three identifiers. A single identifier
+shared across them would re-link that caller between resources and undo what the
+pairwise principal was derived to separate (design §9.0.2) —
+`resource-requirements.md` §3 states the resource-facing half.
 
 **You may decline to host a package you cannot support.** Storage, compute, a
 persistent address, a hardware capability: **not meeting a package's requirements is
@@ -454,7 +464,12 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   go to which asker. **It never leaves your node** — receiving an entry is what
   qualifying looks like, and a field carrying it would tell the asker how they were
   selected.
-- **Hold one current entry per resource.** Re-registering replaces it; the archive
+- **Hold one current entry per resource, whoever owns it.** A `ResourceRequest`
+  names the resource and nothing else (`wire-format.md` §7.3), so if you served two
+  claims for one keyhash you would have nothing to pick between them with — and
+  picking wrong applies one owner's membership and roles to another owner's backend.
+  **Refuse a registration for a keyhash you already serve under a different owner.**
+- **Re-registering by the same owner replaces the entry;** the archive
   keeps both transactions because it keeps everything. **The archive is history, the
   catalog is state**, and the two answer different questions.
 - **Append and replace together.** A crash between the archive append and the local

@@ -3402,9 +3402,8 @@ nothing happened. Ordering was always correct; the dates were not.
   change log rather than the design because a withdrawn finding is not a current
   risk, and §14.5.4 is the design's statement of current risk.
 
-  *The P rows carry four columns and the C rows three, as they did in their source
-  registers.*
-
+| # | Finding | Severity | Disposition |
+|---|---|---|---|
 | ~~P7~~ | ~~Activity summaries export a behavioural baseline to strangers~~ | — | **WITHDRAWN** with the mechanism (§7.4.2). Numbers are never reused |
 | ~~P8~~ | ~~Topology deanonymisation by association~~ | — | **WITHDRAWN**, folded into P15: identification yields a member's job, not a label for any of their subtrees. **The withdrawal originally rested on a second leg — *the attacker described is a horizon member already* — which stopped holding on 2026-08-25**, when §12.2's memo gave ancestors topology for parties far outside their horizon. The conclusion survives on the first leg alone: what labels a subtree is its catalog, and the catalog is answered on request within horizon (§9.5), so a distant ancestor cannot obtain the labels at all. Numbers are never reused |
 | ~~P9~~ | ~~Divergence-notification fan-out~~ | — | **WITHDRAWN.** The exposure it named predates the recovery: a thief holding the key already reads everything addressed to it, so an inquirer's loss dates from the theft, not the notification. And the disclosure runs the **right** way — see §7.4.0.2. Numbers are never reused |
@@ -3919,3 +3918,81 @@ nothing happened. Ordering was always correct; the dates were not.
   travels. Type 6 is the opposite case, which is why it gets a tag — an entry must
   cross from the owner who signs it to the host that answers for it. §4.7 now says so,
   because the question will be asked again.
+
+- **2026-08-28 (0.6.7 hosted-resource authorisation: response code 1 deleted and the
+  codes compacted, hosting made unique per resource keyhash, three cross-document
+  contradictions resolved, three broken tables repaired)** — A clean-room pass at the
+  request path found eighteen unspecified questions, two source disagreements it
+  resolved by document hierarchy, and one code that cannot be sent.
+
+  **`no such resource` had no reachable state.** §7.3 declared code 1, put existence
+  first in the normative order and answered absence with code 2 there, then said code
+  1 was "only reachable at step 3 onward" — by which point the resource is known to
+  exist — and separately that a member asking for a keyhash the host lacks "still gets
+  code 2". Three statements that jointly leave no state in which the code can honestly
+  be sent. **The argument against it was already in the text**: a host cannot tell
+  whether a resource exists elsewhere, so *no such resource* asserts something it does
+  not know, and that is as true for a member as for a stranger. The code is gone and
+  the rest compacted: **0 delivered, 1 refused, 2 unavailable, 3 malformed, 4 no
+  subtree acknowledgement, 5 no matching role.**
+
+  **Malformed had no place in a normative order it was excluded from.** It now has
+  two: a body that does not decode is answered immediately, because nothing has been
+  addressed and nothing can be disclosed; a decoded body carrying malformed HTTP is
+  answered only after the opaque gates, so a stranger cannot probe a resource by
+  sending it rubbish and reading which complaint comes back. Availability stays last.
+
+  **One host may not serve two claims on one resource keyhash.** §4.7 permits two
+  owners to register the same keyhash and `ResourceRequest` names the resource and
+  nothing else — so a node holding both has nothing to choose with, and choosing
+  wrongly applies one owner's membership and roles to the other's backend. The host
+  refuses the second registration, which is a check it can make and the requester
+  cannot. The catalog rule is unchanged: two claims may exist on two hosts, which is
+  the case its reasoning was about.
+
+  **Three contradictions across documents, each resolved toward the design.** §7.3's
+  step 4 said *role predicates* run on the request path while §9.4 says predicates are
+  a macro over a materialised table and **neither of their two evaluations is on that
+  path** — the step is a row lookup, and the same wording was corrected in
+  `infra-client-requirements.md` §9.1. §9.3 said access is "a predicate evaluated at
+  request time", which is the same error inside the design itself; the point it was
+  making — no durable grant object — survives as a row the node re-derives when
+  topology changes. `infra-client-requirements.md` §9.1 gave the evaluation order as
+  *membership, existence* while citing §7.3, which gives existence first for a stated
+  reason: membership is owner-relative and a keyhash you do not host has no owner.
+  And `resource-requirements.md` §3 called the client-to-node carrier an rhtn control
+  frame citing §6.0, when it is a `ResourceRequest` on a new bidirectional stream.
+
+  **Three broken tables, none of which a reference check or a fence check can see.**
+  `resource-requirements.md` §3's credential table was cut in half by an interleaved
+  paragraph, orphaning `rhtn-audience` and `rhtn-session` — two of the four headers
+  the node-to-resource contract consists of, invisible to a renderer. `wire-format.md`
+  §1's limits table was split by a blank line, orphaning everything from `NetworkPoint
+  entries` down, including the `CatalogReply` bound edited the day before. And this
+  log's own withdrawn-register table had no header row at all, so fourteen rows
+  rendered as literal pipes; the note explaining that P rows carry four columns and C
+  rows three was itself stale, since all fourteen carry four. **The check now walks
+  every table run and requires a separator as its second line**, alongside the fence
+  pairing added yesterday.
+
+  **Answers where the documents had a determinate one and had not said it.**
+  `rhtn-roles` **may be empty** and that is not an error: `connect` is the gate and it
+  is spent delivering the request, so an empty list means an admitted caller granted
+  nothing further — the alternative reading would make two existing sentences
+  pointless. base64url is **RFC 4648 §5 without padding**, because a strict parser
+  given the other spelling rejects bytes that decode identically. Role order in the
+  header **carries no information**. The session identifier is **per resource**, on
+  the pairwise principal's own reasoning (§9.0.2): one shared across resources would
+  re-link the caller between them and undo the separation the principal was derived to
+  create. And §7.3.2 now rejects `CONNECT`, `Upgrade` and `Expect: 100-continue` —
+  each wants a tunnel, a protocol switch or an interim response, and the exchange
+  carries one answer — and fixes routing to the resource keyhash, since letting a
+  caller's `Host` or absolute-form target re-aim the request turns the proxy into
+  someone else's client.
+
+  **Two limits stated rather than closed.** "Canonically re-serialise" means *from
+  your parse, deterministically*, not identically to another node: nothing signs those
+  bytes and no second implementation compares them. And the opaque-refusal paths
+  return equal codes but are **not equalised in time** — the opacity is in what the
+  node says, not in how long it takes to say it, and an implementation that does not
+  equalise has a narrower property than §7.3 describes.

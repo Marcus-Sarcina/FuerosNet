@@ -153,7 +153,6 @@ context rather than content also makes the check free.
 | Corroborations per record | 16 (one per witness) |
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
-
 | NetworkPoint entries per anchor, peering endpoint or endpoint record (§5.6) | 8 |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — **1 + f + f²**, the Dunbar Org population at or below (design §3). The frame bound caps this at 127 |
@@ -1925,6 +1924,15 @@ holding two such claims holds two claims, and **the resource keyhash is not a
 namespace anyone allocates.** Which one a reader acts on follows from whose catalog
 answered — and each answer came from a node the reader chose to ask.
 
+**One host may not serve two, and that is where the rule bites.** [D] A
+`ResourceRequest` names the resource and nothing else (§7.3), so a node holding two
+claims for one keyhash has nothing to choose between them with — and choosing wrongly
+applies one owner's membership and roles to the other owner's backend. **A host
+refuses a registration for a keyhash it already serves under a different owner**,
+which is a check it can make and the requester cannot. Two claims may still exist on
+two hosts, which is the case the paragraph above is about: the reader's choice of
+whom to ask is what separates them.
+
 **The owner alone signs**, so a cached or forwarded entry remains attributable. The
 resource proves nothing and supplies no key material: the owner is asserting the
 resource's identity, which is the only assertion a catalog carries.
@@ -3166,9 +3174,9 @@ ResourceRequest = {
 }
 
 ResourceResponse = {
-  1: uint,             ; 0 delivered | 1 no such resource | 2 refused
-                       ;   | 3 resource unavailable | 4 malformed request
-                       ;   | 5 no subtree acknowledgement | 6 no matching role
+  1: uint,             ; 0 delivered | 1 refused | 2 resource unavailable
+                       ;   | 3 malformed request | 4 no subtree acknowledgement
+                       ;   | 5 no matching role
                        ; EVALUATION ORDER IS NORMATIVE, see below
   2: ? bstr            ; the application response as an HTTP/1.1 message, present
                        ;   iff field 1 = 0. Same reasoning as the request
@@ -3178,25 +3186,35 @@ ResourceResponse = {
 **Evaluation order is normative**, because it decides which of two true things a
 requester is told. [D]
 
-1. **Resource exists on this node** → **code 2**, not code 1, if it does not. An
-   unknown resource keyhash has **no owner**, and membership is owner-relative
-   (design §9.2), so there is no membership question to ask first. **Returning code
-   1 here would answer a non-member**, which is exactly what the split was for.
-2. **Membership** in that resource owner's Dunbar Org → code 2. Nothing further is
+0. **The body decodes at all** → **code 3** if it does not. Nothing has been
+   addressed yet, so answering directly discloses nothing about any resource. A
+   malformed *outer frame* is a stream failure, not a response (§7.2).
+1. **Resource exists on this node** → **code 1** if it does not. An unknown resource
+   keyhash has **no owner**, and membership is owner-relative (design §9.2), so
+   there is no membership question to ask first.
+2. **Membership** in that resource owner's Dunbar Org → code 1. Nothing further is
    evaluated or disclosed.
-3. **Subtree acknowledgement** → code 5 if absent.
-4. **Role predicates** → code 6 if none match.
-5. **Availability** → code 3 if the package is not running.
+3. **Subtree acknowledgement** → code 4 if absent.
+4. **The role row** → code 5 if it grants no `connect` (design §9.4). **A lookup,
+   never a predicate evaluation** — predicates are a macro over the materialised
+   table and neither of their two evaluations is on this path.
+5. **The carried HTTP message is well-formed** → code 3 if it is not. It sits here
+   rather than at step 0 because by now the asker has passed the opaque gates;
+   answering earlier would let a stranger probe a resource by sending it rubbish
+   and reading which complaint came back.
+6. **Availability** → code 2 if the package is not running.
 
-**Code 1 is therefore only reachable at step 3 onward**, once the asker is known to
-be a member of that resource's owner's org. A member asking for a keyhash the host
-does not have still gets code 2 — the host cannot tell whether that resource exists
-elsewhere, and answering *no such resource* would assert something it does not know.
+**Absence is refusal, to everyone.** [D] A member asking for a keyhash this host
+does not have gets code 1, exactly as a stranger does — **the host cannot tell
+whether that resource exists elsewhere**, and answering *no such resource* would
+assert something it does not know. There is no code for it because there is no state
+in which the host could honestly send one.
 
 **Availability is checked last, so a role-holder learns the service is down and a
-non-role-holder never does.** Reversing 4 and 5 would tell anyone in the horizon
-when a resource is offline, which is operational information about the owner. And
-running availability first would answer *unavailable* to someone who has no role,
+non-role-holder never does.** Putting availability before the role check would tell
+anyone in the horizon when a resource is offline, which is operational information
+about the owner. And running availability first would answer *unavailable* to
+someone who has no role,
 which is true and useless — they would retry forever against a resource they could
 never reach.
 
@@ -3214,18 +3232,23 @@ gets `refused` and nothing more.** [D] The membership gate (design §9.2) runs f
 so the node already knows which it is talking to.
 
 **Inside the horizon, withholding the reason helps nobody.** A member who lacks a
-`SubtreeAck` (code 5) or satisfies no role predicate (code 6) can act on that — ask
+`SubtreeAck` (code 4) or holds no role row granting `connect` (code 5) can act on
+that — ask
 the grandpatron to acknowledge them, ask the owner for a role — and a bare refusal
 leaves the resource undiagnosable to precisely the people entitled to use it. They
 already hold the topology those answers describe.
 
-**Outside it, `refused` (code 2) covers everything**: not a member, membership
+**Outside it, `refused` (code 1) covers everything**: not a member, membership
 lapsed, resource does not exist for you. A stranger learns nothing about the owner's
-membership or policy, which is the case the opacity was for.
+membership or policy, which is the case the opacity was for — and **a keyhash naming
+nothing returns the same code**, otherwise a stranger enumerates the host's resources
+by watching which lookups differ.
 
-**Code 1, `no such resource`, is therefore only ever sent to a member.** To a
-non-member every path returns code 2, including a keyhash naming nothing — otherwise
-a stranger enumerates the host's resources by watching which lookups differ.
+**The codes are equal; the timing is not specified.** A host that looks up a resource
+it has and one it does not may take measurably different time, and nothing here sets
+an envelope for that. **The opacity is in what the node says, not in how long it
+takes to say it** — an implementation that cares should equalise the two paths, and
+one that does not has a narrower property than this section describes.
 
 #### 7.3.1 Reaching a node you are not attached to
 
@@ -3268,7 +3291,21 @@ other as a fresh request — with the node's authenticated headers attached to i
   cannot fully determine.
 - **Emit exactly one message per `ResourceRequest`.** If the parse yields more than
   one, that is the attack; reject.
+- **Reject anything asking for an exchange other than one request and one
+  response**: `CONNECT`, `Upgrade`, `Expect: 100-continue`. Each needs a tunnel, a
+  protocol switch or an interim response, and `ResourceResponse` carries one answer
+  (§7.3). They are ordinary HTTP and they do not fit here.
+- **Route by the resource keyhash, never by anything the caller wrote.** Convert an
+  absolute-form target to origin form and replace `Host` with the backend you
+  selected. Field 1 already named the resource; letting a header re-aim the request
+  is how a proxy is turned into someone else's client.
 - **Insert your headers after stripping, into the re-serialised message.**
+
+**"Canonically" means *from your parse, deterministically* — not identically to
+another node.** [D] Nothing signs these bytes and no second implementation compares
+them, so there is no interoperable serialisation to agree on. The property that
+matters is that what you emit is what you parsed, entirely, and that the same input
+twice gives the same output. Ordinary HTTP tolerance covers the rest.
 
 **This is a category with published prior art rather than a novel hazard**, and it
 is why the requirement is *parse and re-serialise* rather than a list of patterns
