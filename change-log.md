@@ -4308,3 +4308,99 @@ nothing happened. Ordering was always correct; the dates were not.
   999 row loses its "§14.1 uses this one" gloss and is capacity like the other three.
   §15.1's *lowering fanout for security* row now reads "at least the same factor"
   rather than "exactly", the one place the old parity claim survived.
+
+- **2026-08-28 (0.6.10 rootward memo and cycle detection: the cycle predicate fired
+  on every normal hop; two operations still cannot be expressed)** — The last of the
+  0.6 targets, and the propagation layer's second pass. Four defects, two fixed and
+  two needing a protocol decision.
+
+  **The cycle check was inverted.** §7.2b said *if field 2's path contains your own
+  position, you are your own ancestor*. A memo travels up patron edges, so on every
+  legitimate hop the receiver **is** an ancestor of the patron it names and its path
+  **is** a prefix of that patron's — containment therefore reports a cycle on ordinary
+  traffic, at every hop, forever. The coherent reading is **equality**: field 2's
+  anchor and path equal your own, meaning the memo left you going up and reached you
+  from below. The locator's `seqno` takes no part, since an endpoint change advances
+  it (§2.3) without moving the position and would hide a loop from a whole-locator
+  comparison.
+
+  **A removal was a deletion, and deletions forget.** The table is
+  `subject → (location, seqno)` with no removal state, so `added = false` had nothing
+  to store. Deleting the row discards the counter, and §2.3's *absence of prior state
+  is not a failure* then lets an older addition arriving late reinstate the mapping it
+  had already superseded. A removal now replaces the row with the former location and
+  the subject's counter — a tombstone, local, no wire field.
+
+  **Two receiver rules were stated as properties.** *A memo never leaves its subnet*
+  is only true if a receiver drops one whose anchor is not its own, and §7.2b said
+  nothing about what to do with it. Nor did it inherit §7.2a's no-ack/no-retry
+  decision explicitly. Both now stated.
+
+  **The memo was rebuilt around the patron, not the subject (author, 2026-08-28).**
+  The disavowal problem looked blocking — field 4 wanted the subject's counter, a
+  disavowal is the patron's act alone and carries none — until the author asked why a
+  disavowal should carry anything from the disavowed node at all. **A subordinate
+  reaches the subtree on its patron's authority and ceases to exist from the
+  subtree's point of view when that authority is withdrawn.** The memo is now a
+  patron's statement about one of its own slots: `{patron, patron's position, slot,
+  timestamp, ? occupant}`, with an absent occupant meaning a departure or a
+  disavowal. **Every field is one the patron has authority over**, so nothing in the
+  object comes from a party that did not sign the transaction behind it, and the
+  question that started this does not arise.
+
+  **It closed three things at once.** The subject counter is gone, so the disavowal
+  ordering problem goes with it. The patron's *keyhash* is now present, which settles
+  a defect the review raised separately: the old memo carried the patron's locator
+  but not their identity, and siblings share a position, so a root holding two memos
+  about one node could not tell which sibling was the patron. And **the reason code
+  stays in-horizon** — a root accumulates that a membership changed, never why, which
+  is the same restraint that keeps peering out of this class.
+
+  **The cycle check became an identity comparison.** With field 1 naming the patron,
+  a node that receives a memo naming itself, from below, is its own ancestor. No path
+  arithmetic, no anchor comparison, and nothing that a counter moved for an endpoint
+  change can disturb.
+
+  **Ordering is by field 4, the underlying transaction's own timestamp, copied.** The
+  comparison is always within one patron and one slot, so **no clock is compared
+  across nodes** — two memos about one slot were written by the same patron from the
+  same clock, which is the one case where a timestamp orders reliably. Equal
+  timestamps break by arrival. Copying the transaction's value rather than reading a
+  clock at composition time also means a detector that fetches the record can check
+  it.
+
+  **C19 substantially reduced.** Its join was the memo table against the per-node
+  counter; a memo no longer carries the subject's counter, so an ancestor sees patron
+  counters, which say nothing about a subordinate's out-of-subnet activity. What
+  replaces it is smaller — field 4's timestamp, retained per current row rather than
+  as a history, so an ancestor holds when each slot last changed and not a series.
+
+  **The unformable confirmation fetch dissolved with the same change.** §7.2b required
+  a detection to be confirmed by fetching the underlying transaction via §5.9, and
+  §5.9 needs an archive head that reaches you only by having adopted the subject
+  (§4.1 field 7) — so the rule was unperformable for exactly the distant cycles the
+  memo exists to catch. **It is also unnecessary**: the cycle check fires only on the
+  party field 1 names, who signed the transaction and holds the slot, so confirmation
+  is a local read. A fabricated memo fails it at no traffic cost.
+
+  **Replay, and the rule that closes most of it (author, 2026-08-28).** A replayed
+  memo passes the fabrication check, since the change it describes really happened.
+  The author's observation was that it is recognisable anyway to anyone holding the
+  later state — the adoption carries the subject's counter and the disavowal carries
+  none, and a slot row carries the timestamp of its last write. So **a node holding
+  that slot at or after the memo's timestamp no longer forwards it**, which stops a
+  stale replay at the first table-holding hop above wherever it was injected instead
+  of letting it reach the party it names. The previous rule forwarded unconditionally
+  on the reasoning that an upstream table might not have seen the memo — true of
+  genuine out-of-order delivery, false of a replay by definition.
+
+  **What survives is registered as an accepted risk** (§14.4): a replay of the memo
+  describing the *current* slot state matches the detector's own row and cannot be
+  told from a genuine loop. Bounded on three sides — the injector must sit at or
+  below one of the detector's direct subordinates, the edge severed is the one that
+  handed the memo over and so lies on the injector's route, and the disavowal is
+  reason code 5 with re-adoption available. A freshness nonce would put a second
+  clock on an unsigned object to defend against an attack costing the attacker more
+  than the target.
+
+  **The 0.6 programme closes with nothing open in it.**

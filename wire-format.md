@@ -2763,13 +2763,16 @@ TopologyPush = {
 }
 
 TopologyMemo = {
-  1: keyhash,          ; SUBJECT — the node added or removed
-  2: Locator,          ; the PATRON's position: anchor, path, patron's seqno
-  3: bool,             ; true = added, false = removed
-  4: seqno             ; the SUBJECT's own counter at this position change,
-                       ;   NOT the patron's. Field 2's seqno orders the patron's
-                       ;   moves; this one orders the subject's, which is what a
-                       ;   memo table is keyed on (§2.3)
+  1: keyhash,          ; the PATRON — the party whose subtree changed, and the
+                       ;   only party this object speaks for
+  2: Locator,          ; the patron's OWN position
+  3: uint,             ; the subordinate SLOT: one nibble, 0-9, the child index
+                       ;   under field 2's path (§2.2)
+  4: timestamp,        ; the underlying transaction's own timestamp, copied —
+                       ;   not a fresh clock reading. Orders two statements by
+                       ;   THIS patron about THIS slot, and nothing else
+  5: ? keyhash         ; the node now occupying that slot. ABSENT means the slot
+                       ;   is empty: a departure or a disavowal
 }
 ```
 
@@ -3146,42 +3149,91 @@ silently remove that property.
 
 **Forwarding.** A receiving node forwards the memo to its own patron, unchanged
 except that nothing is added — the memo already carries the position it describes.
-A root has no patron and forwarding stops there. **A memo never leaves its subnet**,
+A root has no patron and forwarding stops there.
+
+**A node holding that slot at or after the memo's timestamp does not forward it.**
+[D — 2026-08-28] It has already passed on what the memo says, or something later, so
+no upstream table can need it. This costs a little latency on a genuinely late
+out-of-order memo — repaired by the next one or by reconciliation, the failure this
+section already accepts — and it stops a **replayed** memo at the first table-holding
+hop above wherever it was injected, rather than letting it travel to the party it
+names. **A memo never leaves its subnet**,
 because its anchor names the subnet and rootward travel terminates at that subnet's
 root. This is what keeps the mechanism clear of design §4.1.1: nothing compares a
 node's binding in one subnet against its binding in another, and nothing adjudicates
 between them.
 
+**So a memo whose anchor is not your subnet's is dropped, not forwarded** [D —
+2026-08-28] — neither applied to a table nor passed on. The property above is only a
+property if a receiver enforces it; a node that forwarded such a memo would carry it
+across the boundary the privacy argument rests on.
+
+**No acknowledgement and no retry**, on §7.2a's reasoning: one best-effort send to
+your patron, and a memo that does not arrive is repaired by the next one or by
+reconciliation. A table mutation already made is kept — the memo was true when it
+passed.
+
 #### Two checks, with different requirements
 
 | Check | Needs | Reach |
 |---|---|---|
-| **Am I on this path?** — cycle detection | the memo alone | any depth |
-| **Do I already hold this subject elsewhere?** — re-parenting | a memo table | wherever a table exists |
+| **Is this me?** — cycle detection | the memo alone | any depth |
+| **Do I already hold this node elsewhere?** — re-parenting | a memo table | wherever a table exists |
 
-**The cycle check is exact and needs no stored state.** [D] A memo reached you by
-travelling up patron edges. If field 2's path contains your own position, you are
-your own ancestor, which is a cycle. It fires at any depth, on the memo alone, and
-terminates the memo there.
+**The cycle check is an identity comparison.** [D — 2026-08-28] A memo travels up
+patron edges and field 1 names the patron it speaks for. **If field 1 is you, a memo
+you originated has come back to you from below** — you are your own ancestor, and
+that is a cycle. It fires at any depth, on the memo alone, and terminates the memo
+there.
+
+**No path arithmetic is involved, deliberately.** [D] An earlier form of this check
+asked whether field 2's path *contained* the receiver's own position, which cannot
+work: a memo reaches you because you are an ancestor of the patron, so your path is a
+prefix of theirs on **every legitimate hop** and containment would report a cycle on
+ordinary traffic. Comparing positions for equality would work, but comparing
+identities is exact, cheaper, and unaffected by anchors, padding or a counter that
+moved for an endpoint change (§2.3).
 
 **The re-parenting check needs a table**, described below.
 
 #### The memo table
 
-**A node MAY maintain a table of `subject → (location, seqno)` built from the memos
+**A node MAY maintain a table of `(patron, slot) → occupant` built from the memos
 that pass through it.** [D] Every memo from below traverses it, so the table's
-coverage is that node's **whole subtree** rather than its horizon.
+coverage is that node's **whole subtree** rather than its horizon. Read the other
+way — by occupant — it answers the re-parenting question: a node appearing in two
+slots is held in two places.
 
 **It is a RIB.** design §12's liveness class already sets the retention rule: *keep
-the table, not the update history, as BGP keeps the RIB.* Apply the operation,
-retain the current mapping, discard the memo. No separate retention parameter is
-needed and none is defined.
+the table, not the update history, as BGP keeps the RIB.* Write the slot, retain the
+current mapping, discard the memo. No separate retention parameter is needed and
+none is defined.
 
-**Ordering is by the subject's own `seqno`** (field 4), under §2.3's existing rule:
-strictly greater to replace, and absence of prior state is not a failure. Memos
-arriving out of order therefore resolve without a clock. **Equal `seqno` naming a
-different location is malformed**, per §5.7.3 — a subject advances its own counter,
-so two distinct positions at one value means one was not produced by the subject.
+**An empty slot is a row, not a deletion.** [D] Field 5 absent writes *nobody* into
+that slot; it does not remove the row. The row carries the timestamp that emptied it,
+which is what stops a late-arriving earlier memo from reinstating an occupant the
+patron has already removed.
+
+**Ordering is by field 4, and the comparison is always within one patron and one
+slot.** [D — 2026-08-28] Later timestamp replaces; equal timestamps break by arrival
+order. **No clock is compared across nodes**: two memos about one slot were written
+by the same patron from the same clock, which is the one case where a timestamp
+orders reliably. This is why the field is the underlying transaction's own timestamp
+(§4.1, §4.2, §4.3) rather than a reading taken when the memo is composed — it is
+copied from a signed record and a detector that fetches that record can check it.
+
+**Every field is a statement the patron has authority to make.** [D] It names
+itself, its own position, its own slot, and who is in it. **Nothing in the object
+comes from a party that did not sign the transaction behind it**, which is why a
+disavowal — the patron's act alone (§4.3), which the subordinate neither signs nor
+contributes to — produces a memo like any other. A subordinate reaches the subtree on
+its patron's authority and ceases to exist from the subtree's point of view when that
+authority is withdrawn.
+
+**And the reason code stays where it was decided.** [D] A disavowal's reason (§4.3)
+is in-horizon state and does not travel rootward. A root accumulates *that* a
+membership changed, never *why* — the same restraint that keeps peering out of this
+class.
 
 **The table is optional, and detection degrades gracefully rather than failing.**
 [D] design §10.6.1 fixes the required state at parent plus ≤f children and calls
@@ -3202,9 +3254,23 @@ an intermediary can fabricate one. Acting directly would manufacture the **false
 positive** design §6.2.5 ranks as the worse failure — a refused or severed legitimate
 adoption, indistinguishable from censorship.
 
-**So a detection triggers a fetch**, of the underlying signed transaction via §5.9,
-and any action follows from the transaction. This is what lets the memo stay small
-and unsigned.
+**So a detection is confirmed against the detector's own records, which is always
+possible.** [D — 2026-08-28] The cycle check fires only on the party field 1 names,
+and that party signed the transaction behind the memo and holds the slot it
+describes: it asks whether it really made that change, and whether its row for that
+slot is still the one the memo asserts. **A fabricated memo fails both**, at no
+traffic cost. This is what lets the memo stay small and unsigned.
+
+**Not a fetch.** A `§5.9` archive request needs a head, and a head reaches you only
+by having adopted the subject (§4.1 field 7) — so a rule requiring a fetch would be
+unperformable for exactly the distant cycles the memo exists to catch. It is also
+unnecessary: the detector is never a stranger to the transaction.
+
+**What survives is a replay of the memo describing the *current* slot state**, which
+matches the detector's row and is therefore indistinguishable from a genuine loop.
+**Registered and accepted** (design §14.4): the injector must sit at or below one of
+the detector's own subordinates, the edge severed is on the injector's route, and
+the disavowal carries no prejudice.
 
 #### What a detecting node does
 
@@ -3222,8 +3288,9 @@ accident rather than an attack."
 case socially. Automatic disavowal is the fallback for cycles formed at a distance,
 which is the case the memo exists for.
 
-**The downward memo.** A node whose table shows the subject already held elsewhere in
-its subtree sends a memo down the other branch, toward the stale position. Same frame;
+**The downward memo.** A node whose table shows the same occupant already held in
+another slot in its subtree sends a memo down that other branch, toward the stale
+position. Same frame;
 direction is implied by the receiver's position relative to the sender rather than by
 a field.
 

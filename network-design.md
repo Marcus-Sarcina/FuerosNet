@@ -1089,15 +1089,17 @@ cycle formed at a distance, where neither party holds the other in view.
 
 **The memo makes the check local rather than global.** A general procedure looked
 impossible because detecting a cycle appeared to need topology beyond one's horizon,
-which is §1.1's *no* branch. It does not: a memo carries the path it travelled, so a
-node that finds **its own position already on that path** is its own ancestor. The
-node reads what it was handed rather than querying anyone.
+which is §1.1's *no* branch. It does not: a memo names the patron it speaks for, so a
+node that **receives a memo naming itself, from below** is its own ancestor. The node
+reads what it was handed rather than querying anyone.
 
 **The failure-mode ordering is preserved, and it is why a memo is a hint rather than
 evidence.** A memo is unsigned and derived, so acting on one directly would let a
 fabricated memo sever a legitimate adoption — the false positive this section ranks
-as the worse failure. Detection therefore triggers a fetch of the underlying signed
-transaction, and action follows from the transaction (`wire-format.md` §7.2b).
+as the worse failure. **Detection is therefore confirmed against the detector's own
+records**: the check fires only on the party the memo names, who signed the
+transaction behind it and holds the slot it describes, so a fabricated memo fails
+without asking anyone anything (`wire-format.md` §7.2b).
 
 **Residual, stated rather than hidden:** cycles are detected within a subnet and
 nothing detects one spanning two, because §4.1.1 says nothing may. That is a
@@ -5022,8 +5024,16 @@ change travels up the patron chain to its subnet's root.** [D] That is
 what *ancestors* means in §12's class table, and the memo is the only topology
 object that leaves the horizon. Encoding: `wire-format.md` §7.2b.
 
-**A memo names the subject, the patron's position, whether the subject was added or
-removed, and the subject's own sequence number.** It carries no address.
+**A memo is a patron's statement about one of its own subordinate slots**: it names
+the patron, the patron's position, which slot, when, and who is in it — with an empty
+slot meaning a departure or a disavowal. It carries no address, **and no reason**: why
+a patron disavowed someone is in-horizon state and stays there.
+
+**Every field is one the patron has authority over.** Nothing in a memo comes from a
+party that did not sign the transaction behind it, which is what lets a disavowal
+produce a memo like any other: the subordinate neither signs it nor contributes to
+it, because it reached the subtree on the patron's authority and ceases to exist from
+the subtree's point of view when that authority is withdrawn.
 
 **Restricted to membership operations, and the restriction is load-bearing.**
 Adoption, departure and disavowal travel rootward; **peering does not.** A peering
@@ -5046,9 +5056,10 @@ over — a patron may disavow its own subordinate and nothing more (§1.1, §6.2
 
 #### 12.2.1 The memo table, and what an ancestor comes to hold
 
-**A node may accumulate the memos passing through it into a table of subject →
-position.** Every memo from below traverses it, so the table's coverage is the node's
-**whole subtree** rather than its horizon.
+**A node may accumulate the memos passing through it into a table of slot →
+occupant.** Every memo from below traverses it, so the table's coverage is the node's
+**whole subtree** rather than its horizon — and read the other way, by occupant, it
+answers whether a node is held in two places at once.
 
 **It is a RIB.** §12's liveness class already sets the rule — keep the table, not the
 update history — so no new retention question arises.
@@ -5460,6 +5471,17 @@ globally.
   corporate gateway holds and is expected, but it is a **new concentration**, and
   it should be named against the design's careful claim that a patron cannot forge
   its subordinates' *transactions*. It can forge their **access**.
+- **A replayed rootward memo can cost one edge, without prejudice.** A memo
+  describing a patron's *current* slot state, captured below and re-injected upward,
+  matches that patron's own row and is indistinguishable from a memo that came back
+  around a cycle (`wire-format.md` §7.2b). Stale replays are stopped by the slot's
+  timestamp at the first table-holding hop; this one is not. **Bounded on three
+  sides**: the injector must sit at or below one of the detector's direct
+  subordinates, the edge severed is the one that handed the memo over and so lies on
+  the injector's own route, and the disavowal is reason code 5 with re-adoption
+  available. **Accepted rather than closed**: a freshness nonce would put a second
+  clock on an unsigned object to defend against an attack costing the attacker more
+  than the target.
 - **Patron eclipse of a new joiner.** An attacker who volunteers to be someone's
   patron controls their view from day one.
 
@@ -5884,7 +5906,7 @@ acknowledged and whose join is not.
 | **C10** | Stable key + catalog + multi-subnet membership | The same person's **services** followed across socially independent contexts — P3's linkage plus P15's fingerprint. **Conditional on a single-identity client**, since the linkage half disappears when a user presents different identities in different subnets | High for such a client |
 | C11 | **One-time key request** + queue and routing metadata | **Largely addressed** (§11.2.4). Reusable prekey material is prefetched across the Dunbar Org as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal — and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the on-demand one-time key request, which is made when a session is actually being opened and therefore precedes its message by a short interval: a node sees a request followed by traffic or by nothing, so an abandoned contact still leaves a trace. Depletion is bounded by per-requester rate limiting rather than by policing motive | Low–Medium |
 | C15 | Pairwise principal + vendor account data + several resource ids | **Accepted, not open** (§14.5.7 item 11). Pairwise identifiers address cross-*operator* linkage; one vendor running several resources correlates them from account, device and network data it holds anyway, and no identifier scheme changes that. **Which resources a subnet offers is part of how it sets its security posture**, and a user may decline one their organisation accepts | — |
-| **C19** | **Memo table + per-node `seqno`** | A durable, subtree-wide index of **out-of-subnet activity** for every member. Each ingredient is registered — the table at P35, the counter at P36 — and the join is what turns an incidental gap into a longitudinal series an ancestor holds for everyone below it. **Bounded by what a memo carries**: positions and keys, never addresses (§12.2) | Medium |
+| **C19** | **Memo table + per-node `seqno`** | A durable, subtree-wide index of **out-of-subnet activity** for every member. Each ingredient is registered — the table at P35, the counter at P36 — and the join is what turns an incidental gap into a longitudinal series an ancestor holds for everyone below it. **Bounded by what a memo carries**: positions and keys, never addresses (§12.2). **Substantially reduced 2026-08-28**: a memo no longer carries the subject's own counter, so the join that produced the series is gone — an ancestor sees patron counters, which say nothing about a subordinate's out-of-subnet activity. What replaces it is smaller: field 4's timestamp, retained per current row rather than as a history, so an ancestor holds when each slot last changed and not a series of when it changed before | Medium |
 | C17 | Source photograph + archive or locator | **Largely obviated by §7.1.5.2.** A compliant client holds captures as ciphertext under the *subject's* keystream, so retained EXIF and background are unreadable. **A non-compliant client keeps plaintext — and that is the baseline**: the same bad actor with an ordinary camera app obtains the same thing, which is the test §1.2.1 sets. **Residual**: a compliant holder decrypts legitimately during a later verification, and has the plaintext in hand for that window, which is why stripping remains a client obligation | Low |
 
 **C4 is the most instructive.** Every other entry composes artifacts held by one
