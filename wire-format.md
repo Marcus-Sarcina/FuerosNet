@@ -1832,13 +1832,7 @@ loop. Nothing on the wire reports the condition, and nothing needs to — the as
 holds both facts already.
 
 **Carried on a bidirectional stream** (§7.2) tagged request type 5, a query per
-stream, with the reply closing it. **A response larger than the frame bound is sent as a sequence.** [D] Field 1 = 0
-may repeat on the same stream, each carrying the next portion of one HTTP message,
-with the stream closing when it ends. **No length is declared up front**: a resource
-streaming a response does not know one, and requiring it would forbid exactly the
-case the sequence exists for.
-
-**A non-zero status ends the exchange** and may not be followed by further frames.
+stream, with the reply closing it.
 
 **Inclusion in a truncated set is not a ranking.** The order below is by resource
 keyhash — arbitrary, chosen because it is stable rather than because it is
@@ -2840,7 +2834,9 @@ arriving first fails the attach attempt.** After the ack, a repeated `Attach` or
 2026-08-27] — reject it or defer it until handshake completion. Early data is
 replayable, and a replayed `Attach` re-binds session state; 0-RTT resumption still
 serves reattachment latency because everything after the handshake keeps its
-benefit. The rule sits on the server because that is where it is checkable.
+benefit. The rule sits on the server because that is where it is checkable. **It is
+one instance of §7.2's general rule** — anything replayable that changes state waits
+for the handshake — and `Attach` is named here because this is where it arrives.
 
 **The cached sibling list should survive restart.** It is replaced by any
 `AttachAck` or `SiblingUpdate` and otherwise persists; an in-memory-only client
@@ -2937,6 +2933,31 @@ no continuation to preserve.
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
 chose, on a stream it opened, so a tag would restate what the requester already
 knows.
+
+**One request frame per stream, and the requester half-closes after it.** [D] The
+stream *is* the request, so a second frame has nothing to be: a responder processes
+the first and treats anything after it as a stream failure. **A responder does not
+wait for the half-close before answering** — a requester waiting for the answer
+before closing and a responder waiting for the close before answering would
+deadlock, and nothing else in the framing chooses between them.
+
+**Where a malformed frame stops being answerable.** [D] Until the array header and
+the `request_type` are readable, the receiver does not know what it is holding, so
+there is nothing to answer in and the stream fails. **Once the type is known, a
+defect in the body is that type's business** and is answered in that type's own
+terms — §7.3's status 3, for instance. **No application error code is assigned for
+the reset**, and none is needed: the reset is the whole message, and a requester
+waiting to be told why would be waiting for something no responder owes it.
+
+**A request that changes state or spends a budget MUST NOT be processed in TLS 1.3
+0-RTT early data** [D — 2026-08-28] — reject it or defer it until the handshake
+completes. Early data is replayable, so a replay repeats whatever the request did:
+an application effect the requester never asked for twice (§7.3), a consumed
+one-time prekey (§5.8), a spent anti-oracle count (§4.6), a registration that
+reverts the current entry (§4.7). **Read-only lookups are unaffected** — resolution,
+archive fetch and catalog queries answer the same way however often they are
+replayed, which is what makes 0-RTT still worth having. §6.2's rule for `Attach` is
+this rule's other instance, on the other stream class.
 
 - Bidirectional streams: request/response — the request types tabled above
 - Unidirectional streams: payload delivery, queue drain
@@ -3159,7 +3180,7 @@ behaviour, not a rule anyone enforces.
 ### 7.3 Resource requests
 
 **A resource request rides a bidirectional stream on a session the requester holds
-with the *hosting* node.** [D]
+with the *hosting* node**, tagged request type 6 (§7.2), one request per stream. [D]
 
 ```
 ResourceRequest = {
@@ -3183,6 +3204,15 @@ ResourceResponse = {
 }
 ```
 
+**A response larger than the frame bound is sent as a sequence.** [D] Field 1 = 0
+may repeat on the same stream, each carrying the next portion of one HTTP message,
+with the stream closing when it ends. **No length is declared up front**: a resource
+streaming a response does not know one, and requiring it would forbid exactly the
+case the sequence exists for.
+
+**A non-zero status ends the exchange** and may not be followed by further frames.
+There is one answer and the stream carries it.
+
 **Evaluation order is normative**, because it decides which of two true things a
 requester is told. [D]
 
@@ -3191,7 +3221,11 @@ requester is told. [D]
    malformed *outer frame* is a stream failure, not a response (§7.2).
 1. **Resource exists on this node** → **code 1** if it does not. An unknown resource
    keyhash has **no owner**, and membership is owner-relative (design §9.2), so
-   there is no membership question to ask first.
+   there is no membership question to ask first. **Existing means the node holds a
+   binding from that keyhash to an owner and a backend** — not that the package is
+   running, which is step 6, and not that a `CatalogEntry` was ever published, which
+   is optional (design §9.5). Collapsing a stopped package into absence would answer
+   code 1 where another host answers code 2 for the same deployment.
 2. **Membership** in that resource owner's Dunbar Org → code 1. Nothing further is
    evaluated or disclosed.
 3. **Subtree acknowledgement** → code 4 if absent.

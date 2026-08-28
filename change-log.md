@@ -3996,3 +3996,56 @@ nothing happened. Ordering was always correct; the dates were not.
   return equal codes but are **not equalised in time** — the opacity is in what the
   node says, not in how long it takes to say it, and an implementation that does not
   equalise has a narrower property than §7.3 describes.
+
+- **2026-08-28 (0.6.8 refused resource request: the 0-RTT rule generalised, stream
+  sequencing and the failure boundary stated, response framing moved to the object
+  it describes)** — The first pass to find **no blocking defect**. It confirmed the
+  previous day's renumbering — codes 0–5, field 2 present iff code 0, and code 1
+  covering both an unhosted keyhash and a lapsed member — and reported fifteen
+  unspecified questions, of which four had a determinate answer the documents had
+  not given.
+
+  **The 0-RTT rule named one instance of a claim that covers five.** §6.2 forbade
+  processing `Attach` in TLS 1.3 early data because a replay re-binds session state.
+  The review noticed a `ResourceRequest` is worse — it carries an arbitrary
+  application request, and a replayed one repeats whatever that request did — but the
+  claim is broader than either: **a request that changes state or spends a budget
+  must not be processed in early data.** A replayed prekey fetch consumes a one-time
+  key (§5.8); a replayed verifier query spends an anti-oracle count (§4.6); a
+  replayed registration reverts the current entry (§4.7). The general rule now sits
+  in §7.2 and `Attach` is named as its other instance, on the other stream class.
+  **Read-only lookups are unaffected**, which is what keeps 0-RTT worth having.
+
+  **Two implementations could deadlock on framing nobody had written down.** Nothing
+  said whether a requester half-closes after its one frame or whether a responder
+  waits for that close before answering — and a responder that waits while a
+  requester waits for the answer first is a hang, not a disagreement about bytes.
+  One frame per stream, requester half-closes, **responder does not wait**. The
+  boundary between a malformed frame and an answerable one is now stated in the same
+  place: until the array header and `request_type` are readable there is nothing to
+  answer *in*, so the stream fails; once the type is known a defect in the body is
+  that type's business. **No application error code is assigned for the reset** and
+  none is needed — the reset is the whole message.
+
+  **The resource response's framing rules were filed under the catalog.** §4.7's
+  sentence about carrying a catalog query had three paragraphs about
+  `ResourceResponse` run onto it — that field 1 = 0 may repeat as a sequence, that no
+  length is declared up front, that a non-zero status ends the exchange. In §4.7 they
+  are not merely misplaced but wrong: a `CatalogReply`'s field 1 is a nonce, not a
+  status, so a reader following them would expect a repeating catalog reply with a
+  status code. Moved to §7.3, where the object they describe is defined. The
+  implementation found the rules and applied them correctly, which is how they were
+  noticed rather than missed.
+
+  **Existence is a binding, not a running process.** §7.3's step 1 said the resource
+  must exist on the node without saying what that means, so a stopped package could
+  be read as absent — answering code 1 where another host answers code 2 for the same
+  deployment, and collapsing a distinction the two codes exist to keep. Existence is
+  a binding from keyhash to owner and backend; running is step 6; a published
+  `CatalogEntry` is optional and irrelevant to either.
+
+  **Answered by rules already stated.** Retry after a refusal is covered by
+  `light-client-requirements.md`'s existing floor — *treat a policy refusal as that
+  node's answer rather than that endpoint's* — which was written for an attach
+  refusal and reaches this one because it is stated by role rather than by message.
+  Nothing was added.

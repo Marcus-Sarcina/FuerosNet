@@ -482,9 +482,9 @@ below.)*
    framing handed to the resource.
 8. **Carry a resource request that is refused**, from the incoming request to the
    response the requester receives. Every prior target took a success path, and
-   `resource-requirements.md` §7.1 makes refusal the normal outcome for most
-   requesters rather than the exceptional one — access is a predicate evaluated at
-   request time, so most evaluations return nothing.
+   refusal is the normal outcome for most requesters rather than the exceptional
+   one — the materialised table holds a row per member of the owner's Dunbar Org
+   (design §9.4), so most askers have no row at all and the lookup misses.
 9. **Flood a topology transaction and publish an endpoint record**
    (`wire-format.md` §7.2a, §5.6): receive a `TopologyPush`, decide whether to
    store and forward it, suppress the duplicate that arrives back through a peering
