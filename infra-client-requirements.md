@@ -37,7 +37,7 @@ that is noted in place.
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
   node**, and from siblings' clients in failover (design §11.1.2).
 - **Serving a third level is your option, and those nodes are not full users**
-  (design §4.3.1, §10.6.3). A node more than two levels below you is outside every
+  (design §4.3, §10.6.3). A node more than two levels below you is outside every
   horizon that could acknowledge it, so it holds no resource access above its own
   patron however you treat it. What you decide is whether to cache and forward for
   it at all — messaging, presence, adoption and trust work if you do, and it is

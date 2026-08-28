@@ -4259,8 +4259,10 @@ nothing happened. Ordering was always correct; the dates were not.
   with the obligation to say whether you serve it, since a user who cannot tell will
   read absence as breakage.
 
-  **§4.3.1 carries the author's reasoning verbatim**, beside §4.2's *Why f = 10
-  (social, not technical)*: memberships that are not cheap to give away, a fanout too
+  **§4.3 carries the author's reasoning verbatim, as a titled blockquote in his own
+  voice** rather than a numbered subsection — set off from the specification voice
+  without being enrolled in the vignette machinery, since it states intent rather
+  than illustrating a mechanism: memberships that are not cheap to give away, a fanout too
   small to build an influencer base on, saturated trees that distribute leadership
   instead of concentrating it, and slow selective growth as the thing worth buying
   entry to. None of that is derivable from the protocol, and without it the bound

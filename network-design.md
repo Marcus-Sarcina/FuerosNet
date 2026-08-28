@@ -730,7 +730,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   infra node and **do not compose**: a node one level down may hold subordinates, and
   *its* subordinates may not, since those would be a third level. To go deeper, a
   node in that chain must associate its key with at least one statically routed
-  device running the infrastructure application (§4.3.1).
+  device running the infrastructure application. The reason for the bound is below.
 - **A third level may exist without being full users, at the serving operator's
   option** (§10.6.3). It is outside every infra node's horizon, so nothing
   acknowledges it into a resource table and it reaches no resources above its own
@@ -742,32 +742,31 @@ payload, so apex load scales with churn and introductions, not with usage.
 - Expected deployment: container or VM image, mostly in cloud datacentres, each
   instance requiring a unique static IP. **No centralised operator.**
 
-#### 4.3.1 Why there can be only 110 light client full users under an infra node
-
-I will admit to having a particular social agenda with this project, and it involves
-scaffolding people to form meaningful working relationships they feel invested in.
-It's true that the ratio of paying to non-paying users implied by a 2 tier limit of
-non-infra subordinates will likely hurt the prospect for rapid uptake. But the social
-formation process I'm aiming for is actually helped by this in several ways:
-
-- More infra users means that memberships aren't cheap to give away. You have to
-  think about who your ten people ought to be and you have to consider whether those
-  people are likely to attract useful subs of their own. This creates a social
-  incentive to develop leadership and judgement and to reward it in others.
-- The smaller the fanout before someone has to pay real money discourages a
-  "celebrity" or "influencer" type culture. Even if you're good at earning attention
-  from the general public, you can't build a base of thousands of low-investment
-  consumers without building an organization of trusted subordinates and investing in
-  promoting those subordinates in turn. This rewards virtue and steadiness over
-  virality and genuine social relations over parasocial relations.
-- With fewer free memberships to give away, trees will tend to become more saturated
-  and opportunities to lead more distributed for those willing to invest in the
-  network. My hope is that this ultimately makes organizations who adopt this network
-  stronger as they'll not be able to grow on only a very few charismatic organizers
-  and so will be less likely to fall apart over any one departure.
-- A network that grows slowly but selectively and which filters for the steadiest and
-  most virtuous people will hopefully develop a reputation of exclusivity, making
-  people more willing to invest their best efforts and resources to obtain entry.
+> **Why there can be only 110 light client full users under an infra node.**
+> I will admit to having a particular social agenda with this project, and it involves
+> scaffolding people to form meaningful working relationships they feel invested in.
+> It's true that the ratio of paying to non-paying users implied by a 2 tier limit of
+> non-infra subordinates will likely hurt the prospect for rapid uptake. But the social
+> formation process I'm aiming for is actually helped by this in several ways:
+>
+> - More infra users means that memberships aren't cheap to give away. You have to
+>   think about who your ten people ought to be and you have to consider whether those
+>   people are likely to attract useful subs of their own. This creates a social
+>   incentive to develop leadership and judgement and to reward it in others.
+> - The smaller the fanout before someone has to pay real money discourages a
+>   "celebrity" or "influencer" type culture. Even if you're good at earning attention
+>   from the general public, you can't build a base of thousands of low-investment
+>   consumers without building an organization of trusted subordinates and investing in
+>   promoting those subordinates in turn. This rewards virtue and steadiness over
+>   virality and genuine social relations over parasocial relations.
+> - With fewer free memberships to give away, trees will tend to become more saturated
+>   and opportunities to lead more distributed for those willing to invest in the
+>   network. My hope is that this ultimately makes organizations who adopt this network
+>   stronger as they'll not be able to grow on only a very few charismatic organizers
+>   and so will be less likely to fall apart over any one departure.
+> - A network that grows slowly but selectively and which filters for the steadiest and
+>   most virtuous people will hopefully develop a reputation of exclusivity, making
+>   people more willing to invest their best efforts and resources to obtain entry.
 
 ### 4.4 Replication
 - **Siblings** replicate each other's traffic (up to f−1 = 9). Authorised
@@ -3821,7 +3820,7 @@ beneath an infra node — at any depth, until another infra node intervenes —
 attaches to that same node, and it therefore holds them all.
 
 **Past two levels they are reachable without being full users.** [D — 2026-08-28]
-Serving a third level is the operator's option (§4.3.1): those nodes are outside
+Serving a third level is the operator's option (§4.3): those nodes are outside
 every infra node's horizon, so nothing acknowledges them into a resource table and
 they reach no resources above their own patron. Messaging, presence, adoption and
 trust need no infra node to *hold* the requester and all work normally. **Nobody
@@ -3937,7 +3936,7 @@ the hierarchy carries no payload**, which is what makes the f=10 cap affordable
 **Direct-first materially changes infra economics.** §13.6 prices an infra node at
 roughly $20/month, a figure never checked against relaying *all* payload for its
 whole subtree — 110 full users, or up to 1,110 where the operator serves the
-optional third level (§4.3.1). Bandwidth would plausibly have dominated it. Making
+optional third level (§4.3). Bandwidth would plausibly have dominated it. Making
 relay the exception removes the dominant term.
 
 **Consequence: the two planes route differently, and resolution returns an
@@ -5307,7 +5306,7 @@ policy parameter computed locally, so it requires no protocol change.
 Infrastructure status is open to anyone, no restriction on running a node. An
 infra node is required to exceed **110** full users (f=10, L=2, §4.3), and a single
 infra node reaches up to **1,110** where its operator serves the optional third
-level (§4.3.1, Appendix A.2). But any user may launch a
+level (Appendix A.2). But any user may launch a
 server instance and sign it with their key; having one does not cause or require
 a hundred people to follow them. Cost is a low-spec VM plus a static IP, roughly
 $20/month at retail, a figure that only holds because payload takes the direct
@@ -5399,7 +5398,7 @@ gained.
 **It is worse than parity, in two ways.** The attacker builds a perfectly packed tree
 while real social graphs are sparse and lopsided, so the attacker reaches the
 theoretical floor and honest operators never do (A10). And an attacker serving its
-own infrastructure always takes the optional third level (§4.3.1) where an honest
+own infrastructure always takes the optional third level (§4.3) where an honest
 operator may decline it.
 
 What f actually trades is shape:
@@ -5412,7 +5411,7 @@ What f actually trades is shape:
 | 20 | 5 | 10 hops | ×20 |
 
 **Conclusion: f is a plumbing and social parameter, not a security parameter**
-(§4.2, §4.3.1).
+(§4.2, §4.3).
 
 ### 14.3 What actually provides Sybil resistance
 Three independent mechanisms, none relying on topology rules:
@@ -6045,7 +6044,7 @@ are all **chosen**, not derived.
 | Symbol | Meaning | Value | Basis |
 |---|---|---|---|
 | f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar at ±2 tiers |
-| L | Non-infra subordinate levels beneath an infra node | 2 | 110 full users before infrastructure is required; a third level is optional and not full users (§4.3.1) |
+| L | Non-infra subordinate levels beneath an infra node | 2 | 110 full users before infrastructure is required; a third level is optional and not full users (§4.3) |
 | S | Anchor **guideline** (subtree size) | ~500,000 | Not a status boundary, any ancestor may serve as anchor; caching is per-node policy (§10.2, §10.7.3). Yields ~120k widely-cached anchors at the 60B stress scale |
 | h_store | Topology storage horizon | 2 | ~110 nodes |
 | h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
@@ -6424,7 +6423,7 @@ node's span or a large network's average.
 | Figure | Meaning |
 |---|---|
 | **110** | **Full users** a single infra node holds — two levels of non-infra, 10 + 100. Beyond it a node in that chain must run infrastructure (§4.3) |
-| **1,110** | Nodes it *reaches* where its operator serves the optional third level (§4.3.1) — 10 + 100 + 1,000. Reachable and trust-bearing, holding no resource access above their own patron |
+| **1,110** | Nodes it *reaches* where its operator serves the optional third level (§4.3) — 10 + 100 + 1,000. Reachable and trust-bearing, holding no resource access above their own patron |
 | **99** | **Asymptotic full users** per infra node in a large network — f^L − 1 |
 | **999** | Asymptotic *reach* per infra node with the third level enabled — f^(L+1) − 1 |
 
