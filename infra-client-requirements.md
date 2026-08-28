@@ -36,13 +36,6 @@ that is noted in place.
 
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
   node**, and from siblings' clients in failover (design §11.1.2).
-- **Serving a third level is your option, and those nodes are not full users**
-  (design §4.3, §10.6.3). A node more than two levels below you is outside every
-  horizon that could acknowledge it, so it holds no resource access above its own
-  patron however you treat it. What you decide is whether to cache and forward for
-  it at all — messaging, presence, adoption and trust work if you do, and it is
-  simply unreachable if you do not. **Say which you do**, since a user who cannot
-  tell will read absence as breakage.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
@@ -520,7 +513,8 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   query gets the truth; there are no copies to invalidate, because you never sent
   any that claimed to be authoritative. **An owner who is not you still has to ask**,
   and does so by re-registering the resource with a requested `discover_scope` of
-  self — which no asker satisfies. What is left is your state to keep or drop.
+  self — which no asker but the owner satisfies. What is left is your state to keep
+  or drop.
 - **A cached answer is the asker's business.** It was true when given, and nothing
   grants access on the strength of it — access is decided by the owner at request
   time (§9.1).

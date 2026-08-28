@@ -251,7 +251,7 @@ unboundedly many encodings.
 unused low nibble of the final byte MUST be zero.** [D] Without that rule one
 logical path has sixteen valid byte encodings, and deterministic CBOR does not
 fix semantic malleability inside a byte string. The explicit
-nibble length is required because **paths are truncatable** [D, design §7.1]: a distant
+nibble length is required because **paths are truncatable** [D, design §10.1]: a distant
 node receives only the prefix needed to route to the right region, and truncation
 must be expressible at nibble granularity rather than byte granularity.
 
@@ -342,7 +342,7 @@ Locator = {
 }
 ```
 
-[D, design §7.1] The `seqno` here **is** the monotonic counter of §6.2, not a separate
+[D, design §6.2] The `seqno` here **is** design §6.2.1's monotonic counter, not a separate
 field: one counter per node, incremented on every position change **and on every
 endpoint change** (§5.6), serving both as freshness test and stale-cache detector.
 
@@ -360,7 +360,7 @@ the last one the verifier holds for that node — **not** exactly previous+1. A
 verifier may legitimately have missed intervening transactions, so requiring
 contiguity would reject valid updates. Absence of prior state is not a failure.
 
-**Two carriage forms** [D]. design §7.1 requires that routing information be
+**Two carriage forms** [D]. design §10.1 requires that routing information be
 authenticated by the participant it describes — true via the envelope inside a
 transaction, and via its own signature at introduction, where a locator is handed
 over alone.
@@ -384,7 +384,7 @@ SignedLocator = {
 
 A bare locator carries no
 signature of its own, because an unsigned locator lets any relay substitute
-itself as the node's mailbox [D, design §7.1].
+itself as the node's mailbox [D, design §10.1].
 
 ---
 
@@ -1834,19 +1834,20 @@ CatalogReply = {
 **orders qualifying entries by resource keyhash, then by owner keyhash, and returns
 the first 111**, and the continuation names the type of the first entry it withheld.
 Without an order, two queries could return the same 111 and the same hint forever.
-The order is arbitrary and that is fine; it only has to be *total*. **Resource
-keyhash alone is not total** — two owners may register the same one, below — so the
-owner breaks the tie, and without that a node could return a different 111 each time
-it was asked the same question.
+The order is arbitrary and that is fine; it only has to be *total*. **The owner key
+is defensive**: on any one host, resource keyhash is already total, because a host
+refuses a second claim on a keyhash it serves (below) — the composite key costs
+nothing and keeps the order total even if that rule is ever relaxed.
 
 **A filtered query is answered from the same order**, so a type filter narrows the
 qualifying set and the asker makes progress within it.
 
 **The bound sits above the population, so truncation is the exception and not the
 mechanism.** [D] An asker's horizon holds at most 1 + f + f² = 111 nodes at or below
-it (design §3), and a single answering node hosts at most f = 10 subordinates
-(design §4.1) — so a reply that truncates comes from a node holding more entries of
-one service type than its horizon has members to run them. **The continuation is a hint for an
+it (design §3), and a single answering node answers for at most the same number of
+owners — itself plus the ≤110 users it serves (design §9.5, §10.6.1) — so a
+reply that truncates comes from a node holding more entries of one service type than
+it has owners to own them. **The continuation is a hint for an
 unusual case, not the normal path through a catalog.** It is also near its own
 ceiling: at 2 KB an entry, 128 maximum-sized entries no longer fit one 256 KB frame
 (§7), so 127 is the highest this field can go without moving the frame bound.
@@ -1916,7 +1917,8 @@ stops returning it, and the next query gets the truth.
 
 **An owner who is not the answering node still has to ask, and needs no new
 message.** [D] It re-registers the resource with a requested `discover_scope` of
-self, which no asker satisfies, so the entry stops being returned to anyone. What
+self, which no asker but the owner satisfies, so the entry stops being returned to
+anyone else. What
 remains is the host's own state to keep or drop — the archive keeps the transactions
 either way, and no asker can distinguish an entry withdrawn this way from one that
 was never registered.
@@ -2757,8 +2759,8 @@ Heartbeat = {
                        ; On reaching u64 max, end the session rather than
                        ; wrapping, a wrap would silently reset gap detection.
                        ; NOT the node's locator seqno, a heartbeat needs gap
-                       ; detection, and a locator seqno changes only on
-                       ; position change
+                       ; detection, and a locator seqno changes only on a
+                       ; position or endpoint change (§2.3)
   2: timestamp         ; advisory; liveness uses local monotonic receipt time
 }
 
@@ -3066,9 +3068,15 @@ except the one it arrived from.** [D] There is no hop count, no TTL and no reach
 field.
 
 **Adjacent means the authenticated sessions you already hold by virtue of a topology
-relationship**: your patron, your subordinates, and your peers (design §6.3). [D —
-2026-08-28] It is not a set to maintain — it is the sessions the node has anyway,
-which is the same move the duplicate rule makes with the store. **Node type does not
+relationship**: your patron and your subordinates where sessions with them exist,
+your peers (design §6.3), **your serving node, and the clients attached to you**
+(design §11.1.2). [D — extended 2026-08-28] It is not a set to maintain — it is the
+sessions the node has anyway, which is the same move the duplicate rule makes with
+the store. **The serving relationship is what carries control past light-client
+patrons**, who hold no sessions and relay nothing (design §10.6.3): a client's
+floods enter and leave the network through the node that serves it, which is how a
+node two levels below its infra ancestor keeps its own horizon view and publishes
+its own departure. **Node type does not
 enter it**, and must not: type is not a function of position — a node becomes infra
 by launching and signing an infra instance, without moving (design §10.6.1) — so a
 rule phrased on type would go stale on an act that changed no topology at all. It is
@@ -3169,6 +3177,18 @@ silently remove that property.
 **Forwarding.** A receiving node forwards the memo to its own patron, unchanged
 except that nothing is added — the memo already carries the position it describes.
 A root has no patron and forwarding stops there.
+
+**Where no session with the patron exists, the memo goes to the nearest
+infrastructure node on the patron chain instead** (design §11.1.2). [D —
+2026-08-28] A light-client patron holds no sessions (design §10.6.3), so hops
+through one are collapsed through the infrastructure that serves it; a skipped
+patron's optional table simply has gaps, which *no tier is load-bearing* already
+prices. **A serving node runs the cycle check for its attached clients as well as
+for itself** — it holds its whole light-client subtree (design §10.6.1), so it
+checks field 1 against itself and every attached client, and a hit for an attached
+client is handed to that client at contact: the records that confirm it and the
+disavowal that answers it are that client's (design §6.2.2), not the serving
+node's.
 
 **A node holding that slot at or after the memo's timestamp does not forward it.**
 [D — 2026-08-28] It has already passed on what the memo says, or something later, so
@@ -3294,7 +3314,7 @@ the disavowal carries no prejudice.
 #### What a detecting node does
 
 **It disavows the direct subordinate that forwarded the memo to it**, once the
-transaction is fetched and confirmed. [D] Any edge breaks a cycle, and that is the
+memo is confirmed against its own records (above). [D] Any edge breaks a cycle, and that is the
 one the detector has authority over (design §6.2.2). It requires no agreement with
 the other party, no tie-break rule and no clock.
 
@@ -3308,17 +3328,20 @@ case socially. Automatic disavowal is the fallback for cycles formed at a distan
 which is the case the memo exists for.
 
 **The downward memo.** A node whose table shows the same occupant already held in
-another slot in its subtree sends a memo down that other branch, toward the stale
-position. Same frame;
-direction is implied by the receiver's position relative to the sender rather than by
-a field.
+another slot in its subtree sends a memo down the branch holding **the slot the
+arriving memo did not name**. [D — 2026-08-28] The choice is trigger-relative and
+needs no clock — the arriving memo names one slot, the table holds the other, and
+the memo goes toward the patron who has not just spoken. Whether that edge is in
+fact stale is that patron's own records' business: the memo is a hint there as
+everywhere. Same frame; direction is implied by the receiver's position relative to
+the sender rather than by a field.
 
 **It walks the tree rather than being addressed to the old patron**, and that is the
 point: the intervening nodes are updated on the way past. Descent is by anchor and
 path (§5.7.2), the same mechanism as resolution.
 
-**Nothing compels the stale-edge holder to act.** [D] It holds an edge its own records
-now show superseded, and design §1.1 is why nothing further is said. **A node
+**Nothing compels the receiving patron to act.** [D] Its own records say whether it
+still holds that subordinate, and design §1.1 is why nothing further is said. **A node
 registered at two positions is not known to harm the network**: addressing is by
 anchor and path, never by lookup against a higher tier's table, so a stale entry
 misroutes nobody. What the memo achieves even where a patron declines to disavow is

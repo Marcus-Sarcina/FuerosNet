@@ -61,9 +61,9 @@ scopes, catalog, abuse reporting, credential, and request framing; group
 operations. Encoding for all of it is in
 `wire-format.md`.
 
-**Not specified.** **The resource layer's interaction protocol** — the frames are
-drafted and no second implementation has been run against them (§18.2). That is now
-the only item blocking a subsystem. End-to-end payload encryption is *adopt PQXDH and
+**Not specified.** Nothing currently blocks a subsystem: the resource layer's
+interaction protocol, previously the one item that did, has now had clean-room
+implementation attempts on both its halves (§18.2). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§11.2.4) rather than designed here, with four integration
 decisions open. Multi-device beyond archive merge (§18.1). **Eleven parameters
 remain unset** (§16.1), sorted by how provisional they actually are in §16.1.1, and
@@ -726,23 +726,18 @@ payload, so apex load scales with churn and introductions, not with usage.
 
 ### 4.3 The infrastructure tier
 - **An infra node's subtree holds at most L = 2 levels of non-infra nodes** —
-  10 + 100 = **110** full users. [D — 2026-08-28] The levels are counted from the
+  10 + 100 = **110** users. [D — 2026-08-28] The levels are counted from the
   infra node and **do not compose**: a node one level down may hold subordinates, and
-  *its* subordinates may not, since those would be a third level. To go deeper, a
-  node in that chain must associate its key with at least one statically routed
-  device running the infrastructure application. The reason for the bound is below.
-- **A third level may exist without being full users, at the serving operator's
-  option** (§10.6.3). It is outside every infra node's horizon, so nothing
-  acknowledges it into a resource table and it reaches no resources above its own
-  patron — but messaging, presence, adoption and trust need no infra node to hold the
-  requester, and all of them work. **This is not a restriction anyone imposes**: it
-  is what falls out, and permitting it costs the operator only what it chooses to
-  cache and forward.
+  *its* subordinates may not, since a third level would sit outside every infra
+  node's horizon — nothing could acknowledge it, serve it, or connect it to the
+  network. To go deeper, a node in that chain must associate its key with at least
+  one statically routed device running the infrastructure application. The reason
+  for the bound is below.
 - **Each server corresponds to a user.** Infra operators are people.
 - Expected deployment: container or VM image, mostly in cloud datacentres, each
   instance requiring a unique static IP. **No centralised operator.**
 
-> **Why there can be only 110 light client full users under an infra node.**
+> **Why there can be only 110 light client users under an infra node.**
 > I will admit to having a particular social agenda with this project, and it involves
 > scaffolding people to form meaningful working relationships they feel invested in.
 > It's true that the ratio of paying to non-paying users implied by a 2 tier limit of
@@ -980,7 +975,8 @@ subtree's view indefinitely, since adoption says nothing about existing bindings
 The old patron does not sign. **This is the escape hatch that makes exit a real
 right**, and no rule may condition it on the patron's cooperation.
 
-Each node signs a **monotonic sequence number** on every position change. Not
+Each node signs a **monotonic sequence number** on every position change — and,
+for an infra node, on every endpoint change (`wire-format.md` §2.3, §5.6). Not
 consensus, a freshness test, letting any observer order a node's own competing
 claims without a clock and detect a stale record a revocation failed to reach.
 
@@ -3827,14 +3823,6 @@ patron chain**, walking up past any light-client patrons. So every light client
 beneath an infra node — at any depth, until another infra node intervenes —
 attaches to that same node, and it therefore holds them all.
 
-**Past two levels they are reachable without being full users.** [D — 2026-08-28]
-Serving a third level is the operator's option (§4.3): those nodes are outside
-every infra node's horizon, so nothing acknowledges them into a resource table and
-they reach no resources above their own patron. Messaging, presence, adoption and
-trust need no infra node to *hold* the requester and all work normally. **Nobody
-imposes this** — it is what falls out of the horizon, and the only cost of allowing
-it is what the operator chooses to cache and forward.
-
 **Intermediate light-client patrons carry no traffic.** They adopt, countersign and
 vouch; they do not serve sessions and nothing routes through them. A node admitted
 to the subnet talks to the infrastructure directly from then on. **So the residual
@@ -3943,9 +3931,8 @@ the hierarchy carries no payload**, which is what makes the f=10 cap affordable
 
 **Direct-first materially changes infra economics.** §13.6 prices an infra node at
 roughly $20/month, a figure never checked against relaying *all* payload for its
-whole subtree — 110 full users, or up to 1,110 where the operator serves the
-optional third level (§4.3). Bandwidth would plausibly have dominated it. Making
-relay the exception removes the dominant term.
+whole subtree of up to 110 users. Bandwidth would plausibly have dominated it.
+Making relay the exception removes the dominant term.
 
 **Consequence: the two planes route differently, and resolution returns an
 address, not a path.**
@@ -4091,13 +4078,13 @@ threshold is an infra node at a static IP, so the network can distinguish "down
 for everyone" from "will not sign for this subordinate specifically", which is
 censorship. Most PKIs cannot tell these apart.
 
-**This does not extend to light-client patrons**, who may hold up to 110
+**This does not extend to light-client patrons**, who may hold up to f = 10
 subordinates (§4.3) with no static address and no uptime commitment. Their
 unreachability is indistinguishable from refusal, so subordinates of a
 light-client patron get no censorship signal, one more reason for the issuance
 pre-delegation below.
 
-**Structural tension: light-client patrons.** A light client may hold up to 110
+**Structural tension: light-client patrons.** A light client may hold up to f = 10
 subordinates (§4.3), who would then depend for currency attestations on a patron
 with no uptime commitment. Resolution: a light-client patron **pre-delegates
 issuance to its own patron at adoption time**. Preferred over restricting
@@ -5321,9 +5308,8 @@ policy parameter computed locally, so it requires no protocol change.
 ### 13.6 Reliability weight is not social trust
 
 Infrastructure status is open to anyone, no restriction on running a node. An
-infra node is required to exceed **110** full users (f=10, L=2, §4.3), and a single
-infra node reaches up to **1,110** where its operator serves the optional third
-level (Appendix A.2). But any user may launch a
+infra node is required to exceed **110** users (f = 10, L = 2, §4.3). But any user
+may launch a
 server instance and sign it with their key; having one does not cause or require
 a hundred people to follow them. Cost is a low-spec VM plus a static IP, roughly
 $20/month at retail, a figure that only holds because payload takes the direct
@@ -5412,11 +5398,9 @@ Any rule that makes an attacker's infrastructure expensive makes an honest opera
 expensive by at least as much, so tightening one tightens the other and nothing is
 gained.
 
-**It is worse than parity, in two ways.** The attacker builds a perfectly packed tree
-while real social graphs are sparse and lopsided, so the attacker reaches the
-theoretical floor and honest operators never do (A10). And an attacker serving its
-own infrastructure always takes the optional third level (§4.3) where an honest
-operator may decline it.
+**It is worse than parity.** The attacker builds a perfectly packed tree while real
+social graphs are sparse and lopsided, so the attacker reaches the theoretical floor
+and honest operators never do (A10).
 
 What f actually trades is shape:
 
@@ -6072,7 +6056,7 @@ are all **chosen**, not derived.
 | Symbol | Meaning | Value | Basis |
 |---|---|---|---|
 | f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar at ±2 tiers |
-| L | Non-infra subordinate levels beneath an infra node | 2 | 110 full users before infrastructure is required; a third level is optional and not full users (§4.3) |
+| L | Non-infra subordinate levels beneath an infra node | 2 | 110 users before infrastructure is required |
 | S | Anchor **guideline** (subtree size) | ~500,000 | Not a status boundary, any ancestor may serve as anchor; caching is per-node policy (§10.2, §10.7.3). Yields ~120k widely-cached anchors at the 60B stress scale |
 | h_store | Topology storage horizon | 2 | ~110 nodes |
 | h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
@@ -6295,17 +6279,15 @@ does block.
 
 ---
 
-#### Blocks a subsystem — one item
+#### Blocks a subsystem — none, as of 2026-08-28
 
-**Half of resource interaction has had an implementation attempt.** The catalog path
-— registration, query and reply, and entry lifecycle as local state
-(`wire-format.md` §4.7) — has been implemented against and repaired. **The
-request/response path has not**: §7.3's normative evaluation order and refusal
-behaviour, and role assignment as a materialised table, are drafted and unattempted.
+**Resource interaction has now had implementation attempts on both halves.** The
+catalog path — registration, query and reply, entry lifecycle as local state
+(`wire-format.md` §4.7) — and the request/response path — §7.3's normative
+evaluation order and refusal behaviour, with the role row consulted as a lookup —
+were each implemented against and repaired, the catalog in one pass and §7.3 in two.
 Every other mechanism in this layer needed a second run before it was sound, and
-these have not had one.
-
-**What it blocks:** parts of the resource layer. Nothing above it.
+these have now had theirs.
 
 ---
 
@@ -6444,35 +6426,32 @@ read before re-proposing anything here.
 
 ---
 
-### A.2 110, 1,110, 99 and 999 are four different quantities
+### A.2 110 and 99 are two different quantities
 
 These look like competing answers to one question and are not. **L = 2 stands**; what
-differs is whether a figure counts full users or reach, and whether it is a single
-node's span or a large network's average.
+differs is a single node's span against a large network's average.
 
 | Figure | Meaning |
 |---|---|
-| **110** | **Full users** a single infra node holds — two levels of non-infra, 10 + 100. Beyond it a node in that chain must run infrastructure (§4.3) |
-| **1,110** | Nodes it *reaches* where its operator serves the optional third level (§4.3) — 10 + 100 + 1,000. Reachable and trust-bearing, holding no resource access above their own patron |
-| **99** | **Asymptotic full users** per infra node in a large network — f^L − 1 |
-| **999** | Asymptotic *reach* per infra node with the third level enabled — f^(L+1) − 1 |
+| **110** | Users a single infra node holds — two levels of non-infra, 10 + 100. Beyond it a node in that chain must run infrastructure (§4.3) |
+| **99** | **Asymptotic** users per infra node in a large network — f^L − 1 |
 
-**Why a yield falls below a span.** In a large network, infra nodes must also serve
-as patrons to other infra nodes, and those overhead nodes carry no subtree of their
-own. If the infra nodes form a tree of fanout f and depth D, only its leaves carry
-subtrees:
+**Why the yield falls below the span.** In a large network, infra nodes must also
+serve as patrons to other infra nodes, and those overhead nodes carry no subtree of
+their own. If the infra nodes form a tree of fanout f and depth D, only its leaves
+carry subtrees:
 
-- Leaf infra nodes: 10^D, each spanning S
+- Leaf infra nodes: 10^D, each spanning 110
 - Total infra nodes: (10^(D+1) − 1)/9 ≈ 1.111 × 10^D
-- Ratio: S × 10^D ÷ (1.111 × 10^D) = **0.9 × S**
+- Ratio: 110 × 10^D ÷ (1.111 × 10^D) = **99.0**
 
-Which is **f^n − 1** for n levels — 99 at S = 110, 999 at S = 1,110 — and is why both
-land one short of a round power. Convergence is fast and from above: **110 → 100 at
-D=1 → 99 by D=2**, and likewise **1,110 → 1,009 → 1,000 → 999**. Small networks are
-therefore slightly *more* infrastructure-efficient per user than large ones.
+Which is **f^L − 1** exactly, and is why it lands one short of a round power.
+Convergence is fast and from above: **110 → 100 at D=1 → 99 by D=2.** Small networks
+are therefore slightly *more* infrastructure-efficient per user than large ones.
 
 **The levels do not compose** [D — 2026-08-28]. An earlier reading gave each of an
 infra node's children its own two levels, making three tiers available as of right
-and 1,110 the ordinary span. The levels are counted from the infra node; the third
-exists only where an operator opts to serve it, and the nodes on it are not full
-users.
+and 1,110 the ordinary span; a later variant kept a third level as an operator
+option. **Both are gone**: the levels are counted from the infra node, there is no
+third, and a node two levels down that wants subordinates runs infrastructure
+(§4.3).

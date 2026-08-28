@@ -4451,3 +4451,98 @@ nothing happened. Ordering was always correct; the dates were not.
   after signing, so the subject would have countersigned a comparison without
   consenting to the terms of it. Placing it at field 5 rather than appending it keeps
   the scheme within what consent covers.
+
+- **2026-08-28 (consistency audit of the seven commits 4afe910..b80e257 against the
+  whole set: nine mechanical completions applied, five items for the author)** —
+  Decided changes whose sweep missed a site, each verified against the current text
+  before edit.
+
+  **The counter's own definition missed the 0.6.9 trigger change.** Design §6.2.1 —
+  the authoritative sentence — still said the sequence number is signed "on every
+  position change", and `wire-format.md` §6.2's heartbeat comment still said a
+  locator seqno "changes only on position change". Both now carry the endpoint
+  trigger. The sweep at the time updated §2.3, §5.6, infra §4.4 and P36 and missed
+  the definition site itself.
+
+  **§7.2b still ordered the fetch it had abolished.** *What a detecting node does*
+  said the disavowal follows "once the transaction is fetched and confirmed", four
+  paragraphs after the fetch requirement was replaced by local confirmation. Aligned.
+
+  **§18.2's blocking item and the front matter were stale, exactly as CLAUDE.md
+  predicts of consolidating sections.** Both said §7.3's request/response path had no
+  implementation attempt; 0.6.7 and 0.6.8 were implementation attempts against
+  exactly that path. Nothing currently blocks a subsystem, and both sites now say so.
+
+  **Two "up to 110 subordinates" claims survived the L change** (§10.6.5.1's
+  censorship-signal and pre-delegation paragraphs) — the old composing reading, under
+  which a light client could hold two full tiers. Now f = 10. The pre-delegation
+  mechanism itself is untouched.
+
+  **The catalog truncation argument miscounted its own bound.** It said an answering
+  node "hosts at most f = 10 subordinates", but an answering node answers for its
+  whole served subtree — itself plus ≤110 full users (§9.5, §10.6.1) = 111 owners,
+  which is the bound. The corrected argument is exact where the old one was wrong in
+  the design's favour by accident.
+
+  **The owner tie-break's justification was falsified by a later rule in the same
+  section.** 0.6.6 justified sorting by (resource, owner) because two owners may
+  share a keyhash; 0.6.7 then made a host refuse a second claim on a keyhash it
+  serves, making keyhash alone total per host. The composite key stays — it costs
+  nothing and survives any future relaxation — and the justification now says that
+  rather than the falsified claim.
+
+  **Also: scope-self withdrawal returns the entry to the owner** (Scope 0 is the
+  owner, so "no asker satisfies" was wrong by exactly one asker — two sites); and
+  A10's consequence column claimed its failure restores exact 1:1 cost symmetry,
+  which the optional-third-level asymmetry now survives.
+
+- **2026-08-28 (the third tier removed entirely; adjacency extended to the serving
+  relationship; the downward memo's branch made trigger-relative; four stale
+  citations remapped)** — Author: *"Remove the third tier entirely. Don't make it
+  work, it is out of keeping with the design concept."* The audit had shown the
+  optional level could not be served without extending control adjacency to it, and
+  rather than confine the extension he removed the thing needing it.
+
+  **All traces gone**: design §4.3's second bullet, §10.6.1's reachable-not-full
+  paragraph, §10.6.3's and §13.6's 1,110-reach clauses, §14.2's second asymmetry (the
+  section is back to packing alone, and A10's consequence column reverts with it),
+  §16's L row qualifier, and `infra-client-requirements.md` §1's serving-option
+  bullet. Appendix A.2 is again two quantities — *110 and 99* — with the superseded
+  readings named in its closing note. **"Full users" reverts to "users"
+  everywhere**, the qualifier's contrast class having been removed with the tier.
+  §4.3's first bullet now states *why* no third level can exist — outside every
+  infra node's horizon, nothing can acknowledge, serve, or connect it — which is the
+  author's original L = −3 argument in its final home.
+
+  **Adjacency includes the serving relationship, both directions.** Removing the
+  tier did not dissolve the gap the audit found: a tier-2 node is a full user whose
+  patron holds no sessions, so its horizon view and its own departure flood still
+  had no path. §7.2a's *adjacent* now names the serving node and attached clients
+  alongside patron, subordinates and peers — still only sessions the node holds
+  anyway — and states that the serving relationship is what carries control past
+  light-client patrons.
+
+  **Rootward memos collapse light-client patron hops through infrastructure.**
+  Where no session with the patron exists, the memo goes to the nearest infra node
+  on the patron chain; a skipped patron's optional table has gaps, which *no tier is
+  load-bearing* already prices. **A serving node runs the cycle check for its
+  attached clients as well as itself** — it holds its whole subtree, so it checks
+  field 1 against itself and every attached client, and a hit for a client is handed
+  to that client at contact: the confirming records and the disavowal are the
+  client's, not the serving node's.
+
+  **The downward memo goes down the branch the arriving memo did not name** (author).
+  Trigger-relative and clockless: the arriving memo names one slot, the table holds
+  the other, and the memo goes toward the patron who has not just spoken. This
+  replaces "toward the stale position", which the per-patron ordering could no longer
+  define — whether the edge is stale is the receiving patron's own records' business,
+  and the "stale-edge holder" language went with it.
+
+  **`VerifierResponse` field 6 needs no equality rule** (author): it records which
+  algorithm produced the verdict for evaluators who never see the query; nobody
+  tests it to validate the record.
+
+  **Four stale `design §7.1` citations in wire §2 remapped** — resolvable, so
+  invisible to the checker, and pointing at Proof of Presence since some old
+  renumbering. Truncatable paths, routing-information authentication and mailbox
+  substitution live in design §10.1; the monotonic counter in design §6.2.1.
