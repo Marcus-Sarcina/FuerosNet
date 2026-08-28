@@ -4049,3 +4049,260 @@ nothing happened. Ordering was always correct; the dates were not.
   node's answer rather than that endpoint's* — which was written for an attach
   refusal and reaches this one because it is stated by role rather than by message.
   Nothing was added.
+
+- **2026-08-28 (0.6.9 topology flooding and endpoint publication: an infra node
+  could not republish its own address; adjacency, subject and *stored* defined)** —
+  The propagation layer's first implementation attempt. It found a deadlock in the
+  one object §5.6 exists to carry, and three normative terms doing load-bearing work
+  without definitions.
+
+  **An infra node that changed address could not say so.** §5.6's `seqno` is §2.3's
+  per-node counter, which §2.3 said was "incremented on every position change".
+  §5.6 replaces on strictly greater. §7.2a and §5.7.3 make equal `seqno` with
+  different contents **malformed** — reasoning, correctly, that a subject advances
+  its own counter to express a change. **A node whose address changed but whose
+  position did not could therefore advance nothing**, so its republished record
+  collided with its own previous one and was malformed by rule. It was stuck
+  advertising a dead address until it happened to move. This is exactly the node
+  §5.6 was written for: the infra node that neither peers nor anchors, whose address
+  reaches its patron by no other route. **The counter now advances on a position
+  change or an endpoint change** — one counter, two triggers. Nothing else moves:
+  §2.3's freshness rule was already *strictly greater, not previous + 1*, because
+  gaps were always expected.
+
+  **Republishing an unchanged set replays the held record** rather than spending a
+  number. Reconciliation is a replay of the same frames, so a fresh number over
+  identical contents is churn that can also race a real position change.
+
+  **Three terms carrying normative weight without definitions.** *Adjacent* appeared
+  exactly once, in the forwarding rule, and nowhere else in any document — two
+  conforming nodes could store the same objects and deliver them to different
+  neighbourhoods, which surfaces as a permanent gap rather than as an error. It is
+  now the authenticated sessions a node already holds by topology relationship:
+  patron, subordinates, peers. **Node type does not enter it, and must not**: type is
+  not a function of position at all, so a rule phrased on type would go stale on an
+  act that changed no topology — which is why a locator does not encode type either.
+  *Subject* was singular while peering has two endpoints, and reading it as the
+  *issuer* would put a patron's adoption of a distant node in range of everyone near
+  the patron. And *stored* was never tied to verification, so a literal reading made
+  every node an amplifier for whatever an authenticated neighbour sent; storing now
+  requires verifying, with `EndpointRecord` the exception the design already states.
+
+  **"Who may push" read as a rule on every sender stops flooding at the first
+  relay.** A relay is not a party to what it forwards. The paragraph governs
+  origination; the distinction is safe because a relay changes nothing — the object
+  goes on byte-for-byte and the signature that made it worth trusting at the origin
+  is the one the next receiver checks.
+
+  **Precision fixes.** §5.6 claimed a recipient learns "which gossip source supplied
+  it": it learns the immediate authenticated hop, since nothing on the wire carries a
+  path and a relay is indistinguishable from a publisher. That is enough — the
+  neighbour is the party you can stop listening to. The endpoint list is in publisher
+  preference order with **distinct** entries, and **port zero is malformed**; a
+  signed object two decoders disagree about splits the network on bytes rather than
+  on meaning. And `infra-client-requirements.md` §4.4's "treat it as unverified
+  gossip" was read by the implementation as *do not refer from it*, which would make
+  a live child unreachable through its own patron: a referral is not a credential,
+  the requester authenticates the subject it meant to reach, and a wrong address
+  costs a failed dial.
+
+  **P36 narrowed.** Endpoint changes now advance the same counter, so a `seqno` gap
+  has an innocent local explanation as well — but only for infra nodes, and only
+  against an observer outside the horizon, since one inside it sees the endpoint
+  records that account for the jump.
+
+  **Correction, author 2026-08-28: how a node becomes infra.** §10.6.1 said "a light
+  client that acquires subordinates becomes infra without moving", and
+  `light-client-requirements.md` repeated it. **That is false, and §4.3 had it right
+  all along**: a node may hold two full tiers of subordinates — up to 110 — as an
+  ordinary light client. Nothing about the tree promotes it. **You become infra by
+  launching and signing an infra instance**, and the effect runs the other way: your
+  grand-subordinates thereby unlock the ability to take subordinates of their own.
+  The conclusion the false premise supported is untouched and now rests on a true
+  one — type is not a function of position, so a locator must not encode it. **Client
+  type says which kind of endpoint you are connected to and little about topology**:
+  the root of a million-node tree still runs a light client on a phone and takes every
+  user action through it. The stale claim was not corrected in the earlier entry that
+  records it; entries are what was decided then, and this is the correction.
+
+  **One assistant gloss removed.** The italicised paragraph closing §3's
+  four-addresses vignette explained the analogy by calling a change of address "a hard
+  fork (§6.2)" — a term §6.2 no longer defines, since hard-fork departure and
+  forwarding are deferred by decision. The vignette above it is the author's and
+  stands.
+
+  **Sweep: "light client" was used 52 times and defined nowhere.** §3's vocabulary
+  defined *infra node* and left its complement to inference, and the inference a
+  reader naturally makes — a tier, or a class of person — is wrong in both halves.
+  The term now has a row: the participant-facing application, and by extension a node
+  with no infrastructure of its own; **every user runs the application, infra
+  operators included**, because that is where user actions happen.
+
+  **The three requirements documents read as three populations.** They are three
+  software roles. An infra operator is an ordinary participant who also runs
+  infrastructure, so their presence ceremonies, catalog browsing and resource
+  requests happen in a participant client like anyone else's — **a complete operator
+  deployment satisfies `light-client-requirements.md` as well as
+  `infra-client-requirements.md`**, which neither document said and both now do.
+  Reaching your own instance from your own client is user interface, not protocol;
+  the network sees one node.
+
+  **Two consequent fixes.** §10.8's bootstrap ordering spoke of "the light-client
+  tier" — there is no such tier, only a node that does not yet run infrastructure.
+  And `light-client-requirements.md` §7 rendered the empty-residual distinction as
+  telling a user *what kind of party* they are contacting, which invites exactly the
+  status reading being corrected: it tells them **which endpoint answered**. The root
+  of a large tree takes their own actions through a client like everyone else.
+
+  **The remaining uses across the four other documents were checked and are sound** —
+  all of them the node sense (no static address, attaches to the nearest infra node
+  on its patron chain, cannot host), which the new vocabulary row now covers.
+
+  **Where an operator's key lives, settled 2026-08-28.** It lives on every device
+  they use, the infra instance among them — the relationship is a seed shared across
+  wallets, not a client and a server. §18.1 already permitted this ("devices may
+  share a key or hold their own; the choice is ordinary key management"), but framed
+  multi-device as a case for people who own several phones. **It is the ordinary
+  condition of everyone in §4.3's tier**, which the section now says. §7.1's
+  reliability distinction gains the mechanism it was missing: an infra participant
+  has no unavailability excuse because a device holding their key is up whether or
+  not they are.
+
+  **Correction, author 2026-08-28: nobody prompts a grandpatron.**
+  `infra-client-requirements.md` §9.1 required an operator to be prompted for every
+  `SubtreeAck` and forbade auto-signing, arguing that an automatic signature
+  "recreates the situation the mechanism exists to correct". **That was an assistant
+  elaboration and it is wrong.** §9.2.1 never asked a grandpatron *user* to
+  countersign anything: the deliberate human act in the sequence is the **patron's**
+  adoption, and in-horizon propagation of membership follows from it automatically.
+  The grandpatron's decision is a **policy**, set once and asynchronously to any
+  traffic it governs, which their node then applies without asking. The bullet is
+  replaced, §9.2.1 states the policy-not-prompt shape so the error cannot be
+  re-derived from it, and its "offline, slow or simply uninterested" — which imagined
+  a human declining to act — becomes a node that is offline or a policy that does not
+  reach the position.
+
+  **The automation principle, stated for the first time (author, 2026-08-28).** The
+  document set had no rule about when a client may spend a user's attention — three
+  scattered touchpoints across five documents, one of which was the prompt rule just
+  removed, and nothing an implementer could reason from. §0 now carries *What a
+  client does without asking*: **infra operation is automatic** — routing, queuing,
+  countersigning, acknowledging subtree membership, replication and issuing resource
+  credentials — and **a user wanting less sets policy in advance rather than being
+  interrupted**, which is §13.1's pluggable-policy shape applied to attention instead
+  of to trust.
+
+  **Hands-on authorisation covers two things.** A **live interaction in which you are
+  one of the people being present** — a presence ceremony, an adoption on either
+  side, and affirming in person that you recognise someone whose key is rotating; and
+  **an operator configuring their own node and resources**. Everything else runs from
+  what the user already decided.
+
+  **The criterion had to be sharpened, and the correction is the useful part.** The
+  obvious test — *does this sound like something a person does* — gets witnessing and
+  verifying backwards, and both are automatic. A witness's **client** observes the
+  ceremony, tests the evidence at each point, checks the timing and signs, while the
+  human who owns it is very likely unaware the ceremony happened or who was in it. A
+  verifier's client compares the presented profile against a picture it already
+  holds — the machine analogue of recognising a face — and its operator is neither
+  asked nor told; they know the person exists, having met them, and learn nothing
+  about this encounter. **The real test is whether your own presence is what is being
+  claimed.** A witness attests what its client saw, a verifier attests what its
+  client holds, and neither asserts that its operator was anywhere. Both facts are
+  now stated at §7.1.1 and §7.1.3, where an implementer would otherwise build a
+  prompt.
+
+  **The verifier notification runs to the subject, not to the answering operator**,
+  and §7.1.3 now says so. The asymmetry is deliberate: the subject is the only party
+  who can see probing spread across many verifiers (§7.1.4), while telling a
+  verifier's operator about each query would tell them only who is meeting whom.
+
+  **Both client documents point at it**, and every existing warn/confirm obligation
+  was checked against it — departure warnings, identity-path warnings, the
+  move-consequence reminder, the bootstrap disambiguation prompt and §11.1.5's
+  doorbell all sit on deliberate acts or are not authorisation prompts at all. None
+  needed changing.
+
+  **§7.1.4's per-subject probing limit was describing a superseded mechanism
+  (author, 2026-08-28).** It said verifiers notify the subject, the subject
+  aggregates, and *the subject withdraws disclosure permission* when probing is
+  detected — a reactive policy act, and the "(below)" it pointed at described no such
+  standing permission. **The real lever had already been built and the section never
+  mentioned it.** A verifier's captures of the subject are sealed under keys only the
+  subject can derive (§7.1.5.2), and `wire-format.md` §5.3's `KeyGrant` releases one
+  bound to a single `query_id` — so a verifier can evaluate **nothing** until the
+  subject's client sends the grant. The limit is **structural rather than vigilant**:
+  not a permission a subject must notice they should withdraw, but a key their client
+  declines to send. Fifty parallel probes need fifty grants. The notification stays,
+  now doing visibility rather than enforcement.
+
+  **The same correction settles the earlier question about a go-ahead round trip.**
+  There is one, and it was already specified: the verifier waits, not for permission
+  to answer, but for the key that makes answering possible.
+
+  **The L = 2 allowance does not compose (author, 2026-08-28), and L itself does not
+  change.** §16 already defined L as *non-infra subordinate levels* with the value 2
+  giving 110, which is what the author's §4.3.1 heading says. What was wrong sat on
+  top of it: Appendix A.2 gave each of an infra node's children its own two levels,
+  so the allowance compounded into three tiers and 1,110 as of right. **The levels
+  are counted from the infra node.** A node one level down may hold subordinates and
+  its subordinates may not, because a third level lies outside every infra node's
+  horizon and nothing can acknowledge it into a resource table.
+
+  **A third level may still exist, at the serving operator's option**, receiving
+  network services and not the resource function. This is not a restriction anyone
+  imposes: messaging, presence, adoption and trust need no infra node to *hold* the
+  requester, while resource access does, so "reachable but not a full user" is what
+  falls out of the horizon rather than a rule added to it. It needs **no new wire
+  type** — only a difference in what the last infra node in a chain caches and
+  forwards — and it is now an optional feature in `infra-client-requirements.md` §1,
+  with the obligation to say whether you serve it, since a user who cannot tell will
+  read absence as breakage.
+
+  **§4.3.1 carries the author's reasoning verbatim**, beside §4.2's *Why f = 10
+  (social, not technical)*: memberships that are not cheap to give away, a fanout too
+  small to build an influencer base on, saturated trees that distribute leadership
+  instead of concentrating it, and slow selective growth as the thing worth buying
+  entry to. None of that is derivable from the protocol, and without it the bound
+  reads as a capacity workaround.
+
+  **The Sybil symmetry breaks, in the attacker's favour, and §14.2 now says so.** It
+  claimed *attacker cost per fake identity equals honest cost per real identity*. An
+  attacker serves its own infrastructure and always enables the optional third level;
+  an honest operator may decline. So the attacker yields **f^(L+1) − 1 = 999** per
+  infra node against an honest **f^L − 1 = 99** — roughly a tenth the cost per
+  identity. This **strengthens** §14.2's conclusion rather than damaging it, since the
+  section exists to say topology cannot provide Sybil resistance and §14.3 carries
+  the actual defence. The closed form is `f^n − 1` for n levels, which is why both
+  figures land one short of a round power; the old text's "f^(L+1) exactly" was the
+  reach figure rounded.
+
+  **Numbers swept**: §14.1, §14.2's table (honest servers @1M rises tenfold: 125,000
+  / 42,000 / 10,000 / 2,500), §13.6, §10.6.3's relay pricing, §16's L row and
+  Appendix A.2, rewritten and retitled — *110, 1,110, 99 and 999 are four different
+  quantities*. **Two sites deliberately untouched**: §12's `h = 3` process-and-discard
+  horizon and §16's `h_process` row both read ~1,110 from 1 + 10 + 100 + 1,000 and
+  have nothing to do with L. A find-and-replace would have corrupted both.
+
+  **Fake-subtree economics removed from the security analysis (author, 2026-08-28).**
+  It kept resurfacing as a security consideration because the document invited it to:
+  §14 opened with a section titled *Fake subtree cost*, priced an attacker's tree to
+  three significant figures, and only then said in §14.2 that topology cannot provide
+  Sybil resistance at all. A reader — or a reviewer, or an assistant — meets the
+  arithmetic first and treats it as a parameter. **The fix was structural, not
+  verbal.** §14.1 is now *Standing comes from edges, not from nodes*: standing comes
+  from the edges a given observer can see into an attacker's region (§13.2, §13.3.1),
+  a fake subtree buys appearance and deniability but never trust, and the cost of
+  building one is capacity arithmetic recorded in Appendix A.2 **and only there**,
+  because pricing an attacker's tree invites the reader to treat the price as a
+  defence. §14.2 keeps the symmetry argument and the `f` table with its
+  fake-identity columns removed — what f trades is depth, path length and sibling
+  factor.
+
+  **No register moved.** A10's subject survives — §14.2 still claims attacker
+  economics are worse than parity, now for two reasons — and A19 is repointed from
+  "§14.2–14.3's attack economics" to §13.6's operator pricing and §14.3's
+  static-addressing leg, which is where those figures actually live. Appendix A.2's
+  999 row loses its "§14.1 uses this one" gloss and is capacity like the other three.
+  §15.1's *lowering fanout for security* row now reads "at least the same factor"
+  rather than "exactly", the one place the old parity claim survived.

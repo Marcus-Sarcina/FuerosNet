@@ -5,6 +5,17 @@
 authoritative on operator-side behaviour. Resource conformance is in
 `resource-requirements.md`.
 
+**It is not the whole of what an operator runs.** An operator is an ordinary
+participant who also runs infrastructure, so their presence ceremonies, catalog
+browsing and resource requests happen in a participant client and are governed by
+`light-client-requirements.md` (design §0). This document covers the server side
+only.
+
+**Your node runs unattended.** Design §0's *What a client does without asking* is
+the rule: serve, queue, countersign, acknowledge, replicate and issue credentials
+from standing policy, and interrupt your operator only for a live two-person act or
+for configuring their own node.
+
 **The infra node is the front door.** It serves sessions, holds queues, issues
 currency, hosts resources, and decides who may use them. It is the one component
 holding both topology and trust state, which is why role assignment belongs to it
@@ -25,6 +36,13 @@ that is noted in place.
 
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
   node**, and from siblings' clients in failover (design §11.1.2).
+- **Serving a third level is your option, and those nodes are not full users**
+  (design §4.3.1, §10.6.3). A node more than two levels below you is outside every
+  horizon that could acknowledge it, so it holds no resource access above its own
+  patron however you treat it. What you decide is whether to cache and forward for
+  it at all — messaging, presence, adoption and trust work if you do, and it is
+  simply unreachable if you do not. **Say which you do**, since a user who cannot
+  tell will read absence as breakage.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
@@ -120,6 +138,11 @@ guarantee, which is a floor rather than a ceiling.
   `seqno`** for a node you hold (`wire-format.md` §2.3).
 - **Collapse forwarding chains at the source**: follow the chain and return the
   terminal record, not the next hop (design §10.3).
+- **Keep the topology store across a restart — it is your seen-set.** Forwarding is
+  *forward if and only if you stored it* (`wire-format.md` §7.2a), so duplicate
+  suppression is a property of the store rather than of a separate cache. A node
+  that forgets what it held replays a forwarding wave into every cycle in its
+  horizon, which is correct behaviour and a cost your neighbours pay for you.
 
 ### 4.4 How you learn an infra child's endpoints
 
@@ -133,6 +156,21 @@ address, and **without that you cannot refer**.
 only once you hold the node's key material, so it gives attribution after contact
 rather than authentication before it. Treat the record as unverified gossip until you
 reach the address and confirm the keyhash.
+
+**Unverified does not mean unusable: refer from it.** A referral you give is not a
+credential — the requester authenticates the *subject it meant to reach*, so a wrong
+address costs it a failed dial rather than misdirecting it silently (design §10.6.1).
+**Withholding referrals until you have confirmed a child yourself would make a live
+child unreachable through you** for as long as you had not happened to contact it,
+which is the failure this record exists to prevent.
+
+**Publishing your own: a changed address advances your counter** (`wire-format.md`
+§2.3), the same counter a position change advances. That is what lets the new record
+replace the old instead of colliding with it, and a node that reuses its current
+number is publishing an equal-`seqno` disagreement with itself, which is malformed.
+**Republish an unchanged set by replaying the record you hold**, not by taking a new
+number — reconciliation is a replay of the same frames, and a number spent on
+identical contents buys nothing.
 
 
 ### 4.5 What a query discloses
@@ -304,12 +342,15 @@ can put strangers inside your gate without asking you**. Require your own
 `SubtreeAck` (`wire-format.md` §5.5) before granting such a node access to
 resources you host (design §9.2.1).
 
-- **Prompt the operator, do not auto-sign.** The point of the acknowledgement is
-  that it is your decision, and a client that signs automatically has recreated the
-  situation the mechanism exists to correct. **Nothing enforces this and nothing
-  detects it**: an auto-signed acknowledgement is byte-identical to a considered
-  one, so this is a commitment of the same kind as everything else in this
-  document.
+- **Issue it automatically, under a policy the operator set beforehand.** The
+  deliberate human act was the *patron's* adoption; propagation of membership within
+  the horizon follows from it (design §9.2.1), and your node acknowledges a new
+  member of your subtree without asking you. **The operator's decision is the
+  policy**, made once and asynchronously to any traffic it governs — an operator who
+  wants to acknowledge nobody, or only some positions, sets that and their node
+  applies it. **Do not prompt per adoption.** A node that interrupts its operator
+  once per arrival trains them to dismiss the interruption, which is a worse gate
+  than the policy they would have written.
 - **On accepting another node's `SubtreeAck`, allocate roles as to any subordinate
   in that network position.** That is the default, and it reaches **positional
   grants only.** A resource whose roles are bound to named individuals (`resource-requirements.md` §7.1.2) is

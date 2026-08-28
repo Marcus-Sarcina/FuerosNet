@@ -4,6 +4,16 @@
 `network-design.md`, which is authoritative on protocol; this document is
 authoritative on client behaviour.
 
+**This document applies to infra operators too.** An operator is an ordinary
+participant who also runs infrastructure, and their own user actions happen in a
+participant client, so a complete operator deployment satisfies this document as well
+as `infra-client-requirements.md` (design §0). Reaching your own instance from your
+own client is a matter of user interface, not of protocol.
+
+**Ask the user only where design §0 says to.** *What a client does without asking*
+fixes the line: a live interaction where two people must both act, or the user
+configuring their own things. Everything else runs from policy they set earlier.
+
 **These are conformance requirements for the reference client, not protocol
 rules.** Another implementation may differ and remain conforming (design §0). They
 are collected here because they were otherwise scattered through the design
@@ -222,10 +232,14 @@ session secrecy. The client implements them; it does not reinvent them.
   Resolution returns a residual path suffix: empty means the addressed party is the
   node itself, non-empty means the last hop forwards to an attached client (design
   §10.6.1). Rendering that distinction — `.0` for the node's own operator, in the
-  military "actual" sense — tells a user what kind of party they are contacting.
-  **It is not encoded in the locator**, because a light client that gains
-  subordinates becomes infra without moving, and an address asserting terminal type
-  would then be silently wrong in every cached copy.
+  military "actual" sense — tells a user **which endpoint answered**, not what kind
+  of participant is behind it: an operator is an ordinary user who also runs
+  infrastructure, and the root of a large tree takes their own actions through a
+  client like everyone else.
+  **It is not encoded in the locator**, because type is not a function of position:
+  a node becomes infra by launching and signing an infra instance, without moving
+  (design §10.6.1), and an address asserting terminal type would then be silently
+  wrong in every cached copy.
 - **Check each referral, not an arrival total.** A referral's `advances` must be at
   least 1 and must not advance past the path's end; arrival is announced by the
   `ServingInfra` reply itself, and no arrival-consistency equation is checked

@@ -130,6 +130,40 @@ signature — that is noted in place, and those are the only ones a counterparty
 act on. They are stated as requirements anyway, because a specification that omitted
 them would leave an implementer to reinvent each decision, usually worse.
 
+**They describe three software roles, not three populations.** An infra operator is
+an ordinary participant who also runs infrastructure: their presence ceremonies,
+catalog browsing and resource requests happen in a participant client like anyone
+else's, so a complete operator deployment satisfies `light-client-requirements.md`
+**as well as** `infra-client-requirements.md`. Reaching your own infra instance from
+your own client is a user-interface matter and not a protocol one — the network sees
+one node.
+
+### What a client does without asking
+
+**Infra operation is automatic.** [D — 2026-08-28] Routing, queuing, countersigning
+adoptions, acknowledging subtree membership (§9.2.1), replication and issuing
+resource credentials all proceed without user intervention. **Witnessing and
+answering a verifier query are automatic too, despite resembling human acts**: the
+witness's client observes a ceremony, tests the evidence and signs without its
+operator knowing the ceremony occurred, and a verifier's client compares a profile
+against what it already holds without asking anyone (§7.1.1, §7.1.3). **A user
+wanting less sets policy in advance rather than being interrupted** — the switch is
+theirs, set asynchronously to any traffic it governs, which is §13.1's
+pluggable-policy shape applied to attention instead of to trust.
+
+**Hands-on authorisation is for two things only.** The first is **a live interaction
+in which you are one of the people being present**: a presence ceremony, an adoption
+on either side, and affirming in person that you recognise someone whose key is
+rotating. The second is **an operator configuring their own node and resources** —
+launching a resource, writing the predicates, setting the policies above.
+
+**The test is whether your own presence is what is being claimed**, not whether the
+act sounds like something a person does. A witness attests what its client saw; a
+verifier attests what its client holds; neither is asserting that its operator was
+anywhere. **A design that meters trust against human attention cannot spend that
+attention on bookkeeping** (§1) — and a user prompted routinely stops reading the
+prompts.
+
 ### Normative vocabulary
 
 §1.1 says the protocol can only compel where shared state exists, so:
@@ -581,6 +615,7 @@ being close to the point of the network.
 | **Subordinate / down-line** | Nodes beneath a node in the hierarchy |
 | **Sibling** | A node sharing the same direct patron |
 | **Infra node** | A node running the server application on a statically routed device |
+| **Light client** | The participant-facing application, and by extension a node with no infrastructure of its own (§4.3). **Every user runs the application, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it. Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§10.2, §10.7.3) |
 | **Dunbar Org** | A node's ±2 tier neighbourhood. At f = 10: up to 111 at or below (1 + 10 + 100) plus two ancestors, and a few hundred once siblings and cousins are included |
@@ -656,12 +691,6 @@ node occupies.
 >
 > You also do not hand someone all four when they ask where to send something. You
 > give the one that fits.
->
-> *Illustrative. Filing a change of address is a hard fork (§6.2); handing over all
-> four is a malformed introduction. One limit: the analogy assumes different names
-> in different domains, and a v1 client holds one identity — so addresses differ
-> while the identity behind them does not. **A client supporting several would have
-> the full property**; the protocol already allows it (§10.8.7).*
 
 **Each binding of a key to a subnet is an address**, its patron is privileged for
 actions under that binding, and no node adjudicates which of a user's names and
@@ -696,12 +725,49 @@ This is affordable only because the tree carries control and attestation, not
 payload, so apex load scales with churn and introductions, not with usage.
 
 ### 4.3 The infrastructure tier
-- To have more than **L = 2 levels** of subordinates (>110), a user's key must
-  be associated with at least one statically routed device running the
-  infrastructure application.
+- **An infra node's subtree holds at most L = 2 levels of non-infra nodes** —
+  10 + 100 = **110** full users. [D — 2026-08-28] The levels are counted from the
+  infra node and **do not compose**: a node one level down may hold subordinates, and
+  *its* subordinates may not, since those would be a third level. To go deeper, a
+  node in that chain must associate its key with at least one statically routed
+  device running the infrastructure application (§4.3.1).
+- **A third level may exist without being full users, at the serving operator's
+  option** (§10.6.3). It is outside every infra node's horizon, so nothing
+  acknowledges it into a resource table and it reaches no resources above its own
+  patron — but messaging, presence, adoption and trust need no infra node to hold the
+  requester, and all of them work. **This is not a restriction anyone imposes**: it
+  is what falls out, and permitting it costs the operator only what it chooses to
+  cache and forward.
 - **Each server corresponds to a user.** Infra operators are people.
 - Expected deployment: container or VM image, mostly in cloud datacentres, each
   instance requiring a unique static IP. **No centralised operator.**
+
+#### 4.3.1 Why there can be only 110 light client full users under an infra node
+
+I will admit to having a particular social agenda with this project, and it involves
+scaffolding people to form meaningful working relationships they feel invested in.
+It's true that the ratio of paying to non-paying users implied by a 2 tier limit of
+non-infra subordinates will likely hurt the prospect for rapid uptake. But the social
+formation process I'm aiming for is actually helped by this in several ways:
+
+- More infra users means that memberships aren't cheap to give away. You have to
+  think about who your ten people ought to be and you have to consider whether those
+  people are likely to attract useful subs of their own. This creates a social
+  incentive to develop leadership and judgement and to reward it in others.
+- The smaller the fanout before someone has to pay real money discourages a
+  "celebrity" or "influencer" type culture. Even if you're good at earning attention
+  from the general public, you can't build a base of thousands of low-investment
+  consumers without building an organization of trusted subordinates and investing in
+  promoting those subordinates in turn. This rewards virtue and steadiness over
+  virality and genuine social relations over parasocial relations.
+- With fewer free memberships to give away, trees will tend to become more saturated
+  and opportunities to lead more distributed for those willing to invest in the
+  network. My hope is that this ultimately makes organizations who adopt this network
+  stronger as they'll not be able to grow on only a very few charismatic organizers
+  and so will be less likely to fall apart over any one departure.
+- A network that grows slowly but selectively and which filters for the steadiest and
+  most virtuous people will hopefully develop a reputation of exclusivity, making
+  people more willing to invest their best efforts and resources to obtain entry.
 
 ### 4.4 Replication
 - **Siblings** replicate each other's traffic (up to f−1 = 9). Authorised
@@ -1174,6 +1240,14 @@ end node, starting from its own local records of people it has met.
    **cannot** attest that two humans were in a room, and the record must not
    claim they did.
 
+**A witness's operator is not involved and need not know it happened.** [D —
+2026-08-28] The witness *client* observes the procedure, tests the evidence at each
+point, checks what it receives against the enforced timing, and signs — without
+asking the person who owns it, who is very likely unaware of the ceremony or of who
+was in it. **Witnessing resembles a human act and is not one** (§0): what a witness
+attests is what its client observed, and a client that stopped to ask would be
+asking its operator about something the operator did not see.
+
 Ceremony duration is deliberately minutes, not seconds. It meters human time,
 which is the scarce resource the attack must consume; a per-identity cooldown
 would not, since an attacker holds many identities.
@@ -1293,6 +1367,16 @@ face-to-face encounter as evidence of identity continuity, its client must
 automatically ask a sample of that claimed identity's prior counterparties
 whether the person now present matches the person they previously encountered.*
 
+**Answering is automatic too, and the notification runs the other way.** [D —
+2026-08-28] A's client compares the presented profile against what it already holds
+and replies — the machine analogue of recognising a face, and no more a human act
+than the witness's signature above (§0). **A's operator is not asked and is not
+told**: they know B exists, having met them, and are not informed that a ceremony
+involving B took place or that they were sampled for it. The notification obligation
+below runs to **the subject's client**, which is the only party able to see probing
+spread across verifiers; the verifier's operator has nothing to do with the answer,
+and learning of each query would tell them only who is meeting whom.
+
 **A verifier receives no part of the record.** [D] The query carries a fuzzed profile
 and a query id; the record does not exist yet, and none of §7.2.1's disclosable fields
 reaches the verifier at any point.
@@ -1329,10 +1413,15 @@ detection rate is high.
     can be probed 50-fold in parallel, one query each, with no verifier seeing an
     anomaly, and coordinating limits across verifiers would require global state,
     which this design refuses. The subject is the only party with both a complete
-    view and the incentive to act on it. Therefore: **verifiers notify the subject
-    of every query**, the subject aggregates, and the subject withdraws disclosure
-    permission (below) when probing is detected. That is not global state; it is
-    one node with standing.
+    view and the incentive to act on it — **and the only party holding what a
+    verifier needs.** [D — 2026-08-28] A verifier's captures of the subject are
+    sealed under keys only the subject can derive (§7.1.5.2), so **it can evaluate
+    nothing until the subject's client sends a `KeyGrant` bound to that query**
+    (`wire-format.md` §5.3). The limit is therefore **structural rather than
+    vigilant**: not a standing permission the subject must notice they should
+    withdraw, but a key their client declines to send. Fifty parallel probes need
+    fifty grants. **That is not global state; it is one node holding what everyone
+    else needs.**
 
     **The aggregate is a lock, not a log.** [D] What the subject holds
     is a counter per requester and per ceremony window, kept **only for the
@@ -1364,11 +1453,19 @@ detection rate is high.
     in *ceremonies* rather than in packets: at ~10 queries per ceremony and
     minutes per ceremony, a reconstruction attack costs weeks of continuously
     staged meetings under witness observation.
-  - **Surface each query to the subject as it arrives**, independent of the limits
-    above, so probing is visible even when it stays under them. **Notification, not
-    a log**: the subject sees the query, and what persists afterwards is the
-    ceremony-window counter and nothing else (§7.1.4). A retained history would
-    rebuild the timeline the counter exists to avoid.
+  - **Surface each query to the subject's client as it arrives**, independent of the
+    limits above, so probing is visible even when it stays under them.
+    **Notification, not a log**: the client sees the query, and what persists
+    afterwards is the ceremony-window counter and nothing else (§7.1.4). A retained
+    history would rebuild the timeline the counter exists to avoid.
+
+    **This is client-to-client and the subject is not interrupted** [D —
+    2026-08-28]. A ceremony runs several verifiers per participant, with witnesses
+    exchanging their own messages at the same time, while both humans stand facing
+    each other with their screens turned away (§0). **What reaches a person is the
+    conclusion, not the traffic**: probing detected, grants refused. A design
+    that popped up each step would be asking someone mid-ceremony to adjudicate
+    dozens of exchanges they cannot evaluate and did not initiate.
 
   Note the synergy with deterministic verifier selection (§7.2.2): because the
   attacker cannot choose *which* verifiers are queried, probes scatter across
@@ -1421,7 +1518,8 @@ detection rate is high.
 - **Light clients vs infrastructure nodes are judged differently on
   availability.** Light clients have legitimately unstable uptime, so silence
   from them carries little weight; infrastructure nodes have none of that
-  excuse. A consequence is that a presence record with an infrastructure
+  excuse — **the operator's instance holds their key too** (§18.1), so the party
+  being queried has a device that is up whether or not they are. A consequence is that a presence record with an infrastructure
   participant is **more reliable as evidence.** That party can be expected to
   answer verification queries years later. Note this is a statement about the
   *record's* evidentiary durability, **not** about the participant's
@@ -2995,11 +3093,19 @@ grandpatron's own decision about who they let in**, and it is enforceable for th
 ordinary reason: the grandpatron's node evaluates access to the resources it hosts,
 and shares with the requester exactly the state that decision turns on.
 
+**The decision is a policy, not a prompt.** [D — 2026-08-28] The grandpatron's node
+issues the acknowledgement automatically under a rule its operator set in advance;
+the deliberate human act in this sequence was the *patron's* adoption, and
+membership propagates within the horizon as a consequence of it. Nobody is
+interrupted per arrival, and an operator wanting to acknowledge nobody, or only
+certain positions, writes that once.
+
 **It does not gate the adoption.** The adoption is complete and valid with the node
 and patron signatures (`wire-format.md` §4.1); it is signed and propagated whether
-or not the grandpatron ever acts. What waits is access to *their* resources, and
-nothing else. So a grandpatron who is offline, slow or simply uninterested delays a
-convenience rather than blocking a membership.
+or not the grandpatron acknowledges it. What waits is access to *their* resources,
+and nothing else. So a grandpatron whose node is offline, or whose standing policy
+does not reach this position, delays a convenience rather than blocking a
+membership.
 
 ##### One signature, several acceptors
 
@@ -3714,6 +3820,14 @@ patron chain**, walking up past any light-client patrons. So every light client
 beneath an infra node — at any depth, until another infra node intervenes —
 attaches to that same node, and it therefore holds them all.
 
+**Past two levels they are reachable without being full users.** [D — 2026-08-28]
+Serving a third level is the operator's option (§4.3.1): those nodes are outside
+every infra node's horizon, so nothing acknowledges them into a resource table and
+they reach no resources above their own patron. Messaging, presence, adoption and
+trust need no infra node to *hold* the requester and all work normally. **Nobody
+imposes this** — it is what falls out of the horizon, and the only cost of allowing
+it is what the operator chooses to cache and forward.
+
 **Intermediate light-client patrons carry no traffic.** They adopt, countersign and
 vouch; they do not serve sessions and nothing routes through them. A node admitted
 to the subnet talks to the infrastructure directly from then on. **So the residual
@@ -3730,9 +3844,9 @@ reached**: empty means the addressed party is the node itself, non-empty means t
 last hop forwards to an attached client. That distinction is therefore learned at
 resolution time from a party positioned to know it, rather than asserted by an
 address that recorded it earlier. **Node type is deliberately not encoded in a
-locator**: a light client that acquires subordinates becomes infra without moving,
-so an address asserting terminal type would silently go wrong on upgrade while
-every cached copy kept asserting it.
+locator**: type is not a function of position. A node becomes infra by **launching
+and signing an infra instance** (§4.3), which changes nothing about where it sits — so an address asserting terminal type would go wrong the moment its operator
+stood up infrastructure, while every cached copy kept asserting it.
 
 **Caching, and its cost.** A requester caches intermediate addresses and prunes
 toward stable entries — a node with infra-grade subordinates two levels down is a
@@ -3821,9 +3935,10 @@ the hierarchy carries no payload**, which is what makes the f=10 cap affordable
 (§4.2).
 
 **Direct-first materially changes infra economics.** §13.6 prices an infra node at
-roughly $20/month, a figure never checked against relaying *all* payload for up to
-1,110 subordinates. Bandwidth would plausibly have dominated it. Making relay the
-exception removes the dominant term.
+roughly $20/month, a figure never checked against relaying *all* payload for its
+whole subtree — 110 full users, or up to 1,110 where the operator serves the
+optional third level (§4.3.1). Bandwidth would plausibly have dominated it. Making
+relay the exception removes the dominant term.
 
 **Consequence: the two planes route differently, and resolution returns an
 address, not a path.**
@@ -4084,9 +4199,9 @@ cooperation from an unrelated infrastructure operator; relationships whose purpo
 is additional cross-tree redundancy or connectivity remain optional.* Concretely:
 an identity must be able to exist disconnected, and a disconnected node must be
 able to adopt or be adopted before it has any peers. The ordering resolves this structurally. Peering is an
-**infra-tier** operation (§6.3) while bootstrap happens at the light-client tier,
-so the ordinary growth sequence is identity → adoption → grow to infra →
-peering, and a new node could not peer even if peering were mandatory.
+**infra-tier** operation (§6.3) while bootstrap happens before a node has
+infrastructure at all, so the ordinary growth sequence is identity → adoption → grow
+to infra → peering, and a new node could not peer even if peering were mandatory.
 **Subnet formation is the exception** (§10.8.1). *When participants create a new
 disconnected authority domain rather than joining an existing one, they must
 establish at least one externally reachable serving participant before creating
@@ -5190,14 +5305,14 @@ policy parameter computed locally, so it requires no protocol change.
 ### 13.6 Reliability weight is not social trust
 
 Infrastructure status is open to anyone, no restriction on running a node. An
-infra node is required to exceed **110** subordinates (f=10, L=2 (§4.3), and a
-single infra node spans up to **1,110** non-infra subordinates across three tiers
-(§15.2). But any user may launch a
+infra node is required to exceed **110** full users (f=10, L=2, §4.3), and a single
+infra node reaches up to **1,110** where its operator serves the optional third
+level (§4.3.1, Appendix A.2). But any user may launch a
 server instance and sign it with their key; having one does not cause or require
-a thousand people to follow them. Cost is a low-spec VM plus a static IP, roughly
+a hundred people to follow them. Cost is a low-spec VM plus a static IP, roughly
 $20/month at retail, a figure that only holds because payload takes the direct
-path where it can (§10.6.3); an infra node relaying all traffic for up to 1,110
-subordinates would be dominated by bandwidth — comparable to Discord Nitro or an X blue check,
+path where it can (§10.6.3); an infra node relaying all traffic for its whole
+subtree would be dominated by bandwidth — comparable to Discord Nitro or an X blue check,
 and increasingly launchable by an agent that encapsulates cloud provisioning
 behind a single recurring-payment authorisation.
 
@@ -5260,36 +5375,44 @@ for v1, given multiple-identity support is deferred.
 
 ## 14. Security analysis — settled findings
 
-### 14.1 Fake subtree cost
-An attacker building a full fake subtree needs **one infra node per f^(L+1)
-identities** = 1,000 at f=10, L=2.
+### 14.1 Standing comes from edges, not from nodes
 
-This is the **asymptotic** figure. A single infra node actually spans 1,110
-non-infra subordinates; the yield falls to 1,000 in a large tree because infra
-nodes must also patronise other infra nodes, and those carry no non-infra subtree
-(§15.2). Convergence is fast — 1,009 by D=1, so 1,000 is the right number for
-any attack at meaningful scale, and small-scale attacks get a ~11% discount that
-changes nothing.
+**Counting identities prices nothing an attacker wants.** [D — 2026-08-28] Standing
+comes from the edges a given observer can see into an attacker's region (§13.2,
+§13.3.1) — not from how many identities that region holds. A fake subtree is cheap
+or dear depending on how it is built, and either way it buys **appearance and
+deniability, never trust**: nobody extends anything to a node on the strength of its
+subordinate count.
+
+**So the cost of building one is capacity arithmetic, not a security parameter**, and
+it belongs with the other capacity figures in Appendix A.2. It is recorded there
+because operators sizing infrastructure need it, and it is recorded *only* there
+because pricing an attacker's tree invites the reader to treat the price as a
+defence. §14.3 has the defences.
 
 ### 14.2 Topology cannot provide Sybil resistance
-The identical formula applies to the honest network: N users need N/f^(L+1)
-infra nodes. **Attacker cost per fake identity equals honest cost per real
-identity**, because the protocol has no way to tell them apart. Every factor by
-which you make the attack more expensive makes your own infrastructure burden
-more expensive by the same factor.
+**No topology rule can, because the protocol cannot tell the two populations apart.**
+Any rule that makes an attacker's infrastructure expensive makes an honest operator's
+expensive by at least as much, so tightening one tightens the other and nothing is
+gained.
 
-It is in fact worse than 1:1, the attacker builds a perfectly packed tree while
-real social graphs are sparse and lopsided, so the attacker achieves the
-theoretical floor and honest operators never do.
+**It is worse than parity, in two ways.** The attacker builds a perfectly packed tree
+while real social graphs are sparse and lopsided, so the attacker reaches the
+theoretical floor and honest operators never do (A10). And an attacker serving its
+own infrastructure always takes the optional third level (§4.3.1) where an honest
+operator may decline it.
 
-| f | Depth @1M | Max path | Sibling factor | Fakes/server | Honest servers @1M |
-|---|---|---|---|---|---|
-| 3 | 13 | 26 hops | ×3 | 27 | 37,000 |
-| 5 | 9 | 18 hops | ×5 | 125 | 8,000 |
-| **10** | **6** | **12 hops** | **×10** | **1,000** | **1,000** |
-| 20 | 5 | 10 hops | ×20 | 8,000 | 125 |
+What f actually trades is shape:
 
-**Conclusion: f is a plumbing and social parameter, not a security parameter.**
+| f | Depth @1M | Max path | Sibling factor |
+|---|---|---|---|
+| 3 | 13 | 26 hops | ×3 |
+| 5 | 9 | 18 hops | ×5 |
+| **10** | **6** | **12 hops** | **×10** |
+| 20 | 5 | 10 hops | ×20 |
+
+**Conclusion: f is a plumbing and social parameter, not a security parameter**
+(§4.2, §4.3.1).
 
 ### 14.3 What actually provides Sybil resistance
 Three independent mechanisms, none relying on topology rules:
@@ -5646,7 +5769,7 @@ and a citation to a missing number resolves there.
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§10.6.1, §9.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§18.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§12.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §10.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §4.1.1 guarantees by construction. §10.4 amended, since it previously stated the opposite as a product property. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§12.2) |
-| **P36** | **`seqno` is a per-node counter, so its gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium | A node bound into two subnets advances one counter in both, so an observer in one sees jumps it cannot account for and learns the node is bound elsewhere and roughly how active that binding is. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **Registered rather than engineered away**: §4.1.1 says plurality is "an accidental consequence… the protocol does not model it", and a per-binding counter would break `seqno`'s double duty as freshness test and stale-cache detector across §10.3, and `wire-format.md` §§2.3, 5.3, 5.6.2. See C19 for what sharpens it |
+| **P36** | **`seqno` is a per-node counter, so its gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium | A node bound into two subnets advances one counter in both, so an observer in one sees jumps it cannot account for and learns the node is bound elsewhere and roughly how active that binding is. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **Registered rather than engineered away**: §4.1.1 says plurality is "an accidental consequence… the protocol does not model it", and a per-binding counter would break `seqno`'s double duty as freshness test and stale-cache detector across §10.3, and `wire-format.md` §§2.3, 5.3, 5.6.2. **Narrowed 2026-08-28**: an infra node's endpoint changes advance the same counter, so a gap has an innocent local explanation as well — but only for infra nodes, and only against an observer outside the horizon, since one inside it sees the endpoint records that account for the jump. See C19 for what sharpens it |
 
 ### 14.5.5 Queue policy had to settle more than size
 
@@ -5870,7 +5993,7 @@ targets for the Stage 1 simulations in the review plan.
 | **A16** | Randomised motion prompts **constitute** a liveness check | Presentation-attack resistance for the whole ceremony (§7.1.1) | Also §15.1. They are *inputs* to a PAD system; if no algorithm delivers the property, print and replay attacks pass |
 | **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (Appendix A.1) | Also §15.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
 | **A18** | Ageing is modest for adults, severe for minors, **substantial in 24 months** | The two-year photo retention tier (§7.1.5.1) | Also §15.1 |
-| **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §14.2–14.3's attack economics and the whole Sybil cost comparison | Also §15.1 |
+| **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §13.6's operator pricing and §14.3's static-addressing leg | Also §15.1 |
 | **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | §13.3's low default flow capacity for peering edges | Both the superlative ("the cheapest route") and the "trust ceiling" framing were withdrawn 2026-08-16. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
 | **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §9.0.1's federation pattern, and through it every application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it |
@@ -5922,7 +6045,7 @@ are all **chosen**, not derived.
 | Symbol | Meaning | Value | Basis |
 |---|---|---|---|
 | f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar at ±2 tiers |
-| L | Non-infra subordinate levels | 2 | 110 subordinates before infrastructure is required |
+| L | Non-infra subordinate levels beneath an infra node | 2 | 110 full users before infrastructure is required; a third level is optional and not full users (§4.3.1) |
 | S | Anchor **guideline** (subtree size) | ~500,000 | Not a status boundary, any ancestor may serve as anchor; caching is per-node policy (§10.2, §10.7.3). Yields ~120k widely-cached anchors at the 60B stress scale |
 | h_store | Topology storage horizon | 2 | ~110 nodes |
 | h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
@@ -6110,7 +6233,13 @@ permits. §8.3's merge resolves it: a transaction following a fork carries
 back-pointers to both heads, so concurrency is legal, **offline signing works**,
 and the merge is self-describing — an evaluator learns the structure from the
 record itself. Devices may share a key or hold their own; the choice is ordinary
-key management, not an archive constraint. *(Three prevention shapes — a single
+key management, not an archive constraint.
+
+**An infra operator is a multi-device user by construction**, and their instance is
+one of the devices. It holds the same key as their phone — the relationship is a
+seed shared across wallets, not a client and a server — and runs different software
+in a different network role. **So this section is not an edge case for people who
+own two phones**: it is the ordinary condition of everyone in §4.3's tier. *(Three prevention shapes — a single
 primary device, a head-check before signing, published per-device key bindings —
 are superseded; Appendix A.1.)*
 
@@ -6267,7 +6396,7 @@ read before re-proposing anything here.
 | **Global DHT for routing** | Exposes every user device's route and interest graph to arbitrary strangers, violating the premise that distant/disjoint trees may be untrustworthy |
 | **Routing solely along the tree** | Too fragile; a strict tree has minimum connectivity and any node failure severs its subtree |
 | **Tier-based anchor definition** | Not merge-stable; every merge becomes a network-wide re-addressing event |
-| **Lowering fanout for security** | Raises honest cost by exactly the same factor (§14.2) |
+| **Lowering fanout for security** | Raises honest cost by at least the same factor (§14.2) |
 | **Distance-decay as the default trust metric** | Diverges unless λ < 1/f; naive tunings are exploitable by a deep fake subtree |
 | **Flooding attestations** | Backbone traffic would grow with total network activity |
 | **Tradable token** | Introduces an asset to steal and an incentive gradient toward extraction |
@@ -6286,30 +6415,35 @@ read before re-proposing anything here.
 
 ---
 
-### A.2 110, 1,110 and 1,000 are three different quantities
+### A.2 110, 1,110, 99 and 999 are four different quantities
 
-These look like competing answers to one question and are not. **There is no
-choice between L=2 and L=3 here.** All three figures are correct, at different
-scales:
+These look like competing answers to one question and are not. **L = 2 stands**; what
+differs is whether a figure counts full users or reach, and whether it is a single
+node's span or a large network's average.
 
 | Figure | Meaning |
 |---|---|
-| **110** | Ceiling for a **non-infra** node, two saturated tiers, 10 + 100. Exceeding it requires infrastructure |
-| **1,110** | Non-infra subordinates a **single infra node** spans — its children are each non-infra with their own two tiers, so it covers three tiers: 10 + 100 + 1,000 |
-| **1,000** | **Asymptotic** non-infra users per infra node in a large network see below |
+| **110** | **Full users** a single infra node holds — two levels of non-infra, 10 + 100. Beyond it a node in that chain must run infrastructure (§4.3) |
+| **1,110** | Nodes it *reaches* where its operator serves the optional third level (§4.3.1) — 10 + 100 + 1,000. Reachable and trust-bearing, holding no resource access above their own patron |
+| **99** | **Asymptotic full users** per infra node in a large network — f^L − 1 |
+| **999** | Asymptotic *reach* per infra node with the third level enabled — f^(L+1) − 1 |
 
-**Why the yield falls from 1,110 to 1,000.** In a large network, infra nodes must
-also serve as patrons to other infra nodes, and those overhead nodes carry no
-non-infra subtree of their own. If the infra nodes form a tree of fanout f and
-depth D, only its leaves carry non-infra subtrees:
+**Why a yield falls below a span.** In a large network, infra nodes must also serve
+as patrons to other infra nodes, and those overhead nodes carry no subtree of their
+own. If the infra nodes form a tree of fanout f and depth D, only its leaves carry
+subtrees:
 
-- Leaf infra nodes: 10^D, each spanning 1,110 non-infra
+- Leaf infra nodes: 10^D, each spanning S
 - Total infra nodes: (10^(D+1) − 1)/9 ≈ 1.111 × 10^D
-- Ratio: 1,110 × 10^D ÷ (1.111 × 10^D) = **999.1**
+- Ratio: S × 10^D ÷ (1.111 × 10^D) = **0.9 × S**
 
-Which is f^(L+1) exactly — confirming the figure §14.1 uses. Convergence is fast
-and from above: **1,110 at D=0, 1,009 at D=1, 1,000 by D=2.** Small networks are
+Which is **f^n − 1** for n levels — 99 at S = 110, 999 at S = 1,110 — and is why both
+land one short of a round power. Convergence is fast and from above: **110 → 100 at
+D=1 → 99 by D=2**, and likewise **1,110 → 1,009 → 1,000 → 999**. Small networks are
 therefore slightly *more* infrastructure-efficient per user than large ones.
 
-**L = 2 stands.** §13.6's original "~1000 subordinates" was a rough statement of
-the 1,110 capacity figure, not a different threshold.
+**The levels do not compose** [D — 2026-08-28]. An earlier reading gave each of an
+infra node's children its own two levels, making three tiers available as of right
+and 1,110 the ordinary span. The levels are counted from the infra node; the third
+exists only where an operator opts to serve it, and the nodes on it are not full
+users.

@@ -343,8 +343,17 @@ Locator = {
 ```
 
 [D, design §7.1] The `seqno` here **is** the monotonic counter of §6.2, not a separate
-field: one counter per node, incremented on every position change, serving both
-as freshness test and stale-cache detector.
+field: one counter per node, incremented on every position change **and on every
+endpoint change** (§5.6), serving both as freshness test and stale-cache detector.
+
+**Endpoints advance it because the malformed-on-equal rule requires them to.** [D —
+2026-08-28] §5.7.3 treats equal `seqno` with different contents as malformed rather
+than a tie to break, on the ground that a subject advances its own counter — so **a
+subject that cannot advance has no way to publish a change at all.** An infra node
+that changes address without changing position would otherwise be stuck advertising
+a dead one until it happened to move, which is precisely the node §5.6 exists for.
+One counter, two triggers; a reader learns that something it must re-fetch has
+changed, which is all the counter ever said.
 
 **Verification rule** [D]: a new locator's seqno must be **strictly greater** than
 the last one the verifier holds for that node — **not** exactly previous+1. A
@@ -1008,7 +1017,8 @@ NetworkPoint = {
                        ;   IPv6 endpoints are deferred by decision (design §2),
                        ;   and a 16-byte address here is malformed in v1
   2: ? uint,           ; ASN. U32 RANGE per RFC 6793 4-byte ASNs
-  3: ? uint            ; UDP port, u16 range. Absent means the default 7431
+  3: ? uint            ; UDP port, u16 range. Absent means the default 7431.
+                       ;   ZERO IS MALFORMED — it is never a destination
 }
 
 Audit = {
@@ -2133,6 +2143,12 @@ Nothing obliges anyone to serve it.
 resources it hosts** (design §9.2.1). Carried separately rather than as a third
 envelope signer, because the adoption must not wait on a party who may be offline.
 
+**Issued by the grandpatron's node, not by its operator.** [D — 2026-08-28] It says
+*I am aware of this member and have added them to my tables*, and a node emits it
+under standing policy without interrupting anyone (design §0). Nothing in it requires
+a human at the moment it is written; the deliberate act it acknowledges was the
+patron's.
+
 ```
 SubtreeAck = {
   1: txid,             ; the adoption being acknowledged
@@ -2196,13 +2212,27 @@ node's horizon and its patron with it. **It does not travel rootward** (§7.2b).
 **Self-signed, and the signature's value is the same one §5.2 states**: a recipient
 holding no key material cannot check it on receipt, so it gives **retroactive
 attribution rather than prior authentication** — a node that reaches the address and
-obtains the key can confirm the record was genuine, and if it was not, knows which
-gossip source supplied it. That is worth having *here* and not in a referral: a
+obtains the key can confirm the record was genuine, and if it was not, knows **which
+neighbour handed it over**. That is the immediate authenticated hop and not the
+origin: nothing on the wire carries a path, and a relay is indistinguishable from a
+publisher. It is enough, because the neighbour is the party you can stop listening
+to. That is worth having *here* and not in a referral: a
 flooded object passes through parties the recipient did not choose, where a
 `Referral` (§5.7.3) comes from the single party the requester is already talking to.
 This is why §5.7.3's replies are unsigned and this record is not.
 
 **Freshness by `seqno`, strictly greater to replace**, under §2.3's rule.
+**Publishing a changed endpoint set advances the counter** — that is what makes the
+new record replace the old rather than collide with it as an equal-`seqno`
+disagreement. **Republishing an unchanged set replays the record already held**
+rather than consuming a number: reconciliation is a replay of the same frames
+(§7.2a), and a fresh number over identical contents is freshness churn with nothing
+behind it.
+
+**The list is in the publisher's preference order, and its entries are distinct.**
+[D] A repeated `NetworkPoint` is malformed. The record is signed, so a decoder
+accepting a repetition another rejects splits the network on bytes rather than on
+meaning — and a repetition expresses nothing the order does not already say.
 
 **A peering record already carries this for peered nodes** (§4.4, `NetworkPoint` for
 both endpoints). The gap this record closes is the infra node that **neither peers
@@ -2999,12 +3029,45 @@ record. **Within the horizon this is a trusted push**, in the narrow sense that 
 pusher is the party whose position the object describes and the object is signed by
 that party. It is not an assertion about anyone else's topology.
 
+**This governs origination, not relaying.** [D — 2026-08-28] A node forwarding a
+stored object under the rule below is ordinarily *not* a party to it, and reading
+the paragraph above as a rule on every sender would stop each flood at its first
+relay. The distinction costs nothing, because **a relay changes nothing**: it
+forwards the object byte-for-byte, and the signature that made it worth trusting at
+the origin is the one the next receiver checks.
+
 #### The forwarding rule: forward if and only if you stored it
 
 **A node stores a topology-class transaction when its subject falls within that
 node's own `h_store`; a node forwards a stored transaction to every adjacent node
 except the one it arrived from.** [D] There is no hop count, no TTL and no reach
 field.
+
+**Adjacent means the authenticated sessions you already hold by virtue of a topology
+relationship**: your patron, your subordinates, and your peers (design §6.3). [D —
+2026-08-28] It is not a set to maintain — it is the sessions the node has anyway,
+which is the same move the duplicate rule makes with the store. **Node type does not
+enter it**, and must not: type is not a function of position — a node becomes infra
+by launching and signing an infra instance, without moving (design §10.6.1) — so a
+rule phrased on type would go stale on an act that changed no topology at all. It is
+the same reason a locator does not encode type. Leaving adjacency unstated would let two conforming nodes store the same
+objects and deliver them to different neighbourhoods, which shows up as a permanent
+gap rather than as an error.
+
+**The subject is the node whose position the transaction changes**: the adopted or
+departing node, the disavowed subordinate, and — for a peering, which has two —
+either endpoint, so the transaction is in range if either is. [D] Reading the
+*issuer* as the subject would put a patron's adoption of a distant node in range of
+everyone near the patron, which is not whose neighbourhood changed.
+
+**Stored means verified.** [D] A node forwards what it stored, so storing an object
+it could not verify would make it an amplifier for whatever an authenticated
+neighbour cared to send. A transaction whose signer's key material the node lacks is
+§3.2's *neither verified nor rejected*: hold it, fetch the key, and let it enter
+storage and propagation when it verifies. **An `EndpointRecord` is the exception the
+design already states** — self-signed by a party the receiver may hold no key for,
+and accepted as gossip precisely so that reaching the address is what confirms it
+(§5.6).
 
 **Reach is a consequence of storage policy, not a separate mechanism.** A hop
 counter would encode the *sender's* horizon and impose it on every receiver, and
