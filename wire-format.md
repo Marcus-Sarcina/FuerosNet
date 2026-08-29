@@ -151,7 +151,7 @@ context rather than content also makes the check free.
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor, peering endpoint or endpoint record (§5.6) | 8 |
 | `CatalogEntry`, total encoded bytes | 2048 |
-| `CatalogReply` entries | 111 — **1 + f + f²**, the Dunbar Org population at or below (design §3). The frame bound caps this at 127 |
+| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§4.7, design §9.5). Not the Dunbar Org population, which is larger (design §12.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
 | Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
@@ -534,6 +534,13 @@ earlier than their own last one. **The bound is against the signer's own history
 not against anyone's clock** — which is the only monotonicity available in a system
 with no global time.
 
+**It is a floor, and not a rate limit.** Everything at or after the predecessor's
+effective time is admissible, including days in the future, so the bound closes
+backdating without closing the reroll it is sometimes read as closing. A signer's
+grinding budget is the span from its last committed record to the day it is willing
+to claim, and design §7.2.2 rests the remaining limit on witnesses declining a day
+their own clocks contradict — not on anything checkable here.
+
 **"Verify" means structurally valid, not effective.** A verifier confirms
 encoding, signatures, and the structural rules stated here. Whether the adoption
 *takes effect* — the patron has capacity, no cycle results, the node's prior
@@ -684,8 +691,11 @@ not propagate, and names the roles the viewer holds (design §9.5).
 
 ```
 Scope = uint / [uint, uint] / [uint, [ + keyhash ]]
-      ; 0 self | 1 down(n) | 2 up(n) | 3 sub(n) | 4 siblings
+      ; 0 self | 1 down(n) | 2 up(n) | 4 siblings
       ; 5 dunbar | 6 list([keyhash])
+      ; 3 is RETIRED and MUST NOT be reused. It encoded sub(n), "the subtree
+      ;   rooted n levels above the owner", which described a shape the Dunbar
+      ;   Org does not have (design §12.1); a decoder meeting tag 3 rejects
       ; forms taking a depth encode as [tag, n]; list encodes as [6, [...]]
       ; the list is in ASCENDING KEYHASH ORDER WITH NO DUPLICATES, and
       ;   violating either is malformed. The list is signed, so a decoder
@@ -1422,8 +1432,15 @@ become another grinding variable.
 **The window ordinal is `floor(unix_seconds / 86400)`.** A 24-hour window, epoch
 aligned. This fills the parameter design §15 marked UNSET. Long is safe here: an
 honest retry inside the window reproduces the *same* sample, which is exactly what
-retry should do, while an attacker aborting to reroll gets **one fresh sample per
-day per participant pair** (design §7.2.2).
+retry should do.
+
+**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§4.6.3.1).
+An attacker aborting to reroll therefore gets one fresh sample per *admissible*
+ordinal rather than one per day, and §3.2's monotonicity bounds admissibility only
+from below — the budget is the span between the signer's last committed record and
+the day it claims. Nothing in a record shows which it was. What limits it is a
+witness declining to commit a nonce against a day far from its own clock, which no
+validator can check and which design §7.2.2 states as a client commitment.
 
 ### 4.6.2.1 Witness nonce derivation — required for the anti-grinding property
 
@@ -1437,9 +1454,15 @@ nonce = PRF(witness_secret, "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_or
 `witness_secret` is the witness's own long-lived secret and never leaves it. Any
 PRF with a 32-byte output is acceptable; HMAC-SHA-256 is the expected choice.
 
+**`window_ordinal` is an input, so an honest witness following this rule still emits
+a fresh nonce for a fabricated day.** Stability holds across attempts *within* an
+ordinal and nowhere else, and the ordinal is the proposer's claim (§4.6.3.1). The
+derivation cannot distinguish a retry from a re-dated first attempt; only the
+witness's own clock can, before it commits (design §7.2.2).
+
 **Without this the anti-grinding property does not exist.** §4.6.2 claims an honest
 retry within the window reproduces the same verifier sample while an aborting
-attacker gets one fresh sample per day per pair. Both depend on the nonce being
+attacker gets one fresh sample per ordinal. Both depend on the nonce being
 stable across attempts, a witness generating fresh randomness each time hands a
 grinding participant a new sample per abort, which is the attack the commit-reveal
 was introduced to close.
@@ -1831,11 +1854,11 @@ nothing and keeps the order total even if that rule is ever relaxed.
 qualifying set and the asker makes progress within it.
 
 **The bound sits above the population, so truncation is the exception and not the
-mechanism.** An asker's horizon holds at most 1 + f + f² = 111 nodes at or below
-it (design §3), and a single answering node answers for at most the same number of
-owners — itself plus the ≤110 users it serves (design §9.5, §10.6.1) — so a
-reply that truncates comes from a node holding more entries of one service type than
-it has owners to own them. **The continuation is a hint for an
+mechanism.** A single answering node answers for at most **itself plus the ≤110
+users it serves** (design §9.5, §10.6.1), so a reply that truncates comes from a
+node holding more entries of one service type than it has owners to own them. The
+bound is per *answering node* and not per horizon — a Dunbar Org is larger (design
+§12.1), and no single node answers for all of it. **The continuation is a hint for an
 unusual case, not the normal path through a catalog.** It is also near its own
 ceiling: at 2 KB an entry, 128 maximum-sized entries no longer fit one 256 KB frame
 (§7), so 127 is the highest this field can go without moving the frame bound.

@@ -490,7 +490,7 @@ argument should not be made without saying which one applies.
 
 ### 1.4 Primary use case
 
-Most traffic is expected to be **non-logged activity within a user's ±2 tier
+Most traffic is expected to be **non-logged activity within a user's two-edge
 "Dunbar Org"**, using the network as a **DNS and SSL replacement** for naming and
 authentication grounded in social attestation rather than in certificate
 authorities. Protocol-defined high-importance transactions should be far less
@@ -615,7 +615,7 @@ distinct from §17's open questions about mechanisms that *are* specified.
 | **Light client** | The participant-facing application, and by extension a node with no infrastructure of its own (§4.3). **Every user runs the application, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it. Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§10.2, §10.7.3) |
-| **Dunbar Org** | A node's ±2 tier neighbourhood. At f = 10: up to 111 at or below (1 + 10 + 100) plus two ancestors, and a few hundred once siblings and cousins are included |
+| **Dunbar Org** | Every node within a **two-edge walk** over adoption and sibling edges. At f = 10, **221** (§12.1). Not a subtree, and not a tier band — cousins and nephews' children fall at three edges |
 | **Witness** | A node nominated by the *counterparty* to notarise a presence ceremony (§7.1.1) |
 | **Verifier** | A prior counterparty queried to confirm a subject's identity (§7.1.3) |
 | **Presence record** | The signed artifact of a face-to-face ceremony (§7.2) |
@@ -714,8 +714,15 @@ interdependent work, though the management literature does not establish a
 universal figure, and suitable spans range from 2–3 to 20+ with the nature of the
 work. Treat ~8 as a **design heuristic, not an empirical constant**. 10 allows
 an 8-person team with headroom so a new addition doesn't force a contemporaneous
-exit. It also keeps the ±2 tier neighbourhood (≈111 at or below, §3) beneath Dunbar's
-number. **The cap applies to infrastructure nodes as well**, preserving the
+exit. It also puts the two-edge neighbourhood at **Dunbar scale** — 221 at f = 10
+(§12.1), against the vernacular estimate of around 200.
+
+**The name is a heuristic anchor, not a bound**, and 221 overshooting 200 does not
+weaken it. What it fixes is the **order of magnitude**: the population of a small
+village, or the students in an elementary school. Bigger than a household or an
+extended family, smaller than a town or a nation state. Of the anchors available for
+a social graph at this scale, Dunbar's is close enough, and the alternative is a
+number with no intuition attached to it at all. **The cap applies to infrastructure nodes as well**, preserving the
 property that an infra node is a *person's* node rather than a capacity pool.
 
 This is affordable only because the tree carries control and attestation, not
@@ -1107,6 +1114,13 @@ consequence of subnet plurality, not a gap in this mechanism.
 - Attests investment in the network and therefore contributes to trust, but at
   **lower flow capacity than hierarchical edges by default** (see §13.3).
 - Carries a real cost: persisting the peer's data.
+- **It confers no scope, and does not extend the horizon.** A peering edge is
+  **ungoverned**: permissionless, outside the tree, requiring nobody's authority and
+  therefore carrying none of the subnet's. A peer is not in your Dunbar Org by virtue
+  of peering, no scope reaches them (§9.2), and the region in §12.1 is built from
+  adoption and sibling edges only. **Contributing to trust and conferring scope are
+  different things** — this is the edge where they separate, and it is the reason the
+  two are described in different sections.
 
 ### 6.4 Countersigning
 First-level patrons countersign their subordinates' **subnet-scoped**
@@ -1430,6 +1444,21 @@ counterparty met a *different* confederate with probability (k−1)/k, so q
 independent queries detect with probability 1 − (1/k)^q. For k=2: q=3 gives
 87.5%, q=5 gives 96.9%. Small q suffices, the cost of the check is low and the
 detection rate is high.
+
+**The arithmetic assumes the sampled counterparties are honest and independent of
+the subject, and nothing structural makes them so.** Candidates are the subject's
+*own* prior counterparties, drawn from the subject's own archive, and eligibility is
+structural rather than weighed (§13.1). Against a subject whose candidate population
+is itself fabricated, detection is not reduced but **absent**, and no q repairs it —
+every query lands on the attacker. This is the same threat this section opens with,
+since the confederates sharing the key are exactly who would answer.
+
+**The check that survives is the one the querier makes while selecting.** C
+enumerates B's candidates in order to sample them, so C sees the population before
+it sees any answer. Recognising none of it is the signal; a `match` returned by
+strangers establishes nothing for C, whatever q was. This protects C rather than any
+later evaluator, which is the right party — C is the one being asked to accept the
+person in front of them as continuous with a history.
 
 #### 7.1.4 Required hardening
 
@@ -2421,8 +2450,9 @@ anti-suppression property this section rests on was unverifiable.
 1. **Seed deterministically from the participant pair and a coarse time window.**
    Witnesses derive their nonce contribution from a value fixed by *who is
    meeting*, not by *when this attempt started*, so restarting within the window
-   reproduces the same sample and gains nothing. The window sets the grinding
-   rate: one fresh sample per window, not one per attempt.
+   reproduces the same sample and gains nothing. The window is meant to set the
+   grinding rate at one fresh sample per window rather than one per attempt — it
+   does not, for the reason below.
 2. **Reveal nonces only after the physically expensive steps are complete** —
    after capture (§7.1.1 step 5), never before. This makes an abort cost a real
    in-person meeting rather than a round trip, which is the friction the whole
@@ -2431,6 +2461,33 @@ anti-suppression property this section rests on was unverifiable.
 
 Both are needed: (1) alone lets an attacker wait out the window; (2) alone leaves
 each attempt merely expensive rather than futile.
+
+**Rule (1) does not set the rate it appears to, because the window is claimed rather
+than elapsed.** The ordinal derives from `started_at` (`wire-format.md` §4.6.3.1),
+which the proposer chooses, and monotonicity against the committed back-pointer
+(`wire-format.md` §3.2) bounds that choice **only from below**. So the budget is not
+one sample per day; it is one sample per *admissible* day, and **the number of
+admissible days is the number of days since the signer's own last committed record**.
+An identity transacting weekly has a handful; a dormant one has as many as it has
+been dormant. Future ordinals are structurally valid too — no clock check exists to
+reject them — at the cost of burning the signer's forward timeline, since the next
+`started_at` must clear this record's `finalized_at`. And the same choice moves the
+730-day candidate horizon and *n*, so a claimed day steers the seed, the pool and the
+threshold together.
+
+**What binds it is the witness's clock.** A witness is the only party to a ceremony
+with an independent clock and no stake in the sample, and it is asked to commit a
+nonce while the ceremony is happening. The reference client therefore declines to
+commit when the claimed `started_at` is far from the time it observes. **This is not
+checkable by a later validator** — a completed record carries no evidence of what any
+witness's clock read — so it is a commitment in §0's sense and not a MUST.
+
+**Cross-nomination is what makes that binding hold**, and this is a second job for
+it beyond §7.1.1's. A grinding participant cannot select lenient witnesses, because
+its witnesses are nominated by the counterparty; a fabricated day must therefore pass
+witnesses the grinding party did not choose. Every witness nonce feeds the seed, so
+one refusal is enough to deny the attempt. What is left is one sample per day that
+actually elapses, which is what rule (1) was for.
 
 **Both rules are aimed at a participant, and a witness is better placed than one.**
 A witness reveals *after* the capture is spent, so it decides with the sample in
@@ -3174,8 +3231,8 @@ Org, which is the region a node holds topology for (§12.1). Consequences:
   membership, which is what would otherwise happen — positional access lapsing
   while named access persisted, backwards from what anyone expects.
 - **It is enforceable**, evaluated from topology the node already holds.
-- **Resources are neighbourhood-scale by construction.** At most the owner's ±2
-  tiers, consistent with §9.4's vocabulary topping out at `dunbar`.
+- **Resources are neighbourhood-scale by construction.** At most the owner's
+  two-edge neighbourhood, consistent with §9.4's vocabulary topping out at `dunbar`.
 
 #### 9.2.1 Membership is necessary, not sufficient, above the patron
 
@@ -3290,7 +3347,7 @@ the owner (§9.4):
 
 | Who | Effect |
 |---|---|
-| **The old upline and lateral org.** Former patron, siblings, cousins through them | **Lose access.** They are no longer within the owner's Dunbar Org |
+| **The old upline and lateral org.** Former patron and its generation, former siblings, and their subordinates | **Lose access.** They are no longer within the owner's Dunbar Org |
 | **The owner's down-line** | **Unaffected.** Subordinates travel with the owner |
 | **The new upline and lateral org** | **Gain access**, wherever a predicate matches |
 
@@ -3364,9 +3421,9 @@ Scope =
     self                  ; the owner alone
   | down(n)               ; owner's subordinates to depth n
   | up(n)                 ; owner's patron chain to height n
-  | sub(n)                ; the subtree rooted n levels above the owner
   | siblings              ; the owner's siblings
-  | dunbar                ; shorthand for sub(2), the ±2 tier neighbourhood
+  | dunbar                ; the owner's whole Dunbar Org (§12.1). A primitive,
+                          ;   NOT a subtree — no subtree has this shape
   | list([keyhash])       ; named members, inside the Dunbar Org like every
                           ;   other scope (§9.2)
 ```
@@ -3414,8 +3471,8 @@ The node holds, per resource, a row for each member of the owner's
 Dunbar Org and the roles that member has. **Authorisation at request time is a
 lookup**, not an evaluation.
 
-**The table is bounded, so materialising it costs nothing.** A Dunbar Org is a few
-hundred nodes (§4.3); one row each, per resource.
+**The table is bounded, so materialising it costs nothing.** A Dunbar Org is 221
+nodes at f = 10 (§12.1); one row each, per resource.
 
 **Predicates are evaluated twice, and neither is on the request path:**
 
@@ -3763,9 +3820,14 @@ A locator is four fields, **signed by the node itself**:
 Identity (public key) is permanent; locator is mutable. Standard
 identity/locator split (see LISP and HIP for well-mapped potholes).
 
-**Known leak:** a locator discloses the node's patron, depth, and subtree to
-anyone it introduces itself to. Since graph position *is* the trust signal, this
-is intrinsic rather than fixable. Document it; don't pretend otherwise.
+**A locator discloses the node's patron, depth and subtree to anyone it introduces
+itself to, and this is disclosure rather than leakage.** An ancestor line is what a
+participant *is* to that subtree — the identity being presented, not something
+escaping alongside it. Introducing yourself from a different subtree introduces a
+different conceptual person, and the design disclaims accountability across the two
+(§10.8.7). §14.5.7 item 2 states the position and its two residuals: correlation
+across subnets while a participant holds a single identity, and the reconnaissance
+value of a complete path to someone sizing independent edges.
 
 ### 10.2 Anchor set
 **Anchors are defined by subtree size, not by tier.**
@@ -3874,7 +3936,7 @@ subnet — holds by construction (§4.1.1, §12.2).
 - **Anchor table.** Cached per local policy and updated by gossip. **Not
   globally replicated**; no node is guaranteed to hold any particular anchor
   (§10.2, §10.7.3).
-- **Dunbar Org (±2 tiers).** Pre-fetched and kept warm; this is where most
+- **Dunbar Org (two-edge walk, §12.1).** Pre-fetched and kept warm; this is where most
   traffic goes.
 - **Contact locators** — `{key → locator, sequence, TTL, last-verified}`.
 - Negative results cached briefly to avoid retry storms.
@@ -4009,13 +4071,14 @@ each peer's IP to the other (P17). Three reasons this is the right boundary:
   topology store?" is the entire check.
 - **It should cover most traffic** (A2), so the bandwidth argument below survives.
 
-**But the horizon is a bounded set, not a trusted one.** At f = 10 and h = 2 it is up to 111 nodes at or below (1 + 10 + 100) plus two ancestors — call it ~113, or a few hundred once siblings and cousins are counted, depending on how the org is drawn
-and includes cousins a user may never have met. A patron already sees its
-subordinates' traffic metadata and gains nothing; siblings and cousins would gain
-an IP they do not have today. **The rule bounds exposure rather than restricting
+**But the horizon is a bounded set, not a trusted one.** At f = 10 and h = 2 it is
+221 nodes (§12.1), and it includes a user's nephews and their patron's siblings —
+people they may never have met. A patron already sees its subordinates'
+traffic metadata and gains nothing; a sibling or a patron's sibling would gain an IP
+they do not have today. **The rule bounds exposure rather than restricting
 it to chosen parties**, and both defaults must therefore be overridable —
-relay-with-a-cousin and direct-with-a-distant-trusted-party are both reasonable
-user choices (P17).
+relay-with-a-patron's-sibling and direct-with-a-distant-trusted-party are both
+reasonable user choices (P17).
 
 The relayed path is the federation shape (email, XMPP, Matrix). **In every case
 the hierarchy carries no payload**, which is what makes the f=10 cap affordable
@@ -5114,7 +5177,7 @@ different propagation design.
 ### 12.1 Horizon parameters
 
 **A horizon is a scope, not a shared region.** Each node's is centred on itself,
-so **no two nodes with different positions have the same one** — my ±2 differs from
+so **no two nodes with different positions have the same one** — my walk differs from
 my subordinates' and from my patron's. There is no shared trust state anywhere in
 this design, and *"inside the horizon"* means *inside mine*.
 
@@ -5124,8 +5187,50 @@ each has its own history with users outside the subtree. Same scope, different
 content. **A node's total trust picture is unique to it** — there is no tree-level
 trust state for it to be a view of.
 
-- **h = 2.** Full topology storage (~110 nodes at f=10)
-- **h = 3.** Process-and-discard (~1,110 nodes)
+**A horizon is every node within a two-edge walk of you**, over adoption and sibling
+edges. That is the whole definition; everything below is consequence.
+
+| Distance | Who | At f = 10 |
+|---|---|---|
+| 0 | you | 1 |
+| 1 | your patron, your subordinates, your siblings | 20 |
+| 2 | your grandpatron, your patron's siblings, your grand-subordinates, your nephews | 200 |
+| | | **221** |
+
+**Sibling edges are what make this the right walk**, and they are not an addition to
+the tree: siblings replicate each other, authorised implicitly by the patron's
+adoption transaction (§4.3). Over adoption edges alone the same walk yields 122 and
+drops both your patron's siblings and your nephews — the two groups the region exists
+to include. **Peering edges do not count** (§6.3): a peering edge is ungoverned and
+carries none of the subnet's authority, so it contributes flow without conferring
+scope.
+
+**Why two edges, and not one or three.** A patron's direct subordinates are a team it
+built and maintains, with specialisation and balance in who does what. You need some
+access to the complementary functions your patron's siblings are responsible for, and
+you reach that part of the operation by dealing with **the node responsible for it at
+the level where its graph intersects yours** — not by addressing the people working
+under them. Two edges is exactly the reach that gives you the responsible party and
+stops short of their staff. **Each generation offers a capability set to the
+generation below it**: your patron's generation collectively serves you and your
+siblings, and you and your siblings collectively serve the hundred nodes below you.
+
+**Cousins are not excluded by a rule.** They are three edges away, as are nephews'
+children and great-grandchildren, and nobody was tempted to write a rule excluding
+those. Reaching cousins would make **the choice of patron meaningless** in shaping
+what you see and who you deal with, which is the thing a third edge would cost.
+
+**Membership is mutual, because graph distance is.** If you are in my horizon I am in
+yours, with no rule required and none possible to get wrong — which is the practical
+argument for defining the region by a walk rather than tier by tier. An enumeration
+has to state the up-rules and the down-rules separately, and nothing forces them to
+mirror; a walk cannot fail to. Every node you can see can therefore grant to you, and
+§9.2's gate — access only within *"the region the owner's policy can evaluate"* —
+never has to arbitrate a one-sided case.
+
+- **h = 2.** Full topology storage — the 221-node horizon above, of which 110 are
+  the node's own downline
+- **h = 3.** Process-and-discard (~1,110 nodes of downline)
 
 Control gossip volume scales as f^h, so fanout and horizon are coupled: any
 increase in one must be paid for in the other.
@@ -5212,7 +5317,7 @@ depth and subtree to anyone you introduce yourself to. What changes is that an
 ancestor **stops needing the introduction**.
 
 **That scope is accepted, and the reason is social rather than technical.** Trust is
-bounded by the ±2 horizon, but **joining one subnet rather than another is a choice
+bounded by the two-edge horizon, but **joining one subnet rather than another is a choice
 to be visible to that subnet** — a company, a club, a party. Structural visibility to
 the thing you joined is what joining means. The property that is defended is that
 this stops at the subnet boundary, which §4.1.1 guarantees by construction.
@@ -5272,6 +5377,20 @@ specification.
 deterministic sample of prior counterparties to confirm a subject is who they say.
 That is an anti-impersonation check, not the evaluation.
 
+**The floor is holder-relative in what it proves, not only in what it checks.**
+Candidate eligibility is structural — `wire-format.md` §4.6.4 admits a prior
+counterparty when the record is canonical and its signatures verify, and nothing
+weighs it — so volume worthless to an evaluator is **not** worthless to selection. A
+subject who manufactures counterparties owns the population their own verifiers are
+drawn from. What answers this is that **the party who selects is the party at risk**:
+§7.2.2 has each participant select the other's verifiers, so the counterparty
+enumerates that candidate set in order to choose from it and sees who is in it. A
+sample drawn wholly from identities the selector has never heard of returns `match`
+from strangers, which is worth what any fabricated history is worth to them —
+nothing. The intersection argument governs the sample too; it is not suspended
+because the protocol chose it. `wire-format.md` §4.6.7 already makes recomputation
+holder-relative, and this is the same property one step further out.
+
 **Credibility is constructive and partitioned by domain.** You start at zero in
 every subnet and build by engaging there. There is no universal permanent record and
 no cross-domain enforcement, so a subject appearing in a new subnet with no history
@@ -5279,9 +5398,11 @@ is a stranger rather than someone concealing one.
 
 **This is why presenting a sparse archive is not an attack.** There is no quantity
 being understated — an evaluator with a specific question either finds records
-answering it or does not. **Volume proves nothing, so manufacturing volume gains
-nothing**, and a subject who forks their archive has divided what they can
-demonstrate rather than concealed a total.
+answering it or does not. **Volume proves nothing to an evaluator, so manufacturing
+volume gains no standing**, and a subject who forks their archive has divided what
+they can demonstrate rather than concealed a total. What manufactured volume *does*
+buy is the candidate population above — and it buys it from the one party placed to
+notice.
 
 Trust rules are deliberately **not inherent to the network structure.** This is
 an intended locus of adaptation and evolutionary pressure.
@@ -6002,8 +6123,25 @@ ceremony.
 
 1. **No anonymity or pseudonymity.** Real identity and physical presence are the
    trust mechanism (§2).
-2. **Locator topology leakage.** Patron, depth and subtree are disclosed on
-   introduction; intrinsic, because graph position *is* the evidence (§10.1).
+2. **Locator topology is disclosed on introduction, and is not meant to be secret.**
+   Patron, depth and subtree travel with the address (§10.1). **An ancestor line is a
+   participant's identity to the outside world as a member of that subtree** — the
+   thing being presented, not metadata escaping alongside it. Supplying an address in
+   a different subtree presents a *different conceptual person*, which is why §10.8.7
+   disclaims cross-subnet accountability outright: the archive exists to inform a new
+   subnet on joining, not to hold anyone to account across them, and presenting
+   different views to different subnets is two histories rather than one edited one.
+   **Only the natural person can bridge their positions and regulate between them**,
+   and that is where most of a participant's power and autonomy comes from.
+
+   Two residuals, both already registered. With a **single** identity across several
+   subnets the bridging is observable to anyone who correlates (C10, §14.5.8);
+   multiple-identity support is the deferred piece that completes this (§14.5.3). And
+   a complete path has **reconnaissance value** to an operator buying edges into a
+   region — it shows which candidate relationships collapse onto one cut and which are
+   genuinely independent branches. That lowers the cost of the expensive step in
+   §14.3's attack without creating any standing, and it is priced here rather than
+   concealed.
 3. **Recovery destroys unlinkability.** Rotation publishes the predecessor link;
    a fresh Genesis identity is the privacy-preserving alternative (§10.8.7).
 4. **Source-photo retention.** Full photographs rather than templates alone, for
@@ -6167,7 +6305,7 @@ targets for the Stage 1 simulations in the review plan.
 | # | Assumption | What rests on it | If false |
 |---|---|---|---|
 | **A1** | **Human time is the binding resource for a presence-proof attack** | The entire Sybil defence (§14.3). Ceremony duration is priced in minutes precisely to meter it | If attackers can hire humans at scale cheaply, presence proofs are far weaker than §14.3 claims and the three-legged defence becomes two-legged |
-| **A2** | **Most traffic stays within the ±2 tier Dunbar Org** | The control/payload split (§10.6.3), f=10 affordability (§4.2), rarity of anchor lookups (§10.2), store-and-forward sufficiency (§11.1.4), **and now the direct payload path, which is horizon-limited (§10.6.3)** | Apex load, anchor load and push requirements change together — **and relay load becomes (out-of-horizon traffic) + (in-horizon traffic where traversal fails)**, so if this is wrong the infra economics of §13.6 collapse as well. The single most load-bearing behavioural claim in the document |
+| **A2** | **Most traffic stays within the two-edge Dunbar Org** | The control/payload split (§10.6.3), f=10 affordability (§4.2), rarity of anchor lookups (§10.2), store-and-forward sufficiency (§11.1.4), **and now the direct payload path, which is horizon-limited (§10.6.3)** | Apex load, anchor load and push requirements change together — **and relay load becomes (out-of-horizon traffic) + (in-horizon traffic where traversal fails)**, so if this is wrong the infra economics of §13.6 collapse as well. The single most load-bearing behavioural claim in the document |
 | **A3** | **Apex load scales with churn, not usage** | The f=10 cap surviving at scale (§4.2) | The fanout cap becomes a throughput ceiling and the social rationale collides with the plumbing again |
 | **A4** | **Evaluation demand is much smaller than total activity** | Pull-not-push attestation (§12), the biggest scaling decision here | Backbone traffic grows with population. Note this is now framed as an implementation constraint (§12), which is enforceable — unlike the others |
 | **A5** | **Presence ceremonies are rare per user** | PQ signatures on presence records (§5), the ~35 KB budget, storage estimates | Record size becomes a real cost and the PQ exception needs revisiting |
@@ -6235,7 +6373,7 @@ are all **chosen**, not derived.
 
 | Symbol | Meaning | Value | Basis |
 |---|---|---|---|
-| f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar at ±2 tiers |
+| f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar scale at a two-edge walk (§4.3) |
 | L | Non-infra subordinate levels beneath an infra node | 2 | 110 users before infrastructure is required |
 | S | Anchor **guideline** (subtree size) | ~500,000 | Not a status boundary, any ancestor may serve as anchor; caching is per-node policy (§10.2, §10.7.3). Yields ~120k widely-cached anchors at the 60B stress scale |
 | h_store | Topology storage horizon | 2 | ~110 nodes |
@@ -6251,7 +6389,7 @@ are all **chosen**, not derived.
 | — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§11.1.2) |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §7.2) |
-| — | Verifier-selection seed window | **24 hours**, epoch-aligned | One fresh sample per day per participant pair for an aborting attacker; an honest retry inside the window reproduces the *same* sample, which is what retry should do (§7.2.2, `wire-format.md` §4.6.2) |
+| — | Verifier-selection seed window | **24 hours**, epoch-aligned | An honest retry inside the window reproduces the *same* sample, which is what retry should do. It does **not** bound an aborting attacker to one sample per day: the ordinal comes from the claimed `started_at`, so the budget is the span since the signer's last committed record (§7.2.2, `wire-format.md` §4.6.3) |
 
 ### 16.1 Unset parameters, the implementation checklist
 

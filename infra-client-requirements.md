@@ -377,6 +377,15 @@ roles, and in a background pass when a node enters or leaves the horizon. A new
 member is scored against standing predicates and given rows; a departing one has
 theirs removed.
 
+**Scoring the changed member alone is correct for every predicate class but one.**
+A *relative* rank predicate — a percentile, a median, any quantile — has a cutoff
+that is a fraction of the population, so a membership change moves it for **every**
+row rather than for the entrant
+(`resource-requirements.md` §7.2.1). Re-score the whole table for those predicates
+and the changed member only for the rest. An implementation that treats them alike
+leaves rows stale in both directions: granting where the line has since risen, and
+withholding where it has fallen.
+
 **A table change is what terminates sessions** (§9.4 below), not a predicate change
 in the abstract. The row moved or it did not.
 
@@ -417,6 +426,10 @@ Affordances the UI must offer:
 threshold is denominated in units meaningful only within one metric family, so
 switching families silently changes who has access, which is not what the
 operator intended when they changed metrics (`resource-requirements.md` §7.2).
+**Prefer an absolute rank to a quantile** where the operator's intent is absolute:
+*"my ten most trusted"* survives a metric change exactly as well as *"top 20%"* and
+depends on nobody but the member and those above them, whereas a quantile's line
+moves with the size of the org (`resource-requirements.md` §7.2.1).
 
 ### 9.3 Templates
 

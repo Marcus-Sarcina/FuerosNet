@@ -4923,3 +4923,217 @@ nothing happened. Ordering was always correct; the dates were not.
   round: §1's *"each with with varying rules"* and `wire-format.md` §5.3's *"a capture
   capture key"*. The earlier duplicated-word sweep this session missed them because its
   word list was restricted to the terms it expected; the unrestricted form found them.
+
+- **2026-08-29 (adversarial review 0.8.3; the candidate set and the claimed day)** —
+  Four findings against a funded fake-standing operator. Two applied here; the other
+  two are described below and left for the author.
+
+  **Manufactured volume is worthless to an evaluator and not worthless to selection.**
+  §13.1 carried both halves of this two paragraphs apart — *"what the protocol supplies
+  is the sampling floor"* and *"volume proves nothing, so manufacturing volume gains
+  nothing"* — without noticing they collide. Candidate eligibility is structural:
+  `wire-format.md` §4.6.4 admits a prior counterparty when the record is canonical and
+  its signatures verify, and nothing weighs it. So a subject who manufactures
+  counterparties owns the population their own verifiers are drawn from, and the
+  2026-08-24 formation bound does not reach it — that capped *formation* records at one
+  per key, while normal records among controlled identities are uncapped and each adds
+  a candidate.
+
+  **What answers it is that the party who selects is the party at risk** (author's
+  framing: fabricated verifiers hurt the counterparty, not a later evaluator). §7.2.2
+  has each participant select the *other's* verifiers, and §7.1.3 has C send the query
+  to B's prior counterparty — so C enumerates B's candidate set in order to sample it,
+  and sees the population before it sees any answer. A sample drawn wholly from
+  strangers returns `match` from strangers. The intersection argument governs the
+  sample too; it is not suspended because the protocol chose it. §13.1's sampling-floor
+  paragraph now carries this, extending `wire-format.md` §4.6.7's holder-relative
+  property from checkability to evidential value, and §7.1.3's detection arithmetic now
+  states the precondition it always had: `1 − (1/k)^q` assumes the sampled
+  counterparties are honest and independent of the subject, and against a fabricated
+  candidate set detection is **absent rather than reduced** — no q repairs it, since
+  the confederates sharing the key are exactly who would answer.
+
+  **The seed window is claimed, not elapsed, so the rate limit was never real.**
+  `window_ordinal` derives from `started_at` (`wire-format.md` §4.6.3.1), which the
+  proposer chooses; §3.2's monotonicity against the committed back-pointer bounds that
+  **only from below**. The documents already named the mechanism — *"the same field
+  derives `window_ordinal`, so varying the claimed day also yields fresh verifier and
+  witness samples"* — and then treated the back-pointer as closing it. It closes
+  backdating, not rerolling. **The real budget is the span between the signer's last
+  committed record and the day it is willing to claim**: an identity transacting weekly
+  has a handful of ordinals, a dormant one has as many as it has been dormant. Future
+  ordinals are structurally valid too, at the cost of the signer's own forward
+  timeline. And the same choice moves the 730-day candidate horizon and *n*, so a
+  claimed day steers the seed, the pool and the threshold together.
+
+  **The witness's clock is what binds it** (author). A witness is the only party to a
+  ceremony with an independent clock and no stake in the sample, and it is asked to
+  commit while the ceremony is happening; the reference client declines to commit
+  against a claimed day far from the time it observes. Not checkable by any later
+  validator — a completed record carries no evidence of what a witness's clock read —
+  so it is a commitment in §0's sense. **Cross-nomination does a second job here**: a
+  grinding participant cannot pick lenient witnesses because its witnesses are
+  nominated by the counterparty, and since every witness nonce feeds the seed, one
+  refusal denies the attempt. New `light-client-requirements.md` §1.0.1 carries the
+  witness obligations; §1.2 gained the candidate-population check, making **three**
+  checks that protect a signer against the person in front of them rather than two.
+
+  **Three stale instances of the overstated rate were swept**, two of them definition
+  sites: §4.6.2.1's own restatement of the property, and the §15 parameter register's
+  rationale for the 24-hour window — which asserted *"one fresh sample per day per
+  participant pair"* as the reason for the value. Rule (1) in §7.2.2 now states the
+  intent and points at why it is not delivered rather than asserting the rate.
+
+  **Percentile role predicates: described rather than defended** (author). 0.8.3's
+  third finding was that `resource-requirements.md` §7.2 recommends rank predicates
+  over raw scores — correctly, since a raw threshold means something different after a
+  metric-family switch — and that both its worked examples, *"top 20% of my Dunbar
+  org"* and *"above the median of my direct clients"*, have a cutoff that is a fraction
+  of a population. An org of 100 with its line at the top 20 admits its 25th member
+  once 25 further members exist beneath them, and the trust metric is right throughout:
+  it rates the padding as worthless, which is why it lands at the bottom and lengthens
+  the queue. The predicate never asked how trusted anyone was.
+
+  **The author's disposition is that this needs describing, not fixing**, on two
+  grounds. A predicate is *sugar over individual role grants* — design §9.4 already
+  says role assignment is a materialised table and predicates are a macro over it, so
+  the operator binds a role by reading an expansion into names. And the horizon is
+  deliberately sized to people the operator has at least passing acquaintance with, so
+  moving a quantile enough to matter means unfamiliar names appearing in a list they
+  read. **Statistical manoeuvring is a weak attack against a population recognised
+  individually.** New `resource-requirements.md` §7.2.1 sets out the five classes —
+  structural, tenure, named, absolute rank, relative rank — and what each depends on
+  besides the member; only relative rank depends on the population.
+
+  **One implementation consequence was worth stating.** `infra-client-requirements.md`
+  §9.2 said to re-evaluate predicates when a node enters or leaves the horizon,
+  scoring the entrant and dropping the leaver's rows. That is correct for four of the
+  five classes and wrong for a quantile, whose line moves for **every** row when the
+  count changes — so an implementation treating them alike leaves rows stale in both
+  directions. §9.2 now separates the two, and recommends an absolute rank where the
+  operator's intent is absolute, since *"my ten most trusted"* survives a metric change
+  exactly as well as *"top 20%"*. `light-client-requirements.md` §8 gained the
+  operator-facing half: expand a predicate into names before it is bound and keep the
+  names primary, and for a quantile show the population it is a fraction of.
+
+- **2026-08-29 (the Dunbar Org is a two-edge walk, and it is 221)** — A stray phrase in
+  a reply — *"a few hundred once siblings and cousins"* — drew the correction that the
+  horizon had never actually been settled. §10.6.3 admitted as much in writing:
+  *"~113, or a few hundred once siblings and cousins are counted, **depending on how
+  the org is drawn**."* Three documents carried three answers.
+
+  **`sub(n)` is deleted from the scope language** (author: *"this was not my
+  requirement, this was a Claude annotation of a misunderstanding of my requirement"*).
+  §9.4 had defined `dunbar` as shorthand for `sub(2)`, *"the subtree rooted n levels
+  above the owner"* — which is the grandpatron's subtree and therefore contains
+  cousins by construction. **No subtree has the Dunbar Org's shape**, so the form was
+  describing something the design does not have. `sub(n)` appeared in exactly three
+  places and nothing else used it. Wire tag **3 is retired and must not be reused**;
+  4, 5 and 6 keep their values rather than sliding down.
+
+  **All trust is relative to the observer** (author), so the region is defined by what
+  a party is to *you* rather than by a shape in the tree — downline because they have
+  a trust chain back to you, patron and grandpatron because you chose them
+  recursively, sibling sets because where they run infra they are **automatically
+  replicators** and because treating a sibling set as an **atomic trust set** is what
+  lets responsibility for resource administration be shared across one. Stated that
+  way it took several attempts to enumerate correctly; stated as a walk, below, it
+  takes one line and cannot be enumerated wrongly.
+
+  **The region is every node within a two-edge walk**, over adoption and sibling
+  edges — **221** at f = 10: you, then patron/subordinates/siblings at one edge, then
+  grandpatron, patron's siblings, grand-subordinates and nephews at two. One sentence
+  replaced a five-row tier enumeration, and the enumeration was what had been
+  generating the errors. An intermediate answer of 140, built tier by tier earlier the
+  same day, left **eighteen members who could not reciprocate** — a node held its
+  patron's siblings while they did not hold it. That cannot happen under a walk:
+  graph distance is symmetric, so the up-rules and down-rules cannot drift apart.
+  **Cousins also stopped needing a rule** — they are three edges out, alongside
+  nephews' children and great-grandchildren, and nobody was tempted to write a rule
+  excluding those.
+
+  **Sibling edges are load-bearing in the definition, not incidental.** Over adoption
+  edges alone the same walk gives 122 and drops both the patron's siblings and the
+  nephews — the two groups the region exists to include. §4.3 already had those edges
+  as real and implicit, *"authorised implicitly by the patron's adoption transaction,
+  with no separate agreement."*
+
+  **Peering edges do not count, and the reason is authority rather than arithmetic**
+  (author): *"peering is an ungoverned edge, it is outside of the tree. It is
+  permissionless and so it does not carry the authority of the subnet."* §6.3 said
+  peering contributes to trust, §12.1 defined the region, and nothing connected them —
+  a reader could reasonably have taken a peer for a neighbour, and the walk would have
+  made that reading nearly forced. §6.3 now states that **contributing to trust and
+  conferring scope are different things**, and that this is the edge where they part.
+
+  **Why two edges** (author): a patron's direct subordinates are a team it built and
+  maintains, with specialisation in who does what. A node needs access to the
+  complementary functions its patron's siblings are responsible for, and reaches them
+  by dealing with the responsible node **at the level where its graph intersects
+  theirs** — not by addressing the staff underneath. Two edges is exactly the reach
+  that yields the responsible party and stops short of their people. Each generation
+  offers a capability set to the generation below it.
+
+  **`f = 10` keeps its justification, restated as a heuristic** (author). The old form
+  — ten *"keeps the neighbourhood beneath Dunbar's number"* — is false at 221. The
+  replacement: the name is an **anchor for order of magnitude, not a bound**, and 221
+  against the vernacular ~200 is close enough. It fixes the scale as a small village
+  or an elementary school, larger than a household and smaller than a town, where the
+  alternative is a number with no intuition attached to it at all.
+
+  **Ten sites carried a superseded composition** and are corrected: §3's vocabulary
+  row, §4.3, §9.2.1's departure table, §9.4's role-table sizing (*"a few hundred
+  nodes"*), §9.5's cache warming, §10.6.3, §12.1, §15's parameter register, the A2
+  assumption row, and `resource-requirements.md` §7.1.1. The **`±2 tier` phrasing is
+  retired** wherever it named the region: the walk spans tiers −2 to +2 without
+  containing all of them, so that framing invites exactly the inference — cousins
+  included — which the region excludes.
+
+  **§12.1's storage figure was wrong before this round and is now right.** It read
+  *"h = 2. Full topology storage (~110 nodes)"* while §9.2 defines the Dunbar Org as
+  *"the region a node holds topology for"* — one quantity, given as 110 in one place
+  and as the horizon in the other. It is the 221-node horizon, of which 110 are the
+  node's own downline.
+
+  **The `CatalogReply` bound of 111 is unaffected, and its stated reason was wrong.**
+  `wire-format.md` §1 justified it as *"the Dunbar Org population at or below"*; the
+  real argument, two sections later, is that **an answering node answers for itself
+  plus the ≤110 users it serves**. Both come to 111 — the same arithmetic read from
+  different ends — but only one survives the horizon growing past it. The bound is per
+  *answering node*, not per horizon, and both sites now say so.
+
+  **0.8.3 finding 4: the locator acceptance was right and its reason was borrowed.**
+  §14.5.7 item 2 accepted locator topology disclosure as *"intrinsic, because graph
+  position is the evidence."* A locator is **self-signed by the node** and §10.1 gives
+  its signature a different job — *"an intermediary cannot substitute itself as the
+  destination"* — so it is routing authentication, not attestation, and §14.1 is
+  titled *"standing comes from edges, not from nodes."* The disclosure also runs wider
+  than the evidence: an introduction hands a distant party a patron chain their own
+  horizon would never have carried.
+
+  **The author's replacement is stronger than the one recommended, and moots it.** The
+  recommendation had been to keep the acceptance and justify it from the signature
+  construction — §10.1 says paths are truncatable for routing, so it is the signature
+  covering the whole path that forces a signed locator to carry it complete.
+  **Concealment was never wanted**, which makes that a mechanical note rather than a
+  reason: *"there is no expectation that topology is secret. Indeed, the hierarchy
+  reflected in your ancestor line is your identity to the outside world as a member of
+  that subtree. If you supplied your address in a different subtree, you would
+  effectively be presenting a different conceptual person… Only Marcus the natural
+  person can bridge these identities and regulate between them, from which the
+  individual draws most of their power and autonomy."*
+
+  **Every piece of this was already in the design and item 2 was connected to none of
+  it.** §10.8.7 disclaims cross-subnet accountability outright — the archive informs a
+  new subnet on joining rather than holding anyone to account across them — and §10.8
+  already says presenting different views to different subnets *"is not an edit to a
+  history, it is two histories."* C10 registers the correlation that remains while a
+  participant holds one identity, and §14.5.3 records multiple-identity support as the
+  deferred piece that completes it. Item 2 now states the position and both residuals,
+  the second being the reconnaissance value of a complete path to an operator sizing
+  independent edges — which creates no standing but cheapens §14.3's expensive step.
+
+  **The same justification was in a second place.** §10.1 carried *"since graph
+  position is the trust signal, this is intrinsic rather than fixable — document it,
+  don't pretend otherwise"* under a **Known leak** heading. Corrected there too, and
+  the heading with it: this is disclosure, not leakage.

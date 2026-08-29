@@ -451,7 +451,9 @@ Affordances the UI should offer:
 - **Named individual nodes.** See §7.1.2
 
 **Access changes without anyone acting.** A node joining the subtree gains access;
-one departing loses it; one crossing a tenure boundary gains it silently. **This is
+one departing loses it; one crossing a tenure boundary gains it silently. Under a
+*relative* rank predicate a membership change also moves the line for everyone else
+(§7.2.1), which is the one case where a join changes somebody other than the joiner. **This is
 correct.** Access follows the org chart, and it extends design §9.2's departure
 warning to a wider surface. None of it produces an event anyone sees.
 
@@ -487,7 +489,7 @@ Consequences, all simplifications:
 - **It is enforceable rather than advisory.** The infra node evaluates membership
   from topology it already holds, before consulting any predicate or grant.
 - **It bounds the resource layer to neighbourhood scale.** A resource serves at
-  most its owner's ±2 tiers — up to 111 at or below at f = 10, more with siblings and cousins. This is consistent with design §9.4's
+  most its owner's two-edge neighbourhood — 221 nodes at f = 10 (design §12.1). This is consistent with design §9.4's
   scope vocabulary topping out at `dunbar`, and it means **resources are
   neighbourhood-scale by construction**, not subnet-scale or network-scale.
 
@@ -530,6 +532,54 @@ something else, and the operator's intent was "be more Sybil-resistant", not
 rank-based predicates survive a metric change intact where raw scores do not. No
 friction, no confirmation dialog, and it matches what operators actually mean,
 since they are rarely thinking *0.6* and usually thinking *the people I trust most*.
+
+#### 7.2.1 Predicate classes, and what each one depends on
+
+**A predicate is a macro, not the mechanism.** What authorises a request is a
+materialised table — one row per Dunbar Org member per resource, consulted as a
+lookup (design §9.4). The predicate is how an operator writes that table quickly; it
+expands at configuration time into assignments the operator can see and adjust. The
+classes below differ in **what an assignment depends on besides the member**, which
+is the whole of their security difference.
+
+- **Structural** — *all my direct clients*, *clients and grand-clients*, *every node
+  at a given relative tier*. Depends on the member's position relative to you.
+  Nobody else's arrival or departure changes the answer for a given member.
+- **Tenure** — *joined before [date]*. Depends on the member's own history. Same
+  property: population-independent.
+- **Named** — *these individuals* (§7.1.2). Depends on nothing but your choice, and
+  is the form every other class is sugar for.
+- **Absolute rank** — *my ten most trusted*. Depends on the member and on the nine
+  above them. A node added below the line cannot change who is above it; a node
+  added above can displace someone, which is the predicate working.
+- **Relative rank** — *top 20%*, *above the median*, any quantile. **Depends on the
+  size of the population.** This is the one class whose result a third party can move
+  without out-ranking anybody.
+
+**Why relative rank is different.** The cutoff is a fraction of a count, so anyone
+who can enlarge the population *below* the line raises everyone above it. An org of
+100 with the line at the top 20 admits its 25th member once 25 further members exist
+beneath them, and the trust metric is not wrong at any point — it rates the added
+members as worthless, which is exactly why they land at the bottom and lengthen the
+queue. **The predicate never asked how trusted anyone was; it asked where they stood
+in a line.** So a relative predicate's soundness rests on the acknowledgement policy
+that decides who enters the horizon (design §9.2.1) rather than on the trust metric,
+and those two settings are one decision rather than two.
+
+**A relative predicate also has to be re-scored across the table, not per member.**
+Design §9.4 re-evaluates when a node enters or leaves the horizon; for the classes
+above that means scoring the entrant and dropping the leaver's rows, but a quantile
+moves for *everyone* when the count changes. An implementation that scores only the
+changed member leaves rows that no longer follow the predicate — stale in both
+directions, granting where the line has risen and withholding where it has fallen.
+
+**What contains this is the size and character of the org, not a rule.** The table
+is bounded and small (§3's vocabulary), and its members are people the operator has
+at least passing acquaintance with — that is what the horizon is sized for. Moving a
+quantile enough to matter means unfamiliar names appearing in a list the operator
+reads while binding the role. **Statistical manoeuvring is a weak attack against a
+population you recognise individually**, which is the reason the predicate language
+is allowed to stay this simple.
 
 ### 7.3 Shrink-wrapping is a security requirement
 

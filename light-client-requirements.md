@@ -53,6 +53,20 @@ that is noted in place.
   is not a validity condition — such a record is well-formed — which is why the
   client has to surface it.
 
+### 1.0.1 Acting as a witness
+
+- **Decline to commit a nonce for a ceremony whose claimed `started_at` is far from
+  the time you observe.** Your nonce is derived over the day ordinal, so a
+  participant who picks a different day gets a different verifier sample without
+  waiting for one; your clock is the only independent one at the ceremony, and the
+  bound is worth nothing unless witnesses apply it (design §7.2.2). No later
+  validator can check that you did — set the tolerance you can defend and refuse
+  outside it.
+- **Derive your nonce as the PRF specifies, and never freshly per attempt.** A fresh
+  nonce on a retry hands the participants a new sample per abort, which is the attack
+  commit-reveal exists to close, and a completed record cannot show that you did it
+  (`wire-format.md` §4.6.2.1).
+
 ### 1.1 Capture
 
 - **Obtain the strongest proximity channel the hardware supports**, and record
@@ -130,9 +144,16 @@ that is noted in place.
   §7.1.3).
 - **Verify the counterparty's verifier selection before signing.** If they
   selected off-seed and you sign anyway, you hold a record that fails
-  recomputation permanently and cannot be repaired (design §7.2.2). With the
-  `nominated_by` check in §1.0, **these are the two checks that protect you
-  against the person in front of you** rather than against an outsider.
+  recomputation permanently and cannot be repaired (design §7.2.2).
+- **Look at the candidate population you are sampling, not only at the answers it
+  returns.** You enumerate the counterparty's prior counterparties in order to select
+  from them, so you can see whether you recognise any of them before you see a single
+  reply. **Tell the user when you recognise none of it**: a `match` from strangers
+  establishes nothing, however many you queried, and a manufactured candidate set
+  makes the detection arithmetic in design §7.1.3 return zero rather than merely less.
+
+  With the `nominated_by` check in §1.0, **these are the three checks that protect
+  you against the person in front of you** rather than against an outsider.
 
 ### 1.3 Disclosure at capture time
 
@@ -347,6 +368,19 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Hold one session at a time during a sweep** and close it. Browsing a cached view
   opens nothing.
 
+- **Expand a role predicate into names before the operator binds it, and keep the
+  names the primary view.** A predicate is a macro over a table of individual grants
+  (design §9.4); what the operator is deciding is who gets in, and a list of people
+  they recognise is the form in which a wrong answer is obvious. Show the count
+  beside it, never instead of it.
+- **For a relative rank predicate — a percentile, a median, any quantile — show the
+  population it is a fraction of, and say that the line moves when the org does.**
+  These are the only predicates whose result depends on somebody other than the
+  member being granted (`resource-requirements.md` §7.2.1), and an operator reading
+  *"top 20%"* has no reason to expect that admitting members at the bottom promotes
+  someone at the cutoff. An absolute *top-k* does not behave this way, and the
+  client should offer it as the plainer alternative when the operator's intent looks
+  absolute.
 - **Tell the user, when they first use a brokered resource, that ending their
   membership will not end that vendor's session.** The network can stop new
   establishment; it cannot reach into a session already running on someone else's
