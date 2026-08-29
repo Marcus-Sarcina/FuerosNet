@@ -503,12 +503,13 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   claims for one keyhash you would have nothing to pick between them with — and
   picking wrong applies one owner's membership and roles to another owner's backend.
   **Refuse a registration for a keyhash you already serve under a different owner.**
-- **Re-registering by the same owner replaces the entry;** the archive
-  keeps both transactions because it keeps everything. **The archive is history, the
-  catalog is state**, and the two answer different questions.
-- **Append and replace together.** A crash between the archive append and the local
-  replacement leaves either a transaction with no queryable entry or an entry whose
-  transaction is missing, and both are wrong in ways a later reader cannot detect.
+- **Re-registering by the same owner replaces the entry, and the old one is gone.**
+  **A registration is not archived** (design §8, `wire-format.md` §4.7): the archive
+  advances on adoption, departure, disavowal, peering and presence, and this is none
+  of them. Keep a live table of what you currently serve and answer from it. **Do
+  not retain superseded registrations** — nobody needs a record of a resource its
+  owner no longer runs, and keeping one turns a withdrawal into something a later
+  reader can still find.
 - **Withdrawal is not a propagated message.** Stop returning the entry and the next
   query gets the truth; there are no copies to invalidate, because you never sent
   any that claimed to be authoritative. **An owner who is not you still has to ask**,
@@ -533,6 +534,6 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   declare a data-practice posture in its catalog entry (design §9.5), which helps a
   user who already has access and not one deciding whether to acquire it.
 
-**Closed 2026-08-25:** queue lifecycle (design §11.1.6 settles ceiling behaviour,
+**Closed:** queue lifecycle (design §11.1.6 settles ceiling behaviour,
 crash copies, metadata and logging; only the cap value is yours to choose) and
 owner-movement semantics (design §9.2 now carries the general rule).

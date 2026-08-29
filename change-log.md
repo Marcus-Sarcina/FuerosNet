@@ -4546,3 +4546,284 @@ nothing happened. Ordering was always correct; the dates were not.
   invisible to the checker, and pointing at Proof of Presence since some old
   renumbering. Truncatable paths, routing-information authentication and mailbox
   substitution live in design §10.1; the monotonic counter in design §6.2.1.
+
+- **2026-08-28 (0.7 LINDDUN privacy: the three findings the author answered — the
+  resource front door, historical catalog resurrection, and the currency query)** —
+  A clean-room LINDDUN pass over the six documents. Its three items not already in
+  the P/C registers were put to the author; all three answers corrected text that
+  had overreached rather than adding mechanism.
+
+  **NEW-1, the resource front door.** §11.2's table said a leaf-to-resource message
+  is plaintext only at the resource, while §7.3.2 requires the hosting node to parse
+  and re-serialise the HTTP to insert the credential. **The node cannot both insert
+  an authenticated credential and be unable to read what it inserts into**, and the
+  table now says so — splitting the row into *through its host*, where the node is an
+  endpoint and reads the request, and *directly*, where a `CatalogEntry` endpoint is
+  reached point-to-point and no node is in the path. The visibility itself was
+  already stated at §9.2 and P24; only §11.2 denied it.
+
+  **The far leg is now required rather than assumed** (author): **HTTPS wherever it
+  crosses a network**, plain HTTP permitted only on a local socket to a package the
+  node hosts itself. `resource-requirements.md` §3 previously described this
+  ("a local socket for a hosted package, ordinary HTTPS for an external service") as
+  deployment fact; it is a requirement. What it protects is everyone *else* — an
+  operator relaying to a resource elsewhere must not put an authenticated principal
+  and an application body on the open network.
+
+  **And the first correction of it overreached the other way (author,
+  same day).** Splitting §11.2's row into *through the host* and *direct* made
+  relaying the assumed shape, which inverts §9.7's stated default: **broker rather
+  than proxy** — a gateway that only authenticates and hands off leaves the user
+  connecting directly, and one that carries the traffic becomes a content
+  chokepoint. The author's point was broader than the catalog endpoint I had cited:
+  **a light client runs on an ordinary network-enabled device and makes its own
+  outbound connections**, and a third-party adaptor could make the node an
+  authenticator to a service the client attaches to directly — the SSO shape §1.3
+  already describes. §11.2 now has three rows, hosted / brokered / proxied, with
+  *brokered* marked as the default and carrying no application traffic across the
+  node at all; §3's far-leg row is scoped to *where the node carries the traffic*;
+  and the HTTPS requirement applies to that case rather than to every resource not
+  on the node. **What a resource does is deliberately not enumerated (§9.4), so how
+  it is reached must not be assumed either.**
+
+  **NEW-2, historical catalog resurrection — the finding dissolved on an archive
+  correction.** The reviewer found that superseded registrations survive in the
+  append-only archive and could be disclosed in a prefix presented to a new patron,
+  exposing services long after withdrawal. **The archive never included them.** §8's
+  definition is *adoption, departure, disavowal, peering and presence* — a resource
+  registration is none of those, and the retention claim came from `wire-format.md`
+  §4.7 and `infra-client-requirements.md` §10 over-generalising to "it keeps
+  everything". Author: *the archive is only for topology transactions and PoP; the
+  owner keeps a live table and generates responses from current state; there is no
+  requirement to keep records of past resources.* §8 now states the exclusions and
+  why they matter — anything travelling with an archive is presented to every future
+  patron along with it, which is the wrong audience for what a person runs and the
+  wrong duration for what they used to run. §12's Catalog class row, §4.7's
+  supersession and withdrawal paragraphs, and infra §10's bullet all follow.
+
+  **NEW-3, the currency query — specified.** §10.6.5's stapling design falls back to
+  "a lookup" that had no message, audience, or retention rule, and the fallback
+  undoes the exact property stapling exists for: it tells the subject's patron that
+  someone is being introduced to their subordinate. Now `wire-format.md` §5.1,
+  **bidirectional request type 8**: `CurrencyRequest {subject, nonce}` and
+  `CurrencyReply {nonce, result, ? attestation}`. Three bounds, each following from
+  something already decided. **The query names the subject and not the querier** — it
+  is the authenticated session peer — so a reply forwarded onward attributes the
+  question to nobody. **Nothing is retained**: liveness class (§12), answered and
+  discarded, never archived (§8). **And a caller with a stale staple asks its
+  introducer first**, who already knows it is talking to the subject, where the
+  patron would learn something new. `Code 1` and silence are the same answer and both
+  fail closed, which is §7.4.0.2's distinguishability requirement met — an answer is
+  an attestation, and one naming the key the caller holds *is* "no rotation".
+
+  **§9.0's subsections were out of order and its taxonomy misfiled (author approved
+  2026-08-28).** The file ran 9.0.2, 9.0.3, 9.0.4, then **9.0.1** — so a sequential
+  reader met *wider reach is federation* after *credentials do not cross the boundary
+  twice*. §9.0.1's **number was already right**, so moving its block ahead of §9.0.2
+  fixed order and numbering together and **changed no citation**. The *Three
+  categories, one mechanism* table — local application, gateway, external service —
+  sat at the tail of §9.0.4, whose subject is credential audience-binding; it is a
+  taxonomy of the whole section and now sits in §9's introduction, with the
+  implementation-requirements pointer that belongs beside it.
+
+  **A document-wide heading audit found 51 level anomalies, left for the
+  organisation pass.** Depth-3 sections are written as `###` in 51 places and
+  `####` in the §9.0.x group, so the file has two conventions and the smaller group
+  is the one a strict renderer agrees with. Ordering is otherwise clean across all
+  141 headings. This is exactly the churn the review plan defers to 0.9, so it is
+  recorded rather than fixed.
+
+- **2026-08-28 (de-linting pass; the type-6 transaction retired)** — Two operations,
+  the first mechanical and the second a simplification the author had been weighing.
+
+  **De-linting: the specification stopped narrating its own drafting.** 47 dated
+  decision markers became bare `[D]`, leaving 275 doing the job the convention gives
+  them. Date tokens across the five root documents fell from 86 to **2** — the two
+  front-matter revision lines, which are document metadata rather than process
+  narration. The pass-archaeology instances went with them: §15.1's *"flagged by the
+  2026-08-14 factual verification pass"* (the author's own example), §15.2's *"from
+  the 2026-08-14 unjustified-claims pass, which returned 280 items"*, §14.5.8's
+  *"the 2026-08-16 LINDDUN re-run found"*, and §7.4's *"a review pass registered it
+  as a privacy cost"*. In each case the finding survives and the pass that produced
+  it does not.
+
+  **Drafting archaeology was judged individually rather than swept**, since some of
+  it earns its place. *An earlier form of this check asked whether the path
+  contained…* becomes **"Containment is not the test and cannot be"** — the same
+  protective content, stated as a rule rather than as history, so a reader cannot
+  re-derive the bug it warns against. §6.1's transfer transaction and §7.1.5.2's
+  `txid` derivation are reframed the same way. The one instance left standing is in
+  Appendix A.2, where superseded readings are the section's subject.
+
+  **A line-wrap trap caught 15 markers.** The first regex required a space after the
+  em dash, and `[D —\n  2026-08-28]` does not have one — so 15 of 47 survived the
+  first pass and were only found by re-counting. Counting after a mechanical
+  substitution is not optional.
+
+  **The type-6 transaction is retired** (author: *"there is no resource registration
+  in shared network state; resource queries are point-to-point communication within
+  the trust horizon"*). It follows from the archive decision earlier the same day:
+  a registration advances no archive, reaches nobody else, and chains to nothing —
+  so an envelope around it would carry **a back-pointer nothing walks, a `txid`
+  nothing references, and a post-quantum signature justified only by an archive it
+  never enters** (§3.2 ties hybrid signing to archive retention). A registration is
+  now the signed `CatalogEntry` itself: `ResourceRegistration` carries the entry
+  rather than an `Envelope`, the reply loses its `txid` echo, and the wrapper-versus-
+  inline hazard that echo existed to catch dissolves with the wrapper. **Abuse report
+  moves from type 7 to type 6**, and the transaction types are six.
+
+  **Correction, author 2026-08-28: nothing ever reports that a key was rotated.** A
+  rotation **evaporates the old identity in the local subnet and instantiates a new
+  one**, and the inheritance is not carried. Within the subnet the upstream sees a
+  disavowal and an adoption in quick succession and **cannot prove they are the same
+  person** — the arriving node may equally have displaced another from a slot.
+  **Beyond the horizon nothing is exposed at all**: the old locator is simply an
+  address that stopped working, with no explanation offered and none available.
+
+  **This corrected pre-existing text as well as new.** §7.4.0.2 and §10.6.5 both
+  required *"no answer from patron or siblings"* to be distinguishable from *"answer
+  says no rotation"* — a sentence that has a patron announcing a rotation to a
+  distant caller. Both now read *"answer attests this identity is current"*, which is
+  the only thing an attestation ever claims. §7.4.0.2's opening said rotation
+  propagates as a topology-class message; it propagates as **the transactions it is
+  made of**, a disavowal and an adoption, within the horizon only. §12's *push near,
+  redirect far* bullet said callers *learn lazily*; they learn whether an identity is
+  currently attested and nothing about one that is not. §7.4.0 now states the model
+  outright, since §5.1 and §10.6.5 both depend on it.
+
+  **And the correction surfaced a stale mechanism.** §7.4.0.2's staleness bullet said
+  a cached attestation is *"corrected on next contact via the forwarding record
+  (§10.3 Case 2)"*. The forwarding record was removed with hard-fork departure, and
+  this was its last reference anywhere — invisible to the checker because §10.3
+  exists. Worse, §10.3 Case 2 says the **opposite** of what the citation claimed:
+  *"Resolution fails. Nothing redirects on Alice's behalf, and no party holds a
+  pointer to where she went."* The bullet now says what actually happens, which is
+  also what the author's model predicts: the holder re-resolves or re-establishes
+  socially, and learns nothing about why.
+
+  **The currency-query residual is accepted rather than registered** (author: *"this
+  is fine"*), and is §14.5.7 item 12. What remains after the bounds is narrow: a
+  patron learns that someone asked about their subordinate. The reply discloses
+  nothing further — an attestation says only that an identity is current in its
+  issuer's subnet, never reporting a rotation or naming what replaced anything — and
+  that residual is the price of being able to see a fork at all (§7.4.0.2). No
+  P-number allocated, so no register number was spent on a cost the design chooses.
+
+  **And the correction needed qualifying against the recovery case.** Transcribing
+  the author's model into §7.4.0 as written would have overstated it: a *plain*
+  rotation carries no link, but a **recovery** adoption publishes `prior_key` plus
+  verifier continuity attestations deliberately (`wire-format.md` §4.1) — which is
+  what §14.5.7 item 3 has always accepted as recovery destroying unlinkability. The
+  section now separates the two and says the publication **reaches the horizon and
+  stops there**; beyond it neither case exposes anything, which is the part of the
+  author's statement that holds universally.
+
+- **2026-08-28 (0.8.1 adversarial: three findings, all confirmed against the
+  construction)** — A clean-room adversarial pass, discarding eight restatements and
+  returning one novel attack, one failed acceptance rationale, and one extension of a
+  known gap. All three verified before edit; all three held.
+
+  **A patron could recover its own victim, and the design's own text shows where the
+  model was thin.** Nothing required the verifier in a `Recovery` block to be
+  distinct from the adopting patron, and a recovery resting on verifier responses
+  needs **one** `match`. A patron is ordinarily a legitimate prior counterparty — it
+  met the subject at adoption — so it can assert `basis: personal_knowledge`, which
+  rests on the verifier's own memory and nothing checkable, without forging anything.
+  It mints a keypair it controls, signs the response, signs the adoption, and the
+  subject-consent signature is by the **new** key: §4.1 already says so outright —
+  *"field 7 is signed by the very key an attacker mounting a fraudulent recovery
+  already controls"*. The consistency rules defend against a **forged** verifier
+  attestation, which is why field 9 is hybrid; they never contemplated a **genuine
+  verifier that lies**, and the same party occupying both roles is what makes lying
+  free. **No response in field 2 may now come from the adopting patron** — checkable
+  by comparing field 1 against the adoption's patron, and it costs a legitimate
+  recovery nothing, since design §7.4.1's attestations are supposed to come from
+  counterparties trusted *independently of the adopter*.
+
+  **§14.4's escape hatch answers a patron that withholds, not one that acts.** The
+  entry says unilateral departure plus adoption elsewhere escapes censorship, and the
+  patron's cost is a fleeing down-line. Against **retaliatory disavowal** that cost is
+  **zero**: the subordinate is already leaving and the slot refills. Nor is there any
+  ordering to appeal to — a departure advances the departing node's counter, a
+  disavowal advances the patron's and carries no subject counter, and timestamps are
+  signer-controlled and never checked against a clock. §14.4 now carries the case
+  separately, and states what actually limits it: an observer holding a departure and
+  a with-prejudice disavowal minutes apart holds an evaluable pair, and a contested
+  exit reads differently from an ordinary disavowal. Visibility, not enforcement,
+  which is §1.1's usual answer — and the record stays durable regardless.
+
+  **§10.7.2 dismissed the leaf case with an assumption disavowal breaks.** *"A root
+  without [a down-line] is a lone identity whose currency nobody has occasion to
+  check"* is true of a Genesis user, who claims nothing. A **disavowed leaf** has
+  history, and §10.7.1's own rule makes a staple required precisely because it claims
+  prior standing — with no down-line to attest from below and no patron from above.
+  **Adoption is itself trust-bearing**, so the operation that would restore an issuer
+  is gated on already having one. What distinguishes this from the availability gap
+  Appendix A records is that **a patron can manufacture the state deliberately**: one
+  disavowal freezes a leaf once its last staple expires, and the only escapes are a
+  second binding established beforehand, a non-conforming evaluator, or returning as
+  Genesis and abandoning the history — denial of service converted into destruction
+  of portable standing. *"Re-adoption is available"* is therefore not a general answer
+  to patron abuse, and §14.4 no longer reads as offering one.
+
+  **Author, same day: there is no lost-key variant, and recovery is key *and*
+  presence.** The adversarial finding was closed by removing the case it exploited
+  rather than by constraining it. **A rotation now carries both halves and always
+  did in intent**: field 3, the old key's own signature, and field 2, at least one
+  `match` from a prior counterparty met in person. Neither substitutes for the
+  other — **a thief holds the key too and could rotate with it; a verifier can be
+  mistaken or lying and nothing checks it** — so an attacker needs the secret *and*
+  a person willing to assert a meeting that did not happen. A key you cannot sign
+  with is not recoverable: you make a new identity and are re-adopted by people who
+  know you, which in a network of close acquaintance is faster than any mechanism
+  here.
+
+  **The separation rule added an hour earlier is withdrawn**, and was wrong. Barring
+  the adopting patron from supplying a `match` would have blocked the most natural
+  legitimate path — in a network of close acquaintance your patron is very often
+  exactly the person who would recognise you. With both halves required the rule
+  buys nothing, because a patron who cannot sign with the victim's old key cannot
+  mount the attack at all.
+
+  **The residual is accepted and stated** (§7.4.0.1): a patron who steals your key
+  satisfies both halves in its own subtree, holding the key and asserting the
+  recognition. **That subtree is effectively its property** — if it wants a straw man
+  wearing your name, the answer is to go elsewhere and make new friends, which the
+  exit argument already assumes you can.
+
+  **And `personal_knowledge` was inverted, not weakened.** The attack read it as the
+  soft option because nothing checks it. It is **the ordinary basis for a rotation**:
+  a template match is a machine agreeing two images resemble each other, where
+  recognition is somebody who knows you saying so. §7.4.1 now leads with the human
+  judgement and treats the stored photo as support for it.
+
+  **Swept**: `Recovery`'s schema (both fields required, `[+ …]` grammar), the
+  threshold logic and the optionality discussion it forced, the two-variant table in
+  design §7.4.0.1, the replay-primitive argument's dependence on an absent field 2,
+  §7.4.1's procedure, §7.4.3's weak-tie boundary, and the retention-tier argument,
+  which now rests on there being nobody within reach to recognise you rather than on
+  a missing quorum.
+
+  **Two-tier capture retention removed entirely** (author). One window, one seed, one
+  key, one grant. The 5-year derived-template tier is gone, `k_template` and
+  `k_images` collapse to a single `k_capture`, `KeyGrant` loses its optional second
+  key, and `pN.retention` goes from `[photo_years, template_years]` to one `uint`.
+  **The tier had one consumer and lost it**: §7.4.1 called weak-tie recovery the only
+  argument supporting the longer window, and with rotation resting on recognition
+  rather than a stored template there is nothing on the other side of the cliff to
+  reach for. §7.1.5.1 now states the cliff as accepted rather than softened, and says
+  why: a second window buys detection by keeping biometric material for years after
+  the images are deleted, and doubles every declaration, key and grant.
+
+  **The consequential simplifications are larger than the parameter change.** The
+  normative segment *ordering* rule existed only because writing images first would
+  "silently convert a template-only grant into an image grant" — with one key there
+  is no such conversion and the rule goes. So do the graduated-capability framing,
+  the tier-release obligation in `light-client-requirements.md`, and *"allow
+  template-only storage for users who accept version lock-in"*.
+
+  **"Segment key" was itself an oblique trace** and is renamed to **capture key**
+  throughout — 16 sites across three documents, plus §5.3's title and the *"two
+  segments, two derived keys"* construction heading. Segments implied separately
+  keyed parts, which is the design being removed; a reader meeting the term would
+  have inferred a structure that no longer exists.

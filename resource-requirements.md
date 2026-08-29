@@ -84,7 +84,22 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 | Leg | Transport | Framing |
 |---|---|---|
 | **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §7.3) — not a stream-0 control frame. No HTTP |
-| **Node → resource** | **Not the network's business.** A local socket for a hosted package, ordinary HTTPS for an external service | **Ordinary HTTP**, carrying the headers below |
+| **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
+
+**The second leg often does not exist at all.** [D] design §9.7's
+default is **broker rather than proxy**: the node authenticates and hands off, and
+the user's client connects to the service itself. **Do not assume a client's
+resource traffic passes through its node** — a light client runs on an
+ordinary network-enabled device and can make its own outbound connections, and an
+adaptor that makes the node a third-party authenticator to a directly-attached
+service is exactly the single sign-on shape §10 describes.
+
+**Where the node does carry the traffic, HTTPS is required wherever that leg crosses
+a network**, and plain HTTP is permitted only on a local socket to a package the
+node hosts itself. The node already reads the request — it inserts the credential —
+so what the far leg protects is everyone *else*: an operator relaying to a resource
+elsewhere must not put an authenticated principal and an application body on the
+open network.
 
 **The node is a reverse proxy that authenticates; the resource is an origin server
 behind it.** And the proxy's two sides speak different protocols, which is what a

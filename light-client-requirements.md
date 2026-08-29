@@ -46,18 +46,14 @@ that is noted in place.
 - **Seal captures under keys derived from the seed the subject supplied, and never
   retain a released key after the ceremony** (design §7.1.5.2). A compliant client holds
   no decryptable likeness of another person; it regains access only when that person
-  releases a segment key again in a later ceremony.
-- **Derive the template at capture time and store it as a fixed-length record at
-  the head of the encrypted store, images after** (design §7.1.5.2). Order is
-  normative: writing images first silently converts a template-only grant into an
-  image grant.
-- **Release keys by tier.** Both while the image window is open, `k_template` only
-  between the image and template windows, neither after. That is
-  how the retention tiers are enforced.
+  releases a capture key again in a later ceremony.
+- **Release the capture key while the retention window is open, and not after.**
+  That is how the window is enforced: it is the subject's key, and declining to send
+  it is the whole mechanism (design §7.1.5.2).
 - **Back up seeds with the rest of device state.** Losing them costs the ability to
   unlock your likeness everywhere, in the same way and for the same reason as losing
   portable standing (design §8.2).
-- **Send a segment key as a `KeyGrant` naming both the record and the query it
+- **Send a capture key as a `KeyGrant` naming both the record and the query it
   answers** (`wire-format.md` §5.3). A grant arriving unattached to a query the
   subject countersigned is an unsolicited key release; treat one as malformed rather
   than opening your store.
@@ -79,7 +75,7 @@ that is noted in place.
 - **Store your own seeds privately**, in your record of the transaction. They are
   what lets you unlock your likeness on a counterparty's device later, and they die
   with the device exactly as portable standing does (design §8.2).
-- **Send the segment key directly to a selected verifier**, bypassing the
+- **Send the capture key directly to a selected verifier**, bypassing the
   counterparty running the ceremony and every witness (design §7.1.5.2).
 - **Let the user set their own retention horizon, and tell them what it costs.**
   Declining to release a key enforces retention unilaterally against a
@@ -309,9 +305,9 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Register a resource with your serving node, not with the network**
   (`wire-format.md` §4.7, request type 7). You sign the entry, your host answers for
   it, and the `discover_scope` you send is a request the host may narrow — an
-  owner delegating hosting delegates that filtering. **Check the returned `txid`
-  against the one you computed**: a mismatch means you and your host disagree about
-  the body bytes, and this is the only exchange where both of you hold the object.
+  owner delegating hosting delegates that filtering. **What you send is the signed
+  entry itself**, not a transaction: it enters no archive, chains to nothing, and the
+  host answers from it directly.
 - **Build your catalog view by sweeping the horizon, and cache it** (design §9.5).
   Refresh on joining a subnet, periodically, after a failed connection, and when the
   user asks. **Do not query per UI interaction.**

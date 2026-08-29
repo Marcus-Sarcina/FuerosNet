@@ -834,7 +834,71 @@ Stated plainly so it is not over-trusted:
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
 | 6 | **0.8b** | Purge | Vignette/spec agreement. Late, once content has stabilised |
-| 7 | **0.9** | Purge | Organisation. Last, so it does not churn against content edits |
+| 7 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
+| 8 | **migration** | — | Not a review. The `network-design.md` reordering: preface → thesis → topology → brief scope → the rest in current order, with the document-conventions section moved to an appendix and *Explicitly deferred* folded into the open-items section. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
+| 9 | **0.9-after** | Purge | Organisation again, on the migrated structure. Confirms the new order reads to a sequential stranger and that nothing was orphaned or double-numbered in the move |
+
+**0.9 runs twice, before and after the migration** [author, 2026-08-28]. The
+first pass is about defects in what exists; the second is about the move itself.
+Splitting them keeps two failure modes apart: material that was already
+misorganised, and material the migration displaced.
+
+**Known inputs to 0.9-before**, found in passing and deliberately not fixed early:
+51 heading-level anomalies (depth-3 sections written `###` in 51 places and
+`####` in the resources section's subsections — two conventions, the smaller one
+correct); and the open question of where Vocabulary sits in the new order, which
+reads naturally before Topology since a reader meets *patron*, *subordinate* and
+*Dunbar Org* there before the structure that uses them.
+
+## De-linting: the released document is a design, not a record of drafting it
+
+**Target** [author, 2026-08-28]: the initial specification should read as a
+**discrete, self-contained design**. Alternatives are mentioned briefly, future-state
+material is confined to one topic, and nothing narrates how the document was
+written. Example given: §15.1's *"Flagged by the 2026-08-14 factual verification
+pass as asserted without an external source"* — a true statement about the drafting
+process and no part of the design as released.
+
+**Survey (2026-08-28).** Smaller than it feels, and concentrated in four kinds:
+
+| Kind | Count | Disposition |
+|---|---|---|
+| **Pass archaeology** — *flagged by the … pass*, *a review pass registered it*, *found by a self-check* | ~4 | Remove. The finding survives; the pass that found it does not |
+| **Dated decision markers**, `[D — 2026-08-28]` against a bare `[D]` | 42 (8 design, 34 wire) | The *decision* is design; the *date* is change-log material. Dropping the dates leaves 241 bare `[D]` markers doing their job |
+| **Bare dates in prose** — *Agreed 2026-08-16*, *Settled 2026-08-25*, *narrowed/reduced/restated 2026-08-28* | ~86 date tokens overall | Same class. Some carry a real qualifier (*narrowed*, *reduced*) whose **substance** should stay and whose date should not |
+| **Drafting archaeology** — *an earlier reading gave…*, *previously stated the opposite*, *superseded* | ~8 | **Judge individually.** Some stop a reader re-deriving a rejected design and earn their place; some are pure history. Appendix A's *rejected alternatives* is the right home for the first kind |
+
+**Not lint, despite looking like it**: the change-log pointers in the registers.
+*Withdrawn numbers are recorded there so a citation resolves* is live
+infrastructure — it is what makes the no-reuse rule work — and the document table
+row naming `change-log.md` is orientation for a reader, not process narration.
+
+**The cause, and why a cleanup alone will not hold it** [author, 2026-08-28]. A
+dedicated pass was run against this material once already, with a different model,
+for no purpose but to clear it — and it came back. Working through a large review
+means holding per-finding state somewhere, and **this file's companion,
+`review-tracking.md`, is the scratchpad that exists for exactly that.** Writing that
+state into the specification instead is an attempt at the same thing which "doesn't
+work very well and leaves a confusing document". Remove the instances without
+removing the reason and they return with the next review round.
+
+**It is also duplication.** `change-log.md` already records when each of these
+changed and why, at length. A parenthetical date in the specification is a second
+copy of a fact that is kept better elsewhere, and two records of one fact drift.
+
+**So the rule, not just the cleanup**: per-finding iteration state goes in
+`review-tracking.md`; reasoning goes in `change-log.md`; **the specification carries
+the decision and nothing about when it was reached.** A bare `[D]` is the
+convention and is sufficient. Where a qualifier carries real substance — *narrowed*,
+*reduced*, *restated* — keep the substance and drop the date.
+
+Sequence the sweep **after** the last substantive review, or it will be run twice.
+
+**Known input to the migration**: the open-items section cites the scope section
+four times for deferred material — IPv6, hard-fork forwarding, transaction types
+beyond the seven, ranging mode. Folding *Explicitly deferred* into it turns those
+into self-references, which want rewording rather than remapping, and a mechanical
+sweep will pass straight over them.
 
 Run a **verification pass after any pass whose findings were addressed by
 rephrasing or by replacing a mechanism.** Rewriting a rule is a good moment to
