@@ -916,8 +916,13 @@ done.
 scope summaries are written once and never re-read, because nobody looks at the
 top of a document they already know. Both went stale here — the date was carried
 forward unchecked for three days, and the status line claimed two things were
-unspecified that had since been specified. **Add the header to the grep list**: it
-is the part of a document a new reader reads first and the authors read last.
+unspecified that had since been specified.
+
+**Resolved by removal rather than by checking** (2026-08-29). The "last updated"
+and "last revised" dates are gone from both documents: an edit timestamp is in the
+filesystem and in git, so restating it by hand created a surface that could only
+ever be wrong. **Scope summaries in headers remain on the grep list** — they carry
+claims nothing else records, so they can still go stale and still have to be read.
 
 **Original ordering rationale, for reference:**
 

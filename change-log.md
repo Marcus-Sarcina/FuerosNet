@@ -5137,3 +5137,64 @@ nothing happened. Ordering was always correct; the dates were not.
   position is the trust signal, this is intrinsic rather than fixable — document it,
   don't pretend otherwise"* under a **Known leak** heading. Corrected there too, and
   the heading with it: this is disclosure, not leakage.
+
+- **2026-08-29 (de-linting pass over the 0.8 rounds)** — Seven detectors over the five
+  root documents returned **112 raw hits**, judged individually rather than swept.
+  **Sixteen were real**; the rest were the detectors being over-broad, which is worth
+  recording so the next pass does not re-litigate them.
+
+  **Two root documents cited `Robot/`, which the working rules forbid outright.** §15.2
+  called its assumptions *"the natural targets for the Stage 1 simulations in the
+  review plan"*, and §18.3 opened *"the implementation passes (review plan 0.6) ask can
+  this be written?"* Both name `Robot/review-plan.md` — a design document depending on
+  a working file for its own argument. Rewritten to say the same thing without the
+  citation: assumptions are targets for simulation, and implementing a mechanism asks
+  whether it can be written.
+
+  **Pass archaeology, six sites.** §14.4 attributed its risk ranking to *"an
+  adversarial review"*; §15.2's Basis column was qualified *"following the 0.3
+  review"*; §18.3 narrated which mechanisms took one implementation pass and which took
+  two; §18.2 was *"consolidated so a reviewer need not reassemble it"*; and both §0 and
+  §18.2 deferred canonical test vectors *"until a review cycle runs clean"* — a
+  specification conditioning its own completeness on a review programme. In each case
+  the finding survives and the pass that produced it does not.
+
+  **Drafting narration, eight sites**, including one that took two passes to clear.
+  *"Until that was written, selection could not be recomputed"* became the requirement
+  it was describing; *"a hole in §10.6.5 as originally written"* lost three words;
+  §14.5.4's P35 row dropped *"§10.4 amended, since it previously stated the opposite"*;
+  §14.5.5 lost *"§11.1.6 originally asked for"*; `wire-format.md` §4.6.4's *"conflating
+  them was left open"* became the rule it had been deferring. **§8.2's italicised
+  parenthetical** — *"a draft of this section briefly treated deliberate multi-device
+  forking as an attack"* — is now the positive statement it was hiding: deliberate
+  forking is not an attack on this, and the multi-device problem is accidental forking.
+
+  **"More load-bearing than when written" appeared twice**, in §8.2 and §17, and the
+  first fix did not find the second — the recurring failure this log keeps recording.
+  The detector caught it on the re-scan, which is the argument for re-running rather
+  than trusting a sweep.
+
+  **Ninety-six hits were the detectors being wrong**, and the categories are worth
+  naming. *"Stated because"* and *"worth stating"* (13) are the design explaining why a
+  rule is explicit — authorial voice, not an instruction to a drafter. *"Withdrawn"* and
+  *"superseded"* (20) are either domain vocabulary — a superseded identity, a withdrawn
+  authority — or the register tombstone convention that keeps numbers from being
+  reused. Most *"open question"* hits (7 of 8) are legitimate pointers into §17 and
+  §18; the eighth was a malformed `(§17.)` citation, now fixed. And most *"pass"* hits
+  were a UWB `pass`, a path passing through a root, or a credential not being passed.
+
+  **Both front-matter revision dates were stale** — 2026-08-25 and 2026-08-22 against
+  documents edited that day — **so they are gone rather than corrected** (author): an
+  edit timestamp lives in the filesystem and now in git, and restating it by hand is a
+  surface that can only ever be wrong. `network-design.md` loses its *"Last updated"*
+  line; `wire-format.md`'s status line keeps **Status: Draft** and drops *"Last revised"*.
+  The other three root documents never had either, so the set is now consistent.
+
+  **The root set carries no date tokens at all.** The 2026-08-28 pass took them from 86
+  to 2 and kept those two as document metadata; this removes the category. `Robot/`'s
+  review plan had already caught the failure mode — *"front matter goes stale silently…
+  nobody looks at the top of a document they already know"* — and prescribed adding the
+  header to the grep list. **Removing the surface beats checking it**, which is the
+  correction this project keeps arriving at. The plan is updated to say so, and to keep
+  header *scope summaries* on the grep list: those carry claims nothing else records,
+  so they can still go stale and still have to be read.

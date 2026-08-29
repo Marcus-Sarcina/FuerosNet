@@ -1,6 +1,6 @@
 # Wire Format Specification
 
-**Status:** Draft. Last revised 2026-08-22.
+**Status:** Draft.
 
 **Companion to `network-design.md`.** That document holds rationale, this one
 holds encoding. Where they disagree the design is authoritative and this file is
@@ -1562,8 +1562,8 @@ committed back-pointer is inside the signature and cannot move.
 
 **Candidates are distinct prior counterparties, deduplicated by keyhash.** A
 subject who met the same person twenty times has one candidate, not twenty — the
-threshold counts *transactions*, the candidate set counts *people*, and conflating
-them was left open.
+threshold counts *transactions*, the candidate set counts *people*, and the two
+must not be conflated.
 
 ```
 required(subject) = min( floor(n / 2), 10, |candidates| )

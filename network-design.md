@@ -68,7 +68,7 @@ the Triple Ratchet* (§11.2.4) rather than designed here, with four integration
 decisions open. Multi-device beyond archive merge (§18.1). **Eleven parameters
 remain unset** (§16.1), sorted by how provisional they actually are in §16.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
-deferred by decision** until a review cycle runs clean.
+deferred by decision** until the encoding stops moving.
 
 **Everything currently open is consolidated at §18.2**, classified by what it
 blocks.
@@ -78,8 +78,6 @@ for the shape; §7 for proof of presence, which is the scarcity mechanism everyt
 else rests on; §8 for the archive; §9 for resources, which is what the network is *for*. §14 records
 what is known to be weak, and §15 what the design rests on that is not established
 here (read that before trusting any quantitative claim).
-
-**Last updated:** 2026-08-25
 
 ### Document set
 
@@ -2439,11 +2437,11 @@ control variable is which completed attempt is allowed to survive. With fraction
 roughly 32 for p=0.5, q=5, and far fewer if the goal is merely avoiding one
 dangerous verifier or landing several `unavailable` slots.
 
-**Encoding is now fully specified** in `wire-format.md` §4.6 — commitment
-construction, seed bytes, the 24-hour window, hash-rank sampling, and the candidate
-set. Until that was written, **selection could not be recomputed from the record at
-all**, because the nonce commitments and reveals were nowhere in it; the
-anti-suppression property this section rests on was unverifiable.
+**Encoding is specified** in `wire-format.md` §4.6 — commitment construction, seed
+bytes, the 24-hour window, hash-rank sampling, and the candidate set. **The nonce
+commitments and reveals must be in the record**, or selection cannot be recomputed
+from it at all and the anti-suppression property this section rests on is
+unverifiable.
 
 **Two rules close it, and both are required:**
 
@@ -2974,11 +2972,10 @@ different subnets is **not** an edit to a history. It is two histories, which
 not to hold users accountable across subnets.* Cross-subnet accountability is
 disclaimed by design and is not a property this chain is protecting.
 
-*(A draft of this section briefly treated deliberate multi-device forking as an
-attack on that basis. It was not, the "gain" of carrying pre-fork standing into
-two subnets is simply the archive doing its job, and a reviewing patron already
-ignores transactions with counterparties it cannot reach. The real multi-device
-problem is **accidental** forking; see §18.2.)*
+**Deliberate multi-device forking is not an attack on this.** The "gain" of carrying
+pre-fork standing into two subnets is the archive doing its job, and a reviewing
+patron already ignores transactions with counterparties it cannot reach. **The
+multi-device problem is *accidental* forking** (§18.2).
 
 **Scope: one chain per identity**, spanning subnets. The resulting cross-subnet
 visibility is bounded by an existing rule: a reviewing patron **ignores
@@ -3018,9 +3015,8 @@ oversight.
 **The cost:** archive loss is history loss. Presence-based recovery (§7.4.1)
 restores the *key*, not the archive, so a user who loses their device and recovers
 their key returns with standing intact in their existing subnets and **nothing
-portable to a new one**. This makes §10.8.7.1's backup requirements considerably
-more load-bearing than when written. *(Whether recovery should restore history is
-an open question (§17.)*
+portable to a new one**. This makes §10.8.7.1's backup requirements
+load-bearing. *(Whether recovery should restore history is an open question — §17.)*
 
 ### 8.3 Merges. The archive is a DAG, not a chain
 
@@ -4298,7 +4294,7 @@ standing, and nobody is asked to prove a negative.
 ### 10.7.2 Roots derive currency from below
 Currency attestations come from the patron (§10.6.5), so a patronless node cannot
 staple and would be permanently frozen for trust-bearing operations. **This is a
-hole in §10.6.5 as originally written, independent of disavowal.**
+hole in §10.6.5, independent of disavowal.**
 
 Resolution inverts a mechanism already present: §7.4.2's social revocation uses a
 threshold of the down-line co-signing, and the same threshold attests **"our
@@ -5708,8 +5704,8 @@ globally.
 
 ### 14.4 Accepted risks
 - **Provider concentration is the highest-ranked systemic risk, and rests on an
-  unsupported premise.** An adversarial review put a state actor compelling one
-  cloud provider first — above endpoint theft, because §4.3's expectation that
+  unsupported premise.** A state actor compelling one cloud provider ranks above
+  endpoint theft, because §4.3's expectation that
   infrastructure concentrates in a handful of clouds turns architectural
   disaggregation back into bulk access. **That expectation is itself unsupported**
   (§15.1), so the ranking inherits its uncertainty: if deployment is genuinely
@@ -6067,14 +6063,13 @@ and a citation to a missing number resolves there.
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §8.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§10.6.1, §9.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§18.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
-| **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§12.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §10.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §4.1.1 guarantees by construction. §10.4 amended, since it previously stated the opposite as a product property. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§12.2) |
+| **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§12.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §10.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §4.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§12.2) |
 | **P36** | **`seqno` is a per-node counter, so its gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium | A node bound into two subnets advances one counter in both, so an observer in one sees jumps it cannot account for and learns the node is bound elsewhere and roughly how active that binding is. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **Registered rather than engineered away**: §4.1.1 says plurality is "an accidental consequence… the protocol does not model it", and a per-binding counter would break `seqno`'s double duty as freshness test and stale-cache detector across §10.3, and `wire-format.md` §§2.3, 5.3, 5.6.2. **Narrowed**: an infra node's endpoint changes advance the same counter, so a gap has an innocent local explanation as well — but only for infra nodes, and only against an observer outside the horizon, since one inside it sees the endpoint records that account for the jump. See C19 for what sharpens it |
 
 ### 14.5.5 Queue policy had to settle more than size
 
-§11.1.6 originally asked for a retention rule and a size bound. **A size bound is not
-a privacy measure**, and the list this section raised is now answered rather than
-pending:
+A queue needs a retention rule as well as a size bound, and **a size bound is not a
+privacy measure**:
 
 | Question | Where |
 |---|---|
@@ -6300,7 +6295,7 @@ Most are rhetorical intensifiers or parameter choices. The twenty-six below are
 different:
 **each supports a design decision that would change if the assumption is false.**
 None is currently validated. They are the list to attack first, and the natural
-targets for the Stage 1 simulations in the review plan.
+targets for simulation.
 
 | # | Assumption | What rests on it | If false |
 |---|---|---|---|
@@ -6364,7 +6359,7 @@ and §15.2's assumptions are what would have to hold for the choices to be sound
 The parameters most exposed are those an attacker can probe (§16.1.1 sorts the
 unset ones by that criterion, and the same reasoning applies to the set ones.
 
-**Read the Basis column carefully.** Following the 0.3 review, values are marked
+**Read the Basis column carefully.** Values are marked
 **derived** only where the document supplies a calculation that produces them.
 Most are **chosen.** A judgement with stated rationale, which is not the same
 thing. `L`, `S`, `h_store`, `h_process`, the retention window, `min(n/2,10)`, the
@@ -6513,8 +6508,8 @@ where an appendix entry reads as settled history.
    device also loses the ability to unlock one's likeness on every counterparty's
    machine. Whether
    recovery should restore history, and how, without handing an attacker the
-   same path — is undecided. §10.8.7.1's backup requirements are now considerably
-   more load-bearing than when written.
+   same path — is undecided. §10.8.7.1's backup requirements are load-bearing
+   because of it.
 6. **Attention as the denominator of agent trust. DEFERRED with autonomous
    participation above.** It is
    a question about autonomous participation, which is not to be implemented in
@@ -6584,7 +6579,7 @@ tracked at §18.2.
 
 ### 18.2 Everything currently open, in one place
 
-**Consolidated so a reviewer need not reassemble it from six registers.**
+**Consolidated so it need not be reassembled from six registers.**
 
 **The identity, presence, routing and messaging layers are specified. The resource
 layer is partly specified.** Every transaction, record, signature rule and encoding is
@@ -6602,9 +6597,7 @@ does block.
 catalog path — registration, query and reply, entry lifecycle as local state
 (`wire-format.md` §4.7) — and the request/response path — §7.3's normative
 evaluation order and refusal behaviour, with the role row consulted as a lookup —
-were each implemented against and repaired, the catalog in one pass and §7.3 in two.
-Every other mechanism in this layer needed a second run before it was sound, and
-these have now had theirs.
+have each been implemented against and repaired.
 
 ---
 
@@ -6642,8 +6635,8 @@ these have now had theirs.
 
 - **Autonomous participation** and the attention question depending on it (§17). Not to
   be implemented in this or any intervening version.
-- **Canonical test vectors** (`wire-format.md` §9), until a review cycle runs clean and
-  someone other than the author writes them.
+- **Canonical test vectors** (`wire-format.md` §9), until the encoding stops moving
+  and someone other than the author writes them.
 - **Transaction types beyond the six**, and **multiple identities per client** (§2) —
   a v1 client-scope exclusion, not a protocol limit.
 - **IPv6 endpoints and prefix-based reputation** (§2). v1 demands IPv4; the
@@ -6665,9 +6658,8 @@ project's dominant failure mode. They are also better produced by someone other
 than the designer, for the same reason review is: **tests written by the author
 encode the author's misunderstandings.**
 
-**A test suite is the natural successor to §18.2.** The implementation passes
-(review plan 0.6) ask *can this be written?* and stub the error paths; a test suite
-asks *what should happen when the input is wrong?*, which is exactly where those
+**A test suite is the natural successor to §18.2.** Implementing a mechanism asks
+*can this be written?* and stubs the error paths; a test suite asks *what should happen when the input is wrong?*, which is exactly where those
 stubs were. Expect a different class of defect — boundary values, error paths, and
 rules that conflict only on malformed input.
 
