@@ -4827,3 +4827,99 @@ nothing happened. Ordering was always correct; the dates were not.
   segments, two derived keys"* construction heading. Segments implied separately
   keyed parts, which is the design being removed; a reader meeting the term would
   have inferred a structure that no longer exists.
+
+- **2026-08-29 (witness adversarial review 0.8.2; cross-nomination refiled)** — An
+  external pass took one witness at a presence ceremony as the adversary and returned
+  three findings. All three held on verification, and the root of all three was that
+  **the witness had never been modelled as a principal**: searching both documents,
+  every witness-related security statement treated witnesses as the *instrument* of a
+  participant's attack — "colluding witnesses", "friendly witnesses" — and none as a
+  party acting on its own behalf.
+
+  **Cross-nomination was doing the wrong job in the documents** (author). `wire-format.md`
+  §4.6.2.1 said the anti-grinding property "rests on the witnesses being honest, and
+  **cross-nomination is what supplies that** … the same bar as forging the ceremony
+  outright." That contradicted §14.2 — no topology rule can supply Sybil resistance,
+  and cross-nomination is a topology rule — and the "same bar" claim was false besides:
+  forging needs a participant's signature, grinding needs a nominee. The author's
+  correction is that cross-nomination was never for honesty. **It is for
+  representativeness of the sample.** Witnesses would ideally be drawn at random from
+  the whole userbase; no node can enumerate it, so each party draws from what it can
+  see in the counterparty's neighbourhood, and in a balanced set each party knows half
+  the witnesses are its own nominees and therefore uncurated by the counterparty.
+  §7.1.1 step 1 and §4.6.2.1's closing now say that, and say what it leaves open.
+
+  **A one-witness record is where the property vanishes, and it stays valid.**
+  `wire-format.md` §3.2 requires at least one witness and requires `nominated_by` to
+  name a participant; it does not require both participants to be represented. Where
+  one party nominated the whole set, the other has none of its own nominees present —
+  and since the seed's only input the participants do not fix is the witness nonces
+  (§4.6.3), that party's verifier sample derives entirely from its counterparty's
+  nominees. A sole witness can therefore commit to a nonce whose sample it has already
+  computed. **Left visible rather than forbidden** (author), on §6.1.1's precedent: a
+  balanced set is what a party should insist on, not what the encoding can require, and
+  a meeting where only one other node could serve is a real case a hard rule would
+  invalidate. `nominated_by` is in the record, so the split reads directly, and
+  `light-client-requirements.md` §1.0 now requires the client to surface it. **Two or
+  more independent witnesses close the seed attack with no further rule**: commitments
+  are published before capture and reveal nothing about their nonces.
+
+  **"Volunteering" was the wrong word and is gone** (author). §7.1.1 previously opened
+  "witnesses signal availability", which describes candidates bidding. What actually
+  happens is the reverse: the nominator selects — with a random element, and spread
+  across as many independent branches of the counterparty's graph as it can, since
+  catching a spread selection needs a correspondingly larger fake region — and *then*
+  probes, because many nodes worth nominating are inactive or light-client-only and
+  cannot serve at ceremony time. Availability is discovered by the nominator, not
+  advertised by the candidate. New **§7.1.1.1** carries the procedure and the residual.
+
+  **§14.4's Potemkin justification was falsified and is replaced.** The accepted risk
+  said a fake region "harms nobody who is not engaging with it." Witness eligibility is
+  not a function of standing, so a node placed by one boundary adoption — valid without
+  a proof of presence, §6.1.1 — sits in a neighbourhood *someone else's counterparty*
+  nominates from, and the C1/C2 disclosures and a withheld signature land on a party
+  that never engaged with it. The risk is still accepted; what bounds it is the branch
+  spread of §7.1.1.1, not the flow metric.
+
+  **The witness's selective abort is now registered** in §7.2.2, which previously
+  analysed only a participant aborting. A witness reveals after the capture is spent
+  and signs last, so it decides twice with a meeting already paid for by two other
+  people; a fresh nonce on retry violates §4.6.2.1 and is invisible in a completed
+  record. The design's usual answer is unavailable here and that is the sharp part: an
+  attempt that never finalises is never published, so there is no artifact to
+  attribute. It remains a denial of service against one pair, not a route to false
+  evidence — the three defences the pass confirmed (no forged record, no rewritten
+  verifier response, no capture from witnessing) all held.
+
+  **Also**: the "one check that protects you against the person in front of you" in
+  `light-client-requirements.md` §1.2 is now two, since the nomination-split check is
+  the same shape; §14.5.2's "an attacker choosing friendly witnesses" scoped to
+  *participant*; nine duplicated-word artefacts fixed (`(design design §…)` ×8 across
+  the two client documents, and §10.8.4's "a a choice"), all of them line-spanning and
+  invisible to a single-line grep.
+
+  **The `[D]` provenance markers are gone — 289 of them across the five root
+  documents** (author). The de-linting pass of 2026-08-28 stripped the dates and kept
+  the markers; this removes the markers on the same reasoning, stated by the author as
+  the rule the earlier pass should have followed: *if something is undecided it belongs
+  in the `Robot/` set, and if it is decided it is just part of the current design.
+  Everything was decided at some point, so there is nothing to flag.* Removed: 220 from
+  `wire-format.md`, 65 from `network-design.md`, 3 from `resource-requirements.md`, 1
+  from `infra-client-requirements.md`. `wire-format.md`'s front-matter **provenance
+  block went with them**, along with the companion `[P]` marker it defined for
+  proposals "not yet agreed" — a marker with **zero instances in use**, its only two
+  occurrences being inside its own definition. Its removal costs nothing and closes the
+  question the block invited.
+
+  **Where the marker was the sentence's object it was rewritten, not deleted.** §4's
+  *"Both are **[D].**"* went entirely, the paragraph ending at its §9.5 citation; §5.2's
+  *"never a protocol constant**\n[D]."* took the period back onto the sentence. Four
+  standalone marker lines were removed without disturbing the blank line a following
+  table or heading needs. Verified after: no marker or `[P]` residue, no trailing
+  whitespace, no doubled prose spaces, and the four documents that had two `\n\n\n`
+  sequences each still have exactly two.
+
+  **Two doubled words fell out of the check that found them**, both predating this
+  round: §1's *"each with with varying rules"* and `wire-format.md` §5.3's *"a capture
+  capture key"*. The earlier duplicated-word sweep this session missed them because its
+  word list was restricted to the terms it expected; the unrestricted form found them.

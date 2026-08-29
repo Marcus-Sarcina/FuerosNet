@@ -33,11 +33,31 @@ that is noted in place.
 
 ## 1. Ceremony
 
+### 1.0 Nomination
+
+- **Nominate witnesses only from the counterparty's neighbourhood, never from your
+  own** (design §7.1.1). Nominating your own is the failure mode the rule exists to
+  prevent, and it destroys the only property the witness set gives you.
+- **Spread nominations across as many independent branches of that neighbourhood as
+  you can, and include a random element.** A selection concentrated on one branch is
+  caught by a correspondingly smaller fake region; a spread one forces a much larger
+  occupation (design §7.1.1.1).
+- **Probe your selections for availability; do not nominate from a set of nodes that
+  advertised themselves.** Many nodes worth nominating are inactive or not running
+  at ceremony time, so availability is something you discover after selecting. A
+  node that solicits nomination is self-selecting (design §7.1.1.1).
+- **Check the `nominated_by` split before you sign, and tell the user when your own
+  nominees are absent or outnumbered.** The witness set is only representative to
+  the extent you nominated half of it; where the counterparty nominated all of it,
+  your verifier sample derives entirely from their nominees (design §7.1.1.1). This
+  is not a validity condition — such a record is well-formed — which is why the
+  client has to surface it.
+
 ### 1.1 Capture
 
 - **Obtain the strongest proximity channel the hardware supports**, and record
   which was achieved. Never present a weaker channel as a stronger one (design
-  design §7.1.6.3).
+  §7.1.6.3).
 - **Refresh the reference image on every subsequent ceremony** with the same
   counterparty, so the stored image tracks the person rather than the first
   meeting (design §7.1.5).
@@ -107,11 +127,12 @@ that is noted in place.
 - **Query verifiers automatically.** A client treating a face-to-face encounter as
   evidence of identity continuity must issue the queries without asking; a client
   that skips them silently produces evidence weaker than it appears (design
-  design §7.1.3).
+  §7.1.3).
 - **Verify the counterparty's verifier selection before signing.** If they
   selected off-seed and you sign anyway, you hold a record that fails
-  recomputation permanently and cannot be repaired (design §7.2.2). **This is the
-  one check that protects you against the person in front of you.**
+  recomputation permanently and cannot be repaired (design §7.2.2). With the
+  `nominated_by` check in §1.0, **these are the two checks that protect you
+  against the person in front of you** rather than against an outsider.
 
 ### 1.3 Disclosure at capture time
 
@@ -190,7 +211,7 @@ session secrecy. The client implements them; it does not reinvent them.
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
   someone rotated — rather than intent to message. Fetching on demand instead
   announces each intended conversation to whoever serves the bundle (design
-  design §14.5.8, C11).
+  §14.5.8, C11).
 - **Never prefetch one-time keys.** Serving one consumes it, so blanket prefetch
   would drain every pool in the org and make exhaustion the normal state —
   destroying its value as a signal that someone is draining a pool deliberately.
@@ -220,7 +241,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Tell the user when attachment is degraded.** On a sibling, trust-bearing
   operations are unavailable; a user who is not told will read this as the
   application being broken and will not know that reconnecting resolves it (design
-  design §11.1.2).
+  §11.1.2).
 - **Disclose trust evidence only in response to another party's actual evaluation
   need**, never proactively for speculative or unsolicited evaluation (design §12).
   Present encoding: attestations are pulled, not pushed.
@@ -287,7 +308,7 @@ session secrecy. The client implements them; it does not reinvent them.
   the new credential to prior history, warn that prior standing will be abandoned;
   where a path does publish such a link, make the corresponding loss of
   unlinkability clear.** The two are one choice seen from opposite sides (design
-  design §10.8.7).
+  §10.8.7).
 
 ---
 

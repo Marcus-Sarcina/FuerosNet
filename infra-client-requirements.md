@@ -75,7 +75,7 @@ that is noted in place.
 
 - **Issue currency attestations for subordinates**, and accept the sibling,
   grandpatron and down-line issuance paths when the patron is unavailable (design
-  design §10.6.5.1).
+  §10.6.5.1).
 - **Issue fresh, never extend stale.**
 
 ## 4. Resolution
@@ -222,7 +222,7 @@ serving node.
   couples this node to a PQXDH revision.
 - **A one-time key request is a metadata event this node observes.** It learns
   that one party intends to message another before any message exists (design
-  design §14.5.8, C11). **A reusable-material fetch is not**, which is the point of
+  §14.5.8, C11). **A reusable-material fetch is not**, which is the point of
   prefetching it org-wide: only the on-demand request carries intent. It falls under §1's process-and-discard obligation: serve the request,
   keep no record of who asked for whose bundle.
 
@@ -231,7 +231,7 @@ serving node.
 - **Act as STUN and TURN** for clients attempting direct payload paths, and carry
   the relayed path as a first-class route rather than a fallback afterthought — a
   substantial minority of connections will never get a direct path (design
-  design §11.1.1).
+  §11.1.1).
 
 ## 7. Operator disclosure
 
@@ -266,7 +266,7 @@ existing metric.
 
 ### 8.2 Sandboxing
 
-**No host binding exposes network transaction primitives to a package.** [D] This
+**No host binding exposes network transaction primitives to a package.** This
 is not a matter of granting narrow scopes carefully: **the hooks do not exist.**
 design §9 already states the rule — *the resource never reads network state* — and
 a hosted package is a resource. It receives its credential (`resource-requirements.md`

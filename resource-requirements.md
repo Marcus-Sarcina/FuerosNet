@@ -86,7 +86,7 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 | **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §7.3) — not a stream-0 control frame. No HTTP |
 | **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
 
-**The second leg often does not exist at all.** [D] design §9.7's
+**The second leg often does not exist at all.** design §9.7's
 default is **broker rather than proxy**: the node authenticates and hands off, and
 the user's client connects to the service itself. **Do not assume a client's
 resource traffic passes through its node** — a light client runs on an
@@ -121,7 +121,7 @@ request reaching you is what a `connect` grant looks like, and you are not prese
 for a discovery decision. **Do not expect them, and do not treat their absence as a
 missing grant.**
 
-**So `rhtn-roles` may be empty, and that is not an error.** [D] `connect` is the
+**So `rhtn-roles` may be empty, and that is not an error.** `connect` is the
 gate and it is spent getting the request to you; the application roles are what you
 were given on top of it. **An empty list means a caller the node admitted and to whom
 the operator has granted nothing further** — decide for yourself what that principal
@@ -142,7 +142,7 @@ header's bytes; match names, not the string.
 parse it, do not assume a width, and do not treat it as globally unique — it
 identifies one node's session and nothing else.
 
-**It is also per resource.** [D] One caller's session with a node yields a
+**It is also per resource.** One caller's session with a node yields a
 *different* identifier for each resource it reaches, on the same reasoning as the
 pairwise principal (design §9.0.2): an identifier common to two resources would
 re-link the same caller across them and undo the separation the principal was
