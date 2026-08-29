@@ -1024,8 +1024,12 @@ Audit = {
 ```
 
 ASN is exposed deliberately so policies can weight network diversity, and so
-concentration (many nodes in one ASN) is observable. **Independence is a visible
-signal, not a trust input** — nothing in the metric consumes it.
+concentration (many nodes in one ASN) is observable. **Concentration is a visible
+signal, not a trust input** — nothing in the metric consumes it. **The signal runs
+one way**: many nodes in one ASN is evidence of concentration, while differing ASNs
+are not evidence of independence, since ASN is routing and not the entity subject to
+one legal order (design §14.3). The field is optional and self-asserted besides —
+no IP-to-ASN validation is specified anywhere.
 The audit list is pruned to the most recent few; peering is a status
 rather than a trust-bearing history.
 

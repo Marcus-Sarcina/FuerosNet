@@ -778,16 +778,20 @@ payload, so apex load scales with churn and introductions, not with usage.
   simply does not have the property. §16 records the same figure as a
   recommendation for that reason.
 - **The peering record carries the ASN for both endpoints** (§6.3), so an
-  observer can see whether two peers are actually independent. **Independence is
+  observer can see whether two peers are *concentrated* — not whether they are
+  independent, which ASN cannot show (§14.3). **Independence is
   adversarial, not only operational**: a party with legal compulsion over one
   provider reaches every node hosted there at once, so concentration bears on
   metadata confidentiality and local-state integrity as much as on fault
   tolerance. Two nodes in
   different subtrees but the same availability zone are not, and most infra will
   live in a handful of clouds. The *selection process* of a foreign operator
-  cannot be compelled; the resulting independence, or lack of it, is visible. The
-  reference client prefers peers differing in ASN and region, and surfaces it
-  when they do not.
+  cannot be compelled; the resulting *concentration*, where it exists, is visible.
+  The reference client prefers peers differing in ASN and region, and surfaces it
+  when they do not — **but a difference is not a demonstration.** ASN and region are
+  routing and geography, so peers differing in both may still sit under one provider
+  and one legal order (§14.3). The check finds concentration it can see; it does not
+  establish independence.
 - Replication depth (how far up/down metadata propagates) should be computed
   from expected traffic. Floor: every user's messages replicate on their nearest
   infra node and that node's siblings.
@@ -1106,8 +1110,8 @@ consequence of subnet plurality, not a gap in this mechanism.
 ### 6.3 Peering (cross-tree)
 - **Voluntary and ad-hoc.** Unlike adoption, not required to participate.
 - **The record carries each endpoint's network point.** Address, and where
-  available the ASN, so independence and concentration are
-  observable rather than asserted (§4.4, §14.3).
+  available the ASN, so **concentration** is observable rather than asserted
+  (§4.4, §14.3). Independence is not: ASN is routing, not legal control.
 - Two signatures, between infra nodes in different subtrees.
 - Attests investment in the network and therefore contributes to trust, but at
   **lower flow capacity than hierarchical edges by default** (see §13.3).
@@ -5697,6 +5701,14 @@ globally.
    - **Expose the ASN** as an attribute of the infra attestation.
      Concentration (1,000 nodes in one ASN) is observable and is a signal
      policies can weight — a visible signal, not a trust input.
+     **The signal runs one way.** Concentration in one ASN is evidence of
+     concentration; ASN or region *diversity* is not evidence of independence.
+     Both describe routing and geography rather than the entity subject to one
+     legal order, and one provider can present many of each. The field is also
+     optional and self-asserted (`wire-format.md` §4.4) with no IP-to-ASN
+     validation specified. Read it as a concentration detector and never as an
+     independence proof — the difference is what §14.4's compelled provider
+     turns on (§1.2.3).
    - Decision: demand IPv4 for now and take the security as a bonus, while
      making no engineering decision that precludes IPv6 later.
 3. **Flow-limited trust** bounds what any single-entry region can claim
@@ -6235,7 +6247,10 @@ ceremony.
 5. **Persistent encounter evidence.** Presence facts are immutable; only derived
    standing decays (§13.5).
 6. **Visible infrastructure placement** — the ASN is exposed *so that*
-   concentration is observable (§14.3).
+   concentration is observable (§14.3). What that buys is a concentration detector
+   and not an independence proof: diversity in ASN or region does not establish
+   separate legal control, which is the boundary §14.4's compelled provider turns
+   on (§1.2.3).
 7. **Optional platform-vendor metadata.** Push is opt-in and declared a
    degradation of the trust model (§11.1.5).
 8. **Patron as communications-metadata chokepoint** (§10.6.3).
@@ -6270,10 +6285,19 @@ ceremony.
    **Accepted because the reply discloses nothing further and the query is already
    the exception.** An attestation says only that an identity is current in its
    issuer's subnet; it never reports a rotation and never names what replaced
-   anything (§7.4.0). The query carries the subject and not the querier, nothing is
-   retained on either side, and a caller with a stale staple asks its introducer
-   first — a party that already knows. What remains is that a patron learns someone
-   asked, which is the price of being able to see a fork at all (§7.4.0.2).
+   anything (§7.4.0). Stapling makes the query rare, and a caller with a stale staple
+   asks its introducer first — a party that already knows. What remains is that a
+   patron learns someone asked, which is the price of being able to see a fork at
+   all (§7.4.0.2).
+
+   **The body omits a querier field, and that hides nothing from the responder.**
+   Transport authentication is mutual (`wire-format.md` §7.1), so the party
+   answering knows which identity asked and can join querier, subject and time
+   whatever the schema leaves out. **The omission is not a privacy property against
+   the issuer**; what limits exposure is frequency, which stapling and
+   introducer-first genuinely reduce. *"Nothing is retained on either side"* is a
+   commitment under §1.1's test rather than a checkable rule, and it does not reach
+   a compelled provider's logging at all (§14.4, §1.2.3).
 
 ### 14.5.8 Correlation register
 
@@ -6357,7 +6381,7 @@ mistaken for established results.
 | 10.6.5 | Carriers aggregate traffic through a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; carrier topology varies and is not published |
 | 7.1.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by radio generation, load and core placement |
 | 5 | A hostile installed extension is a larger attack surface than operator conduct | SUPPORTING. Comparative claim about two surfaces neither of which is measured |
-| 4.3, 4.4 | Infra will deploy "mostly in cloud datacentres", concentrated in "a handful of clouds" | SUPPORTING. Strengthens the case for making ASN/region visible; the independence mechanism stands without the prediction |
+| 4.3, 4.4 | Infra will deploy "mostly in cloud datacentres", concentrated in "a handful of clouds" | SUPPORTING. Strengthens the case for making ASN/region visible; the concentration signal stands without the prediction |
 | 6.2.5 | Bootstrap mutual adoption is a "likely accident" | SUPPORTING. Cycle prevention must work regardless of whether cycles are accidental or malicious |
 | 7.2 | "Real early networks will be thousands to tens of thousands of nodes" | SUPPORTING. Characterises expected early operation; the anchor mechanism is stress-tested independently |
 | 10.6.5 | "The industry direction is away from long-lived credentials" toward short-lived ones | SUPPORTING. Persuasive background; the local renewal mechanism does not depend on the trend |

@@ -5305,3 +5305,44 @@ nothing happened. Ordering was always correct; the dates were not.
   who were there. An actor holding an operator's key can sign as them and cannot put
   them in a room — which is also why the shared-key model does not collapse the
   presence layer along with the identity.
+
+  **The two remaining 0.8.4 corrections, applied on the same terms.**
+
+  **ASN is a concentration detector, not an independence proof.** §14.3 exposed it
+  *"so that concentration is observable"*, §4.4 said *"the resulting independence, or
+  lack of it, is visible"*, and §14.5.7 item 6 accepted the placement disclosure on
+  that basis — three sites treating ASN and region diversity as evidence of separate
+  control. **The signal only runs one way**: 1,000 nodes in one ASN really is evidence
+  of concentration, but ASN and region describe routing and geography rather than the
+  entity subject to one legal order, and one provider can present many of each.
+  `NetworkPoint` field 2 is `? uint` besides — optional and self-asserted, with no
+  IP-to-ASN validation anywhere. §4.4 already knew the shape of this, saying two nodes
+  *"in different subtrees but the same availability zone are not"* independent and
+  that most infra *"will live in a handful of clouds"*, and then drew the opposite
+  conclusion one sentence later. All three sites now say concentration is what the
+  check finds and independence is what it cannot prove.
+
+  **The currency query's body-level omission is not a privacy property.** §14.5.7 item
+  12 accepted the disclosure partly because *"the query carries the subject and not the
+  querier"* — but `wire-format.md` §7.1 states **"Authentication is mutual"** and
+  requires the serving node to bind the requested identity to the transport-authenticated
+  one, so the party answering knows exactly who asked and can join querier, subject and
+  time whatever the schema omits. What genuinely limits exposure is **frequency**, and
+  stapling and introducer-first do reduce it; those survive and now carry the
+  acceptance alone. *"Nothing is retained on either side"* is restated as a commitment
+  under §1.1's test rather than a rule, since it cannot reach a compelled provider's
+  logs.
+
+  Both name the breaking scenario and link §1.2.3, per the same instruction as the
+  provider item.
+
+  **The ASN claim was in five places, not three.** A sweep after the first three edits
+  found §4.4's *"an observer can see whether two peers are actually independent"* and
+  §6.3's *"so independence and concentration are observable rather than asserted"* —
+  the second being the schema's own description of why the field exists. Both now say
+  concentration. This is the same miss the log keeps recording: fixing the sites a
+  review cites, then finding the claim's own definition site on the sweep afterwards.
+  A further sweep across the whole set found a **sixth**, in the other document:
+  `wire-format.md` §4.4's *"**Independence** is a visible signal, not a trust input"*,
+  beside the `Peering` schema. Corrected to concentration, with the one-way asymmetry
+  and the optional self-asserted field stated where the field is defined.
