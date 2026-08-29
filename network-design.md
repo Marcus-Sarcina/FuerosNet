@@ -5709,9 +5709,91 @@ globally.
   infrastructure concentrates in a handful of clouds turns architectural
   disaggregation back into bulk access. **That expectation is itself unsupported**
   (§15.1), so the ranking inherits its uncertainty: if deployment is genuinely
-  provider-diverse, this risk drops below endpoint compromise. **End-to-end payload
-  encryption still holds here**, which is what keeps the failure to metadata and
-  local state rather than content.
+  provider-diverse, this risk drops below endpoint compromise.
+
+  **This is the adversary the design does not defend against, and §1.2.3 says so
+  directly**: the threat model of an anonymity network does not apply here. A state
+  compelling a provider is §1.2.2's third class operating below the whole
+  architecture at once. What follows describes the shape of that failure; none of it
+  is a claim that the failure is survivable.
+
+  **End-to-end encryption does not confine it to metadata.** Payload is encrypted
+  **to the addressed endpoint**, and a provider hosts endpoints — so §11.2's own
+  table gives the plaintext away: a patron reads leaf-to-patron traffic *as the
+  addressed party, not a relay*; a hosting node reads a hosted resource's requests,
+  which it parses and re-serialises to insert the credential; a proxying node reads
+  proxied ones. What encryption does protect here is **leaf-to-leaf traffic in
+  transit and brokered resources**, where the node authenticates and hands off
+  (§9.7). Everything terminating at the provider is readable there.
+
+  **Nor is the exposure limited to reading.** An infra node signs **unattended**,
+  because §0 requires it to: countersignatures, `SubtreeAck` decisions, currency
+  attestations, disavowals, peering records and topology propagation all proceed
+  without an operator present, so the signing capability is on the machine. One order
+  therefore reaches the **genuine protocol authority** of every hosted instance at
+  once, with no separate social compromise per operator. The item below names
+  resource-access forgery; that is one consequence among these rather than the
+  boundary.
+
+  **And the observation boundary is the provider, not the node.** Where a participant
+  holds separate identities in two subnets whose serving nodes are hosted together,
+  one observer sees both mutually-authenticated attaches (`wire-format.md` §7.1) and
+  can join them on device and network signals. C14's withdrawal does not cover this:
+  that reasoning turned on the new identity appearing under *a different serving node
+  that sees only one*, which is sound against a node and says nothing about what sits
+  beneath several.
+
+  **What survives.** Participants' own signatures remain unforgeable, so the actor
+  cannot manufacture a presence record for anyone it has not separately compromised,
+  and §6.4's ungated proof of presence means it cannot suppress an honest ceremony
+  either. Sealed captures sit on light-client devices and are not reachable from
+  infrastructure (§7.1.5.2).
+
+  **And a compromised node is not on the direct path.** Payload between two clients
+  inside the horizon goes point-to-point, and §10.6.3's table gives who sees that flow
+  as **nobody** — so an actor holding an infra node's key sees the connection *setup*
+  and nothing after it. This bites hardest for the node's **own operator**, whose
+  light client is a different device (§18.1): traffic addressed to them as a
+  participant never reaches the instance the actor controls, and cannot be read or
+  even measured there. Forcing the relayed path gains nothing either, since a relay
+  carries ciphertext (§11.2). **The actor's reach is prospective rather than
+  retrospective**, which is the part *"bulk access"* overstates.
+
+  **The residual there is impersonation, not interception.** An instance holds the
+  same key as its operator's other devices (§18.1), so an actor with it can present as
+  that operator in **new** exchanges and become the endpoint legitimately. What it
+  cannot do is reach a session it was never on the path for.
+
+  **And impersonation is a different class of operation from collection.** Reading
+  direct-path content means *acting as* the operator toward people who know that
+  operator — directly, or through someone who does. That is social engineering against
+  a graph built out of face-to-face acquaintance, and it **risks the subverted node
+  the moment anyone notices**. So the position is not that this adversary is stopped;
+  it is that **what the adversary has to spend changes**. Passive bulk collection is
+  what compelling a provider is *for* — scalable, deniable, invisible to the people it
+  collects from — and the direct path denies it that for content, leaving impersonation
+  instead: per-target, high-commitment, and self-burning when detected. **This is
+  §1.1's principle reaching the case the design does not claim to cover** (§1.2.3):
+  the attack is made visible and expensive rather than impossible, which is the same
+  answer the design gives everywhere else.
+
+  **The capability also devalues what it collects.** §1.2.1 already treats cheap
+  fabrication as a privacy property — *"Sybil attackers inadvertently contribute to
+  the deniability of every record"* — and an actor able to act as any hosted operator
+  **enlarges that discount rather than escaping it**. A surveilled record naming an
+  operator becomes deniable in the way a synthesised subnet is, because the actor's own
+  capability is the standing alternative explanation. The asymmetry then runs as
+  §1.2.1's second property says: someone who has met you infers your identity cheaply
+  from personal knowledge, while a remote examiner must pay for either an impersonation
+  operation or an evidence chain that survives due process. **This is the Potemkin
+  acceptance below in a different costume** — an expensive fake that makes the
+  surveilled record less useful to whoever built it.
+
+  **§1.2.1's boundary still holds**, which is what keeps this short of a claim that
+  nothing can be proved. Forging evidence about a *specific real person* needs their
+  participation, and a presence record needs a live counterparty, witnesses and
+  verifiers who were there (§7.1.1). An actor holding an operator's key can sign as
+  them; it cannot put them in a room.
 - **A compromised infra node can forge its subordinates' resource access.** A
   resource trusts the node's assertion of who holds which role (§9), so a
   compromised node can mint any principal with any role. This is the trust a
@@ -5724,11 +5806,18 @@ globally.
   around a cycle (`wire-format.md` §7.2b). Stale replays are stopped by the slot's
   timestamp at the first table-holding hop; this one is not. **Bounded on three
   sides**: the injector must sit at or below one of the detector's direct
-  subordinates, the edge severed is the one that handed the memo over and so lies on
-  the injector's own route, and the disavowal is reason code 5 with re-adoption
-  available. **Accepted rather than closed**: a freshness nonce would put a second
-  clock on an unsigned object to defend against an attack costing the attacker more
-  than the target.
+  subordinates, the edge severed is the one that handed the memo over, and the
+  disavowal is reason code 5 with re-adoption available. **Accepted rather than
+  closed**: a freshness nonce would put a second clock on an unsigned object, and the
+  three bounds hold without one.
+
+  **The economic argument is withdrawn.** This was accepted as an attack *costing the
+  attacker more than the target*, which assumes the injector owns the edge it loses.
+  A state actor operating a commandeered tenant's instance pays with somebody else's
+  relationship, so the cost is externalised, and re-adoption turns the result into
+  repeatable churn rather than a one-time price. The structural bounds are
+  unaffected. The reason for accepting is the item above — §1.2.3, this is the
+  adversary the design does not defend against.
 - **Patron eclipse of a new joiner.** An attacker who volunteers to be someone's
   patron controls their view from day one.
 

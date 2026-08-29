@@ -5198,3 +5198,110 @@ nothing happened. Ordering was always correct; the dates were not.
   correction this project keeps arriving at. The plan is updated to say so, and to keep
   header *scope summaries* on the grep list: those carry claims nothing else records,
   so they can still go stale and still have to be read.
+
+- **2026-08-29 (adversarial review 0.8.4; the provider is not the node)** — Six
+  findings against a state actor compelling a cloud provider. All six held, and five
+  of them are one mistake: **the design repeatedly reasons from the infra node as the
+  compromise and observation boundary**, while a compelled provider sits beneath many
+  nodes, their storage, their authenticated transports and their signing capability at
+  once.
+
+  **§14.4's provider item asserted the opposite of §11.2.** It read *"end-to-end
+  payload encryption still holds here, which is what keeps the failure to metadata and
+  local state rather than content."* Payload is encrypted **to the addressed
+  endpoint**, and a provider hosts endpoints — §11.2's own table says a patron reads
+  leaf-to-patron traffic *"as the addressed party, not a relay"*, a hosting node reads
+  a hosted resource's requests because it parses and re-serialises them to insert the
+  credential, and a proxying node reads proxied ones. What encryption does protect is
+  leaf-to-leaf traffic in transit and brokered resources. The **queue** claim in
+  §11.1.6 was checked and is correct as written: queued traffic is leaf-to-leaf, so it
+  really is ciphertext to the holding node. Relay against endpoint is the distinction
+  the whole item now turns on.
+
+  **The exposure is not limited to reading.** §0 requires infra operation to be
+  unattended, so countersignatures, `SubtreeAck` decisions, currency attestations,
+  disavowals, peering records and topology propagation all proceed with no operator
+  present and the signing capability on the machine. One order reaches the **genuine
+  protocol authority** of every hosted instance at once, with no separate social
+  compromise per operator. The neighbouring register item names resource-access
+  forgery, which is one consequence among these rather than the boundary.
+
+  **Cross-identity linkage is folded in rather than given a register number**
+  (author). C14 was withdrawn on the reasoning that a fresh identity *"appears in a
+  different subnet under a different serving node that sees only one"* — sound against
+  a node, silent about what sits beneath several. Where both serving nodes are hosted
+  together, one observer sees both mutually-authenticated attaches (`wire-format.md`
+  §7.1). C14's tombstone stands as written; it was right about the adversary it
+  considered.
+
+  **Every adjusted claim now names the breaking scenario and links to §1.2.3**
+  (author's instruction). The design is explicit that *"the threat model of an
+  anonymity network does not apply"* and that this is not a platform for evading the
+  state; a compelled provider is §1.2.2's third class operating below the whole
+  architecture. Saying so at each site keeps the corrections from reading as newly
+  discovered weaknesses in a design that never claimed to cover this.
+
+  **The rootward-memo replay keeps its acceptance and loses its economics.** It was
+  accepted as an attack *"costing the attacker more than the target"*, which assumes
+  the injector owns the edge it loses. An actor operating a commandeered tenant's
+  instance pays with somebody else's relationship, and re-adoption makes the result
+  repeatable churn rather than a one-time price. The three structural bounds — the
+  injector must sit at or below a direct subordinate, the severed edge is the one that
+  handed the memo over, and the disavowal is reason code 5 with re-adoption available
+  — are unaffected and now carry the acceptance alone.
+
+  **What survives, stated in the item**: participants' own signatures remain
+  unforgeable, so the actor cannot manufacture a presence record for anyone it has not
+  separately compromised; §6.4's ungated proof of presence means an honest ceremony
+  cannot be suppressed; and sealed captures sit on light-client devices out of
+  infrastructure's reach (§7.1.5.2).
+
+  **A further bound, and a sharper one than the review found** (author): **a
+  compromised node is not on the direct path.** §10.6.3's table already gives who sees
+  a direct-path flow as *"nobody — the peers exchange addresses during setup and
+  connect"*, so an actor holding an infra node's key sees the connection setup and
+  nothing after it. It bites hardest for the node's own operator, whose light client
+  is a different device: traffic addressed to them **as a participant** never reaches
+  the instance the actor controls and cannot be read or even measured there. Forcing a
+  downgrade to the relayed path gains nothing, since a relay carries ciphertext. **The
+  actor's reach is prospective, not retrospective**, which is precisely what *"bulk
+  access"* overstates — for direct-path payload there is no accumulated content at the
+  node to seize.
+
+  **The residual is impersonation rather than interception.** §18.1 is explicit that an
+  operator's instance *"holds the same key as their phone — the relationship is a seed
+  shared across wallets, not a client and a server"*, so an actor with that key can
+  present as the operator in **new** exchanges and become the endpoint legitimately.
+  What it cannot do is reach a session it was never on the path for. This makes the
+  shared-key model cut both ways in the same item, which is worth having stated in one
+  place: it is what lets the actor impersonate, and it is not what lets it read.
+
+  **The economics of that residual are the point, and they close the item** (author):
+  impersonating an infra user toward people who know that user, directly or through
+  someone who does, **risks burning the subverted node**. It forces the actor out of
+  passive bulk collection and into social engineering — per-target, high-commitment,
+  and self-burning when detected. So the design's position on its top-ranked systemic
+  risk is not that the adversary is stopped but that **what the adversary must spend
+  changes**: compelling a provider is *for* scalable deniable collection, and the
+  direct path denies it that for content. **§1.1's principle reaching the one case
+  §1.2.3 says the design does not cover** — visible and expensive rather than
+  impossible, which is the answer the design gives everywhere else.
+
+  **And the capability devalues what it collects** (author). §1.2.1 already treats
+  cheap fabrication as a privacy property — *"Sybil attackers inadvertently contribute
+  to the deniability of every record"* — and an actor able to act as any hosted
+  operator **enlarges that discount rather than escaping it**: a surveilled record
+  naming an operator is deniable because the actor's own capability is the standing
+  alternative explanation. The asymmetry runs as §1.2.1's second property already
+  says — a person who has met you infers your identity cheaply from personal
+  knowledge, while a remote examiner pays for either an impersonation operation or an
+  evidence chain that survives due process. **Structurally the same acceptance as
+  Potemkin subnets**, four items below: an expensive fake that makes the surveilled
+  record less useful to whoever built it.
+
+  **§1.2.1's boundary is restated with it**, so this stops short of claiming nothing
+  can be proved. Forging evidence about a specific real person needs their
+  participation; a presence record needs a live counterparty, witnesses and verifiers
+  who were there. An actor holding an operator's key can sign as them and cannot put
+  them in a room — which is also why the shared-key model does not collapse the
+  presence layer along with the identity.
