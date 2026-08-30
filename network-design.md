@@ -981,10 +981,22 @@ subtree's view indefinitely, since adoption says nothing about existing bindings
 The old patron does not sign. **This is the escape hatch that makes exit a real
 right**, and no rule may condition it on the patron's cooperation.
 
-Each node signs a **monotonic sequence number** on every position change — and,
-for an infra node, on every endpoint change (`wire-format.md` §2.3, §5.6). Not
-consensus, a freshness test, letting any observer order a node's own competing
-claims without a clock and detect a stale record a revocation failed to reach.
+Each node signs a **sequence number** on every position change — and, for an infra
+node, on every endpoint change (`wire-format.md` §2.3, §5.6). Not consensus, a
+freshness test, letting any observer order a node's own competing claims without a
+clock and detect a stale record a revocation failed to reach.
+
+**It is a pair, `{series, counter}`, and only the counter is monotone.** The series is
+an arbitrary label that orders nothing; records in different series do not rank
+against each other at all. **A counter can be exhausted, and that is why**: whoever
+holds a node's key can sign one record at the top of the range, after which no
+successor exists and the node can never publish a position or endpoint change again.
+Advancing to a fresh series is what repairs it, and a **series refresh is
+countersigned by the patron** (`wire-format.md` §4.8) — so the key alone cannot make
+one, and a thief cannot follow the legitimate holder into a new series. Because the
+series is arbitrary and nothing registers it globally, an attacker cannot pre-empt the
+move either: it would have to exhaust a 2³² space and deliver every one of those
+series to every party it wanted to block.
 
 #### 6.2.2 Disavowal (patron-initiated)
 Single signature: the patron. A patron whose reputation is charged for every
@@ -1155,15 +1167,24 @@ actually has is not intended behaviour under any reading of this design.**
 
 **This makes the eclipse attack permeable for the case that matters.** §14.4's
 accepted risk is eclipse of a **new joiner**, whose view is controlled from day
-one. A new joiner has no prior counterparties, so `min(n/2, 10)` is zero (§7.2)
+one. A new joiner has no prior counterparties, so `min(floor(n/2), 10, |candidates|)`
+is zero (§7.2)
 and a **witnessless, verifierless ceremony is valid.** The formation path of
 §10.8.2. They can therefore memorialise a meeting with anyone they physically
 encounter, and the eclipsing patron cannot suppress it. **The false social
 universe is permeable wherever the victim meets a human being.**
 
-**This does not extend to an established user.** With prior counterparties the
-finalization threshold is non-zero, verifier responses are required, and reaching
-those verifiers may run through the very patron doing the eclipsing. An
+**This does not extend to an established user — from the third encounter.**
+`min(floor(n/2), 10, |candidates|)` is zero at *n* = 0 **and at *n* = 1**, because
+`floor(1/2)` is zero: a subject with exactly one prior meeting is verified by nobody,
+and the threshold first bites at *n* = 2. **The second encounter of any identity
+therefore has no continuity check**, and rests on liveness and proximity alone —
+which establish that *someone* is present, not that they are who the existing
+identity represents. Accepted: the case requires an attacker holding both the key and
+the archive, and buying one clean false-continuity edge before the identity has a
+history is worth less than the ceremony costs. From *n* = 2 the threshold is non-zero,
+verifier responses are required, and reaching those verifiers may run through the very
+patron doing the eclipsing. An
 established user who becomes eclipsed has a harder escape, though they also have
 existing standing and relationships that a new joiner does not, which is why
 §14.4 scopes the accepted risk to new joiners in the first place. This makes a spammer's volume chargeable against their **patron's**
@@ -1511,14 +1532,27 @@ person in front of them as continuous with a history.
     exists for no other reason. **The proof is the subject's own consent**: every query carries the subject's signature over its `query_id`
     (`wire-format.md` §4.6.6), minted by the subject's client during the ceremony
     (§7.1.3's automatic querying), so each probe requires the subject's live
-    cooperation. The ceremony pre-commitment travels with it and pins the fuzzed
-    profile — one profile per ceremony, or the verifier rejects. Witness countersignatures are deliberately not
+    cooperation **from whoever holds that key**. The ceremony pre-commitment travels
+    with it and pins the fuzzed profile — one profile per ceremony, or the verifier
+    rejects. Witness countersignatures are deliberately not
     carried: a distant verifier could not tell real witnesses from an attacker's
     keys, while the subject's signature is checkable from the identity the query
     itself names. This prices probing
     in *ceremonies* rather than in packets: at ~10 queries per ceremony and
     minutes per ceremony, a reconstruction attack costs weeks of continuously
     staged meetings under witness observation.
+
+    **The binding is to the subject's key, not to a witnessed encounter**, and the two
+    are the same thing only for an attacker who lacks that key. **A thief holding the
+    subject's device holds both halves of the price**: it mints fresh commitments,
+    signs every query, releases every seed, and receives the notifications below —
+    every subject-side limit here sits on the stolen device. What survives is
+    verifier-side: the per-requester and per-subject counters each verifier keeps
+    locally, which no attacker can reach and which bound probing per counterparty
+    rather than per ceremony. **Witness countersignatures would not repair it** for the
+    reason already given — a distant verifier cannot tell real witnesses from an
+    attacker's keys — so the price against a thief is set by the verifiers' own limits
+    and by how many prior counterparties the victim has (§14.4's stolen-device entry).
   - **Surface each query to the subject's client as it arrives**, independent of the
     limits above, so probing is visible even when it stays under them.
     **Notification, not a log**: the client sees the query, and what persists
@@ -1554,11 +1588,22 @@ person in front of them as continuous with a history.
   detection-by-counting into prevention: one probe point per ceremony rather than
   *n*, and identical probes yield no gradient.
 
-  **An impostor gains nothing.** The profile is generated by the honest
-  counterparty from what they captured, so signing it means signing a profile of
-  *oneself* — which is precisely what produces `no_match`. Refusing to sign leaves
-  a visible absence against the finalization threshold (§7.2), so refusal is
-  self-incriminating.
+  **An impostor gains nothing, where the counterparty is honest.** The profile is
+  generated by that counterparty from what they captured, so signing it means signing
+  a profile of *oneself* — which is precisely what produces `no_match`. Refusing to
+  sign leaves a visible absence against the finalization threshold (§7.2), so refusal
+  is self-incriminating.
+
+  **The premise is the honest counterparty, and it excludes the malicious one.**
+  A client performing the capture can send a **substituted** profile — synthetic, or
+  taken from someone else — and the subject cannot tell: countersigning binds the
+  bytes and the template version, not their provenance, and the subject's own device
+  captured the counterparty rather than itself. What that buys is **one probe point
+  per ceremony** against the subject's prior counterparties' stored captures, which
+  the anti-oracle rule above already caps, and it produces no record: finalization
+  needs the subject's envelope signature, and a subject seeing `no_match` returned
+  about themselves will withhold it. Registered rather than closed — binding a profile
+  to the live subject needs an attestation the capture device does not have (§7.1.8).
 
   **This supersedes the standing disclosure policy.** All queries are
   ceremony-bound and the subject is present at every ceremony about themselves, so
@@ -2477,6 +2522,13 @@ reject them — at the cost of burning the signer's forward timeline, since the 
 730-day candidate horizon and *n*, so a claimed day steers the seed, the pool and the
 threshold together.
 
+**`finalized_at` is bounded structurally and `started_at` is not**, which divides the
+work between the two checks. `wire-format.md` §3.2 caps the gap between them at 24
+hours, so a body cannot name a distant future finalization and freeze every signer's
+chain through the monotonicity rule. It cannot bound `started_at`, because doing so
+needs a clock the reader does not have — that is the witness check below, and it is
+what stops the same attack conducted by moving the whole ceremony forward instead.
+
 **What binds it is the witness's clock.** A witness is the only party to a ceremony
 with an independent clock and no stake in the sample, and it is asked to commit a
 nonce while the ceremony is happening. The reference client therefore declines to
@@ -2568,6 +2620,32 @@ is already an optional part of adoption (§13.7), so adoption spans the
 genuinely-new user *and* the arriving user carrying a decade of history —
 rotation is simply the case where the presented archive belongs to a different
 key.
+
+**Seal the old line as the old key's last act.** "Evaporates" describes propagation,
+not capability: the old key still exists, and nothing so far stops it publishing a
+fresh locator to anyone holding a stale one — §10.3 Case 2 guarantees those holders
+have no other source of truth, since nothing redirects on the subject's behalf.
+**Setting the retired series to its maximum counter forecloses that**
+(`wire-format.md` §4.8), at the cost of one self-signed locator, unilateral and
+needing no patron. The old key is in hand at rotation — it signs the `Recovery` — so
+this is the moment to spend it.
+
+**It does not burn the key globally, and cannot.** A seal reaches exactly as far as
+the locator carrying it, so parties you never contact and subnets you never enter
+never see it. **They are also not the population at risk from it**: redirection needs
+a cached locator to redirect, and someone holding none has nothing to be moved. A
+thief presenting the old key to them is attempting a *first contact*, which §10.3
+Case 0 makes an out-of-band act — a meeting or a referral from a mutual contact — and
+which the presence layer answers rather than the routing layer. **Affirmative closure
+for the parties you reach, and silence about the rest**, which is the right division
+because the two face different attacks.
+
+**Burning a key outright needs no mechanism of its own: rotate, and never refresh.**
+A series is continued by a patron-countersigned refresh (`wire-format.md` §4.8), so
+declining to take one leaves the sealed line as the last word that key will ever have.
+Sealing and continuing is a repair; sealing and stopping is a retirement. **The
+difference is entirely in what the subject does next**, and the protocol needs no
+revocation object to express either.
 
 **So a rotation evaporates the old identity and instantiates a new one, and whether
 the inheritance is carried at all is the subject's choice.** A plain rotation
@@ -2980,6 +3058,23 @@ disclaimed by design and is not a property this chain is protecting.
 pre-fork standing into two subnets is the archive doing its job, and a reviewing
 patron already ignores transactions with counterparties it cannot reach. **The
 multi-device problem is *accidental* forking** (§18.2).
+
+**A series refresh is also an archive checkpoint, and this is what makes pruning
+possible at all.** Truncation to a prefix is the only edit available today because
+every record commits to its predecessor, so verifying anything walks back to genesis:
+you can withhold what you did lately and you cannot drop your early life. A refresh
+countersigned by your patron (`wire-format.md` §4.8) asserts that history existed
+across the boundary without carrying what it contained, so **records before it need
+not be retained or presented** — the blocks and the dates survive and the details go.
+
+**Except inside the 730-day window, where they are still required.** Verifier
+selection counts *n* and draws the candidate set by traversing what is reachable from
+the committed back-pointer (`wire-format.md` §4.6.4), so a checkpoint that discarded
+recent history would shrink both — letting a subject choose its own verification
+burden, down to the `n = 1` case that requires **zero** verifiers (§6.4). **Pruning is
+therefore permitted only beyond the window**, which costs nothing anyone wants: the
+storage saving and the elision of early history are both about records the candidate
+set has already aged out.
 
 **Scope: one chain per identity**, spanning subnets. The resulting cross-subnet
 visibility is bounded by an existing rule: a reviewing patron **ignores
@@ -3811,7 +3906,8 @@ A locator is four fields, **signed by the node itself**:
   come from). Truncation lives in distant nodes' unsigned aggregate state only —
   **a signed locator always carries the complete path**, since the signature
   covers it (`wire-format.md` §2.1)
-- **sequence.** The monotonic counter from §6.2; detects stale cache entries
+- **sequence.** The `{series, counter}` pair from §6.2; the counter detects stale
+  cache entries within a series, and series do not rank against each other
 - **signature.** Non-optional. **Any routing information presented as
   specifying where a participant can be reached must be authenticated by that
   participant**, so an intermediary cannot substitute itself as the destination.
@@ -5830,6 +5926,44 @@ globally.
   repeatable churn rather than a one-time price. The structural bounds are
   unaffected. The reason for accepting is the item above — §1.2.3, this is the
   adversary the design does not defend against.
+- **A stolen key can exhaust a sequence counter, and a patron is what undoes it.**
+  One record at the top of the range leaves no successor, and an equal `seqno` carrying
+  different contents is malformed rather than a tie — so the identity could otherwise
+  never publish a position or endpoint change again, which §6.2.1 names as fatal on its
+  own terms. **Closed rather than accepted**: the counter is half of a `{series,
+  counter}` pair, series are arbitrary and unordered, and advancing to a new one is
+  countersigned by the patron (`wire-format.md` §4.8). A thief holding only the subject
+  key cannot make that transaction, and cannot pre-poison the space either — with no
+  global registration of series, it would have to exhaust 2³² **and reach every party
+  it wanted to block with every one of them.** Residual: the patron must not countersign
+  a refresh for a thief, which is the same social check adoption and recovery rest on.
+- **A stolen device composes into false presence evidence and fraudulent recovery.**
+  Theft grants the key, the archive and the capture seeds at once, and the pieces
+  compose further than any of them registers alone. With a colluding counterparty, the
+  thief runs a real ceremony that real witnesses observe — witnesses attest that the
+  protocol ran and that two humans responded, not that the queried profile came from
+  the live participant's face (§7.1.1). The colluder's client substitutes a profile,
+  the stolen key countersigns it, and **the thief signs the record whatever comes
+  back**, since every response category counts structurally toward finalization
+  (`wire-format.md` §4.6.5) and the subject-side refusal §7.1.4 relies on is the
+  thief's to make. The colluder is then a prior counterparty, positioned to supply the
+  recognition half of §7.4.1's recovery. **Two bounds hold**: honest verifiers'
+  signatures are unforgeable, so adverse results are visible to anyone who weighs
+  them, and §13.2's flow metric caps the successor's standing at what the colluding
+  parties can carry rather than inheriting the victim's. Accepted — the answer to a
+  stolen key is rotation, and what this describes is the cost of the window before it.
+- **A stolen device becomes a biometric collector when a counterparty next meets
+  someone.** Its sealed captures of past counterparties stay ciphertext, and §7.1.5.2's
+  seed release is per query and direct to each selected verifier — there is no standing
+  grant, and no state a subject enters that opens their likeness on every device that
+  ever held it. What theft changes is that a **previously compliant holder** can be
+  selected as a verifier later and receive that seed through ordinary automatic
+  traffic (§0), with the depicted person never asked. **The exposure needs a
+  confluence**: the counterparty must run a new ceremony inside the 730-day window,
+  *and* the compromised identity must be among the selected verifiers — roughly q/d
+  per ceremony. Records older than the window are safe outright, because the subject
+  will not release the seed for them. Real, and hard to target: no captured device
+  releases all of its archive this way, and most release none.
 - **Patron eclipse of a new joiner.** An attacker who volunteers to be someone's
   patron controls their view from day one.
 
@@ -6100,6 +6234,26 @@ verifiers answered `match` without naming them, but that sacrifices the
 "absence of an expected verifier is visible" property (§7.2), which is doing real
 work. **Open.**
 
+**The selection input leaks more than the responses do, and to a worse party.** To
+select the other's verifiers a participant must compute their candidate set, and
+`wire-format.md` §4.6.4 counts a record only if its signatures verify — so it needs
+the **records**, not a list of names, and a list the subject asserted would let the
+subject curate its own sample. §7.2.1's sweep records the fact, giving
+verifier-selection recomputation's reads as *"nonces, seed, candidate set"*; what was
+never priced is who receives it. **An ordinary ceremony therefore hands the person in
+front of you your verified presence history for the whole 730-day window** — every
+prior counterparty, every witness and verifier those records name, and every
+timestamp. At §7.3's own sizing of 200 meetings in that window that is thousands of
+identifier occurrences, and none of it is withholdable: participants, witnesses,
+verifiers and times are body fields under signature. Registered as **P37**.
+
+**It is the same trade as the paragraph above, one step earlier**, and has the same
+non-answer. Selection must be recomputable from the record plus the subject's own
+history and nothing else (§7.2.2), so any scheme that hides the candidate population
+from the selecting party also stops them checking the selection — which is the check
+§7.2.2 requires *before signing*, and the one protecting them against the person in
+front of them.
+
 ### 14.5.3 Selective disclosure — adopted, and what it does not cover
 
 **Specified at §7.2.1 and `wire-format.md` §4.5.1.** A presence
@@ -6165,7 +6319,12 @@ and a citation to a missing number resolves there.
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§10.6.1, §9.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§18.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§12.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §10.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §4.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§12.2) |
-| **P36** | **`seqno` is a per-node counter, so its gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium | A node bound into two subnets advances one counter in both, so an observer in one sees jumps it cannot account for and learns the node is bound elsewhere and roughly how active that binding is. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **Registered rather than engineered away**: §4.1.1 says plurality is "an accidental consequence… the protocol does not model it", and a per-binding counter would break `seqno`'s double duty as freshness test and stale-cache detector across §10.3, and `wire-format.md` §§2.3, 5.3, 5.6.2. **Narrowed**: an infra node's endpoint changes advance the same counter, so a gap has an innocent local explanation as well — but only for infra nodes, and only against an observer outside the horizon, since one inside it sees the endpoint records that account for the jump. See C19 for what sharpens it |
+| **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split: a node holding a separate series per patron relationship advances a separate counter in each, so an observer in one subnet sees no gaps it cannot account for. The residual is a node that has not refreshed since binding elsewhere, and the count of refreshes it has taken | A node bound into two subnets advances one counter in both, so an observer in one sees jumps it cannot account for and learns the node is bound elsewhere and roughly how active that binding is. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **Registered rather than engineered away**: §4.1.1 says plurality is "an accidental consequence… the protocol does not model it", and a per-binding counter would break `seqno`'s double duty as freshness test and stale-cache detector across §10.3, and `wire-format.md` §§2.3, 5.3, 5.6.2. **Narrowed**: an infra node's endpoint changes advance the same counter, so a gap has an innocent local explanation as well — but only for infra nodes, and only against an observer outside the horizon, since one inside it sees the endpoint records that account for the jump. See C19 for what sharpens it |
+| **P37** | **Verifier selection discloses the subject's whole 730-day presence history to the ceremony counterparty** (§7.2.2, §14.5.2) | High | Selecting the other's verifiers means computing their candidate set from *verified* records (`wire-format.md` §4.6.4), so the counterparty receives the records themselves — prior counterparties, witnesses, verifiers and timestamps, none of them withholdable. **Bounded by checkpoints** (§8.2): what exists
+to be handed over is what has accumulated since the last series refresh, so the
+disclosure becomes a function of when a subject last pruned rather than of how long it
+has participated — though never below the 730-day window, which pruning may not enter.
+**Distinct from P19**, which is archive presentation to a prospective patron the user chose; this goes to whoever they just met, and the ceremony itself authorises it. **Distinct from P2/C2**, which price the verifier set *carried in the record* rather than the population it was drawn from. Intrinsic to recomputable selection and open on the same terms as §14.5.2 |
 
 ### 14.5.5 Queue policy had to settle more than size
 
@@ -6228,7 +6387,14 @@ ceremony.
    subnet on joining, not to hold anyone to account across them, and presenting
    different views to different subnets is two histories rather than one edited one.
    **Only the natural person can bridge their positions and regulate between them**,
-   and that is where most of a participant's power and autonomy comes from.
+   and that is where most of a participant's power and autonomy comes from — **at the
+   network layer, which is the only layer this claim is about.** The bridge is not the
+   person, it is the **device**: P5 already registers it as *"the global correlation
+   point the network architecture otherwise avoids"*, and §10.8.7 already says the
+   strongest attack on a multi-subnet identity is device compromise rather than
+   anything the network does. So the autonomy is real and it is **endpoint-bound**,
+   and whoever holds the hardware holds the join. That is a statement about what the
+   protocol declines to build, not a guarantee about where the correlation lives.
 
    Two residuals, both already registered. With a **single** identity across several
    subnets the bridging is observable to anyone who correlates (C10, §14.5.8);
@@ -6498,6 +6664,7 @@ are all **chosen**, not derived.
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§11.1.2) |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §7.2) |
 | — | Verifier-selection seed window | **24 hours**, epoch-aligned | An honest retry inside the window reproduces the *same* sample, which is what retry should do. It does **not** bound an aborting attacker to one sample per day: the ordinal comes from the claimed `started_at`, so the budget is the span since the signer's last committed record (§7.2.2, `wire-format.md` §4.6.3) |
+| — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 
 ### 16.1 Unset parameters, the implementation checklist
 

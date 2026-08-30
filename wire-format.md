@@ -214,7 +214,10 @@ timestamp = uint                   ; seconds since Unix epoch; u64 RANGE.
                                    ; structural verification (§3.2); a recipient
                                    ; reads it as the parties' claim about when
                                    ; the relationship or event began
-seqno     = uint                   ; per-node monotonic counter; u64 RANGE
+seqno     = [series, counter]      ; §2.3. NOT a single integer, and NOT
+                                   ;   comparable as one
+series    = uint                   ; U32 RANGE. ARBITRARY, never ordered
+counter   = uint                   ; U32 RANGE. Monotone WITHIN one series
 
 ; NOTE: no `.size 8` here. It would read as a fixed eight-byte
 ; serialisation, which contradicts the shortest-form requirement in §1, a 2026
@@ -222,7 +225,7 @@ seqno     = uint                   ; per-node monotonic counter; u64 RANGE
 ; encoding is always shortest-form deterministic CBOR.
 ```
 
-**Identities are referenced by hash, never by key.** [D, design §7.2] An **ML-DSA-44**
+**Identities are referenced by hash, never by key** (design §7.2). An **ML-DSA-44**
 public key is ~1.3 KB and the larger parameter sets are bigger still; a hash is 32
 bytes. Full key material appears only in `KeyMaterial`
 (§2.2), transmitted on first contact and pinned thereafter.
@@ -247,7 +250,7 @@ unboundedly many encodings.
 unused low nibble of the final byte MUST be zero.** Without that rule one
 logical path has sixteen valid byte encodings, and deterministic CBOR does not
 fix semantic malleability inside a byte string. The explicit
-nibble length is required because **paths are truncatable** [D, design §10.1]: a distant
+nibble length is required because **paths are truncatable** (design §10.1): a distant
 node receives only the prefix needed to route to the right region, and truncation
 must be expressible at nibble granularity rather than byte granularity.
 
@@ -314,7 +317,7 @@ cannot encode them, and a `uint` field would make the mandated algorithms
 unrepresentable. `int` is a profile decision that accommodates the
 registry; it is not a claim that COSE identifiers are always negative.
 
-Algorithm profile [D, design §5]:
+Algorithm profile (design §5):
 
 | Use | Algorithm |
 |---|---|
@@ -330,13 +333,17 @@ Algorithm profile [D, design §5]:
 Locator = {
   1: keyhash,     ; anchor
   2: path,
-  3: seqno        ; the node's own monotonic counter
+  3: seqno        ; the node's own {series, counter} pair
 }
 ```
 
-[D, design §6.2] The `seqno` here **is** design §6.2.1's monotonic counter, not a separate
-field: one counter per node, incremented on every position change **and on every
-endpoint change** (§5.6), serving both as freshness test and stale-cache detector.
+The `seqno` here **is** design §6.2.1's sequence number, not a separate field
+(design §6.2). Its **counter** is incremented on every position change **and on every
+endpoint change** (§5.6), serving both as freshness test and stale-cache detector; its
+**series** identifies which line those counts belong to and is advanced only by §4.8's
+patron-countersigned refresh. **One series per patron relationship** is the expected
+shape — a node bound under two patrons keeps two, which is what stops its counts in one
+subnet disclosing its activity in another (design §14.5.4, P36).
 
 **Endpoints advance it because the malformed-on-equal rule requires them to.** §5.7.3 treats equal `seqno` with different contents as malformed rather
 than a tie to break, on the ground that a subject advances its own counter — so **a
@@ -346,11 +353,28 @@ a dead one until it happened to move, which is precisely the node §5.6 exists f
 One counter, two triggers; a reader learns that something it must re-fetch has
 changed, which is all the counter ever said.
 
-**Verification rule**: a new locator's seqno must be **strictly greater** than
-the last one the verifier holds for that node — **not** exactly previous+1. A
-verifier may legitimately have missed intervening transactions, so requiring
-contiguity would reject valid updates. Absence of prior state is not a failure.
+**Verification rule**: two `seqno`s are comparable **only when their `series` are
+equal.** Within one series a new `counter` must be **strictly greater** than the last
+one the verifier holds — **not** exactly previous+1, since a verifier may
+legitimately have missed intervening transactions and requiring contiguity would
+reject valid updates. Absence of prior state is not a failure.
 
+**Across series there is no order, and a reader MUST NOT invent one.** `series` is an
+**arbitrary** 32-bit label, not a generation number: it is never compared, never
+assumed to increment, and two records in different series cannot be ranked by any
+party holding only those records. Which series a node is currently on is **proved,
+not inferred** — by the chain of §4.8, presented on request.
+
+**The arbitrariness is the defence, and ordering would remove it.** A counter can be
+exhausted: one record at the top of the range leaves no successor, and §5.7.3 makes an
+equal `seqno` carrying different contents malformed rather than a tie — so a party
+holding the node's key could otherwise pin it permanently, and §2.3's own reasoning
+says why that is fatal (*"a subject that cannot advance has no way to publish a change
+at all"*). Were `series` ordered, the same record could simply name the top series and
+the attack would survive one level up. Unordered, there is no top to name: an attacker
+must exhaust a 2³² space **and deliver every one of those series to every reader it
+wants to block**, because nothing registers a series globally and poisoning is
+therefore per-reader.
 **Two carriage forms**. design §10.1 requires that routing information be
 authenticated by the participant it describes — true via the envelope inside a
 transaction, and via its own signature at introduction, where a locator is handed
@@ -375,7 +399,7 @@ SignedLocator = {
 
 A bare locator carries no
 signature of its own, because an unsigned locator lets any relay substitute
-itself as the node's mailbox [D, design §10.1].
+itself as the node's mailbox (design §10.1).
 
 ---
 
@@ -459,7 +483,25 @@ claimed first transaction is checkable rather than assertable.
 **Presence record structural rules**, all previously unstated:
 
 - **The two participant identities MUST differ.**
-- **`finalized_at` MUST be ≥ `started_at`.**
+- **`finalized_at` MUST be ≥ `started_at`, and MUST NOT exceed it by more than 24
+  hours.** The lower bound alone lets a body name any future instant, and every
+  envelope signer's next record must clear it (§3.2's monotonicity) — so one
+  disposable identity could freeze the chains of a victim and its whole witness set
+  until a date it chose. **This is checkable with no clock**: both values are in the
+  record, and the rule constrains their difference rather than either one against the
+  reader's time, which is why it can be structural where §3.2's other timestamp rules
+  cannot. 24 hours is far beyond any honest finalization — `pending` and `unavailable`
+  count toward the threshold (§4.6.5), so a ceremony never waits on an absent
+  verifier — and reuses the seed window's figure rather than introducing another
+  (design §16).
+
+  **This bounds the gap, not `started_at` itself**, and the two need different
+  mechanisms. A body claiming `started_at` in 2100 with `finalized_at` an hour later
+  satisfies this rule and poisons chains just as effectively; what stands against
+  *that* is a witness declining to commit a nonce against a day its own clock
+  contradicts (design §7.2.2), which no validator can check. **Structural here,
+  client-side there** — the difference is that this rule compares two values the
+  record already carries, and the other needs a clock the reader does not have.
 - **A presence record on the wire is always final.** A ceremony whose threshold is
   unmet is local state and is not published; `finalized_at` therefore always
   records a threshold that was met. Late responses arrive as `LateResponse` objects (§5.3) and
@@ -673,6 +715,7 @@ accepting an unverified object.
 | 4 | Peering | both infra nodes | Topology |
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
 | 6 | Abuse report | the reporting resource only | Attestation (point-to-point, never broadcast) |
+| 7 | Series refresh | node + patron | Topology |
 
 Type 6 carries an `AbuseReport` (design §9.6) addressed to a resource owner.
 
@@ -1103,8 +1146,7 @@ LocationEvidence = {
 Asserted      = { 1: uint, 2: tstr }              ; method, geohash
 Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km
 
-; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2 [D —
-; relocated from a comment stranded under Channel.3]:
+; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2:
 ;   0 GNSS · 1 serving-cell · 2 network egress · 3 latency bound.
 ; DELIBERATELY OPEN, like §4.3's disavowal codes and unlike §1's default:
 ; evidence channels will grow, and rejecting an unknown method would make every
@@ -1201,7 +1243,7 @@ and verifier arrays permanently, and **must never age into looking like a normal
 record**. Typing it explicitly means no policy can mistake self-attestation for
 independent attestation.
 
-**Deliberately absent** [D, design §7.2]: biometric templates, photographs, raw
+**Deliberately absent** (design §7.2): biometric templates, photographs, raw
 latency samples, precise coordinates. Everything identifying stays on the
 participants' devices.
 
@@ -2006,6 +2048,114 @@ with no requirement to do both.
 
 ---
 
+### 4.8 Series refresh (type 7)
+
+**Starts a new `seqno` series for the node and does nothing else.** Two signers, the
+node and its patron.
+
+```
+{
+  1: keyhash,          ; the node
+  2: keyhash,          ; the patron, who countersigns
+  3: seqno,            ; the series being LEFT, at the counter it reached
+  4: seqno,            ; the new series. Its counter is 0
+  5: timestamp
+}
+```
+
+**The patron's countersignature is the whole of the security property.** A `series`
+cannot be advanced by the node's key alone, so a party holding a stolen key can
+exhaust the current counter and cannot escape into a fresh series — while the
+legitimate holder can, because their patron will sign for them and not for a thief.
+This is the same social check adoption and recovery already rest on, applied to the
+one operation that repairs an exhausted or poisoned counter.
+
+**Seal the old series before leaving it, and field 3 is what records that.** A
+32-bit counter advanced only on position and endpoint changes will not exhaust in a
+lifetime, so **the top of the range is dead space the legitimate holder can spend.**
+A node that believes its key is compromised sets the counter it is leaving to the
+**maximum**, then refreshes naming that value — after which nothing the thief signs
+can supersede it, since a strictly greater counter does not exist and an equal one
+carrying different contents is malformed (§5.7.3). **The exhaustion that made the
+attack possible is the same move that closes the abandoned line behind you.**
+
+**Order matters, and the schema enforces it.** Field 3 records the counter the old
+series reached, so sealing must happen *before* the refresh or the chain will name a
+departure point later records contradict. Seal, then refresh, then repeat for every
+other patron relationship whose line is worth securing.
+
+**Sealing is unilateral, and that is the point.** It is an ordinary self-signed
+locator at the top of the counter (§2.3's standalone carriage form) — no patron, no
+transaction, no countersignature. Only the *refresh* needs the patron, because only
+the refresh creates new room. So a node can seal a line toward parties it has no
+standing relationship with, in subnets where it holds no membership and could not
+refresh even if it wanted to. What it cannot do is undo it: a sealed line is spent,
+and reopening means a refresh and the countersignature that requires.
+
+**A chain-holder does not need the seal.** Anyone holding §4.8.1's chain knows which
+series was abandoned and **MUST reject records in it** whatever their counter. The
+seal protects the parties who hold no chain — a cached locator and nothing else — and
+against them it is a race the thief can win by reaching a reader first. That is the
+argument for acting on suspicion rather than on confirmation.
+
+**What a recipient ends up holding is an address that can never be updated.** The
+seal occupies the top of the `(node, series)` sequence — the slot any future locator
+for that pair would have to take — so the entry in that party's address book is final.
+Not deleted: they still hold an address, and it still resolves if the position behind
+it still answers. What is gone is anyone's ability to *move* it, the node's own
+ability included.
+
+**Writing the top slot is denial, not control, and it binds the writer too.** No
+record supersedes a maximum counter, so a party that seals a series — the node or a
+thief holding its key — can execute nothing further in that series either. Sealing
+confers no continuing ability; it removes the series from use by everyone.
+
+**So a thief who seals first burns a line rather than capturing one.** The parties it
+reached first hold a frozen entry pointing where that record pointed, and the thief
+cannot develop it: no further transaction in that series will be recognised by anyone
+holding the seal. **The `keyhash` is untouched** — the legitimate holder refreshes into
+a fresh series with the patron's countersignature, which the thief cannot obtain
+(§4.8), and continues. What the thief destroyed is one line the holder was leaving
+anyway. The cost is re-contact for the parties that took the thief's seal: a chain
+(§4.8.1) for those that will take one, out-of-band re-introduction for those that will
+not.
+
+**A seal reaches as far as it is carried and no further.** It is not a revocation and
+there is nowhere to publish one: parties never contacted and subnets never entered
+never see it, and the key is not dead to them. Nor does it need to be — **redirection
+requires a cached locator to redirect**, so a party holding none is not exposed to
+this attack at all, and a thief presenting the old key to them is attempting a first
+contact, which design §10.3 Case 0 makes an out-of-band act.
+
+**The new series MUST NOT be one the node has previously occupied.** Reusing one
+brings its abandoned high-counter records back into comparison against the new line.
+The node knows its own history, so this is local bookkeeping — and it is **checkable
+by anyone holding the chain**, who MUST reject a refresh naming a series already in it.
+
+#### 4.8.1 Proving which series is current
+
+**Presentation, not propagation, and not a history scan.** A node proves its current
+series by presenting:
+
+- its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno` — and so the
+  series — that the patron countersigned at that moment; and
+- **each series refresh since**, each naming the series left and the series entered.
+
+Every object in that chain is countersigned by the patron named in the node's own
+path, so a recipient already knows the key that must have signed it. The chain
+discloses the age of the patron relationship and the number of refreshes taken, and
+nothing else about what the node did.
+
+**Chain length is the order.** Where two presented chains share an adoption and one
+extends the other, the longer is current. Two chains that **diverge** are two
+successors countersigned by the same patron — patron equivocation, attributable to
+that patron by its own signatures, and handled the way this design handles
+equivocation everywhere: made visible rather than prevented.
+
+**A refresh is not a move.** Routing walks `anchor` and `path` (design §10.3), neither
+of which a refresh touches, so cached locators keep working and no correspondent has to
+be told. What changes is only which records rank against which.
+
 ## 5. Attestations and records
 
 ### 5.1 Currency attestation
@@ -2126,7 +2276,7 @@ is: either entries are verified on acceptance — possible only where the key is
 already pinned — or the table holds unverified gossip and verification happens on
 contact.
 
-Freshness is by `seqno`, strictly greater to replace.
+Freshness is by `seqno`, strictly greater `counter` to replace **within a series**; entries in different series do not rank (§2.3).
 
 ```
 AnchorEntry = {
@@ -2140,7 +2290,7 @@ AnchorEntry = {
 }
 ```
 
-[D, design §7.2] **Key hashes, not keys.** Full PQ keys would blow the table by ~18×.
+**Key hashes, not keys** (design §7.2). Full PQ keys would blow the table by ~18×.
 The table is an index, not a credential store. **Full keys are not fetched during
 resolution** — they arrive from attaching, from a transaction naming the node, or not
 at all (above).
@@ -2296,7 +2446,7 @@ flooded object passes through parties the recipient did not choose, where a
 `Referral` (§5.7.3) comes from the single party the requester is already talking to.
 This is why §5.7.3's replies are unsigned and this record is not.
 
-**Freshness by `seqno`, strictly greater to replace**, under §2.3's rule.
+**Freshness by `seqno`, strictly greater `counter` to replace within a series**, under §2.3's rule; across series they do not rank.
 **Publishing a changed endpoint set advances the counter** — that is what makes the
 new record replace the old rather than collide with it as an equal-`seqno`
 disagreement. **Republishing an unchanged set replays the record already held**
@@ -2463,9 +2613,14 @@ the subject's behalf** — that is the redirection mechanism this rule existed t
 prevent, and removing forwarding removed the thing that needed the guard.
 
 **`seqno` comparison still governs locator freshness** wherever two locators for one
-subject are compared: strictly greater to replace, and **equal `seqno` with different
-contents is malformed** rather than a tie to break, since a subject advances its own
-counter (§2.3).
+subject are compared, **within a series**: strictly greater `counter` to replace, and
+equal `seqno` with different contents malformed rather than a tie to break, since a
+subject advances its own counter (§2.3). **Two locators in different series do not
+rank**, and a reader holding both has learned nothing about which is current — it
+either holds a §4.8 chain that says, or it re-resolves (design §10.3). **A series
+refresh does not disturb routing**: the path is unchanged, so a cached locator still
+reaches the subject, and the comparison only matters once the position moves as
+well — at which point the cached path is stale on its own account.
 
 ### 5.8 Prekey distribution
 
@@ -3180,7 +3335,10 @@ once peering exists (design §6.3); the second arrival is a duplicate and dies t
 
 **An `EndpointRecord` therefore supersedes rather than accumulating**, which is what a
 current-address record should do, and §2.3's strictly-greater rule already governs it.
-**Equal `seqno` with different endpoints is malformed**, per §5.7.3.
+**Equal `seqno` with different endpoints is malformed**, per §5.7.3. **Records in
+different series are not comparable** and neither supersedes the other (§2.3); a
+holder keeps the one whose series it has been shown a chain for (§4.8) and re-resolves
+if it holds none.
 
 **No dedicated suppression cache exists**, and none should be added. It would be a
 second copy of a fact the store already holds, with its own expiry parameter to leave

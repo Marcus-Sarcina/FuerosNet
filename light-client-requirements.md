@@ -180,6 +180,31 @@ job.
 
 ## 2. Archive
 
+- **Never refresh into a series you have occupied before.** The abandoned line's
+  high-counter records would come back into comparison against the new one
+  (`wire-format.md` §4.8). You hold your own chain, so this is yours to check, and a
+  counterparty holding that chain will reject a refresh that repeats a series in it.
+- **Keep the chain that proves your current series** — your adoption and every refresh
+  since — and present it when a counterparty needs to rank two of your records
+  (`wire-format.md` §4.8.1). It is presented, never propagated, and it discloses the age
+  of your patron relationship and how many refreshes you have taken.
+- **On suspected key compromise, seal before you refresh.** Set the counter of the
+  series you are leaving to its maximum, then take the refresh naming that value, and
+  do it for every patron relationship you hold (`wire-format.md` §4.8). Nothing the
+  holder of your old key signs can then supersede your last record in that line.
+  **Act on suspicion**: against a counterparty that holds no chain this is a race, and
+  the thief wins it by reaching them first.
+- **Seal the old line when you rotate**, as the last thing the old key does (design
+  §7.4.0). Otherwise it keeps the ability to redirect anyone still holding a stale
+  locator, indefinitely and with no other source of truth available to them. One
+  self-signed locator at the maximum counter; no patron needed.
+- **Treat a refresh as deliberate, not routine.** It costs nothing in routing, since
+  the path is unchanged, but it is the boundary beyond which you may prune — and
+  pruning is irreversible. **Never prune inside the 730-day window**: those records are
+  what verifier selection counts, and discarding them lowers your own verification
+  threshold, which is a thing an evaluator can see you did (design §8.2).
+
+
 - **Merge automatically on noticing divergence.** A user has no reason to want
   outstanding branches, and an unmerged fork means their history is incomplete
   wherever they present it (design §8.3).
