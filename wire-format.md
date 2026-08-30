@@ -926,7 +926,7 @@ bulk push.
 {
   1: keyhash,          ; departing node
   2: keyhash,          ; patron being left
-  3: seqno,            ; incremented
+  3: seqno,            ; counter incremented within the current series (§2.3)
   4: timestamp,
   5: ? uint            ; reason code — same enumeration as §4.3
 }

@@ -5576,3 +5576,40 @@ nothing happened. Ordering was always correct; the dates were not.
   the refresh count itself. P37 is bounded: what a ceremony counterparty receives is what
   has accumulated since the last checkpoint rather than the subject's whole
   participation, floored at the window.
+
+- **2026-08-30 (consistency pass over commits `c988712`..`99e1051`)** — Diffed the five
+  commits spanning 0.8.2 through 0.8.6 and repaired what the feature changes stranded.
+
+  **A table row rendered broken.** The P37 register row (added in 0.8.6) carried literal
+  newlines inside its final cell, so Markdown split it across five physical lines and
+  the row did not render. Joined to one line. The structural suite gains an
+  **unclosed-table-row check** — a row that starts with `|` and whose line does not end
+  with `|` — which is what would have caught it; fence parity and headerless-table
+  checks both passed it.
+
+  **P36's detail column contradicted its own severity column.** The severity cell was
+  updated to *"largely answered by the `{series, counter}` split"* while the detail cell
+  still read *"a node bound into two subnets advances one counter in both"* and
+  *"registered rather than engineered away… a per-binding counter would break `seqno`'s
+  double duty"* — the exact objection the split overcomes by tagging each counter with
+  its series and forbidding cross-series comparison. Detail rewritten: the split *is* the
+  per-binding counter, made safe by the series tag, with the residuals (a not-yet-refreshed
+  binding, and the visible refresh count) kept.
+
+  **A drifted count.** §18.3 still deferred *"transaction types beyond the six"* after
+  0.8.6 added series refresh as type 7 — now *"beyond the seven"*. The overview at §0 was
+  left as written: it already lists five and omits the point-to-point abuse report, so it
+  is a deliberate sketch rather than an enumeration.
+
+  **One scalar-model residue.** The departure schema's `seqno ; incremented` predated the
+  `{series, counter}` split; tightened to *"counter incremented within the current
+  series"* to match §2.3.
+
+  **Left for the author, not repaired**: checkpoint-pruning (§8.2) is a second archive
+  edit and is in tension with §8's foundational guarantees — *"provably unbroken from
+  identity genesis to the last record shown"*, *"excision is impossible, only truncation
+  to a prefix remains"*, and *"activity gaps are visible"* — and with §13.7's
+  prefix-only presentation model. §8.2 hedges its own claim with *"today"*, but §8, §13.7
+  and `wire-format.md` §§3.1, 4.1 state the exclusivity flatly. Reconciling them is a
+  design decision (see the critique of 2026-08-30), so the cross-references were not
+  scatter-patched.
