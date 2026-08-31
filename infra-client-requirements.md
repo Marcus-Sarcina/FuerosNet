@@ -519,7 +519,7 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   picking wrong applies one owner's membership and roles to another owner's backend.
   **Refuse a registration for a keyhash you already serve under a different owner.**
 - **Re-registering by the same owner replaces the entry, and the old one is gone.**
-  **A registration is not archived** (design §10, `wire-format.md` §6): the archive
+  **A registration is not archived** (design §10, `wire-format.md` §6.5): the archive
   advances on adoption, departure, disavowal, peering and presence, and this is none
   of them. Keep a live table of what you currently serve and answer from it. **Do
   not retain superseded registrations** — nobody needs a record of a resource its
@@ -536,7 +536,7 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   time (§10.1).
 - **Return the owner's signature unchanged, and add none of your own.** An entry is
   signed once at registration and that signature is reused for every answer
-  (`wire-format.md` §6). It keeps the entry attributable **to its owner** wherever
+  (`wire-format.md` §6.7). It keeps the entry attributable **to its owner** wherever
   it travels; a per-answer signature from you would make one entry's bytes differ
   between askers and would attribute the claim to the wrong party.
 

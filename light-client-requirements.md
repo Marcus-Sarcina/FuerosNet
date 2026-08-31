@@ -379,7 +379,7 @@ session secrecy. The client implements them; it does not reinvent them.
 ## 8. Resources
 
 - **Register a resource with your serving node, not with the network**
-  (`wire-format.md` §6, request type 7). You sign the entry, your host answers for
+  (`wire-format.md` §6.2, request type 7). You sign the entry, your host answers for
   it, and the `discover_scope` you send is a request the host may narrow — an
   owner delegating hosting delegates that filtering. **What you send is the signed
   entry itself**, not a transaction: it enters no archive, chains to nothing, and the
@@ -393,7 +393,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **A repeated continuation means truncation, not another page.** If a reply fills
   the entry bound and its continuation names a service type you have already
   filtered on, the answering node holds more entries of that type than the bound
-  and asking again returns the same page (`wire-format.md` §6). Record that
+  and asking again returns the same page (`wire-format.md` §6.4). Record that
   node's portion as truncated, as you would an unreachable one, and do not follow
   the hint again.
 - **Give the user a refresh control** and let a stale view be stale. A new resource

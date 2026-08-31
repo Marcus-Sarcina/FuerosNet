@@ -151,7 +151,7 @@ context rather than content also makes the check free.
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor, peering endpoint or endpoint record (§7.6) | 8 |
 | `CatalogEntry`, total encoded bytes | 2048 |
-| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
+| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
 | Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
@@ -728,7 +728,7 @@ Type 6 carries an `AbuseReport` (design §11.6) addressed to a resource owner.
 
 **There is no registration transaction.** A resource registration is **not
 shared network state**: it is a signed `CatalogEntry` handed to one hosting node and
-answered from that node's current table (§6, design §11.5). It advances no archive
+answered from that node's current table (§6.5, design §11.5). It advances no archive
 (design §10), reaches nobody else, and has nothing to chain to — so an envelope
 around it would carry a back-pointer nothing walks, a `txid` nothing references, and
 a post-quantum signature justified only by an archive it never enters.
@@ -955,7 +955,9 @@ signature.** This is the escape hatch that makes exit a real right.
 #### 4.2.1 Lateral and vertical shifts are not a separate type
 
 Moving to a grandpatron, or to a patron's sibling, is **an ordinary adoption
-whose counterparty happens to be nearby**. It warrants no type of its own.
+whose counterparty happens to be nearby**. It warrants no type of its own, and
+neither does moving between unrelated patrons: **there is no transfer transaction**,
+because dropping the old patron was never a network operation (design §6.2).
 
 But it has a property worth stating: when the new patron lies **inside the old
 patron's replication horizon**, it already holds the node's history through
@@ -1848,6 +1850,8 @@ verify signatures, structure and the seed, but cannot determine which verifiers
 
 ## 6. Resource registration, the catalog, and abuse reports
 
+### 6.1 The catalog entry
+
 **A registration is the entry itself, signed.** There is no envelope and no
 transaction around it: field 8's signature covers fields 1–7 and 9, and those are
 the same bytes a query reply returns. **One object, one signature, wherever it
@@ -1921,6 +1925,8 @@ a policy can weight it, which is design §1.1's move where enforcement is unavai
 the same as client-integrity attributes. **A false declaration is undetectable** and is
 a matter between the owner and whoever relied on it.
 
+### 6.2 Registering an entry
+
 **Submitting one: bidirectional request type 7.** A light client cannot serve
 its own catalog (design §11.5), so it hands the signed transaction to the node
 hosting it. Without a message for that, the single act which makes a resource
@@ -1955,6 +1961,8 @@ the owner is attached already and the host has its identity from the handshake.
 reasons of its own, and saying which would describe the host's state to an owner who
 can do nothing differently with it. Ask again, or ask elsewhere.
 
+### 6.3 Abuse reports
+
 ```
 AbuseReport = {
   1: keyhash,        ; resource — and the signer. A resource reports; its owner
@@ -1987,12 +1995,12 @@ because it traverses the network. **A registration is the opposite case** and th
 why it has a request tag: an entry must cross from the owner who signs it to the host
 that answers for it.
 
-**The query and its answer.**
+### 6.4 The query and its answer
 
 ```
 CatalogQuery = {
   1: ? tstr .size (1..64),  ; service type filter, matched byte-for-byte
-                       ;   against §6's field 3. Absent means everything the
+                       ;   against §6.1's field 3. Absent means everything the
                        ;   asker may see. Same bound as the field it matches —
                        ;   a filter longer than any legal type cannot match and
                        ;   should not be allocated for
@@ -2070,6 +2078,8 @@ reply is a true statement — nothing is visible to you — and it is the wrong 
 because it is indistinguishable from a node that hosts nothing, and it invites an
 asker to conclude the catalog was answered.
 
+### 6.5 An entry's lifecycle
+
 **An entry is signed once, at registration, and that signature is reused for every
 answer.** No field varies per query, so re-signing buys nothing — and a
 per-answer signature would make an entry's bytes differ between askers, which
@@ -2111,6 +2121,8 @@ leaves no durable record to be presented later.
 **Freshness is inherent rather than maintained.** Each answer is computed when
 asked, by the party that knows.
 
+### 6.6 The scope fields
+
 **`discover_scope` is no part of the entry.** It decides which entries an answering
 node returns to which asker — a filtering rule evaluated where the answer is
 composed, never read by the recipient, since receiving an entry is what qualifying
@@ -2127,6 +2139,8 @@ is wrong about presentation and never about access.
 given. That is ordinary staleness with no protocol consequence: the next query
 corrects it, and nothing grants access on the strength of a cached entry — access is
 decided by the owner at request time (§11).
+
+### 6.7 Two owners, one resource keyhash
 
 **Nothing prevents two owners registering the same resource keyhash**, and nothing
 needs to. An entry is a claim by its owner, verifiable as theirs; a reader
@@ -2147,6 +2161,8 @@ whom to ask is what separates them.
 resource proves nothing and supplies no key material: the owner is asserting the
 resource's identity, which is the only assertion a catalog carries.
 
+### 6.8 A scope the evaluator cannot compute
+
 **A scope the evaluator cannot compute is structurally valid and ineffective.** A decoder MUST NOT reject it.
 
 **Rejection is wrong because validity is not local.** The same entry is valid for a
@@ -2158,18 +2174,6 @@ and grant nothing from it.**
 **No scope reaches outside the owner's Dunbar Org**, `list` included (design §11.4).
 A scope naming a position outside it is not an error; it simply matches nobody the
 evaluator can see.
-
-**The patron relationship is formed bilaterally and ended unilaterally by either
-party.** Every non-root node has exactly one patron; roots have none, which is an
-ordinary state (design §12.7). Adoption requires both signatures; departure and disavowal are the two
-one-sided ends of the same relationship.
-
-**There is no transfer transaction.** Since the protocol has no
-concept of "a node's set of patrons," dropping an old patron was never a network
-operation — what distinguished transfer was the dropping, which is now either a
-departure (node-initiated) or a disavowal (patron-initiated). Moving between
-patrons is: adopt at the destination, then depart the origin, in either order and
-with no requirement to do both.
 
 ---
 
@@ -3198,9 +3202,9 @@ no continuation to preserve.
 | 2 | `ArchiveRequest` (§7.9) |
 | 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§7.8) |
 | 4 | `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's consent (§5) |
-| 5 | `CatalogQuery` (§6) |
+| 5 | `CatalogQuery` (§6.4) |
 | 6 | `ResourceRequest` (§11) |
-| 7 | `ResourceRegistration` (§6) |
+| 7 | `ResourceRegistration` (§6.2) |
 | 8 | `CurrencyRequest` (§7.1) |
 
 **The reply carries no type tag and is framed identically otherwise** — the same
@@ -3228,7 +3232,7 @@ waiting to be told why would be waiting for something no responder owes it.
 completes. Early data is replayable, so a replay repeats whatever the request did:
 an application effect the requester never asked for twice (§11), a consumed
 one-time prekey (§7.8), a spent anti-oracle count (§5), a replayed registration
-that reverts an owner's current entry (§6). **Read-only lookups are unaffected** — resolution,
+that reverts an owner's current entry (§6.5). **Read-only lookups are unaffected** — resolution,
 archive fetch and catalog queries answer the same way however often they are
 replayed, which is what makes 0-RTT still worth having. §8.2's rule for `Attach` is
 this rule's other instance, on the other stream class.

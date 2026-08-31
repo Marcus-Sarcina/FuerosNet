@@ -6759,3 +6759,36 @@ exist. **This is for the author to rule on**: the working rules grant `review-tr
 as-of-filing status explicitly and say nothing about this log, and remapping historical
 entries to current numbering would have them describe changes to sections that did not
 exist when the change was made.
+
+### 2026-09-01 (0.9-after, pass 2b: wire §6 split, and a duplicated block removed)
+327 lines with no subsection at all — the largest undivided run left in the set after
+§3.2. **Eight subsections, and not one paragraph moved**: §6.1 the catalog entry,
+§6.2 registering an entry, §6.3 abuse reports, §6.4 the query and its answer, §6.5 an
+entry's lifecycle, §6.6 the scope fields, §6.7 two owners and one resource keyhash,
+§6.8 a scope the evaluator cannot compute. The boundaries were already there in the
+prose; only the headings were missing, and **§6.4 had a bold *The query and its answer*
+lead standing in for one**, the same defect §3.5 had.
+
+**Scope material lands in two places rather than one** — §6.6 for the fields, §6.8 for
+the uncomputable case, with §6.7 between them. Making it contiguous would have meant
+reordering paragraphs, and a short findable section is worth more than a tidy sequence
+bought with a reordering that could strand a reference.
+
+**Two paragraphs were deleted, not moved.** §6 ended with *the patron relationship is
+formed bilaterally and ended unilaterally* and *there is no transfer transaction* —
+both of them restatements of design §6.2, sitting in the chapter about resources. The
+wire text was a strict subset of the design's, which also carries the §3.1.1 collapse
+argument and the soft-fork case. **§4.2.1 is where an implementer looks for this**, and
+it already said moving to a grandpatron warrants no type of its own; it now says the
+same of moving between unrelated patrons, and cites design §6.2 rather than repeating
+it. *If the author wants the fuller statement back in the wire format, it belongs
+there, not at the end of the resource chapter.*
+
+**Thirteen citations sharpened** from `§6` to the subsection that now holds what they
+reach for, across `wire-format.md`, `network-design.md` and all three requirements
+documents. The signer-order table's `§6` row was left alone: it spans §6.1 and §6.3.
+
+**Verified**: zero unresolved references across the five root documents, fences paired.
+Word-multiset differencing accounts for every removed token — the two deleted
+paragraphs, the bold lead that became §6.4's heading, and one full stop that became a
+comma in §4.2.1.

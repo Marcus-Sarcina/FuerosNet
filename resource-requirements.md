@@ -403,7 +403,7 @@ resource.**
 
 **Consequence:** `discover_scope` is a filtering rule the node applies when
 answering, and is **no part of the entry**. An owner may *request* one when it
-registers (`wire-format.md` §6), and the host may narrow or ignore it; nothing
+registers (`wire-format.md` §6.2), and the host may narrow or ignore it; nothing
 carries it to an asker, because receiving an entry is what qualifying looks like.
 **Nothing propagates** — the node returns what an asker may see and omits the rest
 (design §11.5), so there is no second path needing the scope on the wire.
