@@ -2303,7 +2303,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Verification by query (§7.3) | a fuzzed profile and a query id — **not the record**, which does not exist yet | no |
 | Verifier-selection recomputation (§8.1.2) | nonces, seed, candidate set | no |
 | Finalization threshold (§7.4) | verifier responses | no |
-| Structural verification (`wire-format.md` §3.2) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
+| Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
 | Trust metric (§16.2) | graph edges, which come from adoptions | no |
@@ -2470,7 +2470,7 @@ each attempt merely expensive rather than futile.
 **Rule (1) does not set the rate it appears to, because the window is claimed rather
 than elapsed.** The ordinal derives from `started_at` (`wire-format.md` §5.3.1),
 which the proposer chooses, and monotonicity against the committed back-pointer
-(`wire-format.md` §3.2) bounds that choice **only from below**. So the budget is not
+(`wire-format.md` §3.3) bounds that choice **only from below**. So the budget is not
 one sample per day; it is one sample per *admissible* day, and **the number of
 admissible days is the number of days since the signer's own last committed record**.
 An identity transacting weekly has a handful; a dormant one has as many as it has

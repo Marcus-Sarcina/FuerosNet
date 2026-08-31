@@ -3222,7 +3222,7 @@ announced anyway.
 Nineteen questions, **two
 of them contradictions from my own edits.** `resource-requirements.md` §6 still
 said entries *propagate as topology* after the catalog became query-answered, and
-`wire-format.md` §3.2 said a nonempty unprotected COSE header was both **malformed
+`wire-format.md` §3.5 said a nonempty unprotected COSE header was both **malformed
 and ignored** — five lines apart, in text written the same day. **A real dead end
 in the truncation design**: an asker told to *narrow by service type* had no way to
 learn which types exist, so a catalog over 64 entries was undrainable. The reply
@@ -6717,3 +6717,45 @@ Package hosting. The two now cite each other.
 errors, fences paired. Word-multiset differencing against the prior commit shows the
 only removed tokens are the retitled wire heading and the rewritten resource sentence —
 no prose was lost in the moves.
+
+### 2026-09-01 (0.9-after, pass 2a: wire §3.2 split, the review's headline finding)
+The reviewer called this the most consequential organisational defect in the set:
+**231 lines of validation rules filed under the heading *Genesis***, of which genesis
+was the first three. Nothing else in the section was findable.
+
+**Genesis moved to §3.1**, where chain back-pointers are defined and where §3.1 had
+been forward-referencing it. A three-line section pointing back at the section that
+points forward to it is friction with no reader on the other side.
+
+**The remainder became five named subsections**: §3.2 structural rules for presence
+records, §3.3 timestamps and monotonicity, §3.4 what structural verification decides
+and what it does not, §3.5 the signer set, §3.6 canonicality and version. Each was
+already a coherent run of prose; none was rewritten. **§3.5 existed in all but name** —
+it opened with a bold **Signer set rules** lead, which is a heading that could not be
+linked to.
+
+**The chapter is retitled *Common envelope and structural verification*.** It was never
+only the envelope, and the presence-record rules were the evidence: they are consumed by
+the same validator pass as the timestamp and signer-set rules, so keeping the structural
+contract in one chapter is worth more than a title that describes half of it. The
+alternative — moving those rules to §4.5 — would have scattered the contract across two
+chapters and renumbered twenty citations to buy it.
+
+**Twenty-one citations retargeted** across `wire-format.md`, `network-design.md` and
+this log, each to the subsection that now holds the rule it was reaching for. Two of
+them were §3.2 citing itself. The design's structural-verification table row and
+`wire-format.md`'s disclosure table row now cite **§3** rather than a subsection,
+because what they describe spans all five.
+
+**Verified**: zero unresolved references across the five root documents; word-multiset
+differencing shows the only removed tokens are the rewritten genesis sentence and the
+old headings.
+
+**Noted, not fixed**: extending the reference checker to `change-log.md` for the first
+time reports **160 unresolved references** there, and 2 in `Robot/review-plan.md`. These
+are as-of-filing — an entry from August describing §11.8.7 describes the document as it
+stood. The count was 166 before this split and fell to 160 because §3.3 through §3.6 now
+exist. **This is for the author to rule on**: the working rules grant `review-tracking.md`
+as-of-filing status explicitly and say nothing about this log, and remapping historical
+entries to current numbering would have them describe changes to sections that did not
+exist when the change was made.

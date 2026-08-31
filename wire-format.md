@@ -136,8 +136,8 @@ context rather than content also makes the check free.
 
 | Array | Maximum |
 |---|---|
-| Envelope **logical signers** | **Derived, not a constant.** The sum of the transaction type's per-role bounds. For a presence record: 2 participants + 16 witnesses = **18**. **Verifiers are not envelope signers.** Their signatures are embedded evidence inside the body (§3.2, design §5.1) |
-| Envelope `COSE_Signature` **entries** | **Twice the logical-signer bound**, since each contributes one classical and one PQ entry (§3.2). For a presence record, **36** |
+| Envelope **logical signers** | **Derived, not a constant.** The sum of the transaction type's per-role bounds. For a presence record: 2 participants + 16 witnesses = **18**. **Verifiers are not envelope signers.** Their signatures are embedded evidence inside the body (§3.5, design §5.1) |
+| Envelope `COSE_Signature` **entries** | **Twice the logical-signer bound**, since each contributes one classical and one PQ entry (§3.5). For a presence record, **36** |
 | Archive subset references | 256 |
 | Verifier responses per recovery | 32 |
 | Witnesses per presence record | 16 |
@@ -170,7 +170,7 @@ they are safe.
 **The envelope bound MUST be derived, never asserted independently, and derived in
 two steps.** Sum the transaction type's per-role bounds to get the **logical
 signer** ceiling, then **double it** for the `COSE_Signature` array, since each
-logical signer contributes one classical and one post-quantum entry (§3.2).
+logical signer contributes one classical and one post-quantum entry (§3.5).
 
 **An independently asserted envelope bound can contradict the per-role bounds**, so
 that a record one bound permits the other rejects. Deriving it makes that
@@ -178,7 +178,7 @@ structurally impossible rather than something to notice.
 
 **Signature arithmetic, so the figures above are checkable.** Ed25519 is 64 bytes,
 ML-DSA-65 is 3,309. **One logical signer costs 3,373 bytes**, not 6,618 — only one
-of its two entries is post-quantum (§3.2). An adoption's two signers are therefore
+of its two entries is post-quantum (§3.5). An adoption's two signers are therefore
 ≈ 6.6 KB, and a ten-signer presence record ≈ 33 KB, both before the body.
 
 **Typical is far below maximum.** A presence record is expected to carry ~10
@@ -207,11 +207,11 @@ timestamp = uint                   ; seconds since Unix epoch; u64 RANGE.
                                    ; EFFECT** — not when it was drafted and not
                                    ; when either signature was applied. The body
                                    ; is fixed before anyone signs and signatures
-                                   ; may be gathered with any delay (§3.2), so
+                                   ; may be gathered with any delay (§3.4), so
                                    ; the value is the effective time the parties
                                    ; agreed at assembly, not an observed moment.
                                    ; Never checked against a local clock at
-                                   ; structural verification (§3.2); a recipient
+                                   ; structural verification (§3.3); a recipient
                                    ; reads it as the parties' claim about when
                                    ; the relationship or event began
 seqno     = [series, counter]      ; §2.3. NOT a single integer, and NOT
@@ -403,7 +403,7 @@ itself as the node's mailbox (design §12.1).
 
 ---
 
-## 3. Common envelope
+## 3. Common envelope and structural verification
 
 ```
 Envelope = {
@@ -411,7 +411,7 @@ Envelope = {
   2: uint,              ; message type (see §4)
   3: { * uint => any }, ; body — type-specific
   4: COSE_Sign          ; RFC 9052; TWO COSE_Signature entries per required
-                        ; logical signer — one classical, one PQ (§3.2)
+                        ; logical signer — one classical, one PQ (§3.5)
 }
 ```
 
@@ -456,8 +456,11 @@ the middle — an earlier head drops what is recent, a checkpoint drops what is 
 (design §10.1, §10.2).
 
 **This applies to every transaction type, not only presence records.** Adoption,
-departure, disavowal and peering all advance their signers' chains. A signer with
-no prior transaction uses the genesis value (§3.2).
+departure, disavowal and peering all advance their signers' chains.
+
+**A signer with no prior transaction uses the genesis value**, `SHA-256(the
+signer's keyhash)` — derivable by any verifier, so a claimed first transaction is
+checkable rather than assertable.
 
 **One back-pointer LIST per required signer**, since each signer has their own
 independent archive. An adoption advances both the node's archive and the patron's.
@@ -476,22 +479,18 @@ requires reachability rather than sequence.
 A decoder MUST accept lists of **any length from 1 to 8.** The bound in §1 — and
 MUST verify every back-pointer present, not merely the first.
 
-### 3.2 Genesis
+### 3.2 Structural rules for presence records
 
-A signer's first transaction has no predecessor. Its back-pointer is
-`SHA-256(the signer's keyhash)` — a value derivable by any verifier, so a
-claimed first transaction is checkable rather than assertable.
-
-**Presence record structural rules**, all previously unstated:
+Rules a validator checks from the record alone. All were previously unstated.
 
 - **The two participant identities MUST differ.**
 - **`finalized_at` MUST be ≥ `started_at`, and MUST NOT exceed it by more than 24
   hours.** The lower bound alone lets a body name any future instant, and every
-  envelope signer's next record must clear it (§3.2's monotonicity) — so one
+  envelope signer's next record must clear it (§3.3's monotonicity) — so one
   disposable identity could freeze the chains of a victim and its whole witness set
   until a date it chose. **This is checkable with no clock**: both values are in the
   record, and the rule constrains their difference rather than either one against the
-  reader's time, which is why it can be structural where §3.2's other timestamp rules
+  reader's time, which is why it can be structural where §3.3's timestamp rules
   cannot. 24 hours is far beyond any honest finalization — `pending` and `unavailable`
   count toward the threshold (§5.5), so a ceremony never waits on an absent
   verifier — and reuses the seed window's figure rather than introducing another
@@ -516,7 +515,7 @@ claimed first transaction is checkable rather than assertable.
   unverifiable, never valid and never malformed.*
 - **A key may appear in at most one formation record: its first.** A formation record's key 0 list for each signer MUST be exactly
   **the genesis value, `[ SHA-256(signer keyhash) ]`** — the same encoding every
-  first transaction carries (above).
+  first transaction carries (§3.1).
 
   **Two distinct claims, easy to conflate.** *Structurally*: a validator checks the
   subtype, the absent evidence arrays, and the genesis back-pointers — all local to
@@ -551,6 +550,8 @@ claimed first transaction is checkable rather than assertable.
   checkable from the record and requires topology state, the schema records the
   claim, evaluation is the reader's.
 
+### 3.3 Timestamps and monotonicity
+
 **Timestamps are not checked against a local clock at structural verification.**
 No maximum age or future tolerance applies; a decoder has no authoritative clock
 to check against and inventing one would make validity depend on the reader.
@@ -584,6 +585,8 @@ backdating without closing the reroll it is sometimes read as closing. A signer'
 grinding budget is the span from its last committed record to the day it is willing
 to claim, and design §8.1.2 rests the remaining limit on witnesses declining a day
 their own clocks contradict — not on anything checkable here.
+
+### 3.4 What structural verification decides, and what it does not
 
 **"Verify" means structurally valid, not effective.** A verifier confirms
 encoding, signatures, and the structural rules stated here. Whether the adoption
@@ -633,7 +636,7 @@ over any channel, with any delay. **Nothing in the envelope records how they wer
 gathered**, and a verifier cannot tell a co-present exchange from one assembled over
 days. Only the finished envelope is specified.
 
-**Signer set rules**:
+### 3.5 The signer set
 
 The rules count **logical signers**, not `COSE_Signature` entries. design §5.1
 requires both identity components to sign an archive-retained transaction, so one
@@ -695,6 +698,8 @@ tooling could verify it. Two standard entries stay within RFC 9052, let each
 component be verified independently, and support §7's staged migration — a
 verifier may check the classical component for a fast path and the post-quantum
 one when the decision warrants it.
+
+### 3.6 Canonicality and version
 
 **Canonicality applies to the whole envelope**, not only the signed body. A
 non-canonical envelope is malformed and rejected even if its body verifies —
@@ -780,7 +785,7 @@ Recovery = {
                        ;   subject again and recognised them
   3: COSE_Sign         ; by the OLD key. The KEY half. COSE_Sign rather than
                        ; COSE_Sign1 because the old identity is hybrid and one
-                       ; logical signer contributes two entries (§3.2)
+                       ; logical signer contributes two entries (§3.5)
 }
 ```
 
@@ -848,7 +853,7 @@ arrays are never encoded. **The optionality that once made this grammar awkward 
 gone with the lost-key variant**: there is one procedure, and it needs both halves.
 
 **Field 3 is a `COSE_Sign`**, not a `COSE_Sign1` — the old identity is hybrid, so it
-contributes two entries like any other logical signer (§3.2).
+contributes two entries like any other logical signer (§3.5).
 
 **It signs a successor statement, not the Recovery map.** The payload is the deterministic CBOR of:
 
@@ -1086,7 +1091,7 @@ Field-for-field per design §8.1.
 
 ```
 {
-  1: timestamp,        ; started_at. In the body, not disclosable: §3.2's
+  1: timestamp,        ; started_at. In the body, not disclosable: §3.3's
                        ;   monotonicity and §5.3's 730-day window need the
                        ;   exact value, and finalized_at and key 7 already show
                        ;   the ceremony's day in every presentation
@@ -1382,7 +1387,7 @@ able to read.** design §8.1.1 carries the same table with the reasoning.
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 4, 8, 11 |
 | Finalization threshold (§5.5) | **None.** Counts field 5 |
-| Structural verification (§3.2) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
+| Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
 | Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
@@ -1639,7 +1644,7 @@ retry should do.
 
 **The seconds are `started_at`'s, so the window is claimed and not elapsed** (§5.3.1).
 An attacker aborting to reroll therefore gets one fresh sample per *admissible*
-ordinal rather than one per day, and §3.2's monotonicity bounds admissibility only
+ordinal rather than one per day, and §3.3's monotonicity bounds admissibility only
 from below — the budget is the span between the signer's last committed record and
 the day it claims. Nothing in a record shows which it was. What limits it is a
 witness declining to commit a nonce against a day far from its own clock, which no
@@ -1703,10 +1708,10 @@ signatures verify — reachability alone admits nothing. Counting
 parseable-but-unverified records would let forged history move thresholds and
 steer samples. A reachable record that cannot be fetched leaves the chain
 **incomplete, not smaller**: the traversal reports unverifiable rather than
-returning a lower *n* (§3.2's unavailable-predecessor rule).
+returning a lower *n* (§3.4's unavailable-predecessor rule).
 
 **Traversal may prune a verified branch at the window boundary.**
-Effective time is monotonic along every verified chain (§3.2), so once a branch
+Effective time is monotonic along every verified chain (§3.3), so once a branch
 reaches a verified record at or before `started_at − 730d`, nothing beyond it can
 fall inside the window — an unavailable record *past* that point leaves the full
 archive incomplete without making this record's *n* or candidate set unverifiable.
@@ -3309,7 +3314,7 @@ everyone near the patron, which is not whose neighbourhood changed.
 **Stored means verified.** A node forwards what it stored, so storing an object
 it could not verify would make it an amplifier for whatever an authenticated
 neighbour cared to send. A transaction whose signer's key material the node lacks is
-§3.2's *neither verified nor rejected*: hold it, fetch the key, and let it enter
+§3.4's *neither verified nor rejected*: hold it, fetch the key, and let it enter
 storage and propagation when it verifies. **An `EndpointRecord` is the exception the
 design already states** — self-signed by a party the receiver may hold no key for,
 and accepted as gossip precisely so that reaching the address is what confirms it
