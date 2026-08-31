@@ -1571,23 +1571,19 @@ ambiguity is in the word *use*, not in either table.
 
 ### Open for the author
 
-**Three citations to §11.0.1 discuss hosting while §11.0.1 is about federation.**
-Verified pre-existing against `14292b9` — the section was §9.0.1 before and carried the
-same title, so this is not migration damage. A fourth, *"§11.0.1's manifest"*, is fixed
-here because pass 1 gave the manifest a definite home at `resource-requirements.md` §8.
-The remaining three need a decision about what was meant, not a reading of what is
-written:
+**~~Three citations to §11.0.1 discuss hosting while §11.0.1 is about
+federation.~~ WITHDRAWN** [author, 2026-08-31]. **All three are correct and the
+misreading was mine.** §11.0.1 is what establishes that a wide-scale service is *many
+local instances, each hosted by a patron* — so it is exactly the authority for a
+sentence about what a node hosts. Author: *"The infra node is a server and the resource
+is a package that interacts with one or more networks... even in the case of a
+third-party service, the infra node runs the authentication package to access that
+user-facing service, and so it's still a thing the infra node hosts."* The fourth,
+*"§11.0.1's manifest"*, was genuinely wrong and is fixed — the manifest's home is
+`resource-requirements.md` §8.
 
-- design §11.4's who-sees-what list — *"the hosting path, which is inside the owner's
-  own machine or a connection the owner controls (§11.0.1)"*. **Nothing else in the set
-  states this claim**; it appears only at its own citation.
-- design §11.5 — *"registered with, and answered by, the infra node hosting it
-  (§11.0.1)"*. The sentence is inside §11.5 and describes §11.5's own subject, so the
-  citation is self-referential or meant for `wire-format.md` §6.2.
-- design §14.2's visibility table — *"parses and re-serialises the request to insert the
-  credential (§11.0.1, `wire-format.md` §11.2)"*. The wire half is right.
-
-§18.2's A21 row is the one §11.0.1 citation that is correct.
+**What the misreading was actually detecting** is recorded below as V1: not a wrong
+citation, but one word carrying four jobs.
 
 **`change-log.md` holds 160 unresolved section references**, and `Robot/review-plan.md`
 two. Extending the checker to them for the first time surfaced this; the count was 166
@@ -1597,3 +1593,49 @@ The working rules grant that status to this file explicitly and say nothing abou
 change log, and remapping historical entries to current numbering would have them
 describe changes to sections that did not exist when the change was made. **Author's
 call.**
+
+### V1 — "application" carries four jobs, and two of them collide
+
+**Open for the author.** Found while checking the withdrawn §11.0.1 finding above. Not
+a missing name: **the distinction the author described is already in the documents, and
+already well put.** `resource-requirements.md` §4 states it as **Physically** / **Logically** —
+
+> **Physically:** a package running on the same infra node as the network services. For
+> an external service, **the conforming component is the local adaptor or gateway.** The
+> vendor's own system sits behind it and conforms to nothing here.
+> **Logically:** a black box exposing a set of **roles**, accepting the infra node's
+> credential to access those roles.
+
+— and the three-category table in both design §11 and resource §4 covers all three
+shapes the author named: **Local application** (local to the node), **External service**
+(third party), **Gateway** (another distributed system). *"The sandbox constrains the
+broker, not the service behind"* (resource §4) already names the local half of a
+third-party case.
+
+**So no new jargon is needed.** What is wrong is that one word does four jobs:
+
+| Sense | Sites | Example |
+|---|---|---|
+| **Node software** | **7** — design §2 (×3), §3.3, §4 (×2); light-client §0 | *"A node running the server application"*, *"the participant-facing application"*, *"Every user runs the application"* |
+| **The wider thing many resources instantiate** | **3** — design §11.0.1, §20.2's A21; resource §4.1 | *"A resource is neighbourhood-scale; **an application** can be any scale"* |
+| **A thing a resource can be** | 1 — design §2's Resource row | *"A service, data store or application owned by a node"* |
+| **The layer** (`application data`, `application-level`, `application semantics`) | the majority | Conventional, unambiguous, leave alone |
+
+**The first two are the collision.** §2 says *every user runs the application*; §11.0.1
+says *an application can be any scale*. A reader who meets §2 first carries the wrong
+sense into §11.
+
+**The third is what made §2's Resource row unhelpful** — it enumerates what a resource
+can front instead of saying what a resource *is*, which is §11's three-category table's
+job and is done better there.
+
+**Cheapest fix, using only words already in the set — about eight edits:**
+
+- The 7 node-software sites become **client** / **node software**. Design §2 already
+  defines *Light client* as *naming software*, so *"the participant-facing application"*
+  → *"the participant-facing client"* is the definition using its own term.
+- §2's **Resource** row says what a resource is and points at §11 for the shapes, rather
+  than listing *"a service, data store or application"*.
+
+**Not applied.** Vocabulary is load-bearing and this is the author's call — §2 is the
+row every later chapter is written against.
