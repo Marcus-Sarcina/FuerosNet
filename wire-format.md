@@ -81,13 +81,13 @@ Present encoding: `external_aad` holds the ASCII role tag.
 | Verifier response (§4.5) | `rhtn/1:verifier` |
 | Subject consent to a query (§4.5) | `rhtn/1:consent` |
 | VerificationQuery, canonical form | see §4.5 |
-| Currency attestation (§5.1) | `rhtn/1:currency` |
+| Currency attestation (§7.1) | `rhtn/1:currency` |
 | Catalog entry (§4) | `rhtn/1:catalog` |
 | Abuse report (§4) | `rhtn/1:abuse` |
 | Standalone locator (§2.3) | `rhtn/1:locator` |
-| Anchor entry (§5.2) | `rhtn/1:anchor` |
-| Prekey bundle (§5.8) | `rhtn/1:prekey` |
-| Subtree acknowledgement (§5.5) | `rhtn/1:subtree-ack` |
+| Anchor entry (§7.2) | `rhtn/1:anchor` |
+| Prekey bundle (§7.8) | `rhtn/1:prekey` |
+| Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
 
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
@@ -149,9 +149,9 @@ context rather than content also makes the check free.
 | Corroborations per record | 16 (one per witness) |
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
-| NetworkPoint entries per anchor, peering endpoint or endpoint record (§5.6) | 8 |
+| NetworkPoint entries per anchor, peering endpoint or endpoint record (§7.6) | 8 |
 | `CatalogEntry`, total encoded bytes | 2048 |
-| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§4.7, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
+| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
 | Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
@@ -258,12 +258,12 @@ must be expressible at nibble granularity rather than byte granularity.
 The signature covers the path — standalone via `SignedLocator`, in a transaction via
 the envelope — so no intermediary can truncate one without breaking it. Truncated
 prefixes exist only in **unsigned aggregate routing state** held by distant nodes,
-and are never what a resolution starts from: §5.7's *full, unmodified path* is
+and are never what a resolution starts from: §7.7's *full, unmodified path* is
 guaranteed by the input being signed, not by a completeness marker.
 
 ### 2.2 Key material
 
-Identity keys are a **COSE_KeySet** (RFC 9052 §7) of exactly two entries in fixed
+Identity keys are a **COSE_KeySet** (RFC 9052 §9) of exactly two entries in fixed
 order — classical first, post-quantum second.
 
 ```
@@ -339,17 +339,17 @@ Locator = {
 
 The `seqno` here **is** design §6.2.1's sequence number, not a separate field
 (design §6.2). Its **counter** is incremented on every position change **and on every
-endpoint change** (§5.6), serving both as freshness test and stale-cache detector; its
-**series** identifies which line those counts belong to and is advanced only by §4.8's
+endpoint change** (§7.6), serving both as freshness test and stale-cache detector; its
+**series** identifies which line those counts belong to and is advanced only by §4.6's
 patron-countersigned reissue. **One series per patron relationship** is the expected
 shape — a node bound under two patrons keeps two, which is what stops its counts in one
 subnet disclosing its activity in another (design §19.4, P36).
 
-**Endpoints advance it because the malformed-on-equal rule requires them to.** §5.7.3 treats equal `seqno` with different contents as malformed rather
+**Endpoints advance it because the malformed-on-equal rule requires them to.** §7.7.3 treats equal `seqno` with different contents as malformed rather
 than a tie to break, on the ground that a subject advances its own counter — so **a
 subject that cannot advance has no way to publish a change at all.** An infra node
 that changes address without changing position would otherwise be stuck advertising
-a dead one until it happened to move, which is precisely the node §5.6 exists for.
+a dead one until it happened to move, which is precisely the node §7.6 exists for.
 One counter, two triggers; a reader learns that something it must re-fetch has
 changed, which is all the counter ever said.
 
@@ -363,10 +363,10 @@ reject valid updates. Absence of prior state is not a failure.
 **arbitrary** 32-bit label, not a generation number: it is never compared, never
 assumed to increment, and two records in different series cannot be ranked by any
 party holding only those records. Which series a node is currently on is **proved,
-not inferred** — by the chain of §4.8, presented on request.
+not inferred** — by the chain of §4.6, presented on request.
 
 **The arbitrariness is the defence, and ordering would remove it.** A counter can be
-exhausted: one record at the top of the range leaves no successor, and §5.7.3 makes an
+exhausted: one record at the top of the range leaves no successor, and §7.7.3 makes an
 equal `seqno` carrying different contents malformed rather than a tie — so a party
 holding the node's key could otherwise pin it permanently, and §2.3's own reasoning
 says why that is fatal (*"a subject that cannot advance has no way to publish a change
@@ -387,7 +387,7 @@ SignedLocator = {
   3: COSE_Sign1      ; BY THE SUBJECT over canonical CBOR of fields 1-2;
                      ; external_aad = "rhtn/1:locator".
                      ; Classical only: a locator's relevance expires when the
-                     ; node next moves, so §5.1's post-quantum horizon does
+                     ; node next moves, so §7.1's post-quantum horizon does
                      ; not apply
 }
 ```
@@ -441,7 +441,7 @@ and it must be stated because *"the required signer set"* names an unordered thi
 | Disavowal (§4.3) | the issuing patron |
 | Peering (§4.4) | endpoint A, then endpoint B, as fields 1 and 2 |
 | Presence (§4.5) | the two participants in field 3's order, then witnesses in field 4's order |
-| Resource registration, abuse report (§4.7) | the single signer |
+| Resource registration, abuse report (§6) | the single signer |
 
 **Getting this wrong is silent.** Every hash and signature still verifies while each
 predecessor is attributed to the wrong signer, so a mismatch surfaces only when
@@ -493,7 +493,7 @@ claimed first transaction is checkable rather than assertable.
   record, and the rule constrains their difference rather than either one against the
   reader's time, which is why it can be structural where §3.2's other timestamp rules
   cannot. 24 hours is far beyond any honest finalization — `pending` and `unavailable`
-  count toward the threshold (§4.6.5), so a ceremony never waits on an absent
+  count toward the threshold (§5.5), so a ceremony never waits on an absent
   verifier — and reuses the seed window's figure rather than introducing another
   (design §21).
 
@@ -506,7 +506,7 @@ claimed first transaction is checkable rather than assertable.
   record already carries, and the other needs a clock the reader does not have.
 - **A presence record on the wire is always final.** A ceremony whose threshold is
   unmet is local state and is not published; `finalized_at` therefore always
-  records a threshold that was met. Late responses arrive as `LateResponse` objects (§5.3) and
+  records a threshold that was met. Late responses arrive as `LateResponse` objects (§7.3) and
   never alter the original record's validity.
 - **`strongest` MUST appear among the channels with `result = pass`, and no
   higher-ranked channel may appear with `pass`.** Ranking is UWB > NFC > optical >
@@ -589,7 +589,7 @@ their own clocks contradict — not on anything checkable here.
 encoding, signatures, and the structural rules stated here. Whether the adoption
 *takes effect* — the patron has capacity, no cycle results, the node's prior
 binding ended — depends on topology state a validator may not hold, and is a
-separate question answered by §5.7's resolution and the receiver's own view. An API
+separate question answered by §7.7's resolution and the receiver's own view. An API
 returning one boolean for both is answering a question nobody asked.
 
 **A back-pointer whose record is unavailable is not a failure.** Verifying a chain
@@ -692,7 +692,7 @@ logical signer contributes **two entries**.
 one private-use `alg` would keep the entry count at one per signer, but it would
 require inventing an algorithm the COSE registry does not define, and no standard
 tooling could verify it. Two standard entries stay within RFC 9052, let each
-component be verified independently, and support §5's staged migration — a
+component be verified independently, and support §7's staged migration — a
 verifier may check the classical component for a fast path and the post-quantum
 one when the decision warrants it.
 
@@ -723,7 +723,7 @@ Type 6 carries an `AbuseReport` (design §11.6) addressed to a resource owner.
 
 **There is no registration transaction.** A resource registration is **not
 shared network state**: it is a signed `CatalogEntry` handed to one hosting node and
-answered from that node's current table (§4.7, design §11.5). It advances no archive
+answered from that node's current table (§6, design §11.5). It advances no archive
 (design §10), reaches nobody else, and has nothing to chain to — so an envelope
 around it would carry a back-pointer nothing walks, a `txid` nothing references, and
 a post-quantum signature justified only by an archive it never enters.
@@ -898,14 +898,14 @@ Not a list, not a range, not a proof.
 
 **The chain already encodes everything else.** design §10 makes each transaction carry
 its predecessors, so a patron given a head walks backward through the
-back-pointers, fetching as it goes (§5.9) and stopping when it has seen enough or
+back-pointers, fetching as it goes (§7.9) and stopping when it has seen enough or
 stops recognising counterparties. Merges need no special handling, a record with
 two back-pointers means both branches are reachable and both get walked.
 
 **Truncation needs no grammar.** A subject presenting less history presents an
 *earlier* head, and this field expresses that and nothing else. The chain's other
 edit — dropping what is early — is carried by the checkpoint that licenses it
-(§4.8, design §10.2) rather than by anything here, so the field still cannot express
+(§4.6, design §10.2) rather than by anything here, so the field still cannot express
 what the archive model does not already allow.
 
 **The patron chooses its own depth**, which is the right asymmetry: the presenter
@@ -921,7 +921,7 @@ extending credit decides how much evidence it wants.
 | **Merkle proof** | Largest body, highest complexity, and needs a tree imposed on a native DAG. It buys verification without fetching, but the patron **needs the contents anyway** to recognise counterparties, so it optimises a cost this use case does not have |
 
 References rather than contents remains right, and is consistent with attestation
-being pull (§8): the patron fetches what it wants to verify rather than receiving a
+being pull (§12): the patron fetches what it wants to verify rather than receiving a
 bulk push.
 
 ### 4.2 Departure (type 2)
@@ -1017,7 +1017,7 @@ about the node:
 | 2 | Pruned for space — inadequate room at the node's current position |
 | 3 | Merge trim, the node held membership in both of two merging subnets and must keep one |
 | 4 | Incompatible subnet membership, the node belongs to a subnet the patron deems incompatible |
-| 5 | Cycle repair — the patron relation formed a cycle and this edge was cut to break it (§7.2b) |
+| 5 | Cycle repair — the patron relation formed a cycle and this edge was cut to break it (§10.2) |
 | 6–30 | Unassigned |
 | 31 | Other, without prejudice |
 
@@ -1087,7 +1087,7 @@ Field-for-field per design §8.1.
 ```
 {
   1: timestamp,        ; started_at. In the body, not disclosable: §3.2's
-                       ;   monotonicity and §4.6.3's 730-day window need the
+                       ;   monotonicity and §5.3's 730-day window need the
                        ;   exact value, and finalized_at and key 7 already show
                        ;   the ceremony's day in every presentation
   2: timestamp,        ; finalized_at
@@ -1213,7 +1213,7 @@ VerifierResponse = {
                        ; marker is syntax; result and basis determine presence
   7: COSE_Sign1,       ; SUBJECT's countersignature. Payload: the RAW 32 BYTES of
                        ; query_id (field 3) — not a CBOR bstr wrapping them, and
-                       ; not the query itself (see §4.6.6).
+                       ; not the query itself (see §5.6).
                        ; external_aad = "rhtn/1:consent".
                        ; ALWAYS CLASSICAL, including inside a Recovery (§4.1).
                        ; A verifier MUST reject a query lacking it, and MUST reject
@@ -1336,7 +1336,7 @@ malformed, not that a field is missing.
 
 **Withholding is visible, and that is deliberate.** All seven slots are always
 present, so a recipient always knows a field exists and was withheld. This is the
-same posture as §4.6.5's `pending` and `unavailable` verifier responses: absence is
+same posture as §5.5's `pending` and `unavailable` verifier responses: absence is
 legible rather than silent, and a policy may weight it.
 
 #### Cost
@@ -1379,15 +1379,15 @@ able to read.** design §8.1.1 carries the same table with the reasoning.
 |---|---|
 | Ceremony, at creation (design §7.1) | **All.** Both parties construct the body |
 | Witness signing (design §7.1) | **Location only**, which the witness corroborates |
-| Verification by query (§4.6.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
-| Verifier-selection recomputation (§4.6) | **None.** Seed inputs are body fields 4, 8, 11 |
-| Finalization threshold (§4.6.5) | **None.** Counts field 5 |
+| Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
+| Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 4, 8, 11 |
+| Finalization threshold (§5.5) | **None.** Counts field 5 |
 | Structural verification (§3.2) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
-| Archive fetch by a prospective patron (§5.9) | **Holder's choice.** The only exchange with a use for location |
+| Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
 | Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
-| Late verifier response (§5.4) | **None.** References `txid` |
-| Capture key grant (§5.3) | **None.** References `txid` |
+| Late verifier response (§7.4) | **None.** References `txid` |
+| Capture key grant (§7.3) | **None.** References `txid` |
 
 **Ten of eleven exchanges need none of it**, which is what makes the mechanism worth
 its 0.3%. **A conforming client withholds by default and reveals on the holder's
@@ -1405,7 +1405,115 @@ a wish. What the fixed interface buys is that a refusal is **the recipient's pol
 rather than the protocol's**, and that every disclosure subset stays structurally
 valid.
 
-### 4.6 Verifier selection — recomputation
+### 4.6 Series reissue (type 7)
+
+**Starts a new `seqno` series for the node and does nothing else.** Two signers, the
+node and its patron.
+
+```
+{
+  1: keyhash,          ; the node
+  2: keyhash,          ; the patron, who countersigns
+  3: seqno,            ; the series being LEFT, at the counter it reached
+  4: seqno,            ; the new series. Its counter is 0
+  5: timestamp
+}
+```
+
+**The patron's countersignature is the whole of the security property.** A `series`
+cannot be advanced by the node's key alone, so a party holding a stolen key can
+exhaust the current counter and cannot escape into a fresh series — while the
+legitimate holder can, because their patron will sign for them and not for a thief.
+This is the same social check adoption and recovery already rest on, applied to the
+one operation that repairs an exhausted or poisoned counter.
+
+**Seal the old series before leaving it, and field 3 is what records that.** A
+32-bit counter advanced only on position and endpoint changes will not exhaust in a
+lifetime, so **the top of the range is dead space the legitimate holder can spend.**
+A node that believes its key is compromised sets the counter it is leaving to the
+**maximum**, then reissues naming that value — after which nothing the thief signs
+can supersede it, since a strictly greater counter does not exist and an equal one
+carrying different contents is malformed (§7.7.3). **The exhaustion that made the
+attack possible is the same move that closes the abandoned line behind you.**
+
+**Order matters, and the schema enforces it.** Field 3 records the counter the old
+series reached, so sealing must happen *before* the reissue or the chain will name a
+departure point later records contradict. Seal, then reissue, then repeat for every
+other patron relationship whose line is worth securing.
+
+**Sealing is unilateral, and that is the point.** It is an ordinary self-signed
+locator at the top of the counter (§2.3's standalone carriage form) — no patron, no
+transaction, no countersignature. Only the *reissue* needs the patron, because only
+the reissue creates new room. So a node can seal a line toward parties it has no
+standing relationship with, in subnets where it holds no membership and could not
+reissue even if it wanted to. What it cannot do is undo it: a sealed line is spent,
+and reopening means a reissue and the countersignature that requires.
+
+**A chain-holder does not need the seal.** Anyone holding §4.6.1's chain knows which
+series was abandoned and **MUST reject records in it** whatever their counter. The
+seal protects the parties who hold no chain — a cached locator and nothing else — and
+against them it is a race the thief can win by reaching a reader first. That is the
+argument for acting on suspicion rather than on confirmation.
+
+**What a recipient ends up holding is an address that can never be updated.** The
+seal occupies the top of the `(node, series)` sequence — the slot any future locator
+for that pair would have to take — so the entry in that party's address book is final.
+Not deleted: they still hold an address, and it still resolves if the position behind
+it still answers. What is gone is anyone's ability to *move* it, the node's own
+ability included.
+
+**Writing the top slot is denial, not control, and it binds the writer too.** No
+record supersedes a maximum counter, so a party that seals a series — the node or a
+thief holding its key — can execute nothing further in that series either. Sealing
+confers no continuing ability; it removes the series from use by everyone.
+
+**So a thief who seals first burns a line rather than capturing one.** The parties it
+reached first hold a frozen entry pointing where that record pointed, and the thief
+cannot develop it: no further transaction in that series will be recognised by anyone
+holding the seal. **The `keyhash` is untouched** — the legitimate holder reissues into
+a fresh series with the patron's countersignature, which the thief cannot obtain
+(§4.6), and continues. What the thief destroyed is one line the holder was leaving
+anyway. The cost is re-contact for the parties that took the thief's seal: a chain
+(§4.6.1) for those that will take one, out-of-band re-introduction for those that will
+not.
+
+**A seal reaches as far as it is carried and no further.** It is not a revocation and
+there is nowhere to publish one: parties never contacted and subnets never entered
+never see it, and the key is not dead to them. Nor does it need to be — **redirection
+requires a cached locator to redirect**, so a party holding none is not exposed to
+this attack at all, and a thief presenting the old key to them is attempting a first
+contact, which design §12.3 Case 0 makes an out-of-band act.
+
+**The new series MUST NOT be one the node has previously occupied.** Reusing one
+brings its abandoned high-counter records back into comparison against the new line.
+The node knows its own history, so this is local bookkeeping — and it is **checkable
+by anyone holding the chain**, who MUST reject a reissue naming a series already in it.
+
+#### 4.6.1 Proving which series is current
+
+**Presentation, not propagation, and not a history scan.** A node proves its current
+series by presenting:
+
+- its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno` — and so the
+  series — that the patron countersigned at that moment; and
+- **each series reissue since**, each naming the series left and the series entered.
+
+Every object in that chain is countersigned by the patron named in the node's own
+path, so a recipient already knows the key that must have signed it. The chain
+discloses the age of the patron relationship and the number of reissues taken, and
+nothing else about what the node did.
+
+**Chain length is the order.** Where two presented chains share an adoption and one
+extends the other, the longer is current. Two chains that **diverge** are two
+successors countersigned by the same patron — patron equivocation, attributable to
+that patron by its own signatures, and handled the way this design handles
+equivocation everywhere: made visible rather than prevented.
+
+**A reissue is not a move.** Routing walks `anchor` and `path` (design §12.3), neither
+of which a reissue touches, so cached locators keep working and no correspondent has to
+be told. What changes is only which records rank against which.
+
+## 5. Verifier selection — recomputation
 
 **Previously unspecified, and the record did not carry the inputs.** design §8.1.2
 requires that selection be recomputable by any party holding the subject's history,
@@ -1413,7 +1521,7 @@ so a missing verifier is
 visible, but the nonce commitments and reveals it depends on were nowhere in the
 presence record, so the anti-suppression property could not be checked at all.
 
-#### 4.6.1 Nonce commitment
+### 5.1 Nonce commitment
 
 ```
 commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)
@@ -1425,7 +1533,7 @@ included so a commitment cannot be replayed by a different witness.
 A validator MUST recompute every commitment from the revealed nonce and reject the
 record on any mismatch.
 
-#### 4.6.2 Recomputability invariant — binding on any future change to seeding
+### 5.2 Recomputability invariant — binding on any future change to seeding
 
 **Each participant selects the other's verifiers.** A queries B's prior
 counterparties to establish that B is B, and B queries A's. So the party who
@@ -1463,7 +1571,7 @@ while making selection **silently unverifiable** by anyone who does not hold the
 counterparty's archive. The failure would be invisible in testing, because a
 developer with both archives sees everything work.
 
-##### 4.6.2.1 Witness nonce derivation — required for the anti-grinding property
+#### 5.2.1 Witness nonce derivation — required for the anti-grinding property
 
 **A witness derives its nonce deterministically from the participant pair and the
 window**, not freshly per attempt:
@@ -1477,11 +1585,11 @@ PRF with a 32-byte output is acceptable; HMAC-SHA-256 is the expected choice.
 
 **`window_ordinal` is an input, so an honest witness following this rule still emits
 a fresh nonce for a fabricated day.** Stability holds across attempts *within* an
-ordinal and nowhere else, and the ordinal is the proposer's claim (§4.6.3.1). The
+ordinal and nowhere else, and the ordinal is the proposer's claim (§5.3.1). The
 derivation cannot distinguish a retry from a re-dated first attempt; only the
 witness's own clock can, before it commits (design §8.1.2).
 
-**Without this the anti-grinding property does not exist.** §4.6.2 claims an honest
+**Without this the anti-grinding property does not exist.** §5.2 claims an honest
 retry within the window reproduces the same verifier sample while an aborting
 attacker gets one fresh sample per ordinal. Both depend on the nonce being
 stable across attempts, a witness generating fresh randomness each time hands a
@@ -1500,7 +1608,7 @@ topology rule can be (design §17.2).
 sample it works: the participant must corrupt its counterparty's nominees, having
 none of its own. Against a **witness grinding on its own behalf** it does nothing,
 and the sole-witness case is where that bites — the seed's only input the
-participants do not fix is the witness nonces (§4.6.3), so one witness, or a set
+participants do not fix is the witness nonces (§5.3), so one witness, or a set
 under one actor, chooses the seed outright by committing to a nonce whose sample it
 has already computed. **Two or more independent witnesses close this with no
 further rule**: every commitment is published before capture and a commitment
@@ -1508,7 +1616,7 @@ reveals nothing about its nonce, so no witness can compute the final seed before
 binding its own. Whether the set is independent is what the `nominated_by` split
 (§3.2) lets a participant judge before signing.
 
-#### 4.6.3 Seed
+### 5.3 Seed
 
 ```
 seed = SHA-256(
@@ -1529,7 +1637,7 @@ aligned. This fills the parameter design §20 marked UNSET. Long is safe here: a
 honest retry inside the window reproduces the *same* sample, which is exactly what
 retry should do.
 
-**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§4.6.3.1).
+**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§5.3.1).
 An attacker aborting to reroll therefore gets one fresh sample per *admissible*
 ordinal rather than one per day, and §3.2's monotonicity bounds admissibility only
 from below — the budget is the span between the signer's last committed record and
@@ -1537,7 +1645,7 @@ the day it claims. Nothing in a record shows which it was. What limits it is a
 witness declining to commit a nonce against a day far from its own clock, which no
 validator can check and which design §8.1.2 states as a client commitment.
 
-##### 4.6.3.1 The window, the horizon, and who is eligible
+#### 5.3.1 The window, the horizon, and who is eligible
 
 Six definitions the selection rule depends on and did not carry.
 
@@ -1566,7 +1674,7 @@ Six definitions the selection rule depends on and did not carry.
   (design §16.1), not a structural one.
 
 
-#### 4.6.4 Candidate set and sampling
+### 5.4 Candidate set and sampling
 
 ***n* counts distinct presence transactions reachable from the back-pointer this
 record commits for that subject, in which the subject is one of the two
@@ -1642,7 +1750,7 @@ the first `required(subject)` are selected. **Exactly that many are queried.** T
 selected set and the finalization threshold are the same size, which is what makes
 "a missing verifier is visible" precise.
 
-#### 4.6.5 What counts toward finalization
+### 5.5 What counts toward finalization
 
 **Finalization counts structurally valid responses and never inspects their
 content.** Whether a response reports a match, a failure, or an inability to
@@ -1684,7 +1792,7 @@ participant to pad the record with material nobody asked for. A validator lackin
 the subject's history cannot make this determination and treats the responses it
 cannot place as unverifiable rather than invalid.
 
-#### 4.6.6 Consent is signed over the query id
+### 5.6 Consent is signed over the query id
 
 `query_id = SHA-256(canonical CBOR of the VerificationQuery with field 6 absent)` —
 the map of fields 1–5, hashed, then stored as field 6. Hashing a map that contains
@@ -1707,12 +1815,12 @@ for no verification benefit.
 two-element array `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's
 consent beside it, never inside it. It cannot be a query field: the consent signs
 `query_id`, which hashes fields 1–5, so placing it in the map it authorises would be
-the §4.6.6 circularity again one level up. The verifier checks the consent against
+the §5.6 circularity again one level up. The verifier checks the consent against
 the query's own `query_id` before anything else; **a query arriving without consent
 is rejected**, which is what field 7's rule already required and the wire could not
 previously carry.
 
-#### 4.6.7 Who can verify what, the property is holder-relative
+### 5.7 Who can verify what, the property is holder-relative
 
 **Anti-suppression is per-subject, and an evaluator can check only the subjects
 whose history it holds.**
@@ -1733,7 +1841,7 @@ party"* would be stronger than achievable. A stranger holding only the record ca
 verify signatures, structure and the seed, but cannot determine which verifiers
 *should* have appeared.
 
-### 4.7 Resource registration, the catalog, and abuse reports
+## 6. Resource registration, the catalog, and abuse reports
 
 **A registration is the entry itself, signed.** There is no envelope and no
 transaction around it: field 8's signature covers fields 1–7 and 9, and those are
@@ -1759,7 +1867,7 @@ CatalogEntry = {
                      ;   neither allow-all nor deny-all. ADVISORY: tells the asker whether a
                      ;   connection is likely to be accepted, so a client can
                      ;   present the entry accordingly. The owner decides at
-                     ;   request time regardless (§7.3)
+                     ;   request time regardless (§11)
   7: ? bstr .size (1..1024),  ; additional service metadata, the TXT analogue.
                      ;   SHOULD NOT duplicate field 5 — an uninterpreted byte
                      ;   string cannot be checked for semantic duplication, so
@@ -1770,7 +1878,7 @@ CatalogEntry = {
                      ;   informative and is NOT equivalent to any declared value
   8: COSE_Sign1      ; by the OWNER over fields 1-7 AND 9 of THIS map only.
                      ;   Classical component alone — an entry's relevance ends
-                     ;   when the owner stops returning it (§5.1). It does NOT
+                     ;   when the owner stops returning it (§7.1). It does NOT
                      ;   cover the enclosing transaction's key 0: the same entry
                      ;   is returned in query replies where no transaction exists
                      ;   around it, and a signature covering the body would be
@@ -1879,7 +1987,7 @@ that answers for it.
 ```
 CatalogQuery = {
   1: ? tstr .size (1..64),  ; service type filter, matched byte-for-byte
-                       ;   against §4.7's field 3. Absent means everything the
+                       ;   against §6's field 3. Absent means everything the
                        ;   asker may see. Same bound as the field it matches —
                        ;   a filter longer than any legal type cannot match and
                        ;   should not be allocated for
@@ -1919,7 +2027,7 @@ bound is per *answering node* and not per horizon — a Dunbar Org is larger (de
 §15.1), and no single node answers for all of it. **The continuation is a hint for an
 unusual case, not the normal path through a catalog.** It is also near its own
 ceiling: at 2 KB an entry, 128 maximum-sized entries no longer fit one 256 KB frame
-(§7), so 127 is the highest this field can go without moving the frame bound.
+(§9), so 127 is the highest this field can go without moving the frame bound.
 
 **Where a node does exceed the bound, the asker can detect it and MUST NOT loop.**
 The continuation names a *type*, not a position, so an asker that has already
@@ -1930,7 +2038,7 @@ node is truncated. Treating it as truncated is right; following the hint again i
 loop. Nothing on the wire reports the condition, and nothing needs to — the asker
 holds both facts already.
 
-**Carried on a bidirectional stream** (§7.2) tagged request type 5, a query per
+**Carried on a bidirectional stream** (§9.2) tagged request type 5, a query per
 stream, with the reply closing it.
 
 **Inclusion in a truncated set is not a ranking.** The order below is by resource
@@ -1945,7 +2053,7 @@ retained state is a denial-of-service surface however well-intentioned.
 
 **Unsigned session messages reject unknown map keys** — `CatalogQuery`,
 `CatalogReply`, `ResourceRequest`, `ResourceResponse` and the control frames of
-§6.0 alike. The
+§8.0 alike. The
 preserve-unknown-keys rule (§1) exists so an extension survives re-serialisation for
 signature verification. **Neither of these is signed and neither is re-serialised**,
 so there is nothing for preservation to protect — and accepting unknown keys on an
@@ -2007,13 +2115,13 @@ direction only**: an owner requests one at registration, above.
 
 **`connect_scope` remains and is advisory.** It lets a client show whether a
 connection is likely to succeed rather than presenting every entry identically. The
-owner decides at request time regardless (§7.3), so a client that ignores the field
+owner decides at request time regardless (§11), so a client that ignores the field
 is wrong about presentation and never about access.
 
 **A requester may cache what it was told**, and holds an answer that was true when
 given. That is ordinary staleness with no protocol consequence: the next query
 corrects it, and nothing grants access on the strength of a cached entry — access is
-decided by the owner at request time (§7.3).
+decided by the owner at request time (§11).
 
 **Nothing prevents two owners registering the same resource keyhash**, and nothing
 needs to. An entry is a claim by its owner, verifiable as theirs; a reader
@@ -2022,7 +2130,7 @@ namespace anyone allocates.** Which one a reader acts on follows from whose cata
 answered — and each answer came from a node the reader chose to ask.
 
 **One host may not serve two, and that is where the rule bites.** A
-`ResourceRequest` names the resource and nothing else (§7.3), so a node holding two
+`ResourceRequest` names the resource and nothing else (§11), so a node holding two
 claims for one keyhash has nothing to choose between them with — and choosing wrongly
 applies one owner's membership and roles to the other owner's backend. **A host
 refuses a registration for a keyhash it already serves under a different owner**,
@@ -2060,117 +2168,9 @@ with no requirement to do both.
 
 ---
 
-### 4.8 Series reissue (type 7)
+## 7. Attestations and records
 
-**Starts a new `seqno` series for the node and does nothing else.** Two signers, the
-node and its patron.
-
-```
-{
-  1: keyhash,          ; the node
-  2: keyhash,          ; the patron, who countersigns
-  3: seqno,            ; the series being LEFT, at the counter it reached
-  4: seqno,            ; the new series. Its counter is 0
-  5: timestamp
-}
-```
-
-**The patron's countersignature is the whole of the security property.** A `series`
-cannot be advanced by the node's key alone, so a party holding a stolen key can
-exhaust the current counter and cannot escape into a fresh series — while the
-legitimate holder can, because their patron will sign for them and not for a thief.
-This is the same social check adoption and recovery already rest on, applied to the
-one operation that repairs an exhausted or poisoned counter.
-
-**Seal the old series before leaving it, and field 3 is what records that.** A
-32-bit counter advanced only on position and endpoint changes will not exhaust in a
-lifetime, so **the top of the range is dead space the legitimate holder can spend.**
-A node that believes its key is compromised sets the counter it is leaving to the
-**maximum**, then reissues naming that value — after which nothing the thief signs
-can supersede it, since a strictly greater counter does not exist and an equal one
-carrying different contents is malformed (§5.7.3). **The exhaustion that made the
-attack possible is the same move that closes the abandoned line behind you.**
-
-**Order matters, and the schema enforces it.** Field 3 records the counter the old
-series reached, so sealing must happen *before* the reissue or the chain will name a
-departure point later records contradict. Seal, then reissue, then repeat for every
-other patron relationship whose line is worth securing.
-
-**Sealing is unilateral, and that is the point.** It is an ordinary self-signed
-locator at the top of the counter (§2.3's standalone carriage form) — no patron, no
-transaction, no countersignature. Only the *reissue* needs the patron, because only
-the reissue creates new room. So a node can seal a line toward parties it has no
-standing relationship with, in subnets where it holds no membership and could not
-reissue even if it wanted to. What it cannot do is undo it: a sealed line is spent,
-and reopening means a reissue and the countersignature that requires.
-
-**A chain-holder does not need the seal.** Anyone holding §4.8.1's chain knows which
-series was abandoned and **MUST reject records in it** whatever their counter. The
-seal protects the parties who hold no chain — a cached locator and nothing else — and
-against them it is a race the thief can win by reaching a reader first. That is the
-argument for acting on suspicion rather than on confirmation.
-
-**What a recipient ends up holding is an address that can never be updated.** The
-seal occupies the top of the `(node, series)` sequence — the slot any future locator
-for that pair would have to take — so the entry in that party's address book is final.
-Not deleted: they still hold an address, and it still resolves if the position behind
-it still answers. What is gone is anyone's ability to *move* it, the node's own
-ability included.
-
-**Writing the top slot is denial, not control, and it binds the writer too.** No
-record supersedes a maximum counter, so a party that seals a series — the node or a
-thief holding its key — can execute nothing further in that series either. Sealing
-confers no continuing ability; it removes the series from use by everyone.
-
-**So a thief who seals first burns a line rather than capturing one.** The parties it
-reached first hold a frozen entry pointing where that record pointed, and the thief
-cannot develop it: no further transaction in that series will be recognised by anyone
-holding the seal. **The `keyhash` is untouched** — the legitimate holder reissues into
-a fresh series with the patron's countersignature, which the thief cannot obtain
-(§4.8), and continues. What the thief destroyed is one line the holder was leaving
-anyway. The cost is re-contact for the parties that took the thief's seal: a chain
-(§4.8.1) for those that will take one, out-of-band re-introduction for those that will
-not.
-
-**A seal reaches as far as it is carried and no further.** It is not a revocation and
-there is nowhere to publish one: parties never contacted and subnets never entered
-never see it, and the key is not dead to them. Nor does it need to be — **redirection
-requires a cached locator to redirect**, so a party holding none is not exposed to
-this attack at all, and a thief presenting the old key to them is attempting a first
-contact, which design §12.3 Case 0 makes an out-of-band act.
-
-**The new series MUST NOT be one the node has previously occupied.** Reusing one
-brings its abandoned high-counter records back into comparison against the new line.
-The node knows its own history, so this is local bookkeeping — and it is **checkable
-by anyone holding the chain**, who MUST reject a reissue naming a series already in it.
-
-#### 4.8.1 Proving which series is current
-
-**Presentation, not propagation, and not a history scan.** A node proves its current
-series by presenting:
-
-- its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno` — and so the
-  series — that the patron countersigned at that moment; and
-- **each series reissue since**, each naming the series left and the series entered.
-
-Every object in that chain is countersigned by the patron named in the node's own
-path, so a recipient already knows the key that must have signed it. The chain
-discloses the age of the patron relationship and the number of reissues taken, and
-nothing else about what the node did.
-
-**Chain length is the order.** Where two presented chains share an adoption and one
-extends the other, the longer is current. Two chains that **diverge** are two
-successors countersigned by the same patron — patron equivocation, attributable to
-that patron by its own signatures, and handled the way this design handles
-equivocation everywhere: made visible rather than prevented.
-
-**A reissue is not a move.** Routing walks `anchor` and `path` (design §12.3), neither
-of which a reissue touches, so cached locators keep working and no correspondent has to
-be told. What changes is only which records rank against which.
-
-## 5. Attestations and records
-
-### 5.1 Currency attestation
+### 7.1 Currency attestation
 
 ```
 CurrencyAttestation = {
@@ -2185,7 +2185,7 @@ CurrencyAttestation = {
   7: COSE_Sign1        ; BY THE ISSUER over canonical CBOR of fields 1-6;
                        ; external_aad = "rhtn/1:currency". Classical only: an
                        ; attestation's relevance expires with it (~10 h), well
-                       ; inside §5.1's post-quantum horizon.
+                       ; inside §7.1's post-quantum horizon.
 }
 ```
 
@@ -2239,7 +2239,7 @@ topology and presence — and a responder that logged these would hold a record 
 was being introduced to whom, which is the exposure stapling exists to prevent.
 Rate-limit per requester as with any other query.
 
-### 5.2 Anchor table entry
+### 7.2 Anchor table entry
 
 **An entry may only name a contactable infrastructure node.** Any ancestor may
 be *named* as an anchor in a locator (design §12.2), but an anchor **table** entry
@@ -2251,7 +2251,7 @@ The requester has a keyhash from the table and no key material —
 `AnchorEntry` carries neither — and **a keyhash cannot be checked against what the
 handshake presents.** An identity is SHA-256 of the *pair* (§1), while RFC 7250
 carries one SubjectPublicKeyInfo, so the classical component alone cannot reconstruct
-the hash. This is the same impossibility §6.2 states for a sibling arriving without
+the hash. This is the same impossibility §8.2 states for a sibling arriving without
 `KeyMaterial`. **Nor does the reply supply it**: `Referral.key_material` names the
 next hop and `ServingInfra.key_material` the serving node, never the responder
 itself, so an anchor that refers you onward is never pinned at all.
@@ -2263,7 +2263,7 @@ handshake failure rather than a silent misdirection. A hostile chain costs a fai
 dial. **Disclose nothing beyond the query itself** to a party you cannot
 authenticate.
 
-> **Why this differs from the sibling rule, which an implementer will notice.** §6.2
+> **Why this differs from the sibling rule, which an implementer will notice.** §8.2
 > makes a sibling with no key material **UNUSABLE** rather than dialling it
 > unauthenticated. The cases are genuinely different: a sibling is a **destination**,
 > and its identity is the whole point of contacting it; an anchor returning a referral
@@ -2309,7 +2309,7 @@ at all (above).
 
 Which anchors a node caches is **per-node policy, never a protocol constant**.
 
-### 5.3 Capture key grant
+### 7.3 Capture key grant
 
 **The message by which a subject releases a capture key to a holder**
 (design §7.5.2). It exists because nothing else in this profile carries one, and
@@ -2344,7 +2344,7 @@ holder may buffer an unopened grant briefly awaiting its query — bounded and b
 since an indefinite buffer defeats the momentary-release property. The bound is
 local policy.
 
-### 5.4 Late verifier response
+### 7.4 Late verifier response
 
 **A verifier response that arrives after finalization is carried as a standalone
 signed object referring to the record it supplements.** It is not an
@@ -2374,7 +2374,7 @@ and discards it with them. **Saying no rule applies left it outliving the thing 
 describes**, which is how an attestation becomes an orphaned fact about a person.
 Nothing obliges anyone to serve it.
 
-### 5.5 Subtree acknowledgement
+### 7.5 Subtree acknowledgement
 
 **A grandpatron's countersignature over an adoption, admitting the new node to the
 resources it hosts** (design §11.2.1). Carried separately rather than as a third
@@ -2397,7 +2397,7 @@ SubtreeAck = {
   5: COSE_Sign1        ; BY THE GRANDPATRON over fields 1-4;
                        ; external_aad = "rhtn/1:subtree-ack".
                        ; Classical only: it lapses with the relationship it
-                       ; describes, well inside §5.1's post-quantum horizon
+                       ; describes, well inside §7.1's post-quantum horizon
 }
 ```
 
@@ -2422,9 +2422,9 @@ the patron, or the patron departs, the acknowledgement describes a subtree the n
 is no longer in and confers nothing. **No revocation object is needed**: the
 condition it depends on is already visible in topology.
 
-### 5.6 Node endpoint record
+### 7.6 Node endpoint record
 
-**How an infra node's address reaches the parties that must refer to it.** Modelled on `AnchorEntry` (§5.2), which is the anchor-table
+**How an infra node's address reaches the parties that must refer to it.** Modelled on `AnchorEntry` (§7.2), which is the anchor-table
 specialisation of the same object.
 
 ```
@@ -2443,10 +2443,10 @@ EndpointRecord = {
 never attaches, so nothing otherwise carries its address to its patron — and without
 it **the patron cannot refer** (design §12.6.1).
 
-**Carried in the topology class**, by §7.2a's forwarding rule, so it reaches the
-node's horizon and its patron with it. **It does not travel rootward** (§7.2b).
+**Carried in the topology class**, by §10.1's forwarding rule, so it reaches the
+node's horizon and its patron with it. **It does not travel rootward** (§10.2).
 
-**Self-signed, and the signature's value is the same one §5.2 states**: a recipient
+**Self-signed, and the signature's value is the same one §7.2 states**: a recipient
 holding no key material cannot check it on receipt, so it gives **retroactive
 attribution rather than prior authentication** — a node that reaches the address and
 obtains the key can confirm the record was genuine, and if it was not, knows **which
@@ -2455,15 +2455,15 @@ origin: nothing on the wire carries a path, and a relay is indistinguishable fro
 publisher. It is enough, because the neighbour is the party you can stop listening
 to. That is worth having *here* and not in a referral: a
 flooded object passes through parties the recipient did not choose, where a
-`Referral` (§5.7.3) comes from the single party the requester is already talking to.
-This is why §5.7.3's replies are unsigned and this record is not.
+`Referral` (§7.7.3) comes from the single party the requester is already talking to.
+This is why §7.7.3's replies are unsigned and this record is not.
 
 **Freshness by `seqno`, strictly greater `counter` to replace within a series**, under §2.3's rule; across series they do not rank.
 **Publishing a changed endpoint set advances the counter** — that is what makes the
 new record replace the old rather than collide with it as an equal-`seqno`
 disagreement. **Republishing an unchanged set replays the record already held**
 rather than consuming a number: reconciliation is a replay of the same frames
-(§7.2a), and a fresh number over identical contents is freshness churn with nothing
+(§10.1), and a fresh number over identical contents is freshness churn with nothing
 behind it.
 
 **The list is in the publisher's preference order, and its entries are distinct.**
@@ -2480,11 +2480,11 @@ until now one with no carrier for its address at all.
 subordinates, so an `h=2` ball of ~110 nodes contains on the order of one. The
 constant-state floor of design §12.6.1 is untouched.
 
-### 5.7 Resolution
+### 7.7 Resolution
 
 Encodes design §12.3's cases and design §12.6.1's self-routing.
 
-#### 5.7.1 Who sends a resolution request
+#### 7.7.1 Who sends a resolution request
 
 **A light client sends `ResolveRequest` to its serving infra node, not to the
 anchor.** Control traffic is always client-to-serving-node (design §14.1.1); a
@@ -2499,7 +2499,7 @@ The request is anchor-*relative* — the path in it is interpreted from the anch
 named in the locator, which is a statement about how the path is read, not about
 who the request is addressed to.
 
-#### 5.7.2 Descent is through infrastructure only
+#### 7.7.2 Descent is through infrastructure only
 
 **A path is not walked node by node.** Intermediate nodes may be light clients,
 which are neither always online nor independently reachable (§4.3, design §14.1.1).
@@ -2511,7 +2511,7 @@ is the node the target attaches to (design §14.1.2).
 uses it to identify which of its attached clients is meant. This is what lets a
 path address a light client that nothing can route to directly.
 
-#### 5.7.3 Messages
+#### 7.7.3 Messages
 
 ```
 ResolveRequest = {
@@ -2544,7 +2544,7 @@ Referral = {
                              ;   is a loop, and a node with nothing to add
                              ;   reports failure instead
   4: ? KeyMaterial           ; so a requester with nothing pinned can authenticate
-                             ;   the next hop (§7.1). Same reason `ServingInfra`
+                             ;   the next hop (§9.1). Same reason `ServingInfra`
                              ;   carries it
 }
 
@@ -2552,7 +2552,7 @@ ServingInfra = {
   1: keyhash,                 ; the serving infra node's own identity
   4: ? KeyMaterial,           ; full key material, so a requester with no pinned
                               ; entry can verify the keyhash and then authenticate
-                              ; the TLS peer (§7.1). Without this a first contact
+                              ; the TLS peer (§9.1). Without this a first contact
                               ; cannot complete: the handshake presents only the
                               ; classical component, and the keyhash covers the
                               ; pair
@@ -2592,7 +2592,7 @@ continues from there. A node may refer past several indices at once where it kno
 its own subtree.
 
 **Nothing polices referral honesty, because nothing needs to.** The requester
-authenticates each endpoint against the keyhash it expects (§7.1), so a wrong
+authenticates each endpoint against the keyhash it expects (§9.1), so a wrong
 address produces a handshake failure rather than a silent misdirection — which is
 also why an intermediary misreporting progress gains nothing.
 
@@ -2629,12 +2629,12 @@ subject are compared, **within a series**: strictly greater `counter` to replace
 equal `seqno` with different contents malformed rather than a tie to break, since a
 subject advances its own counter (§2.3). **Two locators in different series do not
 rank**, and a reader holding both has learned nothing about which is current — it
-either holds a §4.8 chain that says, or it re-resolves (design §12.3). **A series
+either holds a §4.6 chain that says, or it re-resolves (design §12.3). **A series
 reissue does not disturb routing**: the path is unchanged, so a cached locator still
 reaches the subject, and the comparison only matters once the position moves as
 well — at which point the cached path is stale on its own account.
 
-### 5.8 Prekey distribution
+### 7.8 Prekey distribution
 
 **The network distributes prekeys; it does not define them.** design §14.2.4 adopts
 PQXDH, whose bundle contents are specified by that protocol. This section carries
@@ -2657,7 +2657,7 @@ PrekeyBundle = {
   5: COSE_Sign1        ; BY THE SUBJECT over fields 1-4;
                        ; external_aad = "rhtn/1:prekey".
                        ; Classical only — relevance expires on replacement, so
-                       ; §5.1's horizon does not apply
+                       ; §7.1's horizon does not apply
 }
 
 PrekeyRequest = {
@@ -2711,7 +2711,7 @@ per subject** rather than policing motive. That bounds the harm the rule was
 protecting against — draining a victim's pool to force them onto the last-resort
 key — without requiring anyone to prove why they asked.
 
-### 5.9 Archive fetch
+### 7.9 Archive fetch
 
 **A presence record arrives in whatever form its holder chose** (§4.5.1). The
 disclosable fields may be revealed or withheld, withholding is visible in the digest
@@ -2753,9 +2753,9 @@ already parsing.
 **Bounded by the same array limits as everything else** (§1): 256 records per
 batch, matching the archive-reference bound it replaces.
 
-## 6. Session messages
+## 8. Session messages
 
-### 6.0 Control frame framing
+### 8.0 Control frame framing
 
 **Stream 0 carries length-delimited, type-tagged frames.** Without this two
 implementations cannot parse each other at all.
@@ -2774,23 +2774,23 @@ decimal implementer and the boundary frames would divide the two.
 | 2 | `AttachAck` |
 | 3 | `Heartbeat` |
 | 4 | `SiblingUpdate` |
-| 5 | `TopologyPush` (§7.2a) |
-| 6 | `TopologyMemo` (§7.2b) |
+| 5 | `TopologyPush` (§10.1) |
+| 6 | `TopologyMemo` (§10.2) |
 
 **Topology framing belongs on stream 0 and not on a bidirectional stream.** Both are unsolicited pushes with no reply, so neither is a request; and
 the extension posture decides it. An unknown control frame is **skipped** and the
 session survives, which is the correct outcome for gossip carrying a class the
 receiver does not implement. An unknown request type on a bidirectional stream is
-**rejected** (§7.2), which would turn every future topology class into a flag day.
+**rejected** (§9.2), which would turn every future topology class into a flag day.
 `SiblingUpdate` is the precedent: a server-initiated frame that arrives with nobody
 having asked.
 
 **Unknown frame types MUST be skipped, not rejected.** The length prefix exists so
 a receiver can skip one it does not understand; tearing down the connection instead
 would make every future frame type a flag day. This is the same extension posture
-as unknown capability parameters (§6.1).
+as unknown capability parameters (§8.1).
 
-### 6.1 Capabilities
+### 8.1 Capabilities
 
 **Modelled on QUIC transport parameters** (RFC 9000), which are already the
 transport underneath this.
@@ -2836,8 +2836,8 @@ extension point; an enumerated field is a closed vocabulary.
 
 **Values, not flags.** A parameter carries an opaque value rather than mere
 presence, because several natural capabilities are quantities: the largest archive
-batch a peer will serve (§5.9), which prekey construction it implements (§5.8),
-what it will accept as a resolution referral depth (§5.7). A bitfield could express
+batch a peer will serve (§7.9), which prekey construction it implements (§7.8),
+what it will accept as a resolution referral depth (§7.7). A bitfield could express
 none of these, and would cap the space at 64.
 
 **Absence of a capability is never a connection failure.** Parameters set limits;
@@ -2847,7 +2847,7 @@ attach instead would turn ordinary version skew into a **connectivity** problem 
 and the party harmed would be the light client, which has no alternative serving
 node except its serving node's siblings.
 
-#### 6.1.1 Greasing — required, not decorative
+#### 8.1.1 Greasing — required, not decorative
 
 *A greased id is drawn avoiding ids the sender knows; collision with an id known
 only to the peer is accepted at its negligible probability, and the peer treats
@@ -2896,7 +2896,7 @@ between an extension point and a comment claiming one exists.** It costs a few
 bytes per session and is the only mechanism here whose value is entirely in the
 future.
 
-### 6.2 Frames
+### 8.2 Frames
 
 Not signed transactions; these are transport-layer control frames.
 
@@ -2907,11 +2907,11 @@ Attach = {
                        ; an attestation that fails validation — bad signature,
                        ; wrong subject, expired — is treated as ABSENT, not as
                        ; an authentication failure. Currency
-                       ; gates trust-bearing operations (§5.1), never
+                       ; gates trust-bearing operations (§7.1), never
                        ; connectivity; the transport authenticated the client
                        ; already, and refusing the session would strand a
                        ; client whose patron is the party that can refresh it
-  3: Capabilities      ; §6.1
+  3: Capabilities      ; §8.1
 }
 
 AttachAck = {
@@ -2941,7 +2941,7 @@ AttachAck = {
                        ;   state (design §14.1.6) — so a failover value is
                        ;   normally 0 and a client MUST NOT present it as a
                        ;   global count
-  5: Capabilities      ; §6.1, the serving node's own
+  5: Capabilities      ; §8.1, the serving node's own
 }
 
 SiblingRef = {
@@ -2965,13 +2965,13 @@ SiblingRef = {
                        ; classical component while the keyhash commits to the
                        ; pair, and trust-on-first-use cannot check a keyhash it
                        ; cannot reconstruct. Same reason `ServingInfra` carries
-                       ; it (§5.7.3)
+                       ; it (§7.7.3)
 }
 
 Heartbeat = {
   1: uint,             ; heartbeat counter — ONE INDEPENDENT SEQUENCE PER SENDER,
                        ; from 0, +1 each beat. Both sides send
-                       ; (§7.2), and a shared sequence is unimplementable:
+                       ; (§9.2), and a shared sequence is unimplementable:
                        ; neither peer can know the interleaving order. Each side
                        ; gap-detects the other's sequence alone.
                        ; On reaching u64 max, end the session rather than
@@ -2995,7 +2995,7 @@ SiblingUpdate = {
 
 TopologyPush = {
   1: uint,             ; body kind: 0 = signed transaction envelope,
-                       ;            1 = EndpointRecord (§5.6)
+                       ;            1 = EndpointRecord (§7.6)
   2: bstr              ; the object, byte-for-byte as received. NOT re-encoded:
                        ;   it is already canonical (§1) and re-serialising risks
                        ;   changing bytes a signature covers
@@ -3105,7 +3105,7 @@ arriving first fails the attach attempt.** After the ack, a repeated `Attach` or
 replayable, and a replayed `Attach` re-binds session state; 0-RTT resumption still
 serves reattachment latency because everything after the handshake keeps its
 benefit. The rule sits on the server because that is where it is checkable. **It is
-one instance of §7.2's general rule** — anything replayable that changes state waits
+one instance of §9.2's general rule** — anything replayable that changes state waits
 for the handshake — and `Attach` is named here because this is where it arrives.
 
 **The cached sibling list should survive restart.** It is replaced by any
@@ -3122,9 +3122,9 @@ reachability is only a hint about when to attempt delivery.
 
 ---
 
-## 7. QUIC binding
+## 9. Transport binding
 
-### 7.1 Handshake and hop authentication
+### 9.1 Handshake and hop authentication
 
 **QUIC with TLS 1.3, key exchange group `X25519MLKEM768`.** This is the deployed
 industry-standard hybrid rather than anything invented here: classical X25519
@@ -3152,7 +3152,7 @@ Present encoding: `Attach` field 1 must equal the connection-authenticated
 identity. `Attach` is unsigned, so without that check any party
 could claim any keyhash and receive another node's queued messages.
 
-That is the whole authentication step, and it is exactly what §5.7's unsigned resolution
+That is the whole authentication step, and it is exactly what §7.7's unsigned resolution
 replies rely on, a wrong address produces a failed handshake rather than a false
 identity.
 
@@ -3161,7 +3161,7 @@ the named group is this profile's doing, not TLS's** — TLS 1.3 negotiates amon
 whatever groups are configured, and offering only `X25519MLKEM768` is what leaves
 nothing weaker to fall back to.
 
-### 7.2 Binding
+### 9.2 Binding
 
 - ALPN: `rhtn/1`
 - **Default port 7431/udp**, overridable per endpoint. `NetworkPoint` carried no
@@ -3178,7 +3178,7 @@ protocol.
 frame = u32-be length || deterministic CBOR of [ uint request_type, body ]
 ```
 
-Same framing as stream 0 (§6.0), same rule — **unknown request types are rejected
+Same framing as stream 0 (§8.0), same rule — **unknown request types are rejected
 on a bidirectional stream**, unlike unknown control frames which are skipped — but
 **a larger bound: 256 KB — exactly 262,144 bytes.** Stream 0's 64 KB cannot carry what
 bidirectional streams exist to fetch: a maximum-signer presence record is ~65 KB
@@ -3189,14 +3189,14 @@ no continuation to preserve.
 
 | `request_type` | Body |
 |---|---|
-| 1 | `ResolveRequest` (§5.7) |
-| 2 | `ArchiveRequest` (§5.9) |
-| 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§5.8) |
-| 4 | `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's consent (§4.6) |
-| 5 | `CatalogQuery` (§4.7) |
-| 6 | `ResourceRequest` (§7.3) |
-| 7 | `ResourceRegistration` (§4.7) |
-| 8 | `CurrencyRequest` (§5.1) |
+| 1 | `ResolveRequest` (§7.7) |
+| 2 | `ArchiveRequest` (§7.9) |
+| 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§7.8) |
+| 4 | `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's consent (§5) |
+| 5 | `CatalogQuery` (§6) |
+| 6 | `ResourceRequest` (§11) |
+| 7 | `ResourceRegistration` (§6) |
+| 8 | `CurrencyRequest` (§7.1) |
 
 **The reply carries no type tag and is framed identically otherwise** — the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
@@ -3214,18 +3214,18 @@ deadlock, and nothing else in the framing chooses between them.
 the `request_type` are readable, the receiver does not know what it is holding, so
 there is nothing to answer in and the stream fails. **Once the type is known, a
 defect in the body is that type's business** and is answered in that type's own
-terms — §7.3's status 3, for instance. **No application error code is assigned for
+terms — §11's status 3, for instance. **No application error code is assigned for
 the reset**, and none is needed: the reset is the whole message, and a requester
 waiting to be told why would be waiting for something no responder owes it.
 
 **A request that changes state or spends a budget MUST NOT be processed in TLS 1.3
 0-RTT early data** — reject it or defer it until the handshake
 completes. Early data is replayable, so a replay repeats whatever the request did:
-an application effect the requester never asked for twice (§7.3), a consumed
-one-time prekey (§5.8), a spent anti-oracle count (§4.6), a replayed registration
-that reverts an owner's current entry (§4.7). **Read-only lookups are unaffected** — resolution,
+an application effect the requester never asked for twice (§11), a consumed
+one-time prekey (§7.8), a spent anti-oracle count (§5), a replayed registration
+that reverts an owner's current entry (§6). **Read-only lookups are unaffected** — resolution,
 archive fetch and catalog queries answer the same way however often they are
-replayed, which is what makes 0-RTT still worth having. §6.2's rule for `Attach` is
+replayed, which is what makes 0-RTT still worth having. §8.2's rule for `Attach` is
 this rule's other instance, on the other stream class.
 
 - Bidirectional streams: request/response — the request types tabled above
@@ -3245,22 +3245,23 @@ meeting that, but **neither guarantees failure** (RFC 8445).
 
 ---
 
-### 7.2a Topology propagation
+## 10. Topology propagation
+### 10.1 Topology propagation
 
 **design §15 defines the classes and the patterns; this section says what carries
 them.** *Flood-within-horizon* and *push near, redirect far* are
 named and reasoned about across rotation (design §9.0.2), peering (design §6.3)
-and the endpoint records of §5.6. Until now none of them said what was sent, on
+and the endpoint records of §7.6. Until now none of them said what was sent, on
 what stream, or how a receiver decided whether to forward. **A policy is not a
 protocol.**
 
-**Frame:** `TopologyPush`, control frame type 5 on stream 0 (§6.0), carrying the
+**Frame:** `TopologyPush`, control frame type 5 on stream 0 (§8.0), carrying the
 object byte-for-byte with a **body-kind tag and nothing else.** The class is not
 uniform — most topology objects are signed transactions with an envelope, and an
-`EndpointRecord` (§5.6) is a standalone signed map with neither — so a receiver needs
+`EndpointRecord` (§7.6) is a standalone signed map with neither — so a receiver needs
 one discriminator to know which parser to use. **That is the only wrapper field
 permitted.** Anything further would be sender-supplied state every receiver must
-trust, which §5.7.3 rejected for resolution and rejects here for the same reason.
+trust, which §7.7.3 rejected for resolution and rejects here for the same reason.
 
 **Who may push.** A node pushes topology it is a party to — its own adoptions and
 departures, disavowals of its own subordinates, its own peerings, its own endpoint
@@ -3312,7 +3313,7 @@ neighbour cared to send. A transaction whose signer's key material the node lack
 storage and propagation when it verifies. **An `EndpointRecord` is the exception the
 design already states** — self-signed by a party the receiver may hold no key for,
 and accepted as gossip precisely so that reaching the address is what confirms it
-(§5.6).
+(§7.6).
 
 **Reach is a consequence of storage policy, not a separate mechanism.** A hop
 counter would encode the *sender's* horizon and impose it on every receiver, and
@@ -3347,9 +3348,9 @@ once peering exists (design §6.3); the second arrival is a duplicate and dies t
 
 **An `EndpointRecord` therefore supersedes rather than accumulating**, which is what a
 current-address record should do, and §2.3's strictly-greater rule already governs it.
-**Equal `seqno` with different endpoints is malformed**, per §5.7.3. **Records in
+**Equal `seqno` with different endpoints is malformed**, per §7.7.3. **Records in
 different series are not comparable** and neither supersedes the other (§2.3); a
-holder keeps the one whose series it has been shown a chain for (§4.8) and re-resolves
+holder keeps the one whose series it has been shown a chain for (§4.6) and re-resolves
 if it holds none.
 
 **No dedicated suppression cache exists**, and none should be added. It would be a
@@ -3363,7 +3364,7 @@ than an omission.
 
 **Loss is detected at the receiver, which is the party that can act.** §3.1 puts a
 back-pointer in every signed body, so a transaction whose predecessor the receiver
-does not hold announces the gap, names exactly what is missing, and §5.9 fetches it.
+does not hold announces the gap, names exactly what is missing, and §7.9 fetches it.
 That is stronger than acknowledgement, which detects loss at the sender — who can
 only resend into the same hole.
 
@@ -3377,10 +3378,10 @@ unenforceable direction.** You cannot make a peer forward. Acks and retries woul
 also make gossip traffic scale with population, inverting design §15's stated
 scaling property.
 
-### 7.2b Rootward topology memo
+### 10.2 Rootward topology memo
 
 **A minified record of every membership change travels rootward to its subnet's
-root.** `TopologyMemo`, control frame type 6 on stream 0 (§6.0).
+root.** `TopologyMemo`, control frame type 6 on stream 0 (§8.0).
 This is what design §15's *ancestors* reach means: **full transactions flood within
 the horizon; only memos travel further up.**
 
@@ -3423,7 +3424,7 @@ between them.
 property if a receiver enforces it; a node that forwarded such a memo would carry it
 across the boundary the privacy argument rests on.
 
-**No acknowledgement and no retry**, on §7.2a's reasoning: one best-effort send to
+**No acknowledgement and no retry**, on §10.1's reasoning: one best-effort send to
 your patron, and a memo that does not arrive is repaired by the next one or by
 reconciliation. A table mutation already made is kept — the memo was true when it
 passed.
@@ -3516,7 +3517,7 @@ describes: it asks whether it really made that change, and whether its row for t
 slot is still the one the memo asserts. **A fabricated memo fails both**, at no
 traffic cost. This is what lets the memo stay small and unsigned.
 
-**Not a fetch.** A `§5.9` archive request needs a head, and a head reaches you only
+**Not a fetch.** A `§7.9` archive request needs a head, and a head reaches you only
 by having adopted the subject (§4.1 field 7) — so a rule requiring a fetch would be
 unperformable for exactly the distant cycles the memo exists to catch. It is also
 unnecessary: the detector is never a stranger to the transaction.
@@ -3554,7 +3555,7 @@ the sender rather than by a field.
 
 **It walks the tree rather than being addressed to the old patron**, and that is the
 point: the intervening nodes are updated on the way past. Descent is by anchor and
-path (§5.7.2), the same mechanism as resolution.
+path (§7.7.2), the same mechanism as resolution.
 
 **Nothing compels the receiving patron to act.** Its own records say whether it
 still holds that subordinate, and design §1.1 is why nothing further is said. **A node
@@ -3565,10 +3566,10 @@ that **the rest of the subnet's view reflects the most recent adoption**, to the
 extent its members run compliant clients. That is a convergence property of compliant
 behaviour, not a rule anyone enforces.
 
-### 7.3 Resource requests
+## 11. Resource requests
 
 **A resource request rides a bidirectional stream on a session the requester holds
-with the *hosting* node**, tagged request type 6 (§7.2), one request per stream.
+with the *hosting* node**, tagged request type 6 (§9.2), one request per stream.
 
 ```
 ResourceRequest = {
@@ -3576,7 +3577,7 @@ ResourceRequest = {
                        ;   and nothing else in the frame names which
   2: bstr             ; the application request as an HTTP/1.1 message: request
                       ;   line, headers, blank line, body (RFC 9112). The node
-                      ;   PARSES and RE-SERIALISES it (§7.3.2) — it does not
+                      ;   PARSES and RE-SERIALISES it (§11.2) — it does not
                       ;   relay the bytes. Opaque means the node does not
                       ;   interpret the application semantics, not that it
                       ;   forwards unexamined input
@@ -3606,7 +3607,7 @@ requester is told.
 
 0. **The body decodes at all** → **code 3** if it does not. Nothing has been
    addressed yet, so answering directly discloses nothing about any resource. A
-   malformed *outer frame* is a stream failure, not a response (§7.2).
+   malformed *outer frame* is a stream failure, not a response (§9.2).
 1. **Resource exists on this node** → **code 1** if it does not. An unknown resource
    keyhash has **no owner**, and membership is owner-relative (design §11.2), so
    there is no membership question to ask first. **Existing means the node holds a
@@ -3672,7 +3673,7 @@ an envelope for that. **The opacity is in what the node says, not in how long it
 takes to say it** — an implementation that cares should equalise the two paths, and
 one that does not has a narrower property than this section describes.
 
-#### 7.3.1 Reaching a node you are not attached to
+### 11.1 Reaching a node you are not attached to
 
 **This is ordinary session establishment, not a gap.** A resource
 request goes to the hosting node and a catalog query to each horizon node in turn;
@@ -3682,7 +3683,7 @@ lacks.**
 **Messaging already works this way.** design §12.6.3's relayed path runs client →
 own serving node → **recipient's serving node** → recipient, and its direct path has
 a client reach a peer outside its own subtree entirely. Infra nodes hold static
-addresses (§5.2) and authenticate by keyhash (§7.1), so opening a session to one is
+addresses (§7.2) and authenticate by keyhash (§9.1), so opening a session to one is
 the same operation wherever it sits.
 
 **Attachment is not exclusivity.** design §14.1.2 makes attachment the answer to
@@ -3692,7 +3693,7 @@ restriction was a misreading of what the singular is for.
 
 ---
 
-#### 7.3.2 The node parses; it does not relay
+### 11.2 The node parses; it does not relay
 
 **A node that strips `rhtn-*` headers is parsing HTTP, and must be specified as
 doing so.** Saying it relays bytes opaquely *and* replaces
@@ -3716,7 +3717,7 @@ other as a fresh request — with the node's authenticated headers attached to i
 - **Reject anything asking for an exchange other than one request and one
   response**: `CONNECT`, `Upgrade`, `Expect: 100-continue`. Each needs a tunnel, a
   protocol switch or an interim response, and `ResourceResponse` carries one answer
-  (§7.3). They are ordinary HTTP and they do not fit here.
+  (§11). They are ordinary HTTP and they do not fit here.
 - **Route by the resource keyhash, never by anything the caller wrote.** Convert an
   absolute-form target to origin form and replace `Host` with the backend you
   selected. Field 1 already named the resource; letting a header re-aim the request
@@ -3735,7 +3736,7 @@ to filter. A filter enumerates what its author thought of.
 
 ---
 
-## 8. Size estimates
+## 12. Size estimates
 
 **All archive-retained transactions are post-quantum** (design §5.1), so the
 classical column applies only to session-layer traffic.
@@ -3762,7 +3763,7 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 ---
 
-## 9. Open items
+## 13. Open items
 
 1. **Queue cap value.** A per-node policy value; design §21.1.1 classifies it
    *freely tunable, forever*, and nothing here fixes one.

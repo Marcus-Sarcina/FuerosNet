@@ -809,7 +809,7 @@ convenience. §22.2 now states this, and a browser-hosted client needs
 **The resolution
 request/response protocol did not exist.** The design described resolution
 narratively across §11.3 and §11.6.1 and no wire message carried it, so the
-network's primary operation was unimplementable. New `wire-format.md` §5.6
+network's primary operation was unimplementable. New `wire-format.md` §7.6
 specifies it. Two further findings of substance: the **locator authentication
 contradiction** — design §11.1 requires the node's signature, the wire format
 claimed an enclosing envelope always supplies it — resolved by distinguishing
@@ -828,7 +828,7 @@ verifier-selection invariant could not be recomputed from the record**: §8.1.2
 requires third-party recomputation so a missing verifier is visible, and the
 witness nonce commitments and reveals it depends on were nowhere in the presence
 record — the anti-suppression property was unverifiable. Now fully specified in
-`wire-format.md` §4.6: nonce carriage in `Witness`, a domain-separated
+`wire-format.md` §5: nonce carriage in `Witness`, a domain-separated
 identity-bound commitment, canonical seed bytes with participant order
 canonicalised so it cannot become a grinding variable, **a 24-hour epoch-aligned
 window** (filling the §20 UNSET), hash-rank sampling, and candidates as
@@ -849,7 +849,7 @@ set, which comes from their archive, so the property is **per-subject and
 holder-relative** and nobody validates both halves of a record without both
 archives. That scope is correct — an evaluator assessing A cares whether *A*
 suppressed verifiers — but was unstated. Second, a **binding invariant** added at
-`wire-format.md` §4.6.2: a subject's selection must be recomputable from the
+`wire-format.md` §5.2: a subject's selection must be recomputable from the
 record plus that subject's own history and nothing else, so the seed may draw
 only on record-carried values and the candidate set only on the subject's own
 history. The current construction satisfies this by accident of design; adding
@@ -976,7 +976,7 @@ control plane requires — the split is correct rather than a compromise.
 ### 2026-08-16 (payload encryption propagated)
 
 The §12.2.4 adoption carried
-into the companion documents. **`wire-format.md` §5.7 adds prekey distribution**
+into the companion documents. **`wire-format.md` §7.7 adds prekey distribution**
 — `PrekeyBundle`, `PrekeyRequest`, `PrekeyReply` — with the bundle **opaque to
 this protocol**, since only the endpoints hold the state to interpret it and
 carrying it as a blob means a PQXDH revision forces no wire change. Serving a
@@ -1010,14 +1010,14 @@ The last blocker to finalising
 an adoption transaction is closed. Adoption field 7 is **a single head txid**, not
 a list, range or proof: §8.1.1's chain already carries the predecessors, so a
 patron walks backward from the head and fetches in batches (`wire-format.md`
-`wire-format.md` §5.8). Truncation needs no grammar — presenting less history means presenting an
+`wire-format.md` §7.8). Truncation needs no grammar — presenting less history means presenting an
 earlier head, the only edit the chain permits. **The patron chooses its own
 depth**, which is the right asymmetry: the presenter picks the head and cannot
 control how far back the recipient looks. The three alternatives were rejected on
 specific grounds — a **list** duplicates the chain while proving nothing, a
 **range** is *reachable from B but not A*, which is precisely the excision §8.1.1
 exists to prevent, and a **Merkle proof** optimises away a fetch the patron needs
-anyway to recognise counterparties. New `wire-format.md` §5.8 specifies batched
+anyway to recognise counterparties. New `wire-format.md` §7.8 specifies batched
 fetch, with the requester verifying the chain itself since a holder cannot be
 trusted to have walked it correctly.
 
@@ -1055,7 +1055,7 @@ and the resource, and is the responsibility of IdP plugin developers.
 
 ### 2026-08-16 (capability negotiation)
 
-`wire-format.md` §6.1 replaces the
+`wire-format.md` §8.1 replaces the
 placeholder with a **QUIC-shaped parameter map**, sent in both directions, with
 unknown parameters ignored rather than rejected — the same treatment §1 gives
 unknown map keys, and deliberately unlike unknown enum values. Parameters carry
@@ -1567,7 +1567,7 @@ ALPN token `h3` at QUIC connection establishment (RFC 9114), while the client's
 session negotiates `rhtn/1` — so standard HTTP/3 cannot be layered onto it, and
 "no new transport, no new framing" was false twice over. The fix separates two
 legs I had merged: **client-to-node travels as an rhtn control frame** on the
-existing session (`wire-format.md` §6.0, frame types 5 and 6), and
+existing session (`wire-format.md` §8.0, frame types 5 and 6), and
 **node-to-resource is ordinary HTTP over whatever suits** — a local socket for a
 hosted package, HTTPS for an external service. Nothing required those to be the
 same transport, and requiring it was the whole error; a proxy speaking different
@@ -2035,7 +2035,7 @@ replicating or acting on a transaction, and nothing makes it wait. An adoption i
 signed by node and patron, a peering by two infra nodes, so a third party
 asserting a veto over either has no mechanism to exercise it — and a challenge
 window that delays nothing the actor controls delays nothing at all. **Removed**:
-the delegated-veto object (`wire-format.md` §5.5), its four open questions, its
+the delegated-veto object (`wire-format.md` §7.5), its four open questions, its
 expiry parameter, the down-line threshold veto, and the challenge window.
 **N3's blocked privacy analysis is closed by withdrawal** rather than by being
 answered. **What replaces it is what was always real**: a compliant client
@@ -2047,14 +2047,14 @@ plurality reached through a different door. §9.2's argument that one keypair
 suffices is rewritten: not because anything can be blocked, but because a thief's
 natural move destroys most of what they stole, and a second credential would add
 a key to steal without adding a power anyone can exercise. **The invariant is
-kept** in `wire-format.md` §5.5, now describing a power that does not exist rather
+kept** in `wire-format.md` §7.5, now describing a power that does not exist rather
 than one to be constrained, so that reintroducing any blocking mechanism has to
 argue against it.
 
 ### 2026-08-22 (grandpatron subtree acknowledgement)
 
 New §11.2.1 and
-`wire-format.md` §5.4a. **Adoption puts a node inside its grandpatron's Dunbar
+`wire-format.md` §7.4a. **Adoption puts a node inside its grandpatron's Dunbar
 Org automatically, so a patron could admit arbitrary strangers to their own
 superior's resources without that superior agreeing.** A grandpatron now
 countersigns before the new node reaches resources they host — enforceable for
@@ -2157,7 +2157,7 @@ provisional — **an undetected cycle is a correctness problem in one subnet's
 topology, while a false positive refuses a legitimate adoption and is
 indistinguishable from censorship** — so the rule accepts the first to avoid the
 second, and any general procedure must preserve that ordering.
-`wire-format.md` §9's list renumbered after the activity-summary removal left it
+`wire-format.md` §13's list renumbered after the activity-summary removal left it
 starting at 2, and its queue entry rewritten to the residue.
 
 ### 2026-08-22 (decision audit)
@@ -2173,7 +2173,7 @@ mode of matching on remembered text rather than read text. The unset-parameter
 count read twenty against nineteen rows after the activity-summary window and
 staleness parameters were removed — **the third time today that count has gone
 stale**, each time because removing a row does not touch the sentence that counts
-them. And `wire-format.md` §9's list was renumbered. Confirmed clean: the
+them. And `wire-format.md` §13's list was renumbered. Confirmed clean: the
 remaining mentions of `VetoDelegation`, `ActivitySummary` and P7 are inside
 withdrawal notes naming what was removed, which is correct, and the "challenge
 window" at §7.6.1 is a timing window in the proximity analysis, unrelated to the
@@ -2707,7 +2707,7 @@ effective* boundary already drawn.
 
 A 0.6 implementation
 attempt found **a direct contradiction between the two documents**: §12.6.1
-described resolution descending through infra nodes, while `wire-format.md` §5.6
+described resolution descending through infra nodes, while `wire-format.md` §7.6
 forbade forwarding outright — a rule added in an earlier 0.6 pass and never
 checked against the design. **The iterative model as written also did not work**:
 a node reporting "not authoritative" gave the requester nowhere to go, since no
@@ -2807,7 +2807,7 @@ four lines below. Resolved by stating the rule as a condition rather than a list
 the signer**, so envelope entries carry it and embedded objects do not, since a
 `VerifierResponse` names its verifier in a field and a second copy could disagree.
 **Late verifier responses were said in three places to have a present encoding
-and no such object existed** — now `LateResponse` (`wire-format.md` §5.3a), a
+and no such object existed** — now `LateResponse` (`wire-format.md` §7.3a), a
 standalone signed object referring to the record it supplements, which explicitly
 **does not amend it**: the record is immutable, finalization already happened, and
 a late response is evidence an evaluator may weigh rather than a change to what
@@ -3038,7 +3038,7 @@ the ceremony pre-commitment**: fixed before capture, countersigned by both parti
 and the witnesses, unique per ceremony — everything the binding needed, available
 when the binding is made. **The key grant had no message**, the same gap class as
 the `CurrencyAttestation` signature: three implementations would have invented
-three. Now `KeyGrant` (`wire-format.md` §5.3a), carried as end-to-end encrypted
+three. Now `KeyGrant` (`wire-format.md` §7.3a), carried as end-to-end encrypted
 payload and **never retained in a record**, since a persisted grant defeats the
 retention property the scheme exists for. It names the record to open — a verifier
 met several times holds several sealed captures — and the query it answers, so an
@@ -3059,7 +3059,7 @@ body was ever defined. **A direct contradiction alongside it**: §6.0 put resour
 frames on stream 0 while §8.1 assigns request/response to bidirectional streams.
 Resolved toward §8.1 — resource traffic is not session control — with frames 5 and
 6 withdrawn from the control table and `ResourceRequest`/`ResourceResponse` drafted
-at `wire-format.md` §7.3. Two rules fell out of writing them: **the node's status
+at `wire-format.md` §11. Two rules fell out of writing them: **the node's status
 codes are not the resource's**, so an application error returns inside a delivered
 response rather than looking like a gateway refusal; and **`not authorised` does
 not distinguish absent from refused**, because distinguishing them tells a
@@ -3151,7 +3151,7 @@ far*, and those patterns are relied on by rotation, catalog entries, peering and
 the locator gap — while **no message carries any of them**. Nothing says what is
 sent, on which stream, how a receiver decides to forward, or how a flood
 terminates in a horizon that contains cycles once peering exists. Recorded at
-`wire-format.md` §7.2a and as a §23.2 blocker, with the diagnosis: **§15 settles
+`wire-format.md` §10.1 and as a §23.2 blocker, with the diagnosis: **§15 settles
 the policy — which class reaches how far — and a policy is not a protocol.** No
 target exercised propagation until this one. It blocks the catalog subsystem and
 subsumes most of the locator gap; it blocks nothing two parties do directly.
@@ -3612,7 +3612,7 @@ The
 largest of the remaining §23.2 blockers closed together, because they turned out to
 share a mechanism.
 
-**Topology propagation acquired an encoding** (`wire-format.md` §7.2a). Control frame
+**Topology propagation acquired an encoding** (`wire-format.md` §10.1). Control frame
 type 7 on stream 0, carrying the signed envelope byte-for-byte with no wrapper.
 Stream 0 rather than a bidirectional stream because an unknown control frame is
 *skipped* and the session survives, which is the right outcome for gossip, where an
@@ -3627,7 +3627,7 @@ retry**: §2.1's back-pointers make a gap self-announcing at the receiver, §5.8
 fetches what is missing, and periodic reconciliation with siblings and patron is a
 replay of the same frames rather than a separate mechanism.
 
-**The rootward memo is new** (design §15.2, `wire-format.md` §7.2b). Frame type 8. A
+**The rootward memo is new** (design §15.2, `wire-format.md` §10.2). Frame type 8. A
 minified record of every membership change — subject, patron's position, added or
 removed, subject's `seqno` — travels up the patron chain to its subnet's root. This
 is what §15's *ancestors* reach had always meant and never said. **Peering is
@@ -3651,7 +3651,7 @@ did. A `Locator` is `{anchor, path, seqno}` — a position. The infra-child endp
 gap was also narrower than stated, since a **peering** record already carries both
 endpoints' addresses; what had no carrier was an infra node that neither peers nor
 serves as an anchor, a supported degraded state. Closed by a **node endpoint record**
-(`wire-format.md` §5.3d) modelled on `AnchorEntry`, self-signed for the same reason
+(`wire-format.md` §7.3d) modelled on `AnchorEntry`, self-signed for the same reason
 §5.3 gives — retroactive attribution of forged gossip, which is worth having for a
 flooded object and not for a referral from the one party you are already talking to.
 
@@ -3741,7 +3741,7 @@ be** a replay primitive, which is why it does not"* — same warning, no history
 resolved; §11.8's closed entries, leaving only the gateway-evaluation item; and the
 "Closed in the 2026-08-25 round" table added to §23.2 earlier the same day, which was
 a change-log entry in a specification. §9.4 was titled *Open* while stating an
-answer and is retitled to what it says. `wire-format.md` §5.4 and §5.5 kept their
+answer and is retitled to what it says. `wire-format.md` §7.4 and §5.5 kept their
 numbers — removing them would shift §5.6 — and shrank from 39 lines to 20, pointing
 at design §9.2 for reasoning they had been duplicating.
 
@@ -4122,7 +4122,7 @@ described its intent — a courtesy stub so traffic still arriving at an old pat
 forwarded — and withdrew it: it is unenforceable either way (§1.1), and it cost a
 standing pointer to where a departed subordinate went.
 
-**Removed with it**: `wire-format.md` §5.2 (number tombstoned), `ResolveReply`'s
+**Removed with it**: `wire-format.md` §7.2 (number tombstoned), `ResolveReply`'s
 repair variant and result code 1, the four-repair bound, the 90-day TTL parameter,
 and the infra obligation to retain and return forwarding records. §12.6.2 is
 retitled *Stale paths fail; they are not repaired.* **P6 and C3 are closed by
@@ -4428,7 +4428,7 @@ Disavowal reason code is field 4; AbuseReport is keys 1–5; NetworkPoint's port
 key 3; the presence body is contiguous keys 0–8 (participants 3, witnesses 4,
 responses 5, subtype 6, ordinal 7, disclosure root 8); ResolveReply is fields 1–5
 with result codes 0 serving / 1 failure / 2 referral; TopologyPush and
-TopologyMemo are frame types 5 and 6; and wire §5 renumbers to a clean 5.1–5.9 —
+TopologyMemo are frame types 5 and 6; and wire §7 renumbers to a clean 5.1–5.9 —
 anchor entry 5.2, segment grant 5.3, late response 5.4, subtree ack 5.5, endpoint
 record 5.6, resolution 5.7 with subsections 5.7.1–3, prekeys 5.8, archive fetch
 5.9. The lettered 5.3a–d sections and the three stub sections are gone. Every
@@ -4853,7 +4853,7 @@ aggregates, and *the subject withdraws disclosure permission* when probing is
 detected — a reactive policy act, and the "(below)" it pointed at described no such
 standing permission. **The real lever had already been built and the section never
 mentioned it.** A verifier's captures of the subject are sealed under keys only the
-subject can derive (§7.5.2), and `wire-format.md` §5.3's `KeyGrant` releases one
+subject can derive (§7.5.2), and `wire-format.md` §7.3's `KeyGrant` releases one
 bound to a single `query_id` — so a verifier can evaluate **nothing** until the
 subject's client sends the grant. The limit is **structural rather than vigilant**:
 not a permission a subject must notice they should withdraw, but a key their client
@@ -5085,7 +5085,7 @@ before edit.
 
 **The counter's own definition missed the 0.6.9 trigger change.** Design §6.2.1 —
 the authoritative sentence — still said the sequence number is signed "on every
-position change", and `wire-format.md` §6.2's heartbeat comment still said a
+position change", and `wire-format.md` §8.2's heartbeat comment still said a
 locator seqno "changes only on position change". Both now carry the endpoint
 trigger. The sweep at the time updated §4.3, §5.6, infra §3.4 and P36 and missed
 the definition site itself.
@@ -5218,7 +5218,7 @@ append-only archive and could be disclosed in a prefix presented to a new patron
 exposing services long after withdrawal. **The archive never included them.** §10's
 definition is *adoption, departure, disavowal, peering and presence* — a resource
 registration is none of those, and the retention claim came from `wire-format.md`
-§4.7 and `infra-client-requirements.md` §10 over-generalising to "it keeps
+§6 and `infra-client-requirements.md` §10 over-generalising to "it keeps
 everything". Author: *the archive is only for topology transactions and PoP; the
 owner keeps a live table and generates responses from current state; there is no
 requirement to keep records of past resources.* §10 now states the exclusions and
@@ -5230,7 +5230,7 @@ supersession and withdrawal paragraphs, and infra §12's bullet all follow.
 **NEW-3, the currency query — specified.** §12.6.5's stapling design falls back to
 "a lookup" that had no message, audience, or retention rule, and the fallback
 undoes the exact property stapling exists for: it tells the subject's patron that
-someone is being introduced to their subordinate. Now `wire-format.md` §5.1,
+someone is being introduced to their subordinate. Now `wire-format.md` §7.1,
 **bidirectional request type 8**: `CurrencyRequest {subject, nonce}` and
 `CurrencyReply {nonce, result, ? attestation}`. Three bounds, each following from
 something already decided. **The query names the subject and not the querier** — it
@@ -5472,7 +5472,7 @@ participant's attack — "colluding witnesses", "friendly witnesses" — and non
 party acting on its own behalf.
 
 **Cross-nomination was doing the wrong job in the documents** (author). `wire-format.md`
-§4.6.2.1 said the anti-grinding property "rests on the witnesses being honest, and
+§5.2.1 said the anti-grinding property "rests on the witnesses being honest, and
 **cross-nomination is what supplies that** … the same bar as forging the ceremony
 outright." That contradicted §17.2 — no topology rule can supply Sybil resistance,
 and cross-nomination is a topology rule — and the "same bar" claim was false besides:
@@ -5555,7 +5555,7 @@ whitespace, no doubled prose spaces, and the four documents that had two `\n\n\n
 sequences each still have exactly two.
 
 **Two doubled words fell out of the check that found them**, both predating this
-round: §1's *"each with with varying rules"* and `wire-format.md` §5.3's *"a capture
+round: §1's *"each with with varying rules"* and `wire-format.md` §7.3's *"a capture
 capture key"*. The earlier duplicated-word sweep this session missed them because its
 word list was restricted to the terms it expected; the unrestricted form found them.
 
@@ -5568,7 +5568,7 @@ two are described below and left for the author.
 §16.1 carried both halves of this two paragraphs apart — *"what the protocol supplies
 is the sampling floor"* and *"volume proves nothing, so manufacturing volume gains
 nothing"* — without noticing they collide. Candidate eligibility is structural:
-`wire-format.md` §4.6.4 admits a prior counterparty when the record is canonical and
+`wire-format.md` §5.4 admits a prior counterparty when the record is canonical and
 its signatures verify, and nothing weighs it. So a subject who manufactures
 counterparties owns the population their own verifiers are drawn from, and the
 2026-08-24 formation bound does not reach it — that capped *formation* records at one
@@ -5582,7 +5582,7 @@ to B's prior counterparty — so C enumerates B's candidate set in order to samp
 and sees the population before it sees any answer. A sample drawn wholly from
 strangers returns `match` from strangers. The intersection argument governs the
 sample too; it is not suspended because the protocol chose it. §16.1's sampling-floor
-paragraph now carries this, extending `wire-format.md` §4.6.7's holder-relative
+paragraph now carries this, extending `wire-format.md` §5.7's holder-relative
 property from checkability to evidential value, and §7.3's detection arithmetic now
 states the precondition it always had: `1 − (1/k)^q` assumes the sampled
 counterparties are honest and independent of the subject, and against a fabricated
@@ -5590,7 +5590,7 @@ candidate set detection is **absent rather than reduced** — no q repairs it, s
 the confederates sharing the key are exactly who would answer.
 
 **The seed window is claimed, not elapsed, so the rate limit was never real.**
-`window_ordinal` derives from `started_at` (`wire-format.md` §4.6.3.1), which the
+`window_ordinal` derives from `started_at` (`wire-format.md` §5.3.1), which the
 proposer chooses; §2.2's monotonicity against the committed back-pointer bounds that
 **only from below**. The documents already named the mechanism — *"the same field
 derives `window_ordinal`, so varying the claimed day also yields fresh verifier and
@@ -5803,7 +5803,7 @@ the finding survives and the pass that produced it does not.
 *"Until that was written, selection could not be recomputed"* became the requirement
 it was describing; *"a hole in §12.6.5 as originally written"* lost three words;
 §19.4's P35 row dropped *"§12.4 amended, since it previously stated the opposite"*;
-§19.5 lost *"§14.1.6 originally asked for"*; `wire-format.md` §4.6.4's *"conflating
+§19.5 lost *"§14.1.6 originally asked for"*; `wire-format.md` §5.4's *"conflating
 them was left open"* became the rule it had been deferring. **§10.2's italicised
 parenthetical** — *"a draft of this section briefly treated deliberate multi-device
 forking as an attack"* — is now the positive statement it was hiding: deliberate
@@ -5873,7 +5873,7 @@ forgery, which is one consequence among these rather than the boundary.
 different subnet under a different serving node that sees only one"* — sound against
 a node, silent about what sits beneath several. Where both serving nodes are hosted
 together, one observer sees both mutually-authenticated attaches (`wire-format.md`
-§7.1). C14's tombstone stands as written; it was right about the adversary it
+§9.1). C14's tombstone stands as written; it was right about the adversary it
 considered.
 
 **Every adjusted claim now names the breaking scenario and links to §1.2.3**
@@ -5966,7 +5966,7 @@ check finds and independence is what it cannot prove.
 
 **The currency query's body-level omission is not a privacy property.** §19.7 item
 12 accepted the disclosure partly because *"the query carries the subject and not the
-querier"* — but `wire-format.md` §7.1 states **"Authentication is mutual"** and
+querier"* — but `wire-format.md` §9.1 states **"Authentication is mutual"** and
 requires the serving node to bind the requested identity to the transport-authenticated
 one, so the party answering knows exactly who asked and can join querier, subject and
 time whatever the schema omits. What genuinely limits exposure is **frequency**, and
@@ -5996,7 +5996,7 @@ from the perspective of a hostile person standing in front of you. All four held
 
 **An ordinary ceremony discloses the subject's whole 730-day presence history to
 whoever they just met.** Selecting the other's verifiers means computing their
-candidate set, and `wire-format.md` §4.6.4 counts a record only if its signatures
+candidate set, and `wire-format.md` §5.4 counts a record only if its signatures
 verify — so the selecting party needs the **records**, not a list of names, and a
 list the subject asserted would let the subject curate its own sample. §8.1.1's
 eleven-exchange sweep already recorded the fact, giving recomputation's reads as
@@ -6385,7 +6385,7 @@ repeated, matching the fix applied to the same shape in 0.8.3.
 the word to avoid and never reached the text; `series branching` was considered and
 dropped, and `series refresh` — the term 0.8.6 was drafted with — is renamed across
 **34 edit sites in three documents**, yielding 38 occurrences of the new term,
-including the type-7 table row and `wire-format.md` §4.8's heading.
+including the type-7 table row and `wire-format.md` §4.6's heading.
 
 **`branch` was the disqualifying collision, and it sits one subsection away.** §10.3
 is *"Merges. The archive is a DAG, not a chain"*, and there a **branch** is a line
@@ -6506,7 +6506,7 @@ not, nor did 15 in `wire-format.md` and one in `light-client-requirements.md`, s
 none needed shallowing, and the deepest result is `h5`. Re-levelled mechanically; no
 heading text changed, and references still resolve at zero unresolved.
 
-**One subsection was physically out of sequence.** `wire-format.md` §4.6.2.1 sat
+**One subsection was physically out of sequence.** `wire-format.md` §5.2.1 sat
 between §3.6.3 and §3.6.3.1 — noticed during 0.8.3 and never fixed. Moved to precede
 §3.6.3, which is what its number claims. §3.6 now reads 4.6.1, 4.6.2, 4.6.2.1, 4.6.3,
 4.6.3.1, 4.6.4…, and no document has an out-of-order heading.
@@ -6614,3 +6614,25 @@ reading order pointed at *"§7 for proof of presence"* and *"§17 records what i
 to be weak"*, both of which now span three chapters; they read §7–9 and §17–19, and
 the order now names §2 and Appendix A. `CLAUDE.md`'s instruction to read *"§§0–1
 first"* pointed at a section that had become an appendix.
+
+### 2026-09-01 (migration, stage 2: wire-format split at §4 and §7)
+**§4 held three unlike things.** Transaction encodings, a seven-subsection
+verifier-selection mini-specification, and a family of objects the section itself said
+were **not** transactions. Verifier selection becomes **§5** and the registration,
+catalog and abuse-report objects **§6**; series reissue stays a transaction and
+renumbers from §4.8 to **§4.6**.
+
+**§7 had outgrown "QUIC binding."** It began with the handshake and then carried
+topology propagation, the rootward memo and resource request framing. It becomes **§9
+Transport binding**, **§10 Topology propagation** and **§11 Resource requests** — and
+the split retires the `7.2a`/`7.2b` alphanumerics, which existed only because there was
+nowhere else to put those subsections.
+
+**433 wire references remapped across seven files.** Deciding which bare `§N` inside
+`wire-format.md` was a wire reference and which a design reference required the
+*pre-migration* heading set, read from git rather than reconstructed.
+
+**Verified by differencing word multisets against the previous commit**, ignoring
+section numbers. Every file's removed and added counts match exactly, and **the only
+non-reference word removed anywhere in the set is `QUIC`** — from the retitled chapter.
+Zero unresolved references.

@@ -906,7 +906,7 @@ The old patron does not sign. **This is the escape hatch that makes exit a real
 right**, and no rule may condition it on the patron's cooperation.
 
 Each node signs a **sequence number** on every position change — and, for an infra
-node, on every endpoint change (`wire-format.md` §2.3, `wire-format.md` §5.6). Not consensus, a
+node, on every endpoint change (`wire-format.md` §2.3, `wire-format.md` §7.6). Not consensus, a
 freshness test, letting any observer order a node's own competing claims without a
 clock and detect a stale record a revocation failed to reach.
 
@@ -916,7 +916,7 @@ against each other at all. **A counter can be exhausted, and that is why**: whoe
 holds a node's key can sign one record at the top of the range, after which no
 successor exists and the node can never publish a position or endpoint change again.
 Advancing to a fresh series is what repairs it, and a **series reissue is
-countersigned by the patron** (`wire-format.md` §4.8) — so the key alone cannot make
+countersigned by the patron** (`wire-format.md` §4.6) — so the key alone cannot make
 one, and a thief cannot follow the legitimate holder into a new series. Because the
 series is arbitrary and nothing registers it globally, an attacker cannot pre-empt the
 move either: it would have to exhaust a 2³² space and deliver every one of those
@@ -1037,7 +1037,7 @@ fabricated memo sever a legitimate adoption — the false positive this section 
 as the worse failure. **Detection is therefore confirmed against the detector's own
 records**: the check fires only on the party the memo names, who signed the
 transaction behind it and holds the slot it describes, so a fabricated memo fails
-without asking anyone anything (`wire-format.md` §7.2b).
+without asking anyone anything (`wire-format.md` §10.2).
 
 **Residual, stated rather than hidden:** cycles are detected within a subnet and
 nothing detects one spanning two, because §3.1.1 says nothing may. That is a
@@ -1310,7 +1310,7 @@ rule would invalidate. `nominated_by` is in the record, so the split reads direc
 
 **The split is a signing check before it is an evaluator's.** It bears on the
 signer's own verifier sample, because the seed draws on nothing the participants
-control except the witness nonces (`wire-format.md` §4.6.3). A party whose
+control except the witness nonces (`wire-format.md` §5.3). A party whose
 counterparty nominated every witness has its verifier selection derived entirely
 from that counterparty's nominees. §8.1.2 already requires each participant to
 verify the other's selection before signing, and this is the same check for the same
@@ -1445,7 +1445,7 @@ person in front of them as continuous with a history.
     verifier needs.** A verifier's captures of the subject are
     sealed under keys only the subject can derive (§7.5.2), so **it can evaluate
     nothing until the subject's client sends a `KeyGrant` bound to that query**
-    (`wire-format.md` §5.3). The limit is therefore **structural rather than
+    (`wire-format.md` §7.3). The limit is therefore **structural rather than
     vigilant**: not a standing permission the subject must notice they should
     withdraw, but a key their client declines to send. Fifty parallel probes need
     fifty grants. **That is not global state; it is one node holding what everyone
@@ -1470,7 +1470,7 @@ person in front of them as continuous with a history.
     engaged in a witnessed encounter with someone claiming to be that subject,
     and the proof must bind the request to that encounter.* A legitimate query
     exists for no other reason. **The proof is the subject's own consent**: every query carries the subject's signature over its `query_id`
-    (`wire-format.md` §4.6.6), minted by the subject's client during the ceremony
+    (`wire-format.md` §5.6), minted by the subject's client during the ceremony
     (§7.3's automatic querying), so each probe requires the subject's live
     cooperation **from whoever holds that key**. The ceremony pre-commitment travels
     with it and pins the fuzzed profile — one profile per ceremony, or the verifier
@@ -1886,7 +1886,7 @@ counterparty's access remotely without the counterparty acting or knowing.
 presence record has its own sealed store, its own seed and its own retention
 windows, ageing independently. **A verifier who has met the subject several times
 holds several**, and the subject's grant names which to open (`wire-format.md`
-§5.3).
+§7.3).
 
 **Querying prefers the most recent eligible capture**, because a stale template
 matches worse and says less. Nothing forbids a subject granting against an older
@@ -2222,7 +2222,7 @@ PresenceRecord {
     template_version: uint16           # omitted when basis = personal_knowledge
                                        # or absent
     subject_consent : COSE_Sign1       # BY THE SUBJECT, over the query_id —
-                                       # see `wire-format.md` §4.6.6 (§7.4)
+                                       # see `wire-format.md` §5.6 (§7.4)
     signature       : COSE_Sign1       # BY THE VERIFIER
   }
 }
@@ -2308,7 +2308,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
 | Trust metric (§16.2) | graph edges, which come from adoptions | no |
 | Presence-based recovery (§9.1) | verifier responses | no |
-| Late response, capture key grant (`wire-format.md` §5.3–b) | `txid` | no |
+| Late response, capture key grant (`wire-format.md` §7.3–b) | `txid` | no |
 
 **Ten of eleven have no use for it.** The mechanism exists because a record currently
 reaches all of them whole.
@@ -2413,7 +2413,7 @@ ceremony, which guard against outsiders or against the pair colluding.
 B's can verify A's half of a record and not B's, so **nobody validates both halves
 unless they hold both archives.** Less likely given selective presentation (§16.7).
 
-**Binding constraint on any future change to seeding** (`wire-format.md` §4.6.2):
+**Binding constraint on any future change to seeding** (`wire-format.md` §5.2):
 a subject's selection must be recomputable from **the record plus that subject's
 own history and nothing else.** So the seed may draw only on values carried in the
 record, and the candidate set only on the subject's own history. Adding
@@ -2444,7 +2444,7 @@ control variable is which completed attempt is allowed to survive. With fraction
 roughly 32 for p=0.5, q=5, and far fewer if the goal is merely avoiding one
 dangerous verifier or landing several `unavailable` slots.
 
-**Encoding is specified** in `wire-format.md` §4.6 — commitment construction, seed
+**Encoding is specified** in `wire-format.md` §5 — commitment construction, seed
 bytes, the 24-hour window, hash-rank sampling, and the candidate set. **The nonce
 commitments and reveals must be in the record**, or selection cannot be recomputed
 from it at all and the anti-suppression property this section rests on is
@@ -2468,7 +2468,7 @@ Both are needed: (1) alone lets an attacker wait out the window; (2) alone leave
 each attempt merely expensive rather than futile.
 
 **Rule (1) does not set the rate it appears to, because the window is claimed rather
-than elapsed.** The ordinal derives from `started_at` (`wire-format.md` §4.6.3.1),
+than elapsed.** The ordinal derives from `started_at` (`wire-format.md` §5.3.1),
 which the proposer chooses, and monotonicity against the committed back-pointer
 (`wire-format.md` §3.2) bounds that choice **only from below**. So the budget is not
 one sample per day; it is one sample per *admissible* day, and **the number of
@@ -2507,7 +2507,7 @@ hand and the meeting already paid for by two other people; and since every witne
 is a required envelope signer, it can instead wait for the verifier responses and
 withhold its signature once it has seen them. Neither move forges anything. Rule (1)
 does not bind it either: re-deriving a fresh nonce on a retry violates
-`wire-format.md` §4.6.2.1 and is invisible in a completed record, so a hostile
+`wire-format.md` §5.2.1 and is invisible in a completed record, so a hostile
 witness gets a fresh sample per attempt where an honest one gets one per window.
 
 **The design's usual answer — make it visible and let policy weight it — is not
@@ -2526,7 +2526,7 @@ a participant controls. `txid` is disqualified for a different reason: it depend
 on the responses.
 
 **Late responses.** A verifier should answer long-aged pending requests even
-after the threshold is met. Late answers arrive as `LateResponse` objects (`wire-format.md` §5.4) referencing
+after the threshold is met. Late answers arrive as `LateResponse` objects (`wire-format.md` §7.4) referencing
 `txid`; they do not alter the record's validity, and they accrue to **the
 responder's own reliability record** as evidence of good citizenship.
 
@@ -2556,7 +2556,7 @@ identify a person stays on the participants' devices.
 - **Immutable once finalized.** *Once every party required to authenticate a
   piece of historical evidence has finalized it, nobody may alter that evidence
   in place; later assertions must be separately signed and must cryptographically
-  refer back to the evidence they supplement.* Present encoding: `LateResponse` (`wire-format.md` §5.4), signed by
+  refer back to the evidence they supplement.* Present encoding: `LateResponse` (`wire-format.md` §7.4), signed by
   signed reference to `txid`.
 - **Rate**: far below the 1-per-100s threshold in §1. Ceremony duration is
   deliberately minutes (§7.1), which caps throughput at the human.
@@ -2584,7 +2584,7 @@ not capability: the old key still exists, and nothing so far stops it publishing
 fresh locator to anyone holding a stale one — §12.3 Case 2 guarantees those holders
 have no other source of truth, since nothing redirects on the subject's behalf.
 **Setting the retired series to its maximum counter forecloses that**
-(`wire-format.md` §4.8), at the cost of one self-signed locator, unilateral and
+(`wire-format.md` §4.6), at the cost of one self-signed locator, unilateral and
 needing no patron. The old key is in hand at rotation — it signs the `Recovery` — so
 this is the moment to spend it.
 
@@ -2599,7 +2599,7 @@ for the parties you reach, and silence about the rest**, which is the right divi
 because the two face different attacks.
 
 **Burning a key outright needs no mechanism of its own: rotate, and never reissue.**
-A series is continued by a patron-countersigned reissue (`wire-format.md` §4.8), so
+A series is continued by a patron-countersigned reissue (`wire-format.md` §4.6), so
 declining to take one leaves the sealed line as the last word that key will ever have.
 Sealing and continuing is a repair; sealing and stopping is a retirement. **The
 difference is entirely in what the subject does next**, and the protocol needs no
@@ -2963,7 +2963,7 @@ what they establish, who governs them, and whether they are evidence at all.
 | **PoP records** | The signed artifact of a face-to-face ceremony (§8.1) | That two people met, and the **witnesses and verifiers available for a later ceremony with anyone**. Potent under any sequence and in any subtree | **Not patron-countersigned** (§6.4). A PoP **is** a transaction and enters the archive like any other — but the chain does not govern its *use*: identifying validators for a later ceremony does not depend on the archive's continuity, and a counterparty is **handed a bundle rather than walking the archive** (§8.1.2). They survive pruning of the chain that carried them |
 | **Sequence number** (`counter`) | Freshness for asynchronously updated routing information (`wire-format.md` §2.3) | Which of two locators for one node is current | **Not history, and not an enforcement mechanism.** Neither the archive nor its chain |
 | **Seqno series** | A grouping of sequence numbers, generally though not necessarily bound to one subnet or to a run of subnet memberships | That one user has several routing-table entries locating them in different subnets. The series follows the subnet, and address updates use the counter in that same series | Not history. Advanced only by a reissue |
-| **Series reissue** (type 7) | Branching a new series off an existing one, patron-countersigned (`wire-format.md` §4.8) | That activity is partitionable by subnet — and, by election, a **checkpoint** for retention and archive look-back | Advances the archive, like any topology transaction |
+| **Series reissue** (type 7) | Branching a new series off an existing one, patron-countersigned (`wire-format.md` §4.6) | That activity is partitionable by subnet — and, by election, a **checkpoint** for retention and archive look-back | Advances the archive, like any topology transaction |
 
 **The first two answer questions about a person; the middle two answer questions
 about an address.** Conflating them is the standing hazard here, and the sequence
@@ -3052,7 +3052,7 @@ multi-device problem is *accidental* forking** (§23.2).
 **A series reissue is also an archive checkpoint, and this is what makes pruning
 possible at all.** Because every record commits to its predecessor, verification walks
 backward: without a second root a subject can withhold what they did lately and cannot
-drop their early life. A reissue countersigned by your patron (`wire-format.md` §4.8)
+drop their early life. A reissue countersigned by your patron (`wire-format.md` §4.6)
 supplies that root, asserting that history existed across the boundary without carrying
 what it contained, so **the chain before it need not be retained or presented** — the
 blocks and the dates survive and the details go.
@@ -3066,7 +3066,7 @@ license discarding presence records, sealed captures or capture seeds, and
 
 **Except inside the 730-day window, where they are still required.** Verifier
 selection counts *n* and draws the candidate set by traversing what is reachable from
-the committed back-pointer (`wire-format.md` §4.6.4), so a checkpoint that discarded
+the committed back-pointer (`wire-format.md` §5.4), so a checkpoint that discarded
 recent history would shrink both — letting a subject choose its own verification
 burden, down to the `n = 1` case that requires **zero** verifiers (§6.4). **Pruning is
 therefore permitted only beyond the window**, which costs nothing anyone wants: the
@@ -3330,7 +3330,7 @@ Org, which is the region a node holds topology for (§15.1). Consequences:
 #### 11.2.1 Membership is necessary, not sufficient, above the patron
 
 **A new subordinate reaches its patron's resources on adoption. It reaches
-resources higher in the tree only once the grandpatron countersigns.** The countersignature is carried as a `SubtreeAck` (`wire-format.md` §5.5).
+resources higher in the tree only once the grandpatron countersigns.** The countersignature is carried as a `SubtreeAck` (`wire-format.md` §7.5).
 
 Adoption puts a node inside its grandpatron's Dunbar Org, so the §11.2 gate opens
 automatically, and a patron can therefore admit arbitrary strangers to their own
@@ -3654,7 +3654,7 @@ CatalogEntry = {
   data_practice   : ? uint         ; declared logging and retention posture.
                                    ;   OPTIONAL; absent means undeclared, which
                                    ;   is itself informative. Values enumerated
-                                   ;   in `wire-format.md` §4.7
+                                   ;   in `wire-format.md` §6
   signature       : COSE_Sign1     ; by the OWNER, not the resource
 }
 ```
@@ -3763,7 +3763,7 @@ answer than a protocol that keeps hundreds of views in sync for an event that is
 socially announced anyway.
 
 **This also bounds the session cost.** A sweep holds one session at a time and
-closes it; browsing opens nothing (`wire-format.md` §7.3.1).
+closes it; browsing opens nothing (`wire-format.md` §11.1).
 
 **The catalog is answered, not published.** A node asks an infra
 node within its horizon what it has; the infra node returns the entries it **owns**
@@ -3952,11 +3952,11 @@ your subtree.
   networks will be thousands to tens of thousands of nodes, where see §12.7.3.
 - **Entry format (key hash, not key):** 32B hash + 16B address + 4B subtree size +
   8B sequence ≈ 60 bytes for the index fields, **plus the anchor's own signature**
-  (`wire-format.md` §5.2), which the sizing below omits. 120,000 × 60B ≈ **7.2 MB**
+  (`wire-format.md` §7.2), which the sizing below omits. 120,000 × 60B ≈ **7.2 MB**
   of index, inside the 25 MB budget with room for signatures. **Full keys are
   fetched at contact time** — the table is an *index*, not a credential store, which
   is also why an entry's signature cannot be checked on receipt
-  (`wire-format.md` §5.2).
+  (`wire-format.md` §7.2).
 - Nodes replicate anchor entries **according to local caching policy** (§12.7.3),
   not universally. In practice widely-cached anchors converge across nodes with
   similar policies, but **no node is guaranteed to hold any particular anchor**
@@ -4106,7 +4106,7 @@ argument behind §3.2 and §12.2, and it bounds what a node *must* keep rather t
 what it *may*.
 
 **An infra node publishes its endpoints as a signed record** (`wire-format.md`
-§5.6), carried in the topology class and therefore reaching its patron. A light client's address arrives when it attaches (§14.1.2); an infra
+§7.6), carried in the topology class and therefore reaching its patron. A light client's address arrives when it attaches (§14.1.2); an infra
 child serves itself and never attaches, so without this nothing delivered its address
 to its patron — and **without that the patron cannot refer**.
 
@@ -4256,7 +4256,7 @@ to.
 
 **The fallback undoes that last property, which is why it is a fallback.** Querying tells the subject's patron that someone is evaluating or being
 introduced to their subordinate, and repeated queries would map relationship
-formation. Three things bound it, and the encoding is `wire-format.md` §5.1's
+formation. Three things bound it, and the encoding is `wire-format.md` §7.1's
 request type 8. **The query names the subject and not the querier**, so an answer
 forwarded onward attributes the question to nobody. **Nothing is retained** — it is
 liveness class (§15), answered and discarded, and never archived (§10), so no
@@ -4761,7 +4761,7 @@ relay becomes the **fallback**: ICE attempts the direct path first and falls bac
 to the serving node when it fails.
 
 **Feature capabilities are separate from the handshake and deliberately
-non-fatal** (`wire-format.md` §6.1): parameters set limits rather than gating a
+non-fatal** (`wire-format.md` §8.1): parameters set limits rather than gating a
 session, so version skew costs features and never connectivity, which matters
 most for a light client, whose only alternatives are its serving node's siblings.
 **Tolerating unknown parameters is mandatory and checkable; sending greased ones is
@@ -4783,7 +4783,7 @@ relay path is not vestigial and must be maintained as a first-class route.
 because a mailbox must have one address. **It is not a restriction on which nodes a
 client may open a session with** — messaging already has a client reach a
 recipient's serving node (§12.6.3), and resource requests and catalog queries do the
-same (`wire-format.md` §7.3.1).
+same (`wire-format.md` §11.1).
 
 1. Light client dials out to its **serving infra node.** The nearest
    infrastructure node on its patron chain, which **is not necessarily its
@@ -4809,7 +4809,7 @@ same (`wire-format.md` §7.3.1).
    sibling determines from its own topology that this client is not in its
    subtree, and therefore that it is providing failover rather than primary
    service; `AttachAck` reports that determination so both ends agree the session
-   is degraded (`wire-format.md` §6). **No automatic failback**: the client stays on
+   is degraded (`wire-format.md` §8). **No automatic failback**: the client stays on
    the sibling until that session ends, and the next fresh attach tries its actual
    serving node first.
 
@@ -4827,7 +4827,7 @@ as §19.6's disclosure requirements. A user whose trust-bearing operations
 silently stop working will read it as the application being broken, and will not
 know that it resolves on reconnection. The serving sibling determines the mode
 from its own topology, a client not in its subtree is in failover, and reports
-it in `AttachAck` (`wire-format.md` §6), because a client with stale topology may
+it in `AttachAck` (`wire-format.md` §8), because a client with stale topology may
 not know which state it is in.
 
 **Asymmetry:** client-detects-server matters more than server-detects-client,
@@ -4987,7 +4987,7 @@ socket, where ordinary HTTP is sufficient because nothing is in between.
 |---|---|---|
 | **Leaf → leaf** | The recipient node | Recipient only. On the direct path nobody relays; on the fallback path both serving infra nodes carry ciphertext (§12.6.3) |
 | **Leaf → patron** | The patron | The patron, legitimately. It is the addressed party, not a relay. Attach, heartbeat, queue operations, currency requests |
-| **Leaf → resource**, hosted on the node | The resource (§11) | The resource **and its hosting node**, which parses and re-serialises the request to insert the credential (§11.0.1, `wire-format.md` §7.3.2). An endpoint, not a relay, and the same visibility §11.2 gives it over role and membership |
+| **Leaf → resource**, hosted on the node | The resource (§11) | The resource **and its hosting node**, which parses and re-serialises the request to insert the credential (§11.0.1, `wire-format.md` §11.2). An endpoint, not a relay, and the same visibility §11.2 gives it over role and membership |
 | **Leaf → resource**, brokered | The resource | **The resource alone**, and this is the default (§11.7): the node authenticates and hands off, the client connects to the service itself, and no application traffic crosses the node |
 | **Leaf → resource**, proxied | The resource | The resource and the proxying node. §11.7 keeps this off the default path precisely because it makes the node a content chokepoint |
 
@@ -5012,7 +5012,7 @@ backgrounded. **You cannot run an interactive handshake with a recipient who is
 not there.** Therefore:
 
 - Each node **publishes prekeys**, which its patron serves on request, the X3DH
-  shape. Carriage is in `wire-format.md` §5.8; the bundle itself is opaque to this
+  shape. Carriage is in `wire-format.md` §7.8; the bundle itself is opaque to this
   protocol, since only the endpoints hold the state to interpret it.
 - **Prekey exhaustion degrades forward secrecy rather than blocking messaging**: an
   attacker drains a target's one-time prekeys, after which sessions open from
@@ -5111,7 +5111,7 @@ the bundle.
 
 **The two fetch classes are structurally distinct on the wire, so intent need not
 be inferred.** A batch request names the population it sweeps; a single-subject
-request is visibly targeted (`wire-format.md` §5.8). **Asking that fetches be
+request is visibly targeted (`wire-format.md` §7.8). **Asking that fetches be
 *made independent of intent* would state a property no observer could check**, since
 the fact of a fetch is shared and the motive is not (§1.1).
 
@@ -5164,8 +5164,8 @@ but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.
   a **one-time key** is a metadata event (§14.2.2, C11), and spreading it changes
   who sees it. Serving reusable material is not.
 - **Payload-type demultiplexing.** Protocol objects ride the end-to-end channel —
-  capture key grants (`wire-format.md` §5.3), late verifier responses
-  (`wire-format.md` §5.4) —
+  capture key grants (`wire-format.md` §7.3), late verifier responses
+  (`wire-format.md` §7.4) —
   beside application payload, and nothing says how a recipient tells them apart.
 - **Crate maturity.** §5.2's audit caveat applies here too.
 
@@ -5219,7 +5219,7 @@ not the usual participants-patrons-witnesses set:
 
 | Class | Contents | Reach | Persistence |
 |---|---|---|---|
-| **Topology** | adoption (incl. Rotation/recovery and former transfer, §9.0), departure, disavowal, peering, node endpoint records (`wire-format.md` §5.6). **Resource registration is NOT in this class**, and is not a transaction at all — a signed entry goes to the hosting node and is answered on request, never propagated (§11.5) | **horizon** as the full transaction; **ancestors** as a memo only (§15.2) | stored within horizon, folded into aggregate state beyond |
+| **Topology** | adoption (incl. Rotation/recovery and former transfer, §9.0), departure, disavowal, peering, node endpoint records (`wire-format.md` §7.6). **Resource registration is NOT in this class**, and is not a transaction at all — a signed entry goes to the hosting node and is answered on request, never propagated (§11.5) | **horizon** as the full transaction; **ancestors** as a memo only (§15.2) | stored within horizon, folded into aggregate state beyond |
 | **Catalog** | resource registrations (§11.5) | **the hosting node alone**, answered on request | **current state only, and not archived** (§10): the host holds what it serves now, replaces it on re-registration, and keeps no history. Never propagated, and no copy exists to reconcile |
 | **Attestation** | presence records (§8.1), verifier responses, other trust-bearing transactions | **pull, not push** | stored by participants, their patrons, and witnesses; fetched on demand by evaluators |
 | **Attestation, point-to-point** | abuse reports (§11.6) | delivered to the addressed party only, never broadcast | stored by the resource owner alone. **Not** by patrons or witnesses, an abuse report is a private complaint, and giving it the generic attestation audience would make it the public accusation §6.2.2 declines to build |
@@ -5230,7 +5230,7 @@ not the usual participants-patrons-witnesses set:
 reach* is appropriate; a pattern says *how* that reach is achieved. Two patterns
 are in use:
 - **Flood-within-horizon.** The default for topology. Encoded at
-  `wire-format.md` §7.2a: forward if and only if you stored it, duplicate-suppressed
+  `wire-format.md` §10.1: forward if and only if you stored it, duplicate-suppressed
   by `txid`, with no hop count and no acknowledgement.
 - **Rootward memo.** A minified record of a membership change travels up the patron
   chain to its subnet's root (§15.2). This is what *ancestors* means in the table
@@ -5335,7 +5335,7 @@ increase in one must be paid for in the other.
 | Job | Section |
 |---|---|
 | Topology storage and gossip volume | §15.1 |
-| **Topology forwarding reach** | `wire-format.md` §7.2a — a node forwards what it stores, so `h_store` *is* the flood boundary |
+| **Topology forwarding reach** | `wire-format.md` §10.1 — a node forwards what it stores, so `h_store` *is* the flood boundary |
 | Permission scope evaluability | §11.4 |
 | Fanout depth for group operations | §14.3 |
 | Catalog **query** range | §11.5 — the nodes a client asks. The catalog is answered on request and never propagates, so this is a range of *asking*, not of replication |
@@ -5355,7 +5355,7 @@ other things. Anyone proposing to tune *h* should be shown this table.
 **Full transactions flood within the horizon; a minified memo of every membership
 change travels up the patron chain to its subnet's root.** That is
 what *ancestors* means in §15's class table, and the memo is the only topology
-object that leaves the horizon. Encoding: `wire-format.md` §7.2b.
+object that leaves the horizon. Encoding: `wire-format.md` §10.2.
 
 **A memo is a patron's statement about one of its own subordinate slots**: it names
 the patron, the patron's position, which slot, when, and who is in it — with an empty
@@ -5473,7 +5473,7 @@ deterministic sample of prior counterparties to confirm a subject is who they sa
 That is an anti-impersonation check, not the evaluation.
 
 **The floor is holder-relative in what it proves, not only in what it checks.**
-Candidate eligibility is structural — `wire-format.md` §4.6.4 admits a prior
+Candidate eligibility is structural — `wire-format.md` §5.4 admits a prior
 counterparty when the record is canonical and its signatures verify, and nothing
 weighs it — so volume worthless to an evaluator is **not** worthless to selection. A
 subject who manufactures counterparties owns the population their own verifiers are
@@ -5483,7 +5483,7 @@ enumerates that candidate set in order to choose from it and sees who is in it. 
 sample drawn wholly from identities the selector has never heard of returns `match`
 from strangers, which is worth what any fabricated history is worth to them —
 nothing. The intersection argument governs the sample too; it is not suspended
-because the protocol chose it. `wire-format.md` §4.6.7 already makes recomputation
+because the protocol chose it. `wire-format.md` §5.7 already makes recomputation
 holder-relative, and this is the same property one step further out.
 
 **Credibility is constructive and partitioned by domain.** You start at zero in
@@ -5715,7 +5715,7 @@ capture parameters, proximity — has no consumer here.
 
 **Presentation is a single head txid** (`wire-format.md` §4.1 field 7), from which
 the patron walks the chain backward and fetches what it wants
-(`wire-format.md` §5.9, archive fetch). **The patron chooses its own depth.** The presenter picks the head and
+(`wire-format.md` §7.9, archive fetch). **The patron chooses its own depth.** The presenter picks the head and
 cannot control how far back the recipient looks, so the party extending credit
 decides how much evidence it wants. On joining a new tree, the node presents a
 **contiguous run** of its archive to the new patron rather than the whole thing —
@@ -5845,7 +5845,7 @@ globally.
 
   **And the observation boundary is the provider, not the node.** Where a participant
   holds separate identities in two subnets whose serving nodes are hosted together,
-  one observer sees both mutually-authenticated attaches (`wire-format.md` §7.1) and
+  one observer sees both mutually-authenticated attaches (`wire-format.md` §9.1) and
   can join them on device and network signals. C14's withdrawal does not cover this:
   that reasoning turned on the new identity appearing under *a different serving node
   that sees only one*, which is sound against a node and says nothing about what sits
@@ -5911,7 +5911,7 @@ globally.
 - **A replayed rootward memo can cost one edge, without prejudice.** A memo
   describing a patron's *current* slot state, captured below and re-injected upward,
   matches that patron's own row and is indistinguishable from a memo that came back
-  around a cycle (`wire-format.md` §7.2b). Stale replays are stopped by the slot's
+  around a cycle (`wire-format.md` §10.2). Stale replays are stopped by the slot's
   timestamp at the first table-holding hop; this one is not. **Bounded on three
   sides**: the injector must sit at or below one of the detector's direct
   subordinates, the edge severed is the one that handed the memo over, and the
@@ -5932,7 +5932,7 @@ globally.
   never publish a position or endpoint change again, which §6.2.1 names as fatal on its
   own terms. **Closed rather than accepted**: the counter is half of a `{series,
   counter}` pair, series are arbitrary and unordered, and advancing to a new one is
-  countersigned by the patron (`wire-format.md` §4.8). A thief holding only the subject
+  countersigned by the patron (`wire-format.md` §4.6). A thief holding only the subject
   key cannot make that transaction, and cannot pre-poison the space either — with no
   global registration of series, it would have to exhaust 2³² **and reach every party
   it wanted to block with every one of them.** Residual: the patron must not countersign
@@ -5945,7 +5945,7 @@ globally.
   the live participant's face (§7.1). The colluder's client substitutes a profile,
   the stolen key countersigns it, and **the thief signs the record whatever comes
   back**, since every response category counts structurally toward finalization
-  (`wire-format.md` §4.6.5) and the subject-side refusal §7.4 relies on is the
+  (`wire-format.md` §5.5) and the subject-side refusal §7.4 relies on is the
   thief's to make. The colluder is then a prior counterparty, positioned to supply the
   recognition half of §9.1's recovery. **Two bounds hold**: honest verifiers'
   signatures are unforgeable, so adverse results are visible to anyone who weighs
@@ -6236,7 +6236,7 @@ work. **Open.**
 
 **The selection input reaches a different party than the responses do.** To select
 the other's verifiers a participant needs a candidate set, and the subject supplies it
-as records rather than names, since `wire-format.md` §4.6.4 counts only what verifies.
+as records rather than names, since `wire-format.md` §5.4 counts only what verifies.
 §8.1.1's sweep already records the fact, giving verifier-selection recomputation's
 reads as *"nonces, seed, candidate set"*; what was never priced is who receives it —
 the person in front of you rather than a later evaluator.
@@ -6310,8 +6310,8 @@ and a citation to a missing number resolves there.
 | **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§19.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. Corrected as a reference-client obligation, not yet a demonstrated one |
 | **P24** | **A gateway operator sees their subnet's external traffic** (§11.7) | **Medium, reduced** | Socially trusted is not accountable, and the design ensures no patron sees payload content (§14.2) while a gateway hands a subnet member exactly that one layer up. **The user can now evaluate before routing**: the signed `CatalogEntry` binds the service to what the owner published and carries a declared `data_practice`, and it reaches them at catalog lookup — which precedes any connection (§11.5). **The residual is that a declaration is a claim, not a guarantee** (§1.1), and the operator sees the traffic whatever they declared. Beyond that the remedy is not to use the resource |
 | **P25** | **A hosted operator can invert a pairwise principal identifier** (§11.0.2) | Low | They know the resource identity and their own org's keyhashes, so one hash per member recovers the mapping. Deliberate, the scheme withholds network identity from parties who do not already know you, not from the operator you chose |
-| **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §5.7) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
-| P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§11.6) | **Low, reduced** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §4.7), which limits volume rather than kind |
+| **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §7.7) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
+| P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§11.6) | **Low, reduced** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §6), which limits volume rather than kind |
 | P28 | **Source photographs may carry EXIF and contextual background** (§7.5) | Low | See C17. Encryption under the subject's keystream (§7.5.2) means a compliant client holds nothing readable; stripping still applies because a legitimate decryption during verification puts plaintext in the holder's hands |
 | **P29** | **A ceremony counterparty holds the victim's raw capture indefinitely** (§7.5) — **substantially answered by §7.5.2** for compliant clients, where the capture is ciphertext the subject holds the key to | Medium–High | Retention is a client commitment with no detection mechanism (P13). An adversary attending one meeting acquires a biometric sample joined to a record naming time, coarse place and social position. The ceremony is a collection event as much as an evidence event, and the victim consents to the second |
 | P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
@@ -6319,8 +6319,8 @@ and a citation to a missing number resolves there.
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§23.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
-| **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.8): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
-| **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §4.6.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive — but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
+| **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
+| **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §5.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive — but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
 
 ### 19.5 Queue policy had to settle more than size
 
@@ -6453,7 +6453,7 @@ ceremony.
    all (§9.0.2).
 
    **The body omits a querier field, and that hides nothing from the responder.**
-   Transport authentication is mutual (`wire-format.md` §7.1), so the party
+   Transport authentication is mutual (`wire-format.md` §9.1), so the party
    answering knows which identity asked and can join querier, subject and time
    whatever the schema leaves out. **The omission is not a privacy property against
    the issuer**; what limits exposure is frequency, which stapling and
@@ -6658,8 +6658,8 @@ are all **chosen**, not derived.
 | — | Currency attestation lifetime | ~10 h | Security parameter, not a cache knob; Kerberos-anchored (§12.6.5) |
 | — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2) |
-| — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §7.2) |
-| — | Verifier-selection seed window | **24 hours**, epoch-aligned | An honest retry inside the window reproduces the *same* sample, which is what retry should do. It does **not** bound an aborting attacker to one sample per day: the ordinal comes from the claimed `started_at`, so the budget is the span since the signer's last committed record (§8.1.2, `wire-format.md` §4.6.3) |
+| — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
+| — | Verifier-selection seed window | **24 hours**, epoch-aligned | An honest retry inside the window reproduces the *same* sample, which is what retry should do. It does **not** bound an aborting attacker to one sample per day: the ordinal comes from the claimed `started_at`, so the budget is the span since the signer's last committed record (§8.1.2, `wire-format.md` §5.3) |
 | — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 
 ### 21.1 Unset parameters, the implementation checklist
@@ -6697,7 +6697,7 @@ than by the chooser:
 
 **Needs an encoding decision.** Wire-format work: **none remain.** The last was
 capability parameter ids, resolved by deriving ids from namespaced names so that
-nobody assigns them (`wire-format.md` §6.1). The heading is kept because the category
+nobody assigns them (`wire-format.md` §8.1). The heading is kept because the category
 is real and the next unset parameter may fall into it.
 
 #### 21.1.1 How provisional a provisional value is
@@ -6871,7 +6871,7 @@ does block.
 
 **Resource interaction is specified on both halves.** The catalog path —
 registration, query and reply, entry lifecycle as local state (`wire-format.md`
-§4.7) — and the request/response path — §8.2's normative evaluation order and
+§6) — and the request/response path — §8.2's normative evaluation order and
 refusal behaviour, with the role row consulted as a lookup.
 
 ---
@@ -6910,7 +6910,7 @@ refusal behaviour, with the role row consulted as a lookup.
 
 - **Autonomous participation** and the attention question depending on it (§22). Not to
   be implemented in this or any intervening version.
-- **Canonical test vectors** (`wire-format.md` §9), until the encoding stops moving
+- **Canonical test vectors** (`wire-format.md` §13), until the encoding stops moving
   and someone other than the author writes them.
 - **Transaction types beyond the seven**, and **multiple identities per client** (§4) —
   a v1 client-scope exclusion, not a protocol limit.
@@ -6925,7 +6925,7 @@ refusal behaviour, with the role row consulted as a lookup.
 
 ### 23.3 Test vectors, and what a test suite would add
 
-**Canonical test vectors are absent by decision** (`wire-format.md` §9). They do
+**Canonical test vectors are absent by decision** (`wire-format.md` §13). They do
 not block *building*; they block **demonstrating** that two implementations agree,
 which is a later and different thing. Vectors written against a design still in
 motion become a second artefact to keep in sync, and cross-artefact drift is this

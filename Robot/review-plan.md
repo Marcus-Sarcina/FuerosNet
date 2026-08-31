@@ -486,12 +486,12 @@ below.)*
    one — the materialised table holds a row per member of the owner's Dunbar Org
    (design §11.4), so most askers have no row at all and the lookup misses.
 9. **Flood a topology transaction and publish an endpoint record**
-   (`wire-format.md` §7.2a, §5.6): receive a `TopologyPush`, decide whether to
+   (`wire-format.md` §10.1, §5.6): receive a `TopologyPush`, decide whether to
    store and forward it, suppress the duplicate that arrives back through a peering
    cycle, and build the child table a patron refers from. Exercises the body-kind
    tag, forward-if-stored, `txid` versus `(keyhash, seqno)` identity, and a record
    that supersedes rather than accumulates.
-10. **Forward a rootward memo and detect a cycle** (`wire-format.md` §7.2b): apply
+10. **Forward a rootward memo and detect a cycle** (`wire-format.md` §10.2): apply
     a memo to a table keyed on the subject's own `seqno`, forward it to your patron,
     and fire the in-path check when one arrives naming your own position. Exercises
     ordering under out-of-order arrival, the malformed equal-`seqno` case, and the

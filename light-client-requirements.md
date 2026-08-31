@@ -65,7 +65,7 @@ that is noted in place.
 - **Derive your nonce as the PRF specifies, and never freshly per attempt.** A fresh
   nonce on a retry hands the participants a new sample per abort, which is the attack
   commit-reveal exists to close, and a completed record cannot show that you did it
-  (`wire-format.md` §4.6.2.1).
+  (`wire-format.md` §5.2.1).
 
 ### 1.1 Capture
 
@@ -88,7 +88,7 @@ that is noted in place.
   unlock your likeness everywhere, in the same way and for the same reason as losing
   portable standing (design §10.2).
 - **Send a capture key as a `KeyGrant` naming both the record and the query it
-  answers** (`wire-format.md` §5.3). A grant arriving unattached to a query the
+  answers** (`wire-format.md` §7.3). A grant arriving unattached to a query the
   subject countersigned is an unsolicited key release; treat one as malformed rather
   than opening your store.
 - **Withhold a presence record's disclosable fields by default** (design §8.1.1),
@@ -182,15 +182,15 @@ job.
 
 - **Never take a series reissue into a series you have occupied before.** The abandoned line's
   high-counter records would come back into comparison against the new one
-  (`wire-format.md` §4.8). You hold your own chain, so this is yours to check, and a
+  (`wire-format.md` §4.6). You hold your own chain, so this is yours to check, and a
   counterparty holding that chain will reject a reissue that repeats a series in it.
 - **Keep the chain that proves your current series** — your adoption and every reissue
   since — and present it when a counterparty needs to rank two of your records
-  (`wire-format.md` §4.8.1). It is presented, never propagated, and it discloses the age
+  (`wire-format.md` §4.6.1). It is presented, never propagated, and it discloses the age
   of your patron relationship and how many reissues you have taken.
 - **On suspected key compromise, seal before you take a series reissue.** Set the counter of the
   series you are leaving to its maximum, then take the reissue naming that value, and
-  do it for every patron relationship you hold (`wire-format.md` §4.8). Nothing the
+  do it for every patron relationship you hold (`wire-format.md` §4.6). Nothing the
   holder of your old key signs can then supersede your last record in that line.
   **Act on suspicion**: against a counterparty that holds no chain this is a race, and
   the thief wins it by reaching them first.
@@ -235,7 +235,7 @@ job.
   Presenting less history means presenting an *earlier* head; there is no other way
   to truncate, and none is needed. Present encoding: a single head txid on adoption
   (`wire-format.md` §4.1).
-- **Serve archive requests for your own archive** (`wire-format.md` §5.9). The
+- **Serve archive requests for your own archive** (`wire-format.md` §7.9). The
   subject holds their archive, so a patron evaluating you fetches from you — this
   is peer-to-peer payload, not something an infra node serves on your behalf.
 - **When fetching someone else's archive, verify the chain yourself.** Each
@@ -257,14 +257,14 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Publish a prekey bundle and keep it stocked.** A subject with no one-time
   prekeys left falls back to the last-resort key, which is a **declared reduction
   in forward secrecy.** Not a state to remain in. Replenish
-  well before exhaustion (`wire-format.md` §5.8).
+  well before exhaustion (`wire-format.md` §7.8).
 - **Rotate the signed prekey on a policy interval**, and never reuse a one-time
   prekey.
 - **Only leaf-to-leaf needs this.** Sessions to a patron or a resource terminate at
   an endpoint that is online by definition and are already covered by the transport
   handshake (design §14.2.4).
 - **Prefetch reusable prekey material for the whole Dunbar Org as a batch request**
-  (`wire-format.md` §5.8), which is structurally distinct from a targeted fetch —
+  (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
   someone rotated — rather than intent to message. Fetching on demand instead
   announces each intended conversation to whoever serves the bundle (design
@@ -282,7 +282,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Dial the serving infra node**, which is the nearest infrastructure node on the
   patron chain and not necessarily the patron (design §14.1.2).
 - **Treat a sibling whose `KeyMaterial` you lack as unusable**, not as one to dial
-  unauthenticated (`wire-format.md` §6). There is no fetch path: the party that
+  unauthenticated (`wire-format.md` §8). There is no fetch path: the party that
   would serve one is the node that is down.
 - **A failed or partial cache load means no cached siblings**, not a partial list.
   Failing over on uncertain data is worse than reporting disconnection, because the
@@ -290,7 +290,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Persist the cached sibling list across restarts.** It is pushed at attach
   precisely because it cannot be discovered once the serving node is dark, and an
   in-memory-only client loses failover exactly when a crash coincides with that
-  outage (`wire-format.md` §6).
+  outage (`wire-format.md` §8).
 - **Use the cached list when the serving node is unreachable at attach time**, not
   only when a session dies mid-flight. The three-missed-intervals rule presupposes
   an established session; a client that waits for one can never fail over from a
@@ -317,7 +317,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Check each referral, not an arrival total.** A referral's `advances` must be at
   least 1 and must not advance past the path's end; arrival is announced by the
   `ServingInfra` reply itself, and no arrival-consistency equation is checked
-  (`wire-format.md` §5.7) — it would reject the direct-serving answer a
+  (`wire-format.md` §7.7) — it would reject the direct-serving answer a
   deeper-cached node is permitted to give.
 - **Retry and endpoint-selection policy is yours**, with two floors: treat a node's
   endpoint list as alternatives rather than stopping at the first failure, and treat
@@ -381,7 +381,7 @@ session secrecy. The client implements them; it does not reinvent them.
 ## 8. Resources
 
 - **Register a resource with your serving node, not with the network**
-  (`wire-format.md` §4.7, request type 7). You sign the entry, your host answers for
+  (`wire-format.md` §6, request type 7). You sign the entry, your host answers for
   it, and the `discover_scope` you send is a request the host may narrow — an
   owner delegating hosting delegates that filtering. **What you send is the signed
   entry itself**, not a transaction: it enters no archive, chains to nothing, and the
@@ -395,7 +395,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **A repeated continuation means truncation, not another page.** If a reply fills
   the entry bound and its continuation names a service type you have already
   filtered on, the answering node holds more entries of that type than the bound
-  and asking again returns the same page (`wire-format.md` §4.7). Record that
+  and asking again returns the same page (`wire-format.md` §6). Record that
   node's portion as truncated, as you would an unreachable one, and do not follow
   the hint again.
 - **Give the user a refresh control** and let a stale view be stale. A new resource

@@ -83,7 +83,7 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 
 | Leg | Transport | Framing |
 |---|---|---|
-| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §7.3) — not a stream-0 control frame. No HTTP |
+| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §11) — not a stream-0 control frame. No HTTP |
 | **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
 
 **The second leg often does not exist at all.** design §11.7's
@@ -161,7 +161,7 @@ This pattern is most commonly misimplemented in exactly one way, so both halves 
 stated as requirements:
 
 - **The node parses the HTTP message and re-serialises it; it does not forward your
-  caller's bytes** (`wire-format.md` §7.3.2). Anything ambiguous is rejected rather
+  caller's bytes** (`wire-format.md` §11.2). Anything ambiguous is rejected rather
   than normalised, and exactly one message is emitted per request. **You receive what
   the node's parser produced**, which is what makes the header replacement below
   meaningful.
@@ -413,7 +413,7 @@ resource.**
 
 **Consequence:** `discover_scope` is a filtering rule the node applies when
 answering, and is **no part of the entry**. An owner may *request* one when it
-registers (`wire-format.md` §4.7), and the host may narrow or ignore it; nothing
+registers (`wire-format.md` §6), and the host may narrow or ignore it; nothing
 carries it to an asker, because receiving an entry is what qualifying looks like.
 **Nothing propagates** — the node returns what an asker may see and omits the rest
 (design §11.5), so there is no second path needing the scope on the wire.

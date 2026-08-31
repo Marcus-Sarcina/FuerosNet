@@ -39,8 +39,8 @@ that is noted in place.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
-- **Include each sibling's full `KeyMaterial` in the list** wherever the client may not already hold it — the field is optional on the wire (`wire-format.md` §6) so a node that knows the client has it may omit it, but omitting it from a client that does not is what makes first failover fail
-  (`wire-format.md` §6). A client that has never contacted a sibling cannot
+- **Include each sibling's full `KeyMaterial` in the list** wherever the client may not already hold it — the field is optional on the wire (`wire-format.md` §8) so a node that knows the client has it may omit it, but omitting it from a client that does not is what makes first failover fail
+  (`wire-format.md` §8). A client that has never contacted a sibling cannot
   authenticate it otherwise, the handshake presents the classical component while
   the keyhash commits to the pair.
 - **Push the sibling list at attach.** A client cannot discover failover targets
@@ -81,7 +81,7 @@ that is noted in place.
 ## 4. Resolution
 
 You are the party that answers resolution queries. This is the network's primary
-operation (design §12.6.1, `wire-format.md` §5.7).
+operation (design §12.6.1, `wire-format.md` §7.7).
 
 ### 4.1 What you must hold
 
@@ -96,7 +96,7 @@ constant regardless of network size — the aggregation argument design §12.6.1
 
 **An anchor table**, for starting points you did not learn out of band. Entries are
 gossiped and **their signatures cannot be checked on receipt** — an entry carries
-the anchor's keyhash, not its key (`wire-format.md` §5.2). **State plainly which
+the anchor's keyhash, not its key (`wire-format.md` §7.2). **State plainly which
 model you implement**: entries verified on acceptance, possible only where the key
 is already pinned, or an unverified cache checked at contact. Treating gossip as
 verified gives you a partition vulnerability with no symptom.
@@ -132,14 +132,14 @@ guarantee, which is a floor rather than a ceiling.
 - **Collapse forwarding chains at the source**: follow the chain and return the
   terminal record, not the next hop (design §12.3).
 - **Keep the topology store across a restart — it is your seen-set.** Forwarding is
-  *forward if and only if you stored it* (`wire-format.md` §7.2a), so duplicate
+  *forward if and only if you stored it* (`wire-format.md` §10.1), so duplicate
   suppression is a property of the store rather than of a separate cache. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
 
 ### 4.4 How you learn an infra child's endpoints
 
-**An infra node publishes a signed endpoint record** (`wire-format.md` §5.6), carried
+**An infra node publishes a signed endpoint record** (`wire-format.md` §7.6), carried
 in the topology class, so its address reaches its patron and the rest of its horizon.
 A light client's endpoints arrive when it attaches (§1); an infra child does not
 attach to you — it serves itself — so without this record nothing delivered its
@@ -202,7 +202,7 @@ design §14.2.4 adopts PQXDH, whose asynchronous property depends on someone
 holding a subject's prekeys while that subject is offline. That someone is the
 serving node.
 
-- **Hold and serve prekey bundles for attached clients** (`wire-format.md` §5.8).
+- **Hold and serve prekey bundles for attached clients** (`wire-format.md` §7.8).
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
   carries no intent signal (design §14.2.4).
@@ -312,7 +312,7 @@ changes mid-request terminates the *session* (§9.4), which stops the next reque
 it does not reach into one already running, and a node that tried would be tearing
 down work whose result the resource may already have committed.
 
-**Evaluate in the order `wire-format.md` §7.3 gives**: existence, membership,
+**Evaluate in the order `wire-format.md` §11 gives**: existence, membership,
 acknowledgement, the role row, the carried request's own well-formedness, then
 availability. **Existence comes first because membership is owner-relative** — a
 keyhash you do not host has no owner, so there is no membership question to ask
@@ -323,7 +323,7 @@ owner inside the set entitled to it.
 
 **Answer a member specifically and a stranger opaquely.** The gate has already told
 you which you are talking to, so use it: a member lacking a `SubtreeAck`, or whose
-role row grants no `connect`, gets the reason (`wire-format.md` §7.3), because they
+role row grants no `connect`, gets the reason (`wire-format.md` §11), because they
 can act on it and already hold the topology it describes. **You answer from the row,
 not by evaluating a predicate** (§9.2). **A non-member gets `refused` for
 everything**, including a resource keyhash that names nothing — otherwise a stranger
@@ -332,7 +332,7 @@ enumerates what you host by watching which lookups differ.
 **Above the patron level, membership alone does not admit.** A node adopted into
 your subtree lands inside your Dunbar Org automatically, which means **a subordinate
 can put strangers inside your gate without asking you**. Require your own
-`SubtreeAck` (`wire-format.md` §5.5) before granting such a node access to
+`SubtreeAck` (`wire-format.md` §7.5) before granting such a node access to
 resources you host (design §11.2.1).
 
 - **Issue it automatically, under a policy the operator set beforehand.** The
@@ -499,7 +499,7 @@ horizon asks what you have; you return the entries you **own** and that asker ma
 see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
 - **Accept registrations only from the owner's own session** (`wire-format.md`
-  §4.7, request type 7). An entry is owner-signed and therefore relayable by
+  §6, request type 7). An entry is owner-signed and therefore relayable by
   anyone, so accepting one from any peer means accepting a **replayed earlier
   envelope** — and because you keep whichever you applied last, that silently
   reverts the owner's current entry. The check is free: the owner is attached to
@@ -512,12 +512,12 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   qualifying looks like, and a field carrying it would tell the asker how they were
   selected.
 - **Hold one current entry per resource, whoever owns it.** A `ResourceRequest`
-  names the resource and nothing else (`wire-format.md` §7.3), so if you served two
+  names the resource and nothing else (`wire-format.md` §11), so if you served two
   claims for one keyhash you would have nothing to pick between them with — and
   picking wrong applies one owner's membership and roles to another owner's backend.
   **Refuse a registration for a keyhash you already serve under a different owner.**
 - **Re-registering by the same owner replaces the entry, and the old one is gone.**
-  **A registration is not archived** (design §10, `wire-format.md` §4.7): the archive
+  **A registration is not archived** (design §10, `wire-format.md` §6): the archive
   advances on adoption, departure, disavowal, peering and presence, and this is none
   of them. Keep a live table of what you currently serve and answer from it. **Do
   not retain superseded registrations** — nobody needs a record of a resource its
@@ -534,7 +534,7 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   time (§9.1).
 - **Return the owner's signature unchanged, and add none of your own.** An entry is
   signed once at registration and that signature is reused for every answer
-  (`wire-format.md` §4.7). It keeps the entry attributable **to its owner** wherever
+  (`wire-format.md` §6). It keeps the entry attributable **to its owner** wherever
   it travels; a per-answer signature from you would make one entry's bytes differ
   between askers and would attribute the claim to the wrong party.
 
