@@ -341,7 +341,7 @@ The `seqno` here **is** design §6.2.1's sequence number, not a separate field
 (design §6.2). Its **counter** is incremented on every position change **and on every
 endpoint change** (§5.6), serving both as freshness test and stale-cache detector; its
 **series** identifies which line those counts belong to and is advanced only by §4.8's
-patron-countersigned refresh. **One series per patron relationship** is the expected
+patron-countersigned reissue. **One series per patron relationship** is the expected
 shape — a node bound under two patrons keeps two, which is what stops its counts in one
 subnet disclosing its activity in another (design §14.5.4, P36).
 
@@ -451,7 +451,9 @@ Each participant's archive is a hash chain, so sequence
 position is as trustworthy as the record itself. Because the back-pointer sits in
 the **signed body**, altering a record's position requires forging the *next*
 record's back-pointer, which its counterparty already signed. Excision is
-therefore impossible; only truncation to a prefix remains.
+therefore impossible; only truncation remains, and it cuts at the ends rather than
+the middle — an earlier head drops what is recent, a checkpoint drops what is early
+(design §8.1, §8.2).
 
 **This applies to every transaction type, not only presence records.** Adoption,
 departure, disavowal and peering all advance their signers' chains. A signer with
@@ -715,7 +717,7 @@ accepting an unverified object.
 | 4 | Peering | both infra nodes | Topology |
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
 | 6 | Abuse report | the reporting resource only | Attestation (point-to-point, never broadcast) |
-| 7 | Series refresh | node + patron | Topology |
+| 7 | Series reissue | node + patron | Topology |
 
 Type 6 carries an `AbuseReport` (design §9.6) addressed to a resource owner.
 
@@ -901,8 +903,10 @@ stops recognising counterparties. Merges need no special handling, a record with
 two back-pointers means both branches are reachable and both get walked.
 
 **Truncation needs no grammar.** A subject presenting less history presents an
-*earlier* head. That is the only edit the chain permits (design §8), so the
-field cannot express anything the archive model does not already allow.
+*earlier* head, and this field expresses that and nothing else. The chain's other
+edit — dropping what is early — is carried by the checkpoint that licenses it
+(§4.8, design §8.2) rather than by anything here, so the field still cannot express
+what the archive model does not already allow.
 
 **The patron chooses its own depth**, which is the right asymmetry: the presenter
 picks the head and cannot control how far back the recipient looks, so the party
@@ -1577,6 +1581,14 @@ predecessor set and count each `txid` once. An implementation written when the
 archive was a chain would double-count across merged branches and derive a
 different threshold.
 
+**This defines the set; it does not grant access to it.** A selecting counterparty
+computes *n* and the candidate set over the records the subject **hands it**, not by
+reaching into the subject's archive — nothing here entitles anyone to enumerate
+another party's history, and design §7.2.2 states the bundle model and what a
+recipient can and cannot check about it. The traversal rule is what makes a supplied
+bundle checkable: records must chain, so a bundle with a record missing from the
+middle fails to connect and is detectable as incomplete.
+
 **Only verified history is counted.** A record feeds *n* and the
 candidate set only if it is canonical, its content address checks, and its
 signatures verify — reachability alone admits nothing. Counting
@@ -2048,7 +2060,7 @@ with no requirement to do both.
 
 ---
 
-### 4.8 Series refresh (type 7)
+### 4.8 Series reissue (type 7)
 
 **Starts a new `seqno` series for the node and does nothing else.** Two signers, the
 node and its patron.
@@ -2074,23 +2086,23 @@ one operation that repairs an exhausted or poisoned counter.
 32-bit counter advanced only on position and endpoint changes will not exhaust in a
 lifetime, so **the top of the range is dead space the legitimate holder can spend.**
 A node that believes its key is compromised sets the counter it is leaving to the
-**maximum**, then refreshes naming that value — after which nothing the thief signs
+**maximum**, then reissues naming that value — after which nothing the thief signs
 can supersede it, since a strictly greater counter does not exist and an equal one
 carrying different contents is malformed (§5.7.3). **The exhaustion that made the
 attack possible is the same move that closes the abandoned line behind you.**
 
 **Order matters, and the schema enforces it.** Field 3 records the counter the old
-series reached, so sealing must happen *before* the refresh or the chain will name a
-departure point later records contradict. Seal, then refresh, then repeat for every
+series reached, so sealing must happen *before* the reissue or the chain will name a
+departure point later records contradict. Seal, then reissue, then repeat for every
 other patron relationship whose line is worth securing.
 
 **Sealing is unilateral, and that is the point.** It is an ordinary self-signed
 locator at the top of the counter (§2.3's standalone carriage form) — no patron, no
-transaction, no countersignature. Only the *refresh* needs the patron, because only
-the refresh creates new room. So a node can seal a line toward parties it has no
+transaction, no countersignature. Only the *reissue* needs the patron, because only
+the reissue creates new room. So a node can seal a line toward parties it has no
 standing relationship with, in subnets where it holds no membership and could not
-refresh even if it wanted to. What it cannot do is undo it: a sealed line is spent,
-and reopening means a refresh and the countersignature that requires.
+reissue even if it wanted to. What it cannot do is undo it: a sealed line is spent,
+and reopening means a reissue and the countersignature that requires.
 
 **A chain-holder does not need the seal.** Anyone holding §4.8.1's chain knows which
 series was abandoned and **MUST reject records in it** whatever their counter. The
@@ -2113,7 +2125,7 @@ confers no continuing ability; it removes the series from use by everyone.
 **So a thief who seals first burns a line rather than capturing one.** The parties it
 reached first hold a frozen entry pointing where that record pointed, and the thief
 cannot develop it: no further transaction in that series will be recognised by anyone
-holding the seal. **The `keyhash` is untouched** — the legitimate holder refreshes into
+holding the seal. **The `keyhash` is untouched** — the legitimate holder reissues into
 a fresh series with the patron's countersignature, which the thief cannot obtain
 (§4.8), and continues. What the thief destroyed is one line the holder was leaving
 anyway. The cost is re-contact for the parties that took the thief's seal: a chain
@@ -2130,7 +2142,7 @@ contact, which design §10.3 Case 0 makes an out-of-band act.
 **The new series MUST NOT be one the node has previously occupied.** Reusing one
 brings its abandoned high-counter records back into comparison against the new line.
 The node knows its own history, so this is local bookkeeping — and it is **checkable
-by anyone holding the chain**, who MUST reject a refresh naming a series already in it.
+by anyone holding the chain**, who MUST reject a reissue naming a series already in it.
 
 #### 4.8.1 Proving which series is current
 
@@ -2139,11 +2151,11 @@ series by presenting:
 
 - its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno` — and so the
   series — that the patron countersigned at that moment; and
-- **each series refresh since**, each naming the series left and the series entered.
+- **each series reissue since**, each naming the series left and the series entered.
 
 Every object in that chain is countersigned by the patron named in the node's own
 path, so a recipient already knows the key that must have signed it. The chain
-discloses the age of the patron relationship and the number of refreshes taken, and
+discloses the age of the patron relationship and the number of reissues taken, and
 nothing else about what the node did.
 
 **Chain length is the order.** Where two presented chains share an adoption and one
@@ -2152,8 +2164,8 @@ successors countersigned by the same patron — patron equivocation, attributabl
 that patron by its own signatures, and handled the way this design handles
 equivocation everywhere: made visible rather than prevented.
 
-**A refresh is not a move.** Routing walks `anchor` and `path` (design §10.3), neither
-of which a refresh touches, so cached locators keep working and no correspondent has to
+**A reissue is not a move.** Routing walks `anchor` and `path` (design §10.3), neither
+of which a reissue touches, so cached locators keep working and no correspondent has to
 be told. What changes is only which records rank against which.
 
 ## 5. Attestations and records
@@ -2618,7 +2630,7 @@ equal `seqno` with different contents malformed rather than a tie to break, sinc
 subject advances its own counter (§2.3). **Two locators in different series do not
 rank**, and a reader holding both has learned nothing about which is current — it
 either holds a §4.8 chain that says, or it re-resolves (design §10.3). **A series
-refresh does not disturb routing**: the path is unchanged, so a cached locator still
+reissue does not disturb routing**: the path is unchanged, so a cached locator still
 reaches the subject, and the comparison only matters once the position moves as
 well — at which point the cached path is stale on its own account.
 

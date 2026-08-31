@@ -982,7 +982,7 @@ The old patron does not sign. **This is the escape hatch that makes exit a real
 right**, and no rule may condition it on the patron's cooperation.
 
 Each node signs a **sequence number** on every position change — and, for an infra
-node, on every endpoint change (`wire-format.md` §2.3, §5.6). Not consensus, a
+node, on every endpoint change (`wire-format.md` §2.3, `wire-format.md` §5.6). Not consensus, a
 freshness test, letting any observer order a node's own competing claims without a
 clock and detect a stale record a revocation failed to reach.
 
@@ -991,7 +991,7 @@ an arbitrary label that orders nothing; records in different series do not rank
 against each other at all. **A counter can be exhausted, and that is why**: whoever
 holds a node's key can sign one record at the top of the range, after which no
 successor exists and the node can never publish a position or endpoint change again.
-Advancing to a fresh series is what repairs it, and a **series refresh is
+Advancing to a fresh series is what repairs it, and a **series reissue is
 countersigned by the patron** (`wire-format.md` §4.8) — so the key alone cannot make
 one, and a thief cannot follow the legitimate holder into a new series. Because the
 series is arbitrary and nothing registers it globally, an attacker cannot pre-empt the
@@ -1209,6 +1209,23 @@ Deliberately costly transactions attesting that two users met in person.
   from one who has not. Since PoP is not enforced at adoption, this distinction
   is what makes the unenforced version safe: an unattested adoption carries
   little weight, and observers can see which kind they are looking at.
+
+**The ceremony's first product is not the record.** Two people met. Each can now
+recognise the other, and each has grown their own graph by a party they trust on
+their own account — §1.2.1's second property already says a participant knows which
+meetings happened where a holder of identical records does not. **The record is the
+residue a ceremony leaves for people who were not there**, and everything spent on
+witnesses, verifiers and deterministic selection is spent on that residue rather than
+on the meeting.
+
+**So a thin ceremony is weaker evidence, not a weaker meeting.** Fewer witnesses, or
+a candidate pool in which the counterparty recognises nobody, cost the record its
+weight with third parties and cost the counterparty its assurance about
+**continuity** — whether the person present is the one this key's history belongs to.
+Neither touches what both parties actually acquired: a face they will know again. A
+subject may therefore disclose narrowly and accept a record that persuades fewer
+people, and a counterparty may accept a thin one because the meeting is worth having
+on its own terms.
 
 **What this primitive is.** Bilateral collusion is unpreventable, two parties
 who both want to fake a meeting hold both key sets and can simulate every step,
@@ -2437,6 +2454,23 @@ to them.
 counterparties to establish that B is B, and B queries A's, so the party who
 *performs* a selection is never the party it is *about*.
 
+**The candidate set comes from a bundle the subject hands over, not from a walk.**
+A counterparty computes *n* and the candidate set from presence records the subject
+supplies. **Nobody walks another party's archive to discover their meetings** —
+there is no entitlement to it and no mechanism for it. §13.7's fetch-and-walk is the
+*adoption* disclosure, driven by a prospective patron deciding how much evidence it
+wants; this is not that. What a bundle's recipient can check is that the records
+verify and chain to the commitment. What they cannot check is that the bundle is
+complete.
+
+**So the pool is the subject's and the sample within it is not**, which is the
+precise scope of the rule above. Determinism stops a participant steering the sample;
+it does not stop them choosing what to put in front of the selector. **What protects
+the selector is recognition, not completeness** (§13.1): a pool holding nobody they
+know returns `match` from strangers, worth what any unrecognised history is worth to
+them. A curated bundle therefore costs its author credibility rather than buying them
+a verdict, and that is the same intersection test applied everywhere else here.
+
 **State the property from the subject's side, because the subject is the party with
 the interest.** B must be able to demonstrate that B's verification was honestly
 conducted, using the record and B's own history. **If B cannot recompute the
@@ -2640,8 +2674,8 @@ which the presence layer answers rather than the routing layer. **Affirmative cl
 for the parties you reach, and silence about the rest**, which is the right division
 because the two face different attacks.
 
-**Burning a key outright needs no mechanism of its own: rotate, and never refresh.**
-A series is continued by a patron-countersigned refresh (`wire-format.md` §4.8), so
+**Burning a key outright needs no mechanism of its own: rotate, and never reissue.**
+A series is continued by a patron-countersigned reissue (`wire-format.md` §4.8), so
 declining to take one leaves the sealed line as the last word that key will ever have.
 Sealing and continuing is a repair; sealing and stopping is a retirement. **The
 difference is entirely in what the subject does next**, and the protocol needs no
@@ -2978,7 +3012,7 @@ same connection.* Present encoding: rotation records chain old key to new.
 ## 8. The archive
 
 **Every transaction advances its signers' archives.** Adoption, departure,
-disavowal, peering and presence alike. The archive is what makes a history
+disavowal, peering, series reissue and presence alike. The archive is what makes a history
 presentable to a party who was not there, and what stops that history being edited
 after the fact.
 
@@ -2993,6 +3027,33 @@ duration for what they used to run.
 It is introduced here rather than under proof of presence because it is not a
 presence mechanism: presence records are the largest thing it carries, not its
 subject.
+
+### 8.0 The kinds of history, and what each is for
+
+**Five mechanisms are routinely spoken of as though they were one.** They differ in
+what they establish, who governs them, and whether they are evidence at all.
+
+| Kind | What it is | What it establishes | Governance and retention |
+|---|---|---|---|
+| **Transaction archive** | Each signer's own hash chain over the topology and presence transactions it signed | The history presented at an adoption. **Continuity is proven by the chain** | The node's own. Prunable at a checkpoint, floored at the 730-day window (§8.2) |
+| **PoP records** | The signed artifact of a face-to-face ceremony (§7.2) | That two people met, and the **witnesses and verifiers available for a later ceremony with anyone**. Potent under any sequence and in any subtree | **Not patron-countersigned** (§6.4). A PoP **is** a transaction and enters the archive like any other — but the chain does not govern its *use*: identifying validators for a later ceremony does not depend on the archive's continuity, and a counterparty is **handed a bundle rather than walking the archive** (§7.2.2). They survive pruning of the chain that carried them |
+| **Sequence number** (`counter`) | Freshness for asynchronously updated routing information (`wire-format.md` §2.3) | Which of two locators for one node is current | **Not history, and not an enforcement mechanism.** Neither the archive nor its chain |
+| **Seqno series** | A grouping of sequence numbers, generally though not necessarily bound to one subnet or to a run of subnet memberships | That one user has several routing-table entries locating them in different subnets. The series follows the subnet, and address updates use the counter in that same series | Not history. Advanced only by a reissue |
+| **Series reissue** (type 7) | Branching a new series off an existing one, patron-countersigned (`wire-format.md` §4.8) | That activity is partitionable by subnet — and, by election, a **checkpoint** for retention and archive look-back | Advances the archive, like any topology transaction |
+
+**The first two answer questions about a person; the middle two answer questions
+about an address.** Conflating them is the standing hazard here, and the sequence
+number is the one most often mistaken for the chain: it corrects routing state and
+enforces nothing.
+
+**The correlation between a series and an archive segment is a design decision, not
+a consequence.** A series is routing and an archive is evidence; nothing makes a
+reissue a checkpoint except that this design elects it, for simplicity and ease of
+administration. Saying so matters because the two can be separated later without
+disturbing either mechanism — and because a patron countersigns the reissue, so any
+rule that made presence evidence *depend* on that signature would put a patron
+astride evidence of events it did not observe, which §6.4 forbids. **A checkpoint
+bounds what the chain must retain; it does not reach the PoP records themselves.**
 
 ### 8.1 History completeness, the self-chained archive
 
@@ -3034,12 +3095,17 @@ its counterparty already signed.
 
 Consequences:
 
-- **Any presented sequence is provably unbroken from identity genesis to the last
-  record shown**, even though the archive is built and held by the subject.
-- **Excision is impossible. Only truncation to a prefix remains.**
+- **Any presented sequence is provably unbroken across the range shown**, even
+  though the archive is built and held by the subject. That range is rooted at
+  identity genesis, or at a checkpoint attesting that history existed before it
+  (§8.2).
+- **Excision is impossible.** Only truncation remains, and it cuts at the ends: an
+  earlier head drops what is recent, a checkpoint drops what is early. Nothing
+  removes a record from the middle and keeps its neighbours.
 - **Activity gaps are visible.** You cannot maintain the appearance of a
   long-active user while stripping incriminating records and keeping their
-  contemporaries.
+  contemporaries — **a checkpoint takes everything before it or nothing**, so it
+  cannot be aimed at a record.
 
 **Why this largely dissolves the attack.** Truncation is **self-defeating**,
 because history is precisely what confers standing. Trimming to lower the
@@ -3048,7 +3114,7 @@ economically identical to **starting a fresh identity.** An operation already
 permitted, already costing everything, and requiring no attack.
 
 **The guarantee is per-evaluation.** Within any one subnet's view of a subject,
-truncation to a prefix is the only available edit. Presenting different views to
+truncation is the only available edit, at either end. Presenting different views to
 different subnets is **not** an edit to a history. It is two histories, which
 §10.8.7 explicitly permits: *the archive exists to inform new subnets on joining,
 not to hold users accountable across subnets.* Cross-subnet accountability is
@@ -3059,13 +3125,20 @@ pre-fork standing into two subnets is the archive doing its job, and a reviewing
 patron already ignores transactions with counterparties it cannot reach. **The
 multi-device problem is *accidental* forking** (§18.2).
 
-**A series refresh is also an archive checkpoint, and this is what makes pruning
-possible at all.** Truncation to a prefix is the only edit available today because
-every record commits to its predecessor, so verifying anything walks back to genesis:
-you can withhold what you did lately and you cannot drop your early life. A refresh
-countersigned by your patron (`wire-format.md` §4.8) asserts that history existed
-across the boundary without carrying what it contained, so **records before it need
-not be retained or presented** — the blocks and the dates survive and the details go.
+**A series reissue is also an archive checkpoint, and this is what makes pruning
+possible at all.** Because every record commits to its predecessor, verification walks
+backward: without a second root a subject can withhold what they did lately and cannot
+drop their early life. A reissue countersigned by your patron (`wire-format.md` §4.8)
+supplies that root, asserting that history existed across the boundary without carrying
+what it contained, so **the chain before it need not be retained or presented** — the
+blocks and the dates survive and the details go.
+
+**What is released is the chain, not the evidence.** Presence records are a separate
+kind of history (§8.0): a PoP is a transaction and sits in the archive, but its use —
+identifying validators for a later ceremony, and standing as evidence that two people
+met — does not depend on the chain's continuity. Pruning the chain therefore does not
+license discarding presence records, sealed captures or capture seeds, and
+`light-client-requirements.md` §2 requires they be kept.
 
 **Except inside the 730-day window, where they are still required.** Verifier
 selection counts *n* and draws the candidate set by traversing what is reachable from
@@ -3076,11 +3149,12 @@ therefore permitted only beyond the window**, which costs nothing anyone wants: 
 storage saving and the elision of early history are both about records the candidate
 set has already aged out.
 
-**Scope: one chain per identity**, spanning subnets. The resulting cross-subnet
-visibility is bounded by an existing rule: a reviewing patron **ignores
-transactions whose counterparties it cannot reach** (§13.7). An unfamiliar
-counterparty is an opaque entry, not an intelligible one. It contributes to
-chain length and nothing else.
+**The archive's scope across bindings is left unstated**, and no claim is made
+that one chain spans them. Seqno series (§8.0) postdate the question, and no reader
+is given a way to enumerate a subject's archive uninvited in any case. Where a
+presented history names counterparties a reader cannot reach, a reviewing patron
+**ignores them** (§13.7): an unfamiliar counterparty is an opaque entry rather than
+an intelligible one, contributing length and nothing else.
 
 **Forking identities is expected and fine.** The archive exists to inform a new
 subnet on joining, not to hold users accountable across subnets. Key rotation is
@@ -5166,7 +5240,8 @@ but given A2 that is the rarer case, and such traffic is relayed anyway (§10.6.
   a **one-time key** is a metadata event (§11.2.2, C11), and spreading it changes
   who sees it. Serving reusable material is not.
 - **Payload-type demultiplexing.** Protocol objects ride the end-to-end channel —
-  capture key grants (`wire-format.md` §5.3), late verifier responses (§5.4) —
+  capture key grants (`wire-format.md` §5.3), late verifier responses
+  (`wire-format.md` §5.4) —
   beside application payload, and nothing says how a recipient tells them apart.
 - **Crate maturity.** §5.2's audit caveat applies here too.
 
@@ -5719,8 +5794,9 @@ the patron walks the chain backward and fetches what it wants
 (`wire-format.md` §5.9, archive fetch). **The patron chooses its own depth.** The presenter picks the head and
 cannot control how far back the recipient looks, so the party extending credit
 decides how much evidence it wants. On joining a new tree, the node presents a
-**prefix** of its archive to the new patron rather than the whole thing — **not an arbitrary subset**, since §8's
-chain makes excision impossible and truncation the only available edit; the patron verifies signatures on what it is
+**contiguous run** of its archive to the new patron rather than the whole thing —
+**not an arbitrary subset**, since §8's chain makes excision impossible and truncation
+the only available edit (§8.1); the patron verifies signatures on what it is
 shown and compares it against the identities that patron already knows of.
 Transactions with unknown counterparties can be ignored; those where the
 counterparty is known can contribute to the user's initial trust state (§13.1).
@@ -5936,7 +6012,7 @@ globally.
   key cannot make that transaction, and cannot pre-poison the space either — with no
   global registration of series, it would have to exhaust 2³² **and reach every party
   it wanted to block with every one of them.** Residual: the patron must not countersign
-  a refresh for a thief, which is the same social check adoption and recovery rest on.
+  a reissue for a thief, which is the same social check adoption and recovery rest on.
 - **A stolen device composes into false presence evidence and fraudulent recovery.**
   Theft grants the key, the archive and the capture seeds at once, and the pieces
   compose further than any of them registers alone. With a colluding counterparty, the
@@ -6234,25 +6310,25 @@ verifiers answered `match` without naming them, but that sacrifices the
 "absence of an expected verifier is visible" property (§7.2), which is doing real
 work. **Open.**
 
-**The selection input leaks more than the responses do, and to a worse party.** To
-select the other's verifiers a participant must compute their candidate set, and
-`wire-format.md` §4.6.4 counts a record only if its signatures verify — so it needs
-the **records**, not a list of names, and a list the subject asserted would let the
-subject curate its own sample. §7.2.1's sweep records the fact, giving
-verifier-selection recomputation's reads as *"nonces, seed, candidate set"*; what was
-never priced is who receives it. **An ordinary ceremony therefore hands the person in
-front of you your verified presence history for the whole 730-day window** — every
-prior counterparty, every witness and verifier those records name, and every
-timestamp. At §7.3's own sizing of 200 meetings in that window that is thousands of
-identifier occurrences, and none of it is withholdable: participants, witnesses,
-verifiers and times are body fields under signature. Registered as **P37**.
+**The selection input reaches a different party than the responses do.** To select
+the other's verifiers a participant needs a candidate set, and the subject supplies it
+as records rather than names, since `wire-format.md` §4.6.4 counts only what verifies.
+§7.2.1's sweep already records the fact, giving verifier-selection recomputation's
+reads as *"nonces, seed, candidate set"*; what was never priced is who receives it —
+the person in front of you rather than a later evaluator.
+
+**The disclosure is elective, and the pressure is what makes it wide.** Nobody walks
+another party's archive (§7.2.2), so a subject hands over what it chooses. But the
+incentive runs one way: a bundle holding nobody the selector recognises establishes
+nothing for them (§13.1), so being believed means showing counterparties in common —
+and each record shown carries its witnesses, verifiers and times along with it, none
+of them withholdable, since they are body fields under signature. Registered as
+**P37**, and priced as a pressure rather than a compelled disclosure.
 
 **It is the same trade as the paragraph above, one step earlier**, and has the same
-non-answer. Selection must be recomputable from the record plus the subject's own
-history and nothing else (§7.2.2), so any scheme that hides the candidate population
-from the selecting party also stops them checking the selection — which is the check
-§7.2.2 requires *before signing*, and the one protecting them against the person in
-front of them.
+non-answer. Any scheme that hid the candidate population from the selecting party
+would also stop them checking the selection — the check §7.2.2 requires *before
+signing*, and one of the few protecting them against the person in front of them.
 
 ### 14.5.3 Selective disclosure — adopted, and what it does not cover
 
@@ -6319,8 +6395,8 @@ and a citation to a missing number resolves there.
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§10.6.1, §9.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§18.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§12.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §10.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §4.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§12.2) |
-| **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, §4.8): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet refreshed since binding elsewhere still shares a line, and the *number* of refreshes it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
-| **P37** | **Verifier selection discloses the subject's whole 730-day presence history to the ceremony counterparty** (§7.2.2, §14.5.2) | High | Selecting the other's verifiers means computing their candidate set from *verified* records (`wire-format.md` §4.6.4), so the counterparty receives the records themselves — prior counterparties, witnesses, verifiers and timestamps, none of them withholdable. **Bounded by checkpoints** (§8.2): what exists to be handed over is what has accumulated since the last series refresh, so the disclosure becomes a function of when a subject last pruned rather than of how long it has participated — though never below the 730-day window, which pruning may not enter. **Distinct from P19**, which is archive presentation to a prospective patron the user chose; this goes to whoever they just met, and the ceremony itself authorises it. **Distinct from P2/C2**, which price the verifier set *carried in the record* rather than the population it was drawn from. Intrinsic to recomputable selection and open on the same terms as §14.5.2 |
+| **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.8): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
+| **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§7.2.2, §14.5.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §4.6.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive — but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§13.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§8.2) and by what they elect to include — and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7.1), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
 
 ### 14.5.5 Queue policy had to settle more than size
 

@@ -5613,3 +5613,141 @@ nothing happened. Ordering was always correct; the dates were not.
   and `wire-format.md` §§3.1, 4.1 state the exclusivity flatly. Reconciling them is a
   design decision (see the critique of 2026-08-30), so the cross-references were not
   scatter-patched.
+
+- **2026-08-31 (§8.0: the kinds of history, and what each is for)** — Five mechanisms
+  were routinely spoken of as one — transaction archive, PoP records, sequence numbers,
+  seqno series, and the refresh that branches a series. New **§8.0** tabulates them by
+  what each establishes, who governs it, and whether it is evidence at all. **The
+  sequence number is the one most often mistaken for the chain**: it corrects
+  asynchronously updated routing state and enforces nothing.
+
+  **PoP records are a distinct kind of history** (author). They are referenced by the
+  archive and carried in a sequence's chain, but are **not themselves subject to
+  sequencing**: self-signed, dated, about the natural person, and potent under any
+  sequence and in any subtree. So they **survive pruning of the chain that carried
+  them**, which §6.4 already required without anyone noticing it applied here — *"a
+  party with authority over a participant must not authenticate or gate evidence of an
+  event it did not observe"*, and *"PoP history must survive a node's tenure under any
+  patron."* 0.8.6 had made the patron-countersigned refresh the checkpoint governing
+  pruning, which put the *unit of retention and disclosure* for presence evidence under
+  patron control — a weaker form of the coupling §6.4 forbids. §8.0 states that a
+  checkpoint bounds what the **chain** must retain and does not reach the PoP records.
+
+  **The correlation between a series and an archive segment is elective, and now says
+  so** (author): *"not a necessary consequence, as they are two distinct forms of
+  history, it is a design decision made for simplicity and ease of administration."*
+  Recorded as a choice rather than a consequence so the two can be separated later
+  without disturbing either.
+
+  **Retention and disclosure are separate controls, and the direction of foreclosure
+  matters** (author's correction). Retention forecloses disclosure, permanently and in
+  one direction — not the reverse. A single combined control would make choosing to
+  *show* less also *destroy*, giving a presentation decision silent destructive side
+  effects. `light-client-requirements.md` §2 now requires them kept apart, and requires
+  that pruning the chain not delete presence records, sealed captures or capture seeds.
+
+  **§8's "exhaustive" list of what advances an archive predated type 7** and omitted
+  the series refresh; corrected. No other enumeration of archive membership exists.
+
+  **Nobody walks another party's archive, and P37 was wrong to imply otherwise**
+  (author): *"we never intended to let PoP counterparties walk the user's full archive
+  to discover their PoPs; you just have to trust the bundle of PoP records your
+  counterparty hands you."* §7.2.2 now states the bundle model: a counterparty computes
+  *n* and the candidate set from records the subject supplies, can check that they
+  verify and chain to the commitment, and **cannot check that the bundle is complete**.
+  P37 had conflated this with §13.7's fetch-and-walk — which is the *adoption*
+  disclosure a prospective patron drives — the very distinction the row claimed to be
+  drawing. **Reframed from a compelled disclosure to a pressure**, severity High to
+  Medium: the subject chooses the bundle, and the incentive runs one way, since a pool
+  holding nobody the selector recognises establishes nothing for them.
+
+  **Which scopes §7.2.2's non-influence rule rather than weakening it.** The pool is
+  the subject's and the sample within it is not: determinism stops a participant
+  steering the sample, not choosing what to put in front of the selector. **What
+  protects the selector is recognition, not completeness** (§13.1) — a curated bundle
+  costs its author credibility rather than buying a verdict, which is the intersection
+  test applied everywhere else here.
+
+  **§8.1's "one chain per identity, spanning subnets" is withdrawn and not replaced**
+  (author): seqno series postdate it, and no claim about archive scope across bindings
+  is made in either direction. Nothing turns on it, since no reader can enumerate a
+  subject's archive uninvited. The §8.0 PoP row states the same separation: a PoP **is**
+  a transaction and enters the archive, and the chain does not govern its *use* —
+  identifying validators for a later ceremony does not depend on the archive's
+  continuity.
+
+  **The real security of a PoP is the physical presence, and §7.1 now says so**
+  (author). The section framed the primitive only as *"a cost imposed on acquiring
+  edges into territory the attacker does not already control"* — the Sybil half. The
+  other half was missing: **the ceremony's first product is not the record.** Two
+  people met and can recognise each other afterwards, each having grown a graph they
+  trust on their own account, which is §1.2.1's second property — *"a participant knows
+  which meetings happened"* — stated where the ceremony is defined rather than only in
+  the deniability argument. **The record is the residue a ceremony leaves for people
+  who were not there**, and witnesses, verifiers and deterministic selection are all
+  spent on that residue.
+
+  **Which gives P37 a floor.** A thin ceremony is weaker *evidence*, not a weaker
+  meeting: fewer witnesses or an unrecognised candidate pool cost the record its weight
+  with third parties, and cost the counterparty its assurance about **continuity** —
+  whether the person present is the one this key's history belongs to — while touching
+  neither party's actual gain, a face they will know again. So disclosing narrowly is a
+  choice a subject can really make, per ceremony, rather than a ratchet. Severity left
+  at Medium; what changed is that the row now states what declining costs.
+
+  **Propagation sweep over the whole set.** The archive-integrity claims were the
+  outstanding tension from 2026-08-30 and are now reconciled rather than deferred,
+  because the design decision behind them is settled. **Excision remains impossible and
+  the reason is sharper than before**: a checkpoint takes everything before it or
+  nothing, so it **cannot be aimed at a record**. What changed is that truncation now
+  cuts at either end — an earlier head drops what is recent, a checkpoint drops what is
+  early — and a presented range is unbroken across itself, rooted at genesis *or* at a
+  checkpoint. §8.1's three guarantees, §8.2's per-evaluation claim, §13.7's
+  presentation model (*"prefix"* → *"contiguous run"*), and `wire-format.md` §3.1 and
+  §4.1 all say this now.
+
+  **One conflict the sweep caught between two same-day changes.** §8.2 said *"records
+  before it need not be retained or presented"* while §8.0 and
+  `light-client-requirements.md` §2 said presence records survive pruning. §8.2 now
+  releases **the chain, not the evidence**, and says so where the licence is granted.
+
+  **§4.6.4 defines the candidate set without granting access to it**, which is what
+  permitted the archive-walking reading in the first place. It now states that a
+  selecting counterparty computes over records it is **handed**, and that the traversal
+  rule is what makes a supplied bundle checkable — records must chain, so a bundle
+  missing one from the middle fails to connect.
+
+  **References: zero unresolved across the five root documents.** The prior baseline of
+  29 was never reproducible because the checker mistargeted bare `§N`; the convention is
+  that an unprefixed reference resolves against the containing document first and
+  `network-design.md` second. Under that rule the set is clean, and the only real
+  defects were **three compound citations** — `(`wire-format.md` §2.3, §5.6)` and two
+  like it — where the second reference silently inherits the prefix. Prefix now
+  repeated, matching the fix applied to the same shape in 0.8.3.
+
+  **Naming settled: the operation is a `series reissue`** (author). *"Rotation"* was
+  the word to avoid and never reached the text; `series branching` was considered and
+  dropped, and `series refresh` — the term 0.8.6 was drafted with — is renamed across
+  **34 edit sites in three documents**, yielding 38 occurrences of the new term,
+  including the type-7 table row and `wire-format.md` §4.8's heading.
+
+  **`branch` was the disqualifying collision, and it sits one subsection away.** §8.3
+  is *"Merges. The archive is a DAG, not a chain"*, and there a **branch** is a line
+  created by concurrent device use whose defining property is that it **merges back** —
+  *"branches can be merged, and merging strengthens completeness."* A series is the
+  opposite: it must never merge back, which is what keeps the ordering total and the
+  rollback closed. Two structurally similar things named `branch`, differing in exactly
+  the property that matters, introduced a subsection apart. `branching` survives as
+  **prose** in §8.0's row, where it does the explanatory work without being the term.
+
+  **`reissue` is apt rather than merely free.** The old line is sealed and dead, the
+  identity and its position continue, and the usual reason to ask is that the old one
+  was compromised — which is a card reissue in every particular. `refresh` implied
+  renewal of the same thing and undersold the finality of the seal.
+
+  **The rename also disambiguated a word carrying five senses.** `refresh` was being
+  used for the biometric reference image (§7.1.5), the catalog view (§9.5), the
+  currency attestation (§10.6.5), the prekey (§11.2.4) **and** the series. The first
+  four are each unambiguous inside their own section; the series was the newest and the
+  only one that ranged across all three documents. Removing it leaves the others alone,
+  and no surviving `refresh` refers to a series.

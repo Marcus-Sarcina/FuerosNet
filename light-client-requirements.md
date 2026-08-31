@@ -180,16 +180,16 @@ job.
 
 ## 2. Archive
 
-- **Never refresh into a series you have occupied before.** The abandoned line's
+- **Never take a series reissue into a series you have occupied before.** The abandoned line's
   high-counter records would come back into comparison against the new one
   (`wire-format.md` §4.8). You hold your own chain, so this is yours to check, and a
-  counterparty holding that chain will reject a refresh that repeats a series in it.
-- **Keep the chain that proves your current series** — your adoption and every refresh
+  counterparty holding that chain will reject a reissue that repeats a series in it.
+- **Keep the chain that proves your current series** — your adoption and every reissue
   since — and present it when a counterparty needs to rank two of your records
   (`wire-format.md` §4.8.1). It is presented, never propagated, and it discloses the age
-  of your patron relationship and how many refreshes you have taken.
-- **On suspected key compromise, seal before you refresh.** Set the counter of the
-  series you are leaving to its maximum, then take the refresh naming that value, and
+  of your patron relationship and how many reissues you have taken.
+- **On suspected key compromise, seal before you take a series reissue.** Set the counter of the
+  series you are leaving to its maximum, then take the reissue naming that value, and
   do it for every patron relationship you hold (`wire-format.md` §4.8). Nothing the
   holder of your old key signs can then supersede your last record in that line.
   **Act on suspicion**: against a counterparty that holds no chain this is a race, and
@@ -198,7 +198,18 @@ job.
   §7.4.0). Otherwise it keeps the ability to redirect anyone still holding a stale
   locator, indefinitely and with no other source of truth available to them. One
   self-signed locator at the maximum counter; no patron needed.
-- **Treat a refresh as deliberate, not routine.** It costs nothing in routing, since
+- **Pruning the chain must not delete presence records, sealed captures or capture
+  seeds.** A checkpoint bounds what the *chain* must retain; presence evidence is a
+  separate kind of history that stays usable under any sequence and in any subtree
+  (design §8.0). Deleting it with the chain would discard the evidence a later
+  adoption and a later recovery both depend on, and would put a patron's willingness
+  to countersign a series reissue astride evidence §6.4 says it must not gate.
+- **Keep retention and disclosure as separate controls.** Choosing how far back to
+  *disclose* must never delete anything: disclosure is reversible and can be widened
+  later, up to what is retained. Deleting is the one-way door, and it caps every
+  future disclosure — so it belongs behind its own deliberate control, never as a
+  side effect of choosing what to show today.
+- **Treat a series reissue as deliberate, not routine.** It costs nothing in routing, since
   the path is unchanged, but it is the boundary beyond which you may prune — and
   pruning is irreversible. **Never prune inside the 730-day window**: those records are
   what verifier selection counts, and discarding them lowers your own verification
