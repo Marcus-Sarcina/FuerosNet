@@ -724,6 +724,111 @@ Do not comment on technical content, correctness, or decisions.
 
 ---
 
+## migration — the specification reordering
+
+**Not a review.** The executable spec for the atomic renumber, settled from 0.9-before
+[author, 2026-08-31]. Run it in one pass, verify, commit once.
+
+### Method, and why it is one pass
+
+**Two-phase renumber: every section to a unique placeholder, then placeholders to final
+numbers.** A direct old→new sweep lets Topology-becomes-2 collide with
+Scope-becomes-3 while both numbers are live. Placeholders make the intermediate state
+unambiguous, so no reference resolves to the wrong target mid-sweep.
+
+Roughly 420 section references across seven files move with it. **The reference checker
+validates the result exactly**, resolving an unprefixed `§N` against its own document
+first and `network-design.md` second — the rule that finally reproduced a clean run.
+
+### `network-design.md` — chapter mapping
+
+| New | Chapter | From | Reason |
+|---:|---|---|---|
+| — | Preface | Preface | — |
+| 1 | Thesis | 1 | reorder |
+| 2 | Vocabulary | 3 | terms were used before being defined; §0 leaves for the appendix |
+| 3 | Topology | 4 | reorder |
+| 4 | Scope | 2 | reorder, kept brief |
+| 5 | Cryptography | 5 | — |
+| 6 | Transactions | 6 | — |
+| 7 | The presence ceremony | 7.1 | split; 7.1.1–7.1.8 become 7.1–7.8 |
+| 8 | The presence record | 7.2–7.3 | split; become 8.1–8.2 |
+| 9 | Key compromise and recovery | 7.4 | split; 7.4.0–7.4.4 become 9.0–9.4 |
+| 10 | The archive | 8 | — |
+| 11 | Resources | 9 | — |
+| 12 | Addressing and resolution | 10.1–10.7 | become 12.1–12.7 |
+| 13 | Subnet formation and lifecycle | 10.8 | promoted; unfindable under "Addressing" |
+| 14 | Sessions and payload | 11 | — |
+| 15 | Control plane / data plane | 12 | — |
+| 16 | Trust model | 13 | — |
+| 17 | Security analysis | 14.1–14.3 | split; become 17.1–17.3 |
+| 18 | Accepted risks | 14.4 | split; a 238-line catalogue |
+| 19 | Privacy analysis | 14.5 | split; 14.5.1–14.5.8 become 19.1–19.8 |
+| 20 | Assumptions and evidence | 15 | — |
+| 21 | Parameters | 16 | — |
+| 22 | Open for v1 | 17 + 18.2 | restructured, see below |
+| 23 | Deferred to a later version | 18 + 2's *Explicitly deferred* | restructured |
+| 24 | Suggested build order | 19 | — |
+| A | Document conventions | 0 | moved to appendix |
+| B | Decision log | Appendix A | — |
+
+**§7 splits three ways, not two** [author]. The ceremony is ~1,000 lines on its own and
+is not further divisible without cutting a single argument; the record and the recovery
+procedure separate cleanly from it and from each other.
+
+### `wire-format.md` — chapter mapping
+
+| New | Chapter | From | Reason |
+|---:|---|---|---|
+| 1–3 | Encoding, Primitives, Common envelope | 1–3 | — |
+| 4 | Transaction types | 4.1–4.5, 4.8 | series reissue becomes 4.6 |
+| 5 | Verifier selection | 4.6 | a seven-subsection mini-specification |
+| 6 | Resource registration, catalog, abuse reports | 4.7 | the section says these are *not* transactions |
+| 7 | Attestations and records | 5 | — |
+| 8 | Session messages | 6 | — |
+| 9 | Transport binding | 7.1–7.2 | §7 outgrew "QUIC binding" |
+| 10 | Topology propagation | 7.2a, 7.2b | split; retires the alphanumerics |
+| 11 | Resource requests | 7.3 | split; 7.3.1–7.3.2 become 11.1–11.2 |
+| 12 | Size estimates | 8 | — |
+| 13 | Open items | 9 | reduced to detail referenced from design §22 |
+
+### `infra-client-requirements.md` — alphanumeric normalisation
+
+`§4a` becomes **§5** and `§9.2a` becomes an ordinary decimal subsection, with the
+sections after each shifted. Both are retrofit identifiers that break decimal sorting
+and outline generation. `wire-format.md`'s `7.2a`/`7.2b` retire in the split above.
+
+### Open work: two chapters, not six lists
+
+**The distinction is release-scoped** [author]: what must be settled for the initial
+release is separate from what is wanted in a later one. §18.2 already carries it as
+three subheadings — *blocks a subsystem*, *decide during implementation*, *deferred by
+decision* — so this promotes an existing classification rather than inventing one.
+
+- **§22 Open for v1** — the single index. Former §17's live questions and §18.2's first
+  two groups. This is the section that must be empty of blockers before release.
+- **§23 Deferred to a later version** — §18.2's third group, §18.1 multi-device, §2's
+  *Explicitly deferred*, §17's two standing deferrals, and §18.3's test-vector note.
+  Nothing here blocks anything; it is the wishlist and should read as one.
+
+**The other four lists stay where they are and are referenced, not absorbed.**
+`wire-format.md` §13, `light-client-requirements.md` §Open, `infra-client-requirements.md`
+§Open and the local block in the ceremony chapter each hold items belonging to their own
+document's authority. §22 names them and says what each holds; moving their contents into
+the design would break the authority split §0 sets up.
+
+### Verification before commit
+
+1. **Reference checker: zero unresolved** across the five root documents.
+2. **Heading depth** matches numbering everywhere (`depth = components + 1`).
+3. **No out-of-order headings** in any document.
+4. **Word census** against the pre-migration revision: additions confined to new chapter
+   headings, no words removed. This is what caught a 20-entry miss in the change-log
+   restructure and is cheaper than reading 7,000 lines.
+5. **Fence parity, no trapped headings, no unclosed table rows.**
+
+---
+
 # Stage 1 — Formal modelling (before or alongside implementation)
 
 These need a formalisation, not a running system. They are the highest-value
@@ -834,7 +939,7 @@ Stated plainly so it is not over-trusted:
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
 | 6 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
-| 7 | **migration** | — | Not a review. The `network-design.md` reordering: preface → thesis → topology → brief scope → the rest in current order, with the document-conventions section moved to an appendix and *Explicitly deferred* folded into the open-items section. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
+| 7 | **migration** | — | Not a review. **Spec below**, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §4 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
 | 8 | **0.9-after** | Purge | Organisation again, on the migrated structure. Confirms the new order reads to a sequential stranger and that nothing was orphaned or double-numbered in the move |
 
 **0.9 runs twice, before and after the migration** [author, 2026-08-28]. The

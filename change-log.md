@@ -6543,3 +6543,35 @@ settled findings"** while containing **§14.5.4 "Findings requiring action"**. A
 had to work out what *settled* meant before trusting either label. Retitled **Security
 and privacy analysis**, which is neutral and also describes §14.5 accurately — the
 privacy analysis had grown to be most of the chapter. No document cited the old title.
+
+### 2026-08-31 (the migration spec, settled from 0.9-before)
+The migration existed as one table cell reading *"the rest in current order"*. 0.9-before
+returned reorderings that belong inside it rather than before it — every one renumbers
+sections, and a renumber is what the two-phase placeholder method exists to make safe —
+so they are folded into an executable spec in `Robot/review-plan.md` rather than applied
+piecemeal. **Four decisions, all the author's.**
+
+**Vocabulary moves to §2.** It was §3 while §0 and §1 already used its terms, and §0 is
+leaving for the appendix. This changes the stated order — *preface → thesis → topology →
+brief scope* — by inserting vocabulary second.
+
+**§7 splits three ways**: the ceremony, the presence record, and key compromise and
+recovery. At 1,818 lines it was 2.4× the next largest chapter; the ceremony is ~1,000 of
+those on its own and is not further divisible without cutting one argument.
+
+**Open work becomes two chapters distinguished by release**, not six parallel lists:
+what must be settled for the initial release, and what is wanted in a later one. §18.2
+already carried exactly that split as three subheadings — *blocks a subsystem*, *decide
+during implementation*, *deferred by decision* — so the restructure promotes a
+classification the document already had. **The four lists in other documents are
+referenced rather than absorbed**: each holds items under its own document's authority,
+and moving them into the design would break the split §0 establishes.
+
+**`infra-client-requirements.md`'s `4a` and `9.2a` normalise to decimals.**
+`wire-format.md`'s `7.2a`/`7.2b` retire in the §7 split without separate work.
+
+Also specified: `wire-format.md` splits §4 — verifier selection is a seven-subsection
+mini-specification and the catalog objects are, by that section's own words, not
+transactions — and §7, which had outgrown "QUIC binding". The spec carries a five-item
+verification list, including a **word census against the pre-migration revision**, which
+is what caught the twenty missed entries in the change-log restructure.
