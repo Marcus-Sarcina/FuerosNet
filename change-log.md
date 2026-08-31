@@ -6659,3 +6659,33 @@ documents; no heading-depth errors; nothing out of order; fences paired. Differe
 word multisets against the pre-migration revision `14292b9` shows **no prose removed
 from any document** — every removed token is a section number, an old chapter title
 replaced by the split ones, or `Appendix A.n` becoming `Appendix B.n`.
+
+### 2026-09-01 (migration, stage 4: open work split by release)
+Six parallel open-work lists become **§22 Open for v1** and **§23 Deferred to a later
+version**, on the author's distinction between what must be settled to ship and what is
+wanted afterwards.
+
+**The classification already existed.** §18.2 carried *blocks a subsystem*, *decide
+during implementation* and *deferred by decision* as three subheadings; the first two
+are v1 and the third is the wishlist, so this promotes a distinction the document had
+rather than imposing one. §22 gains the live open questions in detail — peering audit
+calibration, replication distance, the divergence-notice object, archive recovery —
+and §23 takes autonomous participation, the attention denominator, multi-device and
+test vectors.
+
+**Four lists stay where they are**, named by §22.4 rather than absorbed: `wire-format.md`
+§13, both client-requirements `Open` sections, and the local block beside the
+co-presence mechanism it qualifies. Each holds obligations under its own document's
+authority, and moving them into the design would break the split Appendix A establishes.
+
+**The deferral rationale was nearly lost and is restored.** The old §17 explained that
+deferred items sit in the chapter rather than the appendix because *a standing choice
+that could be revisited reads differently from settled history*. It survived the
+restructure only because the word census flagged its vocabulary as removed.
+
+**Whole migration, verified.** Zero unresolved references across the five root
+documents; no depth errors; nothing out of order; fences paired; no unclosed rows.
+Differencing word multisets against `14292b9` leaves 53 removed tokens in
+`network-design.md` and one in `wire-format.md`, every one of them an old chapter title
+replaced by a split one, `Appendix A.n` becoming `B.n`, or an intro paragraph rewritten
+— and `QUIC`, from the retitled transport chapter.

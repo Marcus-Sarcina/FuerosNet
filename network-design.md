@@ -61,14 +61,14 @@ scopes, catalog, abuse reporting, credential, and request framing; group
 operations. Encoding for all of it is in
 `wire-format.md`.
 
-**Not specified.** Nothing currently blocks a subsystem (§23.2). End-to-end payload encryption is *adopt PQXDH and
+**Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§14.2.4) rather than designed here, with four integration
-decisions open. Multi-device beyond archive merge (§23.1). **Eleven parameters
+decisions open. Multi-device beyond archive merge (§23.3). **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until the encoding stops moving.
 
-**Everything currently open is consolidated at §23.2**, classified by what it
+**Everything currently open is consolidated at §22**, classified by what it
 blocks.
 
 **Reading order.** §1 for what this is and what privacy level it targets, then §2 for
@@ -702,7 +702,7 @@ distinct from §22's open questions about mechanisms that *are* specified.
   limit.** The protocol permits them already (§13.7); what v1 omits is the key
   management and interface work. A single-identity client correlates across
   subnets; a multi-identity one does not, with no wire difference between them
-- **Autonomous-AI participation** (§22, *Autonomous participation*). Note this is
+- **Autonomous-AI participation** (§23.2, *Autonomous participation*). Note this is
   deferred *participation*,
   not a deferred mechanism: an autonomous participant that bears its own costs and
   attends ceremonies is an ordinary node, so what is deferred is whether to admit
@@ -1568,7 +1568,7 @@ person in front of them as continuous with a history.
 - **Light clients vs infrastructure nodes are judged differently on
   availability.** Light clients have legitimately unstable uptime, so silence
   from them carries little weight; infrastructure nodes have none of that
-  excuse — **the operator's instance holds their key too** (§23.1), so the party
+  excuse — **the operator's instance holds their key too** (§23.3), so the party
   being queried has a device that is up whether or not they are. A consequence is that a presence record with an infrastructure
   participant is **more reliable as evidence.** That party can be expected to
   answer verification queries years later. Note this is a statement about the
@@ -2120,7 +2120,7 @@ from a user's typical patterns, while removing venue-level identification.
 Every step depends on a sensor reporting honestly, and a modified client can
 fabricate the camera feed, the ranging result and the timing. Hardware
 attestation (Play Integrity, App Attest) would reintroduce the manufacturer as a
-global trusted party, the same tension as §22's autonomous-participation entry raises about attestation. Resolution: treat attested
+global trusted party, the same tension as §23.2's autonomous-participation entry raises about attestation. Resolution: treat attested
 client integrity as a **trust-raising attribute carried in the record, not a
 requirement**, so policies can weight it and users on unattested or open-source
 builds are not excluded. A user can only trust their own client's features,
@@ -3047,7 +3047,7 @@ disclaimed by design and is not a property this chain is protecting.
 **Deliberate multi-device forking is not an attack on this.** The "gain" of carrying
 pre-fork standing into two subnets is the archive doing its job, and a reviewing
 patron already ignores transactions with counterparties it cannot reach. **The
-multi-device problem is *accidental* forking** (§23.2).
+multi-device problem is *accidental* forking** (§22.2).
 
 **A series reissue is also an archive checkpoint, and this is what makes pruning
 possible at all.** Because every record commits to its predecessor, verification walks
@@ -3113,7 +3113,7 @@ oversight.
 restores the *key*, not the archive, so a user who loses their device and recovers
 their key returns with standing intact in their existing subnets and **nothing
 portable to a new one**. This makes §13.7.1's backup requirements
-load-bearing. *(Whether recovery should restore history is an open question — §22.)*
+load-bearing. *(Whether recovery should restore history is an open question — §22.3.)*
 
 ### 10.3 Merges. The archive is a DAG, not a chain
 
@@ -5861,14 +5861,14 @@ globally.
   inside the horizon goes point-to-point, and §12.6.3's table gives who sees that flow
   as **nobody** — so an actor holding an infra node's key sees the connection *setup*
   and nothing after it. This bites hardest for the node's **own operator**, whose
-  light client is a different device (§23.1): traffic addressed to them as a
+  light client is a different device (§23.3): traffic addressed to them as a
   participant never reaches the instance the actor controls, and cannot be read or
   even measured there. Forcing the relayed path gains nothing either, since a relay
   carries ciphertext (§14.2). **The actor's reach is prospective rather than
   retrospective**, which is the part *"bulk access"* overstates.
 
   **The residual there is impersonation, not interception.** An instance holds the
-  same key as its operator's other devices (§23.1), so an actor with it can present as
+  same key as its operator's other devices (§23.3), so an actor with it can present as
   that operator in **new** exchanges and become the endpoint legitimately. What it
   cannot do is reach a session it was never on the path for.
 
@@ -6317,7 +6317,7 @@ and a citation to a missing number resolves there.
 | P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §9.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
-| P33 | **Multi-device replication semantics are unspecified** (§23.1) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
+| P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §5.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive — but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
@@ -6735,15 +6735,68 @@ indefinitely.
 
 ---
 
-## 22. Open questions
+## 22. Open for v1
+
+**Everything that must be settled before an initial release, gathered here so it need
+not be reassembled from six registers.** What is wanted in a *later* release is §23;
+nothing in that chapter blocks anything in this one.
+
+
+**Consolidated so it need not be reassembled from six registers.**
+
+**The identity, presence, routing and messaging layers are specified. The resource
+layer is partly specified.** Every transaction, record, signature rule and encoding is
+specified. What remains is parameter values, policy tuning, product behaviour, and one
+implementation attempt.
+
+**Nothing here blocks writing code.** The classification below says what each item
+does block.
+
+---
+
+### 22.1 Blocks a subsystem — none
+
+**Resource interaction is specified on both halves.** The catalog path —
+registration, query and reply, entry lifecycle as local state (`wire-format.md`
+§6) — and the request/response path — §8.2's normative evaluation order and
+refusal behaviour, with the role row consulted as a lookup.
+
+---
+
+### 22.2 Decide during implementation
+
+- **Eleven unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
+  actually are. **None is currently in the class that hardens on first deployment**,
+  which is a change worth noting rather than a permanent property.
+- **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid
+  identity; whether prekeys are served only by the patron or also by siblings; prekey
+  rotation cadence and last-resort policy; and §5.2's crate-maturity caveat.
+- **The canonical biometric profile** (§7.5): extractor, template format and
+  fixed length per modality version, fuzzing algorithm, matcher and version
+  registry, plus the sealed store's AEAD parameters — cipher, nonce derivation,
+  capture framing (§7.5.2). **Cross-client verification depends on the whole
+  set**: a fuzzed profile one engine produces must be comparable by another's
+  matcher, or verifier queries only work between clients sharing an
+  implementation. *The channel and size question is closed: any channel carries
+  32 bytes.*
+- **Whether a subject may re-derive and re-release a capture key after a device
+  restore** (§7.5.2).
+- **Peering audit calibration** and **replication distance** (§22.3), both tuning problems
+  over working mechanisms.
+- **Divergence-notice object** (§22.3), which would make fork detection a durable artifact
+  rather than assumed behaviour.
+- **Archive recovery after device loss** (§22.3), a gap in user experience rather than in
+  the protocol.
+- **Multi-device beyond archive merge** (§23.3), which also blocks assessing retention
+  and deletion commitments at all (P33).
+- **Queue cap value** (§14.1.6), freely tunable per node.
+
+---
+
+### 22.3 The open questions in detail
 
 **Currently open only.** Resolved and dissolved questions are recorded in
 `change-log.md`; an entry appearing here means the question is live.
-
-**Two are deferred by decision rather than unanswered.** Autonomous participation
-and the attention question that depends on it. They are kept here rather than in
-the appendix because the deferral is a standing choice that could be revisited,
-where an appendix entry reads as settled history.
 
 1. **Peering audit calibration.** Latency-bounded challenge-response is
    adversary-influenced: a peer being audited controls the timing of anything
@@ -6754,7 +6807,68 @@ where an appendix entry reads as settled history.
    availability rather than storage.
 2. **Replication distance rules.** Balance of resilience against resource use;
    currently only a floor is defined.
-3. **Autonomous participation. DEFERRED BY DECISION, not to be implemented in
+3. **Divergence-notice object.** §9.0.2's fork detection depends on a
+   conforming inquirer notifying both patrons, which nothing compels and no patron
+   can detect the absence of. **An inquirer-signed notice** naming the two
+   conflicting currency assertions would make the observation durable and
+   forwardable — evidence rather than assumed behaviour. Patron acknowledgements
+   would additionally make successful notification visible. Neither compels an
+   inquirer to speak; both replace an unenforceable expectation with a checkable
+   artifact.
+
+4. **Archive recovery after device loss** (§10.2). Presence-based recovery
+   restores the key, not the archive, so a user who loses their device returns
+   with standing in existing subnets and nothing portable to a new one. **The
+   keystream scheme widens this**: seeds are device state too (§7.5.2), so a lost
+   device also loses the ability to unlock one's likeness on every counterparty's
+   machine. Whether
+   recovery should restore history, and how, without handing an attacker the
+   same path — is undecided. §13.7.1's backup requirements are load-bearing
+   because of it.
+
+### 22.4 Open items held in other documents
+
+**Not absorbed, because each belongs to its own document's authority** (Appendix A).
+This chapter names them; the obligations stay where the party bound by them will look.
+
+- **`wire-format.md` §13** — encoding items, chiefly the canonical test vectors deferred at §23.4.
+- **`light-client-requirements.md` §Open** — participant-client behaviour still to settle.
+- **`infra-client-requirements.md` §Open** — operator-side behaviour still to settle.
+- **§7.6's local block** — the co-presence questions that belong beside the mechanism they qualify.
+
+---
+
+## 23. Deferred to a later version
+
+**Nothing here blocks anything.** These are areas the design does not address at all,
+or addresses only to record that it will not — distinct from §22, which is open
+questions about specified mechanisms that must be settled to ship.
+
+**Deferred by decision is not the same as unanswered**, and the deferrals are kept
+here rather than in Appendix B because a standing choice that could be revisited reads
+differently from settled history. An appendix entry says *this was decided against*; a
+line here says *this is not being built yet*.
+
+### 23.1 Deferred by decision
+
+- **Autonomous participation** and the attention question depending on it (§22). Not to
+  be implemented in this or any intervening version.
+- **Canonical test vectors** (`wire-format.md` §13), until the encoding stops moving
+  and someone other than the author writes them.
+- **Transaction types beyond the seven**, and **multiple identities per client** (§4) —
+  a v1 client-scope exclusion, not a protocol limit.
+- **IPv6 endpoints and prefix-based reputation** (§4). v1 demands IPv4; the
+  /64 unit, NLRI encoding and prior art are recorded with the deferral.
+- **Hard-fork departure and forwarding** (§4). Not in v1: it needs a delivery
+  notice that was never specified, is unenforceable, and costs a post-departure
+  pointer. Revisiting it means specifying the notice and accepting the linkability
+  window.
+
+---
+
+### 23.2 Autonomous participation, and attention as its denominator
+
+1. **Autonomous participation. DEFERRED BY DECISION, not to be implemented in
    this or any intervening version.** To be revisited only if autonomous agents
    become a practical reality. The *delegated* case is closed regardless: §11.3
    makes a delegated agent a resource, so it consumes no subordinate slots,
@@ -6768,25 +6882,7 @@ where an appendix entry reads as settled history.
    manufacturer, reintroducing exactly the global trusted party the design
    rejects. Unresolved.
 
-4. **Divergence-notice object.** §9.0.2's fork detection depends on a
-   conforming inquirer notifying both patrons, which nothing compels and no patron
-   can detect the absence of. **An inquirer-signed notice** naming the two
-   conflicting currency assertions would make the observation durable and
-   forwardable — evidence rather than assumed behaviour. Patron acknowledgements
-   would additionally make successful notification visible. Neither compels an
-   inquirer to speak; both replace an unenforceable expectation with a checkable
-   artifact.
-
-5. **Archive recovery after device loss** (§10.2). Presence-based recovery
-   restores the key, not the archive, so a user who loses their device returns
-   with standing in existing subnets and nothing portable to a new one. **The
-   keystream scheme widens this**: seeds are device state too (§7.5.2), so a lost
-   device also loses the ability to unlock one's likeness on every counterparty's
-   machine. Whether
-   recovery should restore history, and how, without handing an attacker the
-   same path — is undecided. §13.7.1's backup requirements are load-bearing
-   because of it.
-6. **Attention as the denominator of agent trust. DEFERRED with autonomous
+2. **Attention as the denominator of agent trust. DEFERRED with autonomous
    participation above.** It is
    a question about autonomous participation, which is not to be implemented in
    this or any intervening version. Retained because the hazard is worth
@@ -6799,16 +6895,8 @@ where an appendix entry reads as settled history.
    which is adversarial to the principal's interest. Any such metric needs a
    counterweight, or agents optimise for pushing humans into meetings.
 
----
 
----
-
-## 23. Unspecified areas — features not yet described
-
-Distinct from §22. Those are **open questions about specified mechanisms**; these
-are **areas the design does not address at all**.
-
-### 23.1 Multi-device
+### 23.3 Multi-device
 
 **Storage is solved; durability is a host property.** §13.7.1's envelope
 encryption makes the archive safe in untrusted storage, so password managers and
@@ -6851,79 +6939,9 @@ divergence, since the user has no reason to want otherwise. Replication weakens 
 second factor arithmetically, and merging does not change that: **a user who syncs
 their archive to three devices has three places to lose it from** (§10.2). What
 remains open is which devices hold seeds, sealed captures and deletion state (P33),
-tracked at §23.2.
+tracked at §22.2.
 
-### 23.2 Everything currently open, in one place
-
-**Consolidated so it need not be reassembled from six registers.**
-
-**The identity, presence, routing and messaging layers are specified. The resource
-layer is partly specified.** Every transaction, record, signature rule and encoding is
-specified. What remains is parameter values, policy tuning, product behaviour, and one
-implementation attempt.
-
-**Nothing here blocks writing code.** The classification below says what each item
-does block.
-
----
-
-#### Blocks a subsystem — none
-
-**Resource interaction is specified on both halves.** The catalog path —
-registration, query and reply, entry lifecycle as local state (`wire-format.md`
-§6) — and the request/response path — §8.2's normative evaluation order and
-refusal behaviour, with the role row consulted as a lookup.
-
----
-
-#### Decide during implementation — no blocking effect
-
-- **Eleven unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
-  actually are. **None is currently in the class that hardens on first deployment**,
-  which is a change worth noting rather than a permanent property.
-- **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid
-  identity; whether prekeys are served only by the patron or also by siblings; prekey
-  rotation cadence and last-resort policy; and §5.2's crate-maturity caveat.
-- **The canonical biometric profile** (§7.5): extractor, template format and
-  fixed length per modality version, fuzzing algorithm, matcher and version
-  registry, plus the sealed store's AEAD parameters — cipher, nonce derivation,
-  capture framing (§7.5.2). **Cross-client verification depends on the whole
-  set**: a fuzzed profile one engine produces must be comparable by another's
-  matcher, or verifier queries only work between clients sharing an
-  implementation. *The channel and size question is closed: any channel carries
-  32 bytes.*
-- **Whether a subject may re-derive and re-release a capture key after a device
-  restore** (§7.5.2).
-- **Peering audit calibration** and **replication distance** (§22), both tuning problems
-  over working mechanisms.
-- **Divergence-notice object** (§22), which would make fork detection a durable artifact
-  rather than assumed behaviour.
-- **Archive recovery after device loss** (§22), a gap in user experience rather than in
-  the protocol.
-- **Multi-device beyond archive merge** (§23.1), which also blocks assessing retention
-  and deletion commitments at all (P33).
-- **Queue cap value** (§14.1.6), freely tunable per node.
-
----
-
-#### Deferred by decision, not unanswered
-
-- **Autonomous participation** and the attention question depending on it (§22). Not to
-  be implemented in this or any intervening version.
-- **Canonical test vectors** (`wire-format.md` §13), until the encoding stops moving
-  and someone other than the author writes them.
-- **Transaction types beyond the seven**, and **multiple identities per client** (§4) —
-  a v1 client-scope exclusion, not a protocol limit.
-- **IPv6 endpoints and prefix-based reputation** (§4). v1 demands IPv4; the
-  /64 unit, NLRI encoding and prior art are recorded with the deferral.
-- **Hard-fork departure and forwarding** (§4). Not in v1: it needs a delivery
-  notice that was never specified, is unenforceable, and costs a post-departure
-  pointer. Revisiting it means specifying the notice and accepting the linkability
-  window.
-
----
-
-### 23.3 Test vectors, and what a test suite would add
+### 23.4 Test vectors, and what a test suite would add
 
 **Canonical test vectors are absent by decision** (`wire-format.md` §13). They do
 not block *building*; they block **demonstrating** that two implementations agree,
@@ -6933,7 +6951,7 @@ project's dominant failure mode. They are also better produced by someone other
 than the designer, for the same reason review is: **tests written by the author
 encode the author's misunderstandings.**
 
-**A test suite is the natural successor to §23.2.** Implementing a mechanism asks
+**A test suite is the natural successor to §22.** Implementing a mechanism asks
 *can this be written?* and stubs the error paths; a test suite asks *what should happen when the input is wrong?*, which is exactly where those
 stubs were. Expect a different class of defect — boundary values, error paths, and
 rules that conflict only on malformed input.
