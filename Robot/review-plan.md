@@ -794,8 +794,7 @@ procedure separate cleanly from it and from each other.
 
 ### `infra-client-requirements.md` — alphanumeric normalisation
 
-`§3a` becomes **§5** and `§11.2a` becomes an ordinary decimal subsection, with the
-sections after each shifted. Both are retrofit identifiers that break decimal sorting
+`§4a` became **§5** and `§9.2a` became **§10.3**, with the sections after each shifted. Both are retrofit identifiers that break decimal sorting
 and outline generation. `wire-format.md`'s `7.2a`/`7.2b` retire in the split above.
 
 ### Open work: two chapters, not six lists

@@ -174,7 +174,7 @@ answer the request, keep no record of who asked about whom.
 
 ---
 
-## 4a. Evaluating a presented archive
+## 5. Evaluating a presented archive
 
 **Compare a presented archive against the identities you already know of** (design
 §16.1). **That set is yours alone** — there is no tree-level trust state, and your
@@ -196,7 +196,7 @@ specific claims are supported by people you can ask.
 
 ---
 
-## 5. Prekey service
+## 6. Prekey service
 
 design §14.2.4 adopts PQXDH, whose asynchronous property depends on someone
 holding a subject's prekeys while that subject is offline. That someone is the
@@ -226,21 +226,21 @@ serving node.
   prefetching it org-wide: only the on-demand request carries intent. It falls under §1's process-and-discard obligation: serve the request,
   keep no record of who asked for whose bundle.
 
-## 6. Transport
+## 7. Transport
 
 - **Act as STUN and TURN** for clients attempting direct payload paths, and carry
   the relayed path as a first-class route rather than a fallback afterthought — a
   substantial minority of connections will never get a direct path (design
   §14.1.1).
 
-## 7. Operator disclosure
+## 8. Operator disclosure
 
 - **Tell an operator plainly what their subordinates are exposed to** by their
   configuration and conduct (design §13).
 
 ---
 
-## 8. Package hosting
+## 9. Package hosting
 
 **Distributed as a container or VM image**, so the client must be set up at the OS
 level to load additional packages (`resource-requirements.md` §8).
@@ -250,7 +250,7 @@ declare its roles, tolerate the sandbox, and accept the node's credential
 (`resource-requirements.md` §5). A package that cannot declare roles gives
 predicates nothing to bind to; one that cannot be confined cannot be contained.
 
-### 8.1 Supply chain
+### 9.1 Supply chain
 
 **This is where the project acquires a software supply chain**, and it is a
 distribution problem rather than a protocol one:
@@ -264,7 +264,7 @@ subnet's members trust their patron's judgment about which packages to run.
 Nothing in design §16 expresses that, and it is not obviously reducible to the
 existing metric.
 
-### 8.2 Sandboxing
+### 9.2 Sandboxing
 
 **No host binding exposes network transaction primitives to a package.** This
 is not a matter of granting narrow scopes carefully: **the hooks do not exist.**
@@ -295,12 +295,12 @@ should treat it as an open engineering question rather than a settled one.
 
 ---
 
-## 9. Role assignment
+## 10. Role assignment
 
 **The node evaluates access and presents the result as a credential**
 (`resource-requirements.md` §1). The resource never reads network state.
 
-### 9.1 Membership is the outer gate
+### 10.1 Membership is the outer gate
 
 **Read authorisation state once per request and decide from that snapshot.** A
 membership check, an acknowledgement, a role row and an availability flag read at
@@ -308,7 +308,7 @@ four different instants can describe a state that never existed — and the requ
 either was authorised or was not.
 
 **An in-flight request completes under the state it started with.** A row that
-changes mid-request terminates the *session* (§9.4), which stops the next request;
+changes mid-request terminates the *session* (§10.5), which stops the next request;
 it does not reach into one already running, and a node that tried would be tearing
 down work whose result the resource may already have committed.
 
@@ -325,7 +325,7 @@ owner inside the set entitled to it.
 you which you are talking to, so use it: a member lacking a `SubtreeAck`, or whose
 role row grants no `connect`, gets the reason (`wire-format.md` §11), because they
 can act on it and already hold the topology it describes. **You answer from the row,
-not by evaluating a predicate** (§9.2). **A non-member gets `refused` for
+not by evaluating a predicate** (§10.2). **A non-member gets `refused` for
 everything**, including a resource keyhash that names nothing — otherwise a stranger
 enumerates what you host by watching which lookups differ.
 
@@ -365,7 +365,7 @@ access.** Every other predicate sits behind it, and no grant of any kind reaches
 outside it (`resource-requirements.md` §7.1.1). Departure therefore revokes
 everything, uniformly.
 
-### 9.2 Hold a role table; treat predicates as a macro over it
+### 10.2 Hold a role table; treat predicates as a macro over it
 
 **Materialise role assignments per resource, one row per Dunbar Org member**
 (design §11.4). **Authorisation at request time is a lookup**, never a predicate
@@ -386,7 +386,7 @@ and the changed member only for the rest. An implementation that treats them ali
 leaves rows stale in both directions: granting where the line has since risen, and
 withholding where it has fallen.
 
-**A table change is what terminates sessions** (§9.4 below), not a predicate change
+**A table change is what terminates sessions** (§10.5 below), not a predicate change
 in the abstract. The row moved or it did not.
 
 **Your predicate language is yours, and so is the table.** Neither crosses the wire
@@ -410,7 +410,7 @@ persistent address, a hardware capability: **not meeting a package's requirement
 ordinary capacity, not a conformance failure**, and it says nothing about you or the
 package. Failing to understand the credential contract would be.
 
-### 9.2a Predicates
+### 10.3 Predicates
 
 Assignment is by predicate over topology and archive data the node already holds.
 Affordances the UI must offer:
@@ -431,7 +431,7 @@ operator intended when they changed metrics (`resource-requirements.md` §7.2).
 depends on nobody but the member and those above them, whereas a quantile's line
 moves with the size of the org (`resource-requirements.md` §7.2.1).
 
-### 9.3 Templates
+### 10.4 Templates
 
 **Because every patron becomes an operator, administration must be nearly
 automatic** or the federation pattern does not happen
@@ -446,7 +446,7 @@ automatic** or the federation pattern does not happen
   incentive runs toward breadth. Shrink-wrapping means trusting the author's
   judgment about access, not merely their code.
 
-### 9.4 Terminate hosted sessions when a principal's roles change
+### 10.5 Terminate hosted sessions when a principal's roles change
 
 **When a principal's authorisation state changes for any reason, end the affected
 sessions rather than notifying the relying party.** Departure, disavowal, a
@@ -473,7 +473,7 @@ any network service must regardless.
 **Brokered resources are outside this** (design §11.2). The node can drop its own
 leg; what the external service does with its session is that service's business.
 
-### 9.5 Show the hosting model when binding a resource
+### 10.6 Show the hosting model when binding a resource
 
 **Display whether a resource is hosted here or brokered to an external service.**
 It follows from where the resource runs, so nothing needs declaring.
@@ -483,7 +483,7 @@ this node, while an external service continues on its own terms. **That is a
 property of the service the operator chose, not a shortfall here.** The operator
 should simply know which they are getting.
 
-### 9.6 What accessing users see
+### 10.7 What accessing users see
 
 - **The roles they hold on each resource.** Not the predicates that granted them,
   which are the operator's business.
@@ -492,7 +492,7 @@ should simply know which they are getting.
 
 ---
 
-## 10. Catalog
+## 11. Catalog
 
 **Answer catalog queries; do not propagate entries** (design §11.5). A node in your
 horizon asks what you have; you return the entries you **own** and that asker may
@@ -531,7 +531,7 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   or drop.
 - **A cached answer is the asker's business.** It was true when given, and nothing
   grants access on the strength of it — access is decided by the owner at request
-  time (§9.1).
+  time (§10.1).
 - **Return the owner's signature unchanged, and add none of your own.** An entry is
   signed once at registration and that signature is reused for every answer
   (`wire-format.md` §6). It keeps the entry attributable **to its owner** wherever

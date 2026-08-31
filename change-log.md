@@ -2632,7 +2632,7 @@ The correlation assumed a
 hosted package could reach topology, liveness, queue state, prekey requests and
 role-evaluation inputs. **The design offers no binding that exposes any of them**:
 §11's rule that *the resource never reads network state* applies to a hosted
-package as much as an external one, and `infra-client-requirements.md` §8.2 now
+package as much as an external one, and `infra-client-requirements.md` §9.2 now
 says the hooks **do not exist** rather than that they should be scoped narrowly.
 Offering a binding and scoping it carefully would still be offering it, and the
 narrow scope would become a policy an operator could widen. **What remains is an
@@ -4007,7 +4007,7 @@ risk, and §19.4 is the design's statement of current risk.
 | ~~C13~~ | ~~Disavowal reason code + resource access history~~ | **WITHDRAWN.** The join needs one party holding both halves, and only the disavowing patron does — resource-grant state is local to the owner's node, and that patron already knows their own reasoning. An observer with the code alone gets the band, which is what the enumeration was designed to give them; anyone holding the owner's role assignments already knows more than a reason code adds. **The scenario is also unreachable**: disavowal ends the relationship, so the membership gate (§11.2) revokes all access as a consequence, and there is no separately-dated grant revocation to correlate against. Numbers are never reused | — |
 | ~~C14~~ | ~~Capability vector + network point across an identity fork~~ | **WITHDRAWN.** A serving node is necessarily inside the Dunbar org, and a rotation propagates as a topology-class message pushed within horizon (§9.0.2) — so **any node positioned to see both attaches has already received the record binding the two keys.** The fresh-Genesis case fails from the other side: where unlinkability matters, the new identity appears in a *different* subnet under a different serving node that sees only one; where one node could see both, the person was adopted by a neighbour who met them, so the link exists socially whatever the transport shows. Numbers are never reused | — |
 | ~~C16~~ | ~~`AbuseReport.detail` + resource log~~ | **WITHDRAWN**, for the reason C13 was and one more. **The schema has no subject** (§11.6): a report carries `resource` and `reporter` and names no third party, so a detail field describing someone's circumstances has nobody to describe. And both ends are held by one party — either the resource reports to its own owner, or a user reports about a resource and any personal particular is their own. An earlier version distinguished this from C13 on the grounds that a third-party reporter delivers particulars the owner did not hold; **that reading was wrong**, since the owner granted the role and owns the resource. Numbers are never reused | — |
-| ~~C18~~ | ~~Datasets joined within one infra process~~ | **WITHDRAWN as stated.** The correlation assumed a package could reach topology, liveness, queue state, prekey requests and role-evaluation inputs; **the design offers no binding that exposes any of them** — §11's rule that *the resource never reads network state* applies to a hosted package, and `infra-client-requirements.md` §8.2 states that the hooks do not exist rather than being narrowly scoped. What remains is not a correlation but an **implementation question**: whether the isolation mechanism enforces that boundary against hostile code, which is for the sandboxing literature rather than this document. Numbers are never reused | — |
+| ~~C18~~ | ~~Datasets joined within one infra process~~ | **WITHDRAWN as stated.** The correlation assumed a package could reach topology, liveness, queue state, prekey requests and role-evaluation inputs; **the design offers no binding that exposes any of them** — §11's rule that *the resource never reads network state* applies to a hosted package, and `infra-client-requirements.md` §9.2 states that the hooks do not exist rather than being narrowly scoped. What remains is not a correlation but an **implementation question**: whether the isolation mechanism enforces that boundary against hostile code, which is for the sandboxing literature rather than this document. Numbers are never reused | — |
 | ~~P6~~ | ~~Forwarding records are a post-departure linkability window~~ | — | **CLOSED BY REMOVAL** 2026-08-26. Forwarding records are withdrawn (§4, deferred features), so no former patron holds a pointer to where a departed subordinate went and **departure severs immediately**. Numbers are never reused |
 | ~~C3~~ | ~~Forwarding record + old locator~~ | **CLOSED BY REMOVAL** 2026-08-26. The join required a forwarding record, which no longer exists (§4). Numbers are never reused | — |
 
@@ -4500,7 +4500,7 @@ looks for headings trapped in blocks; all 82 fences pair and none is.
 which 64 are returned is the node's choice, then argued that requiring an order
 would be "a sorting obligation with no consumer" — an argument against the rule the
 section had already made. "Concurrent re-registration" was stated twice in two
-wordings six lines apart. `infra-client-requirements.md` §10 told operators to
+wordings six lines apart. `infra-client-requirements.md` §11 told operators to
 **sign every entry they return**, contradicting "the owner alone signs" and the
 single owner signature `CatalogEntry` actually carries. And the sort key was not
 total — §3.7 states two owners may register the same resource keyhash — so the
@@ -4578,10 +4578,10 @@ the case its reasoning was about.
 step 4 said *role predicates* run on the request path while §11.4 says predicates are
 a macro over a materialised table and **neither of their two evaluations is on that
 path** — the step is a row lookup, and the same wording was corrected in
-`infra-client-requirements.md` §9.1. §11.3 said access is "a predicate evaluated at
+`infra-client-requirements.md` §10.1. §11.3 said access is "a predicate evaluated at
 request time", which is the same error inside the design itself; the point it was
 making — no durable grant object — survives as a row the node re-derives when
-topology changes. `infra-client-requirements.md` §9.1 gave the evaluation order as
+topology changes. `infra-client-requirements.md` §10.1 gave the evaluation order as
 *membership, existence* while citing §8.2, which gives existence first for a stated
 reason: membership is owner-relative and a keyhash you do not host has no owner.
 And `resource-requirements.md` §3 called the client-to-node carrier an rhtn control
@@ -4682,7 +4682,7 @@ without definitions.
 
 **An infra node that changed address could not say so.** §5.6's `seqno` is §4.3's
 per-node counter, which §4.3 said was "incremented on every position change".
-§5.6 replaces on strictly greater. §8.1a and §5.7.3 make equal `seqno` with
+§5.6 replaces on strictly greater. §10.1 and §5.7.3 make equal `seqno` with
 different contents **malformed** — reasoning, correctly, that a subject advances
 its own counter to express a change. **A node whose address changed but whose
 position did not could therefore advance nothing**, so its republished record
@@ -4793,7 +4793,7 @@ has no unavailability excuse because a device holding their key is up whether or
 not they are.
 
 **Correction, author 2026-08-28: nobody prompts a grandpatron.**
-`infra-client-requirements.md` §9.1 required an operator to be prompted for every
+`infra-client-requirements.md` §10.1 required an operator to be prompted for every
 `SubtreeAck` and forbade auto-signing, arguing that an automatic signature
 "recreates the situation the mechanism exists to correct". **That was an assistant
 elaboration and it is wrong.** §11.2.1 never asked a grandpatron *user* to
@@ -4939,7 +4939,7 @@ The last of the
 0.6 targets, and the propagation layer's second pass. Four defects, two fixed and
 two needing a protocol decision.
 
-**The cycle check was inverted.** §8.1b said *if field 2's path contains your own
+**The cycle check was inverted.** §10.2 said *if field 2's path contains your own
 position, you are your own ancestor*. A memo travels up patron edges, so on every
 legitimate hop the receiver **is** an ancestor of the patron it names and its path
 **is** a prefix of that patron's — containment therefore reports a cycle on ordinary
@@ -4957,8 +4957,8 @@ had already superseded. A removal now replaces the row with the former location 
 the subject's counter — a tombstone, local, no wire field.
 
 **Two receiver rules were stated as properties.** *A memo never leaves its subnet*
-is only true if a receiver drops one whose anchor is not its own, and §8.1b said
-nothing about what to do with it. Nor did it inherit §8.1a's no-ack/no-retry
+is only true if a receiver drops one whose anchor is not its own, and §10.2 said
+nothing about what to do with it. Nor did it inherit §10.1's no-ack/no-retry
 decision explicitly. Both now stated.
 
 **The memo was rebuilt around the patron, not the subject (author, 2026-08-28).**
@@ -5000,7 +5000,7 @@ counters, which say nothing about a subordinate's out-of-subnet activity. What
 replaces it is smaller — field 4's timestamp, retained per current row rather than
 as a history, so an ancestor holds when each slot last changed and not a series.
 
-**The unformable confirmation fetch dissolved with the same change.** §8.1b required
+**The unformable confirmation fetch dissolved with the same change.** §10.2 required
 a detection to be confirmed by fetching the underlying transaction via §5.9, and
 §5.9 needs an archive head that reaches you only by having adopted the subject
 (§3.1 field 7) — so the rule was unperformable for exactly the distant cycles the
@@ -5090,7 +5090,7 @@ locator seqno "changes only on position change". Both now carry the endpoint
 trigger. The sweep at the time updated §4.3, §5.6, infra §3.4 and P36 and missed
 the definition site itself.
 
-**§8.1b still ordered the fetch it had abolished.** *What a detecting node does*
+**§10.2 still ordered the fetch it had abolished.** *What a detecting node does*
 said the disavowal follows "once the transaction is fetched and confirmed", four
 paragraphs after the fetch requirement was replaced by local confirmation. Aligned.
 
@@ -5143,7 +5143,7 @@ author's original L = −3 argument in its final home.
 **Adjacency includes the serving relationship, both directions.** Removing the
 tier did not dissolve the gap the audit found: a tier-2 node is a full user whose
 patron holds no sessions, so its horizon view and its own departure flood still
-had no path. §8.1a's *adjacent* now names the serving node and attached clients
+had no path. §10.1's *adjacent* now names the serving node and attached clients
 alongside patron, subordinates and peers — still only sessions the node holds
 anyway — and states that the serving relationship is what carries control past
 light-client patrons.
@@ -5218,7 +5218,7 @@ append-only archive and could be disclosed in a prefix presented to a new patron
 exposing services long after withdrawal. **The archive never included them.** §10's
 definition is *adoption, departure, disavowal, peering and presence* — a resource
 registration is none of those, and the retention claim came from `wire-format.md`
-§6 and `infra-client-requirements.md` §10 over-generalising to "it keeps
+§6 and `infra-client-requirements.md` §11 over-generalising to "it keeps
 everything". Author: *the archive is only for topology transactions and PoP; the
 owner keeps a live table and generates responses from current state; there is no
 requirement to keep records of past resources.* §10 now states the exclusions and
@@ -5642,7 +5642,7 @@ structural, tenure, named, absolute rank, relative rank — and what each depend
 besides the member; only relative rank depends on the population.
 
 **One implementation consequence was worth stating.** `infra-client-requirements.md`
-§9.2 said to re-evaluate predicates when a node enters or leaves the horizon,
+§10.2 said to re-evaluate predicates when a node enters or leaves the horizon,
 scoring the entrant and dropping the leaver's rows. That is correct for four of the
 five classes and wrong for a quantile, whose line moves for **every** row when the
 count changes — so an implementation treating them alike leaves rows stale in both
@@ -6466,7 +6466,7 @@ narration all returned zero** — the categories that dominated the 2026-08-28 a
 sites needed work**, all in the two categories a spec is likeliest to grow late:
 
 **Self-narration, three sites.** §6.1.1's vignette gloss said a rule *"now states"*
-its default; `infra-client-requirements.md` §9 said design §11.2 *"now carries"* the
+its default; `infra-client-requirements.md` §10 said design §11.2 *"now carries"* the
 general rule; §7.5.2 said a compliant holder *"now"* has no way to defeat the
 subject's decision *"where previously it had only an obligation"*. Each described the
 document changing rather than the design working. The third kept its teaching by
@@ -6511,7 +6511,7 @@ between §3.6.3 and §3.6.3.1 — noticed during 0.8.3 and never fixed. Moved to
 §3.6.3, which is what its number claims. §3.6 now reads 4.6.1, 4.6.2, 4.6.2.1, 4.6.3,
 4.6.3.1, 4.6.4…, and no document has an out-of-order heading.
 
-**`infra-client-requirements.md` §4a is correctly placed and awkwardly named**, so it
+**`infra-client-requirements.md` §5 is correctly placed and awkwardly named**, so it
 is left alone: it follows §3.5 as an insertion between §3 and §5, which is what `4a`
 means. The same is true of `9.2a` there and `7.2a`/`7.2b` in `wire-format.md`.
 Renumbering them is a naming decision with reference consequences, not a local defect.
@@ -6636,3 +6636,26 @@ nowhere else to put those subsections.
 section numbers. Every file's removed and added counts match exactly, and **the only
 non-reference word removed anywhere in the set is `QUIC`** — from the retitled chapter.
 Zero unresolved references.
+
+### 2026-09-01 (migration, stage 3: infra alphanumerics, and a defect the earlier stages left)
+`infra-client-requirements.md`'s retrofit labels are gone: **§4a becomes §5** and
+**§9.2a becomes §10.3**, with the sections after each shifted. No document in the set now
+carries an alphanumeric section.
+
+**Stage 1 damaged seven references, and the cause is worth recording.** Its reference
+pattern was `\d+(\.\d+)*` with no trailing-letter guard, so `§7.2a` matched as `§7.2`
+and was remapped to the design's new §8.1, leaving the nonsense `§8.1a`. **The
+specifications escaped**: every `§7.2a` in them carries an explicit
+`` `wire-format.md` `` prefix, which the resolver honoured. Only the change log and the
+review plan wrote the reference bare, and only there did it break — 3 × `§8.1a` and
+4 × `§8.1b`, now §10.1 and §10.2. The review plan's own migration spec was corrupted by
+the same pass, its `§4a` rewritten to `§3a`.
+
+**The lesson is that prefixed cross-references survived a defective sweep and bare ones
+did not.** The convention that looked like verbosity is what made the corpus repairable.
+
+**Whole-migration verification.** Zero unresolved references across the five root
+documents; no heading-depth errors; nothing out of order; fences paired. Differencing
+word multisets against the pre-migration revision `14292b9` shows **no prose removed
+from any document** — every removed token is a section number, an old chapter title
+replaced by the split ones, or `Appendix A.n` becoming `Appendix B.n`.
