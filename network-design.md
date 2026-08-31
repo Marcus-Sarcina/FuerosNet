@@ -80,7 +80,7 @@ that before trusting any quantitative claim). **Appendix A** carries the convent
 the rest of the document is written to — normative vocabulary, where invariants live,
 and what a client does without asking.
 
-### Document set
+## Document set
 
 | Document | Authoritative on |
 |---|---|
@@ -170,7 +170,7 @@ what to do about it.
 **The diagnostic, for implementers:** *is there shared state between the party who
 would enforce and the party who would be bound?*
 
-- **Yes** → enforcement works. A patron countersigns, so a patron can refuse.
+- **Yes** → enforcement works. A patron (§2) countersigns, so a patron can refuse.
   Within a subnet there is enough shared state to make rules bite.
 - **No** → stop trying. Put the distinction in the evidence schema so it is
   visible, and let policy weight it.
@@ -212,7 +212,7 @@ subjects can unilaterally defect from their authority and reattach elsewhere,
 and nobody is obligated to accept any given root.
 
 A useful framing for everyone else: **each Dunbar Org is a team you have
-joined**, and membership in one is not exclusive of others.
+joined** (§2), and membership in one is not exclusive of others.
 
 > **Vignette V1 — The teams you're on.**
 > You belong to a company, a bowling league, a family, and an open-source

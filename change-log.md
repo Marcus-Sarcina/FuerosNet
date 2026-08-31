@@ -1559,7 +1559,7 @@ reasoning would find nothing and reasonably propose a full descriptor, whereas a
 mechanism deliberately shaped to carry only bad news documents its own reasoning
 by existing. Also removed a mangled fragment left in §15.2 by an earlier edit.
 
-### 2026-08-16 (0.1 factual verification, second run)
+### 2026-08-16 (0.1 factual verification, all five documents, second run)
 
 **Three contradictions,
 all one error, and it was a conflation rather than a fact.** HTTP/3 is selected by
@@ -1581,7 +1581,7 @@ wake mechanism* rather than for background delivery generally; and the SaaS
 federation claim allows that it holds for vendors supporting it well rather than
 universally.
 
-### 2026-08-16 (0.2 coherence, second run)
+### 2026-08-16 (0.2 coherence, all five documents, second run)
 
 Six contradictions, **both blocking
 ones introduced within the previous two hours**. The HTTP/3 correction reached
@@ -1601,7 +1601,7 @@ the phrase; and the infra document used "prekey fetch" both for the
 intent-independent reusable prefetch and for the on-demand one-time request that
 does carry intent.
 
-### 2026-08-16 (0.3 unjustified claims, second run)
+### 2026-08-16 (0.3 unjustified claims, all five documents, second run)
 
 84 claims, 58 load-bearing
 against 26 registered. **Most of the gap is §20's parameters and the wire
@@ -1621,7 +1621,7 @@ Three supporting claims added to §17.1 (carrier gateway aggregation, radio acce
 latency, and the comparative size of the extension attack surface), and seven
 intensifiers replaced with the property they were standing in for.
 
-### 2026-08-16 (0.4 parameter inventory, second run)
+### 2026-08-16 (0.4 parameter inventory, all five documents, second run)
 
 **No unresolved value
 contradiction across the five documents** — the first parameter pass to come back
@@ -1638,7 +1638,7 @@ intent is the weaker one, since peering is voluntary and zero peers is supported
 §3.4 now states it as what redundancy costs rather than as a condition of
 participation.
 
-### 2026-08-16 (0.5.1 rule fragility, second run)
+### 2026-08-16 (0.5.1 rule fragility, all five documents, second run)
 
 Eleven residual rules
 restated in terms of the property they protect. The reviewer's exclusions are as
@@ -1661,7 +1661,7 @@ The reviewer also cautioned against reintroducing an intermediary-retention clau
 into the abuse-report rule, which 0.5.2 removed as crossing the enforcement
 boundary — a cross-pass consistency check neither pass could have made alone.
 
-### 2026-08-16 (0.5.2 unenforceable mandates, second run)
+### 2026-08-16 (0.5.2 unenforceable mandates, all five documents, second run)
 
 Three findings, all
 upheld. **Two asked implementations to make a fetch "independent of intent" or to
@@ -1802,7 +1802,7 @@ camera roll is ambiguous and decays; an archive is durable, portable and
 non-repudiable, so along that vector this design is worse than the baseline, as
 §1.2.1 already concedes.
 
-### 2026-08-16 (0.7 LINDDUN, third run)
+### 2026-08-16 (0.7 LINDDUN, all five documents, third run)
 
 Three new findings. **N2 is C9
 reproduced on the infrastructure side**: topology, liveness, queue state, prekey
@@ -4011,8 +4011,6 @@ risk, and §19.4 is the design's statement of current risk.
 | ~~P6~~ | ~~Forwarding records are a post-departure linkability window~~ | — | **CLOSED BY REMOVAL** 2026-08-26. Forwarding records are withdrawn (§4, deferred features), so no former patron holds a pointer to where a departed subordinate went and **departure severs immediately**. Numbers are never reused |
 | ~~C3~~ | ~~Forwarding record + old locator~~ | **CLOSED BY REMOVAL** 2026-08-26. The join required a forwarding record, which no longer exists (§4). Numbers are never reused | — |
 
-## 2026-08-26
-
 ### 2026-08-26 (0.6.1 adoption implementation pass, clean room)
 
 Seven
@@ -5258,8 +5256,6 @@ organisation pass.** Depth-3 sections are written as `###` in 51 places and
 is the one a strict renderer agrees with. Ordering is otherwise clean across all
 141 headings. This is exactly the churn the review plan defers to 0.9, so it is
 recorded rather than fixed.
-
-## 2026-08-28
 
 ### 2026-08-28 (de-linting pass; the type-6 transaction retired)
 
@@ -6516,8 +6512,6 @@ is left alone: it follows §3.5 as an insertion between §3 and §5, which is wh
 means. The same is true of `9.2a` there and `7.2a`/`7.2b` in `wire-format.md`.
 Renumbering them is a naming decision with reference consequences, not a local defect.
 
-## 2026-08-31
-
 ### 2026-08-31 (the change log gains an outline)
 0.9-before found this file the hardest to navigate: **5,800 lines carrying exactly one
 heading**, with 262 dated entries formatted as bullets, so no outline existed and
@@ -6877,3 +6871,35 @@ pattern, which is what the section is.
 **Verified**: zero unresolved references across the five root documents, fences paired,
 no heading without a blank line before it. The only tokens removed outside
 `resource-requirements.md` are the two rewritten sentences.
+
+### 2026-09-01 (0.9-after, pass 4: heading collisions in this file, and the front matter)
+**Seven entry headings collided, and the reason is visible in the outline.**
+2026-08-16 is a reconstructed date carrying two whole review programmes: an early one
+whose passes are labelled *second run*, and a later one that labels its first round
+*all five documents* and then runs its own *second run* series. The two series produced
+identical strings. **The later of each pair now carries its own programme's label** —
+*0.1 factual verification, all five documents, second run* — which is the vocabulary
+that entry's own first round already used, not a distinction invented for the fix.
+
+**Three days had two `##` headings each**: 2026-08-26, 2026-08-28 and 2026-08-31 each
+opened, ran, and opened again. Merged. Nineteen day headings become sixteen, and the
+outline has no duplicate at either level.
+
+**The document set table was a subsection of the Preface.** design's front matter — the
+six-document table, the rule that requirements documents restate no protocol facts, and
+the pointer to Appendix B — sat at `###` inside a personal essay about the author's
+history with distributed systems. **A reader who skips the Preface skips the map**, so
+it is now `## Document set`, a sibling rather than a child.
+
+**§1 uses `patron` and `Dunbar Org` before §2 defines them**, which the reading order
+already anticipates — it says to read §2 next for the vocabulary. Rather than move
+vocabulary or restructure §1, each term now cites §2 at its first use, which is the
+convention the rest of the document already follows.
+
+**The topic index the review asked for is declined, and the reason is in the working
+rules.** *Any section that summarises state elsewhere is stale the moment something it
+summarises changes* — a topic index over 275 entries would be the largest consolidating
+section in the set and the one nothing forces anybody to update. The outline this file
+gained on 2026-08-31 is navigable and derives from the headings themselves; a second
+index would compete with it and decay. **If the author wants one, it should be
+generated rather than written.**
