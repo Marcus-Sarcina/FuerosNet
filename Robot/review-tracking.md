@@ -1503,3 +1503,97 @@ table had no row for it. Added.
 **Nothing in part (d) changed the design.** The crate-maturity findings restate §5.2's
 existing position; the `getrandom` `wasm_js` requirement was already recorded. That is
 the expected result for a re-run and is not a criticism of the pass.
+
+---
+
+## 0.9-after — organisation on the migrated structure (2026-09-01)
+
+**The headline result is negative and is the one that mattered.** The reviewer found
+**no broad numbering collapse across the document set**, which is what the pass existed
+to check: the migration relocated ~2,900 references and nothing was orphaned or
+double-numbered. Everything below is local.
+
+### Pass 1 — mechanical
+
+| # | Finding | Disposition |
+|---|---|---|
+| M1 | design §11's `11.0.x` block has no `### 11.0` parent | **FIXED** — added *What the boundary is, and what it is not*, titled from the subject all four subsections already shared |
+| M2 | design §14.2.4 followed by six same-depth `####` | **FIXED** — demoted to `#####` |
+| M3 | wire §4.5.1 followed by five same-depth `####` | **FIXED** — demoted to `#####` |
+| M4 | wire §10 and §10.1 carry identical titles | **FIXED** — §10.1 is *The push frame and the forwarding rule*, which is what it covers |
+| M5 | light-client: two bullets stranded after §1.3 | **FIXED** — both are verification obligations; moved to §1.2 |
+| M6 | resource §1's capacity block points at "the manifest (§7)", which is Roles | **FIXED** — moved to §8 Packaging, names the manifest inline. The manifest had no definition anywhere |
+| M7 | infra §10.2 ends with a package-hosting paragraph | **FIXED** — moved to §9; it and M6 now cite each other |
+
+### Pass 2 — splits
+
+| # | Finding | Disposition |
+|---|---|---|
+| S1 | wire §3.2: 231 lines under the heading *Genesis* | **FIXED** — genesis (3 lines) folds into §3.1 where back-pointers live; the rest becomes §3.2 presence rules, §3.3 timestamps, §3.4 what structural verification decides, §3.5 the signer set, §3.6 canonicality. Chapter retitled *Common envelope and structural verification*. **21 citations retargeted**, two of which were §3.2 citing itself |
+| S2 | wire §6: 327 lines, no subsection | **FIXED** — eight subsections, no paragraph moved. §6.4 had a bold lead standing in for a heading, the same defect as §3.5 |
+| S3 | design §7.4: seven bullets, the first 85 lines with a nested sublist | **FIXED** — four subsections. Content nested that deep **could not be cited at all**, which is why all 25 citations named the whole chapter |
+| S4 | design §18: 238 lines, eleven risk bullets, no subsection | **FIXED** — five subsections |
+
+### Pass 3 — duplication
+
+| # | Finding | Disposition |
+|---|---|---|
+| D1 | design §11.0.1 and resource §4.1 both carry the federation passage | **FIXED** — the design keeps the argument and gains the one phrase only the resource copy had; resource §4.1 keeps the obligation. 172 words removed |
+| D2 | wire §4.5.2 duplicates design §8.1.1's disclosure table | **NOT UPHELD** — they answer different questions over the same exchanges: the design asks what each exchange *reads*, wire what a recipient *sees*. **What was wrong is wire's claim they are the same table**; the row sets differ. Sentence corrected |
+
+### Pass 4 — the change log and the front matter
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 | Seven duplicate `###` entry headings | **FIXED** — 2026-08-16 carries two review programmes; the later of each pair takes its own programme's *all five documents* label |
+| C2 | *(found while applying)* Three days carry two `##` headings each | **FIXED** — merged; nineteen become sixteen |
+| C3 | A topic index for the change log | **DECLINED** — *a section that summarises state elsewhere is stale the moment something it summarises changes.* An index over 275 entries would be the largest consolidating section in the set and the one nothing forces anybody to update. If wanted, it should be generated |
+| C4 | design's front matter buried under the Preface | **FIXED** — the document-set table is `## Document set`, a sibling of the Preface rather than a child of a personal essay |
+| C5 | §1 uses `patron` and `Dunbar Org` before §2 defines them | **FIXED** — each cites §2 at first use, which is the document's own convention. Vocabulary stays at §2 by the author's migration decision |
+
+### Found while applying, and not in the review
+
+**Four citations to §7.4 attributed the finalization threshold to it, and §7.4 states
+neither half.** §8.1 defines `min(floor(n/2), 10, |candidates|)`; `wire-format.md` §5.5
+says what counts toward it. Two sites now cite wire §5.5, two cite §8.1. **The split is
+what exposed this** — four wrong pointers to a 191-line chapter all resolved, because
+the chapter was large enough to plausibly contain anything.
+
+**Nine headings had no blank line before them**, two of them pre-existing (design §8.1
+and wire §10.1, both sitting directly under their chapter heading).
+
+**Both disclosure tables say "ten of eleven" and each lists three rows that need
+something.** Under one reading — *use* meaning *reads a disclosable field from a
+presented record*, so a party that constructs or contributes has no use — ten is right
+and archive presentation is the one. Under the plain reading it is eight.
+**Unchanged, and for the author**: the counts are consistent with each other and the
+ambiguity is in the word *use*, not in either table.
+
+### Open for the author
+
+**Three citations to §11.0.1 discuss hosting while §11.0.1 is about federation.**
+Verified pre-existing against `14292b9` — the section was §9.0.1 before and carried the
+same title, so this is not migration damage. A fourth, *"§11.0.1's manifest"*, is fixed
+here because pass 1 gave the manifest a definite home at `resource-requirements.md` §8.
+The remaining three need a decision about what was meant, not a reading of what is
+written:
+
+- design §11.4's who-sees-what list — *"the hosting path, which is inside the owner's
+  own machine or a connection the owner controls (§11.0.1)"*. **Nothing else in the set
+  states this claim**; it appears only at its own citation.
+- design §11.5 — *"registered with, and answered by, the infra node hosting it
+  (§11.0.1)"*. The sentence is inside §11.5 and describes §11.5's own subject, so the
+  citation is self-referential or meant for `wire-format.md` §6.2.
+- design §14.2's visibility table — *"parses and re-serialises the request to insert the
+  credential (§11.0.1, `wire-format.md` §11.2)"*. The wire half is right.
+
+§18.2's A21 row is the one §11.0.1 citation that is correct.
+
+**`change-log.md` holds 160 unresolved section references**, and `Robot/review-plan.md`
+two. Extending the checker to them for the first time surfaced this; the count was 166
+before the §3.2 split and fell as new subsections resolved old names. **These are
+as-of-filing** — an August entry describing §11.8.7 describes the document as it stood.
+The working rules grant that status to this file explicitly and say nothing about the
+change log, and remapping historical entries to current numbering would have them
+describe changes to sections that did not exist when the change was made. **Author's
+call.**
