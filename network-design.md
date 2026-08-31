@@ -3212,7 +3212,8 @@ Three properties follow, none of which was designed for:
 - **Every user's access is administered by someone they have a real relationship
   with.** No distant operator decides whether you may use the subnet-wide service;
   your patron does. §1's freedom argument appears here as an **architectural
-  property** rather than a claim.
+  property** rather than a claim — local accountable intermediaries are structurally
+  required, not merely hoped for.
 - **The gate holds at every hop.** A wider system cannot reach past a patron to
   that patron's members, and a patron may deny access the wider system would
   grant.
@@ -3631,7 +3632,8 @@ host or use it, while remaining fully conforming.** Two different failures:
 
 **A package should declare what it needs** so the second failure is visible before
 installation rather than at first request. Nothing in the protocol enforces that;
-it is packaging hygiene, and §11.0.1's manifest is where it belongs.
+it is packaging hygiene, and `resource-requirements.md` §8's manifest is where it
+belongs.
 
 **Binding is by predicate over data the node already holds.** Topology and archive
 within its horizon, so the predicate language needs no new state. It is a query

@@ -6826,3 +6826,54 @@ heading. All fixed; the set now has none.
 **Verified**: zero unresolved references across the five root documents, no depth
 errors, fences paired, and **word-multiset differencing shows not one token removed
 from any of the five** — every heading in this pass was added, nothing was rewritten.
+
+### 2026-09-01 (0.9-after, pass 3: one duplication confirmed, one refuted, and four citations pointing at the wrong section)
+The review's two duplication findings, verified against the text. **One holds and one
+does not.**
+
+**The federation passage was near-verbatim in two documents.** design §11.0.1 and
+`resource-requirements.md` §4.1 shared a title, an opening sentence, three bullets and
+a closing cost paragraph. The design keeps it — this is rationale, and the design is
+authoritative on rationale — and **gains the one phrase only the resource copy had**:
+*local accountable intermediaries are structurally required, not merely hoped for.*
+Resource §4.1 keeps what a package author needs, which is the obligation rather than
+the argument: build for one instance, let the application federate. **172 words of
+duplicated rationale removed**; the two citations that depend on §4.1 still resolve,
+because §4.1 still says every patron becomes an operator.
+
+**The disclosure-table finding does not hold as stated.** wire §4.5.2 and design
+§8.1.1 answer different questions over the same exchanges — the design asks what each
+exchange *reads* and whether it needs location, which is the sweep that justifies the
+scoping; wire asks what a recipient *sees*, which is what a holder needs before
+presenting. Neither is redundant. **What is wrong is wire's claim that design §8.1.1
+"carries the same table"**, because the row sets differ: the design counts the trust
+metric, which reads adoptions and no presence record at all, and combines the two
+`txid`-only exchanges that wire lists separately. Both arrive at eleven rows by
+different arithmetic. The sentence now says what each table answers and where they
+diverge.
+
+**Four citations to §11.0.1 point at a section about federation while discussing
+hosting.** Checked against `14292b9`: **pre-existing, not migration damage** — the
+section was §9.0.1 before and carried the same title. One is fixed here, because its
+target became definite this session: *"§11.0.1's manifest is where it belongs"* now
+cites `resource-requirements.md` §8, where pass 1 put the manifest.
+
+**Three are left for the author**, because fixing them means deciding what he meant,
+not what the text says:
+
+- design §11.4's who-sees-what list — *"the hosting path, which is inside the owner's
+  own machine or a connection the owner controls (§11.0.1)"*. **Nothing else in the
+  set states this**; the claim appears only at its own citation.
+- design §11.5 — *"registered with, and answered by, the infra node hosting it
+  (§11.0.1)"*. The sentence sits inside §11.5 and describes §11.5's own subject, so
+  the citation is either self-referential or meant for `wire-format.md` §6.2.
+- design §14.2's visibility table — *"parses and re-serialises the request to insert
+  the credential (§11.0.1, `wire-format.md` §11.2)"*. The wire half is right; the
+  design half is not obviously §11.0.4 either.
+
+**§18.2's A21 row is the one correct §11.0.1 citation** — it names the federation
+pattern, which is what the section is.
+
+**Verified**: zero unresolved references across the five root documents, fences paired,
+no heading without a blank line before it. The only tokens removed outside
+`resource-requirements.md` are the two rewritten sentences.

@@ -212,34 +212,19 @@ vignette.
 ### 4.1 Wider reach is federation, not wider scope
 
 **A resource is neighbourhood-scale; an application can be any scale.** §7.1.1
-bounds a resource to its owner's Dunbar Org, and that is not a ceiling on what can
-be built. A subnet-wide or cross-subnet service is achieved by **many local
-instances.** Each hosted by a patron, each administering its own team, with the
-application handling instance-to-instance connection in its own architecture.
+bounds a resource to its owner's Dunbar Org. **That is not a ceiling on what can be
+built**: a subnet-wide or cross-subnet service is **many local instances**, each
+hosted by a patron, each administering its own team, with the application handling
+instance-to-instance connection in its own architecture. It is the same shape as
+§4's gateway category at a different scale — one mechanism, not two.
 
-**The network never expresses wide-scale access control because it never sees a
-wide-scale audience.** Each patron holds a connection to the larger system and
-administers only their own members.
+**What this means for a package author.** Do not design for a single wide-scale
+deployment and expect the network to express its access control; it never sees a
+wide-scale audience. Design for one instance, and let the application federate.
 
-Three properties fall out, and they are better than a deliberate design would
-likely have produced:
-
-- **Every user's access is administered by someone they have a real relationship
-  with.** No distant operator decides whether you may use the subnet-wide service;
-  your patron does. design §1's freedom argument appears here as an **architectural
-  property** rather than a claim — local accountable intermediaries are structurally
-  required, not merely hoped for.
-- **The gate holds at every hop.** A wider system cannot reach past a patron to
-  that patron's members, and a patron may deny access the wider system would grant.
-  Local membership stays authoritative for local members.
-- **It is the same shape as §4's gateway category.** A patron running an instance
-  of a subnet-wide service and a patron running a homeserver bridging to another
-  network are doing the same thing at different scales. One mechanism, not two.
-
-**The cost: every patron becomes an operator.** Holding a connection to the larger
-system, hosting an instance, administering team access, carrying the availability
-burden. That is ongoing work of unquantified size, and it lands on exactly the people design §3.3
-already asks to run infrastructure.
+**design §11.0.1 carries the argument** — the three properties that follow from
+this, and the cost, which is that every patron running an instance becomes an
+operator.
 
 > **Assumption — resource-layer sibling of A11.** *Patrons will actually do this
 > work.* A11 says ordinary users tolerate ceremony friction rather than routing

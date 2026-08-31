@@ -1380,7 +1380,12 @@ record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 #### 4.5.2 Which exchanges see the disclosable fields
 
 **Stated per exchange, because a holder needs to know what a given recipient will be
-able to read.** design §8.1.1 carries the same table with the reasoning.
+able to read.** design §8.1.1 sweeps the same exchanges to establish *why* each field
+is withholdable — what each one **reads**, and whether it has any use for location.
+This table answers the holder's question instead: what a given recipient **sees**.
+**The row sets are close but not identical**: the design counts the trust metric,
+which reads adoptions and no presence record at all, and combines the two
+`txid`-only exchanges that appear separately here.
 
 | Exchange | Disclosable fields |
 |---|---|
