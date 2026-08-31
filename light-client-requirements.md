@@ -145,6 +145,12 @@ that is noted in place.
 - **Verify the counterparty's verifier selection before signing.** If they
   selected off-seed and you sign anyway, you hold a record that fails
   recomputation permanently and cannot be repaired (design §8.1.2).
+- **Count *n* from the back-pointer the record commits**, never from a subject's
+  current head (`wire-format.md` §4.5). Counting from a current head lets a subject
+  backfill after the ceremony and present a later evaluator a different threshold
+  than any witness saw.
+- **Report a record as unverifiable, not invalid, when you lack a participant's
+  history.** Those are different answers and a caller may act on the difference.
 - **Look at the candidate population you are sampling, not only at the answers it
   returns.** You enumerate the counterparty's prior counterparties in order to select
   from them, so you can see whether you recognise any of them before you see a single
@@ -167,14 +173,6 @@ job.
   involvement. Both become durable nodes in someone else's evidence graph, and the
   protocol's consent machinery does not cover them (design §19.6).
 
----
-
-- **Count *n* from the back-pointer the record commits**, never from a subject's
-  current head (`wire-format.md` §4.5). Counting from a current head lets a subject
-  backfill after the ceremony and present a later evaluator a different threshold
-  than any witness saw.
-- **Report a record as unverifiable, not invalid, when you lack a participant's
-  history.** Those are different answers and a caller may act on the difference.
 
 ---
 

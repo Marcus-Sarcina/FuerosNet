@@ -3180,6 +3180,10 @@ Implementation requirements — package format, sandboxing, supply chain, the
 role-binding interface — are in `infra-client-requirements.md`. Conformance
 requirements for a resource are in `resource-requirements.md`.
 
+### 11.0 What the boundary is, and what it is not
+
+Four properties of the resource boundary that the rest of this chapter assumes.
+
 #### 11.0.1 Wider reach is federation, not wider scope
 
 **A resource is neighbourhood-scale; an application can be any scale.** §11.2
@@ -5042,7 +5046,7 @@ This is a gap in §5, not merely in this section.
 **There is directly applicable prior art, specified and formally verified.** The
 requirement below is to adopt it, not to design a replacement.
 
-#### Only leaf-to-leaf needs the asynchronous machinery
+##### Only leaf-to-leaf needs the asynchronous machinery
 
 | Case | What it needs |
 |---|---|
@@ -5053,7 +5057,7 @@ requirement below is to adopt it, not to design a replacement.
 That narrows the import considerably: two of the three endpoint cases are already
 covered by transport.
 
-#### Key agreement: PQXDH
+##### Key agreement: PQXDH
 
 **Signal's PQXDH** is designed for exactly this situation, one party offline
 having published prekeys, the other wanting to send immediately and establish a
@@ -5078,7 +5082,7 @@ post-quantum *confidentiality*. §5.1's identity keys are hybrid, so authenticat
 here can bind to the post-quantum component as well. That is a place where this
 design should exceed the deployed profile rather than inherit its limit.
 
-#### Session: the Triple Ratchet
+##### Session: the Triple Ratchet
 
 **Signal's Triple Ratchet.** The Double Ratchet running alongside the **Sparse
 Post-Quantum Ratchet (SPQR)**, with their outputs mixed — provides forward secrecy
@@ -5091,7 +5095,7 @@ chunks across successive headers. This design is unusually sensitive to object
 size (§5), so a construction that already addresses key-size inflation is worth
 more here than elsewhere.
 
-#### A property that falls out, and is wanted
+##### A property that falls out, and is wanted
 
 PQXDH provides **a form of cryptographic deniability** for the session, subject to
 the limitations Signal's specification states about what each party holds and
@@ -5103,7 +5107,7 @@ met someone and not be able to prove what you said to them.**
 The split is not a compromise between the two goals. It is the correct arrangement
 of them, and it arrives free with the imported construction.
 
-#### Blanket prefetch defeats the intent signal
+##### Blanket prefetch defeats the intent signal
 
 **A prekey fetch discloses intent to message, before any message exists** (C11).
 Fetching on demand therefore announces each intended conversation to whoever serves
@@ -5154,7 +5158,7 @@ conversation, that is still the better trade.
 intent signal returns, since blanket prefetch does not scale past a bounded set —
 but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.3).
 
-#### Still to settle
+##### Still to settle
 
 - **Prekey rotation and last-resort policy.** Cadence, and the accepted reduction
   in forward secrecy when the last-resort key is used.

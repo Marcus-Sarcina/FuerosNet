@@ -6689,3 +6689,31 @@ Differencing word multisets against `14292b9` leaves 53 removed tokens in
 `network-design.md` and one in `wire-format.md`, every one of them an old chapter title
 replaced by a split one, `Appendix A.n` becoming `B.n`, or an intro paragraph rewritten
 — and `QUIC`, from the retitled transport chapter.
+
+### 2026-09-01 (0.9-after, pass 1: heading levels and three misfiled blocks)
+The post-migration review's mechanical findings, applied as one pass. The review's
+headline result was negative and reassuring — **no broad numbering collapse across the
+set** — so what remains is local.
+
+**Three heading-level defects.** Design §11's four `11.0.x` subsections had no `### 11.0`
+parent, so the numbering entered at depth four; the umbrella now exists as *What the
+boundary is, and what it is not*, which is the subject all four already shared. Design
+§14.2.4 was followed by six unnumbered `####` headings at its own depth, reading as
+siblings when they are its parts; wire §4.5.1 by five. Both sets demoted to `#####`.
+
+**Wire §10 and §10.1 carried the same title.** A chapter and its first section calling
+themselves *Topology propagation* tells a reader nothing about which to open. §10.1 is
+the `TopologyPush` frame and the rule for forwarding it, and is now titled so.
+
+**Three blocks sat in chapters that were not about them.** Two light-client bullets on
+counting *n* and on reporting unverifiable records were stranded after §1.3's closing
+rule; both are verification obligations and move to §1.2. A capacity paragraph in
+resource §1 pointed at "the manifest (§7)" — §7 is Roles, and the manifest is defined
+nowhere; it moves to §8 Packaging and names the manifest inline. Its operator-side twin
+sat at the end of infra §10.2, which is about session identifiers, and moves to §9
+Package hosting. The two now cite each other.
+
+**Verified**: zero unresolved references across the five root documents, no depth
+errors, fences paired. Word-multiset differencing against the prior commit shows the
+only removed tokens are the retitled wire heading and the rewritten resource sentence —
+no prose was lost in the moves.

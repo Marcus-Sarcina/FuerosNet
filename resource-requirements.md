@@ -41,16 +41,6 @@ This dissolves the read-surface question rather than answering it: a resource
 never reads owner state directly, so no read-scoping interface — a
 security-sensitive surface — needs to exist at all.
 
----
-
-**Declare what you need.** Storage, compute, hardware capabilities, a persistent
-address, anything a requesting client must supply. **A node that cannot meet those
-requirements cannot host you, and remains conforming** — so does a user device that
-cannot use you. That is ordinary capacity rather than a defect on either side.
-
-**The manifest is where this belongs** (§7). Declaring it there makes the mismatch
-visible before installation instead of at first request, which is packaging hygiene
-rather than something the protocol enforces.
 
 ## 2. What the gateway presents
 
@@ -638,6 +628,14 @@ protocol.
 **It also creates a trust relationship the trust model does not represent:** a
 subnet's members trust their patron's judgment about which packages to run. Nothing
 in §9 expresses that, and it is not obviously reducible to the existing metric.
+
+**Declare what you need in the manifest.** Storage, compute, hardware capabilities, a
+persistent address, anything a requesting client must supply. **A node that cannot meet
+those requirements cannot host you, and remains conforming** — so does a user device
+that cannot use you. That is ordinary capacity rather than a defect on either side.
+Declaring it here makes the mismatch visible before installation instead of at first
+request, which is packaging hygiene rather than something the protocol enforces. The
+operator's side of the same fact is `infra-client-requirements.md` §9.
 
 ---
 

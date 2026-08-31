@@ -250,6 +250,12 @@ declare its roles, tolerate the sandbox, and accept the node's credential
 (`resource-requirements.md` §5). A package that cannot declare roles gives
 predicates nothing to bind to; one that cannot be confined cannot be contained.
 
+**You may decline to host a package you cannot support.** Storage, compute, a
+persistent address, a hardware capability: **not meeting a package's requirements is
+ordinary capacity, not a conformance failure**, and it says nothing about you or the
+package. Failing to understand the credential contract would be. The package's side of
+the same fact is `resource-requirements.md` §8.
+
 ### 9.1 Supply chain
 
 **This is where the project acquires a software supply chain**, and it is a
@@ -405,10 +411,6 @@ shared across them would re-link that caller between resources and undo what the
 pairwise principal was derived to separate (design §11.0.2) —
 `resource-requirements.md` §3 states the resource-facing half.
 
-**You may decline to host a package you cannot support.** Storage, compute, a
-persistent address, a hardware capability: **not meeting a package's requirements is
-ordinary capacity, not a conformance failure**, and it says nothing about you or the
-package. Failing to understand the credential contract would be.
 
 ### 10.3 Predicates
 

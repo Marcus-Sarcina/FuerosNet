@@ -1262,7 +1262,7 @@ See design §8.1.1 for what it does not reach and why. *`started_at` and `subtyp
 are body fields, not disclosable — the structural rules consume them, and
 withholding them concealed nothing the body does not already show (§4.5).*
 
-#### The construction is a digest list, not a tree
+##### The construction is a digest list, not a tree
 
 **Each disclosable field becomes a salted digest; the body commits to the sorted
 list of digests.**
@@ -1297,7 +1297,7 @@ duplicated-node second-preimage class**. SD-JWT's own construction is a digest a
 for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
 digest can never be reinterpreted as a root or the reverse.
 
-#### Salts are mandatory
+##### Salts are mandatory
 
 **Every disclosure carries a fresh 16-byte salt.** Without one, an undisclosed
 field is recovered by brute force from its digest: `subtype` has two values,
@@ -1309,7 +1309,7 @@ mean anything here.**
 must therefore compute one root. They are ordinary record state afterwards, held by
 both participants and by anyone given a full record.
 
-#### What travels: the presentation
+##### What travels: the presentation
 
 **A presented record is the envelope plus exactly seven disclosure slots, in
 ascending label order.** Stated as a schema because prose alone left
@@ -1339,7 +1339,7 @@ present, so a recipient always knows a field exists and was withheld. This is th
 same posture as §5.5's `pending` and `unavailable` verifier responses: absence is
 legible rather than silent, and a policy may weight it.
 
-#### Cost
+##### Cost
 
 **+16 bytes per disclosable field at rest** — about 112 bytes on a ~35 KB record,
 **0.3%**. A minimised presentation carries 32 bytes per withheld field, at most 224
@@ -1347,7 +1347,7 @@ bytes. **Presentation size does not otherwise fall**: a presence record is ~96%
 signatures and the envelope requires exactly the required signer set, so a minimised
 record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 
-#### What a decoder MUST do
+##### What a decoder MUST do
 
 - **Reject a record whose recomputed root does not equal body field 8.**
 - **Reject a slot count other than seven**, a revealed label differing from its
@@ -3246,7 +3246,7 @@ meeting that, but **neither guarantees failure** (RFC 8445).
 ---
 
 ## 10. Topology propagation
-### 10.1 Topology propagation
+### 10.1 The push frame and the forwarding rule
 
 **design §15 defines the classes and the patterns; this section says what carries
 them.** *Flood-within-horizon* and *push near, redirect far* are
