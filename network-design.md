@@ -1089,7 +1089,7 @@ The case that decides it: Alice is patron to Bob, who is friends with Charlie.
 Alice dislikes Charlie. **Bob being unable to memorialise a friendship he
 actually has is not intended behaviour under any reading of this design.**
 
-**This makes the eclipse attack permeable for the case that matters.** §18's
+**This makes the eclipse attack permeable for the case that matters.** §18.4's
 accepted risk is eclipse of a **new joiner**, whose view is controlled from day
 one. A new joiner has no prior counterparties, so `min(floor(n/2), 10, |candidates|)`
 is zero (§8.1)
@@ -1111,7 +1111,7 @@ verifier responses are required, and reaching those verifiers may run through th
 patron doing the eclipsing. An
 established user who becomes eclipsed has a harder escape, though they also have
 existing standing and relationships that a new joiner does not, which is why
-§18 scopes the accepted risk to new joiners in the first place. This makes a spammer's volume chargeable against their **patron's**
+§18.4 scopes the accepted risk to new joiners in the first place. This makes a spammer's volume chargeable against their **patron's**
 reputation, so patrons become natural rate limiters — self-enforcing rather than
 protocol-enforced.
 
@@ -1287,7 +1287,7 @@ so the counterparty cannot predict which of its neighbours will be asked; and
 possible**, because catching every one of a party's nominations then requires a
 correspondingly larger fake neighbourhood rather than one well-placed node. Branch
 spread — not the flow metric — is what raises the cost of the Potemkin case in
-§18.
+§18.4.
 
 **Availability is discovered by the nominator, not advertised by the candidate.**
 A large fraction of the nodes a party would like to nominate are inactive, or
@@ -1425,6 +1425,8 @@ person in front of them as continuous with a history.
 
 ### 7.4 Required hardening
 
+#### 7.4.1 Oracle leakage
+
 - **Oracle leakage.** Any match/no-match oracle leaks the template under
   repeated probing (hill-climbing / template reconstruction). Published attacks
   against binary-output matchers need thousands to tens of thousands of queries,
@@ -1492,11 +1494,11 @@ person in front of them as continuous with a history.
     rather than per ceremony. **Witness countersignatures would not repair it** for the
     reason already given — a distant verifier cannot tell real witnesses from an
     attacker's keys — so the price against a thief is set by the verifiers' own limits
-    and by how many prior counterparties the victim has (§18's stolen-device entry).
+    and by how many prior counterparties the victim has (§18.3's stolen-device entry).
   - **Surface each query to the subject's client as it arrives**, independent of the
     limits above, so probing is visible even when it stays under them.
     **Notification, not a log**: the client sees the query, and what persists
-    afterwards is the ceremony-window counter and nothing else (§7.4). A retained
+    afterwards is the ceremony-window counter and nothing else (the aggregate above). A retained
     history would rebuild the timeline the counter exists to avoid.
 
     **This is client-to-client and the subject is not interrupted**. A ceremony runs several verifiers per participant, with witnesses
@@ -1510,13 +1512,16 @@ person in front of them as continuous with a history.
   attacker cannot choose *which* verifiers are queried, probes scatter across
   verifiers holding different photographs — different session, lighting and
   angle, so repeated probing does not converge on any single template.
+
+#### 7.4.2 Consent
+
 - **Consent: the subject countersigns every query about themselves.** *No
   verifier may answer an identity-comparison request unless the subject of that
   request has signed it.* Checkable from the query itself, so an unauthorised
   disclosure cannot be laundered into the trust graph.
 
   **The subject is already present, which is what makes this workable.** The subject is
-  **physically present at the ceremony** that the query is bound to (§7.4), so
+  **physically present at the ceremony** that the query is bound to (§7.4.1), so
   countersigning happens in real time at no cost. Almost no other consent
   mechanism has that property.
 
@@ -1557,6 +1562,9 @@ person in front of them as continuous with a history.
   consented to A becoming a biometric verification service merely by meeting, and
   the per-query countersignature above is what makes that consent explicit rather
   than presumed.
+
+#### 7.4.3 Availability, and what silence is worth
+
 - **"Unavailable" must not be free.** *A participant who undertakes to retain
   identity-verification material about another must publicly commit, at the time
   of collection, to how long that material will remain available for
@@ -1592,6 +1600,9 @@ person in front of them as continuous with a history.
     §16.6 forbids the same weighting on the social-trust axis, and if an
     implementation collapses the two scalars this becomes a genuine
     re-privileging of a paying class. Check the metric against that.
+
+#### 7.4.4 Matching, templates, and local storage
+
 - **False rejection is the practical hazard, not false acceptance.** Cross-device
   matching under uncontrolled lighting, angle, ageing and occlusion produces a
   few percent false-reject rate; across q=5 queries the chance of at least one
@@ -1648,7 +1659,7 @@ while storing the new modality going forward. The
 record therefore carries a **capture-modality field** now, so a future client knows
 what comparison is possible without fetching the image itself.
 
-**Default retention: 2 years**, declared in the record per §7.4. A *default*
+**Default retention: 2 years**, declared in the record per §7.4.3. A *default*
 rather than a limit: the subject enforces it by choosing whether to release the
 capture key at all (§7.5.2).
 
@@ -1675,7 +1686,7 @@ Two justifications carry the value:
 
 **These pull against each other.** Longer retention improves detection of
 slow-burn shared-identity schemes; shorter retention reduces false rejection from
-ageing, and false rejection is the more common failure (§7.4). Two years is a
+ageing, and false rejection is the more common failure (§7.4.4). Two years is a
 **compromise, not an optimum on any axis**, and is recorded as chosen, not derived
 (§21).
 
@@ -1700,7 +1711,7 @@ client refreshes on every subsequent meeting.
 
 **Minors.** The ageing argument is strongest for young subjects and their
 `inconclusive` rate will be higher under any policy. Rather than storing age —
-more PII — rely on §7.4's subject-set retention policy and expect elevated
+more PII — rely on §7.4.3's subject-set retention policy and expect elevated
 `inconclusive` responses in this population.
 
 #### 7.5.2 Keystream-encrypted captures: the subject holds the key
@@ -1769,7 +1780,7 @@ record knows what to expect without needing it to be binding.
 **Two consequences a client should surface rather than bury.**
 
 **Withholding is now a deliberate act, and it looks like unavailability.**
-§7.4 counts an `unavailable` response toward finalization, which was right when
+`wire-format.md` §5.5 counts an `unavailable` response toward finalization, which was right when
 unavailability meant a verifier was offline or had deleted in good faith. It now
 also covers a subject who chose not to help, and an evaluator cannot tell the
 difference. That is the correct treatment, the alternative is asking evaluators to
@@ -1790,7 +1801,7 @@ subject's decision, rather than merely an obligation not to.
 
 ##### Interaction with verifier queries
 
-**None, because the subject is always present.** §7.4 requires the subject's
+**None, because the subject is always present.** §7.4.2 requires the subject's
 countersignature on every verification query, so there is no case where B is asked
 about A while A is absent. The sequence:
 
@@ -1815,7 +1826,7 @@ counterparty's device, in the same way and for the same reason they lose portabl
 standing (§10.2).
 
 The practical consequence is that a post-loss recovery ceremony rests on
-`personal_knowledge` rather than `photo_match`, which §7.4 already treats as the
+`personal_knowledge` rather than `photo_match`, which §7.4.4 already treats as the
 weaker basis. **The scheme adds no dependency here; it makes an existing one
 visible.**
 
@@ -2129,6 +2140,7 @@ never the presumed features of a counterparty's client.
 ---
 
 ## 8. The presence record
+
 ### 8.1 Presence record format
 
 Field-level specification. **`wire-format.md` is authoritative on encoding**; the
@@ -2171,7 +2183,7 @@ PresenceRecord {
     signature       : COSE_Signature within the envelope's COSE_Sign
     # retention and client_integrity are DISCLOSABLE (§8.1.1) and travel in the
     # disclosure set rather than the body. No locator: see below. Disclosure
-    # consent is the per-query subject countersignature (§7.4)
+    # consent is the per-query subject countersignature (§7.4.2)
   }
 
   # --- proximity evidence --- DISCLOSABLE
@@ -2222,7 +2234,7 @@ PresenceRecord {
     template_version: uint16           # omitted when basis = personal_knowledge
                                        # or absent
     subject_consent : COSE_Sign1       # BY THE SUBJECT, over the query_id —
-                                       # see `wire-format.md` §5.6 (§7.4)
+                                       # see `wire-format.md` §5.6 (§7.4.1)
     signature       : COSE_Sign1       # BY THE VERIFIER
   }
 }
@@ -2264,7 +2276,7 @@ open finding.
 final, it must carry independent responses from a bounded fraction of the
 subject's recent prior counterparties, up to a fixed maximum sample.* Requiring
 *every* verifier to respond would couple finalization to verifier availability
-and collide with the `pending` mechanism for offline light clients (§7.4).
+and collide with the `pending` mechanism for offline light clients (§7.4.3).
 Present encoding:
 
 > For a subject with *n* recorded presence transactions in the preceding 730 days,
@@ -2302,7 +2314,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Witness signing (§7.1) | its own corroboration | **contributes it** |
 | Verification by query (§7.3) | a fuzzed profile and a query id — **not the record**, which does not exist yet | no |
 | Verifier-selection recomputation (§8.1.2) | nonces, seed, candidate set | no |
-| Finalization threshold (§7.4) | verifier responses | no |
+| Finalization threshold (§8.1) | verifier responses | no |
 | Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
@@ -3849,7 +3861,7 @@ signer is the resource itself.
 **Not enforceable, and not attempted:** what an unrelated party does with a copy
 it obtains anyway. The owner can hand the signed object to anyone, and no shared
 state lets any rule govern a foreign implementation's storage or trust
-calculation. §7.4 already states this limit for biometric disclosure — *a holder
+calculation. §7.4.2 already states this limit for biometric disclosure — *a holder
 who simply tells someone what they know is beyond any protocol rule* — and it
 applies identically here.
 
@@ -4418,7 +4430,7 @@ second binding established beforehand, an evaluator willing to proceed without
 currency, or returning as a Genesis identity and **abandoning the accumulated
 history** — which converts denial of service into destruction of portable standing.
 **"Re-adoption is available" is therefore not a general answer to patron abuse**, and
-§18 should not be read as offering one.
+§18.5 should not be read as offering one.
 
 #### 12.7.3 Anchor caching is a per-node policy, not a protocol constant
 
@@ -4801,7 +4813,7 @@ same (`wire-format.md` §11.1).
    cheap enough to favour a lazy interval.
 3. **Client heartbeat fails (server side):** the patron **marks the client
    unreachable and begins queuing.** It does not simply do nothing, because
-   §7.4's `pending` mechanism depends on the patron distinguishing "offline"
+   §7.4.3's `pending` mechanism depends on the patron distinguishing "offline"
    from "no record". **This state replicates to siblings**, or a sibling
    answering during failover has no idea of the client's status.
 4. **Server heartbeat fails (client side):** after **3 consecutive missed
@@ -4907,8 +4919,8 @@ messages of anyone whose absence exceeded it. A space bound survives an absence 
 any length; a subordinate who accumulates more than their share hits a ceiling
 rather than a clock.
 
-**A dropped verification query damages its subject, not its sender.** §7.4 counts
-`unavailable` toward the finalization threshold, so a verifier who never receives a
+**A dropped verification query damages its subject, not its sender.** `wire-format.md`
+§5.5 counts `unavailable` toward the finalization threshold, so a verifier who never receives a
 query cannot answer, and the absence counts against the person being verified.
 **Expiring a queued query therefore penalises a third party for their verifier's
 connection habits** — and it falls hardest on light clients, who are the most likely
@@ -5807,7 +5819,7 @@ globally.
      legal order, and one provider can present many of each. The field is also
      optional and self-asserted (`wire-format.md` §4.4) with no IP-to-ASN
      validation specified. Read it as a concentration detector and never as an
-     independence proof — the difference is what §18's compelled provider
+     independence proof — the difference is what §18.1's compelled provider
      turns on (§1.2.3).
    - Decision: demand IPv4 for now and take the security as a bonus, while
      making no engineering decision that precludes IPv6 later.
@@ -5815,6 +5827,9 @@ globally.
    regardless of its size (§16.2).
 
 ## 18. Accepted risks
+
+### 18.1 A compelled cloud provider
+
 - **Provider concentration is the highest-ranked systemic risk, and rests on an
   unsupported premise.** A state actor compelling one cloud provider ranks above
   endpoint theft, because §3.3's expectation that
@@ -5906,6 +5921,9 @@ globally.
   participation, and a presence record needs a live counterparty, witnesses and
   verifiers who were there (§7.1). An actor holding an operator's key can sign as
   them; it cannot put them in a room.
+
+### 18.2 A compromised infrastructure node
+
 - **A compromised infra node can forge its subordinates' resource access.** A
   resource trusts the node's assertion of who holds which role (§11), so a
   compromised node can mint any principal with any role. This is the trust a
@@ -5930,6 +5948,9 @@ globally.
   repeatable churn rather than a one-time price. The structural bounds are
   unaffected. The reason for accepting is the item above — §1.2.3, this is the
   adversary the design does not defend against.
+
+### 18.3 A stolen key, and a stolen device
+
 - **A stolen key can exhaust a sequence counter, and a patron is what undoes it.**
   One record at the top of the range leaves no successor, and an equal `seqno` carrying
   different contents is malformed rather than a tie — so the identity could otherwise
@@ -5949,7 +5970,7 @@ globally.
   the live participant's face (§7.1). The colluder's client substitutes a profile,
   the stolen key countersigns it, and **the thief signs the record whatever comes
   back**, since every response category counts structurally toward finalization
-  (`wire-format.md` §5.5) and the subject-side refusal §7.4 relies on is the
+  (`wire-format.md` §5.5) and the subject-side refusal §7.4.1 relies on is the
   thief's to make. The colluder is then a prior counterparty, positioned to supply the
   recognition half of §9.1's recovery. **Two bounds hold**: honest verifiers'
   signatures are unforgeable, so adverse results are visible to anyone who weighs
@@ -5968,6 +5989,9 @@ globally.
   per ceremony. Records older than the window are safe outright, because the subject
   will not release the seed for them. Real, and hard to target: no captured device
   releases all of its archive this way, and most release none.
+
+### 18.4 Eclipse, and occupying a region
+
 - **Patron eclipse of a new joiner.** An attacker who volunteers to be someone's
   patron controls their view from day one.
 
@@ -6029,6 +6053,9 @@ globally.
   structural signature.** Which is the substantive problem; the cost of
   recruiting and running such a ring is unmodelled. Countered by corroboration (weight a counterparty by
   whether *your* neighbours also transact with them) and by §7.
+
+### 18.5 What a patron can refuse
+
 - **Patron censorship.** A patron can refuse to countersign. Unilateral departure
   plus adoption elsewhere is the escape hatch. Consequence: patron reputation can evaporate in a day
   when a down-line flees. Treated as intended evolutionary pressure.
@@ -6303,7 +6330,7 @@ and a citation to a missing number resolves there.
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
 | **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |
 | **P13** | **Retention promises are undetectable against hostile clients**, though §7.5.2's keystream encryption makes a *compliant* client structurally unable to retain, a client that retains photographs past its declared window runs the match and reports `basis = personal_knowledge` | Medium | §13.7.1. No protocol fix exists, and the mechanism is not detectable by its own use |
-| P14 | **Chain back-pointers leak activity level to counterparties.** Signing over a predecessor hash reveals the subject's chain head, so a counterparty meeting the same person twice sees how far it advanced | Low | **Accepted, not open.** It discloses nothing past §7.4's finalization threshold, which is `min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence count and **the evaluator learns *n* from the subject by design**. Activity level is already an input every evaluator receives; a chain head is a coarser view of the same fact, given to a party who has met them |
+| P14 | **Chain back-pointers leak activity level to counterparties.** Signing over a predecessor hash reveals the subject's chain head, so a counterparty meeting the same person twice sees how far it advanced | Low | **Accepted, not open.** It discloses nothing past §8.1's finalization threshold, which is `min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence count and **the evaluator learns *n* from the subject by design**. Activity level is already an input every evaluator receives; a chain head is a coarser view of the same fact, given to a party who has met them |
 | **P15** | **Service catalog entries reveal what a node runs, to anyone in its horizon who asks.** Resource type, instance name and connection info are served on request (§11.5) | Medium | `discover_scope` filtering at the source limits the audience to those who could use the resource, which is a genuine mitigation. Residual: running a resource at all is visible to everyone in scope, and the *set* of resources a node runs is a fingerprint. Unassessed under §19.1 **Subsumes the former P8** (*topology deanonymisation by association*), withdrawn: identifying one member by real name yields their job, not a label for any of their subtrees — §3.1.1's membership plurality means a member belongs to several, and nothing in the protocol says which is a workplace rather than a bowling team. **What labels a subtree is its catalog**, which is this finding — and the catalog is answered on request within horizon, so a party holding topology from further away cannot obtain the labels at all. An attacker who holds both the topology and a real-name link within their horizon gets the disclosures membership carries (§1.2) |
 | P16 | **The resource owner accumulates signed reports about its own resources** (§11.6) | Low | Never broadcast, so no public accusation is created — that was deliberate (§6.2.2). Because the resource reports and the owner receives (§11.6), these are records of the owner's own operation rather than of who complained about whom. **The residual is what a report describes**, not who filed it |
 | **P17** | **A direct payload connection reveals each peer's IP address to the other** (§14.1.1) | Low–Medium | New with direct-first payload, and **bounded by limiting direct connection to the horizon** (§12.6.3), the set that already holds your locator and topology, so IP is incremental rather than novel there. Residual: the horizon is up to 111 nodes at or below plus siblings and cousins a user may never have met, so exposure is *bounded* rather than *chosen*. §7.6 establishes IP gives coarse location, so an in-horizon party gains an ongoing location signal. **Both defaults must be overridable**, and the reference client must say what each option discloses |
@@ -6353,7 +6380,7 @@ subject; the response is signed and lives in someone else's record for decades
 (§8.1). A **witness** who attests permanently proves neighbourhood involvement.
 Both become durable nodes in another person's evidence graph, disclosed to
 audiences they never chose, and **the design's consent machinery does not address
-them**: the subject countersigns the query (§7.4), which protects the *subject*,
+them**: the subject countersigns the query (§7.4.2), which protects the *subject*,
 while the verifier — whose own relationship is what gets exposed — is asked
 nothing.
 
@@ -6415,7 +6442,7 @@ ceremony.
 6. **Visible infrastructure placement** — the ASN is exposed *so that*
    concentration is observable (§17.3). What that buys is a concentration detector
    and not an independence proof: diversity in ASN or region does not establish
-   separate legal control, which is the boundary §18's compelled provider turns
+   separate legal control, which is the boundary §18.1's compelled provider turns
    on (§1.2.3).
 7. **Optional platform-vendor metadata.** Push is opt-in and declared a
    degradation of the trust model (§14.1.5).
@@ -6463,7 +6490,7 @@ ceremony.
    the issuer**; what limits exposure is frequency, which stapling and
    introducer-first genuinely reduce. *"Nothing is retained on either side"* is a
    commitment under §1.1's test rather than a checkable rule, and it does not reach
-   a compelled provider's logging at all (§18, §1.2.3).
+   a compelled provider's logging at all (§18.1, §1.2.3).
 
 ### 19.8 Correlation register
 
@@ -6584,14 +6611,14 @@ targets for simulation.
 | **A4** | **Evaluation demand is much smaller than total activity** | Pull-not-push attestation (§15), the biggest scaling decision here | Backbone traffic grows with population. Note this is now framed as an implementation constraint (§15), which is enforceable — unlike the others |
 | **A5** | **Presence ceremonies are rare per user** | PQ signatures on presence records (§5), the ~35 KB budget, storage estimates | Record size becomes a real cost and the PQ exception needs revisiting |
 | **A6** | **Verification querying will be routine** | The shared-identity defence (§7.3) | The attack succeeds most of the time. Also enforceable via client default rather than assumed |
-| **A7** | **Infra operators persist for years with their records** | Reliability weighting (§16.6), verification answerability (§7.4), the whole "infra silence is not excusable" argument | Infra participation stops being more evidentially durable and §7.4's distinction collapses |
+| **A7** | **Infra operators persist for years with their records** | Reliability weighting (§16.6), verification answerability (§7.4.3), the whole "infra silence is not excusable" argument | Infra participation stops being more evidentially durable and §7.4.3's distinction collapses |
 | **A8** | **Attackers cannot parallelise physical presence** | A1's teeth (§17.3) | Paid participants, simultaneous ceremonies and colluding witnesses would defeat it |
-| **A9** | **Cross-device face matching FRR is a few percent** | The aggregation rule and threshold design (§7.4); also §20.1 | A materially higher rate makes false accusation common; a much lower one makes single-negative policies safe |
+| **A9** | **Cross-device face matching FRR is a few percent** | The aggregation rule and threshold design (§7.4.4); also §20.1 | A materially higher rate makes false accusation common; a much lower one makes single-negative policies safe |
 | **A10** | **Real social graphs are sparse, so honest operators never achieve theoretical packing** | The claim in §17.2 that attacker economics are *worse* than 1:1 for defenders | The cost symmetry becomes exactly 1:1, weakening §17.2's conclusion |
 | **A11** | **Ordinary users will tolerate ceremony friction rather than route around it** | The whole Sybil defence, which only works if the mechanism is used (§7.1) | Users adopt without meeting, unattested adoptions become the norm, and the face-to-face grounding is decorative. Note this is the honest-user mirror of A1: both must hold |
 | **A12** | **The facts a composition attack would yield are already obtainable about the target user from existing sources** | The acceptance of composition risk in §19.1 as a *matched* rather than *new* exposure | For any user whose baseline exposure is lower — deliberate minimisers, activists, dissidents, people hiding from someone. The trade is not the one described, and the network creates exposure rather than matching it. **Known false for part of the population**; the question is whether it holds for the intended one |
 | **A13** | **Users successfully retain and back up their transaction archive** | The second-factor property (§10.2), portability of history to a new subnet (§16.7), and the value of the chain at all | If archives are routinely lost, users arrive at every new subnet as fresh identities and accumulated standing becomes non-portable in practice. The security property survives; the usability does not, and §13.7.1's backup design becomes the whole story |
-| **A14** | Reconstruction against a binary-output matcher needs **thousands to tens of thousands of queries** | §7.4's whole oracle-hardening argument — ceremony binding turns that count into weeks of staged meetings | Also §20.1. If the true count is orders lower, ceremony binding and rate limits do not price the attack out |
+| **A14** | Reconstruction against a binary-output matcher needs **thousands to tens of thousands of queries** | §7.4.1's whole oracle-hardening argument — ceremony binding turns that count into weeks of staged meetings | Also §20.1. If the true count is orders lower, ceremony binding and rate limits do not price the attack out |
 | **A15** | **"A substantial minority"** of connections fall back to TURN relay | §16.6's infra economics via §12.6.3's direct path | Also §20.1. Two mobile peers behind CGNAT is worst case *and* common case here; a high fraction collapses the cost model |
 | **A16** | Randomised motion prompts **constitute** a liveness check | Presentation-attack resistance for the whole ceremony (§7.1) | Also §20.1. They are *inputs* to a PAD system; if no algorithm delivers the property, print and replay attacks pass |
 | **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (Appendix B.1) | Also §20.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
@@ -6696,8 +6723,8 @@ than by the chooser:
 | Parameter | Section |
 |---|---|
 | Inactivity-decay function | §16.5 |
-| Negative-evidence threshold and inconclusive band | §7.4 |
-| Pending verifier-response deadline | §7.4 |
+| Negative-evidence threshold and inconclusive band | §7.4.4 |
+| Pending verifier-response deadline | §7.4.3 |
 
 **Needs an encoding decision.** Wire-format work: **none remain.** The last was
 capability parameter ids, resolved by deriving ids from namespaced names so that
@@ -6717,7 +6744,7 @@ the **queue's per-subordinate storage cap**. These are §16.1's pluggable-policy
 territory and were never going to be fixed.
 
 **Not on that list, deliberately.** There is no durable query log to set retention
-for — only an anti-oracle counter expiring with the ceremony window (§7.4) — and
+for — only an anti-oracle counter expiring with the ceremony window (§7.4.1) — and
 **queue retention is not tunable at all**: it is indefinite by decision (§14.1.6),
 and what a node chooses is the storage cap, a different quantity.
 

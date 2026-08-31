@@ -135,7 +135,7 @@ that is noted in place.
 ### 1.2 Verification
 
 - **Hold the anti-oracle aggregate as a lock, not a log.** A counter per requester
-  and per ceremony window, discarded when the window closes (design §7.4). It
+  and per ceremony window, discarded when the window closes (design §7.4.1). It
   exists to refuse the next query; retaining a queryable history of who probed you
   builds a timeline of ceremony attempts on a device that can be seized.
 - **Query verifiers automatically.** A client treating a face-to-face encounter as
@@ -346,7 +346,7 @@ session secrecy. The client implements them; it does not reinvent them.
 ## 6. Warnings before irreversible or surprising actions
 
 - **Encourage a second independent adoption early**, while the user can still reach
-  one freely. Subnet plurality is what defeats patron eclipse (design §18), and
+  one freely. Subnet plurality is what defeats patron eclipse (design §18.4), and
   establishing it *after* an eclipse costs a physical meeting rather than a message
   — at the moment the user is least placed to recognise the need.
 

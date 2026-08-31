@@ -1188,10 +1188,10 @@ Witness = {
 VerificationQuery = {
   1: keyhash,          ; subject
   2: keyhash,          ; querier
-  3: bstr .size 32,    ; ceremony pre-commitment (design §7.4)
+  3: bstr .size 32,    ; ceremony pre-commitment (design §7.4.1)
   4: bstr .size (1..4096),   ; fuzzed profile
   5: uint,             ; TEMPLATE VERSION the profile in field 4 was produced
-                       ;   under (design §7.4). A verifier that cannot compare
+                       ;   under (design §7.4.4). A verifier that cannot compare
                        ;   under this version answers `3 unavailable` with no
                        ;   basis — it has not evaluated. Without it a mismatched
                        ;   engine compares anyway and signs a `no-match`
@@ -3255,6 +3255,7 @@ meeting that, but **neither guarantees failure** (RFC 8445).
 ---
 
 ## 10. Topology propagation
+
 ### 10.1 The push frame and the forwarding rule
 
 **design §15 defines the classes and the patterns; this section says what carries
@@ -3533,7 +3534,7 @@ unnecessary: the detector is never a stranger to the transaction.
 
 **What survives is a replay of the memo describing the *current* slot state**, which
 matches the detector's row and is therefore indistinguishable from a genuine loop.
-**Registered and accepted** (design §18): the injector must sit at or below one of
+**Registered and accepted** (design §18.2): the injector must sit at or below one of
 the detector's own subordinates, the edge severed is on the injector's route, and
 the disavowal carries no prejudice.
 

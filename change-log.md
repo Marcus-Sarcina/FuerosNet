@@ -6792,3 +6792,37 @@ documents. The signer-order table's `§6` row was left alone: it spans §6.1 and
 Word-multiset differencing accounts for every removed token — the two deleted
 paragraphs, the bold lead that became §6.4's heading, and one full stop that became a
 comma in §4.2.1.
+
+### 2026-09-01 (0.9-after, pass 2c: design §7.4 and §18 split, and four citations that pointed at the wrong section)
+The last two of the review's four splits. **§18 had the same defect §6 did** — 238
+lines, eleven risk bullets, no subsection at all, one bullet running to 91 lines. It
+becomes §18.1 a compelled cloud provider, §18.2 a compromised infrastructure node,
+§18.3 a stolen key and a stolen device, §18.4 eclipse and occupying a region, §18.5
+what a patron can refuse.
+
+**§7.4 was a different shape of the same problem**: seven bullets, of which the first
+ran 85 lines with a five-item sublist inside it. Content nested that deep inside a list
+item **cannot be cited at all**, which is why §7.4 was cited twenty-five times and
+always as a whole chapter. It becomes §7.4.1 oracle leakage, §7.4.2 consent, §7.4.3
+availability and what silence is worth, §7.4.4 matching, templates and local storage.
+
+**Thirty-one citations sharpened** to the subsection that holds what they reach for.
+**Two of them were §7.4 citing itself** from inside §7.4 — one now names the paragraph
+it meant, the other names §7.4.1 across the new boundary.
+
+**Four citations attributed the finalization threshold to §7.4, which states neither
+half of it.** The threshold is `min(floor(n/2), 10, |candidates|)` and is defined in
+§8.1; what counts toward it — `pending` and `unavailable` alike — is `wire-format.md`
+§5.5. Two sites saying *"§7.4 counts `unavailable` toward finalization"* now cite
+`wire-format.md` §5.5; the disclosure table's *Finalization threshold* row and P14's
+argument now cite §8.1. **The split is what made this visible**: four wrong pointers to
+a 191-line chapter all resolved, because the chapter was large enough to plausibly
+contain anything.
+
+**Nine headings had no blank line before them**, seven of them new. Two were
+pre-existing — design §8.1 and wire §10.1 both sat directly under their chapter
+heading. All fixed; the set now has none.
+
+**Verified**: zero unresolved references across the five root documents, no depth
+errors, fences paired, and **word-multiset differencing shows not one token removed
+from any of the five** — every heading in this pass was added, nothing was rewritten.
