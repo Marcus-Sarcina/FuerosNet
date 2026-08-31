@@ -8,10 +8,10 @@ authoritative on operator-side behaviour. Resource conformance is in
 **It is not the whole of what an operator runs.** An operator is an ordinary
 participant who also runs infrastructure, so their presence ceremonies, catalog
 browsing and resource requests happen in a participant client and are governed by
-`light-client-requirements.md` (design §0). This document covers the server side
+`light-client-requirements.md` (design Appendix A). This document covers the server side
 only.
 
-**Your node runs unattended.** Design §0's *What a client does without asking* is
+**Your node runs unattended.** Design Appendix A's *What a client does without asking* is
 the rule: serve, queue, countersign, acknowledge, replicate and issue credentials
 from standing policy, and interrupt your operator only for a live two-person act or
 for configuring their own node.
@@ -25,7 +25,7 @@ and to nothing else.
 than restating them.
 
 **On the force of these requirements.** Most of what follows cannot be checked by
-anyone (see `network-design.md` §0, *The force of client requirements*). These are
+anyone (see `network-design.md` Appendix A, *The force of client requirements*). These are
 **commitments, not enforceable rules**: a conforming label means the author asserts
 them, not that anyone verified them. Where a requirement leaves a visible artifact,
 that is noted in place.
@@ -35,7 +35,7 @@ that is noted in place.
 ## 1. Serving
 
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
-  node**, and from siblings' clients in failover (design §11.1.2).
+  node**, and from siblings' clients in failover (design §14.1.2).
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
@@ -44,20 +44,20 @@ that is noted in place.
   authenticate it otherwise, the handshake presents the classical component while
   the keyhash commits to the pair.
 - **Push the sibling list at attach.** A client cannot discover failover targets
-  after its serving node is already dark (design §11.1.2).
+  after its serving node is already dark (design §14.1.2).
 - **Process liveness updates and discard them.** Store the resulting reachability
-  state, not the update history (design §12). **The protocol cannot prevent an
+  state, not the update history (design §15). **The protocol cannot prevent an
   operator logging what it says to discard; not doing so is the requirement.**
 
 ## 2. Queue
 
-- **Hold ciphertext for offline clients** (design §11.1.4).
+- **Hold ciphertext for offline clients** (design §14.1.4).
 - **Queue indefinitely, bounded by a per-subordinate storage cap** (design
-  §11.1.6). No time limit: a message survives an absence of any length.
+  §14.1.6). No time limit: a message survives an absence of any length.
 - **Do not replicate queue state to siblings.** Failover covers sessions, not
   mailboxes, a client attached to a sibling collects from its own patron when that
   patron returns.
-- **At the cap, refuse the newest message and tell the sender** (design §11.1.6).
+- **At the cap, refuse the newest message and tell the sender** (design §14.1.6).
   Never drop the oldest: it destroys a message the sender believes was accepted, and
   it lets anyone who can reach the queue flush what is already in it.
 - **Delete on delivery, immediately, leaving nothing recoverable.** No journal, no
@@ -68,31 +68,31 @@ that is noted in place.
 - **Do not log queue events**, and **state what your deployment actually does** —
   §1's process-and-discard obligation extends here, the protocol cannot reach it, and
   a deployment cannot state its data practices otherwise.
-- **The cap's value is yours.** design §16.1.1 classifies it as freely tunable per
+- **The cap's value is yours.** design §21.1.1 classifies it as freely tunable per
   node; nothing coordinates it.
 
 ## 3. Currency
 
 - **Issue currency attestations for subordinates**, and accept the sibling,
   grandpatron and down-line issuance paths when the patron is unavailable (design
-  §10.6.5.1).
+  §12.6.5.1).
 - **Issue fresh, never extend stale.**
 
 ## 4. Resolution
 
 You are the party that answers resolution queries. This is the network's primary
-operation (design §10.6.1, `wire-format.md` §5.7).
+operation (design §12.6.1, `wire-format.md` §5.7).
 
 ### 4.1 What you must hold
 
 **Your attached light clients, by path.** Every light client beneath you attaches
-to you — not only your direct subordinates, since design §11.1.2 has a client walk up past
+to you — not only your direct subordinates, since design §14.1.2 has a client walk up past
 light-client patrons to the nearest infrastructure. **You resolve their paths
 yourself**; nothing routes through an intermediate light-client patron.
 
 **A child table for your infra children: index → keyhash, endpoints.** These are the
 only parties you refer to. Bounded at f, and holding only this keeps per-node state
-constant regardless of network size — the aggregation argument design §10.6.1 rests on.
+constant regardless of network size — the aggregation argument design §12.6.1 rests on.
 
 **An anchor table**, for starting points you did not learn out of band. Entries are
 gossiped and **their signatures cannot be checked on receipt** — an entry carries
@@ -109,10 +109,10 @@ verified gives you a partition vulnerability with no symptom.
   `KeyMaterial` where the requester may lack it.
 - **Keep nothing for a node that has left your subtree**, and do not redirect on its
   behalf. A resolution against a position it no longer occupies is a failure
-  (design §10.3 Case 2); the requester re-resolves from a higher ancestor or is
+  (design §12.3 Case 2); the requester re-resolves from a higher ancestor or is
   re-introduced. **Retaining a pointer to where a departed subordinate went would
   make departure fail to sever**, which is what withdrawing forwarding was for
-  (design §2).
+  (design §4).
 - **Report failure only when you can neither answer nor refer.** A referral and a
   failure are different replies; conflating them leaves a requester with nowhere
   to go.
@@ -130,7 +130,7 @@ guarantee, which is a floor rather than a ceiling.
 - **Replace an endpoint set when you receive a locator with a strictly greater
   `seqno`** for a node you hold (`wire-format.md` §2.3).
 - **Collapse forwarding chains at the source**: follow the chain and return the
-  terminal record, not the next hop (design §10.3).
+  terminal record, not the next hop (design §12.3).
 - **Keep the topology store across a restart — it is your seen-set.** Forwarding is
   *forward if and only if you stored it* (`wire-format.md` §7.2a), so duplicate
   suppression is a property of the store rather than of a separate cache. A node
@@ -152,7 +152,7 @@ reach the address and confirm the keyhash.
 
 **Unverified does not mean unusable: refer from it.** A referral you give is not a
 credential — the requester authenticates the *subject it meant to reach*, so a wrong
-address costs it a failed dial rather than misdirecting it silently (design §10.6.1).
+address costs it a failed dial rather than misdirecting it silently (design §12.6.1).
 **Withholding referrals until you have confirmed a child yourself would make a live
 child unreachable through you** for as long as you had not happened to contact it,
 which is the failure this record exists to prevent.
@@ -169,7 +169,7 @@ identical contents buys nothing.
 ### 4.5 What a query discloses
 
 **A resolution request tells you who wants to reach whom**, before any contact
-exists (design §14.5.4, P26). It falls under §1's process-and-discard obligation:
+exists (design §19.4, P26). It falls under §1's process-and-discard obligation:
 answer the request, keep no record of who asked about whom.
 
 ---
@@ -177,7 +177,7 @@ answer the request, keep no record of who asked about whom.
 ## 4a. Evaluating a presented archive
 
 **Compare a presented archive against the identities you already know of** (design
-§13.1). **That set is yours alone** — there is no tree-level trust state, and your
+§16.1). **That set is yours alone** — there is no tree-level trust state, and your
 siblings share your position without sharing your knowledge, because each of you has
 different history with users outside the subtree.
 
@@ -198,14 +198,14 @@ specific claims are supported by people you can ask.
 
 ## 5. Prekey service
 
-design §11.2.4 adopts PQXDH, whose asynchronous property depends on someone
+design §14.2.4 adopts PQXDH, whose asynchronous property depends on someone
 holding a subject's prekeys while that subject is offline. That someone is the
 serving node.
 
 - **Hold and serve prekey bundles for attached clients** (`wire-format.md` §5.8).
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
-  carries no intent signal (design §11.2.4).
+  carries no intent signal (design §14.2.4).
 - **Consume one-time keys on serving them**, and only when one is requested.
 - **Rate-limit one-time key issuance per requester per subject.** You cannot tell
   whether a requester is really opening a session, and binding consumption to
@@ -222,7 +222,7 @@ serving node.
   couples this node to a PQXDH revision.
 - **A one-time key request is a metadata event this node observes.** It learns
   that one party intends to message another before any message exists (design
-  §14.5.8, C11). **A reusable-material fetch is not**, which is the point of
+  §19.8, C11). **A reusable-material fetch is not**, which is the point of
   prefetching it org-wide: only the on-demand request carries intent. It falls under §1's process-and-discard obligation: serve the request,
   keep no record of who asked for whose bundle.
 
@@ -231,12 +231,12 @@ serving node.
 - **Act as STUN and TURN** for clients attempting direct payload paths, and carry
   the relayed path as a first-class route rather than a fallback afterthought — a
   substantial minority of connections will never get a direct path (design
-  §11.1.1).
+  §14.1.1).
 
 ## 7. Operator disclosure
 
 - **Tell an operator plainly what their subordinates are exposed to** by their
-  configuration and conduct (design §10.8).
+  configuration and conduct (design §13).
 
 ---
 
@@ -261,27 +261,27 @@ distribution problem rather than a protocol one:
 
 **It also creates a trust relationship the trust model does not represent:** a
 subnet's members trust their patron's judgment about which packages to run.
-Nothing in design §13 expresses that, and it is not obviously reducible to the
+Nothing in design §16 expresses that, and it is not obviously reducible to the
 existing metric.
 
 ### 8.2 Sandboxing
 
 **No host binding exposes network transaction primitives to a package.** This
 is not a matter of granting narrow scopes carefully: **the hooks do not exist.**
-design §9 already states the rule — *the resource never reads network state* — and
+design §11 already states the rule — *the resource never reads network state* — and
 a hosted package is a resource. It receives its credential (`resource-requirements.md`
 §2) and its own request traffic, and nothing else: no topology, no liveness state,
 no queue contents, no prekey requests, no role-evaluation inputs.
 
 **Why this matters more than ordinary containment.** Those datasets are minimised
 individually and separated deliberately, and a single process holding all of them
-reproduces the endpoint-aggregation problem (design §14.5.8, C9) on the
+reproduces the endpoint-aggregation problem (design §19.8, C9) on the
 infrastructure side. **Offering a binding and scoping it narrowly would still be
 offering it**, and the narrow scope would then be a policy decision an operator
 could widen.
 
 **A plugin runs inside the trust boundary regardless.** The design works to ensure
-a patron sees metadata and not content (design §11.2); code the operator installed
+a patron sees metadata and not content (design §14.2); code the operator installed
 sits inside that boundary, and **the threat model has no account of it** — the
 operator selects that code with less information than they have about their own
 conduct.
@@ -333,11 +333,11 @@ enumerates what you host by watching which lookups differ.
 your subtree lands inside your Dunbar Org automatically, which means **a subordinate
 can put strangers inside your gate without asking you**. Require your own
 `SubtreeAck` (`wire-format.md` §5.5) before granting such a node access to
-resources you host (design §9.2.1).
+resources you host (design §11.2.1).
 
 - **Issue it automatically, under a policy the operator set beforehand.** The
   deliberate human act was the *patron's* adoption; propagation of membership within
-  the horizon follows from it (design §9.2.1), and your node acknowledges a new
+  the horizon follows from it (design §11.2.1), and your node acknowledges a new
   member of your subtree without asking you. **The operator's decision is the
   policy**, made once and asynchronously to any traffic it governs — an operator who
   wants to acknowledge nobody, or only some positions, sets that and their node
@@ -368,7 +368,7 @@ everything, uniformly.
 ### 9.2 Hold a role table; treat predicates as a macro over it
 
 **Materialise role assignments per resource, one row per Dunbar Org member**
-(design §9.4). **Authorisation at request time is a lookup**, never a predicate
+(design §11.4). **Authorisation at request time is a lookup**, never a predicate
 evaluation — that makes it deterministic, cheap, and readable by the operator who
 configured it.
 
@@ -402,7 +402,7 @@ than to another node.
 **Mint the session identifier per resource, not per connection.** One caller
 reaching three resources over one session gets three identifiers. A single identifier
 shared across them would re-link that caller between resources and undo what the
-pairwise principal was derived to separate (design §9.0.2) —
+pairwise principal was derived to separate (design §11.0.2) —
 `resource-requirements.md` §3 states the resource-facing half.
 
 **You may decline to host a package you cannot support.** Storage, compute, a
@@ -470,7 +470,7 @@ ends under another.
 The resource's only obligation is to tolerate a session ending at any time, which
 any network service must regardless.
 
-**Brokered resources are outside this** (design §9.2). The node can drop its own
+**Brokered resources are outside this** (design §11.2). The node can drop its own
 leg; what the external service does with its session is that service's business.
 
 ### 9.5 Show the hosting model when binding a resource
@@ -494,7 +494,7 @@ should simply know which they are getting.
 
 ## 10. Catalog
 
-**Answer catalog queries; do not propagate entries** (design §9.5). A node in your
+**Answer catalog queries; do not propagate entries** (design §11.5). A node in your
 horizon asks what you have; you return the entries you **own** and that asker may
 see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
@@ -517,7 +517,7 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
   picking wrong applies one owner's membership and roles to another owner's backend.
   **Refuse a registration for a keyhash you already serve under a different owner.**
 - **Re-registering by the same owner replaces the entry, and the old one is gone.**
-  **A registration is not archived** (design §8, `wire-format.md` §4.7): the archive
+  **A registration is not archived** (design §10, `wire-format.md` §4.7): the archive
   advances on adoption, departure, disavowal, peering and presence, and this is none
   of them. Keep a live table of what you currently serve and answer from it. **Do
   not retain superseded registrations** — nobody needs a record of a resource its
@@ -544,9 +544,9 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
 - Whether a user can evaluate a gateway operator before routing external traffic
   through them (`resource-requirements.md` §11, design P24). A resource owner may
-  declare a data-practice posture in its catalog entry (design §9.5), which helps a
+  declare a data-practice posture in its catalog entry (design §11.5), which helps a
   user who already has access and not one deciding whether to acquire it.
 
-**Closed:** queue lifecycle (design §11.1.6 settles ceiling behaviour,
+**Closed:** queue lifecycle (design §14.1.6 settles ceiling behaviour,
 crash copies, metadata and logging; only the cap value is yours to choose) and
-owner-movement semantics (design §9.2 carries the general rule).
+owner-movement semantics (design §11.2 carries the general rule).

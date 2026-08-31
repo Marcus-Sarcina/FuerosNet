@@ -10,13 +10,13 @@ states the **resource's side of the same boundaries**: what a package must decla
 tolerate and accept. Where both documents discuss packaging, sandboxing or roles,
 they are describing the two halves of one interface, not repeating each other.
 
-Design rationale is in design §9.
+Design rationale is in design §11.
 
 **This document states no protocol rules of its own.** Where it repeats one for context it cites the section that owns it, and the cited document governs on any disagreement. It cites design sections rather than
 restating them, because a restated fact is one that will drift.
 
 **On the force of these requirements.** Most of what follows cannot be checked by
-anyone (see `network-design.md` §0, *The force of client requirements*). These are
+anyone (see `network-design.md` Appendix A, *The force of client requirements*). These are
 **commitments, not enforceable rules**: a conforming label means the author asserts
 them, not that anyone verified them. Where a requirement leaves a visible artifact,
 that is noted in place.
@@ -58,10 +58,10 @@ The credential a resource receives, and the whole of what it knows about a calle
 
 | Field | Contents |
 |---|---|
-| **Principal** | A **pairwise identifier**, `SHA-256("rhtn/1:pairwise" \|\| resource_keyhash \|\| user_keyhash)` — stable per user per resource, and not the user's network keyhash (design §9.0.2) |
+| **Principal** | A **pairwise identifier**, `SHA-256("rhtn/1:pairwise" \|\| resource_keyhash \|\| user_keyhash)` — stable per user per resource, and not the user's network keyhash (design §11.0.2) |
 | **Roles** | The role names this principal currently holds, from those the package declared (§7) |
-| **Audience** | The relying party it was minted for. **An authorisation assertion is valid only there; one naming a different party MUST be rejected** (design §9.0.4) |
-| **Validity** | The session. Role changes end the session rather than mutating it (design §9.4) |
+| **Audience** | The relying party it was minted for. **An authorisation assertion is valid only there; one naming a different party MUST be rejected** (design §11.0.4) |
+| **Validity** | The session. Role changes end the session rather than mutating it (design §11.4) |
 
 **A resource sees nothing else.** No topology, no archive, no keyhash, no
 membership predicate, and it cannot ask. The node evaluated access; the resource
@@ -86,7 +86,7 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 | **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §7.3) — not a stream-0 control frame. No HTTP |
 | **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
 
-**The second leg often does not exist at all.** design §9.7's
+**The second leg often does not exist at all.** design §11.7's
 default is **broker rather than proxy**: the node authenticates and hands off, and
 the user's client connects to the service itself. **Do not assume a client's
 resource traffic passes through its node** — a light client runs on an
@@ -116,7 +116,7 @@ to be the same, and requiring it was the error.
 | `rhtn-session` | Session identifier, so a resource can correlate requests and notice a session ending |
 
 **The roles you receive are application actions.** `discover` and `connect` are
-reserved for the node's own evaluation (design §9.4) and never appear here — a
+reserved for the node's own evaluation (design §11.4) and never appear here — a
 request reaching you is what a `connect` grant looks like, and you are not present
 for a discovery decision. **Do not expect them, and do not treat their absence as a
 missing grant.**
@@ -144,13 +144,13 @@ identifies one node's session and nothing else.
 
 **It is also per resource.** One caller's session with a node yields a
 *different* identifier for each resource it reaches, on the same reasoning as the
-pairwise principal (design §9.0.2): an identifier common to two resources would
+pairwise principal (design §11.0.2): an identifier common to two resources would
 re-link the same caller across them and undo the separation the principal was
 derived to create. Two resources comparing notes learn nothing from it.
 
 **You are not notified when a session ends.** There is no teardown message on the
 hosting path; you observe it as requests ceasing to arrive under that identifier
-(design §9.4). **Do not hold state that requires a close signal.**
+(design §11.4). **Do not hold state that requires a close signal.**
 
 
 **Responses are ordinary HTTP.** The node relays them; it does not interpret them.
@@ -191,7 +191,7 @@ gateway-inserted headers are distinguishable from client-supplied ones.
   server, library and debugging tool.
 - **It is what resources already speak.** SaaS, local services and the IdP plugin
   case (§5) all expect HTTP, and the plugin needs it regardless for SAML or OIDC.
-- **The request path carries no trust** (design §9.0.3), so nothing here needs
+- **The request path carries no trust** (design §11.0.3), so nothing here needs
   signing, canonical encoding or domain separation. A purpose-built framing would
   buy properties this path does not require.
 
@@ -248,7 +248,7 @@ likely have produced:
 
 **The cost: every patron becomes an operator.** Holding a connection to the larger
 system, hosting an instance, administering team access, carrying the availability
-burden. That is ongoing work of unquantified size, and it lands on exactly the people design §4.3
+burden. That is ongoing work of unquantified size, and it lands on exactly the people design §3.3
 already asks to run infrastructure.
 
 > **Assumption — resource-layer sibling of A11.** *Patrons will actually do this
@@ -257,7 +257,7 @@ already asks to run infrastructure.
 > participants. If patrons will not administer resources, the federation pattern
 > does not happen and applications either stay local or route around the network —
 > and if they route around it, the network's whole product argument (design §1) goes
-> with them. **Belongs in design §15.2 when this propagates.**
+> with them. **Belongs in design §20.2 when this propagates.**
 
 ## 5. Conformance: extension support is not arbitrary-program support
 
@@ -346,7 +346,7 @@ path:**
 | §11 exposure | Low | **High, the node becomes a content chokepoint** |
 
 **Default to brokering.** Proxying hides users from the vendor, which is
-which some operators will want, but it makes the infra node a data chokepoint — precisely what design §11.2
+which some operators will want, but it makes the infra node a data chokepoint — precisely what design §14.2
 works to prevent for payload, and it breaks the systems below.
 
 **What resists brokering specifically:**
@@ -377,7 +377,7 @@ service is reachable only by the user connecting directly, which the network can
 still help with, by carrying identity and discovery while staying out of the
 session itself.
 
-*(design §7.1.8 does define optional client-integrity attestation, but deliberately as
+*(design §7.8 does define optional client-integrity attestation, but deliberately as
 **evidence a party may weigh**, never as a gate. A resource could ask for it and
 weigh its absence; it cannot compel it, and that is the same distinction design §1.1 draws
 everywhere else.)*
@@ -396,11 +396,11 @@ properties:
 
 ## 6. Registration versus the catalog page
 
-| | `CatalogEntry` (design §9.5) | Catalog page |
+| | `CatalogEntry` (design §11.5) | Catalog page |
 |---|---|---|
 | **What** | Network-layer registration | Session-time view |
 | **Signed** | Yes, by the owner | No — served over an authenticated session |
-| **Propagates** | **Not at all** — held by the hosting node and returned on request (design §9.5) | Not at all |
+| **Propagates** | **Not at all** — held by the hosting node and returned on request (design §11.5) | Not at all |
 | **Uniform** | Yes, same for everyone | **No — personalised, names the viewer's roles** |
 | **Purpose** | Makes a resource addressable: reachable point-to-point, or able to call out to a node | Discovery, and the front door for locally-hosted interaction |
 | **Required** | **No** | For any resource a user interacts with |
@@ -416,7 +416,7 @@ answering, and is **no part of the entry**. An owner may *request* one when it
 registers (`wire-format.md` §4.7), and the host may narrow or ignore it; nothing
 carries it to an asker, because receiving an entry is what qualifying looks like.
 **Nothing propagates** — the node returns what an asker may see and omits the rest
-(design §9.5), so there is no second path needing the scope on the wire.
+(design §11.5), so there is no second path needing the scope on the wire.
 
 ---
 
@@ -454,10 +454,10 @@ Affordances the UI should offer:
 one departing loses it; one crossing a tenure boundary gains it silently. Under a
 *relative* rank predicate a membership change also moves the line for everyone else
 (§7.2.1), which is the one case where a join changes somebody other than the joiner. **This is
-correct.** Access follows the org chart, and it extends design §9.2's departure
+correct.** Access follows the org chart, and it extends design §11.2's departure
 warning to a wider surface. None of it produces an event anyone sees.
 
-**Design §9.2 states the general rule**, including what happens to in-flight state
+**Design §11.2 states the general rule**, including what happens to in-flight state
 when an owner moves. It is a protocol fact and belongs there; this section describes
 what an implementation does with it.
 
@@ -466,7 +466,7 @@ what an implementation does with it.
 **Above the patron level, admission is a decision separate from membership.** The
 node may present a principal whose adoption is valid and whose membership is
 current, and still refuse it because the host has not acknowledged that node's
-subtree (design §9.2.1). **A resource never sees this**: it receives a principal
+subtree (design §11.2.1). **A resource never sees this**: it receives a principal
 and roles, or it receives nothing. The distinction matters only for understanding
 why a structurally valid member may be absent.
 
@@ -481,7 +481,7 @@ Consequences, all simplifications:
   package the node terminates the session, so access ends at once. For a brokered
   external service, membership gates *establishment* only, an existing session
   continues on that service's terms, which is what choosing that service means
-  (design §9.2).
+  (design §11.2).
 - **No stale-grant accumulation.** Individual grants are not exceptions to
   positional access: a departed node cannot hold named roles while its predicate
   access lapses, which would be backwards from what either party expects.
@@ -489,11 +489,11 @@ Consequences, all simplifications:
 - **It is enforceable rather than advisory.** The infra node evaluates membership
   from topology it already holds, before consulting any predicate or grant.
 - **It bounds the resource layer to neighbourhood scale.** A resource serves at
-  most its owner's two-edge neighbourhood — 221 nodes at f = 10 (design §12.1). This is consistent with design §9.4's
+  most its owner's two-edge neighbourhood — 221 nodes at f = 10 (design §15.1). This is consistent with design §11.4's
   scope vocabulary topping out at `dunbar`, and it means **resources are
   neighbourhood-scale by construction**, not subnet-scale or network-scale.
 
-**Resource access eligibility is one of the horizon's jobs** (design §12.1): resource access
+**Resource access eligibility is one of the horizon's jobs** (design §15.1): resource access
 eligibility. Worth adding to that table, since *h* was already the most over-loaded
 parameter in the design.
 
@@ -521,7 +521,7 @@ need not be in the org, or in the network at all.
 **Tuning a metric's parameters and having access follow is the feature**, not a
 hazard: you re-tuned because you wanted that effect.
 
-**Switching metric *families* is different.** design §13.1 makes the algorithm pluggable,
+**Switching metric *families* is different.** design §16.1 makes the algorithm pluggable,
 and a threshold of 0.6 under a decay metric has no defined counterpart under a flow
 metric. The predicate evaluates without error against a number that now means
 something else, and the operator's intent was "be more Sybil-resistant", not
@@ -537,7 +537,7 @@ since they are rarely thinking *0.6* and usually thinking *the people I trust mo
 
 **A predicate is a macro, not the mechanism.** What authorises a request is a
 materialised table — one row per Dunbar Org member per resource, consulted as a
-lookup (design §9.4). The predicate is how an operator writes that table quickly; it
+lookup (design §11.4). The predicate is how an operator writes that table quickly; it
 expands at configuration time into assignments the operator can see and adjust. The
 classes below differ in **what an assignment depends on besides the member**, which
 is the whole of their security difference.
@@ -563,11 +563,11 @@ beneath them, and the trust metric is not wrong at any point — it rates the ad
 members as worthless, which is exactly why they land at the bottom and lengthen the
 queue. **The predicate never asked how trusted anyone was; it asked where they stood
 in a line.** So a relative predicate's soundness rests on the acknowledgement policy
-that decides who enters the horizon (design §9.2.1) rather than on the trust metric,
+that decides who enters the horizon (design §11.2.1) rather than on the trust metric,
 and those two settings are one decision rather than two.
 
 **A relative predicate also has to be re-scored across the table, not per member.**
-Design §9.4 re-evaluates when a node enters or leaves the horizon; for the classes
+Design §11.4 re-evaluates when a node enters or leaves the horizon; for the classes
 above that means scoring the entrant and dropping the leaver's rows, but a quantile
 moves for *everyone* when the count changes. An implementation that scores only the
 changed member leaves rows that no longer follow the predicate — stale in both
@@ -644,7 +644,7 @@ in §9 expresses that, and it is not obviously reducible to the existing metric.
 ## 9. Sandboxing
 
 **A plugin inside the infra client is inside the trust boundary.** The design works
-hard to ensure a patron sees metadata and not content (design §11.2); a hostile or
+hard to ensure a patron sees metadata and not content (design §14.2); a hostile or
 compromised extension sees everything the node sees.
 
 The current threat model assumes the **operator's conduct** is the risk. It has no
@@ -667,7 +667,7 @@ principal with any role.**
 
 This is the same trust a corporate gateway holds, and it is expected. But it is a
 **new** concentration and it should be named: previously a compromised patron could
-eclipse and observe (design §9.4). It can now also **impersonate its subordinates to
+eclipse and observe (design §11.4). It can now also **impersonate its subordinates to
 every resource they use.**
 
 The design states carefully that a patron cannot forge its subordinates'
@@ -682,7 +682,7 @@ socially trusted, a neighbour, a subnet member, but **socially trusted is not
 accountable**, and they become the obvious target for anyone wanting that subnet's
 external activity.
 
-**design §9's permission model runs the wrong direction for this.** It is entirely about
+**design §11's permission model runs the wrong direction for this.** It is entirely about
 the *owner* controlling who may access. Nothing helps a *user* evaluate an operator
 they are about to route external traffic through. For team tools that asymmetry is
 fine. **For gateways the user takes the larger risk and has the least support.**
@@ -695,7 +695,7 @@ A light client cannot host a service. It is not reachable. Its resource therefor
 runs on its **serving infra node**, whose operator can decline to host it and sees
 its traffic regardless.
 
-design §9.2 states where they execute, a light-client owner's resource runs on
+design §11.2 states where they execute, a light-client owner's resource runs on
 its serving infra node, and treats that as a **deployment fact separable from
 ownership**. What follows from it is that a move changing the serving node forces
 the resource to migrate.

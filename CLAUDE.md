@@ -5,8 +5,8 @@ Network — a peer-to-peer trust protocol metered against physical presence. He 
 the author and sole decision-maker. Nothing is implemented; this is a design under
 review.
 
-Read `network-design.md` §§0–1 first. §0 carries the conventions this document
-assumes, and §1 states what the network is for.
+Read `network-design.md` §1 first — it states what the network is for — and its
+**Appendix A**, which carries the conventions the document assumes.
 
 ---
 
@@ -130,5 +130,5 @@ headings. Whenever a row is removed, check the sentence that counts them.
 not "the style pass is complete". A count is checkable later.
 
 **Consolidating sections decay fastest.** Any section that summarises state
-elsewhere is stale the moment something it summarises changes. Re-read §18.2 after
+elsewhere is stale the moment something it summarises changes. Re-read §23.2 after
 closing anything.

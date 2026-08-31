@@ -54,7 +54,7 @@ those: they do not parse as references at all.
 **A clean pass means the discipline has moved into the documents.** The earlier runs
 corrected instances; this one found the corrections holding, including the
 abuse-report rule the register keeps as its worked example. Expect a pass to go
-clean once its lesson is written into design §0 rather than applied case by case — and
+clean once its lesson is written into design Appendix A rather than applied case by case — and
 expect it to stop being clean the moment a large new mechanism lands.
 
 ## Prompt construction principles
@@ -126,8 +126,8 @@ The second concern is real, but it is an **instruction** problem, not a
 **withholding** problem — and withholding costs something specific.
 
 **The decisive argument: only a reviewer who sees our reasoning can tell us the
-reasoning is wrong.** design §14.4 accepts patron eclipse because identities are cheap
-and there is no token to steal. design §14.5.7 accepts its privacy costs, each for a
+reasoning is wrong.** design §18 accepts patron eclipse because identities are cheap
+and there is no token to steal. design §19.7 accepts its privacy costs, each for a
 stated reason. If any of those reasons is bad, that is among the most valuable
 findings available — and stripping the section makes it structurally impossible
 to find. It hides precisely the arguments most in need of adversarial reading.
@@ -149,7 +149,7 @@ found but what was decided, which is process, not artifact.
 **Supply `wire-format.md` alongside the design document for 0.8.** Encoding-level
 attacks — canonicalisation, malleability, bounds, seed grinding — are invisible
 from the design document alone, and the one attack of that class found so far
-(design §7.2.2's grinding attack) came from an implementation attempt rather than from
+(design §8.1.2's grinding attack) came from an implementation attempt rather than from
 adversarial review.
 
 **On re-running a pass at higher effort:** if you hold results from a lower-effort
@@ -484,7 +484,7 @@ below.)*
    response the requester receives. Every prior target took a success path, and
    refusal is the normal outcome for most requesters rather than the exceptional
    one — the materialised table holds a row per member of the owner's Dunbar Org
-   (design §9.4), so most askers have no row at all and the lookup misses.
+   (design §11.4), so most askers have no row at all and the lookup misses.
 9. **Flood a topology transaction and publish an endpoint record**
    (`wire-format.md` §7.2a, §5.6): receive a `TopologyPush`, decide whether to
    store and forward it, suppress the duplicate that arrives back through a peering
@@ -587,10 +587,10 @@ was a browser-specific claim stated as a property of the target:
 
 **What actually varies is durability, and that is the thing to care about.** Browser
 storage is subject to eviction under storage pressure unless persistent storage is
-granted; a native filesystem is not. Design document §8.2 makes the archive a **second
+granted; a native filesystem is not. Design document §10.2 makes the archive a **second
 factor**, and A13 assumes users retain it — so silent eviction would cost portable
 history and weaken a security property, not merely inconvenience the user. That
-bears on retention enforcement (design §10.8.7.1's scan-on-import) and on recovery.
+bears on retention enforcement (design §13.7.1's scan-on-import) and on recovery.
 
 ## 0.7 Privacy threat modelling (LINDDUN)
 
@@ -669,9 +669,9 @@ Your adversary role for this session, and the only one to consider:
     [ONE ROLE FROM THE TABLE]
 
 You have been given everything, deliberately — including the designers' own
-register of known weaknesses (design §14.4 accepted risks, §14.5.4 findings
-requiring action, §14.5.7 accepted costs, §14.5.8 correlations, §15.1 unsourced
-assumptions, §15.2 load-bearing assumptions) and their change log. A real
+register of known weaknesses (design §18 accepted risks, §19.4 findings
+requiring action, §19.7 accepted costs, §19.8 correlations, §20.1 unsourced
+assumptions, §20.2 load-bearing assumptions) and their change log. A real
 attacker would have all of this, so you do too.
 
 Describe the best attacks you can construct in that role. For each: the
@@ -685,7 +685,7 @@ Classify every finding into exactly one of:
                they did not describe
   NOVEL      — not in the registers at all
   REASONING  — an accepted risk whose stated JUSTIFICATION is wrong. Every
-               entry in design §14.4 and §14.5.7 carries a reason: a Potemkin
+               entry in design §18 and §19.7 carries a reason: a Potemkin
                region "harms nobody who is not engaging with it"; locator
                topology leakage is "intrinsic, because graph position IS the
                evidence". If a reason does not hold, show why.
@@ -746,7 +746,7 @@ first and `network-design.md` second — the rule that finally reproduced a clea
 |---:|---|---|---|
 | — | Preface | Preface | — |
 | 1 | Thesis | 1 | reorder |
-| 2 | Vocabulary | 3 | terms were used before being defined; §0 leaves for the appendix |
+| 2 | Vocabulary | 3 | terms were used before being defined; Appendix A leaves for the appendix |
 | 3 | Topology | 4 | reorder |
 | 4 | Scope | 2 | reorder, kept brief |
 | 5 | Cryptography | 5 | — |
@@ -794,28 +794,28 @@ procedure separate cleanly from it and from each other.
 
 ### `infra-client-requirements.md` — alphanumeric normalisation
 
-`§4a` becomes **§5** and `§9.2a` becomes an ordinary decimal subsection, with the
+`§3a` becomes **§5** and `§11.2a` becomes an ordinary decimal subsection, with the
 sections after each shifted. Both are retrofit identifiers that break decimal sorting
 and outline generation. `wire-format.md`'s `7.2a`/`7.2b` retire in the split above.
 
 ### Open work: two chapters, not six lists
 
 **The distinction is release-scoped** [author]: what must be settled for the initial
-release is separate from what is wanted in a later one. §18.2 already carries it as
+release is separate from what is wanted in a later one. §23.2 already carries it as
 three subheadings — *blocks a subsystem*, *decide during implementation*, *deferred by
 decision* — so this promotes an existing classification rather than inventing one.
 
-- **§22 Open for v1** — the single index. Former §17's live questions and §18.2's first
+- **§22 Open for v1** — the single index. Former §22's live questions and §23.2's first
   two groups. This is the section that must be empty of blockers before release.
-- **§23 Deferred to a later version** — §18.2's third group, §18.1 multi-device, §2's
-  *Explicitly deferred*, §17's two standing deferrals, and §18.3's test-vector note.
+- **§23 Deferred to a later version** — §23.2's third group, §23.1 multi-device, §4's
+  *Explicitly deferred*, §22's two standing deferrals, and §23.3's test-vector note.
   Nothing here blocks anything; it is the wishlist and should read as one.
 
 **The other four lists stay where they are and are referenced, not absorbed.**
 `wire-format.md` §13, `light-client-requirements.md` §Open, `infra-client-requirements.md`
 §Open and the local block in the ceremony chapter each hold items belonging to their own
 document's authority. §22 names them and says what each holds; moving their contents into
-the design would break the authority split §0 sets up.
+the design would break the authority split Appendix A sets up.
 
 ### Verification before commit
 
@@ -869,7 +869,7 @@ argument.
 
 **Tool:** a graph simulator, not a model checker.
 
-**Targets:** the flow-metric claims in design §13.2 and §14.1 — that a fake subtree's
+**Targets:** the flow-metric claims in design §16.2 and §17.1 — that a fake subtree's
 claim is bounded by its cut regardless of size; that λ < 1/f is necessary; the
 detection probability arithmetic for shared identities; hub formation around
 infra operators. All of these are currently argued analytically and none has been
@@ -939,7 +939,7 @@ Stated plainly so it is not over-trusted:
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
 | 6 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
-| 7 | **migration** | — | Not a review. **Spec below**, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §4 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
+| 7 | **migration** | — | Not a review. **Spec below**, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §3 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
 | 8 | **0.9-after** | Purge | Organisation again, on the migrated structure. Confirms the new order reads to a sequential stranger and that nothing was orphaned or double-numbered in the move |
 
 **0.9 runs twice, before and after the migration** [author, 2026-08-28]. The
@@ -959,7 +959,7 @@ reads naturally before Topology since a reader meets *patron*, *subordinate* and
 **Target** [author, 2026-08-28]: the initial specification should read as a
 **discrete, self-contained design**. Alternatives are mentioned briefly, future-state
 material is confined to one topic, and nothing narrates how the document was
-written. Example given: §15.1's *"Flagged by the 2026-08-14 factual verification
+written. Example given: §20.1's *"Flagged by the 2026-08-14 factual verification
 pass as asserted without an external source"* — a true statement about the drafting
 process and no part of the design as released.
 
@@ -1039,7 +1039,7 @@ fixing those before the interpretive passes means the expensive reviews are not
 spent rediscovering typos. Organisation last so it does not churn against content
 edits.
 
-**Then**, once the open items in design §17 are closed, re-run 0.2 and 0.4 only —
+**Then**, once the open items in design §22 are closed, re-run 0.2 and 0.4 only —
 those are the two that decay fastest as the document changes.
 
 **Then** Stage 1, before writing much code. The formal models are cheapest to
