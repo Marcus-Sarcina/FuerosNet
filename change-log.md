@@ -5751,3 +5751,80 @@ nothing happened. Ordering was always correct; the dates were not.
   four are each unambiguous inside their own section; the series was the newest and the
   only one that ranged across all three documents. Removing it leaves the others alone,
   and no surviving `refresh` refers to a series.
+
+- **2026-08-31 (0.8b retired from the running order)** — The suggested-order table
+  listed **0.8b — vignette/spec agreement** as pending. It is not: **the pass ran on
+  2026-08-16** and found four contradictions, all in the same direction — the vignette
+  claiming more than the mechanism delivers — with a follow-up entry the same day
+  correcting the over-hedged prose it produced. The row had been carried as an open
+  item ever since, which is how it reached this session's open list.
+
+  **Retired rather than rescheduled** (author): it does not belong under 0.8, whose
+  six adversary roles are attacks on the mechanism, and **0.2 already covers it** —
+  that pass looks for *"a rule stated one way in one section and differently in
+  another"*, and a vignette contradicting the section it illustrates is exactly that.
+  `Robot/authoring-conventions.md` supplies the rule 0.2 would apply: *"a mismatch
+  between vignette and specification is a defect in the vignette."*
+
+  **It never had a section body**, in any version of the plan at either path — checked
+  against every historical revision. So the row was a line in a summary table with
+  nothing behind it, which is the failure mode this log keeps recording for
+  consolidating sections, appearing here in a working file rather than the spec. Table
+  renumbered; the change log's three references to 0.8b resolve to the entries above,
+  which is where a reader tracing the name should land.
+
+- **2026-08-31 (the 2026-08-30 critique closed; its proposals declined)** — That pass
+  produced five protocol-level suggestions. **Four are declined and nothing is carried
+  forward** (author): they drew no comment beyond the corrections already applied, and
+  the pass was **methodologically weak by the plan's own terms** — 0.8 specifies a
+  *different model family*, and this critique reached the drafting model through
+  platform routing rather than by design. A critique of the drafting by the drafter
+  finds what the drafter already believes. It may be re-run elsewhere; nothing here
+  depends on it.
+
+  **Two entries it left dangling are closed here.** The 2026-08-30 entry cites *"the
+  critique of 2026-08-30"* — that was **session conversation, not a document**, and a
+  reader should not hunt for a file. The same entry recorded checkpoint-pruning's
+  tension with §8's guarantees as *"left for the author, not repaired"*; that was
+  **reconciled on 2026-08-31**, when excision was restated as impossible for a sharper
+  reason — a checkpoint takes everything before it or nothing, so it cannot be aimed at
+  a record. Both entries stand as written; this one supersedes them.
+
+  **Of the five, only the recovery-threshold suggestion survived contact**, and not in
+  the form proposed: scaling it as a validity rule would have failed §0's own test,
+  since the threshold needs the *old* identity's archive and a subject recovering from
+  device loss does not have it. What survives is the observation that recovery's flat
+  *"at least one match"* sits oddly beside a ceremony threshold that scales with
+  history — recorded as something an evaluator may weigh, not as a rule.
+
+- **2026-08-31 (de-lint over 0.8.3–0.8.6 and the consistency work)** — Six detectors
+  over the five root documents. **Dates, `Robot/` citations, markers and drafting
+  narration all returned zero** — the categories that dominated the 2026-08-28 and
+  08-29 passes did not recur, so the rounds since were drafted clean of them. **Six
+  sites needed work**, all in the two categories a spec is likeliest to grow late:
+
+  **Self-narration, three sites.** §6.1.1's vignette gloss said a rule *"now states"*
+  its default; `infra-client-requirements.md` §9 said design §9.2 *"now carries"* the
+  general rule; §7.1.5.2 said a compliant holder *"now"* has no way to defeat the
+  subject's decision *"where previously it had only an obligation"*. Each described the
+  document changing rather than the design working. The third kept its teaching by
+  naming the mechanism as the agent — **what *sealing* changes is capability rather
+  than obligation**, which is §1.1's test applied to storage and does not depend on a
+  reader knowing what the design used to say.
+
+  **Process archaeology, two sites**, both about pass 0.6. §0 read *"the resource
+  layer's interaction protocol, previously the one item that did, has now had
+  clean-room implementation attempts on both its halves"*, and §18.2 opened with the
+  same claim. A specification stating that its own mechanisms survived an
+  implementation attempt is describing the review programme, not the protocol; both now
+  state the current fact — **nothing blocks a subsystem**, and **resource interaction is
+  specified on both halves**.
+
+  **One typo**, §11.1.2's *"The the sibling determines"*, found by the unrestricted
+  doubled-word check rather than the whitelisted one — the same lesson as 2026-08-29's
+  *"capture capture key"*.
+
+  **First-person prose was reviewed and left alone.** Sixty-eight hits, all legitimate:
+  the preface is the author's own voice by design, §0's vocabulary table defines *"the
+  reference client"* as *"what our implementation does"*, §4.3 carries the author's
+  verbatim social-agenda blockquote, and the rest is quoted speech inside vignettes.

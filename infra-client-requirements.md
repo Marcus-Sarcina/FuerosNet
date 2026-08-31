@@ -549,4 +549,4 @@ see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
 **Closed:** queue lifecycle (design §11.1.6 settles ceiling behaviour,
 crash copies, metadata and logging; only the cap value is yours to choose) and
-owner-movement semantics (design §9.2 now carries the general rule).
+owner-movement semantics (design §9.2 carries the general rule).

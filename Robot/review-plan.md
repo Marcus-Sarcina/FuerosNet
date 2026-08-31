@@ -833,10 +833,9 @@ Stated plainly so it is not over-trusted:
 | 3 | **0.5.2** | Purge | Unenforceable mandates. Deliberately separated from 0.5.1 — near-neighbour frames contaminate. Likely cheap now that design §1.1 states the principle |
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
-| 6 | **0.8b** | Purge | Vignette/spec agreement. Late, once content has stabilised |
-| 7 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
-| 8 | **migration** | — | Not a review. The `network-design.md` reordering: preface → thesis → topology → brief scope → the rest in current order, with the document-conventions section moved to an appendix and *Explicitly deferred* folded into the open-items section. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
-| 9 | **0.9-after** | Purge | Organisation again, on the migrated structure. Confirms the new order reads to a sequential stranger and that nothing was orphaned or double-numbered in the move |
+| 6 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
+| 7 | **migration** | — | Not a review. The `network-design.md` reordering: preface → thesis → topology → brief scope → the rest in current order, with the document-conventions section moved to an appendix and *Explicitly deferred* folded into the open-items section. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
+| 8 | **0.9-after** | Purge | Organisation again, on the migrated structure. Confirms the new order reads to a sequential stranger and that nothing was orphaned or double-numbered in the move |
 
 **0.9 runs twice, before and after the migration** [author, 2026-08-28]. The
 first pass is about defects in what exists; the second is about the move itself.

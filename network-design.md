@@ -61,9 +61,7 @@ scopes, catalog, abuse reporting, credential, and request framing; group
 operations. Encoding for all of it is in
 `wire-format.md`.
 
-**Not specified.** Nothing currently blocks a subsystem: the resource layer's
-interaction protocol, previously the one item that did, has now had clean-room
-implementation attempts on both its halves (§18.2). End-to-end payload encryption is *adopt PQXDH and
+**Not specified.** Nothing currently blocks a subsystem (§18.2). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§11.2.4) rather than designed here, with four integration
 decisions open. Multi-device beyond archive merge (§18.1). **Eleven parameters
 remain unset** (§16.1), sorted by how provisional they actually are in §16.1.1, and
@@ -1067,7 +1065,7 @@ distance itself, and a self-asserted flag would only be something to lie about.
 >
 > *Illustrative. The trust-preserving property is derivable from topology, not
 > declared (see below). The vignette assumes a fresh adoption carries a proof of
-> presence, which §6.1.1 now states as the expected default rather than leaving
+> presence, which §6.1.1 states as the expected default rather than leaving
 > implicit.*
 
 Expected uses are application-level — teams rebalancing, or onboarding by having
@@ -1862,8 +1860,8 @@ client should say so at the moment the user sets it.
 **The same reservation applies as everywhere else in this section: none of it binds
 a non-compliant client.** A client that kept a released key, kept plaintext, or
 never encrypted is unaffected by A's refusal, and nothing detects the difference.
-What changes is that a **compliant** holder now has no way to defeat the subject's
-decision, where previously it had only an obligation not to.
+What sealing changes is that a **compliant** holder has no way to defeat the
+subject's decision, rather than merely an obligation not to.
 
 ##### Interaction with verifier queries
 
@@ -4882,7 +4880,7 @@ same (`wire-format.md` §7.3.1).
    holds the replicated state but not the authority to countersign. Present
    encoding: a sibling of the serving infra node (§4.4) —
    siblings of the serving node, not of the patron, where those differ. The
-   the sibling determines from its own topology that this client is not in its
+   sibling determines from its own topology that this client is not in its
    subtree, and therefore that it is providing failover rather than primary
    service; `AttachAck` reports that determination so both ends agree the session
    is degraded (`wire-format.md` §6). **No automatic failback**: the client stays on
@@ -6945,11 +6943,10 @@ does block.
 
 #### Blocks a subsystem — none
 
-**Resource interaction has now had implementation attempts on both halves.** The
-catalog path — registration, query and reply, entry lifecycle as local state
-(`wire-format.md` §4.7) — and the request/response path — §7.3's normative
-evaluation order and refusal behaviour, with the role row consulted as a lookup —
-have each been implemented against and repaired.
+**Resource interaction is specified on both halves.** The catalog path —
+registration, query and reply, entry lifecycle as local state (`wire-format.md`
+§4.7) — and the request/response path — §7.3's normative evaluation order and
+refusal behaviour, with the role row consulted as a lookup.
 
 ---
 
