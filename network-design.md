@@ -5806,7 +5806,7 @@ for v1, given multiple-identity support is deferred.
 
 ---
 
-## 14. Security analysis — settled findings
+## 14. Security and privacy analysis
 
 ### 14.1 Standing comes from edges, not from nodes
 
