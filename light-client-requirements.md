@@ -53,7 +53,7 @@ that is noted in place.
   is not a validity condition — such a record is well-formed — which is why the
   client has to surface it.
 
-### 1.0.1 Acting as a witness
+#### 1.0.1 Acting as a witness
 
 - **Decline to commit a nonce for a ceremony whose claimed `started_at` is far from
   the time you observe.** Your nonce is derived over the day ordinal, so a

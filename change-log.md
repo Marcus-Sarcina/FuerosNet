@@ -5828,3 +5828,26 @@ nothing happened. Ordering was always correct; the dates were not.
   the preface is the author's own voice by design, §0's vocabulary table defines *"the
   reference client"* as *"what our implementation does"*, §4.3 carries the author's
   verbatim social-agenda blockquote, and the rest is quoted speech inside vignettes.
+
+- **2026-08-31 (0.9-before, mechanical half)** — An organisation-only pass returned six
+  classes of finding. The two that need no editorial judgement are applied here; the
+  rest are structural and wait for the author.
+
+  **Heading depth did not match the numbering, in 68 places.** The convention is
+  `depth = components + 1` — `## 1.` , `### 1.2`, `#### 1.2.1` — and 111 of
+  `network-design.md`'s 163 numbered headings already followed it. The other 52 did
+  not, nor did 15 in `wire-format.md` and one in `light-client-requirements.md`, so
+  **the numbering and the rendered outline described different structures**: `### 4.6`,
+  `### 4.6.1` and `### 4.6.2.1` all sat at one level. Every deviation was too shallow,
+  none needed shallowing, and the deepest result is `h5`. Re-levelled mechanically; no
+  heading text changed, and references still resolve at zero unresolved.
+
+  **One subsection was physically out of sequence.** `wire-format.md` §4.6.2.1 sat
+  between §4.6.3 and §4.6.3.1 — noticed during 0.8.3 and never fixed. Moved to precede
+  §4.6.3, which is what its number claims. §4.6 now reads 4.6.1, 4.6.2, 4.6.2.1, 4.6.3,
+  4.6.3.1, 4.6.4…, and no document has an out-of-order heading.
+
+  **`infra-client-requirements.md` §4a is correctly placed and awkwardly named**, so it
+  is left alone: it follows §4.5 as an insertion between §4 and §5, which is what `4a`
+  means. The same is true of `9.2a` there and `7.2a`/`7.2b` in `wire-format.md`.
+  Renumbering them is a naming decision with reference consequences, not a local defect.

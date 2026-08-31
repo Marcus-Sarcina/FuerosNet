@@ -947,7 +947,7 @@ is to end that authority relationship** (design §6.2). Present encoding: **the 
 patron does not sign a departure, and a decoder MUST NOT expect a second
 signature.** This is the escape hatch that makes exit a real right.
 
-### 4.2.1 Lateral and vertical shifts are not a separate type
+#### 4.2.1 Lateral and vertical shifts are not a separate type
 
 Moving to a grandpatron, or to a patron's sibling, is **an ordinary adoption
 whose counterparty happens to be nearby**. It warrants no type of its own.
@@ -1253,7 +1253,7 @@ participants' devices.
 
 ---
 
-### 4.5.1 Selective disclosure
+#### 4.5.1 Selective disclosure
 
 **A holder can present a presence record without the fields a given recipient has no
 use for.** Scoped deliberately: this hides **location, retention, client
@@ -1370,7 +1370,7 @@ record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
   validation result: one evaluator may treat any unverifiable dimension as
   disqualifying while another accepts a verified half, and both read the same bytes.
 
-### 4.5.2 Which exchanges see the disclosable fields
+#### 4.5.2 Which exchanges see the disclosable fields
 
 **Stated per exchange, because a holder needs to know what a given recipient will be
 able to read.** design §7.2.1 carries the same table with the reasoning.
@@ -1413,7 +1413,7 @@ so a missing verifier is
 visible, but the nonce commitments and reveals it depends on were nowhere in the
 presence record, so the anti-suppression property could not be checked at all.
 
-### 4.6.1 Nonce commitment
+#### 4.6.1 Nonce commitment
 
 ```
 commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)
@@ -1425,7 +1425,7 @@ included so a commitment cannot be replayed by a different witness.
 A validator MUST recompute every commitment from the revealed nonce and reject the
 record on any mismatch.
 
-### 4.6.2 Recomputability invariant — binding on any future change to seeding
+#### 4.6.2 Recomputability invariant — binding on any future change to seeding
 
 **Each participant selects the other's verifiers.** A queries B's prior
 counterparties to establish that B is B, and B queries A's. So the party who
@@ -1463,36 +1463,7 @@ while making selection **silently unverifiable** by anyone who does not hold the
 counterparty's archive. The failure would be invisible in testing, because a
 developer with both archives sees everything work.
 
-### 4.6.3 Seed
-
-```
-seed = SHA-256(
-    "rhtn/1:verifier-seed"
- || min(participant_a, participant_b)      ; 32 bytes, bytewise comparison
- || max(participant_a, participant_b)      ; 32 bytes
- || window_ordinal                          ; 8 bytes, big-endian
- || for each witness in ascending keyhash order:
-        witness_keyhash || revealed_nonce   ; 64 bytes each
-)
-```
-
-**Participant order is canonicalised** so that which party is listed first cannot
-become another grinding variable.
-
-**The window ordinal is `floor(unix_seconds / 86400)`.** A 24-hour window, epoch
-aligned. This fills the parameter design §15 marked UNSET. Long is safe here: an
-honest retry inside the window reproduces the *same* sample, which is exactly what
-retry should do.
-
-**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§4.6.3.1).
-An attacker aborting to reroll therefore gets one fresh sample per *admissible*
-ordinal rather than one per day, and §3.2's monotonicity bounds admissibility only
-from below — the budget is the span between the signer's last committed record and
-the day it claims. Nothing in a record shows which it was. What limits it is a
-witness declining to commit a nonce against a day far from its own clock, which no
-validator can check and which design §7.2.2 states as a client commitment.
-
-### 4.6.2.1 Witness nonce derivation — required for the anti-grinding property
+##### 4.6.2.1 Witness nonce derivation — required for the anti-grinding property
 
 **A witness derives its nonce deterministically from the participant pair and the
 window**, not freshly per attempt:
@@ -1537,7 +1508,36 @@ reveals nothing about its nonce, so no witness can compute the final seed before
 binding its own. Whether the set is independent is what the `nominated_by` split
 (§3.2) lets a participant judge before signing.
 
-### 4.6.3.1 The window, the horizon, and who is eligible
+#### 4.6.3 Seed
+
+```
+seed = SHA-256(
+    "rhtn/1:verifier-seed"
+ || min(participant_a, participant_b)      ; 32 bytes, bytewise comparison
+ || max(participant_a, participant_b)      ; 32 bytes
+ || window_ordinal                          ; 8 bytes, big-endian
+ || for each witness in ascending keyhash order:
+        witness_keyhash || revealed_nonce   ; 64 bytes each
+)
+```
+
+**Participant order is canonicalised** so that which party is listed first cannot
+become another grinding variable.
+
+**The window ordinal is `floor(unix_seconds / 86400)`.** A 24-hour window, epoch
+aligned. This fills the parameter design §15 marked UNSET. Long is safe here: an
+honest retry inside the window reproduces the *same* sample, which is exactly what
+retry should do.
+
+**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§4.6.3.1).
+An attacker aborting to reroll therefore gets one fresh sample per *admissible*
+ordinal rather than one per day, and §3.2's monotonicity bounds admissibility only
+from below — the budget is the span between the signer's last committed record and
+the day it claims. Nothing in a record shows which it was. What limits it is a
+witness declining to commit a nonce against a day far from its own clock, which no
+validator can check and which design §7.2.2 states as a client commitment.
+
+##### 4.6.3.1 The window, the horizon, and who is eligible
 
 Six definitions the selection rule depends on and did not carry.
 
@@ -1566,7 +1566,7 @@ Six definitions the selection rule depends on and did not carry.
   (design §13.1), not a structural one.
 
 
-### 4.6.4 Candidate set and sampling
+#### 4.6.4 Candidate set and sampling
 
 ***n* counts distinct presence transactions reachable from the back-pointer this
 record commits for that subject, in which the subject is one of the two
@@ -1642,7 +1642,7 @@ the first `required(subject)` are selected. **Exactly that many are queried.** T
 selected set and the finalization threshold are the same size, which is what makes
 "a missing verifier is visible" precise.
 
-### 4.6.5 What counts toward finalization
+#### 4.6.5 What counts toward finalization
 
 **Finalization counts structurally valid responses and never inspects their
 content.** Whether a response reports a match, a failure, or an inability to
@@ -1684,7 +1684,7 @@ participant to pad the record with material nobody asked for. A validator lackin
 the subject's history cannot make this determination and treats the responses it
 cannot place as unverifiable rather than invalid.
 
-### 4.6.6 Consent is signed over the query id
+#### 4.6.6 Consent is signed over the query id
 
 `query_id = SHA-256(canonical CBOR of the VerificationQuery with field 6 absent)` —
 the map of fields 1–5, hashed, then stored as field 6. Hashing a map that contains
@@ -1712,7 +1712,7 @@ the query's own `query_id` before anything else; **a query arriving without cons
 is rejected**, which is what field 7's rule already required and the wire could not
 previously carry.
 
-### 4.6.7 Who can verify what, the property is holder-relative
+#### 4.6.7 Who can verify what, the property is holder-relative
 
 **Anti-suppression is per-subject, and an evaluator can check only the subjects
 whose history it holds.**
@@ -2484,7 +2484,7 @@ constant-state floor of design §10.6.1 is untouched.
 
 Encodes design §10.3's cases and design §10.6.1's self-routing.
 
-### 5.7.1 Who sends a resolution request
+#### 5.7.1 Who sends a resolution request
 
 **A light client sends `ResolveRequest` to its serving infra node, not to the
 anchor.** Control traffic is always client-to-serving-node (design §11.1.1); a
@@ -2499,7 +2499,7 @@ The request is anchor-*relative* — the path in it is interpreted from the anch
 named in the locator, which is a statement about how the path is read, not about
 who the request is addressed to.
 
-### 5.7.2 Descent is through infrastructure only
+#### 5.7.2 Descent is through infrastructure only
 
 **A path is not walked node by node.** Intermediate nodes may be light clients,
 which are neither always online nor independently reachable (§4.3, design §11.1.1).
@@ -2511,7 +2511,7 @@ is the node the target attaches to (design §11.1.2).
 uses it to identify which of its attached clients is meant. This is what lets a
 path address a light client that nothing can route to directly.
 
-### 5.7.3 Messages
+#### 5.7.3 Messages
 
 ```
 ResolveRequest = {
