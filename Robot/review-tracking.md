@@ -2238,3 +2238,12 @@ COSE_KeySet to RFC 9052 §9, which is "CBOR Encoding Restrictions"; the
 definition is §7 "Key Objects"** (verified against the RFC text). Fixed. This is
 a classification correction, not an exemption: the six cites are now positively
 checked rather than skipped.
+
+**A18 ruled (2026-09-02): kept.** The author: it is rhetoric, not proof — the
+reasoning is heuristic, approximate, and his. A threshold is needed, two years
+is a common one, and it is close enough on a number of axes, of which face
+ageing is only one. §20.1's advisory row now records the ruling in place of its
+"recast qualitatively" advice; A18 remains a declared assumption unchanged, and
+§7.5.1's body already states the same frame ("a compromise, not an optimum on
+any axis... chosen, not derived"). The 0.1 queue is empty. The author re-runs
+0.1 at low-moderate effort next.

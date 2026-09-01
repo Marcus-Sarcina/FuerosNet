@@ -7764,3 +7764,8 @@ existed, passing by collision with the set's own headings. All six were checked
 against their RFCs: five held; wire §2.2's COSE_KeySet cite said RFC 9052 §9
 where the definition lives in §7, now fixed. The checker classifies
 RFC-prefixed cites as external and the internal count stands at zero.
+
+A18's 24-month figure is kept by ruling: the two-year tier needs a threshold,
+two years is a common one, and it is close enough on several axes, of which
+face ageing is only one. §20.1's advisory row records the ruling; the
+assumption row and the body text stand unchanged.
