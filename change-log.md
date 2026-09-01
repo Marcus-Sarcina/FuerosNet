@@ -7590,3 +7590,16 @@ governs the slice's framing and nobody else evaluates its meaning, which is why
 preservation works by slice and never by reconstruction through a typed model.
 D18 is the fixture that catches exactly that reconstruction. With these, every
 question accumulated across nine review rounds is ruled and applied.
+
+### 2026-09-01 (bar 3 reworded: the handed bundle, not an archive walk)
+**Author's correction of the canonical bar's framing.** Item 3 described deriving
+*n* "by DAG traversal" of the subject's history — wording that re-imported the
+archive-walking reading deleted during 0.8 (P37). The design is the **bundle
+model**, and `wire-format.md` §5.4 states it: a counterparty computes *n* and the
+candidate set *over the records the subject hands it*, and the traversal rules
+are what make the handed bundle **checkable** — records must chain, so a missing
+middle record fails to connect. The fixture survives as what it always should
+have been: a constructed bundle in which every processing rule has a case that
+changes the answer, with completeness carrying no certainty and needing none —
+overstatement impossible, understatement visible as a bundle that fails to
+connect, and history elsewhere invisible by design.
