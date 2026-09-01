@@ -309,7 +309,7 @@ guaranteed by the input being signed, not by a completeness marker.
 
 ### 2.2 Key material
 
-Identity keys are a **COSE_KeySet** (RFC 9052 §9) of exactly two entries in fixed
+Identity keys are a **COSE_KeySet** (RFC 9052 §7) of exactly two entries in fixed
 order — classical first, post-quantum second.
 
 ```

@@ -7757,3 +7757,10 @@ required no edits — every row was already registered in §20.1, as the reviewe
 acknowledged. One item queued for the author: A18's 24-month ageing figure,
 which the register already advises recasting and the two-year retention tier
 leans on.
+
+Applying the RFC 4271 correction exposed that the reference checker had been
+reading RFC-prefixed section cites as internal references — six such cites
+existed, passing by collision with the set's own headings. All six were checked
+against their RFCs: five held; wire §2.2's COSE_KeySet cite said RFC 9052 §9
+where the definition lives in §7, now fixed. The checker classifies
+RFC-prefixed cites as external and the internal count stands at zero.

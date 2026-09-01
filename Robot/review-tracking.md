@@ -2227,3 +2227,14 @@ working as designed; elevating any row needs a named measurement, not wording.
 **Carried forward**: the reviewer's own caveat — the audit is not exhaustive for
 incidental external assertions. A completion run of 0.1 remains available before
 0.2.
+
+**Follow-up found by the pass itself**: applying the RFC 4271 §4.3 correction
+exposed a checker blind spot — the reference checker read RFC-prefixed section
+cites as internal references, so all six such cites in the set had been passing
+by collision with our own headings or not at all. The checker now classifies a
+§N preceded by "RFC nnnn" as an external citation, and all six were verified
+against their RFCs by hand: five correct; **one wrong — wire §2.2 cited
+COSE_KeySet to RFC 9052 §9, which is "CBOR Encoding Restrictions"; the
+definition is §7 "Key Objects"** (verified against the RFC text). Fixed. This is
+a classification correction, not an exemption: the six cites are now positively
+checked rather than skipped.
