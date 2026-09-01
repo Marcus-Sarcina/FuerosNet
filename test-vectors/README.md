@@ -43,7 +43,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 |---|---|
 | `keys.md` | The synthetic test identities — **both components real**: Ed25519 and ML-DSA-65 keypairs from stated seeds, `KeyMaterial` encodings, keyhashes |
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
-| `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record, and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
+| `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record — now a **fully integrated object**: real §4.5.1 disclosure root, its type-5 envelope, and three verified presentations — and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
 | `records.md` | One known-answer signature per **signing** context — `EndpointRecord` complete; the remaining signed contexts queued, and the **unsigned** §7/§8 message encodings explicitly separated so nobody generates signatures the specification does not define |
 | `verifier-selection.md` | §5.2.1 nonce derivation (**HMAC-SHA-256, normative for clients — a conformance vector**), commitments, the seed preimage and seed, the `required()` table, hash-rank sampling, window boundaries |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
@@ -178,10 +178,14 @@ negatives (T9–T12). Still open:
 4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
    vectors**, both authentication forms (presence/classical,
    Recovery/hybrid), and a complete Recovery adoption as its own target.
-5. **The selective-disclosure construction**: a real seven-slot digest list
-   producing the record's field-8 root; full, partial and empty
-   presentations; negatives for wrong slot count, duplicate or wrong labels,
-   wrong salt width, root mismatch, and mutation of a revealed field.
+5. **The selective-disclosure construction** — *construction and
+   presentations done 2026-09-01*: the formation record now carries a real
+   §4.5.1 root (its synthetic-root caveat is gone), and full, partial and
+   minimal `PresentedRecord`s verify against the same envelope; the harness
+   recomputes every digest and all three roots. **Still open**: the negative
+   family — wrong slot count, duplicate or wrong labels, wrong salt width,
+   root mismatch, mutation of a revealed field — lands with the corpus format
+   (bar 6), and the normal record (bar 2) gets its own set.
 6. **Machine-instantiable fixtures throughout**: every byte-level, context
    and must-accept case resolves to **exact bytes, or an unambiguous
    deterministic mutation of a named positive vector**, plus machine-readable

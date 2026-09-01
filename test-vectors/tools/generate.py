@@ -233,6 +233,7 @@ def cose_signature_entry(protected_bytes, signature):
     return e_arr([e_bstr(protected_bytes), b'\xa0', e_bstr(signature)])
 
 SIGNER_COUNT = {1: 2, 2: 1, 3: 1, 4: 2, 7: 2}  # per-type logical signers (§3.1)
+# type 5's signer set is dynamic (participants + witnesses); callers assert it
 
 def envelope(version, msg_type, body_bytes, signers):
     """signers: the type's logical signer set — asserted against §3.1's
@@ -671,8 +672,57 @@ reissue_txid = H(reissue_body)
 TS_START = TS_2026 + 12 * 3600
 TS_FINAL = TS_START + 900
 WINDOW_ORDINAL = TS_START // 86400
-synthetic_root = H(b'rhtn-test-vectors:synthetic-disclosure-root:formation')
 participant = lambda i: e_map([(e_uint(1), e_bstr(i.keyhash))])
+
+# ---- Selective disclosure, §4.5.1: the REAL construction ----
+LABELS = ['capture', 'location', 'p0.integrity', 'p0.retention',
+          'p1.integrity', 'p1.retention', 'proximity']  # ascending byte order
+
+def disclosure(salt, label, value_bytes):
+    assert len(salt) == 16
+    return e_arr([e_bstr(salt), e_tstr(label), value_bytes])
+
+def disclosure_set(nickname, values):
+    """values: {label: encoded CBOR}. Salts are deterministic for the vectors:
+    first 16 bytes of SHA-256('rhtn-test-vectors:salt:<nickname>:<label>') —
+    production salts are fresh randomness; vectors must reproduce."""
+    slots = {}
+    for lab in LABELS:
+        salt = H(f'rhtn-test-vectors:salt:{nickname}:{lab}'.encode())[:16]
+        D = disclosure(salt, lab, values[lab])
+        slots[lab] = (D, H(b'\x00' + D))
+    root = H(b'\x01' + b''.join(slots[lab][1] for lab in LABELS))
+    return slots, root
+
+def presented(envelope_bytes, slots, reveal):
+    """PresentedRecord = [Envelope, [7 DisclosureSlot]] — revealed Disclosure
+    or the withheld 32-byte digest, position supplying the label."""
+    arr = [slots[lab][0] if lab in reveal else e_bstr(slots[lab][1])
+           for lab in LABELS]
+    return e_arr([envelope_bytes, e_arr(arr)])
+
+# The formation ceremony's disclosable values — schema-valid throughout:
+# capture {modality, count, liveness, version}; location with one asserted
+# geohash and no corroborations (no witnesses to corroborate); per-participant
+# retention (years) and integrity; proximity with optical+latency passing and
+# strongest = optical (3) — no higher-ranked channel present, satisfying §3.2.
+form_values = {
+    'capture':      e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_uint(3)),
+                           (e_uint(3), e_uint(0)), (e_uint(4), e_uint(1))]),
+    'location':     e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)),
+                                                     (e_uint(2), e_tstr('u4p'))])])),
+                           (e_uint(2), e_arr([]))]),
+    'p0.integrity': e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(1))]),
+    'p0.retention': e_uint(2),
+    'p1.integrity': e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(0))]),
+    'p1.retention': e_uint(2),
+    'proximity':    e_map([(e_uint(1), e_arr([
+                            e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))]),
+                            e_map([(e_uint(1), e_uint(4)), (e_uint(2), e_uint(0)),
+                                   (e_uint(3), e_uint(50))])])),
+                           (e_uint(2), e_uint(3))]),
+}
+form_slots, form_root = disclosure_set('formation', form_values)
 # Field 3's order is DELIBERATELY the reverse of keyhash order, so that
 # participant order (which fixes back-pointer list order, §3.1) and envelope
 # kid order (which fixes signature entry order, §3.5) disagree — a decoder
@@ -685,9 +735,13 @@ formation_body = e_map([
     (e_uint(3), e_arr([participant(p_hi), participant(p_lo)])),
     (e_uint(6), e_uint(1)),
     (e_uint(7), e_uint(WINDOW_ORDINAL)),
-    (e_uint(8), e_bstr(synthetic_root)),
+    (e_uint(8), e_bstr(form_root)),
 ])
 formation_txid = H(formation_body)
+formation_env, formation_entries = envelope(1, 5, formation_body, [p_hi, p_lo])
+pres_full = presented(formation_env, form_slots, set(LABELS))
+pres_min = presented(formation_env, form_slots, set())
+pres_part = presented(formation_env, form_slots, {'proximity', 'p0.retention'})
 
 alice_first, bob_first = sorted([alice, bob], key=lambda i: i.keyhash)
 ordered_names = [alice_first.name, bob_first.name]
@@ -1004,6 +1058,54 @@ Body ({len(formation_body)} bytes):
 ```
 
 txid: `{hx(formation_txid)}`
+
+### The disclosure set (§4.5.1)
+
+Salts are deterministic for the vectors — the first 16 bytes of
+`SHA-256("rhtn-test-vectors:salt:formation:<label>")`; production salts are
+fresh randomness. `digest = SHA-256(0x00 ‖ CBOR(Disclosure))`;
+`root = SHA-256(0x01 ‖ digests ascending by label)` = body field 8. `p0` is
+{p_hi.name}, `p1` is {p_lo.name} (field 3's order).
+
+| Label | Salt | Value (CBOR) | Digest |
+|---|---|---|---|
+{chr(10).join(f"| `{lab}` | `{form_slots[lab][0][2:18].hex()}` | `{form_values[lab].hex()}` | `{form_slots[lab][1].hex()}` |" for lab in LABELS)}
+
+root: `{hx(form_root)}`
+
+### The formation envelope — type 5's dynamic signer set
+
+Two participants, zero witnesses: two logical signers, four entries, sorted by
+`kid` then classical-first as every envelope is ({len(formation_env)} bytes):
+
+```
+{hexblock(formation_env)}
+```
+
+### Three presentations of one record (§4.5.1)
+
+`PresentedRecord = [Envelope, [7 DisclosureSlot]]`, position supplying the
+label; a slot is the revealed `Disclosure` or the withheld 32-byte digest. All
+three verify against the same body root under the same envelope signatures.
+
+**Fully revealed** ({len(pres_full)} bytes):
+
+```
+{hexblock(pres_full)}
+```
+
+**Partial** — `proximity` and `p0.retention` revealed, five withheld
+({len(pres_part)} bytes):
+
+```
+{hexblock(pres_part)}
+```
+
+**Minimal** — all seven withheld ({len(pres_min)} bytes):
+
+```
+{hexblock(pres_min)}
+```
 
 ## Adoption where signer order and kid order diverge — {div_node.name} adopted by {div_patron.name}
 

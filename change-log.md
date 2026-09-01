@@ -7603,3 +7603,20 @@ have been: a constructed bundle in which every processing rule has a case that
 changes the answer, with completeness carrying no certainty and needing none —
 overstatement impossible, understatement visible as a bundle that fails to
 connect, and history elsewhere invisible by design.
+
+### 2026-09-01 (the disclosure construction is real; the formation record becomes whole)
+Campaign (a) of the canonical bar opened on the author's go-ahead, and its first
+slice landed: **§4.5.1 is implemented for real**. Seven labelled, salted
+disclosures per record — deterministic salts, stated as a vector convention —
+digests prefixed `0x00`, the root prefixed `0x01` over the label-ordered digest
+run. The formation record's synthetic root is gone: **field 8 is now the genuine
+root**, the record gained its type-5 envelope, and three `PresentedRecord`s —
+fully revealed, partial, minimal — verify against the same body root under the
+same signatures. The harness recomputes all of it independently: every digest,
+the root, and the three presentations; its schema table now validates type 5's
+dynamic signer set alongside the five fixed-count types.
+
+**And the bar's item 3 was reworded on the author's correction**: the fixture is
+the **handed bundle** — nobody walks anyone's archive, and the phrasing that
+suggested otherwise re-imported a reading deleted during 0.8. The traversal rules
+are what make a supplied bundle checkable, which is §5.4 verbatim.

@@ -180,6 +180,10 @@ SCHEMAS = {  # type: (required {field: predicate}, signer-role fields)
          4: lambda v: isinstance(v, dict), 5: lambda v: isinstance(v, int)}, (1, 2)),
     7: ({1: is_h32, 2: is_h32, 3: is_seq, 4: is_seq,
          5: lambda v: isinstance(v, int)}, (1, 2)),
+    5: ({1: lambda v: isinstance(v, int), 2: lambda v: isinstance(v, int),
+         3: lambda v: isinstance(v, list) and len(v) == 2,
+         6: lambda v: v in (0, 1), 7: lambda v: isinstance(v, int),
+         8: is_h32}, None),  # signer set is dynamic: participants + witnesses
 }
 def validate_body(t, obj):
     req, roles = SCHEMAS[t]
@@ -188,7 +192,9 @@ def validate_body(t, obj):
         if not (isinstance(lst, list) and 1 <= len(lst) <= 8
                 and all(is_h32(h) for h in lst)): return 'bad back-pointer list'
         if len(lst) > 1 and lst != sorted(lst): return 'merge list unsorted'
-    if len(obj[0]) != len(roles): return 'wrong signer-list count'
+    expected_lists = (len(obj[3]) + len(obj.get(4, [])) if roles is None
+                      else len(roles))
+    if len(obj[0]) != expected_lists: return 'wrong signer-list count'
     for f, pred in req.items():
         if f not in obj: return f'missing field {f}'
         if not pred(obj[f]): return f'field {f} wrong shape'
@@ -217,7 +223,11 @@ for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
     t = obj[2]
     err = validate_body(t, obj[3])
     assert err is None, f'type-{t} body schema: {err}'
-    derived = {obj[3][f] for f in SCHEMAS[t][1]}
+    if SCHEMAS[t][1] is None:  # presence: participants + witnesses
+        derived = {pp[1] for pp in obj[3][3]}
+        derived |= {w[1] for w in obj[3].get(4, [])}
+    else:
+        derived = {obj[3][f] for f in SCHEMAS[t][1]}
     kids = {parse(bytes.fromhex(e[0]))[0][4] for e in obj[4][3]}
     assert kids == derived, f'type-{t} envelope signers != body roles'
     if isinstance(obj[3], dict) and 99 in obj[3]: ext_env = (obj, body)
@@ -307,7 +317,38 @@ bad = enc({k: (v if k != 99 else 'c0ffef') for k, v in extr[0].items() if k != 4
 check(not verify_sig(BY[extr[0][1]], -8, extr[1], sig_sign1(extr[2], b'rhtn/1:endpoints', bad)),
       'E13: mutating the Sign1-path extension breaks the signature')
 
-# ---------------------------------------------------------------- selection arithmetic
+# ------------------------------------------------- selective disclosure (§4.5.1)
+LABELS = ['capture', 'location', 'p0.integrity', 'p0.retention',
+          'p1.integrity', 'p1.retention', 'proximity']
+dtab = re.findall(r'\| `([a-z01.]+)` \| `([0-9a-f]{32})` \| `([0-9a-f]+)` \| `([0-9a-f]{64})` \|', tx)
+assert [r[0] for r in dtab] == LABELS, 'disclosure table labels'
+digests = {}
+for lab, salt, val, dig in dtab:
+    D = hd(4, 3) + bs(bytes.fromhex(salt)) + ts(lab) + bytes.fromhex(val)
+    assert H(b'\x00' + D).hex() == dig, f'digest {lab}'
+    digests[lab] = bytes.fromhex(dig)
+root = H(b'\x01' + b''.join(digests[l] for l in LABELS))
+froot = re.search(r'root: `([0-9a-f]{64})`', tx).group(1)
+check(root.hex() == froot, 'disclosure root recomputed from salts, labels and values')
+m = re.search(r'## Presence record.*?```\n([0-9a-f\n]+?)```', tx, re.S)
+fbody = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
+check(fbody[8] == froot, 'formation body field 8 equals the recomputed root')
+pres_ok = 0
+for m in re.finditer(r'\*\*(Fully revealed|Partial|Minimal)\*\*.*?```\n([0-9a-f\n]+?)```', tx, re.S):
+    pr_obj = canonical(bytes.fromhex(m.group(2).replace('\n', '')))
+    env, slots = pr_obj
+    assert len(slots) == 7
+    ds = []
+    for i, slot in enumerate(slots):
+        if isinstance(slot, str):          # withheld digest
+            ds.append(bytes.fromhex(slot))
+        else:                              # revealed Disclosure [salt, label, value]
+            assert slot[1] == ('tstr', LABELS[i]), 'label != slot position'
+            D = enc(slot)
+            ds.append(H(b'\x00' + D))
+    if H(b'\x01' + b''.join(ds)).hex() == env[3][8]:
+        pres_ok += 1
+check(pres_ok == 3, 'all three presentations recompute the root against the envelope body')
 v = read('verifier-selection.md')
 rows = re.findall(r'\| (w\d) \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|', v)
 pa, pb = sorted([bytes.fromhex(KH['alice']), bytes.fromhex(KH['carol'])])

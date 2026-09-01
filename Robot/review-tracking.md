@@ -2082,3 +2082,27 @@ interpreted**, in the author's words *uninterpretable state kept for a reader
 that may understand it later*; any deterministic CBOR item is admissible, and
 D18 is the fixture that fails typed-model reconstruction. The vectors' author
 queue is empty across all nine rounds.
+
+---
+
+## Campaign (a) opens: the §4.5.1 construction is real (2026-09-01)
+
+Author cleared item 2 to proceed and corrected item 3's framing to the **bundle
+model** — the fixture is the records one participant hands the other, §5.4's own
+words; the archive-walking phrasing re-imported a reading deleted during 0.8, and
+the bar now says bundle. First build slice delivered:
+
+- **The real §4.5.1 digest-list construction** in the generator: seven labelled
+  salted disclosures, `digest = SHA-256(0x00‖D)`, `root = SHA-256(0x01‖digests)`,
+  deterministic vector salts stated as such.
+- **The formation record is now a fully integrated known-answer object**: real
+  root in field 8 (the synthetic-root caveat is gone), its type-5 envelope (two
+  participants, four entries — the harness's schema table now handles type 5's
+  dynamic signer set), and **three verified `PresentedRecord`s** — full, partial,
+  minimal — all recomputing to the same root under the same signatures.
+- The harness independently recomputes every digest, the root, field 8, and all
+  three presentations; 25 checks, all passing (5 envelopes, 18 signatures).
+
+Next slices: the history bootstrap (records with `required = 0` growing *n*), the
+handed-bundle fixture, and the normal-subtype target record with divergent
+orderings and real responses.
