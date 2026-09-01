@@ -63,6 +63,15 @@ fields defined *today*; they are not a closed list. §1's rule that unknown map 
 survive re-serialisation exists precisely so an extension is covered rather than
 silently dropped, and reading "signs fields 1–2" as exhaustive would defeat it.
 
+**Wherever a signature is described as covering "fields X–Y", the signed payload
+is the deterministic CBOR of the *map* containing exactly those fields under
+their original keys — plus any unknown extension keys the object carries — and
+never the signature field itself.** Stated once because the phrase names eight
+objects, and it admits an array and a concatenation reading that produce
+different bytes and interoperate with nothing. The map keeps each field under
+its own key, which also makes a failing signature diagnosable — a concatenation
+offers a debugger nothing to label.
+
 ### 1.1 Domain separation — REQUIRED PROFILE RULE
 
 COSE does not separate application roles (above), so this profile does.
@@ -344,8 +353,12 @@ Locator = {
 The `seqno` here **is** design §6.2.1's sequence number, not a separate field
 (design §6.2). Its **counter** is incremented on every position change **and on every
 endpoint change** (§7.6), serving both as freshness test and stale-cache detector; its
-**series** identifies which line those counts belong to and is advanced only by §4.6's
-patron-countersigned reissue. **One series per patron relationship** is the expected
+**series** identifies which line those counts belong to. Within a relationship it
+is advanced only by §4.6's patron-countersigned reissue; **a new adoption
+establishes its relationship's series**, countersigned by the same party a
+reissue would need. Whether to adopt an established key that presents no
+history — a fresh series on a visibly non-fresh key — is the patron's
+discretion, like every adoption (design §16.7). **One series per patron relationship** is the expected
 shape — a node bound under two patrons keeps two, which is what stops its counts in one
 subnet disclosing its activity in another (design §19.4, P36).
 
@@ -806,9 +819,11 @@ prior counterparty's `match` (below).
 **Keystream seeds are local, private and never on the wire.** A participant's
 seed for a counterparty's captures lives in that participant's own record of the
 transaction (design §7.5.2) and is exchanged only over the direct channel during
-a ceremony. **It is not a field here**, and a record carrying one would be
-malformed: nothing in the evidence a third party evaluates depends on it, and
-placing it in a signed object would hand every reader the key.
+a ceremony. **It is not a field here, and no conforming client writes one anywhere in a
+record — extension keys included, where no validator could recognise one** (§1
+preserves unknown keys; Appendix A states the force of client rules). Nothing in
+the evidence a third party evaluates depends on it, and placing it in a signed
+object would hand every reader the key.
 
 **Consistency rules for a Recovery block.** Each closes a case where every
 signature verifies and the assembly still means something other than it claims:
@@ -826,6 +841,14 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   protects nothing. Field 9 forges a *verifier's* attestation, which is the attack.
   Field 7's protection is anti-oracle and expires with the ceremony window; field 9's
   is permanent. Cost follows: ~10 responses at 3,373 B is ~34 KB, one pair each.
+
+**`prior_key` MUST differ from field 1** [author, 2026-09-01]. A holder who kept
+  their key and lost their archive needs no `Recovery`: refetch from a holder
+  (§7.9), or adopt afresh on a new series and merge the old branch back when its
+  head resurfaces (§3.1, design §10.3). A same-key `Recovery` would be vacuous
+  evidence — the old key's signature and the continuity attestation each prove a
+  key the subject already holds — and vacuous evidence in a permanent identity
+  object is surface with no use.
 
 **Every response's field 8 MUST equal `prior_key`** — otherwise evidence about
   one old identity is embeddable under a claim about another.
@@ -1471,6 +1494,12 @@ standing relationship with, in subnets where it holds no membership and could no
 reissue even if it wanted to. What it cannot do is undo it: a sealed line is spent,
 and reopening means a reissue and the countersignature that requires.
 
+**Sealing requires naming the series, so a holder who lost their archive cannot
+seal lines whose numbers went with it.** Benign where the device is lost rather
+than stolen — nobody else holds the key, so the unsealed lines are dead space.
+Where it is stolen, the thief holds the key and could out-sign a seal anyway;
+the remedy is rotation (§4.1, design §18.3), not sealing.
+
 **A chain-holder does not need the seal.** Anyone holding §4.6.1's chain knows which
 series was abandoned and **MUST reject records in it** whatever their counter. The
 seal protects the parties who hold no chain — a cached locator and nothing else — and
@@ -1599,11 +1628,18 @@ developer with both archives sees everything work.
 window**, not freshly per attempt:
 
 ```
-nonce = PRF(witness_secret, "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)
+nonce = HMAC-SHA-256(witness_secret,
+                     "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)
 ```
 
-`witness_secret` is the witness's own long-lived secret and never leaves it. Any
-PRF with a 32-byte output is acceptable; HMAC-SHA-256 is the expected choice.
+`witness_secret` is the witness's own long-lived secret and never leaves it. The
+ordinal is 8 bytes big-endian, matching §5.3's seed layout. **The construction is
+HMAC-SHA-256, named rather than left open** — nothing interoperates on the value,
+so the choice costs nothing, and naming it makes a client's derivation testable
+and closes the one real risk: an honest implementation reaching for something
+that is not actually a PRF and silently losing the stability the property rests
+on. Like every client-side rule it is unenforceable from the wire (Appendix A);
+RFC 6979 and Ed25519 made the same move for the same reason.
 
 **`window_ordinal` is an input, so an honest witness following this rule still emits
 a fresh nonce for a fabricated day.** Stability holds across attempts *within* an
@@ -2749,7 +2785,9 @@ that one record per round trip would be prohibitive, so fetching is batched.
 ```
 ArchiveRequest = {
   1: keyhash,          ; subject whose archive is wanted
-  2: txid,             ; head to walk back from
+  2: ? txid,           ; head to walk back from. ABSENT: the holder's newest
+                       ;   record for this subject — the recovery case, where
+                       ;   the requester lost the one thing this field asks for
   3: uint,             ; max_records, 1..256
   4: ? timestamp,      ; stop at records older than this
   5: bstr .size 16     ; nonce
@@ -2770,7 +2808,11 @@ truncation.
 
 **The requester verifies the chain itself.** Each returned record's back-pointers
 must match the record that follows it in the batch, and the first must match the
-requested head. **A holder cannot be trusted to have walked correctly**, and the
+requested head. **Where field 2 was absent, there is no requested head to match**:
+the chain still verifies internally, but its *newestness* is the holder's claim
+and nothing the requester holds can check it — a requester restoring its own
+archive is trusting the holder not to serve a truncated history
+(`light-client-requirements.md` §2 states the interface obligation this creates). **A holder cannot be trusted to have walked correctly**, and the
 verification is one hash comparison per record, over records the requester is
 already parsing.
 

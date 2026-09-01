@@ -107,6 +107,7 @@ works, not inputs.
 | T11 | A `Recovery` old-key proof that is `COSE_Sign1`, or a `COSE_Sign` with a single entry | The old identity is hybrid: one logical signer, two entries (§4.1, §3.5) |
 | T12 | An old-key successor statement whose `new_key` ≠ the enclosing adoption's field 1 | Field 1 is "the ONLY successor authorised" (§4.1) — the cross-object binding that stops one observed proof authorising competing successors |
 | T13 | An adoption whose fields 1 and 2 are equal | Self-adoption is the degenerate cycle, and the one a validator sees from the record alone (§4.1, design §6.2.5) |
+| T14 | A `Recovery` whose `prior_key` equals the enclosing adoption's field 1 | A same-key Recovery is vacuous evidence (§4.1) — the retained-key, lost-archive case is served by archive fetch, fresh adoption and merge, never by Recovery |
 
 ## B. Context-dependent — bytes plus external state, structured result
 
@@ -142,13 +143,14 @@ works, not inputs.
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
 
-## Specification testability gap, flagged for the author
+## Resolved: the seed sentence is a writer commitment
 
-**"A record carrying a keystream seed would be malformed" (§4.1) cannot be
-turned into a decoder test.** Unknown extension keys are preserved by rule, and
-a decoder cannot know that an unknown 32-byte value is semantically a seed.
-Either a reserved key range makes it checkable, or the sentence is a writer
-commitment and should say so. Until ruled on, no fixture exists for it.
+**"A record carrying a keystream seed would be malformed" was untestable as
+written, and the specification now states it as what it is** [author,
+2026-09-01]: no conforming client writes a seed anywhere in a record, extension
+keys included, where no validator could recognise one. By design there is no
+fixture — the rule binds writers, and the security rests on the seed never
+needing to leave the device.
 
 ## Scope
 

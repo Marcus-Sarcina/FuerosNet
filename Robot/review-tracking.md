@@ -1764,3 +1764,28 @@ sentence's testability; the five interpretations (one sentence each, the
 canonical-CBOR one resolving eight objects); HMAC-SHA-256 normative or reference;
 whether self-adoption is structurally malformed; whether `prior_key` may equal the
 new key.
+
+---
+
+## Author rulings on the test-vector queue (2026-08-31 / 2026-09-01)
+
+| Question | Ruling | Applied |
+|---|---|---|
+| The §4.1 seed sentence | **Writer commitment** — the security rests on the seed never needing to leave the device, and the writer mostly injures themselves | §4.1 reworded; the negative suite's gap section records the resolution; no fixture by design |
+| "Canonical CBOR of fields X–Y" | **The map**, globally — *"map encoding seems easier to debug than concatenation"* | One sentence in §1 beside the coverage rule, resolving all eight signed objects; vector interpretation 1 retired |
+| §5.2.1's PRF | **Normative as a client commitment: HMAC-SHA-256**, ordinal 8 bytes big-endian | §5.2.1 rewritten with the RFC 6979/Ed25519 precedent; the nonce table is now a client-conformance vector; interpretation 4 retired |
+| Self-adoption | **Malformed** | §4.1 rule (the degenerate cycle — the one a validator sees from the record alone); T13 |
+| `prior_key` = new key | **Forbidden** — the retained-key, lost-archive case is an adoption, not a recovery | §4.1 rule with the fetch/adopt/merge path cited; T14 |
+| §2.3 "advanced only by §4.6" | **Qualified** — within a relationship; a new adoption establishes its relationship's series. *"It is at the Patron's discretion to relax the history walk to adopt a user on a fictive seqno in this situation"* | §2.3 carries the qualifier and the discretion sentence |
+| `ArchiveRequest` field 2 | **Optional** — absent means the holder's newest; **the light client must surface the trust this involves** | Field made optional (§7.9) with the newestness-is-the-holder's-claim paragraph; `light-client-requirements.md` §2 gains the restore-on-trust interface obligation covering the whole lost-archive path |
+| Unsealable lost series | **Say so** | One paragraph at §4.6: benign in loss, moot in theft where rotation is the remedy |
+
+**The lost-archive sequence is now fully stated in the documents it touches**:
+refetch first (§7.9, head optional), else ordinary adoption on a fresh
+patron-countersigned series (§2.3), merge the old branch back when its head
+resurfaces (§3.1, design §10.3) — and Recovery stays what it was, a key-change
+mechanism.
+
+**Remaining open**: interpretations 1–3 in the vectors README (genesis hash input,
+§5 raw concatenation, merge-list order); whether departure, disavowal, peering and
+reissue reject the degenerate equal-pair; whether a root can reissue at all.

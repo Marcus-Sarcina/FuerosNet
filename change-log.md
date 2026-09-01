@@ -7148,3 +7148,48 @@ only. Negative vector T13 added; the vector set regenerated against the new
 specification hash. **The sibling question — whether departure, disavowal, peering
 and series reissue reject the same degenerate pair — is put to the author, not
 assumed.**
+
+### 2026-09-01 (eight rulings: the lost-archive path, and five spec sentences the vectors asked for)
+The author ruled on the whole test-vector queue and one design question in a single
+pass; everything below is applied.
+
+**The retained-key, lost-archive case is an adoption, not a recovery** — and the
+design already carried every mechanism it needs. The sequence, now stated where each
+piece lives: **refetch first** — sibling replication means the patron holds the
+history, and `ArchiveRequest` field 2 is now optional, absent meaning the holder's
+newest, because the head to walk back from is the one thing a client that lost
+everything cannot name. **Else adopt afresh** on a new series: §2.3 now says a new
+adoption *establishes* its relationship's series, countersigned by the same party a
+reissue would need — the previous "advanced only by §4.6" read literally would have
+stranded exactly this user, since a reissue must name the counter the old series
+reached. Adopting an established key that presents no history is the patron's
+discretion, like every adoption. **Merge when the past resurfaces**: the two-head
+back-pointer list reunites the branches, and the fork-and-merge machinery built for
+two devices absorbs archive loss unchanged. Accordingly **`prior_key` MUST now
+differ from field 1** — a same-key Recovery is vacuous evidence — and the vectors
+gain T14.
+
+**Trust, surfaced rather than hidden.** A headless archive fetch verifies its chain
+internally while its *newestness* stays the holder's claim; §7.9 says so, and
+`light-client-requirements.md` §2 gains the interface obligation: present the whole
+lost-archive path — restore-on-trust, re-adoption on personal judgment — as what it
+is, and never present a restored archive as verified-complete. One paragraph at §4.6
+records that sealing needs the series number the archive took with it: benign in
+loss, moot in theft, where rotation is the remedy.
+
+**Self-adoption is malformed** — the degenerate cycle, and the one cycle a validator
+sees from the record alone where design §6.2.5 otherwise needs topology state (T13).
+
+**Two vector interpretations became specification sentences.** *"Canonical CBOR of
+fields X–Y"* now means the **map** of exactly those fields, globally — one sentence
+in §1 resolving eight signed objects, the author's reason being the practical one, a
+map is debuggable where a concatenation is not. And §5.2.1's PRF is **normatively
+HMAC-SHA-256**, ordinal 8 bytes big-endian — nothing interoperates on the value, so
+naming it costs nothing and closes the honest-homebrew risk, the same move RFC 6979
+and Ed25519 made. The seed sentence in §4.1 is restated as the writer commitment it
+always was.
+
+**The vectors regenerated against the new pins**; the nonce table is promoted from
+reference example to client-conformance vector, and the independent re-derivation
+still matches. Still open: the three remaining interpretations, the degenerate-pair
+question for the other two-party types, and whether a root can reissue at all.

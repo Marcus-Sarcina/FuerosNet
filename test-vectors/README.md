@@ -28,7 +28,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
 | `transactions.md` | Bodies and txids for all six transaction types **including peering**, a formation-subtype presence record, and adversarial variants: signer-order/kid-order divergence, a two-head merge, a must-accept unassigned disavowal code, a must-accept reissue to a numerically smaller series, and a fully-signed unknown-extension adoption. Plus the adoption's full four-entry envelope |
 | `records.md` | §7 standalone signed objects, one known-answer signature per domain-separation context — `EndpointRecord` complete; the rest queued |
-| `verifier-selection.md` | §5.2.1 nonce derivation (**HMAC-SHA-256 reference example — the PRF is implementation-chosen**), commitments, the seed preimage and seed, the `required()` table, hash-rank sampling, window boundaries |
+| `verifier-selection.md` | §5.2.1 nonce derivation (**HMAC-SHA-256, normative for clients — a conformance vector**), commitments, the seed preimage and seed, the `required()` table, hash-rank sampling, window boundaries |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
 ## What every vector assumes
@@ -50,25 +50,21 @@ Places where the specification under-determines the bytes. **Each is a review
 target**: if the choice is wrong, the vector is wrong; if the specification
 permits more than one reading, the specification needs a sentence.
 
-1. **"Canonical CBOR of fields X–Y" — eight objects, one ambiguity.** Read
-   throughout as the deterministic CBOR of the **map** consisting of exactly
-   those fields. The phrase governs `SignedLocator`, `VerifierResponse`,
-   `CatalogEntry`, `CurrencyAttestation`, `AnchorEntry`, the subtree
-   acknowledgement, `EndpointRecord` and the prekey bundle — so the fix is one
-   global sentence, roughly: *"canonical CBOR of fields X–Y" means the
-   deterministic CBOR encoding of the map of exactly those retained fields
-   (plus any unknown extension keys), the signature field omitted.* Flagged by
-   the second review; a per-object resolution would recur eight times.
-2. **Genesis back-pointer input.** §3.1's `SHA-256(the signer's keyhash)` is
+1. **Genesis back-pointer input.** §3.1's `SHA-256(the signer's keyhash)` is
    computed over the **raw 32 keyhash bytes**, not a CBOR `bstr` wrapping.
-3. **Verifier-selection hash inputs.** All §5 constructions are **raw byte
+2. **Verifier-selection hash inputs.** All §5 constructions are **raw byte
    concatenations** — ASCII tags, raw hashes, the 8-byte big-endian ordinal —
    with no CBOR framing.
-4. **§5.2.1's PRF ordinal encoding.** **8 bytes big-endian**, matching §5.3's
-   seed layout; the section does not say.
-5. **Merge back-pointer list order.** §3.1 states no order; **ascending
+3. **Merge back-pointer list order.** §3.1 states no order; **ascending
    bytewise** is used. Worth a rule: without one, the same logical merge has
    multiple valid txids.
+
+Two former interpretations were resolved into the specification [author,
+2026-09-01]: **"canonical CBOR of fields X–Y" now means the map of exactly
+those fields** — one global sentence in §1, chosen partly because a map is
+debuggable where a concatenation is not — and **§5.2.1's construction is
+normatively HMAC-SHA-256 with the ordinal as 8 bytes big-endian**, making the
+nonce table a client-conformance vector.
 
 ## Determined by the profile — stated for the record
 
@@ -97,22 +93,17 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-1. **The seed sentence** (§4.1): *"a record carrying one would be malformed"*
-   is untestable — reserve a key range, or restate as a writer commitment.
-2. **The five interpretations above**, each a one-sentence specification fix if
-   confirmed — the "canonical CBOR of fields" sentence resolves eight objects
-   at once.
-3. **Is HMAC-SHA-256 normative for §5.2.1, or reference-only?** As written,
-   any 32-byte PRF conforms, so the nonce table can never be a conformance
-   vector — only commitment/seed arithmetic downstream of the reveal can.
-   Hardening it buys a testable derivation; the cost is fixing what was left
-   implementation-chosen.
-4. **Is self-adoption (adoption field 1 = field 2) structurally malformed?**
-   Stated nowhere. Presence records state participant distinctness; adoption
-   does not. Review round 2 assumed it should be rejected; the text does not
-   support a vector either way.
-5. **May a `Recovery` name `prior_key` equal to the new key?** Also stated
-   nowhere; same family as 4.
+Rulings of 2026-08-31/09-01 closed the earlier queue: the seed sentence is a
+writer commitment; the fields-X–Y payload is the map, globally; HMAC-SHA-256 is
+normative for §5.2.1; self-adoption is malformed (T13); `prior_key` MUST differ
+from the new key (T14). Still open:
+
+1. **Interpretations 1–3 above**, each a one-sentence specification fix if the
+   reading is confirmed — merge-list order is the one with consequences, since
+   without a rule one logical merge has several valid txids.
+2. **Do the other two-party types reject the degenerate pair** (departure,
+   disavowal, peering, series reissue with field 1 = field 2)? Reissue also
+   raises whether a root, having no patron, can reissue at all.
 
 ## The canonical bar
 

@@ -225,6 +225,15 @@ job.
   the obligation.
 - **Scan any imported backup for expired retention** and delete what is past its
   window. Import is exactly where an over-retention leak occurs (design §13.7.1).
+- **Restoring your own archive from a holder is an act of trust, and the
+  interface must say so.** A client that lost its archive does not know its own
+  head, so it fetches from the newest record the holder claims
+  (`wire-format.md` §7.9) — the chain verifies internally, its completeness does
+  not, and the same reduced footing extends through the whole lost-archive path:
+  re-adoption on a fresh series presents no history and rests on the patron's
+  personal judgment. Surface both as what they are — recovery on trust rather
+  than on verification — and never present a restored archive as
+  verified-complete.
 
 **Presenting and serving history:**
 
