@@ -7500,3 +7500,34 @@ matrices, machine-readable fixture identity, and a unit-fixture class for
 requirements no natural wire input can instantiate. **Four harness-schema
 assumptions are now recorded in the README as their own register**, distinct from
 the retired encoding interpretations.
+
+### 2026-09-01 (eighth vector review: the harness audited as hard as the vectors)
+The round's sharpest findings were against the verification harness itself, and
+all held. **`verify.py` was using decode-and-re-encode to judge canonicality — the
+exact method the suite's own E9/C1 rows forbid a conforming decoder to use.** Its
+parser already rejected duplicates and unsorted keys before materialising, which
+contained the damage, but shortest-form checking rode on the re-encode. The parser
+now rejects non-shortest forms at byte level and the re-encode survives only as a
+cross-check of the harness's own encoder. **Its Sign1 helper inferred the
+signature slot from key magnitude** — an unknown extension key below 10 would have
+been misread as the signature — and that trap is now a generated vector: a
+`SignedLocator` carrying unknown key 4, directly above its schema slot, with its
+mutation complement, both verified. Text strings get a distinct representation so
+the future catalog and disclosure vectors cannot be silently mis-encoded, and the
+harness itself is now **pinned and gated** — a tool change alters what *all checks
+pass* means, so it takes the same acknowledgment a generator change does.
+
+**One finding goes to the author, and it is the round's real discovery**: the
+generator asserts every path has at least one nibble, and §2.1 states no lower
+bound — an unstated protocol assumption hiding in a constructor. The question has
+protocol shape: may a locator's path be empty, a node that is its own anchor,
+which is what a root would publish? Reopened in the interpretations register.
+
+**Eleven fixtures round out the coverage**: the missing response cross-bindings
+(T25, T26), the stateful series traces — a post-reissue record in the abandoned
+series rejected at any counter, and two current-looking series that never rank
+numerically (V10, V11) — the exact-boundary must-accepts (`finalized_at ==
+started_at`, the full 24-hour gap, the idempotent `EndpointRecord` replay: D10–
+D12), and the extension pair D9/E14. The unsigned inventory gains the currency
+request/reply it had omitted — with the omission recorded in the inventory itself
+as the standing argument for enumerating it mechanically.

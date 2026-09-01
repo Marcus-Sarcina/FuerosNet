@@ -56,15 +56,23 @@ def check(cond, what):
 def parse(b, off=0):
     ib = b[off]; mt = ib >> 5; ai = ib & 0x1f; off += 1
     if ai < 24: n = ai
-    elif ai == 24: n = b[off]; off += 1
-    elif ai == 25: n = int.from_bytes(b[off:off+2], 'big'); off += 2
-    elif ai == 26: n = int.from_bytes(b[off:off+4], 'big'); off += 4
-    elif ai == 27: n = int.from_bytes(b[off:off+8], 'big'); off += 8
+    elif ai == 24:
+        n = b[off]; off += 1
+        if n < 24: raise ValueError('non-shortest form')
+    elif ai == 25:
+        n = int.from_bytes(b[off:off+2], 'big'); off += 2
+        if n < 0x100: raise ValueError('non-shortest form')
+    elif ai == 26:
+        n = int.from_bytes(b[off:off+4], 'big'); off += 4
+        if n < 0x10000: raise ValueError('non-shortest form')
+    elif ai == 27:
+        n = int.from_bytes(b[off:off+8], 'big'); off += 8
+        if n < 0x100000000: raise ValueError('non-shortest form')
     else: raise ValueError('indefinite length')
     if mt == 0: return n, off
     if mt == 1: return -1 - n, off
     if mt == 2: return b[off:off+n].hex(), off + n
-    if mt == 3: return b[off:off+n].decode(), off + n
+    if mt == 3: return ('tstr', b[off:off+n].decode()), off + n
     if mt == 4:
         out = []
         for _ in range(n):
@@ -94,6 +102,7 @@ ts = lambda x: hd(3, len(x.encode())) + x.encode()
 def enc(o):
     if isinstance(o, bool): return b'\xf5' if o else b'\xf4'
     if isinstance(o, int): return hd(0, o) if o >= 0 else hd(1, -1 - o)
+    if isinstance(o, tuple) and len(o) == 2 and o[0] == 'tstr': return ts(o[1])
     if isinstance(o, str): return bs(bytes.fromhex(o))
     if isinstance(o, list): return hd(4, len(o)) + b''.join(enc(x) for x in o)
     if isinstance(o, dict):
@@ -103,8 +112,19 @@ def enc(o):
     raise TypeError(o)
 
 def canonical(b):
-    obj, end = parse(b)
-    return obj if (end == len(b) and enc(obj) == b) else None
+    """Byte-level canonical validation: the parser itself rejects duplicate or
+    unsorted map keys before materialising, indefinite lengths, and
+    non-shortest integer forms — the E9/C1 method, not decode->re-encode
+    equality. The re-encode comparison remains as a redundant cross-check of
+    this harness's own encoder, never the verdict."""
+    try:
+        obj, end = parse(b)
+    except ValueError:
+        return None
+    if end != len(b):
+        return None
+    assert enc(obj) == b, 'harness encoder disagrees with its parser'
+    return obj
 
 def sig_sign(prot, payload):
     return hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:envelope') + bs(payload)
@@ -194,23 +214,32 @@ check(broken == 8, 'E10: top-level and nested mutations each break all four sign
 
 # ---------------------------------------------------------------- standalone Sign1
 pr = read('primitives.md'); rc = read('records.md')
-def sign1_object(hexs, aad, fields):
+def sign1_object(hexs, aad, sig_slot):
+    """sig_slot is SCHEMA-FIXED (SignedLocator: 3; EndpointRecord: 4) — never
+    inferred from key magnitude, or an unknown extension key below the slot
+    would be misread as the signature (eighth review)."""
     b = bytes.fromhex(hexs.replace('\n', ''))
     obj = canonical(b); assert obj is not None
-    sig_slot = max(k for k in obj if isinstance(k, int) and k <= 10)
     payload = enc({k: v for k, v in obj.items() if k != sig_slot})
     prot = bytes.fromhex(obj[sig_slot][0]); sig = bytes.fromhex(obj[sig_slot][3])
     return obj, prot, sig, sig_sign1(prot, aad, payload)
 
 m = re.search(r'## SignedLocator.*?Complete `SignedLocator`.*?```\n([0-9a-f\n]+?)```', pr, re.S)
-obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs), 'SignedLocator: signature by the named subject')
 m = re.search(r'## Same-series counter jump.*?Complete object.*?```\n([0-9a-f\n]+?)```', pr, re.S)
-obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][3] == [5, 100],
       'counter-jump SignedLocator: verifies, seqno [5,100]')
+m = re.search(r'## A `SignedLocator` carrying an unknown extension.*?```\n([0-9a-f\n]+?)```', pr, re.S)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
+check(verify_sig(BY[obj[1]], -8, sig, tbs) and 4 in obj,
+      'D9: extension SignedLocator (unknown key 4) verifies with the key in the payload')
+bad = enc({k: (v if k != 4 else 'ab') for k, v in obj.items() if k != 3})
+check(not verify_sig(BY[obj[1]], -8, sig, sig_sign1(prot, b'rhtn/1:locator', bad)),
+      'E14: mutating the SignedLocator extension breaks the signature')
 m = re.search(r'## A wrong-signer `SignedLocator`.*?```\n([0-9a-f\n]+?)```', pr, re.S)
-obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(not verify_sig(BY[obj[1]], -8, sig, tbs) and verify_sig('bob', -8, sig, tbs),
       'S23 wrong-signer: rejected under field 1, valid under bob — binding is the only defect')
 found = []

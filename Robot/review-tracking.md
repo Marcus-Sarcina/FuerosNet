@@ -2018,3 +2018,28 @@ Findings 1 (declared gaps are real) and the execution note (the reviewer could n
 run `verify.py` without `dilithium_py` — environment, not suite) required no
 change. **The four recorded assumptions now live in the README as their own
 section, distinct from encoding interpretations.**
+
+---
+
+## Test-vector review, eighth run (2026-09-01)
+
+**All pins independently recomputed, exact match.** Ten findings; nine applied, one
+to the author — the round's genuine discovery, an unstated protocol assumption
+inside the generator itself.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Declared gaps real, promotion-blocking | No change needed — status accurate |
+| 2 | **The generator asserts `path` ≥ 1 nibble; §2.1 states no lower bound** | **CONFIRMED — AUTHOR.** The question has protocol shape: may a locator's path be empty — a node that is its own anchor, i.e. a root — or is one nibble the minimum? Reopened in the README's interpretations register; the assertion stands flagged until ruled |
+| 3 | `verify.py` used decode→re-encode for canonicality — the method E9/C1 forbid | **CONFIRMED, FIXED** — the parser now rejects non-shortest forms at byte level (duplicates/unsorted/indefinite were already parse-time); re-encode survives only as a cross-check of the harness's own encoder, never the verdict |
+| 4 | The harness collapses tstr/bstr and covers a restricted type domain | **CONFIRMED, FIXED** — text strings get a distinct representation; the docstring states the domain; richer extension-value must-accepts queued with their families |
+| 5 | `sign1_object` inferred the signature slot from key magnitude — an unknown key ≤ 10 would be misread | **CONFIRMED, FIXED** — slots are schema-fixed arguments; and the trap is now a **generated vector**: a `SignedLocator` carrying unknown key **4**, directly above its slot (D9), with mutation complement E14, both harness-verified |
+| 6 | The unsigned inventory omitted the currency request/reply | **CONFIRMED, FIXED** — inventory completed (registration/reply, catalog, resource request/response also now named); the hand-list's own failure is recorded in it as the argument for bar 9's mechanical enumeration |
+| 7 | Response cross-binding fixtures missing two of three bindings | **CONFIRMED, FIXED** — T25 (subject names a non-participant), T26 (transplanted query_id) join T23 |
+| 8 | Series semantics need stateful complements | **CONFIRMED, FIXED** — V10 (post-reissue high-counter record in the abandoned series: reject at any counter, §4.6.1's MUST verified at the text) and V11 (two current-looking series never rank numerically; the presented chain decides) |
+| 9 | Boundary must-accepts missing: exact 24 h gap, `finalized_at == started_at`, idempotent replay | **CONFIRMED, FIXED** — D10, D11, D12; the sweep list gains the 0/86,400/86,401 gap boundary and fixed-width keyhash fields |
+| 10 | `verify.py` unpinned; the spec-accept flag's audit obligation understated | **CONFIRMED, FIXED** — the harness hash is pinned and gated with the generator flag; the accept-spec-change refusal message now states both audit halves: generator constructions **and** hand-authored fixture semantics |
+
+The reviewer's execution note — could not run the ML-DSA path without
+`dilithium-py` — is the environment limitation already recorded; the harness's
+source made its coverage inspectable, which was the point of including it.

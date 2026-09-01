@@ -134,6 +134,23 @@ c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
 09
 ```
 
+## A `SignedLocator` carrying an unknown extension — MUST ACCEPT (D9)
+
+Unknown key **4** — deliberately the nearest uint above the signature slot
+(field 3), so any implementation that *infers* the signature slot from key
+magnitude instead of the schema misreads the extension as the signature
+(eighth review). The key is inside the signed payload per §1's global rule;
+mutating it breaks the signature (E14). (164 bytes):
+
+```
+a40158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
+c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201433141500205038205182a038443a10127a0f658
+40e1d5e3d9a23027b1ed5334487e489fc1fbd8ba88a4bc654ec410ab163e10b0
+ea2708dbab19c4635c3cc17c5a3205106800677d4b5d9703bd93d6d51d3b4078
+0b0441aa
+```
+
 ## A wrong-signer `SignedLocator` — MUST REJECT (S23)
 
 Field 1 names **alice**; the signature is **bob's**, and it is a

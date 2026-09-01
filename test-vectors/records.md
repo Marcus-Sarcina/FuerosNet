@@ -94,9 +94,14 @@ goal — but only for objects that have one:
   the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
   successor statement (§4.1), and the verifier response and consent contexts
   (§4.5, §5.6).
-- **Unsigned message encodings — no signature exists to generate**: the capture
-  key grant (§7.3, transient end-to-end payload), the late-response wrapper
-  (§7.4 — its embedded `VerifierResponse` is already signed; the wrapper adds
-  no signature), resolution messages (§7.7.3), archive fetch (§7.9), and the
-  session messages of §8. These get **encoding** vectors, not signature
-  vectors.
+- **Unsigned message encodings — no signature exists to generate**: the
+  currency request and reply (§7.1), the capture key grant (§7.3, transient
+  end-to-end payload), the late-response wrapper (§7.4 — its embedded
+  `VerifierResponse` is already signed; the wrapper adds no signature),
+  resolution messages (§7.7.3), archive fetch (§7.9), resource registration
+  and its reply (§6.2), the catalog query and reply (§6.4), resource
+  request/response (§11), and the session messages of §8. These get
+  **encoding** vectors, not signature vectors. *This inventory is maintained
+  by hand until the canonical corpus enumerates it mechanically from the
+  wire-format schemas (eighth review) — a hand list can itself omit a family,
+  and did: the currency messages were missing from it until then.*

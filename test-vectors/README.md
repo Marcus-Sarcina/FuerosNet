@@ -29,9 +29,11 @@ signature (ML-DSA under pyca `cryptography`'s independent implementation where
 available), and checking **every generated mutation and arithmetic claim it
 currently reaches** — not the prose-described fixtures, which await bar 6; run
 it after any regeneration. `tools/spec-pins.json` gates generation: a changed specification
-needs `--accept-spec-change`, a changed generator `--accept-generator-change`,
-a missing pin file `--bootstrap-pins`; it records the producer's and every
-output's SHA-256. **Each generated file pins the SHA-256 of both
+needs `--accept-spec-change` — which asserts the audit of **both** the
+generator constructions and the hand-authored fixture semantics — a changed
+generator **or verification harness** needs `--accept-generator-change`, a
+missing pin file `--bootstrap-pins`; it records the producer's, the
+harness's, and every output's SHA-256. **Each generated file pins the SHA-256 of both
 `network-design.md` and `wire-format.md`** — the design wins on any
 disagreement, so a design-only semantic change stales these vectors with the
 wire pin still green; a stale pin of either means regenerate before trusting a
@@ -64,7 +66,14 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-**None remain open.** The last — whether "transaction types" means the six
+**One is open, surfaced by the eighth review**: the generator asserts every
+`path` has **at least one nibble**, and `wire-format.md` §2.1 states no lower
+bound. The question has a real protocol shape: may a locator's path be empty —
+a node that is its own anchor, which is what a root would publish — or is one
+nibble the minimum? **Author ruling pending**; until then the ≥ 1 assertion is
+an unstated protocol assumption, flagged here rather than silent.
+
+Every earlier byte-level choice is closed: The last — whether "transaction types" means the six
 archive transactions — was ruled 2026-09-01: **type 6 is retired** with a
 tombstone row, the abuse report is §6.3's standalone signed object, and the
 suite's reading was confirmed. Its signature-context vector stays queued in
@@ -192,9 +201,12 @@ negatives (T9–T12). Still open:
    that catches two real paths sharing a hard-coded AAD while the artificial
    empty-AAD case (S12) still passes (seventh review).
 9. **The unsigned message families** — positive known-answer encodings plus
-   each family's characteristic malformed and must-accept cases: control
-   frames and `Attach`/`AttachAck`, heartbeat and sibling updates, resolution,
-   archive/prekey/catalog requests, topology push and memo, resource
+   each family's characteristic malformed and must-accept cases, the family
+   inventory **enumerated mechanically from the wire-format schemas** (the
+   hand list omitted the currency request/reply until the eighth review):
+   control frames and `Attach`/`AttachAck`, heartbeat and sibling updates,
+   resolution, currency request/reply, archive/prekey/catalog requests,
+   registration and reply, topology push and memo, resource
    request/response. The families differ on exactly the points a generic
    implementation gets wrong: unknown control-frame types versus unknown
    request types extend differently, and stream 0's 64 KB bound is not §9.2's

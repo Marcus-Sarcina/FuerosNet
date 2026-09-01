@@ -52,6 +52,7 @@ works, not inputs.
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
 | E12 | An otherwise-valid body carrying map key `-1` or `"x"` | §1: protocol map keys are unsigned integers — an arbitrary CBOR key is malformed, **not** an "unknown extension key", which is always a uint. A generic CBOR map type preserves either indistinguishably |
 | E13 | The extended `EndpointRecord` (`records.md`, D8) with its extension value mutated `c0ffee` → `c0ffef` | §1's coverage rule on the **standalone `COSE_Sign1` path**: the unknown key is inside the reconstructed payload, so the signature fails — the Sign1 analogue of E10 |
+| E14 | The extended `SignedLocator` (`primitives.md`, D9) with key 4's value mutated | Same rule, and the fixture that catches a slot-inference bug from the other side: the mutated key must have been in the payload for the signature to fail |
 | S18 | An envelope with type **6** | Retired: the schema is removed and nothing remains to validate *as* (§4's tombstone). The number is reserved, the bytes are not readmitted |
 | S19 | An envelope with type **9** | Unassigned type value — §1's unknown-enum rule on field 2 |
 
@@ -155,6 +156,8 @@ photo comparison without its template version is unverifiable as evidence:
 | T21 | `basis` 0 or 2 with `template_version` absent | REQUIRED for photo bases |
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
 | T23 | A structurally valid response from a verifier outside the recomputed selection | Context fixture: the selection is deterministic (§5.4) and exactly the selected are queried — an unselected response is a slot nothing allocated |
+| T25 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
+| T26 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
 
 ## B. Context-dependent — bytes plus external state, structured result
 
@@ -176,6 +179,8 @@ photo comparison without its template version is unverifiable as evidence:
 | V8 | A perfectly valid, correctly signed envelope supplied in answer to a request for a **different** txid | The requested txid | **Content-address mismatch** — `chain` cannot advance through it. §5.4 counts history only when canonicality, **content address**, and signatures all check; this isolates the txid recomputation from signature verification, catching an implementation that trusts its storage index instead of hashing what it received |
 | V9 | The optionals-exercised adoption (`transactions.md`), field 8 dereferenced | The referenced formation record | `structural = valid`, **`checks[proof_of_presence] = fail`** — the record exists and verifies but names alice–carol, not this adoption's alice–bob (§3.4: dereference confirms the record *names these two parties*) |
 | V9b | The same adoption | The referenced record unfetchable | `structural = valid`, `checks[proof_of_presence] = unverifiable(unfetchable)` — the §3.4 posture: neither confirmed nor failed |
+| V10 | A valid reissue followed by an otherwise-valid high-counter record in the **abandoned** series | The reissue chain held | **Reject the old-series record at any counter** — §4.6.1: a chain-holder knows which series were abandoned and MUST reject records in them whatever their counter. A different bug from V4's reuse: here the old record, not the reissue, is the attack |
+| V11 | Two current-looking records in **different** series for one subject | No reissue chain held | **Neither ranks** — series are unordered (§2.3); currency is proved by the presented chain (§4.6.1), never by comparing series values. An implementation picking the numerically larger series fails here |
 
 ## C. Method requirements — how a decoder works
 
@@ -198,6 +203,10 @@ photo comparison without its template version is unverifiable as evidence:
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
 | D8 | The `EndpointRecord` carrying unknown key `99: h'c0ffee'` (`records.md`) | §1: preserved and **covered on the standalone `COSE_Sign1` path** — the signature verifies over the payload including the unknown key. E13 is the mutation complement |
+| D9 | The `SignedLocator` carrying unknown key **4** (`primitives.md`) | The extension sits directly above the signature slot: an implementation inferring the slot from key magnitude misreads it. Schema-fixed slots, never inference. E14 is the mutation complement |
+| D10 | A presence record with `finalized_at == started_at` | The exact boundary of R2's rule: ≥ admits equality |
+| D11 | A presence record with `finalized_at − started_at` exactly 86,400 s | The exact boundary of R3's rule: 24 hours is the last admissible gap; 86,401 (R3) is the first malformed one |
+| D12 | The identical `EndpointRecord` received twice — same `seqno`, same contents | §7.6: republishing an unchanged set replays the record; idempotent reconciliation, **not** V6's equal-`seqno` conflict, which requires differing contents |
 
 ## Resolved: the seed sentence is a writer commitment
 
@@ -229,6 +238,8 @@ covered objects' fields previously mislabelled out-of-scope: back-pointers
 extension values 1024/1025, **peering audit history 8/9 and `NetworkPoint`
 lists 0/1 and 8/9 per endpoint record** (the list is `1*8` — both bounds have
 an invalid neighbour), the `NetworkPoint` port at 65535/65536,
-u32/u64 edges, epoch saturation, ordinal transitions. Bounds of genuinely uncovered objects (prekey blobs, catalog
+u32/u64 edges, epoch saturation, ordinal transitions, **the presence
+finalization gap at 0 / 86,400 / 86,401 seconds (D10/D11/R3)**, and
+fixed-width keyhash fields at 31/32/33 bytes wherever one appears. Bounds of genuinely uncovered objects (prekey blobs, catalog
 sizes, capabilities, sibling lists, scope lists, corroborations, proximity
 channels, asserted locations, recovery responses) join when their objects do.

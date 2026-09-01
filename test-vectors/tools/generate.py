@@ -47,23 +47,32 @@ _PINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spec-pins.json
 _current = {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA,
             'light-client-requirements.md': LIGHT_SHA}
 GEN_SHA = hashlib.sha256(open(os.path.abspath(__file__), 'rb').read()).hexdigest()
+_VERIFY = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'verify.py')
+VER_SHA = (hashlib.sha256(open(_VERIFY, 'rb').read()).hexdigest()
+           if os.path.exists(_VERIFY) else None)
 if os.path.exists(_PINS):
     _stored = json.load(open(_PINS, encoding='utf-8'))
     if 'specs' in _stored:
         _stored_specs, _stored_gen = _stored['specs'], _stored.get('generator')
+        _stored_ver = _stored.get('verifier')
     else:  # legacy flat format
         _stored_specs = {k: v for k, v in _stored.items() if k != 'tools/generate.py'}
-        _stored_gen = _stored.get('tools/generate.py')
+        _stored_gen = _stored.get('tools/generate.py'); _stored_ver = None
     if _stored_specs != _current and '--accept-spec-change' not in sys.argv:
         sys.exit('spec-pins.json does not match the current specifications.\n'
-                 'Audit the generator against the specification diff, then rerun '
-                 'with --accept-spec-change.')
-    if _stored_gen != GEN_SHA and '--accept-generator-change' not in sys.argv \
+                 'Accepting a specification change asserts BOTH audits: the '
+                 'generator constructions AND the hand-authored fixture '
+                 'semantics in README.md and negative-vectors.md, whose pin '
+                 'lines this run will refresh. Rerun with --accept-spec-change '
+                 'once both are done.')
+    if (_stored_gen != GEN_SHA or (_stored_ver is not None and _stored_ver != VER_SHA)) \
+            and '--accept-generator-change' not in sys.argv \
             and '--accept-spec-change' not in sys.argv:
-        sys.exit('the generator has changed since spec-pins.json was written.\n'
-                 'A generator-only change can alter every vector with both spec '
+        sys.exit('the generator or the verification harness has changed since '
+                 'spec-pins.json was written. A tool-only change can alter every '
+                 'vector, or alter what "all checks pass" means, with the spec '
                  'pins green: rerun with --accept-generator-change after '
-                 'reviewing the generator diff.')
+                 'reviewing the tool diff.')
 elif '--bootstrap-pins' not in sys.argv:
     sys.exit('spec-pins.json is missing. A missing pin file is not a clean '
              'slate — regenerating would silently baseline unaudited '
@@ -71,7 +80,8 @@ elif '--bootstrap-pins' not in sys.argv:
              '--bootstrap-pins to deliberately establish a new baseline.')
 
 def _write_pins(output_hashes):
-    json.dump({'specs': _current, 'generator': GEN_SHA, 'outputs': output_hashes},
+    json.dump({'specs': _current, 'generator': GEN_SHA, 'verifier': VER_SHA,
+               'outputs': output_hashes},
               open(_PINS, 'w', encoding='utf-8', newline='\n'), indent=1)
 
 def _repin_hand_file(name):
@@ -388,6 +398,18 @@ sl2_sig = alice.sign(sl2_tbs)
 sl2 = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2),
              (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl2_sig)]))])
 
+# Extension-bearing SignedLocator: unknown key 4 — deliberately the nearest
+# uint above the signature slot (3), the value that breaks any slot-inference
+# heuristic. Payload = fields 1-2 plus the unknown key, per §1's global rule.
+slx_payload = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
+                     (e_uint(4), e_bstr(bytes.fromhex('aa')))])
+slx_tbs = sig_structure_sign1(sl_protected, AAD_LOCATOR, slx_payload)
+slx_sig = alice.sign(slx_tbs)
+sl_ext = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
+                (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                                   e_bstr(slx_sig)])),
+                (e_uint(4), e_bstr(bytes.fromhex('aa')))])
+
 # Wrong-signer negative: bob signs a locator whose field 1 names alice.
 sl_wrong_sig = bob.sign(sl_tbs)  # same payload, same tag, wrong key
 sl_wrong = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
@@ -503,6 +525,18 @@ Complete object ({len(sl2)} bytes):
 
 ```
 {hexblock(sl2)}
+```
+
+## A `SignedLocator` carrying an unknown extension — MUST ACCEPT (D9)
+
+Unknown key **4** — deliberately the nearest uint above the signature slot
+(field 3), so any implementation that *infers* the signature slot from key
+magnitude instead of the schema misreads the extension as the signature
+(eighth review). The key is inside the signed payload per §1's global rule;
+mutating it breaks the signature (E14). ({len(sl_ext)} bytes):
+
+```
+{hexblock(sl_ext)}
 ```
 
 ## A wrong-signer `SignedLocator` — MUST REJECT (S23)
@@ -1170,12 +1204,17 @@ goal — but only for objects that have one:
   the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
   successor statement (§4.1), and the verifier response and consent contexts
   (§4.5, §5.6).
-- **Unsigned message encodings — no signature exists to generate**: the capture
-  key grant (§7.3, transient end-to-end payload), the late-response wrapper
-  (§7.4 — its embedded `VerifierResponse` is already signed; the wrapper adds
-  no signature), resolution messages (§7.7.3), archive fetch (§7.9), and the
-  session messages of §8. These get **encoding** vectors, not signature
-  vectors.""")
+- **Unsigned message encodings — no signature exists to generate**: the
+  currency request and reply (§7.1), the capture key grant (§7.3, transient
+  end-to-end payload), the late-response wrapper (§7.4 — its embedded
+  `VerifierResponse` is already signed; the wrapper adds no signature),
+  resolution messages (§7.7.3), archive fetch (§7.9), resource registration
+  and its reply (§6.2), the catalog query and reply (§6.4), resource
+  request/response (§11), and the session messages of §8. These get
+  **encoding** vectors, not signature vectors. *This inventory is maintained
+  by hand until the canonical corpus enumerates it mechanically from the
+  wire-format schemas (eighth review) — a hand list can itself omit a family,
+  and did: the currency messages were missing from it until then.*""")
 
 # ================================================================ verifier-selection.md
 
