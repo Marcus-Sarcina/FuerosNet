@@ -45,18 +45,28 @@ import json, sys
 _PINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spec-pins.json')
 _current = {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA}
 if os.path.exists(_PINS):
-    _stored = json.load(open(_PINS))
-    if _stored != _current and '--accept-spec-change' not in sys.argv:
+    _stored = json.load(open(_PINS, encoding='utf-8'))
+    _stored_specs = {k: v for k, v in _stored.items() if k != 'tools/generate.py'}
+    if _stored_specs != _current and '--accept-spec-change' not in sys.argv:
         sys.exit('spec-pins.json does not match the current specifications.\n'
                  'Audit the generator against the specification diff, then rerun '
                  'with --accept-spec-change.')
-json.dump(_current, open(_PINS, 'w'), indent=1)
+elif '--bootstrap-pins' not in sys.argv:
+    sys.exit('spec-pins.json is missing. A missing pin file is not a clean '
+             'slate — regenerating would silently baseline unaudited '
+             'specifications. Restore it from version control, or rerun with '
+             '--bootstrap-pins to deliberately establish a new baseline.')
+# provenance: record which generator produced the artifacts (not gated —
+# the spec hashes gate; this line authenticates the producer)
+GEN_SHA = hashlib.sha256(open(os.path.abspath(__file__), 'rb').read()).hexdigest()
+_record = dict(_current); _record['tools/generate.py'] = GEN_SHA
+json.dump(_record, open(_PINS, 'w', encoding='utf-8', newline='\n'), indent=1)
 
 def _repin_hand_file(name):
     """The hand-authored files carry one machine-managed pin line so staleness
     is mechanically detectable there too."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', name)
-    text = open(path).read()
+    text = open(path, encoding='utf-8').read()
     marker = '**Pinned**: '
     line = (marker + 'wire-format.md `' + WIRE_SHA + '` · network-design.md `'
             + DESIGN_SHA + '`')
@@ -69,11 +79,12 @@ def _repin_hand_file(name):
             out.append(l)
     if not hit:
         sys.exit(name + ' has no "**Pinned**:" line to manage.')
-    open(path, 'w').write('\n'.join(out))
+    open(path, 'w', encoding='utf-8', newline='\n').write('\n'.join(out))
 PIN = ("Generated against `wire-format.md` SHA-256 `" + WIRE_SHA + "` and "
        "`network-design.md` SHA-256 `" + DESIGN_SHA + "` — the design wins on "
        "any disagreement, so a design-only semantic change also stales these "
-       "vectors. Regenerate after any change to either.")
+       "vectors. Regenerate after any change to either. Producer recorded in "
+       "`tools/spec-pins.json`.")
 
 # ---------------------------------------------------------------- CBOR encoder
 # Deterministic encoding per RFC 8949 §4.2 as profiled by wire-format.md §1:
@@ -646,6 +657,14 @@ er2_sig = bob.sign(er2_tbs)
 er2 = e_map(er2_fields + [(e_uint(4),
       e_arr([e_bstr(er_protected), b'\xa0', NULL, e_bstr(er2_sig)]))])
 
+# --- Sign1 extension coverage: fields 1-3 plus an unknown key, all signed.
+er3_fields = er_fields + [(e_uint(99), e_bstr(bytes.fromhex('c0ffee')))]
+er3_payload = e_map(er3_fields)
+er3_tbs = sig_structure_sign1(er_protected, AAD_ENDPOINTS, er3_payload)
+er3_sig = bob.sign(er3_tbs)
+er_ext = e_map(er3_fields + [(e_uint(4),
+      e_arr([e_bstr(er_protected), b'\xa0', NULL, e_bstr(er3_sig)]))])
+
 
 # --- Second reissue: to a NUMERICALLY SMALLER series. Series are arbitrary
 # labels (§2.3); an implementation treating them as generations rejects this.
@@ -997,6 +1016,18 @@ never a tie to break, and a reader MUST NOT prefer either (negative suite,
 V6). A subject advances its own counter, so the pair can only mean equivocation
 or a key in two hands.
 
+## An `EndpointRecord` carrying an unknown extension — MUST ACCEPT (D8)
+
+§1's coverage rule is global: the signed payload is the map of the named fields
+**plus any unknown extension keys**. This record carries `99: h'c0ffee'` inside
+the signed payload of the standalone `COSE_Sign1` path — the same property
+D2/E10 prove for the envelope path. Mutate the extension value and the
+signature fails (E13). Complete record ({len(er_ext)} bytes):
+
+```
+{hexblock(er_ext)}
+```
+
 ## The §7 object model — signed contexts versus unsigned encodings
 
 **Not every §7 object is signed, and the target list must not imply otherwise**
@@ -1143,7 +1174,7 @@ With `started_at = {TS_START}`, the 730-day window is
 import os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 for fname, parts in OUT.items():
-    with open(fname, 'w') as f:
+    with open(fname, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(parts) + '\n')
     print(f"wrote {fname}")
 _repin_hand_file('README.md')

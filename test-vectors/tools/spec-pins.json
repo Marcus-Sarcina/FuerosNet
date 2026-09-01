@@ -1,4 +1,5 @@
 {
- "wire-format.md": "41ec82f4d40c916cd0a42cd316b4cbc226e2d07c7b2ddf667c854bcf86347077",
- "network-design.md": "67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d"
+ "wire-format.md": "2cb9ce091981a99d3aa4221cb0bb39060f65f16d505520989089d379282f70fd",
+ "network-design.md": "67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d",
+ "tools/generate.py": "db92dab6e44ca69c0e1cfe176fdca549451f9652d46222f09d3a3fdd3dd7c53b"
 }

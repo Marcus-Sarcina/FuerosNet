@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` SHA-256 `41ec82f4d40c916cd0a42cd316b4cbc226e2d07c7b2ddf667c854bcf86347077` and `network-design.md` SHA-256 `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `2cb9ce091981a99d3aa4221cb0bb39060f65f16d505520989089d379282f70fd` and `network-design.md` SHA-256 `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either. Producer recorded in `tools/spec-pins.json`.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -66,6 +66,22 @@ condition** — an equal `seqno` carrying different contents is a disagreement,
 never a tie to break, and a reader MUST NOT prefer either (negative suite,
 V6). A subject advances its own counter, so the pair can only mean equivocation
 or a key in two hands.
+
+## An `EndpointRecord` carrying an unknown extension — MUST ACCEPT (D8)
+
+§1's coverage rule is global: the signed payload is the map of the named fields
+**plus any unknown extension keys**. This record carries `99: h'c0ffee'` inside
+the signed payload of the standalone `COSE_Sign1` path — the same property
+D2/E10 prove for the envelope path. Mutate the extension value and the
+signature fails (E13). Complete record (137 bytes):
+
+```
+a50158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
+9c32c3750281a301440a0000010219fbff03191d0803820902048443a10127a0
+f65840828aa398c9725465853470ec0d908fdb7da2ecab61b9d84f1a03fe582c
+810c0b86dc53260f6b906e1a35ebd1784612102ef0f6d624185a593d4e56ce80
+2c0804186343c0ffee
+```
 
 ## The §7 object model — signed contexts versus unsigned encodings
 

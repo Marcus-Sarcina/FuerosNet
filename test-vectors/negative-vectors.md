@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `41ec82f4d40c916cd0a42cd316b4cbc226e2d07c7b2ddf667c854bcf86347077` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `2cb9ce091981a99d3aa4221cb0bb39060f65f16d505520989089d379282f70fd` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
 ## The result model is structured, not a single status
 
@@ -50,6 +50,10 @@ works, not inputs.
 | E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are covered by every signature: **all four entries fail**, both algorithms — verified at generation time under two independent implementations. The unmutated envelope is D2 |
 | E11 | A merge back-pointer list out of ascending bytewise order | §3.1: one logical merge, one encoding, one txid — the positive merge vector shows the sorted form |
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
+| E12 | An otherwise-valid body carrying map key `-1` or `"x"` | §1: protocol map keys are unsigned integers — an arbitrary CBOR key is malformed, **not** an "unknown extension key", which is always a uint. A generic CBOR map type preserves either indistinguishably |
+| E13 | The extended `EndpointRecord` (`records.md`, D8) with its extension value mutated `c0ffee` → `c0ffef` | §1's coverage rule on the **standalone `COSE_Sign1` path**: the unknown key is inside the reconstructed payload, so the signature fails — the Sign1 analogue of E10 |
+| S18 | An envelope with type **6** | Retired: the schema is removed and nothing remains to validate *as* (§4's tombstone). The number is reserved, the bytes are not readmitted |
+| S19 | An envelope with type **9** | Unassigned type value — §1's unknown-enum rule on field 2 |
 
 ### Primitives (§2)
 
@@ -90,6 +94,9 @@ works, not inputs.
 | S15 | A `COSE_Sign` whose **outer** protected header is nonempty | §3.5: the outer protected header is empty — a `COSE_Sign` carries no signature of its own, so it has no algorithm to name; generic libraries permit content there |
 | S16 | A `COSE_Sign` whose **outer** unprotected header is nonempty | §3.5's nonempty-unprotected rule covers every COSE header, the outer pair included |
 | S17 | A disavowal signed by field 2's identity (the subordinate) instead of field 1's — right entry count, right algorithms, wrong party | Signer role is inferred by comparing `kid` to the body's fields (§3.5), and the type requires exactly its own signers: the correct *shape* from the wrong *identity* is malformed. Every type needs this fixture with a real second identity (canonical bar) |
+| S20 | A `SignedLocator` or `EndpointRecord` whose `COSE_Sign1` protected header carries a `kid` | The surrounding object names the signer (§3.5); a second copy could disagree with the first. A decoder with separate `COSE_Sign`/`COSE_Sign1` paths can enforce this on one and not the other |
+| S21 | A standalone `COSE_Sign1` with a nonempty unprotected header | §3.5's rule covers every COSE header — the Sign1 path included, not only envelope entries |
+| S22 | A `SignedLocator` or `EndpointRecord` signed with `alg = -49` | Structurally a valid algorithm, **context-forbidden**: both objects are classical-only by profile (§2.3, §7.6) — their relevance expires with the next update, so the post-quantum horizon does not apply |
 
 ### Presence-record structural rules (§3.2, §3.3)
 
@@ -180,6 +187,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D5 | Verifier responses in any array order | Array order is not canonicalised (§5.4) |
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
+| D8 | The `EndpointRecord` carrying unknown key `99: h'c0ffee'` (`records.md`) | §1: preserved and **covered on the standalone `COSE_Sign1` path** — the signature verifies over the payload including the unknown key. E13 is the mutation complement |
 
 ## Resolved: the seed sentence is a writer commitment
 
@@ -209,7 +217,8 @@ review caught the previous wording claiming otherwise. Its target list is
 covered objects' fields previously mislabelled out-of-scope: back-pointers
 1/8/9, witnesses 16/17, responses 32/33, path 24/25, unknown keys 16/17,
 extension values 1024/1025, **peering audit history 8/9 and `NetworkPoint`
-lists 8/9 per endpoint record**, the `NetworkPoint` port at 65535/65536,
+lists 0/1 and 8/9 per endpoint record** (the list is `1*8` — both bounds have
+an invalid neighbour), the `NetworkPoint` port at 65535/65536,
 u32/u64 edges, epoch saturation, ordinal transitions. Bounds of genuinely uncovered objects (prekey blobs, catalog
 sizes, capabilities, sibling lists, scope lists, corroborations, proximity
 channels, asserted locations, recovery responses) join when their objects do.

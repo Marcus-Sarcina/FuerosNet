@@ -1936,3 +1936,24 @@ seed re-derived. D2/E10 restored to full strength; README's canonical bar item 1
 marked done. The suite is **cryptographically complete** — canonical status still
 awaits what it always did, an independent implementation reproducing the whole
 suite.
+
+---
+
+## Test-vector review, fifth run (2026-09-01)
+
+**Reproduced the snapshot byte-for-byte, pins matched.** Ten findings; all ten
+verified and applied — the two specification contradictions were both stale
+survivors of already-made rulings, so no new author decision was needed.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | §3.2 still said an unmet threshold blocks publication — contradicting §5.5 and the design after the absence ruling | **CONFIRMED, FIXED** — the bullet now says the sample does not gate finalization; a ceremony the participants abandon is what stays local. The sweep that missed it also hid a stale `LateResponse (§7.3)` reference, now §7.4 |
+| 2 | "Both signatures here are `COSE_Sign1` and classical-only" contradicts field 9's own Recovery-hybrid rule | **CONFIRMED, FIXED** — qualified to the ordinary presence record; consent classical everywhere; field 9 hybrid inside `Recovery`, with the permanence rationale |
+| 3 | Most negatives are descriptions, not bytes — reopening the derivation problem for harness builders | **CONFIRMED** — canonical bar 6 rewritten: every A/B/D case must resolve to exact bytes or a deterministic mutation of a named positive vector, plus machine-readable expected dimensions |
+| 4 | Retired type 6 and unassigned type values had no stated handling and no fixtures | **CONFIRMED, FIXED** — one sentence at the type table (*the tombstone reserves the number; it does not readmit the bytes*); S18 (type 6) and S19 (type 9) |
+| 5 | No negative for a non-uint protocol map key | **CONFIRMED, FIXED** — E12: `-1` or a text key is malformed, not an "unknown extension key", which is always a uint |
+| 6 | Bar 3's "a merge" can be satisfied without catching double-counting | **CONFIRMED, FIXED** — bar 3 now requires a **diamond**: an in-window qualifying record reachable through both merge heads, asserted to contribute one to *n* |
+| 7 | Endpoint-list boundary missed the lower bound | **CONFIRMED, FIXED** — 0/1 joins 8/9 |
+| 8 | The standalone `COSE_Sign1` path under-tested: no kid/unprotected/alg negatives, no extension-coverage fixture | **CONFIRMED, FIXED** — S20–S22; and a **generated** extension `EndpointRecord` (D8) with its mutation complement (E13), independently verified both ways |
+| 9 | The pin gate silently bootstraps when the pin file is missing | **CONFIRMED, FIXED** — a missing file is now fatal without `--bootstrap-pins`, a flag deliberately distinct from `--accept-spec-change`; tested |
+| 10 | Text-mode I/O assumptions; no generator provenance | **CONFIRMED, FIXED** — every write is explicit UTF-8 with `\n` newlines; `spec-pins.json` now records the producing generator's SHA-256 (provenance, not gated) |

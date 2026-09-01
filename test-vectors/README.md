@@ -1,15 +1,16 @@
 # Test vectors — DRAFT
 
-**Status: spec-derived; three clean-room review rounds by a second model
-family (2026-08-31 / 2026-09-01, each reran the generator byte-for-byte and
-found no arithmetic error); verified by no implementation.** These vectors were written from the
+**Status: spec-derived; five clean-room review rounds by a second model
+family (2026-08-31 through 2026-09-01, each reproducing the generator's output
+byte-for-byte and finding no arithmetic error); verified by no independent
+implementation.** These vectors were written from the
 specifications alone, which is exactly the condition `wire-format.md` §13 warns
 about: *vectors written from the spec alone encode the spec's own mistakes.*
 That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `41ec82f4d40c916cd0a42cd316b4cbc226e2d07c7b2ddf667c854bcf86347077` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `2cb9ce091981a99d3aa4221cb0bb39060f65f16d505520989089d379282f70fd` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
 **Scope**: wire-format/protocol **interoperability** vectors. This is not a
 certification suite for client and operator behavioural commitments, which are
@@ -138,7 +139,10 @@ negatives (T9–T12). Still open:
 2. **A normal-subtype presence record** whose participant, witness, seed and
    `kid` orders all deliberately differ, with witnesses, embedded responses,
    and its 36-entry envelope.
-3. **Real history behind that record** — a merge, a repeated counterparty, a
+3. **Real history behind that record** — a merge forming a **diamond** (an
+   in-window qualifying presence transaction reachable through *both* merge
+   heads, asserted to contribute **one** to *n*, which is the fixture that
+   fails chain-oriented code with no visited set), a repeated counterparty, a
    witness-only transaction, a formation record, an out-of-window record, the
    current counterparty — so *n* and candidates are **derived by DAG
    traversal**; including the two traps the wire format states: only
@@ -151,8 +155,13 @@ negatives (T9–T12). Still open:
    producing the record's field-8 root; full, partial and empty
    presentations; negatives for wrong slot count, duplicate or wrong labels,
    wrong salt width, root mismatch, and mutation of a revealed field.
-6. **Machine-readable context fixtures** carrying `bytes + context + external
-   state + expected result` with the structured result model.
+6. **Machine-instantiable fixtures throughout**: every byte-level, context
+   and must-accept case resolves to **exact bytes, or an unambiguous
+   deterministic mutation of a named positive vector**, plus machine-readable
+   expected dimensions in the structured result model. Until then the negative
+   suite is a conformance-test *specification*, not yet a corpus — two
+   implementations should not each have to construct a malformed input before
+   testing it (fifth review).
 7. **The boundary sweep** at every bound in the declared scope (list at the
    end of `negative-vectors.md`).
 8. **The remaining signed contexts** in `records.md` — one known-answer

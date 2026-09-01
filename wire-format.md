@@ -543,10 +543,11 @@ Rules a validator checks from the record alone. All were previously unstated.
   class as the `finalized_at` bounds above. The seed reads key 7 (§4.5.2), so a
   record whose ordinal disagrees with its own `started_at` is lying about which
   window seeded its verifier sample.
-- **A presence record on the wire is always final.** A ceremony whose threshold is
-  unmet is local state and is not published; `finalized_at` therefore always
-  records a threshold that was met. Late responses arrive as `LateResponse` objects (§7.3) and
-  never alter the original record's validity.
+- **A presence record on the wire is always final.** A ceremony the participants
+  abandon is local state and is not published; `finalized_at` records when
+  assembly closed, and **the verifier sample does not gate it** — unanswered
+  selected slots are simply absent (§5.5). Late responses arrive as
+  `LateResponse` objects (§7.4) and never alter the original record's validity.
 - **`strongest` MUST appear among the channels with `result = pass`, and no
   higher-ranked channel may appear with `pass`.** Ranking is UWB > NFC > optical >
   latency (design §7.6.3). Without the second half the field is not
@@ -763,6 +764,11 @@ accepting an unverified object.
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
 | 6 | — | — | **Retired 2026-09-01.** The abuse report is §6.3's standalone signed object, not a transaction: it advances no archive, reaches only its addressee, and chains to nothing — the same grounds on which the registration transaction was retired 2026-08-28. Numbers are never reused |
 | 7 | Series reissue | node + patron | Topology |
+
+**A decoder MUST reject a retired or unassigned type value.** Retirement removes
+the schema — there is nothing a type-6 envelope could be validated *as* — and an
+unassigned value is §1's unknown-enum case. The tombstone reserves the number; it
+does not readmit the bytes.
 
 **There is no registration transaction.** A resource registration is **not
 shared network state**: it is a signed `CatalogEntry` handed to one hosting node and
@@ -1297,10 +1303,15 @@ VerifierResponse = {
                        ; The field's type is fixed by where the response sits
 }
 
-**Both signatures here are `COSE_Sign1` and classical-only**, unlike envelope
-signatures. They are evidence embedded inside a hybrid-signed body, so
-substituting them breaks the envelope signature and their authenticity is
-protected transitively (see design §5.1). Hybridising all 64 signatures costs ≈ 211 KB against ≈ 4 KB classical.
+**In an ordinary presence record both signatures here are `COSE_Sign1` and
+classical-only**, unlike envelope signatures: they are evidence embedded inside a
+hybrid-signed body, so substituting them breaks the envelope signature and their
+authenticity is protected transitively (see design §5.1). Hybridising all 64
+signatures would cost ≈ 211 KB against ≈ 4 KB classical. **The consent signature
+(field 7) is classical everywhere. Verifier authentication (field 9) is the one
+exception: inside a `Recovery` it is a hybrid `COSE_Sign`** (§4.1) — a recovery
+induces a permanent identity change, so that one signature's reliance never
+expires.
 ```
 
 **Field 6 is load-bearing**: a formation record has empty witness

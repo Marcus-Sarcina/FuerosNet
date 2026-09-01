@@ -7403,3 +7403,32 @@ re-derived.
 unchanged in kind and now singular: an independent implementation reproducing the
 whole suite — which is the gate `wire-format.md` §13 set on the day the vectors
 were first drafted.
+
+### 2026-09-01 (fifth vector review: two stale survivors of earlier rulings, and the suite's process hardened)
+All ten findings verified and applied, and for the first time a round's
+specification findings needed **no new ruling** — both were sentences the earlier
+rulings' sweeps had missed. §3.2 still said an unmet threshold keeps a ceremony
+unpublished, a survivor of the absence ruling whose fourteen-site sweep was one
+site short (and it hid a stale `LateResponse (§7.3)` reference besides); and §4.5
+still generalised *"both signatures here are classical-only"* over a field whose
+own comment states the Recovery-hybrid exception. Both now say what the rulings
+decided.
+
+**One sentence and eleven fixtures close the round's gaps**: the type table states
+that *the tombstone reserves the number; it does not readmit the bytes* — with S18
+and S19 as the retired-type and unassigned-type fixtures; E12 separates an
+arbitrary CBOR key from a uint extension key; S20–S22 give the standalone
+`COSE_Sign1` path its own kid, unprotected-header and context-forbidden-algorithm
+negatives; and a **generated** extension-carrying `EndpointRecord` (D8, with
+mutation complement E13, both independently verified) proves §1's coverage rule on
+the Sign1 reconstruction path, as D2/E10 prove it for envelopes.
+
+**Process hardening from the review's two sharpest observations**: a missing
+`spec-pins.json` is now fatal without a `--bootstrap-pins` flag distinct from
+`--accept-spec-change` — deleting the pin file no longer converts unaudited
+specifications into a silent baseline — and every generated write is explicit
+UTF-8 with fixed newlines, with the producing generator's own SHA-256 recorded in
+the pin file as provenance. The canonical bar tightened in two places: the merge
+history must be a **diamond** (the fixture that fails chain code with no visited
+set), and every conformance case must resolve to exact bytes or a deterministic
+mutation of a named positive vector — a corpus, not a description.
