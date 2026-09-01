@@ -7620,3 +7620,29 @@ dynamic signer set alongside the five fixed-count types.
 the **handed bundle** — nobody walks anyone's archive, and the phrasing that
 suggested otherwise re-imported a reading deleted during 0.8. The traversal rules
 are what make a supplied bundle checkable, which is §5.4 verbatim.
+
+### 2026-09-01 (the bundle is curated, not chained: §5.4's traversal apparatus dissolves)
+**Author's correction, and the session's largest simplification.** *"You can
+cherry-pick whatever PoP transactions you wish from any of your series and do not
+have to expose the intervening transactions."* Wire §5.4 had built a traversal:
+*n* counted records **reachable from the committed back-pointer**, merge paths
+deduplicated by visited set, a gap made the bundle *incomplete*, pruning stopped
+at the window boundary, and the committed root closed a backfill argument. All of
+it described a contiguity the design does not want — the same archive-walking
+reading deleted during 0.8, rebuilt one layer up.
+
+**The replacement is smaller and stronger.** A bundle is a set of individually
+verifiable records from any of the subject's series; a record qualifies alone —
+canonical, content-addressed, signed, subject a participant, inside the window;
+duplicates count once by txid; a failing record contributes nothing rather than
+making anything incomplete. Understatement is free and self-defeating — a smaller
+*n*, a thinner sample, a record advertising less corroboration, the absent-slot
+posture one layer up. Overstatement is impossible. And **the chain's job passes
+to the record itself**: each party verifies the other's selection before signing,
+so the responder slots in field 5 are the durable commitment — a selection
+recomputed over any other bundle visibly fails to reproduce them. Design
+§8.1.2's *"chain to the commitment"* clause is corrected, the light-client
+count-*n* bullet now says verify-per-record and pin-by-selection, and the
+canonical bar's fixture sheds its diamond, committed-predecessor and
+bundle-minus-one cases — machinery for a model that no longer exists. What
+remains to build is simpler: records that exist and verify, curated into bundles.

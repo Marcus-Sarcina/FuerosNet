@@ -2106,3 +2106,23 @@ the bar now says bundle. First build slice delivered:
 Next slices: the history bootstrap (records with `required = 0` growing *n*), the
 handed-bundle fixture, and the normal-subtype target record with divergent
 orderings and real responses.
+
+**Author correction (2026-09-01): the bundle is curated, not chained.** *"You can
+cherry-pick whatever PoP transactions you wish from any of your series and do not
+have to expose the intervening transactions."* The bar-3 rewording of the same day
+had kept the chaining requirement ("records must chain; a missing middle record
+fails to connect") — which was wire §5.4's own text, and it was wrong: the
+traversal apparatus (reachability from the committed back-pointer, DAG dedup
+across merge paths, incomplete-on-gap, boundary pruning, the backfill argument)
+described machinery the design does not want. **§5.4 is rewritten**: a bundle is a
+set of individually verifiable records from any series; qualification is
+per-record (verifies alone, subject a participant, in-window); duplicates count
+once by txid; understatement is free and self-defeating (§5.5's absent-slot
+posture one layer up); overstatement impossible; and **the record's responder
+slots are what pin the bundle** — selection recomputed over any other bundle
+visibly fails. Design §8.1.2's "chain to the commitment" clause is corrected, the
+light-client count-*n* bullet rewritten around verify-before-signing, and the
+fixture plan sheds its diamond, committed-predecessor and bundle-minus-one cases,
+which tested the dissolved model. This also simplifies the upcoming build: no
+chain bootstrap is needed for bundle purposes — records need only exist and
+verify.

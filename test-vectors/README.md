@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `fbe06543a44d520f1af87098a654c38b863ac57ca81bbf888f423508342a2672` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
+**Pinned**: wire-format.md `52cd1de9c3e3d7ac0a8b6e34c9e97da5a3401e0d735790c7a9fed0fac6ddee4a` · network-design.md `76786811432739e58f1389bf947ffa697f9490d7725645e275a620791f7dc77e`
 
 **Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
 named **client-conformance** vectors where a client rule is normative and
@@ -160,21 +160,22 @@ negatives (T9–T12). Still open:
    witnesses, embedded responses, and its 36-entry envelope — which also
    supplies the alice–bob record the optionals adoption's field 8 swaps to
    (V9's deliberate mismatch until then).
-3. **Promotion-blocking — the specification's hardest derivation, and the
-   arithmetic tables test none of it.** The **handed-bundle fixture**: nobody
-   walks anyone's archive — a counterparty computes *n* and the candidate set
-   **over the records the subject hands it** (wire §5.4, design §8.1.2), and
-   the fixture is that bundle, constructed so every processing rule has a case
-   that changes the answer if broken: a merge forming a **diamond** (an
-   in-window qualifying presence transaction reachable through *both* merge
-   heads, contributing **one** to *n* — the case that fails chain-oriented
-   code with no visited set), a repeated counterparty, a witness-only record,
-   a formation record, an out-of-window record at the exclusive boundary, the
-   current counterparty (never a candidate for their own verification), and
-   the committed-predecessor trap. Completeness has no certainty and needs
-   none: overstatement is impossible (records must verify), and understatement
-   is **visible** — a bundle-minus-one variant fails to connect, and the
-   expected result is *unverifiable*, never a smaller *n*.
+3. **Promotion-blocking.** The **curated-bundle fixture** [author,
+   2026-09-01: *"you can cherry-pick whatever PoP transactions you wish from
+   any of your series and do not have to expose the intervening
+   transactions"*]: a set of individually verifiable records — **no chaining,
+   no completeness, no traversal** — over which *n* and the candidate set are
+   computed (wire §5.4). Its cases: a repeated counterparty (three records,
+   one candidate), a witness-only record handed anyway (does not qualify), an
+   out-of-window record at the exclusive boundary, a duplicate txid (counts
+   once), a non-verifying record (contributes nothing — not "incomplete"),
+   the current counterparty (never a candidate for their own verification),
+   an understatement variant (a smaller bundle: smaller selection, both
+   records valid), and **the binding case** — the selection recomputed over a
+   different bundle fails to reproduce the record's responder slots, which is
+   what pins the bundle in place of the chain that never existed. *The
+   diamond, committed-predecessor and bundle-minus-one cases of earlier
+   revisions dissolved with the chaining model they tested.*
 4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
    vectors**, both authentication forms (presence/classical,
    Recovery/hybrid), and a complete Recovery adoption as its own target.
@@ -231,9 +232,9 @@ negatives (T9–T12). Still open:
     finalized on `no-match`, `inconclusive`, `unavailable`, and on **absent
     selected slots** — the threshold sizes the sample and does not gate
     finalization, `pending` having left the enum entirely (V7); the
-    commitment-mismatch fixture (V5); and the committed-predecessor trap — a
-    post-ceremony backfilled head that would change *n*, with the expected
-    selection unchanged.
+    commitment-mismatch fixture (V5); and the bundle-binding case — the
+    record's responder slots against a substituted bundle (bar 3), the check
+    that replaced the dissolved committed-predecessor trap.
 12. **The enumeration/extension posture as a systematic matrix** (sixth
     review; E8's two wrong instantiations are the argument): every closed
     enumeration gets an unknown-value rejection fixture, every deliberately

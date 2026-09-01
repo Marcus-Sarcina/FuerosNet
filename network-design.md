@@ -2408,9 +2408,10 @@ A counterparty computes *n* and the candidate set from presence records the subj
 supplies. **Nobody walks another party's archive to discover their meetings** —
 there is no entitlement to it and no mechanism for it. §16.7's fetch-and-walk is the
 *adoption* disclosure, driven by a prospective patron deciding how much evidence it
-wants; this is not that. What a bundle's recipient can check is that the records
-verify and chain to the commitment. What they cannot check is that the bundle is
-complete.
+wants; this is not that. What a bundle's recipient can check is that each record verifies — **the records
+need not chain** [author, 2026-09-01]: the bundle is curated freely, from any of
+the subject's series, with no intervening transactions exposed. What they cannot
+check is that the bundle is complete, and nothing needs them to.
 
 **So the pool is the subject's and the sample within it is not**, which is the
 precise scope of the rule above. Determinism stops a participant steering the sample;

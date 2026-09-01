@@ -145,10 +145,14 @@ that is noted in place.
 - **Verify the counterparty's verifier selection before signing.** If they
   selected off-seed and you sign anyway, you hold a record that fails
   recomputation permanently and cannot be repaired (design §8.1.2).
-- **Count *n* from the back-pointer the record commits**, never from a subject's
-  current head (`wire-format.md` §4.5). Counting from a current head lets a subject
-  backfill after the ceremony and present a later evaluator a different threshold
-  than any witness saw.
+- **Compute *n* over the bundle handed to you, and pin it by the selection, not
+  by a chain** (`wire-format.md` §5.4). The bundle is the counterparty's to
+  curate — records from any of their series, no chaining, no completeness — so
+  verify each record alone, count qualifying ones once by txid, and **before
+  signing, confirm that the selection over that bundle equals the responder
+  slots the record will carry**: the slots are what any later evaluator
+  recomputes against, and they are what stops a different bundle being
+  presented afterwards.
 - **Report a record as unverifiable, not invalid, when you lack a participant's
   history.** Those are different answers and a caller may act on the difference.
 - **Look at the candidate population you are sampling, not only at the answers it

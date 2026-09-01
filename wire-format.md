@@ -1823,42 +1823,38 @@ Six definitions the selection rule depends on and did not carry.
 
 ### 5.4 Candidate set and sampling
 
-***n* counts distinct presence transactions reachable from the back-pointer this
-record commits for that subject, in which the subject is one of the two
-participants**, each once. **A record the subject signed
-only as a witness is in their chain and is not their meeting** — it names them in
-field 4, not field 3 — and counting it would raise *n* without adding a candidate,
-since a witnessed ceremony's participants met each other, not the witness. The same
-rule scopes the candidate set: a candidate is the *other participant* of a counted
-record. The archive is a Merkle DAG after a merge (design §10.3), so a transaction
-reachable by several merge paths is still one transaction — traverse the reachable
-predecessor set and count each `txid` once. An implementation written when the
-archive was a chain would double-count across merged branches and derive a
-different threshold.
+***n* counts the qualifying presence transactions in the bundle the subject hands
+over, and the bundle is the subject's to curate** [author, 2026-09-01]: any
+presence records they choose, **from any of their series, with no intervening
+transactions exposed and no chaining between them**. A bundle is a set of
+individually verifiable records, not a stretch of archive — nobody walks another
+party's archive (design §8.1.2), and nothing requires the handed records to
+connect.
 
-**This defines the set; it does not grant access to it.** A selecting counterparty
-computes *n* and the candidate set over the records the subject **hands it**, not by
-reaching into the subject's archive — nothing here entitles anyone to enumerate
-another party's history, and design §8.1.2 states the bundle model and what a
-recipient can and cannot check about it. The traversal rule is what makes a supplied
-bundle checkable: records must chain, so a bundle with a record missing from the
-middle fails to connect and is detectable as incomplete.
+**A record qualifies when it verifies alone**: canonical, its content address
+checks, its signatures verify, it names the subject as one of the two
+participants, and its `finalized_at` falls inside the window (§5.3.1). **A record
+the subject signed only as a witness does not qualify** — it names them in field
+4, not field 3, and a witnessed ceremony's participants met each other, not the
+witness. Duplicates count once, by `txid`. A record that fails its checks
+contributes nothing — with no completeness to protect, it is simply not in the
+pool, rather than making anything incomplete. The candidate set follows: a
+candidate is the *other participant* of a counted record.
 
-**Only verified history is counted.** A record feeds *n* and the
-candidate set only if it is canonical, its content address checks, and its
-signatures verify — reachability alone admits nothing. Counting
-parseable-but-unverified records would let forged history move thresholds and
-steer samples. A reachable record that cannot be fetched leaves the chain
-**incomplete, not smaller**: the traversal reports unverifiable rather than
-returning a lower *n* (§3.4's unavailable-predecessor rule).
+**Understatement is free, and self-defeating rather than dangerous.** A subject
+who hands fewer records gets a smaller *n*, a smaller sample, and a record that
+advertises thinner corroboration — §5.5's absent-slot posture one layer up.
+Overstatement is impossible, since every record must verify. What protects the
+selector is **recognition, not completeness** (design §8.1.2): a pool holding
+nobody they know is worth what unrecognised history is worth.
 
-**Traversal may prune a verified branch at the window boundary.**
-Effective time is monotonic along every verified chain (§3.3), so once a branch
-reaches a verified record at or before `started_at − 730d`, nothing beyond it can
-fall inside the window — an unavailable record *past* that point leaves the full
-archive incomplete without making this record's *n* or candidate set unverifiable.
-Without this rule, one missing genesis-era record would block every threshold
-recomputation forever.
+**What pins the bundle is the record's own selection, not a chain.** Each party
+verifies the other's selection before signing (design §8.1.2), and afterwards the
+responder slots in field 5 are the durable commitment: recomputing the selection
+over any *other* bundle fails to reproduce them. An evaluator handed the
+ceremony's bundle confirms that the selection it derives equals the record's
+slots; handed anything else, the recomputation visibly fails — which is all a
+later party can check, and all they need to.
 
 **Responses have no canonical array order.** Deterministic CBOR
 orders map keys, not array elements. A validator evaluates field 5 as a set of
@@ -1928,8 +1924,8 @@ single verifier cannot occupy multiple slots.
 **Validation is per-subject, and a validator may hold one history and not the
 other.** Structural and cryptographic checks cover the whole record; the
 selection and threshold checks are computed **per participant** against that
-participant's history. A holder with one subject's archive can verify that half and
-must report the other as **unverifiable** — which is neither valid nor invalid, and
+participant's handed bundle. A holder with one subject's bundle can verify that
+half and must report the other as **unverifiable** — which is neither valid nor invalid, and
 collapsing the two lets a caller overclaim what it checked (§4.1).
 
 **`inconclusive` covers a failure to decrypt, and `no-match` never does.** A
@@ -1944,11 +1940,11 @@ matches one the subject countersigned, its `subject` names one of the two
 participants, and its `verifier` is in the selected set for that subject.**
 
 **A response failing any of those makes the record malformed** where the validator
-holds enough history to determine the selected set, not merely unweighted. The
+holds the bundle that determines the selected set, not merely unweighted. The
 same treatment as duplicates, and for the same reason: "present but ignored" leaves
 room between the 32-entry array bound and the 20 legitimate responses for a
 participant to pad the record with material nobody asked for. A validator lacking
-the subject's history cannot make this determination and treats the responses it
+the subject's bundle cannot make this determination and treats the responses it
 cannot place as unverifiable rather than invalid.
 
 ### 5.6 Consent is signed over the query id

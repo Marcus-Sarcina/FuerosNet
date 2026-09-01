@@ -1,8 +1,8 @@
 {
  "specs": {
-  "wire-format.md": "fbe06543a44d520f1af87098a654c38b863ac57ca81bbf888f423508342a2672",
-  "network-design.md": "5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae",
-  "light-client-requirements.md": "69c5ac5837304937cee93243af9a5737a1f7d8c131108a04f179e9319940bf6f"
+  "wire-format.md": "52cd1de9c3e3d7ac0a8b6e34c9e97da5a3401e0d735790c7a9fed0fac6ddee4a",
+  "network-design.md": "76786811432739e58f1389bf947ffa697f9490d7725645e275a620791f7dc77e",
+  "light-client-requirements.md": "309399ef6a9c1a66e18b3a891a96e3d36c78df287399d996ca1fd57c97a9a2b9"
  },
  "generator": "41e393e0663a61cca196d37cf7383f09c4eff0d704d839d49baf52125d4d4122",
  "verifier": "231f8bc92c6bc7a1d2527d206a881ef162dd57573c92e60a6cb2e45070f83f3b",
@@ -11,12 +11,12 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "4be987be4f93acc5eac6966a9803c0ea6a91611d3010fbd3bc51621c1652ac21",
-  "primitives.md": "fcf1a8afdb0277a11783f4044aa4bd6c9c43af8da9b03fe6e55d1db106616b1c",
-  "transactions.md": "07b671327a9c91d462eeb7adcb36f5b26062c5a0088a4a8782033a5a90fec6b2",
-  "records.md": "a2391a767725ea72ad9bdfc8d068591bb271e356d98eb21676a33b35be5638a6",
-  "verifier-selection.md": "b8ea5c248eae3925d74d25006a84c28a73581364d92014b7e78e336285614fc1",
-  "README.md": "95e55d365e470bcdae21a0897a31edab4b718f5765d8e2e5b3b0a288a096c57d",
-  "negative-vectors.md": "4fd019ea22310074a839c9cac29a9495ee01be56e491cdf85c90076016624309"
+  "keys.md": "a23050f6ecae31f72bdcdc4586addcde21105d9c1bd340b282864e76216f4dd9",
+  "primitives.md": "4a8d30acef0d73c59fddaa2cb47fb329cfc45fe02aec65347f0e69e6a9b73fbe",
+  "transactions.md": "3dc9e2e7dbed7730da96dadcd35bd844f4aefd2e99fef4d1d6d43456c9a3d707",
+  "records.md": "05f0450b8ea56db882eaab2f84064975ac12680b7c4d9d6d1dc768ba75890cc7",
+  "verifier-selection.md": "ef868826df419c5432b83281bc6c8035a2e2af0c561b4eafbf06e3e869ba73a0",
+  "README.md": "8fcb6d0fe0b4224d0d4254deca3f4fac29f54526e564ce9f71a95b897d86b4a4",
+  "negative-vectors.md": "5bbed116d65a0b5cafb94ce4e324e97ba36625889579a7d736f555751df5f2b9"
  }
 }
