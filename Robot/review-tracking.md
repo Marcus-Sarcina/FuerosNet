@@ -1585,14 +1585,27 @@ user-facing service, and so it's still a thing the infra node hosts."* The fourt
 **What the misreading was actually detecting** is recorded below as V1: not a wrong
 citation, but one word carrying four jobs.
 
-**`change-log.md` holds 160 unresolved section references**, and `Robot/review-plan.md`
-two. Extending the checker to them for the first time surfaced this; the count was 166
-before the §3.2 split and fell as new subsections resolved old names. **These are
-as-of-filing** — an August entry describing §11.8.7 describes the document as it stood.
-The working rules grant that status to this file explicitly and say nothing about the
-change log, and remapping historical entries to current numbering would have them
-describe changes to sections that did not exist when the change was made. **Author's
-call.**
+**~~`change-log.md` holds 160 unresolved section references.~~ RESOLVED** [author,
+2026-08-31]: *"Historical numbering is of no interest in this case, the change log
+should point to the areas of the current design affected."* **144 references named
+sections existing in no document; 26 remain.**
+
+Git resolved only 7 — the repository starts 2026-08-25 and the log starts 08-12, so
+most stale references predate all available history. The rest were resolved by reading
+what each entry says its section was *about*. Whole clusters had shifted together and
+most confirmed by **exact heading-title match**; several numbers meant **different
+things at different sites** and were read one at a time — §11.8 is both subnet
+formation and a deleted open-items register, `wire-format.md` §7.3a is `LateResponse`
+in one entry and `KeyGrant` in another.
+
+**The 26 remaining are a different grammatical case**: their sentences are *about* the
+old number — *"§4a becomes §5"*, *"§8.2.1 withdrawn"*, *"§21.8 dissolved rather than
+resolved"*. Remapping them would make every one false. **A reference that cites a
+section was repointed; a reference that names one was left.** `Robot/review-plan.md`'s
+two are the same case and stay.
+
+**This file keeps its as-of-filing exemption** — the working rules grant it explicitly,
+and the ruling was about the change log.
 
 ### V1 — "application" carries four jobs, and two of them collide
 
