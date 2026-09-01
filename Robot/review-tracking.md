@@ -1852,3 +1852,26 @@ Found in the sweep: the design's §4 scope list had omitted **series reissue** s
 type 7's introduction on 2026-08-30 — completed. The vectors' interpretation
 register and author queue are both empty again, this time with the taxonomy ruled
 rather than assumed.
+
+---
+
+## Test-vector review, fourth run (2026-09-01, verification pass)
+
+**Five outputs byte-for-byte, pins matched.** Thirteen findings; ten applied, two
+specification contradictions to the author, one observation alongside them.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `pending` responses are not constructible: the offline verifier cannot sign what the schema requires, and no patron-authenticated variant exists — while §5.5 counts `pending` toward finalization | **CONFIRMED — AUTHOR.** Options presented in the vectors README: a patron-authenticated pending (the queue-holder attests delivery); absence-as-encoding, which changes §5.5's counting; or other |
+| 2 | §1.1 carried a phantom thirteenth row — `VerificationQuery` is hashed, never signed | **CONFIRMED, FIXED** — row removed, the table is twelve and the stated count true again; the canonical-form pointer moved into the hash-family note. *Observation raised alongside*: `query_id` is the profile's only undomained hash of a CBOR map |
+| 3 | §5.3.1's "closed at the near end" contradicts its strict formula | **CONFIRMED — AUTHOR.** The vector implements the formula; the word or the formula must move |
+| 4 | The canonical bar omitted the unsigned message families | **CONFIRMED, FIXED** — bar item 9: positive encodings plus characteristic malformed/must-accept per family, naming the two divergences a generic implementation misses (unknown-type behaviour, 64 KB vs 256 KB) |
+| 5 | Signer-to-role binding untested — right shape, wrong identity passes | **CONFIRMED, FIXED** — S17 now; bar item 10 generalises it per type |
+| 6 | The commitment-recompute MUST has no negative | **CONFIRMED, FIXED** — V5, riding the planned normal record; named in bar item 11 |
+| 7 | Finalization must-accepts missing (threshold met by non-`match` results; omitted selected slot) | **CONFIRMED, FIXED** — bar item 11 |
+| 8 | `VerifierResponse` conditional-field matrix untested | **CONFIRMED, FIXED** — T19–T23, from the schema's own REQUIRED/absent rules |
+| 9 | The committed-predecessor trap unnamed in the history fixture | **CONFIRMED, FIXED** — bar item 11: a backfilled post-ceremony head that would change *n*, expected selection unchanged |
+| 10 | Equal-seqno/different-content pair untested | **CONFIRMED, FIXED** — the pair is now *generated*: two independently verified `EndpointRecord`s by one signer, same seqno, different endpoints; V6 states the malformed-condition-not-a-tie rule |
+| 11 | `EndpointRecord` duplicate entries and the u16 port edge unlisted | **CONFIRMED, FIXED** — T17, T18; the boundary list gains 65535/65536 |
+| 12 | Pins are provenance, not a gate; the hand files were unpinned | **CONFIRMED, FIXED** — `tools/spec-pins.json` gates generation: a changed spec hash refuses to run without `--accept-spec-change` (tested both ways); the two hand files carry a machine-managed pin line the generator rewrites, so their staleness is mechanically visible |
+| 13 | `records.md` intro said every §7 object is signed | **CONFIRMED, FIXED** — in the generator, as the reviewer specified |

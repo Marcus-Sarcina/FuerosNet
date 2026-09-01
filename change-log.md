@@ -7290,3 +7290,40 @@ sample. Negative vector R14; the formation vector already satisfies the rule.
 five transaction types, missing series reissue since type 7 arrived on 2026-08-30.
 Completed. The vectors' interpretation register and author queue are empty again —
 this time with the taxonomy ruled rather than silently assumed.
+
+### 2026-09-01 (fourth vector review: the pin gate, the conflict pair, and two contradictions for the author)
+Ten of thirteen findings applied; the two that remain are specification
+contradictions only a ruling can resolve, and the vector exercise is what exposed
+both.
+
+**`pending` cannot be built as specified.** The design queues queries to an offline
+light client at its patron and returns `pending`; the wire makes `pending` a
+result inside a response the **verifier** signs — who is, by construction, offline
+— and no patron-authenticated variant exists. §5.5 counts `pending` toward
+finalization, so this is load-bearing, and the options are in the README: the
+queue-holder attests delivery, or absence becomes the encoding and the counting
+rule changes.
+
+**§1.1 carried a thirteenth row for a context that does not sign.** A
+`VerificationQuery` is hashed into `query_id`; what gets signed is the id, under
+consent. Row removed — the table is twelve rows and the stated count of twelve is
+true again — with the canonical-form pointer folded into the hash-family note, and
+one observation left beside it: `query_id` is now the profile's only undomained
+hash of a CBOR map.
+
+**The window prose contradicts its formula** — *"closed at the near end"* against
+`lower < finalized_at < started_at`, strict at both ends. The vector implements
+the formula; the author picks the word or the boundary.
+
+**The generator now refuses to stamp new hashes onto old assumptions.** A changed
+specification hash stops generation until `--accept-spec-change` acknowledges an
+audit — tested in both directions — and the two hand-authored files carry a
+machine-managed pin line, so the negative suite can no longer go stale silently.
+The equal-seqno conflict pair is generated rather than described: two
+independently verified `EndpointRecord`s by one signer, same `seqno`, different
+endpoints — individually valid, jointly the malformed condition no reader may
+break as a tie. Eight negative rows and three canonical-bar items join the suite:
+the wrong-identity signer (S17), the `VerifierResponse` conditional matrix
+(T19–T23), endpoint duplicates and the u16 port edge, the unsigned message
+families, per-type signer binding, and the finalization semantics with the
+commitment-mismatch and committed-predecessor traps.

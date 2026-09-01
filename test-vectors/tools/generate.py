@@ -26,6 +26,41 @@ def _sha(name):
     return hashlib.sha256(open(os.path.join(_ROOT, name), 'rb').read()).hexdigest()
 WIRE_SHA = _sha('wire-format.md')
 DESIGN_SHA = _sha('network-design.md')
+
+# --- The pin gate. A changed specification hash means the generator's
+# hard-coded constructions may encode stale semantics: refuse to stamp new
+# hashes onto old assumptions unless the change is explicitly acknowledged
+# with --accept-spec-change, which records the new hashes after (presumably)
+# a human audited the constructions against the diff.
+import json, sys
+_PINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spec-pins.json')
+_current = {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA}
+if os.path.exists(_PINS):
+    _stored = json.load(open(_PINS))
+    if _stored != _current and '--accept-spec-change' not in sys.argv:
+        sys.exit('spec-pins.json does not match the current specifications.\n'
+                 'Audit the generator against the specification diff, then rerun '
+                 'with --accept-spec-change.')
+json.dump(_current, open(_PINS, 'w'), indent=1)
+
+def _repin_hand_file(name):
+    """The hand-authored files carry one machine-managed pin line so staleness
+    is mechanically detectable there too."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', name)
+    text = open(path).read()
+    marker = '**Pinned**: '
+    line = (marker + 'wire-format.md `' + WIRE_SHA + '` · network-design.md `'
+            + DESIGN_SHA + '`')
+    out = []
+    hit = False
+    for l in text.split('\n'):
+        if l.startswith(marker):
+            out.append(line); hit = True
+        else:
+            out.append(l)
+    if not hit:
+        sys.exit(name + ' has no "**Pinned**:" line to manage.')
+    open(path, 'w').write('\n'.join(out))
 PIN = ("Generated against `wire-format.md` SHA-256 `" + WIRE_SHA + "` and "
        "`network-design.md` SHA-256 `" + DESIGN_SHA + "` — the design wins on "
        "any disagreement, so a design-only semantic change also stales these "
@@ -585,6 +620,20 @@ er_sig = bob.sign(er_tbs)
 er_cose = e_arr([e_bstr(er_protected), b'\xa0', NULL, e_bstr(er_sig)])
 endpoint_record = e_map(er_fields + [(e_uint(4), er_cose)])
 
+# --- The equal-seqno conflict pair: a second record by bob, SAME seqno [9,2],
+# DIFFERENT endpoint set. Individually valid; together malformed rather than a
+# tie (§7.6, §7.7.3) — the disagreement no reader may break by preference.
+er2_fields = [
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_arr([network_point([192, 0, 2, 7], port=7433)])),
+    (e_uint(3), seqno(9, 2)),
+]
+er2_payload = e_map(er2_fields)
+er2_tbs = sig_structure_sign1(er_protected, AAD_ENDPOINTS, er2_payload)
+er2_sig = bob.sign(er2_tbs)
+er2 = e_map(er2_fields + [(e_uint(4),
+      e_arr([e_bstr(er_protected), b'\xa0', NULL, e_bstr(er2_sig)]))])
+
 
 # --- Second reissue: to a NUMERICALLY SMALLER series. Series are arbitrary
 # labels (§2.3); an implementation treating them as generations rejects this.
@@ -882,9 +931,11 @@ emit('records.md', f"""# Standalone signed records (`wire-format.md` §7)
 {PIN}
 
 **Draft. Spec-derived, unverified by an implementation.** See
-[README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
-own domain-separation tag (§1.1) — this file grows toward one known-answer
-vector per signing context. Payload reading throughout: the deterministic CBOR
+[README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
+under its own domain-separation tag (§1.1) — this file grows toward one
+known-answer vector per signing context, and the unsigned §7 encodings are
+listed apart at the end so nobody generates signatures the specification does
+not define. Payload reading throughout: the deterministic CBOR
 of the map of exactly the named fields (§1's fields-X–Y rule, which governs
 all eight signed objects).
 
@@ -917,6 +968,21 @@ Complete `EndpointRecord` ({len(endpoint_record)} bytes):
 ```
 {hexblock(endpoint_record)}
 ```
+
+## The equal-seqno conflict pair (§7.6, §7.7.3)
+
+A second record by bob — **same seqno `[9, 2]`, different endpoint set**, its
+signature equally valid ({len(er2)} bytes):
+
+```
+{hexblock(er2)}
+```
+
+Each record is individually well-formed; **holding both is the malformed
+condition** — an equal `seqno` carrying different contents is a disagreement,
+never a tie to break, and a reader MUST NOT prefer either (negative suite,
+V6). A subject advances its own counter, so the pair can only mean equivocation
+or a key in two hands.
 
 ## The §7 object model — signed contexts versus unsigned encodings
 
@@ -1067,3 +1133,6 @@ for fname, parts in OUT.items():
     with open(fname, 'w') as f:
         f.write('\n'.join(parts) + '\n')
     print(f"wrote {fname}")
+_repin_hand_file('README.md')
+_repin_hand_file('negative-vectors.md')
+print("repinned README.md, negative-vectors.md")

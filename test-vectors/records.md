@@ -1,11 +1,13 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` SHA-256 `d7591e5f3a431ba73b2e8c543eef43e47ea16d1c3159cd3a4bc2516bf31b587b` and `network-design.md` SHA-256 `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `7be675cc87635c26845a785436ec3e6ff071ede74a1497a06ff6e50cd7e7f5a6` and `network-design.md` SHA-256 `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
-[README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
-own domain-separation tag (§1.1) — this file grows toward one known-answer
-vector per signing context. Payload reading throughout: the deterministic CBOR
+[README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
+under its own domain-separation tag (§1.1) — this file grows toward one
+known-answer vector per signing context, and the unsigned §7 encodings are
+listed apart at the end so nobody generates signatures the specification does
+not define. Payload reading throughout: the deterministic CBOR
 of the map of exactly the named fields (§1's fields-X–Y rule, which governs
 all eight signed objects).
 
@@ -46,6 +48,24 @@ f65840a513df69375698611a8aaab4241d1dc7a8b1537d15f59a0c1c282242ca
 c11c050bfd7fbb7377db937cb21c36157b57c4d363e9561a02b300796f3153cc
 8ba70a
 ```
+
+## The equal-seqno conflict pair (§7.6, §7.7.3)
+
+A second record by bob — **same seqno `[9, 2]`, different endpoint set**, its
+signature equally valid (127 bytes):
+
+```
+a40158205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14db812911e2
+ab4be5940281a20144c000020703191d0903820902048443a10127a0f65840a9
+238ad378c9b0ca567442b7450330555adda8e0ace3b5cbe6f225142afb53e2a6
+a7455b6ee697f6926af3e06f73ba25107bb6122ca8f2a143a846b4966bec0b
+```
+
+Each record is individually well-formed; **holding both is the malformed
+condition** — an equal `seqno` carrying different contents is a disagreement,
+never a tie to break, and a reader MUST NOT prefer either (negative suite,
+V6). A subject advances its own counter, so the pair can only mean equivocation
+or a key in two hands.
 
 ## The §7 object model — signed contexts versus unsigned encodings
 

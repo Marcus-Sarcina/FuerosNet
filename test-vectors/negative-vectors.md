@@ -3,6 +3,8 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
+**Pinned**: wire-format.md `7be675cc87635c26845a785436ec3e6ff071ede74a1497a06ff6e50cd7e7f5a6` · network-design.md `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd`
+
 ## The result model is structured, not a single status
 
 The specification's validation semantics do not reduce to accept/reject, and —
@@ -87,6 +89,7 @@ works, not inputs.
 | S14 | An envelope entry with `alg = -7` (ES256) | Outside the profile: any `alg` other than −8/−49 in a signer group is malformed (§3.5) |
 | S15 | A `COSE_Sign` whose **outer** protected header is nonempty | §3.5: the outer protected header is empty — a `COSE_Sign` carries no signature of its own, so it has no algorithm to name; generic libraries permit content there |
 | S16 | A `COSE_Sign` whose **outer** unprotected header is nonempty | §3.5's nonempty-unprotected rule covers every COSE header, the outer pair included |
+| S17 | A disavowal signed by field 2's identity (the subordinate) instead of field 1's — right entry count, right algorithms, wrong party | Signer role is inferred by comparing `kid` to the body's fields (§3.5), and the type requires exactly its own signers: the correct *shape* from the wrong *identity* is malformed. Every type needs this fixture with a real second identity (canonical bar) |
 
 ### Presence-record structural rules (§3.2, §3.3)
 
@@ -121,8 +124,24 @@ works, not inputs.
 | T12 | An old-key successor statement whose `new_key` ≠ the enclosing adoption's field 1 | Field 1 is "the ONLY successor authorised" (§4.1) — the cross-object binding that stops one observed proof authorising competing successors |
 | T15 | An old-key successor statement whose `patron_key` ≠ the enclosing adoption's field 2 | The symmetric assembly error: §4.1 requires a verifier to check **both** bindings and reject on mismatch — the right successor under the wrong patron is still a forged assembly |
 | T16 | A series reissue whose field 4 counter is not 0 | §4.6: the new series opens at counter 0 |
+| T17 | An `EndpointRecord` listing the same `NetworkPoint` twice | §7.6: entries are distinct; a repetition is malformed — it expresses nothing the order does not already say |
+| T18 | A `NetworkPoint` with port 65536 | u16 range (§4.4); 65535 is the valid ceiling and MUST be accepted |
 | T13 | Any two-party transaction whose two identity fields are equal — adoption, departure, disavowal, peering, series reissue | The degenerate pair is rejected across every two-party type (§4.1), as equal participants already are for presence (§3.2, R1). Self-adoption is also the degenerate cycle — the one a validator sees from the record alone (design §6.2.5) |
 | T14 | A `Recovery` whose `prior_key` equals the enclosing adoption's field 1 | A same-key Recovery is vacuous evidence (§4.1) — the retained-key, lost-archive case is served by archive fetch, fresh adoption and merge, never by Recovery |
+
+### VerifierResponse conditional-field matrix (§4.5)
+
+`basis` and `template_version` are conditionally required, and the conditions
+are load-bearing — a verifier who has not evaluated asserts no basis, and a
+photo comparison without its template version is unverifiable as evidence:
+
+| # | Input | Violation |
+|---|---|---|
+| T19 | `result` 0–2 with `basis` absent | `basis` REQUIRED for evaluated results |
+| T20 | `result` 3 or 4 with `basis` present | MUST be absent — no truthful value existed |
+| T21 | `basis` 0 or 2 with `template_version` absent | REQUIRED for photo bases |
+| T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
+| T23 | A structurally valid response from a verifier outside the recomputed selection | Context fixture: the selection is deterministic (§5.4) and exactly the selected are queried — an unselected response is a slot nothing allocated |
 
 ## B. Context-dependent — bytes plus external state, structured result
 
@@ -138,6 +157,8 @@ works, not inputs.
 | V2 | A scope naming a position the evaluator cannot compute | Topology does not reach it | `structural = valid`, `effective = no` — MUST NOT reject (§6.8) |
 | V3 | A signer's key material never seen and no resolver | Any signed object | `signatures[signer] = unverifiable(key)` — a third outcome; collapsing it into invalid discards a fetchable object (§3.4) |
 | V4 | A series reissue naming a series the node previously occupied | Evaluator holds the node's chain | **Reject** — §4.6: a chain-holder MUST reject a reissue naming a series already in the chain; reuse brings the abandoned line's high counters back into comparison |
+| V5 | A normal presence record whose witness commitment does not recompute from its revealed nonce | The record alone | `structural = malformed` — §5.1: a validator MUST recompute every commitment and reject on mismatch; an implementation that seeds from reveals without checking commitments defeats the commit-reveal ordering and passes every arithmetic vector |
+| V6 | The two `EndpointRecord`s of `records.md`'s conflict pair | Both held | **Malformed condition, not a tie** — equal `seqno`, different contents (§7.6, §7.7.3); a reader MUST NOT prefer either. The pair can only mean equivocation or a key in two hands |
 
 ## C. Method requirements — how a decoder works
 
@@ -187,7 +208,7 @@ review caught the previous wording claiming otherwise. Its target list is
 covered objects' fields previously mislabelled out-of-scope: back-pointers
 1/8/9, witnesses 16/17, responses 32/33, path 24/25, unknown keys 16/17,
 extension values 1024/1025, **peering audit history 8/9 and `NetworkPoint`
-lists 8/9 per endpoint record**, u32/u64 edges, epoch saturation, ordinal
-transitions. Bounds of genuinely uncovered objects (prekey blobs, catalog
+lists 8/9 per endpoint record**, the `NetworkPoint` port at 65535/65536,
+u32/u64 edges, epoch saturation, ordinal transitions. Bounds of genuinely uncovered objects (prekey blobs, catalog
 sizes, capabilities, sibling lists, scope lists, corroborations, proximity
 channels, asserted locations, recovery responses) join when their objects do.

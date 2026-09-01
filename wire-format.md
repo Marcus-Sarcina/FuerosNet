@@ -85,14 +85,15 @@ is the current enumeration rather than a closed set.
 Present encoding: `external_aad` holds the ASCII role tag. *The hash and PRF
 domain tags — `rhtn/1:nonce-commit`, `rhtn/1:verifier-seed`, `rhtn/1:wnonce`
 (§5) — are a separate family: they prefix hash inputs and never appear in an
-`external_aad`.*
+`external_aad`. A `VerificationQuery` is hashed, never signed — `query_id` is
+SHA-256 of its canonical form (§4.5), and what gets signed is the resulting id,
+under `rhtn/1:consent`.*
 
 | Role | `external_aad` |
 |---|---|
 | Transaction envelope | `rhtn/1:envelope` |
 | Verifier response (§4.5) | `rhtn/1:verifier` |
 | Subject consent to a query (§4.5) | `rhtn/1:consent` |
-| VerificationQuery, canonical form | see §4.5 |
 | Currency attestation (§7.1) | `rhtn/1:currency` |
 | Catalog entry (§4) | `rhtn/1:catalog` |
 | Abuse report (§4) | `rhtn/1:abuse` |
