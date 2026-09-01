@@ -1909,3 +1909,30 @@ preimage languages (mandatory key 0; the `KeyMaterial` array; first key 1; exact
 tag. Chosen over tagging `query_id` alone because the invariant is what does the
 work — a tag would have left `txid` and `keyhash` resting on unstated luck. **The
 test-vector author queue is empty, for the first time with every closure a ruling.**
+
+---
+
+## Canonical bar item 1 complete (2026-09-01): real ML-DSA-65 throughout
+
+The tooling blocker dissolved when the author enabled pip on the machine (PEP 668
+routed the install into a target directory). `dilithium-py` 1.4.0 supplies FIPS 204
+seed-based keygen and deterministic signing; **pyca `cryptography` 50.0.1 serves as
+the independent second implementation** in the verification harness.
+
+**The keygen recipe, now stated in the suite**: `xi =
+SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed")`, keypair =
+`ML-DSA-65.KeyGen_internal(xi)`, deterministic signing, empty context.
+**Cross-implementation agreement proved before regeneration**: pyca re-derives every
+public key from the same seeds and verifies dilithium-py's deterministic signatures
+— the recipe is implementation-independent, not an oracle over one generator.
+
+**Wholesale regeneration executed** — every keyhash changed, so every body, txid,
+seed, rank and ordering recomputed; the generator's placeholder machinery is gone.
+Independent verification after: 11 keyhashes re-derived from scratch with pyca's
+keygen; 11 bodies parse canonically with matching txids; **4 envelopes, 14
+signatures, every one verified under the independent implementation**; the E10
+mutation now breaks **all four** signatures of the extension envelope; nonces and
+seed re-derived. D2/E10 restored to full strength; README's canonical bar item 1
+marked done. The suite is **cryptographically complete** — canonical status still
+awaits what it always did, an independent implementation reproducing the whole
+suite.

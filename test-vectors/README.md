@@ -16,9 +16,9 @@ certification suite for client and operator behavioural commitments, which are
 deliberately unenforceable from bytes (design §1.1) and live in the
 requirements documents.
 
-The generated documents are produced by `tools/generate.py` (Python 3 + the
-`cryptography` package for Ed25519); re-running it reproduces them
-byte-for-byte. **Each generated file pins the SHA-256 of both
+The generated documents are produced by `tools/generate.py` (Python 3 with
+the `cryptography` package for Ed25519 and **`dilithium-py` for ML-DSA-65**);
+re-running it reproduces them byte-for-byte. **Each generated file pins the SHA-256 of both
 `network-design.md` and `wire-format.md`** — the design wins on any
 disagreement, so a design-only semantic change stales these vectors with the
 wire pin still green; a stale pin of either means regenerate before trusting a
@@ -26,7 +26,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 | File | Contents |
 |---|---|
-| `keys.md` | The synthetic test identities: Ed25519 keys (real), ML-DSA-65 public keys (structurally valid, cryptographically meaningless), `KeyMaterial` encodings, keyhashes |
+| `keys.md` | The synthetic test identities — **both components real**: Ed25519 and ML-DSA-65 keypairs from stated seeds, `KeyMaterial` encodings, keyhashes |
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
 | `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record, and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
 | `records.md` | One known-answer signature per **signing** context — `EndpointRecord` complete; the remaining signed contexts queued, and the **unsigned** §7/§8 message encodings explicitly separated so nobody generates signatures the specification does not define |
@@ -35,15 +35,18 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## What every vector assumes
 
-- **Identities are synthetic and deterministic** — derivation rules in
-  `keys.md`. The ML-DSA-65 public keys are *not* valid lattice keys; nothing in
-  an encoding or hashing vector depends on key validity.
-- **No ML-DSA-65 implementation was available in the drafting environment**;
-  PQ slots carry their exact `Sig_structure` and envelopes including them are
-  STRUCTURAL. **Canonical promotion is a wholesale regeneration** — real
-  keypairs change every keyhash — and requires a **deterministic keygen recipe
-  first** (canonical bar 1), so a second implementation derives the same keys
-  independently rather than taking generator output as an oracle.
+- **Identities are synthetic, deterministic, and real for both components**
+  (2026-09-01). The keygen recipe is implementation-independent:
+  `xi = SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed")`, keypair =
+  **FIPS 204 `ML-DSA-65.KeyGen_internal(xi)`**; signing is the deterministic
+  variant with empty context (`wire-format.md` §2.2). At generation time a
+  **second, independent ML-DSA implementation** re-derived every public key
+  from the stated seeds and verified every signature — the recipe is not an
+  oracle over this generator's output.
+- **Every signature in the suite is real.** All envelopes are final; the
+  verification harness checks all of them, both algorithms, including the
+  mutation-must-fail property across all four entries of the
+  unknown-extension envelope.
 - Deterministic CBOR per RFC 8949 §4.2 as profiled by `wire-format.md` §1.
 
 ## Interpretations taken
@@ -127,10 +130,11 @@ smaller-series reissue must-accepts, the fully-signed unknown-extension
 fixture with its mutation complement, and four Recovery cross-binding
 negatives (T9–T12). Still open:
 
-1. **Real deterministic ML-DSA-65 test keypairs** — recipe first (exact
-   seed → keypair procedure, e.g. FIPS 204 seed-based keygen from the labelled
-   hash), then wholesale regeneration with no placeholder slots. *(Blocked on
-   tooling here.)*
+1. ~~Real deterministic ML-DSA-65 test keypairs~~ **DONE 2026-09-01**: the
+   recipe is stated above, the wholesale regeneration is complete, no
+   placeholder slots remain, and a second implementation confirmed keygen and
+   signatures. What canonical status still awaits is unchanged in kind: an
+   independent implementation reproducing the *whole suite*.
 2. **A normal-subtype presence record** whose participant, witness, seed and
    `kid` orders all deliberately differ, with witnesses, embedded responses,
    and its 36-entry envelope.

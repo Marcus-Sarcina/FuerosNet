@@ -8,16 +8,25 @@ verifier-selection.md byte-for-byte, each pinned to the SHA-256 of both
 authored by hand.
 
 Status: DRAFT, derived from the specifications and verified by no
-implementation.
+independent RHTN implementation.
 
-Requires: Python 3, `cryptography` (for Ed25519). ML-DSA-65 values are not
-computed — no implementation was available — so post-quantum signature slots
-carry their exact signing input (`Sig_structure`) and a placeholder marker.
+Requires: Python 3, `cryptography` (Ed25519) and `dilithium-py` (ML-DSA-65).
+All signatures are real. The ML-DSA keygen recipe, so a second implementation
+derives identical keys: xi = SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed"),
+keypair = FIPS 204 ML-DSA-65.KeyGen_internal(xi) (dilithium-py's key_derive),
+signing deterministic with empty context. Cross-checked at generation time
+against a second, independent ML-DSA implementation where available.
 """
 
 import hashlib, hmac, os
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+try:
+    from dilithium_py.ml_dsa import ML_DSA_65
+except ImportError:
+    raise SystemExit('dilithium-py is required for the ML-DSA-65 values: '
+                     'pip install dilithium-py (any environment this '
+                     'interpreter can import from)')
 
 H = lambda b: hashlib.sha256(b).digest()
 
@@ -94,23 +103,17 @@ def e_map(pairs):  # pairs of (encoded_key, encoded_value)
 NULL = b'\xf6'
 
 # ---------------------------------------------------------------- identities
-# Test identities are synthetic and deterministic. Ed25519 keys are real
-# (seed = SHA-256 of the labelled string); ML-DSA-65 public keys are
-# structurally valid byte strings of the correct length (1,952 bytes) expanded
-# from a labelled hash stream, and are NOT valid lattice keys. Encoding and
-# hashing vectors do not depend on key validity; signature vectors that would
-# need a real ML-DSA key are marked as requiring an implementation.
+# Test identities are synthetic, deterministic, and REAL for both components:
+# Ed25519 from seed = SHA-256("rhtn-test-vectors:<name>:ed25519-seed"), and
+# ML-DSA-65 from xi = SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed") via
+# FIPS 204 KeyGen_internal. Signing is the deterministic variant with empty
+# context, per wire §2.2.
 
 def ed25519_seed(name):
     return H(b'rhtn-test-vectors:' + name.encode() + b':ed25519-seed')
 
-def mldsa_pub(name):
-    out = b''
-    i = 0
-    while len(out) < 1952:
-        out += H(b'rhtn-test-vectors:' + name.encode() + b':ml-dsa-65-pub:' + str(i).encode())
-        i += 1
-    return out[:1952]
+def mldsa_seed(name):
+    return H(b'rhtn-test-vectors:' + name.encode() + b':ml-dsa-65-seed')
 
 class Identity:
     def __init__(self, name):
@@ -118,7 +121,8 @@ class Identity:
         self.seed = ed25519_seed(name)
         self.sk = Ed25519PrivateKey.from_private_bytes(self.seed)
         self.ed_pub = self.sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-        self.pq_pub = mldsa_pub(name)
+        self.pq_seed = mldsa_seed(name)
+        self.pq_pub, self.pq_sk = ML_DSA_65.key_derive(self.pq_seed)
         # COSE_Key, classical: {1: 1 (kty OKP), -1: 6 (crv Ed25519), -2: x}
         # exactly three labels (wire §2.2)
         self.cose_ed = e_map([(e_int(1), e_uint(1)),
@@ -133,6 +137,8 @@ class Identity:
         self.keyhash = H(self.key_material)
     def sign(self, data):
         return self.sk.sign(data)
+    def sign_pq(self, data):
+        return ML_DSA_65.sign(self.pq_sk, data, deterministic=True)
 
 IDS = {n: Identity(n) for n in
        ['alice', 'bob', 'carol', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']}
@@ -171,8 +177,6 @@ def cose_signature_entry(protected_bytes, signature):
     wire §3.5), signature: bstr]"""
     return e_arr([e_bstr(protected_bytes), b'\xa0', e_bstr(signature)])
 
-MLDSA_PLACEHOLDER = b'\x00' * 3309  # marks the slot; a real value needs an implementation
-
 def envelope(version, msg_type, body_bytes, signers):
     """signers: list of Identity, already the type's logical signer set.
     Entries sort by kid, then classical before post-quantum (wire §3.5)."""
@@ -181,7 +185,7 @@ def envelope(version, msg_type, body_bytes, signers):
         for alg in (-8, -49):
             prot = sig_protected(alg, ident.keyhash)
             tbs = sig_structure_sign(prot, AAD_ENVELOPE, body_bytes)
-            sig = ident.sign(tbs) if alg == -8 else MLDSA_PLACEHOLDER
+            sig = ident.sign(tbs) if alg == -8 else ident.sign_pq(tbs)
             entries.append((ident, alg, prot, tbs, sig))
     cose_sign = e_arr([e_bstr(b''), b'\xa0', NULL,
                        e_arr([cose_signature_entry(p, s) for _, _, p, _, s in entries])])
@@ -241,14 +245,16 @@ emit('keys.md', f"""# Test identities
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
 
-Every identity is synthetic and deterministic:
+Every identity is synthetic, deterministic, and **real for both components**:
 
-- **Ed25519**: real keys. `seed = SHA-256("rhtn-test-vectors:<name>:ed25519-seed")`,
-  public key derived per RFC 8032.
-- **ML-DSA-65**: `pub` is 1,952 structurally valid bytes expanded from
-  `SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-pub:<i>")` for i = 0, 1, … —
-  **not a valid lattice key**. Encoding and hashing vectors do not depend on key
-  validity; anything needing a real ML-DSA signature is marked.
+- **Ed25519**: `seed = SHA-256("rhtn-test-vectors:<name>:ed25519-seed")`,
+  public key per RFC 8032.
+- **ML-DSA-65**: `xi = SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed")`,
+  keypair = **FIPS 204 `ML-DSA-65.KeyGen_internal(xi)`**. Signing is the
+  deterministic variant with empty context (wire §2.2). The recipe is
+  implementation-independent — at generation time a second, independent
+  ML-DSA implementation reproduced the same public keys from the same seeds
+  and verified the deterministic signatures.
 
 Per `wire-format.md` §2.2, `KeyMaterial = [COSE_Key, COSE_Key]` in fixed order
 classical-then-post-quantum, each key carrying exactly three labels, and
@@ -277,6 +283,12 @@ Ed25519 seed (private key bytes):
 {hx(alice.seed)}
 ```
 
+ML-DSA-65 seed `xi`:
+
+```
+{hx(alice.pq_seed)}
+```
+
 Classical `COSE_Key`, deterministic CBOR ({len(alice.cose_ed)} bytes):
 
 ```
@@ -287,20 +299,20 @@ Byte-level reading: `a3` map(3) · `01 01` kty: OKP · `20 06` crv: Ed25519 ·
 `21 58 20 …` x: 32-byte public key.
 
 Post-quantum `COSE_Key` ({len(alice.cose_pq)} bytes): `a3` map(3) · `01 07`
-kty: AKP · `03 38 30` alg: −49 · `20 59 07 a0 …` pub: 1,952 bytes. The `pub`
-bytes are in the appendix.
+kty: AKP · `03 38 30` alg: −49 · `20 59 07 a0 …` pub: the real 1,952-byte
+ML-DSA-65 public key derived from `xi` above, printed in the appendix.
 
 `KeyMaterial` is the two-element array `82` followed by both keys
 ({len(alice.key_material)} bytes); its SHA-256 is the keyhash in the table.
 
-## Appendix: alice's synthetic ML-DSA-65 `pub`
+## Appendix: alice's ML-DSA-65 `pub`
 
 ```
 {hexblock(alice.pq_pub)}
 ```
 
-Other identities' `pub` bytes follow the same derivation and are regenerable
-from the script.""")
+Other identities' keys follow the same derivation and are regenerable from the
+script — or from any FIPS 204 implementation exposing seed-based keygen.""")
 
 # ================================================================ primitives.md
 
@@ -705,20 +717,14 @@ Protected header: `{hx(prot)}`
 {hexblock(tbs)}
 ```
 """)
-    if alg == -8:
-        emit('transactions.md', f"""Signature:
+    emit('transactions.md', f"""Signature:
 
 ```
 {hexblock(sig)}
 ```
 """)
-    else:
-        emit('transactions.md',
-             "Signature: **requires an ML-DSA-65 implementation** (deterministic"
-             " variant, §2.2). The 3,309-byte slot is zero-filled in the envelope"
-             " bytes below, which are therefore STRUCTURAL, not final.\n")
 
-emit('transactions.md', f"""#### Envelope bytes (structural — PQ slots zero-filled)
+emit('transactions.md', f"""#### Envelope bytes — final, all four signatures real
 
 {len(adopt_env)} bytes:
 
@@ -749,8 +755,7 @@ required-signer rule, fails here. Ed25519 signature (protected
 {hexblock(dep_entries[0][4])}
 ```
 
-Envelope bytes ({len(dep_env)} bytes; the ML-DSA slot is a placeholder,
-STRUCTURAL as in the adoption envelope):
+Envelope bytes ({len(dep_env)} bytes — final, both signatures real):
 
 ```
 {hexblock(dep_env)}
@@ -824,12 +829,16 @@ adoption; `Sig_structure`s omitted for brevity):
 """)
 
 for ident, alg, prot, tbs, sig in div_entries:
-    if alg == -8:
-        emit('transactions.md',
-             f"- {ident.name}, Ed25519: protected `{hx(prot)}`, signature\n  `{hx(sig)}`")
-    else:
-        emit('transactions.md',
-             f"- {ident.name}, ML-DSA-65: protected `{hx(prot)}`, signature requires an implementation")
+    algname = 'Ed25519' if alg == -8 else 'ML-DSA-65'
+    emit('transactions.md',
+         f"- {ident.name}, {algname}: protected `{hx(prot)}`, signature SHA-256"
+         f" `{hx(H(sig))}` (full value in the envelope bytes below)")
+emit('transactions.md', f"""
+Envelope bytes ({len(div_env)} bytes — final):
+
+```
+{hexblock(div_env)}
+```""")
 
 emit('transactions.md', f"""
 ## Departure carrying a merge — alice reunites two branches
@@ -880,16 +889,20 @@ Body ({len(ext_body)} bytes):
 
 txid: `{hx(ext_txid)}`
 
-**The envelope over this body is constructed, and the unknown key is inside
-the signed payload.** Mutating `c0ffee` breaks **both Ed25519 signatures**
-(negative suite, E10); the coverage rule binds the ML-DSA entries identically,
-but their slots are placeholders until canonical bar 1, so they are
-**non-oracular** — nothing about them can be proved or disproved yet. Ed25519
-signatures ({ext_entries[0][0].name} then {ext_entries[2][0].name}, by kid):
+**The envelope over this body is fully signed, and the unknown key is inside
+the signed payload** — mutate `c0ffee` and **all four signatures fail**
+(negative suite, E10). Ed25519 signatures ({ext_entries[0][0].name} then
+{ext_entries[2][0].name}, by kid):
 
 ```
 {hx([e for e in ext_entries if e[1] == -8][0][4])}
 {hx([e for e in ext_entries if e[1] == -8][1][4])}
+```
+
+Envelope bytes ({len(ext_env)} bytes — final, all four signatures inside):
+
+```
+{hexblock(ext_env)}
 ```
 
 ## Peering (type 4) — bob and carol as infra peers

@@ -47,7 +47,7 @@ works, not inputs.
 | E6 | A body carrying 17 unknown extension keys | Exceeds the 16-per-map bound |
 | E7 | An unknown extension key whose encoded value is 1,025 bytes | Exceeds the 1,024-byte encoded-slice bound |
 | E8 | A presence record with `subtype = 2` | §1's unknown-enum rule on a closed enumeration: field 6 is `0 normal, 1 formation` and load-bearing (§4.5). **Choosing the field matters** — two earlier instantiations of this row were wrong: disavowal codes are a banded exception (D1), and `ClientIntegrity.scheme` is an **open** namespace ("a validator checks only the shapes", §4.5) |
-| E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are covered by every signature: `signatures[·, -8] = failed` for **both** Ed25519 entries. The rule binds the ML-DSA entries identically, but their slots are placeholders and **non-oracular** until canonical bar 1. The unmutated envelope is D2 |
+| E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are covered by every signature: **all four entries fail**, both algorithms — verified at generation time under two independent implementations. The unmutated envelope is D2 |
 | E11 | A merge back-pointer list out of ascending bytewise order | §3.1: one logical merge, one encoding, one txid — the positive merge vector shows the sorted form |
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
 
@@ -174,7 +174,7 @@ photo comparison without its template version is unverifiable as evidence:
 | # | Input | Rule |
 |---|---|---|
 | D1 | The disavowal with unassigned in-range code 40 (`transactions.md`) | §4.3's banded exception: retained and evaluated by band |
-| D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and both **classical** signatures verify over bytes including the unknown key; the PQ slots are non-oracular until canonical bar 1. E10 is the mutation complement |
+| D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its full envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and **all four signatures** verify over bytes including the unknown key. E10 is the mutation complement |
 | D3 | A `LocationEvidence` method value of 9 | The location-method registry is deliberately open (§4.5) |
 | D4 | A `Witness.attestation` with a reserved bit (3+) set | Reserved bits retained; interpret only 0–2 (§4.5) |
 | D5 | Verifier responses in any array order | Array order is not canonicalised (§5.4) |

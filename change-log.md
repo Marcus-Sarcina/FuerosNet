@@ -7375,3 +7375,31 @@ every language above or carry its own `rhtn/1:` tag. Stating the invariant was
 chosen over tagging `query_id` because the tag would have protected one hash and
 left the other three resting on unstated luck — the drift §1.1 already records
 happening once to the signing roles.
+
+### 2026-09-01 (the vectors go cryptographically complete: real ML-DSA-65, cross-verified)
+The last tooling blocker fell — the machine gained pip, PEP 668 routed the install
+into a target directory — and canonical bar item 1 executed end to end.
+
+**The keygen recipe came first, as the fourth review required**: `xi =
+SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-seed")`, keypair = FIPS 204
+`ML-DSA-65.KeyGen_internal(xi)`, deterministic signing with empty context. **And it
+was proved implementation-independent before anything regenerated**: a second,
+independent ML-DSA implementation re-derived every public key from the same seeds
+and verified the first implementation's deterministic signatures. A second
+implementation deriving the same keys from a stated recipe is the opposite of
+taking generator output as an oracle, which was the fourth review's exact worry.
+
+**Then the wholesale regeneration** every reviewer said this day would bring: real
+keypairs change every keyhash, so every body, txid, seed preimage, rank and
+bytewise ordering recomputed — mechanically, because every value flows from the
+generator. The placeholder machinery is deleted; every envelope is final; the
+extension envelope's mutation property now breaks **all four** signatures rather
+than the two classical ones. Independent verification of the regenerated set: 11
+keyhashes re-derived from scratch, 11 bodies and txids, 4 envelopes with 14
+signatures all verified under the second implementation, nonces and seed
+re-derived.
+
+**The suite is cryptographically complete.** What canonical status awaits is
+unchanged in kind and now singular: an independent implementation reproducing the
+whole suite — which is the gate `wire-format.md` §13 set on the day the vectors
+were first drafted.
