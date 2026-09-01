@@ -1656,7 +1656,9 @@ What remains of the word is the **Local application** category name, the convent
 layer sense (`application data`, `application actions`, `application layer`), and one
 site of the word meaning *act of applying*.
 
-**Still open — §2's `Resource` row**, the fourth sense: *"A service, data store or
-application owned by a node."* It enumerates what a resource can front where §11's
-three-category table does that better, and it is the definition a reader meets first.
-Not touched; the author did not speak to it.
+**§2's `Resource` row is deliberate and stays** [author, 2026-08-31]: *"Section 2 is
+introducing the resource for the first time and explaining it in familiar terms."* The
+row is orienting a reader who has met none of this yet, so *"a service, data store or
+application"* is doing the work everyday words do — §11's three-category table is the
+taxonomy, and it arrives when the reader needs one. **The fourth sense was never a
+collision**; it reads as the ordinary English word, which is the point.

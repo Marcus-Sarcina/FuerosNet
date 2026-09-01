@@ -6938,6 +6938,8 @@ What remains is the **Local application** category name, the conventional layer 
 and one *act of applying*. Zero unresolved references; every removed token is an
 `application` that was renamed. `change-log.md`'s own occurrence stays as written.
 
-**Left open**: §2's `Resource` row still reads *"a service, data store or application
-owned by a node"* — the fourth sense, enumerating what a resource can front where §11's
-category table does it better. The author did not speak to it.
+**§2's `Resource` row stays as written** [author]: *"Section 2 is introducing the
+resource for the first time and explaining it in familiar terms."* *"A service, data
+store or application"* is everyday English orienting a reader who has met none of this
+yet; §11's three-category table is the taxonomy and arrives when it is wanted. **Only
+the two colliding senses needed names**, and both now have one.
