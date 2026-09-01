@@ -1900,3 +1900,12 @@ absent-slot must-accept.
 **The window is exclusive at both ends** — *"previously completed ceremonies
 only."* §5.3.1's "closed at the near end" is gone; formula and vector were already
 strict, and the generator's boundary table now says so in the ruling's words.
+
+**Final item closed (2026-09-01)**: the `query_id` observation resolved as option
+(b) — §1.1 now states the **hash-disjointness invariant**: the four untagged hashes
+(`txid`, `keyhash`, `query_id`, genesis) have pairwise structurally disjoint
+preimage languages (mandatory key 0; the `KeyMaterial` array; first key 1; exactly
+32 bytes), and any future hashed object MUST stay disjoint or carry an `rhtn/1:`
+tag. Chosen over tagging `query_id` alone because the invariant is what does the
+work — a tag would have left `txid` and `keyhash` resting on unstated luck. **The
+test-vector author queue is empty, for the first time with every closure a ruling.**

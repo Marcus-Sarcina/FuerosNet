@@ -9,7 +9,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `07802cb85a4ada3afcdf2783bbd94e4867688d5454983436dcf379acefe59a8f` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `41ec82f4d40c916cd0a42cd316b4cbc226e2d07c7b2ddf667c854bcf86347077` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
 **Scope**: wire-format/protocol **interoperability** vectors. This is not a
 certification suite for client and operator behavioural commitments, which are
@@ -100,9 +100,14 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-One observation stands: **`query_id` is an undomained SHA-256 of a CBOR map**
-(§4.5) — the only such hash in the profile, now that §1.1 notes the tag
-families. Worth a tag, or a sentence saying why not.
+**Nothing.** The last item — whether `query_id` needed a domain tag — closed
+2026-09-01 with §1.1's **hash-disjointness invariant**: the four untagged
+hashes (`txid`, `keyhash`, `query_id`, genesis) have pairwise structurally
+disjoint preimage languages, and any future hashed object must stay disjoint
+or carry a tag. The suite's positive hash vectors are the invariant's living
+witnesses — a txid preimage begins `a? 00`, a keyhash preimage begins `82`, a
+genesis preimage is exactly 32 bytes — and a `query_id` vector joins them with
+the query/consent set (canonical bar 4).
 
 Both fourth-review contradictions were ruled 2026-09-01: **absence is the
 encoding of an unanswered query** — `pending` left the enum, the threshold

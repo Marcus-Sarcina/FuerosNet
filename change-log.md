@@ -7361,3 +7361,17 @@ ceremonies only*. The word "closed" is gone from §5.3.1; the formula and the
 vector were already strict, and the boundary table now states the rule in the
 author's words. The vectors' author queue holds one item: whether `query_id`,
 now the profile's only undomained hash, gets a tag.
+
+### 2026-09-01 (the hash-disjointness invariant)
+The last open vector question closes as a stated invariant rather than a new tag.
+**§1.1 now records why the four untagged hashes are safe**: `txid`, `keyhash`,
+`query_id` and the genesis value have pairwise structurally disjoint preimage
+languages — a body's mandatory key 0, `KeyMaterial`'s two-element array shape, the
+query's key-1-first five-map, and a fixed 32-byte input shorter than any other
+preimage — so no digest can be reinterpreted across roles without a SHA-256
+collision across disjoint languages. **And the disjointness is now a rule, not an
+accident**: any future hashed object must either stay structurally disjoint from
+every language above or carry its own `rhtn/1:` tag. Stating the invariant was
+chosen over tagging `query_id` because the tag would have protected one hash and
+left the other three resting on unstated luck — the drift §1.1 already records
+happening once to the signing roles.

@@ -89,6 +89,16 @@ domain tags — `rhtn/1:nonce-commit`, `rhtn/1:verifier-seed`, `rhtn/1:wnonce`
 SHA-256 of its canonical form (§4.5), and what gets signed is the resulting id,
 under `rhtn/1:consent`.*
 
+**Four hashes carry no tag, and their safety is structural rather than tagged**:
+`txid` (a body map, whose first key is always 0), `keyhash` (the two-element
+`KeyMaterial` array), `query_id` (a five-entry map whose first key is 1), and
+the genesis value (exactly 32 raw bytes, shorter than any other preimage here).
+Their preimage languages are pairwise disjoint from the first bytes, so no
+digest can be reinterpreted across roles without a SHA-256 collision. **The
+disjointness is an invariant, not an accident: any future hashed object MUST
+either be structurally disjoint from every language above, or carry its own
+`rhtn/1:` tag** [author, 2026-09-01].
+
 | Role | `external_aad` |
 |---|---|
 | Transaction envelope | `rhtn/1:envelope` |
