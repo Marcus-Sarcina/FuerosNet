@@ -449,8 +449,8 @@ latency for a stranger's key**, not bandwidth.
 | **Patron** | A node's immediate upstream node |
 | **Subordinate / down-line** | Nodes beneath a node in the hierarchy |
 | **Sibling** | A node sharing the same direct patron |
-| **Infra node** | A node running the server application on a statically routed device |
-| **Light client** | The participant-facing application, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the application, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
+| **Infra node** | A node running the server software on a statically routed device |
+| **Light client** | The participant-facing client software, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the client software, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it. Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
 | **Dunbar Org** | Every node within a **two-edge walk** over adoption and sibling edges. At f = 10, **221** (§15.1). Not a subtree, and not a tier band — cousins and nephews' children fall at three edges |
@@ -573,7 +573,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   *its* subordinates may not, since a third level would sit outside every infra
   node's horizon — nothing could acknowledge it, serve it, or connect it to the
   network. To go deeper, a node in that chain must associate its key with at least
-  one statically routed device running the infrastructure application. The reason
+  one statically routed device running the server software. The reason
   for the bound is below.
 - **Each server corresponds to a user.** Infra operators are people.
 - Expected deployment: container or VM image, mostly in cloud datacentres, each
@@ -641,8 +641,8 @@ payload, so apex load scales with churn and introductions, not with usage.
 ## 4. Scope
 
 ### In scope for v1
-- Client application (light, end-user devices)
-- Server application (always-up infrastructure nodes)
+- Client software (light, end-user devices)
+- Server software (always-up infrastructure nodes)
 - Transaction types: **adoption**, which subsumes key rotation, recovery and
   transfer between patrons (§9.0, §6.2); **departure**, **disavowal**,
   peering, **proof of presence**
@@ -3198,10 +3198,12 @@ Four properties of the resource boundary that the rest of this chapter assumes.
 
 #### 11.0.1 Wider reach is federation, not wider scope
 
-**A resource is neighbourhood-scale; an application can be any scale.** §11.2
-bounds a resource to its owner's Dunbar Org, and that is not a ceiling on what can
-be built: a subnet-wide or cross-subnet service is **many local instances**, each
-hosted by a patron, each administering its own team, with the application handling
+**A resource is neighbourhood-scale; a resource application can be any scale.** A
+**resource application** is the wider system a resource is one instance of — the
+network hosts the instance and knows nothing of the system. §11.2 bounds a resource
+to its owner's Dunbar Org, and that is not a ceiling on what can be built: a
+subnet-wide or cross-subnet service is **many local instances**, each hosted by a
+patron, each administering its own team, with the resource application handling
 instance-to-instance connection in its own architecture.
 
 **The network never expresses wide-scale access control because it never sees a
@@ -6627,7 +6629,7 @@ targets for simulation.
 | **A18** | Ageing is modest for adults, severe for minors, **substantial in 24 months** | The two-year capture retention tier (§7.5.1) | Also §20.1 |
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §16.6's operator pricing and §17.3's static-addressing leg | Also §20.1 |
 | **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | §16.3's low default flow capacity for peering edges | Both the superlative ("the cheapest route") and the "trust ceiling" framing are withdrawn. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
-| **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
+| **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every resource application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it |
 | **A23** | An adoption without a meeting is **near-worthless** rather than merely weaker | Keeping proof of presence optional (§6.1.1) instead of mandatory where it could be enforced | If unattested edges carry meaningful standing under plausible policies, optionality becomes a gap rather than a graceful degradation |
 | **A24** | A user accumulates **a few hundred archive records per decade** | The claim that post-quantum archive size is operationally insignificant (§5) | An order of magnitude more makes the archive a storage and bandwidth problem, not a rounding error |

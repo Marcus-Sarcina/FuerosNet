@@ -1637,5 +1637,26 @@ job and is done better there.
 - §2's **Resource** row says what a resource is and points at §11 for the shapes, rather
   than listing *"a service, data store or application"*.
 
-**Not applied.** Vocabulary is load-bearing and this is the author's call — §2 is the
-row every later chapter is written against.
+**APPLIED** [author, 2026-08-31]: *"2 is the client software and 11 is the resource
+application."* Each sense now carries its own name.
+
+- **The 7 node-software sites say `client software` or `server software`.** design §2's
+  two rows, §3.3's deeper-chain rule, §4's in-scope list (both lines), and
+  `light-client-requirements.md`'s opening line. **No new term** — §2 already said the
+  row *names software*.
+- **`resource application` is the author's term and is anchored at both first uses**:
+  *the wider system a resource is one instance of — the network hosts the instance and
+  knows nothing of the system* (design §11.0.1), and the package-author phrasing in
+  resource §4.1. A21 follows.
+- **`change-log.md`'s one occurrence is left as written**, per the standing rule that
+  the log records what the text said at the time.
+
+**Verified**: the node-software sense appears nowhere in the five design documents.
+What remains of the word is the **Local application** category name, the conventional
+layer sense (`application data`, `application actions`, `application layer`), and one
+site of the word meaning *act of applying*.
+
+**Still open — §2's `Resource` row**, the fourth sense: *"A service, data store or
+application owned by a node."* It enumerates what a resource can front where §11's
+three-category table does that better, and it is the definition a reader meets first.
+Not touched; the author did not speak to it.

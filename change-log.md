@@ -6903,3 +6903,41 @@ section in the set and the one nothing forces anybody to update. The outline thi
 gained on 2026-08-31 is navigable and derives from the headings themselves; a second
 index would compete with it and decay. **If the author wants one, it should be
 generated rather than written.**
+
+### 2026-08-31 (one word, four jobs: the node software and the resource application get separate names)
+Found while the author was correcting a bad finding of mine. **Three citations to
+§11.0.1 were reported as pointing at a federation section while discussing hosting;
+all three are correct and the misreading was mine** — §11.0.1 is what establishes that
+a wide-scale service is *many local instances, each hosted by a patron*, so it is
+exactly the authority for a sentence about what a node hosts. Author: *"even in the
+case of a third-party service, the infra node runs the authentication package to
+access that user-facing service, and so it's still a thing the infra node hosts."*
+
+**What the misreading was detecting was real, and it was not a missing name.** The
+distinction — the package on the server, versus the thing the user reaches — is
+already stated, and stated well, in `resource-requirements.md` §4 as **Physically** /
+**Logically**, with the three-category table covering all three shapes. What was wrong
+is that **`application` was doing four jobs**, two of which collide: §2 said *every user
+runs the application* (the node software) while §11.0.1 said *an application can be any
+scale* (the wider system). A reader meeting §2 first carries the wrong sense into §11.
+
+**The author's ruling settles it without new jargon**: *"2 is the client software and
+11 is the resource application."*
+
+**Seven sites now say `client software` or `server software`** — §2's Infra node and
+Light client rows, §3.3's deeper-chain rule, §4's in-scope list, and
+`light-client-requirements.md`'s opening line. §2's Light client row already said the
+term *names software*; it now uses the word.
+
+**`resource application` is anchored where it first appears** in both documents that
+use it — *the wider system a resource is one instance of; the network hosts the
+instance and knows nothing of the system*. A21 follows it.
+
+**Verified**: the node-software sense appears nowhere in the five design documents.
+What remains is the **Local application** category name, the conventional layer sense,
+and one *act of applying*. Zero unresolved references; every removed token is an
+`application` that was renamed. `change-log.md`'s own occurrence stays as written.
+
+**Left open**: §2's `Resource` row still reads *"a service, data store or application
+owned by a node"* — the fourth sense, enumerating what a resource can front where §11's
+category table does it better. The author did not speak to it.

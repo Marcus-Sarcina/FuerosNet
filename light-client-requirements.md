@@ -1,6 +1,6 @@
 # Light client — requirements
 
-**What a participant's client application must do.** Companion to
+**What a participant's client software must do.** Companion to
 `network-design.md`, which is authoritative on protocol; this document is
 authoritative on client behaviour.
 

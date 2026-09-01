@@ -211,11 +211,13 @@ vignette.
 
 ### 4.1 Wider reach is federation, not wider scope
 
-**A resource is neighbourhood-scale; an application can be any scale.** §7.1.1
-bounds a resource to its owner's Dunbar Org. **That is not a ceiling on what can be
-built**: a subnet-wide or cross-subnet service is **many local instances**, each
-hosted by a patron, each administering its own team, with the application handling
-instance-to-instance connection in its own architecture. It is the same shape as
+**A resource is neighbourhood-scale; a resource application can be any scale.** A
+**resource application** is the wider system your package is one instance of (design
+§11.0.1). §7.1.1 bounds a resource to its owner's Dunbar Org. **That is not a ceiling
+on what can be built**: a subnet-wide or cross-subnet service is **many local
+instances**, each hosted by a patron, each administering its own team, with the
+resource application handling instance-to-instance connection in its own
+architecture. It is the same shape as
 §4's gateway category at a different scale — one mechanism, not two.
 
 **What this means for a package author.** Do not design for a single wide-scale
