@@ -139,6 +139,12 @@ context rather than content also makes the check free.
 - **Duplicate map keys MUST be rejected before the map is materialised.** A
   decoder that parses into a map type first has already collapsed them, and
   deterministic encoding is then satisfied by a body the sender never sent.
+- **Unsigned messages reject unknown map keys — every message outside a
+  signature's coverage, in every family.** The preserve-unknown-keys rule below
+  exists so an extension survives re-serialisation for signature verification;
+  an unsigned message is never re-serialised for one, so there is nothing for
+  preservation to protect — and accepting unknown keys on an unsigned message is
+  accepting unbounded input from an unauthenticated peer.
 - **An OPTIONAL field whose value would be an empty array or map MUST be omitted,
   never encoded empty.** Absent and present-but-empty produce different bytes
   and therefore different signatures and txids; without this the same logical object
@@ -553,7 +559,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   latency (design §7.6.3). Without the second half the field is not
   deterministic. *Proximity is disclosable (§4.5.1), so this is the one structural
   rule checked only when its field is revealed — withheld, it reports
-  unverifiable, never valid and never malformed.*
+  unverifiable, never valid and never malformed. **Revealed and violated, the
+  record is malformed**, like any structural failure.*
 - **A key may appear in at most one formation record: its first.** A formation record's key 0 list for each signer MUST be exactly
   **the genesis value, `[ SHA-256(signer keyhash) ]`** — the same encoding every
   first transaction carries (§3.1).
@@ -597,15 +604,18 @@ Rules a validator checks from the record alone. All were previously unstated.
 No maximum age or future tolerance applies; a decoder has no authoritative clock
 to check against and inventing one would make validity depend on the reader.
 
-**But `started_at` is not merely evidentiary, and MUST be monotonic against the
-committed back-pointer.** The predecessor's time is its **effective time** —
-`finalized_at` for a presence record, the transaction `timestamp` (§1) for every
-other type, stated because a predecessor need not be a presence record and only
-presence records carry `finalized_at`. Every predecessor in a merge list is
-checked. For each signer, `started_at` MUST be
-greater than or equal to the `finalized_at` of the record its key 0 back-pointer
-names, and `finalized_at` MUST be greater than or equal to `started_at`. **A record
-violating either is malformed.**
+**But effective time is not merely evidentiary, and MUST be monotonic against
+the committed back-pointers — for every transaction type.** A record's
+**effective time** is `finalized_at` for a presence record and the transaction
+`timestamp` (§1) for every other type. For each signer, the current record's
+effective time — `started_at` for a presence record, `timestamp` otherwise —
+MUST be greater than or equal to the effective time of **every** record its key 0
+list names, every predecessor in a merge list checked; and a presence record's
+`finalized_at` MUST be greater than or equal to its `started_at`. **A record
+violating any of these is malformed.** Stated for all types because §5.4's
+pruning and §3.2's chronology bound rely on effective time being monotonic along
+**every** verified chain — a rule binding presence records alone would let a
+non-presence transaction bridge backward through the chain and break both.
 
 **Without that bound, backdating collapses verification.** `started_at` determines
 the 730-day window, so *n* — and therefore the selection threshold — is computed
@@ -2185,13 +2195,10 @@ a signed object a node retains — 16 per map and 1 KB per value. **Extension
 tolerance is not unbounded tolerance**, and a rule that admits arbitrary bytes into
 retained state is a denial-of-service surface however well-intentioned.
 
-**Unsigned session messages reject unknown map keys** — `CatalogQuery`,
-`CatalogReply`, `ResourceRequest`, `ResourceResponse` and the control frames of
-§8.0 alike. The
-preserve-unknown-keys rule (§1) exists so an extension survives re-serialisation for
-signature verification. **Neither of these is signed and neither is re-serialised**,
-so there is nothing for preservation to protect — and accepting unknown keys on an
-unsigned message is accepting unbounded input from an unauthenticated peer.
+**Unsigned session messages reject unknown map keys** (§1's global rule) —
+`CatalogQuery`, `CatalogReply`, `ResourceRequest`, `ResourceResponse` and the
+control frames of §8.0 alike, and equally every unsigned family this chapter does
+not name: resolution, prekey and archive requests, grants and wrappers.
 
 **An asker outside the answering node's horizon is refused before the application
 reply.** Close the stream; do not return an empty `CatalogReply`. **An empty
@@ -2489,10 +2496,10 @@ LateResponse = {
 ```
 
 **It does not amend the record it names.** A presence record is immutable and its
-`txid` fixes its content; this object sits beside it. **Finalization is unaffected**
-— the record already met its threshold, and §4.5's structural rules governed what
-counted at that moment. A late response is additional evidence an evaluator may
-weigh, never a change to what was decided.
+`txid` fixes its content; this object sits beside it. **The record is unaffected**
+— it finalised with the responses that had arrived, its unanswered slots absent
+and visible (§5.5, §3.2). A late response is additional evidence an evaluator may
+weigh, never a change to what was decided — and never retro-inserted.
 
 **The verifier must have been in the selected set** for that subject, and the
 response must carry the same `query_id` the subject countersigned. Otherwise

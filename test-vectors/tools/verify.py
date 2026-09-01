@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Independent verification harness for the RHTN test vectors.
+
+Deliberately separate from generate.py: its own CBOR decoder and encoder, its
+own Sig_structure reconstruction, no shared code — so agreement between the two
+is evidence, not tautology. Reads the generated markdown, re-derives and checks
+every claim it can reach:
+
+  - all eleven identities' keyhashes, from the stated seeds (ML-DSA public keys
+    re-derived via dilithium-py, and cross-checked via pyca `cryptography`'s
+    independent ML-DSA implementation where importable);
+  - every transaction body: canonical parse (sorted unique keys, definite
+    lengths, shortest forms via re-encode comparison) and txid;
+  - every envelope: entry order, header profile, and every signature under
+    both algorithms — ML-DSA verified with pyca where importable, else
+    dilithium-py;
+  - the standalone COSE_Sign1 objects (SignedLocator ×2, EndpointRecord ×3)
+    and the wrong-signer negative (must NOT verify under the named subject);
+  - the extension-coverage mutations: E10 (top-level and nested) and E13 must
+    break their signatures;
+  - the verifier-selection arithmetic: nonces (HMAC per §5.2.1), commitments,
+    seed, ranks, selection, required() table rows, window-boundary table;
+  - the formation record's structural claims (R8 genesis form, R14 ordinal).
+
+Exit status 0 only if every check passes.
+Requires: cryptography (Ed25519), dilithium-py; pyca cryptography >= 45
+optionally strengthens the ML-DSA check to a second implementation.
+"""
+
+import hashlib, hmac, os, re, sys
+
+HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+def read(name):
+    return open(os.path.join(HERE, name), encoding='utf-8').read()
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from dilithium_py.ml_dsa import ML_DSA_65
+try:
+    from cryptography.hazmat.primitives.asymmetric.mldsa import (
+        MLDSA65PublicKey, MLDSA65PrivateKey)
+    PYCA_MLDSA = True
+except ImportError:
+    PYCA_MLDSA = False
+
+H = lambda b: hashlib.sha256(b).digest()
+FAILURES = []
+def check(cond, what):
+    if cond:
+        print('  ok  ' + what)
+    else:
+        print('FAIL  ' + what)
+        FAILURES.append(what)
+
+# ---------------------------------------------------------------- CBOR
+def parse(b, off=0):
+    ib = b[off]; mt = ib >> 5; ai = ib & 0x1f; off += 1
+    if ai < 24: n = ai
+    elif ai == 24: n = b[off]; off += 1
+    elif ai == 25: n = int.from_bytes(b[off:off+2], 'big'); off += 2
+    elif ai == 26: n = int.from_bytes(b[off:off+4], 'big'); off += 4
+    elif ai == 27: n = int.from_bytes(b[off:off+8], 'big'); off += 8
+    else: raise ValueError('indefinite length')
+    if mt == 0: return n, off
+    if mt == 1: return -1 - n, off
+    if mt == 2: return b[off:off+n].hex(), off + n
+    if mt == 3: return b[off:off+n].decode(), off + n
+    if mt == 4:
+        out = []
+        for _ in range(n):
+            v, off = parse(b, off); out.append(v)
+        return out, off
+    if mt == 5:
+        out = {}; prev = None
+        for _ in range(n):
+            ks = off; k, off = parse(b, off); kb = b[ks:off]
+            if prev is not None and kb <= prev:
+                raise ValueError('map keys unsorted or duplicate')
+            prev = kb; v, off = parse(b, off); out[k] = v
+        return out, off
+    if mt == 7 and ai == 20: return False, off
+    if mt == 7 and ai == 21: return True, off
+    if mt == 7 and ai == 22: return None, off
+    raise ValueError((mt, ai))
+
+def hd(m, n):
+    if n < 24: return bytes([m << 5 | n])
+    if n < 0x100: return bytes([m << 5 | 24, n])
+    if n < 0x10000: return bytes([m << 5 | 25]) + n.to_bytes(2, 'big')
+    if n < 0x100000000: return bytes([m << 5 | 26]) + n.to_bytes(4, 'big')
+    return bytes([m << 5 | 27]) + n.to_bytes(8, 'big')
+bs = lambda x: hd(2, len(x)) + x
+ts = lambda x: hd(3, len(x.encode())) + x.encode()
+def enc(o):
+    if isinstance(o, bool): return b'\xf5' if o else b'\xf4'
+    if isinstance(o, int): return hd(0, o) if o >= 0 else hd(1, -1 - o)
+    if isinstance(o, str): return bs(bytes.fromhex(o))
+    if isinstance(o, list): return hd(4, len(o)) + b''.join(enc(x) for x in o)
+    if isinstance(o, dict):
+        pr = sorted((enc(k), enc(v)) for k, v in o.items())
+        return hd(5, len(pr)) + b''.join(a + b for a, b in pr)
+    if o is None: return b'\xf6'
+    raise TypeError(o)
+
+def canonical(b):
+    obj, end = parse(b)
+    return obj if (end == len(b) and enc(obj) == b) else None
+
+def sig_sign(prot, payload):
+    return hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:envelope') + bs(payload)
+def sig_sign1(prot, aad, payload):
+    return hd(4, 4) + ts('Signature1') + bs(prot) + bs(aad) + bs(payload)
+
+# ---------------------------------------------------------------- identities
+NAMES = ['alice', 'bob', 'carol', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']
+ED, PQ, KH = {}, {}, {}
+for n in NAMES:
+    ed = Ed25519PrivateKey.from_private_bytes(H(f'rhtn-test-vectors:{n}:ed25519-seed'.encode()))
+    ED[n] = ed.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    xi = H(f'rhtn-test-vectors:{n}:ml-dsa-65-seed'.encode())
+    pk, _ = ML_DSA_65.key_derive(xi)
+    if PYCA_MLDSA:
+        assert MLDSA65PrivateKey.from_seed_bytes(xi).public_key().public_bytes_raw() == pk
+    PQ[n] = pk
+    km = hd(4, 2) \
+        + (hd(5, 3) + b'\x01\x01\x20\x06\x21' + bs(ED[n])) \
+        + (hd(5, 3) + b'\x01\x07\x03\x38\x30\x20' + bs(pk))
+    KH[n] = H(km).hex()
+keys_md = read('keys.md')
+stated = dict(re.findall(r'\| (\w+) \| [^|]+ \| `[0-9a-f]{64}` \| `([0-9a-f]{64})` \|', keys_md))
+check(all(stated.get(n) == KH[n] for n in NAMES),
+      f'keyhashes: all {len(NAMES)} re-derived from seeds'
+      + (' (ML-DSA cross-checked against pyca)' if PYCA_MLDSA else ' (dilithium-py only)'))
+BY = {KH[n]: n for n in NAMES}
+
+def verify_sig(name, alg, sig, tbs):
+    if alg == -8:
+        try:
+            Ed25519PublicKey.from_public_bytes(ED[name]).verify(sig, tbs); return True
+        except Exception:
+            return False
+    if PYCA_MLDSA:
+        try:
+            MLDSA65PublicKey.from_public_bytes(PQ[name]).verify(sig, tbs); return True
+        except Exception:
+            return False
+    return ML_DSA_65.verify(PQ[name], tbs, sig)
+
+# ---------------------------------------------------------------- bodies + envelopes
+tx = read('transactions.md')
+bodies = re.findall(r'```\n([0-9a-f\n]+?)```\n\ntxid: `([0-9a-f]{64})`', tx)
+ok = 0
+for hexs, txid in bodies:
+    b = bytes.fromhex(hexs.replace('\n', ''))
+    obj = canonical(b)
+    if obj is not None and hashlib.sha256(b).hexdigest() == txid: ok += 1
+check(ok == len(bodies), f'bodies: {ok}/{len(bodies)} canonical with matching txid')
+
+envs = 0; sigs = 0; sig_ok = 0; ext_env = None
+for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
+    b = bytes.fromhex(m.group(1).replace('\n', ''))
+    try:
+        obj = canonical(b)
+    except Exception:
+        continue
+    if not isinstance(obj, dict) or set(obj) != {1, 2, 3, 4}: continue
+    envs += 1
+    body = enc(obj[3])
+    if isinstance(obj[3], dict) and 99 in obj[3]: ext_env = (obj, body)
+    prev = None
+    for entry in obj[4][3]:
+        prot = bytes.fromhex(entry[0]); pobj, _ = parse(prot)
+        name = BY[pobj[4]]; sigs += 1
+        if verify_sig(name, pobj[1], bytes.fromhex(entry[2]), sig_sign(prot, body)):
+            sig_ok += 1
+        key = (pobj[4], 0 if pobj[1] == -8 else 1)
+        assert prev is None or key > prev, 'entry order violated'
+        prev = key
+check(sig_ok == sigs, f'envelopes: {envs} found, {sig_ok}/{sigs} signatures verify (both algorithms)')
+
+# E10: both extension mutations break all four signatures
+obj, body = ext_env
+muts = [body.replace(bytes.fromhex('c0ffee'), bytes.fromhex('c0ffef')),
+        body.replace(hd(0, 99) + bs(bytes.fromhex('beef')),
+                     hd(0, 99) + bs(bytes.fromhex('beee')))]
+broken = 0
+for bad in muts:
+    assert bad != body
+    for entry in obj[4][3]:
+        prot = bytes.fromhex(entry[0]); pobj, _ = parse(prot)
+        if not verify_sig(BY[pobj[4]], pobj[1], bytes.fromhex(entry[2]), sig_sign(prot, bad)):
+            broken += 1
+check(broken == 8, 'E10: top-level and nested mutations each break all four signatures')
+
+# ---------------------------------------------------------------- standalone Sign1
+pr = read('primitives.md'); rc = read('records.md')
+def sign1_object(hexs, aad, fields):
+    b = bytes.fromhex(hexs.replace('\n', ''))
+    obj = canonical(b); assert obj is not None
+    sig_slot = max(k for k in obj if isinstance(k, int) and k <= 10)
+    payload = enc({k: v for k, v in obj.items() if k != sig_slot})
+    prot = bytes.fromhex(obj[sig_slot][0]); sig = bytes.fromhex(obj[sig_slot][3])
+    return obj, prot, sig, sig_sign1(prot, aad, payload)
+
+m = re.search(r'## SignedLocator.*?Complete `SignedLocator`.*?```\n([0-9a-f\n]+?)```', pr, re.S)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+check(verify_sig(BY[obj[1]], -8, sig, tbs), 'SignedLocator: signature by the named subject')
+m = re.search(r'## Same-series counter jump.*?Complete object.*?```\n([0-9a-f\n]+?)```', pr, re.S)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][3] == [5, 100],
+      'counter-jump SignedLocator: verifies, seqno [5,100]')
+m = re.search(r'## A wrong-signer `SignedLocator`.*?```\n([0-9a-f\n]+?)```', pr, re.S)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 2)
+check(not verify_sig(BY[obj[1]], -8, sig, tbs) and verify_sig('bob', -8, sig, tbs),
+      'S23 wrong-signer: rejected under field 1, valid under bob — binding is the only defect')
+found = []
+for m in re.finditer(r'```\n(a[45][0-9a-f\n]+?)```', rc):
+    b = bytes.fromhex(m.group(1).replace('\n', ''))
+    try:
+        obj = canonical(b)
+    except Exception:
+        continue
+    if isinstance(obj, dict) and 4 in obj and isinstance(obj[4], list):
+        payload = enc({k: v for k, v in obj.items() if k != 4})
+        prot = bytes.fromhex(obj[4][0]); sig = bytes.fromhex(obj[4][3])
+        good = verify_sig(BY[obj[1]], -8, sig, sig_sign1(prot, b'rhtn/1:endpoints', payload))
+        found.append((obj, sig, prot, payload, good))
+check(len(found) == 3 and all(g for *_, g in found),
+      f'EndpointRecords: {len(found)} found, all verify under the named node')
+pair = [o for o, *_ in found if 99 not in o]
+check(len(pair) == 2 and pair[0][3] == pair[1][3] and pair[0][2] != pair[1][2],
+      'conflict pair: same seqno, different endpoints, both individually valid')
+extr = [(o, s, p, pl) for o, s, p, pl, _ in found if 99 in o][0]
+bad = enc({k: (v if k != 99 else 'c0ffef') for k, v in extr[0].items() if k != 4})
+check(not verify_sig(BY[extr[0][1]], -8, extr[1], sig_sign1(extr[2], b'rhtn/1:endpoints', bad)),
+      'E13: mutating the Sign1-path extension breaks the signature')
+
+# ---------------------------------------------------------------- selection arithmetic
+v = read('verifier-selection.md')
+rows = re.findall(r'\| (w\d) \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|', v)
+pa, pb = sorted([bytes.fromhex(KH['alice']), bytes.fromhex(KH['carol'])])
+ordinal = int(re.search(r'86400\) = (\d+)', v).group(1))
+good = True
+for name, sec, nonce, comm in rows:
+    n2 = hmac.new(bytes.fromhex(sec), b'rhtn/1:wnonce' + pa + pb + ordinal.to_bytes(8, 'big'),
+                  hashlib.sha256).digest()
+    good &= (n2.hex() == nonce)
+    good &= (H(b'rhtn/1:nonce-commit' + bytes.fromhex(KH[name]) + n2).hex() == comm)
+check(good, 'nonces and commitments re-derived per §5.2.1/§5.1')
+ws = sorted(['w1', 'w2', 'w3'], key=lambda n: KH[n])
+pre = b'rhtn/1:verifier-seed' + pa + pb + ordinal.to_bytes(8, 'big')
+for n in ws:
+    pre += bytes.fromhex(KH[n]) + bytes.fromhex([r[2] for r in rows if r[0] == n][0])
+seed = H(pre)
+check(seed.hex() == re.search(r'seed: `([0-9a-f]{64})`', v).group(1), 'seed re-derived per §5.3')
+ranks = {c: H(seed + bytes.fromhex(KH['alice']) + bytes.fromhex(KH[c])).hex()
+         for c in ['c1', 'c2', 'c3', 'c4', 'c5']}
+check(all(re.search(rf'\| {c} \| `{ranks[c]}` \|', v) for c in ranks), 'ranks re-derived per §5.4')
+sel = sorted(ranks, key=lambda c: (ranks[c], KH[c]))[:3]
+check(f"selected: {', '.join(sel)}" in v, 'selection: first 3 by ascending rank')
+good = True
+for n, c, r in re.findall(r'\| (\d+) \| (\d+) \| (\d+) \|', v):
+    good &= (min(int(n) // 2, 10, int(c)) == int(r))
+check(good, 'required() table rows match the formula')
+
+# ---------------------------------------------------------------- formation structural
+m = re.search(r'## Presence record.*?```\n([0-9a-f\n]+?)```', tx, re.S)
+obj = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
+p0, p1 = obj[3][0][1], obj[3][1][1]
+check(4 not in obj and 5 not in obj and obj[6] == 1, 'formation: keys 4/5 absent, subtype 1')
+check(obj[0] == [[H(bytes.fromhex(p0)).hex()], [H(bytes.fromhex(p1)).hex()]],
+      'formation R8: key 0 is exactly the genesis value per signer')
+check(obj[7] == obj[1] // 86400, 'formation R14: ordinal equals floor(started_at/86400)')
+
+print()
+if FAILURES:
+    print(f'{len(FAILURES)} FAILURE(S)'); sys.exit(1)
+print('ALL CHECKS PASS')

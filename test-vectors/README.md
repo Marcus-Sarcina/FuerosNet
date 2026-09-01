@@ -10,16 +10,27 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `2cb9ce091981a99d3aa4221cb0bb39060f65f16d505520989089d379282f70fd` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `c6ffa3450a8ae9941a0426f5e39d58e60823dbcd37f904848bcfc708b0cff86b` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
-**Scope**: wire-format/protocol **interoperability** vectors. This is not a
-certification suite for client and operator behavioural commitments, which are
-deliberately unenforceable from bytes (design §1.1) and live in the
-requirements documents.
+**Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
+named **client-conformance** vectors where a client rule is normative and
+computable — today the §5.2.1 nonce derivation, which is why
+`light-client-requirements.md` is pinned alongside the two protocol documents.
+Beyond those named vectors this is not a certification suite for client and
+operator behavioural commitments, which are deliberately unenforceable from
+bytes (design §1.1).
 
 The generated documents are produced by `tools/generate.py` (Python 3 with
 the `cryptography` package for Ed25519 and **`dilithium-py` for ML-DSA-65**);
-re-running it reproduces them byte-for-byte. **Each generated file pins the SHA-256 of both
+re-running it reproduces them byte-for-byte. **`tools/verify.py` is the
+independent harness** — its own decoder and Sig_structure reconstruction,
+sharing no code with the generator — re-deriving every key, verifying every
+signature (ML-DSA under pyca `cryptography`'s independent implementation where
+available), and checking every mutation and arithmetic claim; run it after any
+regeneration. `tools/spec-pins.json` gates generation: a changed specification
+needs `--accept-spec-change`, a changed generator `--accept-generator-change`,
+a missing pin file `--bootstrap-pins`; it records the producer's and every
+output's SHA-256. **Each generated file pins the SHA-256 of both
 `network-design.md` and `wire-format.md`** — the design wins on any
 disagreement, so a design-only semantic change stales these vectors with the
 wire pin still green; a stale pin of either means regenerate before trusting a
@@ -174,10 +185,17 @@ negatives (T9–T12). Still open:
    request/response. The families differ on exactly the points a generic
    implementation gets wrong: unknown control-frame types versus unknown
    request types extend differently, and stream 0's 64 KB bound is not §9.2's
-   256 KB.
-10. **Signer-to-role binding per type** (S17's generalisation): every
-    transaction type gets an envelope or a context fixture in which the wrong
-    real identity signs with the right shape.
+   256 KB. **Session semantics additionally need trace fixtures** — sequences
+   with expected actions (`skip_frame`, `fail_attach`, `close_stream`,
+   `session_survives`, `defer_until_handshake`) — because a static
+   `bytes → result` fixture cannot express rules like *unknown control frames
+   are skipped while the session survives* (sixth review).
+10. **Signer-to-role binding everywhere a signer is named** — every
+    transaction type (S17), and every **standalone signed object** (S23's
+    generalisation; the wrong-signer `SignedLocator` exists as generated
+    bytes, and each remaining signed context gets its analogue with its
+    positive vector). The defect is always the same: a cryptographically
+    valid signature under a key the object does not name.
 11. **Finalization semantics on the normal record**: must-accept records
     finalized on `no-match`, `inconclusive`, `unavailable`, and on **absent
     selected slots** — the threshold sizes the sample and does not gate
@@ -185,6 +203,14 @@ negatives (T9–T12). Still open:
     commitment-mismatch fixture (V5); and the committed-predecessor trap — a
     post-ceremony backfilled head that would change *n*, with the expected
     selection unchanged.
+12. **The enumeration/extension posture as a systematic matrix** (sixth
+    review; E8's two wrong instantiations are the argument): every closed
+    enumeration gets an unknown-value rejection fixture, every deliberately
+    open namespace a must-accept fixture — enumerated mechanically from the
+    schemas, not remembered.
+13. **Optionals-exercised positives grow with every schema**: no optional
+    field should exist that no positive vector ever decodes
+    (`transactions.md` now carries the first three).
 
 ## Reviewing this draft
 

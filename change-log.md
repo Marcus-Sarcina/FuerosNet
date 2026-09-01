@@ -7432,3 +7432,40 @@ the pin file as provenance. The canonical bar tightened in two places: the merge
 history must be a **diamond** (the fixture that fails chain code with no visited
 set), and every conformance case must resolve to exact bytes or a deterministic
 mutation of a named positive vector — a corpus, not a description.
+
+### 2026-09-01 (sixth vector review: the monotonicity gap, and the harness joins the corpus)
+The round's most consequential finding was its last-listed and first-priority one:
+**§3.3 bound effective time for presence records only, while §5.4's pruning and
+§3.2's chronology rationale rely on monotonicity along every verified chain** — as
+written, a non-presence transaction could bridge backward through a chain and
+break both. §3.3 now states the rule for every type: each record's effective time
+must clear every committed predecessor's, merge heads included, and the reliance
+is stated as the reason. T24 is the temporal-bridge negative.
+
+**Two more stale survivors fell**: `LateResponse` still said the record "already
+met its threshold" (with a mis-aimed §4.5 citation beside it), and the unsigned
+unknown-key rule named five message families where its own rationale is fully
+general — it now lives in §1 as a rule for every message outside a signature's
+coverage. **And one drift was the vector suite's own**: R11 called a revealed
+`strongest` violation a failed check when §3.2 calls the rule *structural* —
+revealed-and-violated is malformed, §3.2 now says so in words, and the row
+records its own correction.
+
+**The suite gained its independent harness**: `tools/verify.py`, sharing no code
+with the generator — its own decoder, its own Sig_structure reconstruction —
+re-deriving all eleven identities, verifying all fourteen bodies and every
+signature under two ML-DSA implementations, and proving the mutation properties.
+Eighteen checks, exit-nonzero, part of the corpus so the cross-implementation
+claims are reproducible rather than asserted. **The generator hardened around
+it**: construction assertions on every primitive, both hand-typed tables now
+generated from the functions they document, pins v2 gating the generator itself
+and the newly pinned `light-client-requirements.md`, and every output's SHA-256
+recorded.
+
+**New vectors, all harness-verified**: a wrong-signer `SignedLocator` — bob's
+cryptographically valid signature under alice's name, the binding the only defect
+(S23); a nested unknown key inside the extension adoption's `Locator`, both
+mutations breaking all four signatures; and three optionals-exercised bodies, so
+no schema field exists that no positive vector decodes. Fixture rows P15–P18,
+T24, V8, C3 and bar items 12–13 complete the round. Dispositions in
+`Robot/review-tracking.md`.

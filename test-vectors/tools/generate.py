@@ -35,6 +35,7 @@ def _sha(name):
     return hashlib.sha256(open(os.path.join(_ROOT, name), 'rb').read()).hexdigest()
 WIRE_SHA = _sha('wire-format.md')
 DESIGN_SHA = _sha('network-design.md')
+LIGHT_SHA = _sha('light-client-requirements.md')
 
 # --- The pin gate. A changed specification hash means the generator's
 # hard-coded constructions may encode stale semantics: refuse to stamp new
@@ -43,24 +44,35 @@ DESIGN_SHA = _sha('network-design.md')
 # a human audited the constructions against the diff.
 import json, sys
 _PINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spec-pins.json')
-_current = {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA}
+_current = {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA,
+            'light-client-requirements.md': LIGHT_SHA}
+GEN_SHA = hashlib.sha256(open(os.path.abspath(__file__), 'rb').read()).hexdigest()
 if os.path.exists(_PINS):
     _stored = json.load(open(_PINS, encoding='utf-8'))
-    _stored_specs = {k: v for k, v in _stored.items() if k != 'tools/generate.py'}
+    if 'specs' in _stored:
+        _stored_specs, _stored_gen = _stored['specs'], _stored.get('generator')
+    else:  # legacy flat format
+        _stored_specs = {k: v for k, v in _stored.items() if k != 'tools/generate.py'}
+        _stored_gen = _stored.get('tools/generate.py')
     if _stored_specs != _current and '--accept-spec-change' not in sys.argv:
         sys.exit('spec-pins.json does not match the current specifications.\n'
                  'Audit the generator against the specification diff, then rerun '
                  'with --accept-spec-change.')
+    if _stored_gen != GEN_SHA and '--accept-generator-change' not in sys.argv \
+            and '--accept-spec-change' not in sys.argv:
+        sys.exit('the generator has changed since spec-pins.json was written.\n'
+                 'A generator-only change can alter every vector with both spec '
+                 'pins green: rerun with --accept-generator-change after '
+                 'reviewing the generator diff.')
 elif '--bootstrap-pins' not in sys.argv:
     sys.exit('spec-pins.json is missing. A missing pin file is not a clean '
              'slate — regenerating would silently baseline unaudited '
              'specifications. Restore it from version control, or rerun with '
              '--bootstrap-pins to deliberately establish a new baseline.')
-# provenance: record which generator produced the artifacts (not gated —
-# the spec hashes gate; this line authenticates the producer)
-GEN_SHA = hashlib.sha256(open(os.path.abspath(__file__), 'rb').read()).hexdigest()
-_record = dict(_current); _record['tools/generate.py'] = GEN_SHA
-json.dump(_record, open(_PINS, 'w', encoding='utf-8', newline='\n'), indent=1)
+
+def _write_pins(output_hashes):
+    json.dump({'specs': _current, 'generator': GEN_SHA, 'outputs': output_hashes},
+              open(_PINS, 'w', encoding='utf-8', newline='\n'), indent=1)
 
 def _repin_hand_file(name):
     """The hand-authored files carry one machine-managed pin line so staleness
@@ -80,11 +92,12 @@ def _repin_hand_file(name):
     if not hit:
         sys.exit(name + ' has no "**Pinned**:" line to manage.')
     open(path, 'w', encoding='utf-8', newline='\n').write('\n'.join(out))
-PIN = ("Generated against `wire-format.md` SHA-256 `" + WIRE_SHA + "` and "
-       "`network-design.md` SHA-256 `" + DESIGN_SHA + "` — the design wins on "
-       "any disagreement, so a design-only semantic change also stales these "
-       "vectors. Regenerate after any change to either. Producer recorded in "
-       "`tools/spec-pins.json`.")
+PIN = ("Generated against `wire-format.md` `" + WIRE_SHA[:16] + "…`, "
+       "`network-design.md` `" + DESIGN_SHA[:16] + "…` and "
+       "`light-client-requirements.md` `" + LIGHT_SHA[:16] + "…` (full hashes, "
+       "producer and output hashes in `tools/spec-pins.json`). The design wins "
+       "on any disagreement; a change to any pinned document stales these "
+       "vectors.")
 
 # ---------------------------------------------------------------- CBOR encoder
 # Deterministic encoding per RFC 8949 §4.2 as profiled by wire-format.md §1:
@@ -109,6 +122,8 @@ def e_tstr(s):  b = s.encode(); return head(3, len(b)) + b
 def e_arr(items):  # items are pre-encoded byte strings
     return head(4, len(items)) + b''.join(items)
 def e_map(pairs):  # pairs of (encoded_key, encoded_value)
+    keys = [k for k, _ in pairs]
+    assert len(keys) == len(set(keys)), 'duplicate map key in a positive vector'
     return head(5, len(pairs)) + b''.join(k + v for k, v in sorted(pairs))
 
 NULL = b'\xf6'
@@ -188,9 +203,15 @@ def cose_signature_entry(protected_bytes, signature):
     wire §3.5), signature: bstr]"""
     return e_arr([e_bstr(protected_bytes), b'\xa0', e_bstr(signature)])
 
+SIGNER_COUNT = {1: 2, 2: 1, 3: 1, 4: 2, 7: 2}  # per-type logical signers (§3.1)
+
 def envelope(version, msg_type, body_bytes, signers):
-    """signers: list of Identity, already the type's logical signer set.
-    Entries sort by kid, then classical before post-quantum (wire §3.5)."""
+    """signers: the type's logical signer set — asserted against §3.1's
+    per-type count and for distinctness. Entries sort by kid, then classical
+    before post-quantum (wire §3.5)."""
+    if msg_type in SIGNER_COUNT:
+        assert len(signers) == SIGNER_COUNT[msg_type], 'wrong signer count for type'
+    assert len({i.keyhash for i in signers}) == len(signers), 'duplicate signer'
     entries = []
     for ident in sorted(signers, key=lambda i: i.keyhash):
         for alg in (-8, -49):
@@ -209,6 +230,8 @@ def envelope(version, msg_type, body_bytes, signers):
 # ---------------------------------------------------------------- primitives
 
 def path(nibbles):
+    assert 1 <= len(nibbles) <= 24 and all(0 <= n <= 9 for n in nibbles), \
+        'path: nibbles 0-9, length 1-24 (wire §2.1)'
     packed = bytearray()
     for i in range(0, len(nibbles) - 1, 2):
         packed.append(nibbles[i] << 4 | nibbles[i + 1])
@@ -217,6 +240,7 @@ def path(nibbles):
     return e_map([(e_uint(1), e_bstr(bytes(packed))), (e_uint(2), e_uint(len(nibbles)))])
 
 def seqno(series, counter):
+    assert 0 <= series < 2**32 and 0 <= counter < 2**32, 'seqno: u32 ranges (§2.3)'
     return e_arr([e_uint(series), e_uint(counter)])
 
 def locator(anchor_kh, path_bytes, seqno_bytes):
@@ -230,6 +254,10 @@ def genesis(keyhash):
     return H(keyhash)
 
 def backptrs(*lists):
+    assert lists, 'at least one signer list (§3.1)'
+    for one in lists:
+        assert 1 <= len(one) <= 8 and all(len(h) == 32 for h in one), \
+            'back-pointers: 1-8 entries of 32 bytes per signer (§1, §3.1)'
     return e_arr([e_arr([e_bstr(h) for h in one]) for one in lists])
 
 # ---------------------------------------------------------------- formatting
@@ -354,6 +382,12 @@ sl2_sig = alice.sign(sl2_tbs)
 sl2 = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2),
              (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl2_sig)]))])
 
+# Wrong-signer negative: bob signs a locator whose field 1 names alice.
+sl_wrong_sig = bob.sign(sl_tbs)  # same payload, same tag, wrong key
+sl_wrong = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
+                  (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                                     e_bstr(sl_wrong_sig)]))])
+
 
 emit('primitives.md', f"""# Primitives
 
@@ -364,19 +398,13 @@ emit('primitives.md', f"""# Primitives
 
 ## Deterministic CBOR atoms (`wire-format.md` §1)
 
-Shortest-form unsigned integers at every width boundary:
+Shortest-form unsigned integers at every width boundary (rows generated by
+the same encoder every vector uses):
 
 | Value | Encoding |
 |---|---|
-| 0 | `00` |
-| 23 | `17` |
-| 24 | `1818` |
-| 255 | `18ff` |
-| 256 | `190100` |
-| 65535 | `19ffff` |
-| 65536 | `1a00010000` |
-| 4294967295 | `1affffffff` |
-| 4294967296 | `1b0000000100000000` |
+{chr(10).join(f'| {v} | `{e_uint(v).hex()}` |' for v in
+              [0, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296])}
 
 A 2026 timestamp encodes in five bytes, as §2 claims:
 `{TS_2026}` (2026-01-01T00:00:00Z) → `{hx(e_uint(TS_2026))}`.
@@ -469,6 +497,19 @@ Complete object ({len(sl2)} bytes):
 
 ```
 {hexblock(sl2)}
+```
+
+## A wrong-signer `SignedLocator` — MUST REJECT (S23)
+
+Field 1 names **alice**; the signature is **bob's**, and it is a
+cryptographically valid signature over exactly the right payload under the
+right tag. The only defect is the binding: the signer is not the named subject.
+An implementation that verifies the signature against "whatever key it
+resolves" instead of the key field 1 names accepts this object
+({len(sl_wrong)} bytes):
+
+```
+{hexblock(sl_wrong)}
 ```
 
 ## Genesis back-pointer (§3.1)
@@ -600,11 +641,15 @@ code40_txid = H(code40_body)
 
 # --- Adoption carrying a bounded unknown extension key: preserved,
 # re-serialised, and covered by txid and signatures (§1).
+ext_loc = e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                 (e_uint(2), path([3, 1, 4, 1, 5])),
+                 (e_uint(3), seqno(5, 42)),
+                 (e_uint(99), e_bstr(bytes.fromhex('beef')))])  # NESTED unknown key
 ext_body = e_map([
     (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
     (e_uint(1), e_bstr(alice.keyhash)),
     (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), loc),
+    (e_uint(3), ext_loc),
     (e_uint(4), e_uint(TS_ADOPT)),
     (e_uint(99), e_bstr(bytes.fromhex('c0ffee'))),
 ])
@@ -677,6 +722,41 @@ reissue2_body = e_map([
     (e_uint(5), e_uint(TS_DEPART + 2 * 86400)),
 ])
 reissue2_txid = H(reissue2_body)
+
+# --- Optionals-exercised bodies (F9, sixth review) ---
+adopt_full_body = e_map([
+    (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), loc),
+    (e_uint(4), e_uint(TS_ADOPT)),
+    (e_uint(5), alice.key_material),
+    (e_uint(7), e_bstr(depart_txid)),
+    (e_uint(8), e_bstr(formation_txid)),
+])
+adopt_full_txid = H(adopt_full_body)
+depart_r_body = e_map([
+    (e_uint(0), backptrs([adopt_txid])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), seqno(5, 45)),
+    (e_uint(4), e_uint(TS_DEPART + 7200)),
+    (e_uint(5), e_uint(2)),
+])
+depart_r_txid = H(depart_r_body)
+audit = e_map([(e_uint(1), e_uint(TS_DEPART)), (e_uint(2), b'\xf5'),
+               (e_uint(3), e_bstr(carol.keyhash))])
+peer_full_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [formation_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(carol.keyhash)),
+    (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+    (e_uint(4), network_point([192, 0, 2, 7])),
+    (e_uint(5), e_uint(TS_DEPART + 7200)),
+    (e_uint(6), e_uint(1 << 30)),
+    (e_uint(7), e_arr([audit])),
+])
+peer_full_txid = H(peer_full_body)
 
 emit('transactions.md', f"""# Transaction bodies, txids, and one full envelope
 
@@ -893,12 +973,13 @@ Body ({len(code40_body)} bytes):
 
 txid: `{hx(code40_txid)}`
 
-## Adoption carrying a bounded unknown extension key — MUST ACCEPT AND PRESERVE
+## Adoption carrying unknown extension keys, top-level AND nested — MUST ACCEPT AND PRESERVE
 
-The first adoption's body plus an unknown key `99` carrying `h'c0ffee'` —
-within §1's bounds (≤ 16 unknown keys, ≤ 1,024 encoded bytes each). A decoder
-MUST preserve it on re-serialisation, and it is covered by the txid and by
-every signature: note the txid differs from the first adoption's.
+The first adoption's body plus unknown key `99: h'c0ffee'` at the top level
+**and `99: h'beef'` nested inside the Locator** — §1's preservation rule reaches
+every map, and a typed implementation with a struct per schema can preserve the
+outer key while silently dropping the nested one. Both are covered by the txid
+and by every signature: mutating **either** breaks all four (E10).
 
 Body ({len(ext_body)} bytes):
 
@@ -954,7 +1035,41 @@ Body ({len(reissue2_body)} bytes):
 {hexblock(reissue2_body)}
 ```
 
-txid: `{hx(reissue2_txid)}`""")
+txid: `{hx(reissue2_txid)}`
+
+## Optionals exercised — three positive bodies no minimal vector decodes
+
+An implementation can pass every minimal vector above without ever decoding
+`KeyMaterial`, a `Recovery`-free adoption's optional references, a departure
+reason, or peering's commitment and audit history. These three close that.
+
+**Adoption with fields 5, 7 and 8** — carried `KeyMaterial` (alice's, hashing
+to field 1 per §4.1), an archive head, and a proof-of-presence reference
+({len(adopt_full_body)} bytes):
+
+```
+{hexblock(adopt_full_body)}
+```
+
+txid: `{hx(adopt_full_txid)}`
+
+**Departure with a reason code** (2, same enumeration as §4.3;
+{len(depart_r_body)} bytes):
+
+```
+{hexblock(depart_r_body)}
+```
+
+txid: `{hx(depart_r_txid)}`
+
+**Peering with commitment and audit history** — field 6 and one `Audit`
+({len(peer_full_body)} bytes):
+
+```
+{hexblock(peer_full_body)}
+```
+
+txid: `{hx(peer_full_txid)}`""")
 
 # ================================================================ records.md
 
@@ -1129,17 +1244,13 @@ seed: `{hx(seed)}`
 
 ## Threshold (§5.4)
 
-`required(subject) = min(floor(n / 2), 10, |candidates|)`:
+`required(subject) = min(floor(n / 2), 10, |candidates|)` (rows generated from
+the formula itself):
 
 | n | candidates | required |
 |---|---|---|
-| 0 | 0 | 0 |
-| 1 | 1 | 0 |
-| 2 | 1 | 1 |
-| 3 | 2 | 1 |
-| 7 | 5 | 3 |
-| 20 | 1 | 1 |
-| 25 | 12 | 10 |
+{chr(10).join(f'| {n} | {c} | {min(n // 2, 10, c)} |' for n, c in
+              [(0, 0), (1, 1), (2, 1), (3, 2), (7, 5), (20, 1), (25, 12)])}
 
 ## Sampling (§5.4)
 
@@ -1173,10 +1284,17 @@ With `started_at = {TS_START}`, the 730-day window is
 
 import os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+_outputs = {}
 for fname, parts in OUT.items():
+    data = '\n'.join(parts) + '\n'
     with open(fname, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('\n'.join(parts) + '\n')
+        f.write(data)
+    _outputs[fname] = hashlib.sha256(data.encode()).hexdigest()
     print(f"wrote {fname}")
 _repin_hand_file('README.md')
 _repin_hand_file('negative-vectors.md')
-print("repinned README.md, negative-vectors.md")
+for name in ('README.md', 'negative-vectors.md'):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', name)
+    _outputs[name] = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+_write_pins(_outputs)
+print("repinned README.md, negative-vectors.md; pins written")

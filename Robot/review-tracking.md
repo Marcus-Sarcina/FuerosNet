@@ -1957,3 +1957,35 @@ survivors of already-made rulings, so no new author decision was needed.
 | 8 | The standalone `COSE_Sign1` path under-tested: no kid/unprotected/alg negatives, no extension-coverage fixture | **CONFIRMED, FIXED** — S20–S22; and a **generated** extension `EndpointRecord` (D8) with its mutation complement (E13), independently verified both ways |
 | 9 | The pin gate silently bootstraps when the pin file is missing | **CONFIRMED, FIXED** — a missing file is now fatal without `--bootstrap-pins`, a flag deliberately distinct from `--accept-spec-change`; tested |
 | 10 | Text-mode I/O assumptions; no generator provenance | **CONFIRMED, FIXED** — every write is explicit UTF-8 with `\n` newlines; `spec-pins.json` now records the producing generator's SHA-256 (provenance, not gated) |
+
+---
+
+## Test-vector review, sixth run (2026-09-01)
+
+Fifteen findings; **fourteen verified and applied, one applied as a determinate
+completion the reviewer read as an open choice**. The round's centre of gravity was
+the reviewer's closing observation: the specification relied on an invariant §3.3
+did not impose.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | **Effective-time monotonicity stated for presence records only**, while §5.4's pruning and §3.2's chronology bound rely on it chain-wide — a non-presence transaction could bridge backward | **CONFIRMED, FIXED** — §3.3 now binds **every** type: each record's effective time (`started_at` or `timestamp`) ≥ every committed predecessor's, merge heads included, with the reliance stated as the reason. T24 is the temporal-bridge negative, with the one-head-violates merge variant |
+| 2 | `LateResponse` still said "the record already met its threshold" | **CONFIRMED, FIXED** — stale survivor of the absence ruling (with a stale §4.5-for-§3.2 citation beside it); now speaks in absent-slot terms |
+| 3 | R11's revealed-violation verdict was an unstated choice | **CONFIRMED — but determinate, and the drift was this file's, not the spec's**: §3.2 calls it a *structural* rule, so revealed-and-violated is malformed. §3.2 now says so explicitly; R11 corrected and its own history noted in the row |
+| 4 | The unsigned unknown-key rule named five families and left the rest ambiguous | **CONFIRMED, FIXED** — the rule is global in §1 (every message outside a signature's coverage), the §6 instance now cites it |
+| 5 | Chain-binding arity untested (list counts, 31/33-byte hashes, seqno arity) | **CONFIRMED, FIXED** — P15–P18 |
+| 6 | No fixture isolates the content-address check from signature verification | **CONFIRMED, FIXED** — V8: a valid signed envelope answering the wrong txid |
+| 7 | Signer-role binding missing for standalone objects | **CONFIRMED, FIXED** — a **generated** wrong-signer `SignedLocator` (field 1 alice, bob's valid signature; S23), harness-checked to fail under the named subject and verify under bob; bar 10 broadened |
+| 8 | Extension coverage only top-level | **CONFIRMED, FIXED** — the extension adoption now carries a **nested** unknown key inside its `Locator`; the harness proves both mutations break all four signatures |
+| 9 | Six-type positive coverage never decodes the optional fields | **CONFIRMED, FIXED** — three optionals-exercised bodies: adoption with `KeyMaterial`/head/PoP-ref, departure with reason, peering with commitment and audit; bar 13 makes the principle standing |
+| 10 | Session semantics need trace fixtures, not byte fixtures | **CONFIRMED** — bar 9 amended with the action vocabulary |
+| 11 | Two generator tables were hand-typed literals | **CONFIRMED, FIXED** — the shortest-form and `required()` tables are now generated from the same encoder and formula the vectors use |
+| 12 | Positive construction relied on author discipline | **CONFIRMED, FIXED** — assertions in `e_map` (duplicate keys), `path`, `seqno`, `backptrs`, and `envelope` (per-type signer counts, distinctness) |
+| 13 | Generator changes were recorded but not gated; outputs unhashed | **CONFIRMED, FIXED** — pins v2: three specs gated (`light-client-requirements.md` joins, per finding 15), generator gated behind `--accept-generator-change`, every output's SHA-256 recorded |
+| 14 | The cross-check claims were externally asserted, not in the corpus | **CONFIRMED, FIXED** — `tools/verify.py` is now part of the suite: an independent decoder and verifier sharing no code with the generator, 18 checks, exit-nonzero |
+| 15 | The nonce table's client-conformance status was outside the stated scope and pin model | **CONFIRMED, FIXED** — scope restated as wire interoperability *plus named client-conformance vectors*; the light-client document is pinned |
+
+Plus the two closing suggestions: the enumeration/extension **matrix** is bar 12
+(E8's two wrong instantiations being the argument for mechanical enumeration), and
+the rank tie-break is C3 — a comparator requirement the real-hash suite cannot
+instantiate without a SHA-256 collision.
