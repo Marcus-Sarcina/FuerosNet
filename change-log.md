@@ -7805,3 +7805,9 @@ twenty-six became the thirty-one it always was; nine leaves became seven and
 four proof hashes three; and §20.1's section column was remapped wholesale,
 merging two duplicate rows found in the process. Sweeps for every replaced
 phrase return nothing.
+
+The author confirmed both 0.2 reconstructions. His custody rationale is now in
+§7.5.2: the capture-time handover adds no new trust class — a compliant holder
+is already trusted to discard a released key after answering as a verifier, and
+discarding the sealing key is the same obligation at an earlier moment. The
+non-compliance list names capture-time key retention among the defeats.

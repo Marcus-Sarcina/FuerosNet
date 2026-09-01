@@ -1773,9 +1773,12 @@ one protecting the depicted person's data from the holder.
 ##### What it does not do
 
 **A non-compliant client defeats it entirely**, and nothing detects the difference.
-Such a client can decline to seal its captures, retain a released key after a
-ceremony, or
-keep plaintext alongside the ciphertext. §1.1's diagnostic returns *no enforcement
+Such a client can decline to seal its captures, retain the capture key it was
+handed at sealing time, retain a released key after a ceremony, or keep plaintext
+alongside the ciphertext. The capture-time handover adds no new trust class: a
+compliant holder is already trusted to discard a released key after answering as
+a verifier, and discarding the sealing key is the same obligation at an earlier
+moment. §1.1's diagnostic returns *no enforcement
 available*, as it does for every other client-side obligation.
 
 **The honest claim is therefore narrower than it first appears: this changes what a

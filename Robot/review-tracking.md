@@ -2376,3 +2376,10 @@ Checks after: §21.1 counts eleven parameter rows across its three tables as
 §22.2 claims; the wire reads-table counts eleven exchanges with the patron the
 sole field recipient; §23.2 clean; residual sweeps for every replaced phrase
 return nothing.
+
+**0.2 findings 1 and 6 confirmed by the author (2026-09-02).** On custody: "The
+holder has to be trusted to discard the capture key when they act as verifier,
+so this is a minimal extension of that trust" — recorded into §7.5.2's
+non-compliance paragraph, which now also names retaining the capture-time key
+among the defeats. The §10.1 qualification-alignment rationale stands as
+rebuilt. The 0.2 queue is empty.
