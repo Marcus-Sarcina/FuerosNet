@@ -2383,3 +2383,39 @@ so this is a minimal extension of that trust" — recorded into §7.5.2's
 non-compliance paragraph, which now also names retaining the capture-time key
 among the defeats. The §10.1 qualification-alignment rationale stands as
 rebuilt. The 0.2 queue is empty.
+
+## Cycle 2, pass 0.2 — second run (2026-09-02, medium effort)
+
+Six findings, again disjoint from the high-effort run's 25. **Five held and were
+applied; one rejected on verification.**
+
+**Applied:**
+1. §16.1 still said "deterministic sample" fourteen lines before its own
+   "recognition *is* the selection rule"; now recognition-selected, citing
+   §8.1.2.
+2. §7.1.1's "requires at least one witness" now carries the formation
+   exception wire §3.2 states ("zero witnesses is the formation case and
+   nothing else").
+3. Wire §3.2's two nonce residues: the future-`started_at` defence is now "a
+   witness declining to sign a ceremony whose claimed day its own clock
+   contradicts", and the duplicate-witness rationale stands on undefined
+   ordering plus independence, the dead seed-input clause removed.
+4. The same sentence's cross-reference moved from design §8.1.2 (verifier
+   selection; says nothing about clocks) to `light-client-requirements.md`
+   §1.0.1, which states the behaviour.
+5. rr §3 now says only the second leg "speaks HTTP on the wire", and the
+   client→node cell explains the frame embeds a serialized HTTP/1.1 message
+   (wire §11) — the schema and the ALPN argument both preserved.
+
+**Rejected — finding 6 (predicate recalculation).** The claimed contradiction
+dissolves on reading: rr §7.2's "tuning and having access follow" is design
+§11.4's moment one (an operator configuring — §11.4 carries the identical
+parenthetical itself), and infra §10.5's "a predicate ceasing to match" is what
+happens *at* either sanctioned moment, upon which §10.5 terminates sessions.
+Both cited behaviours live inside the two-moments rule; no text says access
+follows anything between moments. **Residual question queued for the author,
+distinct from the finding**: a score drifting on new *evidence* between the two
+moments (no retune, no membership change) leaves the table deliberately stale
+until the next moment — nothing says whether that staleness is intended or
+whether evidence arrival should be a third trigger. The documents are silent
+rather than contradictory.

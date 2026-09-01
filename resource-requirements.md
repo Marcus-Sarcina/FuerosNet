@@ -68,14 +68,14 @@ does.
 
 ## 3. How a request arrives
 
-**There are two legs, and only the second is HTTP**, and conflating them produces a
+**There are two legs, and only the second speaks HTTP on the wire**, and conflating them produces a
 claim that cannot hold: HTTP/3 is selected by ALPN token `h3`
 at QUIC connection establishment (RFC 9114), while the client's session already
 negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 
 | Leg | Transport | Framing |
 |---|---|---|
-| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §11) — not a stream-0 control frame. No HTTP |
+| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §11) — not a stream-0 control frame. No HTTP transport — the application request rides inside the frame as a serialized HTTP/1.1 message (`wire-format.md` §11) |
 | **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
 
 **The second leg often does not exist at all.** design §11.7's

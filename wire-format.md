@@ -558,8 +558,9 @@ Rules a validator checks from the record alone. All were previously unstated.
   **This bounds the gap, not `started_at` itself**, and the two need different
   mechanisms. A body claiming `started_at` in 2100 with `finalized_at` an hour later
   satisfies this rule and poisons chains just as effectively; what stands against
-  *that* is a witness declining to commit a nonce against a day its own clock
-  contradicts (design §8.1.2), which no validator can check. **Structural here,
+  *that* is a witness declining to sign a ceremony whose claimed day its own
+  clock contradicts (`light-client-requirements.md` §1.0.1), which no validator
+  can check. **Structural here,
   client-side there** — the difference is that this rule compares two values the
   record already carries, and the other needs a clock the reader does not have.
 - **A presence record on the wire is always final.** A ceremony the participants
@@ -593,8 +594,8 @@ Rules a validator checks from the record alone. All were previously unstated.
 - **Formation records omit fields 4 and 5 entirely** rather than encoding empty
   arrays, per §1's rule. Absence means empty.
 - **Witness identities MUST be distinct**, and **MUST NOT include either
-  participant.** Duplicates would give one identity several nonce inputs to the
-  seed and leave the ascending-keyhash ordering undefined between equal keys; a
+  participant.** Duplicates would leave the ascending-keyhash ordering undefined
+  between equal keys; a
   participant witnessing their own ceremony is not an independent witness, which is
   the entire role.
 - **A normal record MUST carry at least one witness.** Zero witnesses is the

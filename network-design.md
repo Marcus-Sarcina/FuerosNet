@@ -1313,7 +1313,8 @@ be nominated would be self-selecting, which is the thing cross-nomination exists
 prevent.
 
 **Balance is what the property depends on, and nothing enforces it.**
-`wire-format.md` §3.2 requires at least one witness and requires each
+`wire-format.md` §3.2 requires at least one witness on a normal record — zero
+witnesses is the formation case and nothing else — and requires each
 `nominated_by` to name one of the participants; it does not require both
 participants to be represented. Where one party nominated every witness — a
 one-witness record being the smallest case — the other party has none of its own
@@ -5418,7 +5419,8 @@ local**, and how an adopter weighs what it finds is theirs — outside this
 specification.
 
 **What the protocol supplies is the sampling floor.** Verifier selection asks a
-deterministic sample of prior counterparties to confirm a subject is who they say.
+recognition-selected sample of prior counterparties to confirm a subject is who
+they say (§8.1.2).
 That is an anti-impersonation check, not the evaluation.
 
 **The floor is holder-relative in what it proves, not only in what it checks.**

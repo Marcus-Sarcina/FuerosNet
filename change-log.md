@@ -7811,3 +7811,16 @@ The author confirmed both 0.2 reconstructions. His custody rationale is now in
 is already trusted to discard a released key after answering as a verifier, and
 discarding the sealing key is the same obligation at an earlier moment. The
 non-compliance list names capture-time key retention among the defeats.
+
+### 2026-09-02 (cycle 2, pass 0.2, second run: five of six applied)
+The medium-effort contradiction run found six, disjoint from the high-effort
+twenty-five. Five held: §16.1's "deterministic sample" residue (contradicting
+its own section), §7.1.1's missing formation exception on the witness minimum,
+wire §3.2's two nonce residues with the clock-decline defence re-cited to the
+light client's §1.0.1, and the resource document's "No HTTP" cell now explaining
+that the first leg embeds a serialized HTTP/1.1 message without speaking HTTP on
+the wire. The sixth — predicate recalculation — was rejected: tuning is the
+two-moments rule's first moment and "ceasing to match" happens at either moment,
+so the cited texts cohere; the genuinely open point, whether evidence drift
+between moments should re-evaluate the table, is queued as a question rather
+than applied as a fix.
