@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` `c6ffa3450a8ae994…`, `network-design.md` `67f5d245694bcd47…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `bf7f219ff183618d…`, `network-design.md` `5fd849a259c8df45…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -132,6 +132,21 @@ c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
 402dd2909258174e682345dffee0e5b3818fbff0a78fa01642f1d6c87a925cd2
 61a25397b4a2d18adc851c19a27d7a86603d59716843f028038cea6feabbf091
 09
+```
+
+## A root's self-anchored `SignedLocator` — MUST ACCEPT (D13)
+
+**Roots legitimately self-anchor** [author, 2026-09-01]: bob names himself as
+anchor with the **empty path** — zero nibbles, empty byte string, count 0
+(`a2 01 40 02 00`) — the case §2.1 now states. An implementation asserting a
+minimum path length rejects every root's locator. (157 bytes):
+
+```
+a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
+9c32c37502a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a20140020003820903038443a10127a0f65840667b63
+1a592a87fef3f4215c291669766a55917e0ada709dcee7b98241989a9128a5e9
+63b0405c108c24a14f416cfdf8ac2542d26004f9799081c837d1a88602
 ```
 
 ## A `SignedLocator` carrying an unknown extension — MUST ACCEPT (D9)

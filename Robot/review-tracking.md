@@ -2043,3 +2043,11 @@ inside the generator itself.
 The reviewer's execution note — could not run the ML-DSA path without
 `dilithium-py` — is the environment limitation already recorded; the harness's
 source made its coverage inspectable, which was the point of including it.
+
+**Ruling (2026-09-01): roots legitimately self-anchor.** The empty path — zero
+nibbles, empty byte string, count 0, `{1: h'', 2: 0}` — is valid and is the
+self-anchor case. Stated at wire §2.1; the design's Anchor vocabulary row and
+§12.1's anchor bullet carry the root clause. The generator's ≥ 1 assertion is
+corrected to ≥ 0, and **D13 is the generated must-accept**: bob's complete
+self-anchored `SignedLocator`, harness-verified — anchor equals subject, path
+empty, signature valid. The interpretations register is empty again.

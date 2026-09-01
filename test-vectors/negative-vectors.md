@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `c6ffa3450a8ae9941a0426f5e39d58e60823dbcd37f904848bcfc708b0cff86b` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `bf7f219ff183618d8f47fa8d72ba406ff91a304a711a4a76f13b521d65da2d3e` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 ## The result model is structured, not a single status
 
@@ -207,6 +207,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D10 | A presence record with `finalized_at == started_at` | The exact boundary of R2's rule: ≥ admits equality |
 | D11 | A presence record with `finalized_at − started_at` exactly 86,400 s | The exact boundary of R3's rule: 24 hours is the last admissible gap; 86,401 (R3) is the first malformed one |
 | D12 | The identical `EndpointRecord` received twice — same `seqno`, same contents | §7.6: republishing an unchanged set replays the record; idempotent reconciliation, **not** V6's equal-`seqno` conflict, which requires differing contents |
+| D13 | The root's self-anchored `SignedLocator` (`primitives.md`) — anchor = the node itself, path `{1: h'', 2: 0}` | **Roots legitimately self-anchor** (§2.1) [author, 2026-09-01]: the empty path is the zero-hop case, and a decoder asserting a minimum path length rejects every root's locator |
 
 ## Resolved: the seed sentence is a writer commitment
 

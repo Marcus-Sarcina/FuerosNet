@@ -453,7 +453,7 @@ latency for a stranger's key**, not bandwidth.
 | **Infra node** | A node running the server software on a statically routed device |
 | **Light client** | The participant-facing client software, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the client software, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
-| **Anchor** | An ancestor a node names in its locator so a recipient can route to it. Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
+| **Anchor** | An ancestor a node names in its locator so a recipient can route to it — or itself: **a root self-anchors**, with an empty path (`wire-format.md` §2.1). Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
 | **Dunbar Org** | Every node within a **two-edge walk** over adoption and sibling edges. At f = 10, **221** (§15.1). Not a subtree, and not a tier band — cousins and nephews' children fall at three edges |
 | **Witness** | A node nominated by the *counterparty* to notarise a presence ceremony (§7.1) |
 | **Verifier** | A prior counterparty queried to confirm a subject's identity (§7.3) |
@@ -3931,7 +3931,8 @@ A locator is four fields, **signed by the node itself**:
 { anchor, path, sequence, signature }
 ```
 
-- **anchor.** Key hash of the anchor whose subtree contains the node
+- **anchor.** Key hash of the anchor whose subtree contains the node — a
+  root names itself, with an empty path
 - **path.** Position beneath the anchor; **truncatable** to a prefix
   sufficient to route to the right region (this is where aggregation savings
   come from). Truncation lives in distant nodes' unsigned aggregate state only —

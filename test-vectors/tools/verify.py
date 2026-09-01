@@ -231,6 +231,11 @@ m = re.search(r'## Same-series counter jump.*?Complete object.*?```\n([0-9a-f\n]
 obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][3] == [5, 100],
       'counter-jump SignedLocator: verifies, seqno [5,100]')
+m = re.search(r"## A root's self-anchored `SignedLocator`.*?```\n([0-9a-f\n]+?)```", pr, re.S)
+obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
+check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][2] == {1: '', 2: 0}
+      and obj[1] == obj[2][1],
+      'D13: root self-anchors — empty path {1: h\'\', 2: 0}, anchor = subject, verifies')
 m = re.search(r'## A `SignedLocator` carrying an unknown extension.*?```\n([0-9a-f\n]+?)```', pr, re.S)
 obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs) and 4 in obj,

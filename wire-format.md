@@ -272,6 +272,11 @@ path = {
 With f = 10 (design §3.2) each hop index needs values 0–9, so 4 bits suffice. A
 depth-11 path — sufficient for 6×10¹⁰ nodes — occupies 6 bytes.
 
+**A path may be empty** [author, 2026-09-01]: zero nibbles, the empty byte
+string, count 0 — `{1: h'', 2: 0}` is its one encoding. It is the
+**self-anchor** case: a root has no ancestor to name, so it names itself, and
+the path from itself to itself has no hops.
+
 **The packed byte string MUST be exactly `ceil(nibble_count / 2)` bytes.** Trailing
 surplus bytes are malformed, not ignorable — otherwise one logical path has
 unboundedly many encodings.

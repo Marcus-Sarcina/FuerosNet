@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `c6ffa3450a8ae9941a0426f5e39d58e60823dbcd37f904848bcfc708b0cff86b` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
+**Pinned**: wire-format.md `bf7f219ff183618d8f47fa8d72ba406ff91a304a711a4a76f13b521d65da2d3e` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 **Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
 named **client-conformance** vectors where a client rule is normative and
@@ -66,14 +66,12 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-**One is open, surfaced by the eighth review**: the generator asserts every
-`path` has **at least one nibble**, and `wire-format.md` §2.1 states no lower
-bound. The question has a real protocol shape: may a locator's path be empty —
-a node that is its own anchor, which is what a root would publish — or is one
-nibble the minimum? **Author ruling pending**; until then the ≥ 1 assertion is
-an unstated protocol assumption, flagged here rather than silent.
+**None remain open.** The last — whether a path may be empty — was ruled
+2026-09-01: **roots legitimately self-anchor**, the empty path
+`{1: h'', 2: 0}` is its one encoding, §2.1 now says so, and D13 is the
+generated must-accept: a root's complete self-anchored `SignedLocator`.
 
-Every earlier byte-level choice is closed: The last — whether "transaction types" means the six
+Every earlier byte-level choice is likewise closed: The last — whether "transaction types" means the six
 archive transactions — was ruled 2026-09-01: **type 6 is retired** with a
 tombstone row, the abuse report is §6.3's standalone signed object, and the
 suite's reading was confirmed. Its signature-context vector stays queued in

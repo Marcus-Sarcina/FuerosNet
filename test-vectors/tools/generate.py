@@ -246,8 +246,8 @@ def envelope(version, msg_type, body_bytes, signers):
 # ---------------------------------------------------------------- primitives
 
 def path(nibbles):
-    assert 1 <= len(nibbles) <= 24 and all(0 <= n <= 9 for n in nibbles), \
-        'path: nibbles 0-9, length 1-24 (wire §2.1)'
+    assert 0 <= len(nibbles) <= 24 and all(0 <= n <= 9 for n in nibbles), \
+        'path: nibbles 0-9, length 0-24 — empty is the self-anchor case (wire §2.1)'
     packed = bytearray()
     for i in range(0, len(nibbles) - 1, 2):
         packed.append(nibbles[i] << 4 | nibbles[i + 1])
@@ -398,6 +398,15 @@ sl2_sig = alice.sign(sl2_tbs)
 sl2 = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2),
              (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl2_sig)]))])
 
+# The root's self-anchored locator: bob names himself, empty path (D13).
+root_loc = locator(bob.keyhash, path([]), seqno(9, 3))
+slr_payload = e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc)])
+slr_tbs = sig_structure_sign1(sl_protected, AAD_LOCATOR, slr_payload)
+slr_sig = bob.sign(slr_tbs)
+sl_root = e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc),
+                 (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                                    e_bstr(slr_sig)]))])
+
 # Extension-bearing SignedLocator: unknown key 4 — deliberately the nearest
 # uint above the signature slot (3), the value that breaks any slot-inference
 # heuristic. Payload = fields 1-2 plus the unknown key, per §1's global rule.
@@ -525,6 +534,17 @@ Complete object ({len(sl2)} bytes):
 
 ```
 {hexblock(sl2)}
+```
+
+## A root's self-anchored `SignedLocator` — MUST ACCEPT (D13)
+
+**Roots legitimately self-anchor** [author, 2026-09-01]: bob names himself as
+anchor with the **empty path** — zero nibbles, empty byte string, count 0
+(`a2 01 40 02 00`) — the case §2.1 now states. An implementation asserting a
+minimum path length rejects every root's locator. ({len(sl_root)} bytes):
+
+```
+{hexblock(sl_root)}
 ```
 
 ## A `SignedLocator` carrying an unknown extension — MUST ACCEPT (D9)

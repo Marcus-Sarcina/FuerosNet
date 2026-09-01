@@ -7531,3 +7531,16 @@ started_at`, the full 24-hour gap, the idempotent `EndpointRecord` replay: D10�
 D12), and the extension pair D9/E14. The unsigned inventory gains the currency
 request/reply it had omitted — with the omission recorded in the inventory itself
 as the standing argument for enumerating it mechanically.
+
+### 2026-09-01 (roots legitimately self-anchor; the empty path is stated)
+**Author's ruling on the eighth review's discovery.** A path may be empty — zero
+nibbles, the empty byte string, count 0, `{1: h'', 2: 0}` its one encoding — and
+the case is not an edge but a population: it is what **every root publishes**,
+having no ancestor to name. Wire §2.1 states it; the design's Anchor vocabulary
+row and §12.1's anchor bullet gain the root clause; the generator's silent ≥ 1
+assertion — the unstated protocol assumption the review caught — is corrected;
+and D13 is the generated must-accept, a root's complete self-anchored
+`SignedLocator` verified end to end. A decoder asserting a minimum path length
+rejects every root's locator, which is exactly the class of over-strictness the
+must-accept suite exists to catch. The vectors' interpretations register is
+empty again.

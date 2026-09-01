@@ -1,6 +1,6 @@
 # Verifier selection — recomputation
 
-Generated against `wire-format.md` `c6ffa3450a8ae994…`, `network-design.md` `67f5d245694bcd47…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `bf7f219ff183618d…`, `network-design.md` `5fd849a259c8df45…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
