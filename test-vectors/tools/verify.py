@@ -166,6 +166,34 @@ def verify_sig(name, alg, sig, tbs):
             return False
     return ML_DSA_65.verify(PQ[name], tbs, sig)
 
+# ------------------------------------------------- schema-aware validation
+def is_h32(v): return isinstance(v, str) and len(v) == 64
+def is_seq(v): return (isinstance(v, list) and len(v) == 2
+                       and all(isinstance(x, int) and 0 <= x < 2**32 for x in v))
+def is_loc(v): return (isinstance(v, dict) and is_h32(v.get(1))
+                       and isinstance(v.get(2), dict) and is_seq(v.get(3)))
+SCHEMAS = {  # type: (required {field: predicate}, signer-role fields)
+    1: ({1: is_h32, 2: is_h32, 3: is_loc, 4: lambda v: isinstance(v, int)}, (1, 2)),
+    2: ({1: is_h32, 2: is_h32, 3: is_seq, 4: lambda v: isinstance(v, int)}, (1,)),
+    3: ({1: is_h32, 2: is_h32, 3: lambda v: isinstance(v, int)}, (1,)),
+    4: ({1: is_h32, 2: is_h32, 3: lambda v: isinstance(v, dict),
+         4: lambda v: isinstance(v, dict), 5: lambda v: isinstance(v, int)}, (1, 2)),
+    7: ({1: is_h32, 2: is_h32, 3: is_seq, 4: is_seq,
+         5: lambda v: isinstance(v, int)}, (1, 2)),
+}
+def validate_body(t, obj):
+    req, roles = SCHEMAS[t]
+    if 0 not in obj or not isinstance(obj[0], list): return 'missing key 0'
+    for lst in obj[0]:
+        if not (isinstance(lst, list) and 1 <= len(lst) <= 8
+                and all(is_h32(h) for h in lst)): return 'bad back-pointer list'
+        if len(lst) > 1 and lst != sorted(lst): return 'merge list unsorted'
+    if len(obj[0]) != len(roles): return 'wrong signer-list count'
+    for f, pred in req.items():
+        if f not in obj: return f'missing field {f}'
+        if not pred(obj[f]): return f'field {f} wrong shape'
+    return None
+
 # ---------------------------------------------------------------- bodies + envelopes
 tx = read('transactions.md')
 bodies = re.findall(r'```\n([0-9a-f\n]+?)```\n\ntxid: `([0-9a-f]{64})`', tx)
@@ -186,6 +214,12 @@ for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
     if not isinstance(obj, dict) or set(obj) != {1, 2, 3, 4}: continue
     envs += 1
     body = enc(obj[3])
+    t = obj[2]
+    err = validate_body(t, obj[3])
+    assert err is None, f'type-{t} body schema: {err}'
+    derived = {obj[3][f] for f in SCHEMAS[t][1]}
+    kids = {parse(bytes.fromhex(e[0]))[0][4] for e in obj[4][3]}
+    assert kids == derived, f'type-{t} envelope signers != body roles'
     if isinstance(obj[3], dict) and 99 in obj[3]: ext_env = (obj, body)
     prev = None
     for entry in obj[4][3]:
@@ -231,6 +265,10 @@ m = re.search(r'## Same-series counter jump.*?Complete object.*?```\n([0-9a-f\n]
 obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][3] == [5, 100],
       'counter-jump SignedLocator: verifies, seqno [5,100]')
+m = re.search(r'## The `SignedLocator` equal-seqno conflict partner.*?```\n([0-9a-f\n]+?)```', pr, re.S)
+objb, protb, sigb, tbsb = sign1_object(m.group(1), b'rhtn/1:locator', 3)
+check(verify_sig(BY[objb[1]], -8, sigb, tbsb) and objb[2][3] == [5, 100],
+      'V12 partner: same subject and seqno as the counter-jump locator, different path, valid')
 m = re.search(r"## A root's self-anchored `SignedLocator`.*?```\n([0-9a-f\n]+?)```", pr, re.S)
 obj, prot, sig, tbs = sign1_object(m.group(1), b'rhtn/1:locator', 3)
 check(verify_sig(BY[obj[1]], -8, sig, tbs) and obj[2][2] == {1: '', 2: 0}

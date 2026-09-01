@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `bf7f219ff183618d8f47fa8d72ba406ff91a304a711a4a76f13b521d65da2d3e` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
+**Pinned**: wire-format.md `a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 ## The result model is structured, not a single status
 
@@ -23,6 +23,7 @@ it names:
 | `checks[name]` | pass · fail · unverifiable(reason) — per named rule **and per reference evaluation**: the `strongest`-channel check when revealed; `checks[proof_of_presence]` and every other dereference (§3.4's evaluation step) — `fail` when the referenced object does not establish what the citing object claims, `unverifiable(unfetchable)` when it cannot be fetched. `effective` stays topology/grant evaluation; `chain` stays predecessor history — neither absorbs reference evaluation, by decision (seventh review) | §3.2, §3.4, §4.5.1 |
 | `effective` | yes · **no** — structurally valid may still grant nothing for this evaluator | §6.8 |
 | `evidentiary` | free-form flags (fork-detected, …) — findings against history, not against the object | §3.2 |
+| `state_action` | install · replace · replay · ignore_stale · **conflict** · incomparable — what a holder's store does with an individually valid freshness-bearing record (§2.3, §7.6). The dimension the seqno fixtures constrain: D6 → replace, D12 → replay, V6/V12 → conflict, V11 → incomparable, a lower-counter same-series record → ignore_stale (ninth review) | §2.3, §7.6, §7.7.3 |
 
 **Over-strictness is non-conformance too**: section D fixtures MUST be
 accepted, and a decoder rejecting them fails conformance exactly as one
@@ -50,6 +51,13 @@ works, not inputs.
 | E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are covered by every signature: **all four entries fail**, both algorithms — verified at generation time under two independent implementations. The unmutated envelope is D2 |
 | E11 | A merge back-pointer list out of ascending bytewise order | §3.1: one logical merge, one encoding, one txid — the positive merge vector shows the sorted form |
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
+| E19 | A `bstr`, `tstr`, array or map with a non-shortest **length** header (`58 05` for a 5-byte string) | §1's shortest-form rule covers every header, not only integer values — a decoder canonicalising integers alone accepts these (ninth review) |
+| E20 | An indefinite-length map, byte string or text string | E2's rule across every major type — a decoder rejecting indefinite arrays can still accept indefinite maps |
+| E21 | A `tstr` carrying invalid UTF-8 | Major type 3 is defined over UTF-8; undecodable text is malformed, not lenient-decoded |
+| E15 | A `Locator` missing its `seqno` (key 3) | Required-field matrix: a decoder that defaults missing fields passes every present-field vector |
+| E16 | A transaction `timestamp` encoded as a byte string | Wrong-major-type matrix: coercive decoding is silent divergence |
+| E17 | A `NetworkPoint` missing its address (key 1) | Required-field matrix |
+| E18 | An `EndpointRecord` missing its signature (key 4) | Required-field matrix — absence of the one field that authenticates the rest |
 | E12 | An otherwise-valid body carrying map key `-1` or `"x"` | §1: protocol map keys are unsigned integers — an arbitrary CBOR key is malformed, **not** an "unknown extension key", which is always a uint. A generic CBOR map type preserves either indistinguishably |
 | E13 | The extended `EndpointRecord` (`records.md`, D8) with its extension value mutated `c0ffee` → `c0ffef` | §1's coverage rule on the **standalone `COSE_Sign1` path**: the unknown key is inside the reconstructed payload, so the signature fails — the Sign1 analogue of E10 |
 | E14 | The extended `SignedLocator` (`primitives.md`, D9) with key 4's value mutated | Same rule, and the fixture that catches a slot-inference bug from the other side: the mutated key must have been in the payload for the signature to fail |
@@ -98,6 +106,7 @@ works, not inputs.
 | S14 | An envelope entry with `alg = -7` (ES256) | Outside the profile: any `alg` other than −8/−49 in a signer group is malformed (§3.5) |
 | S15 | A `COSE_Sign` whose **outer** protected header is nonempty | §3.5: the outer protected header is empty — a `COSE_Sign` carries no signature of its own, so it has no algorithm to name; generic libraries permit content there |
 | S16 | A `COSE_Sign` whose **outer** unprotected header is nonempty | §3.5's nonempty-unprotected rule covers every COSE header, the outer pair included |
+| S24 | A protected header whose **embedded map** (inside its `bstr`) is non-canonical | Canonicality reaches the serialisation inside the header bstr — outer-envelope canonical parsing does not establish it (ninth review) |
 | S17 | A disavowal signed by field 2's identity (the subordinate) instead of field 1's — right entry count, right algorithms, wrong party | Signer role is inferred by comparing `kid` to the body's fields (§3.5), and the type requires exactly its own signers: the correct *shape* from the wrong *identity* is malformed. Every type needs this fixture with a real second identity (canonical bar) |
 | S20 | A `SignedLocator` or `EndpointRecord` whose `COSE_Sign1` protected header carries a `kid` | The surrounding object names the signer (§3.5); a second copy could disagree with the first. A decoder with separate `COSE_Sign`/`COSE_Sign1` paths can enforce this on one and not the other |
 | S21 | A standalone `COSE_Sign1` with a nonempty unprotected header | §3.5's rule covers every COSE header — the Sign1 path included, not only envelope entries |
@@ -180,7 +189,8 @@ photo comparison without its template version is unverifiable as evidence:
 | V9 | The optionals-exercised adoption (`transactions.md`), field 8 dereferenced | The referenced formation record | `structural = valid`, **`checks[proof_of_presence] = fail`** — the record exists and verifies but names alice–carol, not this adoption's alice–bob (§3.4: dereference confirms the record *names these two parties*) |
 | V9b | The same adoption | The referenced record unfetchable | `structural = valid`, `checks[proof_of_presence] = unverifiable(unfetchable)` — the §3.4 posture: neither confirmed nor failed |
 | V10 | A valid reissue followed by an otherwise-valid high-counter record in the **abandoned** series | The reissue chain held | **Reject the old-series record at any counter** — §4.6.1: a chain-holder knows which series were abandoned and MUST reject records in them whatever their counter. A different bug from V4's reuse: here the old record, not the reissue, is the attack |
-| V11 | Two current-looking records in **different** series for one subject | No reissue chain held | **Neither ranks** — series are unordered (§2.3); currency is proved by the presented chain (§4.6.1), never by comparing series values. An implementation picking the numerically larger series fails here |
+| V11 | Two current-looking records in **different** series for one subject | No reissue chain held | **Neither ranks** — series are unordered (§2.3); currency is proved by the presented chain (§4.6.1), never by comparing series values. An implementation picking the numerically larger series fails here. `state_action = incomparable` |
+| V12 | The counter-jump `SignedLocator` and its conflict partner (`primitives.md`) — same subject, same `[5,100]`, different paths | Both held | `state_action = conflict` — the **locator-path** analogue of V6: equal `seqno`, different contents, no tie to break (§2.3, §7.7.3). Separate decoding routes need the rule separately |
 
 ## C. Method requirements — how a decoder works
 
@@ -208,6 +218,10 @@ photo comparison without its template version is unverifiable as evidence:
 | D11 | A presence record with `finalized_at − started_at` exactly 86,400 s | The exact boundary of R3's rule: 24 hours is the last admissible gap; 86,401 (R3) is the first malformed one |
 | D12 | The identical `EndpointRecord` received twice — same `seqno`, same contents | §7.6: republishing an unchanged set replays the record; idempotent reconciliation, **not** V6's equal-`seqno` conflict, which requires differing contents |
 | D13 | The root's self-anchored `SignedLocator` (`primitives.md`) — anchor = the node itself, path `{1: h'', 2: 0}` | **Roots legitimately self-anchor** (§2.1) [author, 2026-09-01]: the empty path is the zero-hop case, and a decoder asserting a minimum path length rejects every root's locator |
+| D14 | A normal presence record in which one identity is both a witness (envelope signer) and a verifier (embedded response) | One identity, one logical signer per capacity (§3.2) — the roles are different objects, and rejecting the overlap is over-strict |
+| D15 | One verifier answering once for **each** participant — two `(subject, verifier)` slots | §5.5: only duplicate slots are malformed; a verifier may have met both (T6's positive complement) |
+| D16 | A record whose witnesses all carry the same `nominated_by` | Wire-valid (§3.2 requires only that each names a participant); the nomination split is the reference client's warning, never a validity condition (`light-client-requirements.md` §1.0) |
+| D17 | The counter-jump pair read as state: `[5,42]` then `[5,100]` | `state_action = replace` — and the reverse order is `ignore_stale`, not an error: absence of prior state is acceptable and staleness is ordinary (§2.3) |
 
 ## Resolved: the seed sentence is a writer commitment
 

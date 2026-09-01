@@ -179,7 +179,7 @@ context rather than content also makes the check free.
 | Corroborations per record | 16 (one per witness) |
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
-| NetworkPoint entries per anchor, peering endpoint or endpoint record (§7.6) | 8 |
+| NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — **peering carries exactly one `NetworkPoint` per endpoint** (§4.4), and was struck from this row when the ninth vector review caught the contradiction |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |

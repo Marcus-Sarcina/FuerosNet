@@ -2051,3 +2051,24 @@ self-anchor case. Stated at wire §2.1; the design's Anchor vocabulary row and
 corrected to ≥ 0, and **D13 is the generated must-accept**: bob's complete
 self-anchored `SignedLocator`, harness-verified — anchor equals subject, path
 empty, signature valid. The interpretations register is empty again.
+
+---
+
+## Test-vector review, ninth run (2026-09-01)
+
+Ten findings; eight applied, two to the author. One was a genuine **specification
+inconsistency** — the second the vector programme has caught in the wire format's
+own bound table.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | The harness verified crypto and canonicality but not schema conformance — the generator was the semantic oracle for positives | **CONFIRMED, FIXED** — `verify.py` now validates every envelope's body against a per-type schema (required fields, shapes, back-pointer list counts, merge sort) and **derives the required signer set from the body**, asserting the envelope's kid set equals it. Presence stays bespoke until bar 2 |
+| 2 | No result dimension for freshness/reconciliation outcomes | **CONFIRMED, FIXED** — `state_action = install · replace · replay · ignore_stale · conflict · incomparable`; existing rows (D6, D12, V6, V11) labelled, D17 added |
+| 3 | Explicit default port undetermined — and §7.6 distinctness needs the answer | **CONFIRMED — AUTHOR**, with the recommendation that a field equal to its stated default MUST be omitted (the scalar analogue of the optional-empty rule) |
+| 4 | **The bound table said eight `NetworkPoint`s per "peering endpoint"; §4.4's schema is singular** | **CONFIRMED, FIXED** — the schema governs; "peering endpoint" struck from the row, with the correction noted in it |
+| 5 | Extension-value domain wider than the harness's type model | **CONFIRMED — AUTHOR** — recommended reading: slices preserved opaquely, never interpreted; one sentence either way |
+| 6 | No systematic missing-field / wrong-type matrix | **CONFIRMED, FIXED** — E15–E18 seed it; bar 14 makes it standing, with the reason: the schema-aware harness checks *our* positives, not an implementation under test |
+| 7 | Valid role overlaps lacked must-accepts | **CONFIRMED, FIXED** — D14 (witness∩verifier), D15 (one verifier, both subjects), D16 (uniform `nominated_by` is wire-valid; the split is client policy, verified at `light-client-requirements.md` §1.0) |
+| 8 | The equal-seqno rule tested on one of two decoding paths | **CONFIRMED, FIXED** — a **generated** `SignedLocator` conflict partner (same subject, same `[5,100]`, different path), harness-verified; V12, plus D17's replace/ignore_stale reading of the existing pair |
+| 9 | Output hashes recorded but not gated; dependencies unrecorded; the ML-DSA independence env-dependent | **CONFIRMED, FIXED** — the generator now compares regenerated outputs against the stored pins when specs and tools are unchanged and refuses drift without `--accept-output-change` (tested: clean rerun reproduces byte-for-byte); dependency versions recorded in the pins; the harness already names which ML-DSA path ran in its output |
+| 10 | Generic CBOR negatives exercised two parser branches | **CONFIRMED, FIXED** — E19 (non-shortest length headers), E20 (indefinite across major types), E21 (invalid UTF-8), S24 (non-canonical map inside the protected-header bstr) |

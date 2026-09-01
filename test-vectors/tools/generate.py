@@ -79,10 +79,23 @@ elif '--bootstrap-pins' not in sys.argv:
              'specifications. Restore it from version control, or rerun with '
              '--bootstrap-pins to deliberately establish a new baseline.')
 
+def _dep_versions():
+    from importlib import metadata
+    out = {}
+    for d in ('dilithium-py', 'cryptography'):
+        try: out[d] = metadata.version(d)
+        except Exception: out[d] = 'unknown'
+    return out
+
 def _write_pins(output_hashes):
     json.dump({'specs': _current, 'generator': GEN_SHA, 'verifier': VER_SHA,
-               'outputs': output_hashes},
+               'deps': _dep_versions(), 'outputs': output_hashes},
               open(_PINS, 'w', encoding='utf-8', newline='\n'), indent=1)
+
+_ACCEPTED = any(f in sys.argv for f in
+                ('--accept-spec-change', '--accept-generator-change',
+                 '--accept-output-change', '--bootstrap-pins'))
+_STORED_OUTPUTS = (_stored.get('outputs', {}) if os.path.exists(_PINS) else {})
 
 def _repin_hand_file(name):
     """The hand-authored files carry one machine-managed pin line so staleness
@@ -398,6 +411,16 @@ sl2_sig = alice.sign(sl2_tbs)
 sl2 = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2),
              (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl2_sig)]))])
 
+# The SignedLocator equal-seqno conflict partner: same subject, same
+# [series, counter] as sl2, DIFFERENT path — the locator-path analogue of the
+# EndpointRecord conflict pair (V12).
+loc2b = locator(bob.keyhash, path([2, 7]), seqno(5, 100))
+sl2b_payload = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2b)])
+sl2b_sig = alice.sign(sig_structure_sign1(sl_protected, AAD_LOCATOR, sl2b_payload))
+sl2b = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2b),
+              (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                                 e_bstr(sl2b_sig)]))])
+
 # The root's self-anchored locator: bob names himself, empty path (D13).
 root_loc = locator(bob.keyhash, path([]), seqno(9, 3))
 slr_payload = e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc)])
@@ -534,6 +557,17 @@ Complete object ({len(sl2)} bytes):
 
 ```
 {hexblock(sl2)}
+```
+
+## The `SignedLocator` equal-seqno conflict partner (V12)
+
+Same subject, same `[5, 100]`, **different path** than the counter-jump
+locator above — each individually valid, holding both is the equal-`seqno`
+conflict, on the **locator path** as V6 is on the endpoint-record path: two
+separate decoding routes, each needing the rule. ({len(sl2b)} bytes):
+
+```
+{hexblock(sl2b)}
 ```
 
 ## A root's self-anchored `SignedLocator` — MUST ACCEPT (D13)
@@ -1377,11 +1411,26 @@ _assert_hash_languages([adopt_body, depart_body, disavow_body, reissue_body,
                         peer_full_body, peer_body])
 
 _outputs = {}
+_pending = {}
 for fname, parts in OUT.items():
     data = '\n'.join(parts) + '\n'
+    _pending[fname] = data
+    _outputs[fname] = hashlib.sha256(data.encode()).hexdigest()
+# Output-drift gate: identical specs and tools must reproduce identical bytes.
+# A divergence here means an untracked input changed — a crypto dependency,
+# the platform — and silently baselining it would defeat the pins (ninth
+# review). Any acceptance flag covers it, since those already assert an audit.
+if _STORED_OUTPUTS and not _ACCEPTED:
+    _drift = [f for f in _outputs
+              if f in _STORED_OUTPUTS and _STORED_OUTPUTS[f] != _outputs[f]]
+    if _drift:
+        sys.exit('outputs changed with specs and tools unchanged: '
+                 + ', '.join(_drift) + '\nAn untracked input (dependency, '
+                 'platform) altered generation. Diagnose, then rerun with '
+                 '--accept-output-change.')
+for fname, data in _pending.items():
     with open(fname, 'w', encoding='utf-8', newline='\n') as f:
         f.write(data)
-    _outputs[fname] = hashlib.sha256(data.encode()).hexdigest()
     print(f"wrote {fname}")
 _repin_hand_file('README.md')
 _repin_hand_file('negative-vectors.md')

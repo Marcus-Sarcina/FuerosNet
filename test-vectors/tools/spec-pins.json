@@ -1,18 +1,22 @@
 {
  "specs": {
-  "wire-format.md": "bf7f219ff183618d8f47fa8d72ba406ff91a304a711a4a76f13b521d65da2d3e",
+  "wire-format.md": "a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c",
   "network-design.md": "5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae",
   "light-client-requirements.md": "69c5ac5837304937cee93243af9a5737a1f7d8c131108a04f179e9319940bf6f"
  },
- "generator": "25139612cf091d0c35c1b1489a5b32437ad45d72aa3c373198620e1d0b9934f5",
- "verifier": "9fdeff01737d21585c5f9d431f4b2bf3a218a83cda566fc7dc8b0c479b32948a",
+ "generator": "05aa700d5cdc3b759ed621dc99e136ce96791ac79db598faccc45c4c585838b7",
+ "verifier": "ae83282dab258646fecebb64c64e00ec06acbc0e9eff4fa028990aca62d54f8d",
+ "deps": {
+  "dilithium-py": "1.4.0",
+  "cryptography": "50.0.1"
+ },
  "outputs": {
-  "keys.md": "eb57a4eadc455436008e169a76f35a6f5381f6be0f237b3794433175d7fc62f7",
-  "primitives.md": "d9790c40a67c48d2c62522cb6d0841b914ae84e9b4591681b9b5a5b8084deb99",
-  "transactions.md": "ae46fdf7fd6b3d19198ebaf7d7cbbe12598de537cae0656494b52362b793936e",
-  "records.md": "bf238813e10e98d24b3c30667f788836a4e08b3b36caafb3408c5f5fc61d50a4",
-  "verifier-selection.md": "f06402a321c29a290739dd144115fc9fbc51f6792c70621ec695877833ed5597",
-  "README.md": "cb5122b0a5224eab5cdadb2f17a17cc43a1c30b58e116211f2387e664c41005d",
-  "negative-vectors.md": "2393c85ade602cd8a53956d55d1d86d0cd182ce32785ff6b5e56048485feb56e"
+  "keys.md": "696f8ebf9d35392286bc35fa70ec9f92bcda76dbd3494af038d079ef75dd61c9",
+  "primitives.md": "bfdd55b7a387dd4a5454f12e763d8626b6cd2b343f5b5135f4ba4de4989a85b0",
+  "transactions.md": "ee2ade7d8493b8b52a996d9ad30bb179134d476f41fe75264de18dbe91866b27",
+  "records.md": "be40248443b5f43717c5eef29ca0a42c76f7d746b8cd40a678ff4ea9869b937d",
+  "verifier-selection.md": "fcdf1649ef7115349394da3bd1555cea8a7c2cf3dc88adfab16a610509ca681c",
+  "README.md": "7a83af52756ad46b3eea8c814bff38c33e15e37452c10ac938a105c3d8699166",
+  "negative-vectors.md": "888c83c805433360b327b22b23edc2a1082870adbcd8d83f670e74a351370d49"
  }
 }

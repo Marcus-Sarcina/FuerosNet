@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `bf7f219ff183618d8f47fa8d72ba406ff91a304a711a4a76f13b521d65da2d3e` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
+**Pinned**: wire-format.md `a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 **Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
 named **client-conformance** vectors where a client rule is normative and
@@ -238,6 +238,30 @@ negatives (T9–T12). Still open:
 13. **Optionals-exercised positives grow with every schema**: no optional
     field should exist that no positive vector ever decodes
     (`transactions.md` now carries the first three).
+14. **The schema-shape matrix** (ninth review): for every covered schema, a
+    missing-required-field fixture and a wrong-major-type fixture — E15–E18
+    seed it — because a decoder that defaults absent fields or coerces types
+    passes every well-formed vector, and the schema-aware harness checks
+    positives, not an implementation under test.
+
+## Open for the author
+
+Two questions from the ninth review, both with vector consequences:
+
+1. **May the default port be encoded explicitly?** `NetworkPoint.3` absent
+   means 7431; nothing says whether `3: 7431` written out is valid, a
+   non-canonical spelling to reject, or a distinct value — and §7.6's
+   distinct-entries rule needs the answer: are `{ip}` and `{ip, 3: 7431}` one
+   destination twice or two entries? The profile's one-object-one-encoding
+   philosophy suggests: **a field equal to its stated default MUST be
+   omitted**, the scalar analogue of §1's optional-empty rule.
+2. **What may an unknown extension value be?** §1 bounds it as "the complete
+   encoded slice … measurable for every value type". If *every value type*
+   means the full deterministic CBOR model (floats, tags), harnesses must
+   preserve slices opaquely rather than reconstruct through typed models — the
+   recommended reading, needing one sentence: *unknown extension values are
+   preserved as opaque encoded slices and never interpreted*. If the profile
+   instead narrows the admissible types, §1 should say so.
 
 ## Recorded assumptions of the harness schema
 

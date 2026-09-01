@@ -7544,3 +7544,33 @@ and D13 is the generated must-accept, a root's complete self-anchored
 rejects every root's locator, which is exactly the class of over-strictness the
 must-accept suite exists to catch. The vectors' interpretations register is
 empty again.
+
+### 2026-09-01 (ninth vector review: the harness becomes schema-aware; a bound-table contradiction falls)
+Two findings stood out. **The wire format's own bound table contradicted its
+peering schema** — eight `NetworkPoint` entries per "peering endpoint" against
+§4.4's strictly singular fields 3 and 4; the schema governs, and the row now says
+so and why. And **the harness, for all its cryptographic rigor, was not checking
+what the positives claimed to be**: it verified canonicality and signatures while
+the generator remained the semantic oracle for schema shape. `verify.py` now
+validates every envelope's body against a per-type schema and **derives the
+required signer set from the body itself**, asserting the envelope's `kid` set
+matches — the check §3.1 warns is silent when wrong, now independent.
+
+**The result model gained its missing dimension**: `state_action` — install,
+replace, replay, ignore_stale, conflict, incomparable — the vocabulary for what a
+holder's store does with an individually valid freshness-bearing record, which
+`effective` was never meant to absorb. The equal-`seqno` conflict now exists on
+**both** decoding paths — a generated `SignedLocator` partner joins the
+endpoint-record pair — and the must-accept suite gained the three valid role
+overlaps a strict implementation plausibly rejects, including the
+uniform-`nominated_by` record that is wire-valid while being exactly what the
+client warns about. **The pin process closed its last silent path**: outputs are
+now compared against the stored pins when specs and tools are unchanged, so a
+crypto-dependency drift cannot baseline itself; dependency versions ride in the
+pin file. Nine new fixture rows seed the schema-shape and parser-branch matrices.
+
+**Two questions to the author**: may the default port be written explicitly —
+recommended no, a field equal to its default MUST be omitted, the scalar analogue
+of the optional-empty rule, and §7.6's distinctness needs the ruling either way —
+and what an unknown extension value may be, with slice-opacity recommended over
+type narrowing.

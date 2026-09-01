@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` `bf7f219ff183618d…`, `network-design.md` `5fd849a259c8df45…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `a2c7967e6c487eb3…`, `network-design.md` `5fd849a259c8df45…` and `light-client-requirements.md` `69c5ac5837304937…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -132,6 +132,21 @@ c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
 402dd2909258174e682345dffee0e5b3818fbff0a78fa01642f1d6c87a925cd2
 61a25397b4a2d18adc851c19a27d7a86603d59716843f028038cea6feabbf091
 09
+```
+
+## The `SignedLocator` equal-seqno conflict partner (V12)
+
+Same subject, same `[5, 100]`, **different path** than the counter-jump
+locator above — each individually valid, holding both is the equal-`seqno`
+conflict, on the **locator path** as V6 is on the endpoint-record path: two
+separate decoding routes, each needing the rule. (159 bytes):
+
+```
+a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
+c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201412702020382051864038443a10127a0f658405a
+7e4a1e7fed8b75c3703dbb7fdbf134f2f200d3e48a949e466a96fff45a0730d3
+0aee8ab60f5483d063fbd5b19d58269d9f358f56bc7a726ebeb4aab60b0903
 ```
 
 ## A root's self-anchored `SignedLocator` — MUST ACCEPT (D13)
