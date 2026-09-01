@@ -516,8 +516,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   until a date it chose. **This is checkable with no clock**: both values are in the
   record, and the rule constrains their difference rather than either one against the
   reader's time, which is why it can be structural where §3.3's timestamp rules
-  cannot. 24 hours is far beyond any honest finalization — `pending` and `unavailable`
-  count toward the threshold (§5.5), so a ceremony never waits on an absent
+  cannot. 24 hours is far beyond any honest finalization — an unanswered slot is simply
+  absent from the record (§5.5), so a ceremony never waits on an absent
   verifier — and reuses the seed window's figure rather than introducing another
   (design §21).
 
@@ -597,7 +597,7 @@ names, and `finalized_at` MUST be greater than or equal to `started_at`. **A rec
 violating either is malformed.**
 
 **Without that bound, backdating collapses verification.** `started_at` determines
-the 730-day window, so *n* — and therefore the finalization threshold — is computed
+the 730-day window, so *n* — and therefore the selection threshold — is computed
 relative to a value the proposer chooses. **Claiming a `started_at` earlier than
 one's own history yields n = 0 and a required verifier count of zero.** The same
 field derives `window_ordinal`, so varying the claimed day also yields fresh
@@ -1247,11 +1247,13 @@ VerifierResponse = {
   1: keyhash,          ; verifier
   2: keyhash,          ; subject
   3: bstr .size 32,    ; query_id — matches VerificationQuery field 6
-  4: uint,             ; 0 match, 1 no-match, 2 inconclusive,
-                       ; 3 unavailable, 4 pending
+  4: uint,             ; 0 match, 1 no-match, 2 inconclusive, 3 unavailable.
+                       ; THERE IS NO pending VALUE: an unreachable verifier
+                       ; answers nothing, and its slot is ABSENT (§5.5) —
+                       ; nobody holds authority to sign on its behalf
   5: ? uint,           ; basis: 0 photo_match, 1 personal_knowledge, 2 both.
                        ; REQUIRED when result is 0-2; MUST be absent when result
-                       ; is 3 (unavailable) or 4 (pending) — a
+                       ; is 3 (unavailable) — a
                        ; verifier who has not evaluated asserts no evidence
                        ; basis, and no truthful value existed: photo bases
                        ; demand a template version that may not exist, and
@@ -1385,7 +1387,7 @@ malformed, not that a field is missing.
 
 **Withholding is visible, and that is deliberate.** All seven slots are always
 present, so a recipient always knows a field exists and was withheld. This is the
-same posture as §5.5's `pending` and `unavailable` verifier responses: absence is
+same posture as §5.5's absent slots and `unavailable` responses: absence is
 legible rather than silent, and a policy may weight it.
 
 ##### Cost
@@ -1435,7 +1437,7 @@ which reads adoptions and no presence record at all, and combines the two
 | Witness signing (design §7.1) | **Location only**, which the witness corroborates |
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 3, 4, 7 |
-| Finalization threshold (§5.5) | **None.** Counts field 5 |
+| Selected-slot accounting (§5.5) | **None.** Counts field 5 against the recomputed selection |
 | Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
@@ -1750,10 +1752,12 @@ Six definitions the selection rule depends on and did not carry.
   less than 730 days after the epoch the subtraction would underflow, and the
   window simply starts at zero. Irrelevant in practice, and cheaper to state than
   to leave each implementation to discover.
-- **The window is open at the far end and closed at the near end**: a prior record
-  counts if `started_at - 730d < its finalized_at < started_at`. **A record
-  finalising exactly 730 days earlier is out.** The prose and the formula must
-  agree at the boundary instant, or two implementations resolve it differently.
+- **The window is exclusive at both ends** [author, 2026-09-01]: a prior record
+  counts if `started_at - 730d < its finalized_at < started_at` — **previously
+  completed ceremonies only**, so a record finalising at this ceremony's own
+  start instant is out, as is one finalising exactly 730 days earlier. The prose
+  and the formula must agree at the boundary instant, or two implementations
+  resolve it differently.
 - **The candidate horizon is the same window.** A counterparty met more than 730
   days ago is not a candidate, even though the meeting remains in the archive
   permanently — *n* and the candidate set are drawn from the same interval, and
@@ -1837,22 +1841,34 @@ rank(c) = SHA-256(seed || subject || c)
 ```
 
 Candidates are ordered by ascending `rank`, ties broken by ascending keyhash, and
-the first `required(subject)` are selected. **Exactly that many are queried.** The
-selected set and the finalization threshold are the same size, which is what makes
-"a missing verifier is visible" precise.
+the first `required(subject)` are selected. **Exactly that many are queried**, and each selected slot is
+either answered in field 5 or **visibly absent** against the recomputed
+selection — which is what makes *a missing verifier is visible* precise.
 
-### 5.5 What counts toward finalization
+### 5.5 The selected slots, and what the record carries
 
-**Finalization counts structurally valid responses and never inspects their
-content.** Whether a response reports a match, a failure, or an inability to
-answer, it occupies its slot — content is evidence weighed by policy
-(design §15.1), not an input to structural validity. Present encoding: `pending` and
-`unavailable` count alongside `match` and `no-match`.
+**The threshold sizes the sample; it does not gate finalization** [author,
+2026-09-01]. `required(subject)` verifiers are selected and queried; the record
+carries whatever structurally valid responses arrived by assembly, and **a
+selected verifier that did not answer is an absent slot** — visible to any
+evaluator recomputing the selection, since the selected set is deterministic and
+each member is either answered in field 5 or missing from it.
 
-The alternative — counting only completed comparisons — hands an attacker who can
-make verifiers unreachable a way to block finalization indefinitely. A record
-finalized on ten `pending` responses is visibly weak to any evaluator, which is the
-correct place for that weakness to be handled.
+**There is no `pending` on the wire.** A reachable verifier that cannot evaluate
+answers `unavailable`, under its own signature; an unreachable one answers
+nothing, and **absence is the encoding** — nobody signs on an absent verifier's
+behalf, and its patron holds no authority to answer for it. A reply that misses
+the ceremony resolves **privately to the participants** and is never
+retro-inserted: the record is immutable, and a responder who wants its late
+answer durable has §7.4's `LateResponse`.
+
+**Responses that are present count content-blind.** Match, no-match,
+inconclusive, unavailable — each fills its slot; content is evidence weighed by
+policy (design §15.1), never an input to structural validity. A record with most
+slots absent or `unavailable` is **visibly weak**, which is the correct place
+for that weakness to be handled — and it is why an attacker who can make
+verifiers unreachable gains no block on finalization: what suppression produces
+is not a stuck ceremony but a record that advertises its own thinness.
 
 **Duplicate responses from one verifier for one subject are malformed**, so a
 single verifier cannot occupy multiple slots.

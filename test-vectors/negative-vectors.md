@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `7be675cc87635c26845a785436ec3e6ff071ede74a1497a06ff6e50cd7e7f5a6` · network-design.md `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd`
+**Pinned**: wire-format.md `07802cb85a4ada3afcdf2783bbd94e4867688d5454983436dcf379acefe59a8f` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
 ## The result model is structured, not a single status
 
@@ -138,7 +138,7 @@ photo comparison without its template version is unverifiable as evidence:
 | # | Input | Violation |
 |---|---|---|
 | T19 | `result` 0–2 with `basis` absent | `basis` REQUIRED for evaluated results |
-| T20 | `result` 3 or 4 with `basis` present | MUST be absent — no truthful value existed |
+| T20 | `result` 3 (`unavailable`) with `basis` present | MUST be absent — no truthful value existed. *There is no result 4: `pending` left the enum on 2026-09-01 — an unreachable verifier's slot is absent, and a response claiming result 4 is an unknown enum value, rejected per E8's rule* |
 | T21 | `basis` 0 or 2 with `template_version` absent | REQUIRED for photo bases |
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
 | T23 | A structurally valid response from a verifier outside the recomputed selection | Context fixture: the selection is deterministic (§5.4) and exactly the selected are queried — an unselected response is a slot nothing allocated |
@@ -159,6 +159,7 @@ photo comparison without its template version is unverifiable as evidence:
 | V4 | A series reissue naming a series the node previously occupied | Evaluator holds the node's chain | **Reject** — §4.6: a chain-holder MUST reject a reissue naming a series already in the chain; reuse brings the abandoned line's high counters back into comparison |
 | V5 | A normal presence record whose witness commitment does not recompute from its revealed nonce | The record alone | `structural = malformed` — §5.1: a validator MUST recompute every commitment and reject on mismatch; an implementation that seeds from reveals without checking commitments defeats the commit-reveal ordering and passes every arithmetic vector |
 | V6 | The two `EndpointRecord`s of `records.md`'s conflict pair | Both held | **Malformed condition, not a tie** — equal `seqno`, different contents (§7.6, §7.7.3); a reader MUST NOT prefer either. The pair can only mean equivocation or a key in two hands |
+| V7 | A normal presence record whose field 5 fills fewer slots than the recomputed selection | Selection recomputable from the subject's bundle | **Accepted** — the threshold sizes the sample and does not gate finalization (§5.5): the absent slots are visible evidence weight, not a defect. A decoder requiring a full slot set rejects valid records and is non-conforming [author, 2026-09-01] |
 
 ## C. Method requirements — how a decoder works
 

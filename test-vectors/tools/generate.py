@@ -1116,7 +1116,7 @@ With n = {n_example} and these five candidates, `required = {required}`;
 
 With `started_at = {TS_START}`, the 730-day window is
 `{TS_START} − 63072000 = {TS_START - 63072000} < finalized_at < {TS_START}` —
-open at the far end, closed at the near end:
+**exclusive at both ends: previously completed ceremonies only** (§5.3.1):
 
 | Prior record `finalized_at` | Counted? |
 |---|---|

@@ -1875,3 +1875,28 @@ specification contradictions to the author, one observation alongside them.
 | 11 | `EndpointRecord` duplicate entries and the u16 port edge unlisted | **CONFIRMED, FIXED** — T17, T18; the boundary list gains 65535/65536 |
 | 12 | Pins are provenance, not a gate; the hand files were unpinned | **CONFIRMED, FIXED** — `tools/spec-pins.json` gates generation: a changed spec hash refuses to run without `--accept-spec-change` (tested both ways); the two hand files carry a machine-managed pin line the generator rewrites, so their staleness is mechanically visible |
 | 13 | `records.md` intro said every §7 object is signed | **CONFIRMED, FIXED** — in the generator, as the reviewer specified |
+
+**Rulings on the fourth-review contradictions (2026-09-01)**:
+
+**Absence is the encoding.** *"Late arriving replies are private information for
+participants, not part of the record."* `pending` leaves the `VerifierResponse`
+enum entirely — an unreachable verifier answers nothing, nobody signs on its
+behalf, and its slot is simply absent from field 5, visible against the
+recomputed selection. **The threshold now sizes the sample and does not gate
+finalization**: wire §5.5 is rewritten (*The selected slots, and what the record
+carries*), design §8.1's invariant block is renamed *The verifier sample* and its
+blockquote now reads *select and query* rather than *require … to finalize*. The
+DoS rationale inverts cleanly: suppression cannot stall a ceremony, it can only
+produce a record that advertises its own thinness. Late replies resolve privately;
+`LateResponse` remains the responder's opt-in durability. Swept: the ceremony
+summary, the §7.4.3 offline-client bullet, both schemas, the withholding-posture
+sentences, the stolen-device analysis, the dropped-query paragraph, the reads
+table, P14, the parameter table (row renamed *Verifiers selected and queried per
+subject*), and the unset parameter renamed *queued verifier-reply patience*. The
+q-vs-n aside's stale "§12.2's finalization threshold" citation was caught and
+fixed in the same sweep. Vectors: T20 notes result 4 is gone, V7 is the
+absent-slot must-accept.
+
+**The window is exclusive at both ends** — *"previously completed ceremonies
+only."* §5.3.1's "closed at the near end" is gone; formula and vector were already
+strict, and the generator's boundary table now says so in the ruling's words.

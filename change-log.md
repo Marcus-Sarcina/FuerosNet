@@ -7327,3 +7327,37 @@ the wrong-identity signer (S17), the `VerifierResponse` conditional matrix
 (T19–T23), endpoint duplicates and the u16 port edge, the unsigned message
 families, per-type signer binding, and the finalization semantics with the
 commitment-mismatch and committed-predecessor traps.
+
+### 2026-09-01 (absence is the encoding: `pending` leaves the wire; the window is exclusive at both ends)
+**The fourth review's two contradictions, ruled and applied.** The author: *"Late
+arriving replies are private information for participants, not part of the
+record."*
+
+**`pending` is gone from the `VerifierResponse` enum** — it was never
+constructible: the offline verifier could not sign it and its patron held no
+authority to. An unreachable verifier now answers nothing, and **its slot is
+absent from field 5**, visible to any evaluator recomputing the deterministic
+selection. With that, **the threshold changes character: it sizes the sample and
+no longer gates finalization.** Wire §5.5 is rewritten as *The selected slots,
+and what the record carries*; design §8.1's invariant is renamed *The verifier
+sample* and its blockquote now says *select and query* where it said *require …
+to finalize*. The anti-DoS rationale inverts rather than weakens: an attacker who
+can make verifiers unreachable no longer needs answering at all, because absence
+blocks nothing — what suppression buys is a record that advertises its own
+thinness. Late replies resolve privately to the participants and are never
+retro-inserted; a responder wanting durability has `LateResponse`, unchanged.
+
+The sweep touched fourteen sites across the two documents — ceremony summary,
+schemas, withholding posture, the stolen-device analysis, the dropped-query
+paragraph, both tables, P14 — renamed the unset parameter to *queued
+verifier-reply patience*, and caught one stale citation riding along: the q-vs-n
+aside pointed its threshold at §12.2, which is the anchor set. Vectors: T20
+records that result 4 is now an unknown enum value; **V7** is the new must-accept
+— a record with absent selected slots is valid, and a decoder demanding a full
+slot set is non-conforming.
+
+**The 730-day window is exclusive at both ends** — *previously completed
+ceremonies only*. The word "closed" is gone from §5.3.1; the formula and the
+vector were already strict, and the boundary table now states the rule in the
+author's words. The vectors' author queue holds one item: whether `query_id`,
+now the profile's only undomained hash, gets a tag.

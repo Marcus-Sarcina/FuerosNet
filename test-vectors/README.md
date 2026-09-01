@@ -9,7 +9,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `7be675cc87635c26845a785436ec3e6ff071ede74a1497a06ff6e50cd7e7f5a6` · network-design.md `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd`
+**Pinned**: wire-format.md `07802cb85a4ada3afcdf2783bbd94e4867688d5454983436dcf379acefe59a8f` · network-design.md `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d`
 
 **Scope**: wire-format/protocol **interoperability** vectors. This is not a
 certification suite for client and operator behavioural commitments, which are
@@ -100,32 +100,17 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-Two specification contradictions, surfaced by the fourth review, and one small
-observation:
+One observation stands: **`query_id` is an undomained SHA-256 of a CBOR map**
+(§4.5) — the only such hash in the profile, now that §1.1 notes the tag
+families. Worth a tag, or a sentence saying why not.
 
-1. **`pending` verifier responses are not constructible as specified.** Design
-   §7.4.3 has queries to an offline light client *queue at its patron and
-   return `pending`*; the wire makes `pending` a `VerifierResponse.result`
-   whose field 9 is signed **by the verifier** — who is, by construction,
-   offline. No patron-authenticated pending object exists. §5.5 counts
-   `pending` toward finalization, so the gap is load-bearing. Options: a
-   patron-authenticated pending variant (the queue-holder attests the query
-   was delivered); or `pending` never appears in a record and the slot's
-   absence is the encoding — which changes §5.5's counting rule; or something
-   else.
-2. **The 730-day window's prose contradicts its formula.** §5.3.1 says *"open
-   at the far end and closed at the near end"* then defines
-   `lower < finalized_at < started_at` — strict at **both** ends, and the
-   vector implements the formula. If strict-at-near is intended (a record
-   finalising at the ceremony's own start instant is not *prior*), the word
-   "closed" should go; if inclusion is intended, the formula and the vector
-   change.
-3. *Observation*: `query_id` is an undomained SHA-256 of a CBOR map (§4.5) —
-   the only such hash in the profile, now that §1.1 notes the tag families.
-   Worth a tag, or a sentence saying why not.
-
-Everything else accumulated across four review rounds is ruled and applied —
-see `review-tracking.md`.
+Both fourth-review contradictions were ruled 2026-09-01: **absence is the
+encoding of an unanswered query** — `pending` left the enum, the threshold
+sizes the sample without gating finalization, and late replies are the
+participants' private information (V7 is the must-accept complement) — and
+**the 730-day window is exclusive at both ends**, previously completed
+ceremonies only. Everything else accumulated across four review rounds is
+ruled and applied — see `review-tracking.md`.
 
 ## The canonical bar
 
@@ -175,12 +160,13 @@ negatives (T9–T12). Still open:
 10. **Signer-to-role binding per type** (S17's generalisation): every
     transaction type gets an envelope or a context fixture in which the wrong
     real identity signs with the right shape.
-11. **Finalization semantics on the normal record**: an omitted selected slot
-    (the selected set and the threshold are the same size); must-accept
-    records finalized on `no-match`, `inconclusive`, `unavailable` — and
-    `pending` once its construction is ruled; the commitment-mismatch fixture
-    (V5); and the committed-predecessor trap — a post-ceremony backfilled
-    head that would change *n*, with the expected selection unchanged.
+11. **Finalization semantics on the normal record**: must-accept records
+    finalized on `no-match`, `inconclusive`, `unavailable`, and on **absent
+    selected slots** — the threshold sizes the sample and does not gate
+    finalization, `pending` having left the enum entirely (V7); the
+    commitment-mismatch fixture (V5); and the committed-predecessor trap — a
+    post-ceremony backfilled head that would change *n*, with the expected
+    selection unchanged.
 
 ## Reviewing this draft
 

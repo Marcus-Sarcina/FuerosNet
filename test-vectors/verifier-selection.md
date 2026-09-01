@@ -1,6 +1,6 @@
 # Verifier selection — recomputation
 
-Generated against `wire-format.md` SHA-256 `7be675cc87635c26845a785436ec3e6ff071ede74a1497a06ff6e50cd7e7f5a6` and `network-design.md` SHA-256 `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `07802cb85a4ada3afcdf2783bbd94e4867688d5454983436dcf379acefe59a8f` and `network-design.md` SHA-256 `67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
@@ -95,7 +95,7 @@ With n = 7 and these five candidates, `required = 3`;
 
 With `started_at = 1767268800`, the 730-day window is
 `1767268800 − 63072000 = 1704196800 < finalized_at < 1767268800` —
-open at the far end, closed at the near end:
+**exclusive at both ends: previously completed ceremonies only** (§5.3.1):
 
 | Prior record `finalized_at` | Counted? |
 |---|---|
