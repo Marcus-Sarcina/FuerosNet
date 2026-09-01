@@ -1789,3 +1789,9 @@ mechanism.
 **Remaining open**: interpretations 1–3 in the vectors README (genesis hash input,
 §5 raw concatenation, merge-list order); whether departure, disavowal, peering and
 reissue reject the degenerate equal-pair; whether a root can reissue at all.
+
+**Correction, same day**: the degenerate-pair ruling above ("No") was the author
+misreading the question and is reversed — **all two-party types reject field 1 =
+field 2**. Applied at `wire-format.md` §4.1; T13 widened to the five types. The
+root-reissue consequence (a root cannot produce a type-7 at all) is with the author
+as an advice question.

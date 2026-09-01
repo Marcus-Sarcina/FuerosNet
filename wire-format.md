@@ -807,10 +807,14 @@ Recovery = {
 }
 ```
 
-**The node and the patron MUST differ** [author, 2026-08-31]. A self-adoption is
-the degenerate cycle — the proposed patron *is* the node — and it is the one cycle a
-validator can see from the record alone, where design §6.2.5's rule otherwise needs
-topology state and rejects on positive knowledge only.
+**The node and the patron MUST differ, and the rule holds for every two-party
+type** [author, 2026-09-01]: departure, disavowal, peering and series reissue
+reject the degenerate pair identically, as presence records already reject equal
+participants (§3.2). For adoption it is also the degenerate cycle — the proposed
+patron *is* the node — and the one cycle a validator can see from the record
+alone, where design §6.2.5's rule otherwise needs topology state. For the
+two-signer types the envelope layer agrees independently: a required signer set
+collapsing to one identity collides with §3.5's no-duplicate-signers rule.
 
 `Recovery` is present on a rotation and absent otherwise. **There are no
 variants of it**: every rotation carries both halves, the old key's signature and a

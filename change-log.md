@@ -7193,3 +7193,20 @@ always was.
 reference example to client-conformance vector, and the independent re-derivation
 still matches. Still open: the three remaining interpretations, the degenerate-pair
 question for the other two-party types, and whether a root can reissue at all.
+
+### 2026-09-01 (the degenerate pair is rejected everywhere; a mis-recorded ruling corrected same-day)
+**The author's ruling, corrected by the author within the hour**: every two-party
+type — adoption, departure, disavowal, peering, series reissue — rejects a
+transaction naming the same identity on both sides, as presence records already
+reject equal participants. The first reading ("adoption's alone") was briefly
+applied and never pushed; the correction replaces it. The generalised rule sits at
+`wire-format.md` §4.1, noting the two independent agreements: presence's §3.2 rule,
+and — for the two-signer types — §3.5's no-duplicate-signers rule, which the
+collapsed signer set collides with anyway. Negative vector T13 now spans the five
+types.
+
+**A consequence sharpens the open root question.** With self-reissue malformed, a
+root — having no patron — cannot produce a type-7 at all, and §2.3 makes a series
+claim *proved, not inferred*, by a chain a root cannot produce for a transition.
+Advice on what a root's series therefore is, and what an unlinked series means to a
+consumer, is with the author.

@@ -101,9 +101,11 @@ from the new key (T14). Still open:
 1. **Interpretations 1–3 above**, each a one-sentence specification fix if the
    reading is confirmed — merge-list order is the one with consequences, since
    without a rule one logical merge has several valid txids.
-2. **Do the other two-party types reject the degenerate pair** (departure,
-   disavowal, peering, series reissue with field 1 = field 2)? Reissue also
-   raises whether a root, having no patron, can reissue at all.
+2. **Whether and how a root changes series.** The degenerate pair is now
+   rejected for every two-party type [author, 2026-09-01], which closes the
+   self-countersigned reissue path — so a root, having no patron, cannot
+   produce a type-7 at all, and an unlinked fresh series is unprovable under
+   §2.3's proved-not-inferred rule. Advice pending.
 
 ## The canonical bar
 
