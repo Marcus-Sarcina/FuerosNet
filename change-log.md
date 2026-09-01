@@ -55,7 +55,7 @@ Proof of presence specified end to end (§7–6.7)
 and key compromise/recovery added (§9). Corrections made in this pass:
 latency bounds distance from *above*, not below (§7.6); radio-environment
 co-presence cut (§7.6.1); a second veto keypair reversed to a single keypair
-(§9.2); decay reframed as a deliberate mechanism (§15.5); retention's
+(§9.2); decay reframed as a deliberate mechanism (§16.5); retention's
 recovery role narrowed to weak ties (§9.1).
 
 ### 2026-08-12 (consistency pass)
@@ -97,20 +97,20 @@ sibling fallback, and answer TTL added.
 
 §11.6 added: self-routing addresses, repair in
 transit, infra nodes carry no payload, and the security/performance TTL split.
-Closes §21.7.
+Closes the routing open question.
 
 ## 2026-08-13
 
 ### 2026-08-13 (currency)
 
-§11.6.5 added: key currency treated as the PKI
+§12.6.5 added: key currency treated as the PKI
 revocation problem, not a session-key one. Stapled short-lived currency
 attestations, ~10 h lifetime, and failure mode graded by stakes rather than
 uniformly soft-fail.
 
 ### 2026-08-13 (outage)
 
-§11.6.5.1 added: patron outage cascades downward
+§12.6.5.1 added: patron outage cascades downward
 through countersignatures. Handled by sibling then grandpatron issuance, with
 the rule that attestations are issued fresh rather than extended stale.
 Light-client patrons pre-delegate issuance.
@@ -124,16 +124,16 @@ from below, anchor status requires size as well as rootlessness (correcting
 
 ### 2026-08-13 (corrections)
 
-§11.7.3 reverses an incorrect claim: the anchor
+§12.7.3 reverses an incorrect claim: the anchor
 budget is a per-node cache limit, not a global cap, so the caching threshold is
 per-node policy and must NOT be a protocol constant — a fixed threshold would
 make roots invisible in the early network. §11.2's 60B figure reframed as a
-stress test rather than a target. §11.7.1 added: Genesis identities need no
+stress test rather than a target. §12.7.1 added: Genesis identities need no
 currency attestation because the question it answers does not arise.
 
 ### 2026-08-13 (peering optionality)
 
-§11.7.5 records why peering stays
+§12.7.5 records why peering stays
 optional (infra-tier operation vs light-tier bootstrap; no ordering conflict)
 and that its three dependencies degrade gracefully. Peerless infra nodes
 flagged as a visible, policy-discountable deficiency. §6.2.5 notes cycle
@@ -141,7 +141,7 @@ prevention as unspecified.
 
 ### 2026-08-13 (subnet formation)
 
-§11.8 added, closing §21.9. Bootstrap
+§13 added, closing the bootstrap open question. Bootstrap
 reframed as recurring subnet formation rather than a one-time genesis: meeting
 before adoption, formation records permanently typed as witnessless, one infra
 instance required and two recommended, and ceremony evidence documented as
@@ -152,8 +152,8 @@ degrading by availability across three stages.
 Major simplification. §3.1.1 reframes
 multi-subnet membership as a power the protocol does not model rather than a
 feature it represents; the DAG claim removed from the specification. Soft-fork
-deleted as a transaction type. §21.8 dissolved rather than resolved. §11.8.6
-notes rotation is per-subnet; §11.8.7 records that deferring multiple identities
+deleted as a transaction type. §21.8 dissolved rather than resolved. §13.6
+notes rotation is per-subnet; §13.7 records that deferring multiple identities
 forces correlation, and that the device is the single point of failure for a
 cross-subnet identity.
 
@@ -167,10 +167,10 @@ refers to authority only.
 
 ### 2026-08-13 (client vs protocol)
 
-§11.8.7 records that multiple keys are a
+§13.7 records that multiple keys are a
 client concern with no protocol consequence beyond the rotation transaction,
 and that exhaustive-disclosure investigation degrades as multi-key matures.
-§11.8.7.1 added: local store is append-only and backs up with ordinary tooling,
+§13.7.1 added: local store is append-only and backs up with ordinary tooling,
 but the blob aggregates every key and photo, and backups must be encrypted
 separately and retention-aware or §7.5.1's commitment is fiction.
 
@@ -179,9 +179,9 @@ separately and retention-aware or §7.5.1's commitment is fiction.
 §12.1 added, closing session establishment:
 no NAT traversal problem, QUIC, dial-out attach with sibling failover as a
 declared degraded state, store-and-forward default with content-free push
-opt-in, and the patron-as-mailbox queue policy left open. §11.8.7.1 gains the
+opt-in, and the patron-as-mailbox queue policy left open. §13.7.1 gains the
 envelope-encryption construction, an honest costing of Shamir/SLIP-39 KEK
-splitting, and scan-on-import retention enforcement. §11.8.7 records that
+splitting, and scan-on-import retention enforcement. §13.7 records that
 rotation chains are walkable, so recovery and unlinkability are the same
 choice seen from two sides.
 
@@ -227,7 +227,7 @@ with it.
 
 Review pass 0.4. Five conflicts found
 and resolved; see new Appendix A.2. Presence record size aligned at ~35 KB, stale
-geohash comment fixed, infra threshold corrected to 110 in §15.6, anchor
+geohash comment fixed, infra threshold corrected to 110 in §16.6, anchor
 threshold S reframed as a guideline rather than a status boundary, and the
 `n` notation collision resolved by renaming the query count to `q`. Heartbeat
 interval and currency attestation lifetime given explicit status. One open
@@ -252,7 +252,7 @@ subtype added to the §8.1 schema to match the wire format; anchor redefined in
 §2 and the "every node replicates" claim corrected to local caching policy;
 the "any patron with subordinates is infra" claim scoped, with the consequence
 that light-client patrons give no censorship signal; §7.4's infra-trust claim
-rescoped to evidentiary reliability per §15.6; peering minimum marked
+rescoped to evidentiary reliability per §16.6; peering minimum marked
 recommended rather than required; agent deferral split so the schema
 requirement is in scope; §22 build step 1 no longer says "hostile networks".
 
@@ -371,19 +371,19 @@ graph.
 
 Review pass 0.7, 23 analysis units. New §16.5 gives
 privacy a home for the first time; it previously existed only as local argument
-at each mechanism, which is why the central finding went unnoticed. **§16.5.1
+at each mechanism, which is why the central finding went unnoticed. **§19.1
 states the composition invariant**: privacy must be assessed under composition
 of everything an observer can obtain, never artifact by artifact. §7.2 had
 said exactly this for biometrics and never generalised it. New finding P2: a
 presence record leaks a sample of the subject's *prior* counterparties via the
 verifier list, and neighbourhood structure via witnesses — §8.1's
 "strictly dominates" claim about carrying verifier responses is corrected to
-"a trade". §16.5.3 proposes Merkle-ised record bodies for selective disclosure.
-Nine deliberately accepted privacy costs consolidated in §16.5.7.
+"a trade". §19.3 proposes Merkle-ised record bodies for selective disclosure.
+Nine deliberately accepted privacy costs consolidated in §19.7.
 
 ### 2026-08-14 (V6)
 
-Vignette on the composition tradeoff added to §16.5.1,
+Vignette on the composition tradeoff added to §19.1,
 with two amendments to the proposed text: aggregation cost restored as part of
 privacy (identical facts, different access cost and evidentiary weight — the
 argument this document already makes about camera networks), and the exposure
@@ -398,9 +398,9 @@ The Ring/Flock
 comparison was wrong twice over: those are designed aggregation services, not
 examples of high-friction fragmented data, and the "zero access cost" claim was
 already false for this design because attestation has been pull-only since §14.
-New §16.5.1.1 records the error and states disaggregation as a positive
+New §19.1.1 records the error and states disaggregation as a positive
 property — §16.5 had catalogued composition risk without crediting what limits
-it. New §16.5.1.2 records **P12, Critical: end-to-end payload encryption is not
+it. New §19.1.2 records **P12, Critical: end-to-end payload encryption is not
 specified**, so both serving infra nodes currently see plaintext. The patron was
 accepted as a metadata chokepoint, never a content one, and the distinction was
 never written down.
@@ -412,7 +412,7 @@ data stores owned by a node, addressed relative to it, with access adjudicated
 by the requester's position. Notable as the one place §1.1's diagnostic comes
 out affirmative — owner and requester share topology and the owner runs the
 service, so access control is genuinely enforceable rather than merely visible.
-Resolves §21.10 structurally: *borrows authority → resource; bears its own costs
+Resolves the agent question — now §23.2 — structurally: *borrows authority → resource; bears its own costs
 → node*, which makes an agent a resource with permission to act, and makes its
 inability to accumulate independent standing structural rather than asserted.
 Object in scope; permission vocabulary and interaction protocol deferred.
@@ -452,7 +452,7 @@ Two changes
 from the 0.8 findings. **Patrons no longer countersign PoP** (§6.4): the patron
 was not present, PoP sits outside the subnet trust envelope, and a patron able
 to veto it shapes what later patrons see. This also makes the eclipse attack
-permeable, since witnessless ceremonies (§11.8.2) let an eclipsed user memorialise
+permeable, since witnessless ceremonies (§13.2) let an eclipsed user memorialise
 any real meeting unsuppressably. **The archive becomes a hash chain** (§8.1.1):
 each transaction carries a hash of the subject's previous one, so excision is
 impossible and only truncation to a prefix remains — which is self-defeating,
@@ -531,7 +531,7 @@ and front matter, not only to the specification body.
 ### 2026-08-15 (fork finding retracted)
 
 The author's claim that deliberate
-multi-device forking reintroduces selective disclosure is **withdrawn**. §11.8.7
+multi-device forking reintroduces selective disclosure is **withdrawn**. §13.7
 explicitly disclaims cross-subnet accountability, so presenting different views
 to different subnets attacks no stated guarantee — the finding was generated
 against an imagined requirement. §8.1.1's original claim is restored and scoped:
@@ -603,7 +603,7 @@ vignettes.
 
 Propagation check before re-running the
 review plan. Fixed: §22.2 still told the reader to state a degradation
-"whichever shape is chosen", though merges (§8.1.1.3) had superseded the three
+"whichever shape is chosen", though merges (§10.3) had superseded the three
 shapes; §16.5 had no entry for the resource layer, specified after it was
 written, so **P15** (catalog entries reveal what a node runs to its whole
 horizon, and the set of them is a fingerprint) and **P16** (abuse reports
@@ -652,9 +652,9 @@ states the ASN/prefix fields §3.4 had been citing it for.
 NAT traversal returns for payload only.
 Infra nodes act as **STUN and TURN**, which adds no capability they lacked —
 relaying payload is what a TURN server does — and makes the relay a **fallback**
-rather than the default. §12.1.1's "there is no NAT traversal problem" is
+rather than the default. §14.1.1's "there is no NAT traversal problem" is
 withdrawn: it held only because payload was always relayed. Three consequences.
-**Infra economics improve materially** — §15.6's ~$20/month was never checked
+**Infra economics improve materially** — §16.6's ~$20/month was never checked
 against relaying all payload for 1,110 subordinates, and bandwidth would have
 dominated it. **The relay path stays first-class**, since symmetric NAT and CGNAT
 defeat hole punching and two mobile peers is both the worst and the common case.
@@ -672,7 +672,7 @@ outside — and the check needs no new state. P17 downgraded to Low–Medium
 accordingly, with the residual noted: the horizon is bounded rather than chosen,
 and includes cousins a user may never have met, so both defaults stay
 overridable. **A2 gains a fifth dependent** and its failure would now collapse
-§15.6's infra economics as well. §14.1 gains a table of the horizon's five jobs,
+§16.6's infra economics as well. §14.1 gains a table of the horizon's five jobs,
 since *h* is now the most over-loaded parameter in the design.
 
 ### 2026-08-16 (0.3 unjustified claims, second run)
@@ -686,7 +686,7 @@ reconstruction cost, TURN relay fraction, the PAD claim, face entropy, the
 ageing regime, and infra costs. Added as **A14–A19**, and the orthogonality is
 now stated. **A17 is singular**: the only assumption used to *reject* an
 alternative rather than support a choice, closing off fuzzy commitments as a way
-to keep verification without keeping biometrics. §15.3's "peering is the cheapest
+to keep verification without keeping biometrics. §16.3's "peering is the cheapest
 route" superlative **withdrawn** — unattested adoption is plausibly cheaper —
 though the mitigation stands, since it needs peering to be cheap and
 endorsement-invisible rather than cheapest. Seven intensifiers replaced with
@@ -694,14 +694,14 @@ figures or mechanisms per Appendix A's intensifier rule.
 
 ### 2026-08-16 (trust ceiling framing withdrawn)
 
-§15.3 rewritten. **There is no
+§16.3 rewritten. **There is no
 trust ceiling**: standing is per-observer, and a peering edge is visible only
 within the two peers' horizons, so it conveys nothing to anyone outside them. The
 concern is therefore local and targeted — *gain standing with a particular victim
 via a favour from their neighbour* — not a route to global standing. What
 survives is that peering reads as a technical request rather than an endorsement,
 which is exactly what the low default flow capacity addresses: **the mitigation
-was right and the justification was wrong**. New **§15.3.1** states a principle
+was right and the justification was wrong**. New **§16.3.1** states a principle
 that was nowhere in the document: **the min-cut bound is observer-relative**.
 Different observers hold different edge sets and compute different cuts, so
 §16.3's Sybil bounds are per-observer, invisibility is conservative rather than
@@ -762,8 +762,8 @@ version against whom.
 Full re-run over 28 flows and stores,
 discharging the coverage caveat. 31 threats and 10 correlation findings; the
 individual threats mapped almost entirely onto P1–P17, and **the new material was
-overwhelmingly compositional**. New **§16.5.8 correlation register** — the
-structure §16.5.1's invariant required and the document lacked. Four new
+overwhelmingly compositional**. New **§19.8 correlation register** — the
+structure §19.1's invariant required and the document lacked. Four new
 individual findings, P18–P21. **C4 is the most instructive**: the same archive
 means different things to different observers, so *moving* one changes which
 entries are legible and **archive portability carries a destination-dependent
@@ -799,16 +799,16 @@ target has no filesystem access was **browser-specific stated as general**, and
 is withdrawn: WASI gives native WASM ordinary file access, an embedded component
 gets host bindings, and even in a browser OPFS provides real file handles. **What
 survives is durability**: browser storage is evictable under storage pressure
-unless persistent storage is granted, and since §8.1.1.1 makes the archive a
+unless persistent storage is granted, and since §10.2 makes the archive a
 second factor, silent eviction costs a security property rather than only
 convenience. §22.2 now states this, and a browser-hosted client needs
-§11.8.7.1's backup path to be mandatory rather than advisory.
+§13.7.1's backup path to be mandatory rather than advisory.
 
 ### 2026-08-16 (0.6 target 2, resolve a locator)
 
 **The resolution
 request/response protocol did not exist.** The design described resolution
-narratively across §11.3 and §11.6.1 and no wire message carried it, so the
+narratively across §11.3 and §12.6.1 and no wire message carried it, so the
 network's primary operation was unimplementable. New `wire-format.md` §7.6
 specifies it. Two further findings of substance: the **locator authentication
 contradiction** — design §11.1 requires the node's signature, the wire format
@@ -817,7 +817,7 @@ carriage, with a `SignedLocator` required standalone and a bare locator rejected
 and **descent is through infrastructure only**, terminating at the serving infra
 node and returning the residual path suffix rather than traversing it, which is
 what lets a path address a light client nothing can route to directly. That was
-implicit and is now in §11.6.1. Anchor entries are now self-signed — they vouch
+implicit and is now in §12.6.1. Anchor entries are now self-signed — they vouch
 for nothing, but an unsigned entry lets a gossip peer inject addresses and
 partition the network.
 
@@ -878,7 +878,7 @@ against the pair colluding, a threat direction the ceremony had not addressed.
 findings, two unsatisfiable. **A zero-sibling topology had no valid encoding**:
 `AttachAck` required one-or-more siblings while §1 forbids encoding an empty
 array, so an infra node with a single child could produce no conforming ack.
-And **§12.1.2's requirement that degraded attachment "must be explicit" had no
+And **§14.1.2's requirement that degraded attachment "must be explicit" had no
 wire representation** — `Attach` now names the client's intended serving node and
 `AttachAck` echoes the receiver's determination, so a disagreement surfaces
 rather than one side permitting operations the other considers unavailable.
@@ -891,16 +891,16 @@ the sibling-update frame were all undefined and now are.
 
 ### 2026-08-16 (degraded-attachment "explicit" corrected)
 
-§12.1.2's requirement
+§14.1.2's requirement
 that degraded attachment be explicit is a **user-interface obligation**, not a
 wire one; the author had misread it and added an `Attach` field for the client to
 assert its intended serving node, now removed. The supporting argument was also
 wrong: a sibling can determine the mode from its own topology, since a client
 attaching to it sits two hops away within its horizon. `AttachAck`'s mode field
 is kept for a better reason — it reports the **server's** determination, because
-a client with stale topology may not know which state it is in. §12.1.2 now states
+a client with stale topology may not know which state it is in. §14.1.2 now states
 the UI obligation as a reference-client requirement, of the same kind as
-§16.5.6's disclosure rules.
+§19.6's disclosure rules.
 
 ### 2026-08-16 (0.7 LINDDUN, third run)
 
@@ -912,10 +912,10 @@ visible**. C12: the verification-query log is a *defence* that becomes an
 exposure — retained beside the archive it timelines ceremony attempts the network
 never recorded. C13: enumerated disavowal reasons avoid a defamation surface, but
 **context supplies the semantics the code omits** when joined with resource
-history. **New P23**: §16.5.6's capture-time disclosure obligation covered
+history. **New P23**: §19.6's capture-time disclosure obligation covered
 participants only — a verifier who answers permanently proves they met the
 subject, and the consent machinery protects the subject while asking the verifier
-nothing. **P22**: query logs have no retention rule. §16.5.7 gains an accepted
+nothing. **P22**: query logs have no retention rule. §19.7 gains an accepted
 cost for the absence of erasure at the evidence layer, noted as a compliance
 posture needing a documented lawful basis rather than a deletion mechanism.
 
@@ -924,7 +924,7 @@ posture needing a documented lawful basis rather than a deletion mechanism.
 `resource-requirements.md` folded
 into the documents. §10 rewritten around the execution model: **the infra node
 is the front door and the resource sits behind it**, so a resource never reads
-network state and a compromised one leaks only its own data. New §10.0.1:
+network state and a compromised one leaks only its own data. New §11.0.1:
 **wider reach is federation, not wider scope** — a subnet-wide service is many
 local instances, each administered by a patron, which makes §1.2's freedom
 argument an architectural property rather than a claim. §10.2 states
@@ -937,7 +937,7 @@ signed `CatalogEntry` from the personalised catalog page and notes role names
 leak. New §10.7 on gateways re-concentrating what the architecture
 disaggregates, with broker-rather-than-proxy as the default. New **P24** (gateway
 operators see external traffic), **A21** (patrons will administer resources — the
-resource-layer sibling of A11), **§22.6** *(since removed as out of scope)* (external root-of-trust bootstrap is
+resource-layer sibling of A11), **an open item since removed as out of scope** (external root-of-trust bootstrap is
 unmapped), and a new accepted risk in §16.4: **a compromised infra node can forge
 its subordinates' access**, though not their transactions. §1.2 gains the SSO
 adoption observation; §14.1's horizon table gains a sixth job.
@@ -948,14 +948,14 @@ adoption observation; §14.1's horizon table gains a sixth job.
 participation while requiring its schema constraints be settled immediately. Both
 halves are stale: §10.3 makes a delegated agent **a resource**, and §10.2
 already gives resources identity without consuming subordinate slots — so there
-is nothing left to settle in the schema. §21.10 narrowed to the one question that
+is nothing left to settle in the schema. §23.2 narrowed to the one question that
 remains open, **what "presence" means for a persistent self-directed AI**, and §4
 now notes that autonomous participation is deferred as a *decision* rather than
 as a mechanism: such a participant is an ordinary node.
 
 ### 2026-08-16 (payload encryption: import, not invent)
 
-§12.2.4 replaced.
+§14.2.4 replaced.
 **Directly applicable prior art exists, specified and formally verified**, so the
 requirement is to adopt rather than design. **PQXDH** for asynchronous key
 agreement — the exact situation of a recipient offline with published prekeys —
@@ -965,7 +965,7 @@ SPQR, released October 2025) for session forward secrecy and post-compromise
 security, whose erasure-coded chunking already solves the ML-KEM key-size problem
 this design would otherwise hit. Two narrowing observations: **only leaf-to-leaf
 needs any of it**, since patron and resource endpoints are online by definition
-and covered by the §12.1.1 transport handshake; and §12.2.2 had independently
+and covered by the §14.1.1 transport handshake; and §14.2.2 had independently
 reconstructed the X3DH prekey shape, so importing replaces a hand-rolled version
 with the analysed original. One place to exceed the deployed profile: PQXDH's
 published revision authenticates classically, and §5.1's hybrid identity permits
@@ -975,7 +975,7 @@ control plane requires — the split is correct rather than a compromise.
 
 ### 2026-08-16 (payload encryption propagated)
 
-The §12.2.4 adoption carried
+The §14.2.4 adoption carried
 into the companion documents. **`wire-format.md` §7.7 adds prekey distribution**
 — `PrekeyBundle`, `PrekeyRequest`, `PrekeyReply` — with the bundle **opaque to
 this protocol**, since only the endpoints hold the state to interpret it and
@@ -1031,10 +1031,10 @@ specification update, which matters because most values are undefined in v1 and
 will be assigned later. Ten codes assigned. **Codes 32+ are the vocabulary for
 the negative attestation §6.2.2 describes.** Code 4, incompatible subnet
 membership, sits without prejudice deliberately: the patron is asserting
-something about *that subnet*, not about the subordinate. Also clarified: §22.6's *(since removed)*
-external root-of-trust bootstrap is **not** the genesis procedure — §11.8 is
-bootstrapping inside the network, §22.6 is an outside consumer deciding which
-issuers to recognise. §21 item 10 marked **deferred by decision**, not to be
+something about *that subnet*, not about the subordinate. Also clarified: the *(since removed)*
+external root-of-trust bootstrap is **not** the genesis procedure — §13 is
+bootstrapping inside the network, while that item was about an outside consumer
+deciding which issuers to recognise. §21 item 10 marked **deferred by decision**, not to be
 implemented in this or any intervening version.
 
 ### 2026-08-16 (two items moved out of scope)
@@ -1068,7 +1068,7 @@ around it. **Greasing is mandatory**: every implementation sends parameters it
 knows to be unassigned and must tolerate receiving them, with ids of the form
 `31*N + 27` permanently reserved. An extension mechanism nobody exercises decays
 until it no longer works anywhere, so this keeps the ignore-unknown path
-exercised in production rather than only in tests. §22.5's blocker list is down
+exercised in production rather than only in tests. §22.1's blocker list is down
 to one: the resource interaction protocol.
 
 ### 2026-08-16 (node-resource trust boundary)
@@ -1138,7 +1138,7 @@ the interaction protocol.**
 
 ### 2026-08-16 (resources assert nothing into the trust graph)
 
-§10.0.3 closes
+§11.0.3 closes
 the last question with design content in it. **A resource reports to its host and
 may message nodes peer-to-peer where configured; it emits nothing the trust
 metric consumes.** The reason is that the alternative is unbounded — letting
@@ -1159,7 +1159,7 @@ The last blocker. **HTTP/3 over the
 existing QUIC session**, credential in request headers
 (`resource-requirements.md` §3) — no new transport, no new framing, and no
 signing or canonical encoding, because the request path carries no trust
-(§10.0.3). The **header-spoofing hazard** is stated on both sides, being the way
+(§11.0.3). The **header-spoofing hazard** is stated on both sides, being the way
 this pattern is most often misimplemented: the node must strip inbound `rhtn-*`
 headers before inserting its own, and a resource must not trust them on any path
 but the gateway's, since being behind a gateway is a deployment fact rather than
@@ -1169,11 +1169,11 @@ access silently** — nobody acts, the predicate simply matches different people
 so the client warns before such a move. The larger effect is hosting: a
 light-client owner's resource runs on its serving infra node, so a move that
 changes that node forces migration — an argument for resource owners to run
-infrastructure. **§22.5's blocker list is now empty.**
+infrastructure. **§22.1's blocker list is now empty.**
 
 ### 2026-08-16 (provisionality of unset parameters)
 
-New §20.1.1. *"Take a
+New §21.1.1. *"Take a
 provisional value and tune later"* is true of most of the eighteen and false of
 six. **A parameter hardens when someone other than its chooser depends on it** —
 an attacker choosing where to attack, a peer parsing a number, a consumer reading
@@ -1246,8 +1246,8 @@ confirmed as part of the deliverable set** — §4 and §2 are the only specific
 of the credential and the request framing anywhere — and converted from
 working-file form: the R-numbering, the propagation table and the
 "what this implies" section are gone, replaced by plain sections and the same
-no-protocol-facts rule the other requirements documents carry. Also: §16.5.8 sat
-before §16.5.7; four headings still carried stale status markers
+no-protocol-facts rule the other requirements documents carry. Also: §19.8 sat
+before §19.7; four headings still carried stale status markers
 (*REQUIREMENTS SKETCH*, *DATA PLANE UNDESIGNED*, *NEW FINDING*, *Still deferred*).
 All references in all six documents re-verified after the renumber.
 
@@ -1288,7 +1288,7 @@ full `VerificationQuery` and the `query_id`. **Also fixed:** `duration_s` surviv
 in §8.1's illustrative schema after the wire format removed it; §21 listed the
 disavowal enumeration, version-mismatch behaviour and CBOR-versus-protobuf as
 open when all three are settled, and pointed at a nonexistent `wire-format.md`
-§12; §22.5 listed test vectors as blocking two lines above "none remain";
+§12; §22.1 listed test vectors as blocking two lines above "none remain";
 parameter counts disagreed (17 versus 23); §14 said four message classes over a
 five-row table; and **five presence references had become §11.2 in the section
 split** — pattern-indistinguishable from the legitimate anchor references, so the
@@ -1315,7 +1315,7 @@ here supports. **§20 now states plainly that every parameter is a chosen
 operating point**, and `wire-format.md` §1 that its maxima are conservative DoS
 ceilings rather than capacity results — exceeding one means *malformed*, not
 *overloaded*. **The SaaS adoption claim was narrowed in `resource-requirements.md`
-during 0.1 and left unfixed in design §1.2.1a** — the same claim in two places,
+during 0.1 and left unfixed in design §1.3** — the same claim in two places,
 one corrected. Twelve intensifiers replaced with the mechanism or the figure.
 
 ### 2026-08-16 (0.4 parameter inventory, all five documents)
@@ -1354,7 +1354,7 @@ structurally valid responses without inspecting content, so a new response type
 needs no rule change; **prekey prefetch** as *a fetch revealing intent must be made
 independent of intent, and consumable material never prefetched*; **session
 termination** as triggered by any authorisation-state change rather than an
-enumerated list of causes; and **§20.1.1's hardening rule** as a property with the
+enumerated list of causes; and **§21.1.1's hardening rule** as a property with the
 table as instances. Two generalise beyond their sections: *absence of data from a
 holder is never evidence about that data's existence*, and *a component behind an
 authenticating intermediary must not treat intermediary-asserted metadata as
@@ -1423,7 +1423,7 @@ in the table" as "verified" while its ingestion path does not enforce it has a
 partition vulnerability with no visible symptom. Also: endpoint selection and
 retry remain local policy, but with a floor — **the list must be treated as
 alternatives**, or a single unreachable first entry becomes a permanent outage.
-And new §5.6.0 resolves an ambiguity between the design narrative and the wire
+And new §7.7.1 resolves an ambiguity between the design narrative and the wire
 operation: **a light client sends its resolution request to its serving node**,
 not to the anchor; the request is anchor-*relative* in how its path is read, which
 is not a statement about who it is addressed to.
@@ -1457,7 +1457,7 @@ the record with responses nobody asked for.
 ### 2026-08-16 (0.6 implementation attempt, client attach)
 
 Fifteen findings,
-four blocking. **A stale sentence in design §12.1.2** still said `Attach` names the
+four blocking. **A stale sentence in design §14.1.2** still said `Attach` names the
 intended serving node after the field was removed — an implementation written
 from the design alone would have produced incompatible CBOR. **The most
 consequential finding concerns transport authentication**: RFC 7250 carries one
@@ -1497,7 +1497,7 @@ Four new correlations and
 three findings. **C15 narrows a guarantee written today**: pairwise identifiers
 stop two *independent* vendors comparing IDs, and do nothing to stop **one vendor
 correlating its own several resources** using account and network data it holds
-anyway. §10.0.2's claim now says so — the scheme addresses cross-*operator*
+anyway. §11.0.2's claim now says so — the scheme addresses cross-*operator*
 linkage, not cross-*service* linkage within one operator. **C17 is the cheapest
 serious fix**: a retained source photograph carrying EXIF or recognisable
 background defeats the coarse-geohash design outright, bypassing rather than
@@ -1519,7 +1519,7 @@ Run in one pass at high effort.
 **The design is much stronger against cryptographic fabrication than against
 control of endpoints, local infrastructure and human participation** — its worst
 cases are where the attacker legitimately possesses the component the
-architecture deliberately trusts. Three findings changed text. **§15.4's
+architecture deliberately trusts. Three findings changed text. **§16.4's
 pluggability tension is an attack surface, not a coordination inconvenience**: a
 funded operator's best move is not building a giant fake region, which the
 reference metric renders nearly worthless, but **shopping for evaluators whose
@@ -1738,7 +1738,7 @@ Eleven gaps. **One is a self-contradiction introduced the previous day**:
 the 730-day window was given as a formula admitting the boundary instant and a
 sentence excluding it, which two implementations resolve differently at exactly
 that point. Now open at the far end, closed at the near. **The deepest finding is
-that the anti-grinding property had no mechanism behind it.** §3.6.2 claims an
+that the anti-grinding property had no mechanism behind it.** §5.2 claims an
 honest retry within the window reproduces the same verifier sample while an
 aborting attacker gets one fresh sample per day — both depend on a witness nonce
 being *stable across attempts*, and nothing said how. A witness generating fresh
@@ -1854,7 +1854,7 @@ minutes proving they were where I was"*. V4 also priced the attack as universal 
 §7 states plainly that **bilateral collusion is unpreventable**; the cost falls
 on edges to people who did not agree, not on meetings inside territory the
 attacker controls. And V8 described institutions binding *"its own name for you"*,
-the multi-identity property §11.8.7 records as **deferred**. Worth noting the
+the multi-identity property §13.7 records as **deferred**. Worth noting the
 pattern: vignettes drift optimistic, because the version that reads well is the
 version that claims the mechanism works better than it does.
 
@@ -2054,7 +2054,7 @@ argue against it.
 ### 2026-08-22 (grandpatron subtree acknowledgement)
 
 New §11.2.1 and
-`wire-format.md` §7.4a. **Adoption puts a node inside its grandpatron's Dunbar
+`wire-format.md` §7.5. **Adoption puts a node inside its grandpatron's Dunbar
 Org automatically, so a patron could admit arbitrary strangers to their own
 superior's resources without that superior agreeing.** A grandpatron now
 countersigns before the new node reaches resources they host — enforceable for
@@ -2198,7 +2198,7 @@ which were repaired by dropping the paren rather than by patching across lines.
 §23.2 and the status
 block now say that **nothing on the protocol itself is unanswered, with two
 qualifications**: the general cycle-prevention procedure for partial information
-(§6.2.5) and the owner-movement rule for in-flight resource state (§11.8) are
+(§6.2.5) and the owner-movement rule for in-flight resource state (§11.2) are
 protocol-shaped and unwritten. Neither blocks writing code or two implementations
 agreeing. Everything else outstanding is a parameter value, a policy choice, or
 product behaviour. **`authoring-conventions.md` gains a rule on cleanup passes**:
@@ -2807,7 +2807,7 @@ four lines below. Resolved by stating the rule as a condition rather than a list
 the signer**, so envelope entries carry it and embedded objects do not, since a
 `VerifierResponse` names its verifier in a field and a second copy could disagree.
 **Late verifier responses were said in three places to have a present encoding
-and no such object existed** — now `LateResponse` (`wire-format.md` §7.3a), a
+and no such object existed** — now `LateResponse` (`wire-format.md` §7.4), a
 standalone signed object referring to the record it supplements, which explicitly
 **does not amend it**: the record is immutable, finalization already happened, and
 a late response is evidence an evaluator may weigh rather than a change to what
@@ -3038,7 +3038,7 @@ the ceremony pre-commitment**: fixed before capture, countersigned by both parti
 and the witnesses, unique per ceremony — everything the binding needed, available
 when the binding is made. **The key grant had no message**, the same gap class as
 the `CurrencyAttestation` signature: three implementations would have invented
-three. Now `KeyGrant` (`wire-format.md` §7.3a), carried as end-to-end encrypted
+three. Now `KeyGrant` (`wire-format.md` §7.3), carried as end-to-end encrypted
 payload and **never retained in a record**, since a persisted grant defeats the
 retention property the scheme exists for. It names the record to open — a verifier
 met several times holds several sealed captures — and the query it answers, so an
@@ -3055,7 +3055,7 @@ to cover the resource layer found what it was added to find. **The authorisation
 rule is implementable** — membership gate, subtree acknowledgement, predicate
 evaluation, pairwise derivation, credential construction all work — and **the
 request cannot be carried**, because frame types 5 and 6 were named and neither
-body was ever defined. **A direct contradiction alongside it**: §6.0 put resource
+body was ever defined. **A direct contradiction alongside it**: §8.0 put resource
 frames on stream 0 while §8.1 assigns request/response to bidirectional streams.
 Resolved toward §8.1 — resource traffic is not session control — with frames 5 and
 6 withdrawn from the control table and `ResourceRequest`/`ResourceResponse` drafted
@@ -3199,7 +3199,7 @@ attributability. **Re-registration replaces the current entry** — one per reso
 with the archive keeping both transactions: **the archive is history, the catalog
 is state.** The infra client must append and replace together, since a crash
 between them leaves either a transaction with no queryable entry or an entry whose
-transaction is missing. **And the §8.2.1 topology gap is worse than recorded**: a
+transaction is missing. **And the §11.1 topology gap is worse than recorded**: a
 resource request needs a session with one non-attached node, a catalog query needs
 one with every infra node in the asker's horizon.
 
@@ -3491,7 +3491,7 @@ Typing them as weaker evidence governs weight, not eligibility: the defence and 
 attack act on different quantities. **The node parses HTTP and re-serialises it**,
 where the wire format had said it relays bytes opaquely *and* strips `rhtn-*`
 headers — two different components, with the gap between them being the classic
-multi-parser boundary hazard. New §8.2.2 requires parse, reject-don't-normalise,
+multi-parser boundary hazard. New §11.2 requires parse, reject-don't-normalise,
 and exactly one message per request. **`started_at` MUST be monotonic against the
 committed back-pointer**: it determines the 730-day window and therefore *n*, so a
 backdated ceremony yielded a required verifier count of **zero**, and varying the
@@ -3623,7 +3623,7 @@ each node's own storage policy, with no hop count, TTL or reach field, because a
 counter would encode the sender's horizon and impose it on receivers (§15.1) and
 because nothing verifies that an intermediary decremented it. Duplicate suppression
 is by `txid` against the store the node already keeps. **No acknowledgement and no
-retry**: §2.1's back-pointers make a gap self-announcing at the receiver, §5.8
+retry**: §2.1's back-pointers make a gap self-announcing at the receiver, §7.9
 fetches what is missing, and periodic reconciliation with siblings and patron is a
 replay of the same frames rather than a separate mechanism.
 
@@ -3651,7 +3651,7 @@ did. A `Locator` is `{anchor, path, seqno}` — a position. The infra-child endp
 gap was also narrower than stated, since a **peering** record already carries both
 endpoints' addresses; what had no carrier was an infra node that neither peers nor
 serves as an anchor, a supported degraded state. Closed by a **node endpoint record**
-(`wire-format.md` §7.3d) modelled on `AnchorEntry`, self-signed for the same reason
+(`wire-format.md` §7.6) modelled on `AnchorEntry`, self-signed for the same reason
 §5.3 gives — retroactive attribution of forged gossip, which is worth having for a
 flooded object and not for a referral from the one party you are already talking to.
 
@@ -3666,7 +3666,7 @@ Metadata bounded to ciphertext, recipient keyhash and arrival time. Only the cap
 **Owner movement was already written, in the wrong document.**
 `resource-requirements.md` §7.1 and §7.1 carried the general rule — access is a
 predicate evaluated at request time, so there is no grant object for a move to
-invalidate — while design §11.8 and §23.2 recorded it as unwritten. Relocated to §11.2
+invalidate — while design §22 and §23.2 recorded it as unwritten. Relocated to §11.2
 per Appendix A's rule that requirements documents carry no protocol facts.
 
 **`CatalogEntry` gains an optional `data_practice` declaration** (§11.5), which is
@@ -3676,7 +3676,7 @@ the catalog's — you learn a resource's posture if and when you already have ac
 and think to ask — which is stated rather than left to be discovered. **P20 is not
 closed by it**; the field gives visibility, not a limit.
 
-**Abuse reports are standalone**, not bound to a live session (§11.8). Binding would
+**Abuse reports are standalone**, not bound to a live session (§11.6). Binding would
 make a report unfileable after the session ended, which is when most are filed.
 
 **What closing all of that cost**, recorded because it is the part that gets lost:
@@ -4104,8 +4104,8 @@ the payload is end-to-end encrypted. §5.3 corrected to describe what happens ra
 than a procedure that cannot run.
 
 **Withdrawn: the missing `ServingInfra.advances`.** §12.6.1 permits a node to return
-the serving node directly; §5.6.2's arrival check rejects exactly that. The author
-asked what the check breaks. **Nothing** — §5.6.2 says the running total exists
+the serving node directly; §7.7.3's arrival check rejects exactly that. The author
+asked what the check breaks. **Nothing** — §7.7.3 says the running total exists
 "purely to know when it has arrived… no node depends on it", and the reply's result
 code already says so. Over-counting is caught by the overshoot bound; equality only
 detected *under*-counting, which is the legitimate optimisation. **The check was
@@ -4166,7 +4166,7 @@ and verified at contact time" was corrected with it.
 A
 read-back of the 0.6.2 report against the current documents found the previous
 entry's claim *"the check was deleted rather than a field added"* was **false at
-the time it was written**: the arrival-consistency equation still stood in §5.6.2,
+the time it was written**: the arrival-consistency equation still stood in §7.7.3,
 as did a "returns a repair" in its intro, and two fixes proposed as mechanical —
 the truncation clarification and `NetworkPoint`'s key listing order — had never
 been applied at all. All four are now actually in.
@@ -4177,7 +4177,7 @@ prefixes exist only in unsigned aggregate state and §5.6's full-path rule needs
 completeness marker — the reviewer's `require_complete_path_provenance` seam
 dissolves.
 
-§5.6.2 now states that arrival is announced by the reply rather than computed:
+§7.7.3 now states that arrival is announced by the reply rather than computed:
 per-referral checks (`advances` ≥ 1, no advancing past the path's end) remain, the
 equality that rejected §12.6.1's direct-serving answer is gone.
 
@@ -4221,7 +4221,7 @@ states: independence is a visible signal, not a trust input.
 All eleven verified; ten held, one (U-11) was the text
 being confusing rather than contradictory.
 
-**The central finding was self-inflicted.** §3.5.2 claimed structural verification
+**The central finding was self-inflicted.** §4.5.2 claimed structural verification
 needs no disclosures while §2.2's structural rules consume three disclosable
 fields — `started_at` (monotonicity, the 730-day window), `subtype` (formation
 rules), `proximity` (the strongest-channel rule). A minimised record could not be
@@ -4235,7 +4235,7 @@ checks. `subtype`: a formation record's absent evidence arrays announce it, so t
 label hid nothing. **Both return to the body** (keys 1 and 10, subtype's 0/1
 assignment restored — closing U-5, which the move had orphaned). `proximity` stays
 disclosable — genuinely private — and the strongest rule is the one structural rule
-checked only on reveal, stated in §2.2, §3.5.1's decoder rules and both exchange
+checked only on reveal, stated in §2.2, §4.5.1's decoder rules and both exchange
 tables. The disclosure set is seven; salts ~112 B, 0.3%.
 
 **A presentation now has a schema** (U-1, blocking): `PresentedRecord = [Envelope,
@@ -4244,7 +4244,7 @@ tables. The disclosure set is seven; salts ~112 B, 0.3%.
 nothing. Seven slots always; a revealed label differing from its slot is malformed.
 
 **Value schemas restored** (U-6): each label's value is the CBOR its field carried
-in the body, tabulated in §3.5.1 — the move had orphaned retention's `[uint, uint]`
+in the body, tabulated in §4.5.1 — the move had orphaned retention's `[uint, uint]`
 entirely.
 
 **Formation records carry the genesis value, not an absent back-pointer** (U-7):
@@ -4353,7 +4353,7 @@ callbacks; heartbeat timestamps are advisory; a greased id avoids locally-known
 ids and a collision is accepted at its probability.
 
 **A 0.6.2 leftover surfaced**: `light-client-requirements.md` still instructed
-clients to check the arrival equation deleted from §5.6.2 — replaced with the
+clients to check the arrival equation deleted from §7.7.3 — replaced with the
 per-referral checks. And design §5.2 now states the browser-wasm constraint
 precisely: the gap is the transport stack, not the primitives, and native and
 browser conformance are separate targets.
@@ -4370,7 +4370,7 @@ bytes while the query and response define the same identifier as 32-byte SHA-256
 consent while request type 4's body was `VerificationQuery` alone, which cannot
 carry it — the body is now `[ VerificationQuery, COSE_Sign1 ]`, consent beside
 the query and never inside it, since it signs the hash of fields 1–4 and placing
-it in the map it authorises recreates §3.6.6's circularity one level up. And
+it in the map it authorises recreates §5.6's circularity one level up. And
 `basis` was required on every response while `unavailable` and `pending` assert
 no evidence — no truthful value existed, photo bases demanding a version that may
 not exist and personal_knowledge as a sentinel being structurally valid and
@@ -4455,7 +4455,7 @@ belonged to no class at all, having been excluded from the only one that named i
 **The pagination defect was real and the author's repair was cheaper than the one
 proposed.** The continuation names a service type, not a position, so 65 visible
 entries of one type left the 65th unreachable and an asker following the hint
-looping forever — the exact failure §3.7's "truncation must make progress"
+looping forever — the exact failure §6.4's "truncation must make progress"
 paragraph claims to prevent, since ordering makes the answer *stable* and stability
 is what causes the loop. A position-carrying cursor was proposed and dropped in
 favour of **raising the reply bound to 111 = 1 + f + f²**, the Dunbar Org
@@ -4494,14 +4494,14 @@ paragraphs in a block while `AnchorEntry`'s own opener was missing. The file hel
 reported clean. **Even parity is not pairing.** The check now walks the pairs and
 looks for headings trapped in blocks; all 82 fences pair and none is.
 
-**Four more the review did not reach.** §3.7 mandated the keyhash order, then said
+**Four more the review did not reach.** §6.4 mandated the keyhash order, then said
 which 64 are returned is the node's choice, then argued that requiring an order
 would be "a sorting obligation with no consumer" — an argument against the rule the
 section had already made. "Concurrent re-registration" was stated twice in two
 wordings six lines apart. `infra-client-requirements.md` §11 told operators to
 **sign every entry they return**, contradicting "the owner alone signs" and the
 single owner signature `CatalogEntry` actually carries. And the sort key was not
-total — §3.7 states two owners may register the same resource keyhash — so the
+total — §6.7 states two owners may register the same resource keyhash — so the
 stability the truncation argument rests on did not hold; the key is now (resource,
 owner).
 
@@ -4511,7 +4511,7 @@ wrapper reading changes body bytes, `txid` and envelope signatures); and the
 explicit-scope keyhash list is ascending and distinct, matching every comparable
 list in the document — it is signed, so two decoders disagreeing means one rejects
 bytes the other accepts on an object neither may re-encode. **Not applied**:
-apply-last needs no linearization point, which §3.7 already says outright; and the
+apply-last needs no linearization point, which §6.5 already says outright; and the
 crate-maturity findings restate design §5.2, which already records the unaudited
 notices and the wasm transport gap.
 
@@ -4536,7 +4536,7 @@ queries and prekeys — so it now points at the table instead of restating it.
 either, and needs none: design §11.6 already says an abuse report is created and
 consumed at the owner's node, signed because it is portable rather than because it
 travels. Type 6 is the opposite case, which is why it gets a tag — an entry must
-cross from the owner who signs it to the host that answers for it. §3.7 now says so,
+cross from the owner who signs it to the host that answers for it. §6.3 now says so,
 because the question will be asked again.
 
 ## 2026-08-28
@@ -4564,7 +4564,7 @@ addressed and nothing can be disclosed; a decoded body carrying malformed HTTP i
 answered only after the opaque gates, so a stranger cannot probe a resource by
 sending it rubbish and reading which complaint comes back. Availability stays last.
 
-**One host may not serve two claims on one resource keyhash.** §3.7 permits two
+**One host may not serve two claims on one resource keyhash.** §6.7 permits two
 owners to register the same keyhash and `ResourceRequest` names the resource and
 nothing else — so a node holding both has nothing to choose with, and choosing
 wrongly applies one owner's membership and roles to the other's backend. The host
@@ -4583,7 +4583,7 @@ topology changes. `infra-client-requirements.md` §10.1 gave the evaluation orde
 *membership, existence* while citing §8.2, which gives existence first for a stated
 reason: membership is owner-relative and a keyhash you do not host has no owner.
 And `resource-requirements.md` §3 called the client-to-node carrier an rhtn control
-frame citing §6.0, when it is a `ResourceRequest` on a new bidirectional stream.
+frame citing §8.0, when it is a `ResourceRequest` on a new bidirectional stream.
 
 **Three broken tables, none of which a reference check or a fence check can see.**
 `resource-requirements.md` §3's credential table was cut in half by an interleaved
@@ -4606,7 +4606,7 @@ given the other spelling rejects bytes that decode identically. Role order in th
 header **carries no information**. The session identifier is **per resource**, on
 the pairwise principal's own reasoning (§11.0.2): one shared across resources would
 re-link the caller between them and undo the separation the principal was derived to
-create. And §8.2.2 now rejects `CONNECT`, `Upgrade` and `Expect: 100-continue` —
+create. And §11.2 now rejects `CONNECT`, `Upgrade` and `Expect: 100-continue` —
 each wants a tunnel, a protocol switch or an interim response, and the exchange
 carries one answer — and fixes routing to the resource keyhash, since letting a
 caller's `Host` or absolute-form target re-aim the request turns the proxy into
@@ -4633,8 +4633,8 @@ The review noticed a `ResourceRequest` is worse — it carries an arbitrary
 application request, and a replayed one repeats whatever that request did — but the
 claim is broader than either: **a request that changes state or spends a budget
 must not be processed in early data.** A replayed prekey fetch consumes a one-time
-key (§5.8); a replayed verifier query spends an anti-oracle count (§3.6); a
-replayed registration reverts the current entry (§3.7). The general rule now sits
+key (§7.8); a replayed verifier query spends an anti-oracle count (§3.6); a
+replayed registration reverts the current entry (§6.5). The general rule now sits
 in §8.1 and `Attach` is named as its other instance, on the other stream class.
 **Read-only lookups are unaffected**, which is what keeps 0-RTT worth having.
 
@@ -4649,10 +4649,10 @@ answer *in*, so the stream fails; once the type is known a defect in the body is
 that type's business. **No application error code is assigned for the reset** and
 none is needed — the reset is the whole message.
 
-**The resource response's framing rules were filed under the catalog.** §3.7's
+**The resource response's framing rules were filed under the catalog.** §6.4's
 sentence about carrying a catalog query had three paragraphs about
 `ResourceResponse` run onto it — that field 1 = 0 may repeat as a sequence, that no
-length is declared up front, that a non-zero status ends the exchange. In §3.7 they
+length is declared up front, that a non-zero status ends the exchange. In §6.4 they
 are not merely misplaced but wrong: a `CatalogReply`'s field 1 is a nonce, not a
 status, so a reader following them would expect a repeating catalog reply with a
 status code. Moved to §8.2, where the object they describe is defined. The
@@ -4680,7 +4680,7 @@ without definitions.
 
 **An infra node that changed address could not say so.** §5.6's `seqno` is §4.3's
 per-node counter, which §4.3 said was "incremented on every position change".
-§5.6 replaces on strictly greater. §10.1 and §5.7.3 make equal `seqno` with
+§5.6 replaces on strictly greater. §10.1 and §7.7.3 make equal `seqno` with
 different contents **malformed** — reasoning, correctly, that a subject advances
 its own counter to express a change. **A node whose address changed but whose
 position did not could therefore advance nothing**, so its republished record
@@ -4864,7 +4864,7 @@ to answer, but for the key that makes answering possible.
 
 **The L = 2 allowance does not compose (author, 2026-08-28), and L itself does not
 change.** §21 already defined L as *non-infra subordinate levels* with the value 2
-giving 110, which is what the author's §3.3.1 heading says. What was wrong sat on
+giving 110, which is what the author's §3.3 heading says. What was wrong sat on
 top of it: Appendix A.2 gave each of an infra node's children its own two levels,
 so the allowance compounded into three tiers and 1,110 as of right. **The levels
 are counted from the infra node.** A node one level down may hold subordinates and
@@ -4999,8 +4999,8 @@ replaces it is smaller — field 4's timestamp, retained per current row rather 
 as a history, so an ancestor holds when each slot last changed and not a series.
 
 **The unformable confirmation fetch dissolved with the same change.** §10.2 required
-a detection to be confirmed by fetching the underlying transaction via §5.9, and
-§5.9 needs an archive head that reaches you only by having adopted the subject
+a detection to be confirmed by fetching the underlying transaction via §7.9, and
+§7.9 needs an archive head that reaches you only by having adopted the subject
 (§3.1 field 7) — so the rule was unperformable for exactly the distant cycles the
 memo exists to catch. **It is also unnecessary**: the cycle check fires only on the
 party field 1 names, who signed the transaction and holds the slot, so confirmation
@@ -5178,7 +5178,7 @@ the P/C registers were put to the author; all three answers corrected text that
 had overreached rather than adding mechanism.
 
 **NEW-1, the resource front door.** §14.2's table said a leaf-to-resource message
-is plaintext only at the resource, while §8.2.2 requires the hosting node to parse
+is plaintext only at the resource, while §11.2 requires the hosting node to parse
 and re-serialise the HTTP to insert the credential. **The node cannot both insert
 an authenticated credential and be unable to read what it inserts into**, and the
 table now says so — splitting the row into *through its host*, where the node is an
@@ -5222,7 +5222,7 @@ owner keeps a live table and generates responses from current state; there is no
 requirement to keep records of past resources.* §10 now states the exclusions and
 why they matter — anything travelling with an archive is presented to every future
 patron along with it, which is the wrong audience for what a person runs and the
-wrong duration for what they used to run. §15's Catalog class row, §3.7's
+wrong duration for what they used to run. §15's Catalog class row, §6.5's
 supersession and withdrawal paragraphs, and infra §12's bullet all follow.
 
 **NEW-3, the currency query — specified.** §12.6.5's stapling design falls back to
@@ -5478,14 +5478,14 @@ representativeness of the sample.** Witnesses would ideally be drawn at random f
 the whole userbase; no node can enumerate it, so each party draws from what it can
 see in the counterparty's neighbourhood, and in a balanced set each party knows half
 the witnesses are its own nominees and therefore uncurated by the counterparty.
-§7.1 step 1 and §3.6.2.1's closing now say that, and say what it leaves open.
+§7.1 step 1 and §5.2.1's closing now say that, and say what it leaves open.
 
 **A one-witness record is where the property vanishes, and it stays valid.**
 `wire-format.md` §3.2 requires at least one witness and requires `nominated_by` to
 name a participant; it does not require both participants to be represented. Where
 one party nominated the whole set, the other has none of its own nominees present —
 and since the seed's only input the participants do not fix is the witness nonces
-(§3.6.3), that party's verifier sample derives entirely from its counterparty's
+(§5.3), that party's verifier sample derives entirely from its counterparty's
 nominees. A sole witness can therefore commit to a nonce whose sample it has already
 computed. **Left visible rather than forbidden** (author), on §6.1.1's precedent: a
 balanced set is what a party should insist on, not what the encoding can require, and
@@ -5515,7 +5515,7 @@ spread of §7.1.1, not the flow metric.
 **The witness's selective abort is now registered** in §8.1.2, which previously
 analysed only a participant aborting. A witness reveals after the capture is spent
 and signs last, so it decides twice with a meeting already paid for by two other
-people; a fresh nonce on retry violates §3.6.2.1 and is invisible in a completed
+people; a fresh nonce on retry violates §5.2.1 and is invisible in a completed
 record. The design's usual answer is unavailable here and that is the sharp part: an
 attempt that never finalises is never published, so there is no artifact to
 attribute. It remains a denial of service against one pair, not a route to false
@@ -5611,7 +5611,7 @@ witness obligations; §1.2 gained the candidate-population check, making **three
 checks that protect a signer against the person in front of them rather than two.
 
 **Three stale instances of the overstated rate were swept**, two of them definition
-sites: §3.6.2.1's own restatement of the property, and the §20 parameter register's
+sites: §5.2.1's own restatement of the property, and the §20 parameter register's
 rationale for the 24-hour window — which asserted *"one fresh sample per day per
 participant pair"* as the reason for the value. Rule (1) in §8.1.2 now states the
 intent and points at why it is not delivered rather than asserting the rate.
@@ -6102,10 +6102,10 @@ archive this way, and most release none.
 
 A
 stolen key could pin an identity permanently. One record at the top of a `u64` leaves
-no successor, §5.7.3 makes an equal `seqno` with different contents malformed rather
+no successor, §7.7.3 makes an equal `seqno` with different contents malformed rather
 than a tie, and `wire-format.md` §2.3 **states the consequence while arguing for a
 different rule**: *"a subject that cannot advance has no way to publish a change at
-all."* Nothing in the registers mentioned exhaustion. §5.6.2's heartbeat counter
+all."* Nothing in the registers mentioned exhaustion. §8.2's heartbeat counter
 already carried an exhaustion rule — *"on reaching u64 max, end the session rather
 than wrapping"* — so the case was reasoned about where running out is benign and not
 where it is adversarial.
@@ -6166,7 +6166,7 @@ that made the attack possible is what seals the abandoned line behind you.
 series reached, so the seal must precede the refresh or the chain names a departure
 point that later records contradict. Seal, refresh, repeat per patron relationship.
 
-**And it exposed a rule left implicit.** A party holding the §3.8.1 chain knows which
+**And it exposed a rule left implicit.** A party holding the §4.6.1 chain knows which
 series were abandoned and **MUST reject records in them at any counter** — the seal is
 not for them. It protects parties holding a cached locator and nothing else, and
 against those it is a race the thief wins by arriving first, which is the argument for
@@ -6363,7 +6363,7 @@ before it need not be retained or presented"* while §10.0 and
 `light-client-requirements.md` §2 said presence records survive pruning. §10.2 now
 releases **the chain, not the evidence**, and says so where the licence is granted.
 
-**§3.6.4 defines the candidate set without granting access to it**, which is what
+**§5.4 defines the candidate set without granting access to it**, which is what
 permitted the archive-walking reading in the first place. It now states that a
 selecting counterparty computes over records it is **handed**, and that the traversal
 rule is what makes a supplied bundle checkable — records must chain, so a bundle
@@ -6745,14 +6745,10 @@ because what they describe spans all five.
 differencing shows the only removed tokens are the rewritten genesis sentence and the
 old headings.
 
-**Noted, not fixed**: extending the reference checker to `change-log.md` for the first
-time reports **160 unresolved references** there, and 2 in `Robot/review-plan.md`. These
-are as-of-filing — an entry from August describing §11.8.7 describes the document as it
-stood. The count was 166 before this split and fell to 160 because §3.3 through §3.6 now
-exist. **This is for the author to rule on**: the working rules grant `review-tracking.md`
-as-of-filing status explicitly and say nothing about this log, and remapping historical
-entries to current numbering would have them describe changes to sections that did not
-exist when the change was made.
+**Noted, not fixed here**: extending the reference checker to `change-log.md` for the
+first time reports **160 unresolved references** there, and 2 in `Robot/review-plan.md`.
+**Ruled on the same day** — historical numbering is of no interest and the log should
+point at the current design. The remapping is the last entry in this file.
 
 ### 2026-09-01 (0.9-after, pass 2b: wire §6 split, and a duplicated block removed)
 327 lines with no subsection at all — the largest undivided run left in the set after
@@ -6943,3 +6939,55 @@ resource for the first time and explaining it in familiar terms."* *"A service, 
 store or application"* is everyday English orienting a reader who has met none of this
 yet; §11's three-category table is the taxonomy and arrives when it is wanted. **Only
 the two colliding senses needed names**, and both now have one.
+
+### 2026-08-31 (the change log is repointed at the current design)
+**Author's ruling**: *"Historical numbering is of no interest in this case, the change
+log should point to the areas of the current design affected."* **144 references named
+sections that exist in no document; 26 remain, and every one of those is a sentence
+whose subject is the number itself.**
+
+**Git could not do this.** The repository begins 2026-08-25 and the log begins
+2026-08-12, so more than half the stale references predate all available history.
+Resolving by checking out the document as it stood resolved **7 of 144**. The rest were
+resolved by reading what each entry says the section was *about* and finding where that
+subject lives today.
+
+**Most of it turned out to be structural, and verifiable by heading title.** Whole
+clusters had shifted together: old §11.x is today's §12.x, old §11.8.x is §13.x — the
+chapter split in two — old §12.x is §14.x, old §15.x is §16.x, old §16.5.x is §19.x.
+Titles confirm rather than assume: old §11.6.5 *key currency: adopt the PKI revocation
+playbook* is today's §12.6.5 under the same words, and §11.7.3, §11.7.5, §11.8.6,
+§11.8.7.1, §12.1.1, §12.2.4, §15.3.1, §15.4, §16.5.1, §16.5.1.1, §16.5.3, §16.5.7,
+§16.5.8 and §20.1.1 all land on an exact title match. In `wire-format.md` the same held:
+old §3.5.x is §4.5.x, §3.6.x is §5.x, §5.6.x is §7.7.x, §6.0 is §8.0, §8.2.x is §11.x.
+
+**Positional mapping alone would have been wrong, because a number is not a topic.**
+Several resolved differently at different sites, and each site was read:
+
+- **§11.8 is two unrelated sections.** At the 2026-08-13 and 08-16 entries it is subnet
+  formation, today §13. At the 08-22 through 08-25 entries it is an open-items register
+  inside Resources that was later deleted — its sites resolve to §11.2, §11.6 and §22
+  by what each sentence is about.
+- **`wire-format.md` §7.3a is `LateResponse` in one entry and `KeyGrant` in another**,
+  written weeks apart under different numbering. They go to §7.4 and §7.3.
+- **§5.8 is archive fetch in one entry and prekey distribution in another** — §7.9 and
+  §7.8. **§5.6.2 is resolution messages in five places and the heartbeat counter in a
+  sixth** — §7.7.3 and §8.2.
+- **§3.7's eleven sites** spread across §6.3, §6.4, §6.5 and §6.7 by which catalog rule
+  each one invokes.
+
+**Four references named an open question rather than content, and a question that was
+closed has no successor section.** *"Closes §21.7"* now closes *the routing open
+question*; the external root-of-trust item, already annotated *(since removed as out of
+scope)*, no longer pretends to a section number. **One collision was caught and
+repaired**: §11.8 and §21.9 both fell to §13 on one line, briefly producing *"§13 added,
+closing §13."*
+
+**The 26 that remain are a different grammatical case and must not be remapped.** Their
+sentences are *about* the old number: *"§4a becomes §5"*, *"§8.2.1 withdrawn — not a
+gap"*, *"`§7.2a` matched as `§7.2`"*, *"§21.8 dissolved rather than resolved"*, *"§11.8
+deleted"*. Rewriting these to current numbering would make every one of them false.
+**A reference that cites a section was repointed; a reference that names one was left.**
+
+**Verified**: only `change-log.md` changed; the five design documents are untouched and
+still resolve at zero. No line now carries the same section number twice by accident.
