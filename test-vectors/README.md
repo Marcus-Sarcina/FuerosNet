@@ -161,16 +161,20 @@ negatives (T9–T12). Still open:
    supplies the alice–bob record the optionals adoption's field 8 swaps to
    (V9's deliberate mismatch until then).
 3. **Promotion-blocking — the specification's hardest derivation, and the
-   arithmetic tables test none of it.** Real history behind that record — a
-   merge forming a **diamond** (an
+   arithmetic tables test none of it.** The **handed-bundle fixture**: nobody
+   walks anyone's archive — a counterparty computes *n* and the candidate set
+   **over the records the subject hands it** (wire §5.4, design §8.1.2), and
+   the fixture is that bundle, constructed so every processing rule has a case
+   that changes the answer if broken: a merge forming a **diamond** (an
    in-window qualifying presence transaction reachable through *both* merge
-   heads, asserted to contribute **one** to *n*, which is the fixture that
-   fails chain-oriented code with no visited set), a repeated counterparty, a
-   witness-only transaction, a formation record, an out-of-window record, the
-   current counterparty — so *n* and candidates are **derived by DAG
-   traversal**; including the two traps the wire format states: only
-   cryptographically verified history counts, and an unavailable predecessor
-   makes selection unverifiable unless beyond the 730-day pruning boundary.
+   heads, contributing **one** to *n* — the case that fails chain-oriented
+   code with no visited set), a repeated counterparty, a witness-only record,
+   a formation record, an out-of-window record at the exclusive boundary, the
+   current counterparty (never a candidate for their own verification), and
+   the committed-predecessor trap. Completeness has no certainty and needs
+   none: overstatement is impossible (records must verify), and understatement
+   is **visible** — a bundle-minus-one variant fails to connect, and the
+   expected result is *unverifiable*, never a smaller *n*.
 4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
    vectors**, both authentication forms (presence/classical,
    Recovery/hybrid), and a complete Recovery adoption as its own target.
