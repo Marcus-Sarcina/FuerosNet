@@ -7701,3 +7701,40 @@ seed used to scatter them — a cleaner gradient against one reference set, stil
 priced at a full witnessed ceremony per probe. The paragraph also names the
 tell: the same counterparty selecting the same verifier ceremony after ceremony
 is exactly the pattern the query-surfacing rule exists to show the subject.
+
+### 2026-09-01 (full consistency pass and de-lint; the set baselines for review cycle 2)
+The author called the close of the first review era: enough changed in the 0.8
+rounds and the nine vector passes that **the programme restarts from 0.1**, against
+the cleanest set constructible. This pass produced it.
+
+**Consistency findings, all repaired.** Seven residues of the retired selection
+machinery had survived their own rulings: the ceremony's step 6 still said
+*deterministically selected* two sentences before *selection is by recognition* —
+and never introduced the bundle handover the selection reads from, which it now
+does; `LateResponse` still required its verifier to have been *in the selected
+set*, a set that no longer exists — consent is the gate; the offline-client bullet
+and both withholding-visible passages still spoke in absent-slot language; §19.2's
+composition tension still rested the visibility requirement on anti-suppression —
+it now rests on recognition, and the aggregate-signature direction is priced
+accordingly: an unnamed responder cannot be recognised, so that escape now costs
+the record its value; and a pre-existing *"subnet trust envelope"* — the author's
+own later-disowned word — became *outside any subnet boundary*. One dangling
+argument in the light-client document still cited §7.3's retired detection
+arithmetic.
+
+**Counts, re-verified against their tables**: twelve signing roles, twelve rows;
+eleven unset parameters, eleven rows; eleven exchanges claimed, eleven rows in
+both disclosure tables; the light-client's *three checks* still count three; §21
+still carries the 24-hour figure §3.2 leans on; seven disclosure labels. The
+*ten-of-eleven* wording in both disclosure tables remains as previously recorded
+— the author has seen it and left it. **Vignettes V1–V8 checked against their
+changed sections** per the authoring conventions; all still illustrate what their
+sections now say. Headings: zero depth, order, duplication or spacing defects
+across the five documents; fences paired; no trailing whitespace, CRLF, doubled
+words, or task markers anywhere in the set.
+
+**The numbers, as the conventions require**: em-dashes 583 in the design, 400 in
+the wire format, 31 / 37 / 44 in the three requirements documents — 1,095 across
+the five-document set. References resolve at zero across the five documents and
+seven vector files; the 25-check harness passes against the regenerated vectors.
+`Robot/review-plan.md` opens the second cycle.

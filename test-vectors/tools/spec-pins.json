@@ -1,8 +1,8 @@
 {
  "specs": {
-  "wire-format.md": "5b007a7bc61cb1d6575f15b217ce85984b3f28d152deec4a4d3ac3f5ee1d4c1c",
-  "network-design.md": "fe1472481e6c94219e6c20537528f5ba6869d5413a557d8f5ae0edf924cb989f",
-  "light-client-requirements.md": "79a2a59c117807b3c2ced7b9cf6c27703017bdcbe56c2249be271c460e847399"
+  "wire-format.md": "d449b25e5d6285bea06e1c813af58eaadccece622f313d664c0e3827e96ce0d4",
+  "network-design.md": "482b7d721ed6bd08835f4f236357e7e141b37e653b351d165344d8c528399623",
+  "light-client-requirements.md": "7cb488428ded2ce96b453ada1c1eb90285b2f3e7c13640465158cc03a972dd68"
  },
  "generator": "c72e17d0adc18a3a32b812cdd5b45382484a14bc0bd47e7021141acf6169a632",
  "verifier": "22e56afdca782e6c486bb5c8a2be03eaf07b8afd2c1bb7a2e93825c6f7bb4011",
@@ -11,12 +11,12 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "7d49dec128d5bcca2282622c87370b87c426fb1bba8265b37aee383f432f3325",
-  "primitives.md": "4504f3fb4957717c3bea2c008a352ea1f36340f9cfb957d52e85bee9fbe65576",
-  "transactions.md": "7328c34f88058477253c4c061a308dc880e8dc4d76cf5ab88293e48a0e727d9a",
-  "records.md": "977a41f642d1f948ddac139ff4e9ac5836ea58c8d5c5ecd5e9a8f089c7f94186",
-  "verifier-selection.md": "ae77829161f07281129c22139ad002208ccb208f02300cde048702aa3ac30bfb",
-  "README.md": "66bfdb514b34a6282e0f5efad8a94543146f2541e506559d40c23b8c0bd37e91",
-  "negative-vectors.md": "bb3b698aeff1c618b430d8ebd2a27274d63649f50d7655373cc8634e730bfa72"
+  "keys.md": "76fee0e3b2c70455d4e7e52deff6dcadaa3cb9c0e2818f2f64f4d7627220d1f0",
+  "primitives.md": "09f330cedd35e55820e0ce46c29fd410287b2945ab2121c0df766cf8d8e41333",
+  "transactions.md": "016637bde826e47b380ef3d6d4cbc968387774c842deb22401c80f2cff40e318",
+  "records.md": "7428cea57e52e71074129cf48b35ab8598bd1db0c34dd9192b528c7dd80f900a",
+  "verifier-selection.md": "ceced5d9ce3ab6167bcf795896edf7644ae5c6e641312514bc24d8f71174606b",
+  "README.md": "c871bfcc6b7da6be8da6c68eeab162539d0b4d1593f521215326717c5906ebf9",
+  "negative-vectors.md": "b8f6ace103c0fcab2733d5d193760dfc16c36a55834b58582e87c384581cfa80"
  }
 }

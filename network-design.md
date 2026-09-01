@@ -1079,8 +1079,8 @@ Three reasons, any one sufficient:
   and rate-limiting — is coherent for subnet-internal transactions and empty
   here. PoP is already rate-limited by human time (§7.1), a constraint a patron cannot impose
   than a patron could.
-- **PoP happens outside the subnet trust envelope.** It memorialises a fact about
-  the world, not an action within the patron's authority.
+- **PoP happens outside any subnet boundary** (§8.1.2). It memorialises a fact
+  about the world, not an action within the patron's authority.
 - **PoP history must survive a node's tenure under any patron** (§16.7). A patron
   able to gate PoP creation would shape what *later* patrons see, which is an
   attack surface on portability itself. This is why patrons do not countersign
@@ -1194,9 +1194,11 @@ end node, starting from its own local records of people it has met.
    likeness of anyone but itself. Images stay on the device **for the declared
    retention period** (§7.5.1) and are then deleted; nothing biometric enters the
    record at any point.
-6. **Verifier queries**, run automatically by the client (§7.3). Each party's
-   client sends a fuzzed profile of the person in front of it to a
-   deterministically selected sample of that identity's prior counterparties.
+6. **Verifier queries**, run automatically by the client (§7.3). Each party
+   hands the other a bundle of its prior presence records (§8.1.2,
+   `wire-format.md` §5.4), and each party's client sends a fuzzed profile of
+   the person in front of it to the sample of prior counterparties it selected
+   from that bundle.
    **The subject sends each selected verifier the capture key** for that verifier's
    stored images, directly and in parallel, so the verifier can decrypt what it
    holds (§7.5.2). The queries ask whether it matches what they hold.
@@ -1611,10 +1613,11 @@ person in front of them as continuous with a history.
     offline light client **queue at its patron**, resolving when the client next
     connects — and a reply that misses the ceremony reaches the querier
     **privately**: late replies are the participants' information, not part of
-    the record, whose slot simply stays absent (`wire-format.md` §5.5). **How
+    the record, which simply carries no response from that verifier
+    (`wire-format.md` §5.5). **How
     long to keep listening is the querier's own patience parameter** (§21.1) —
     nothing transmits a deadline, and a promise inside a permanently archived
-    response would be stale noise the moment it passed. The absent slot
+    response would be stale noise the moment it passed. The missing response
     preserves the distinction without handing light clients an unfalsifiable
     excuse.
   - **Watch for hub concentration.** Weighting infra participation more heavily
@@ -2396,7 +2399,7 @@ also the most dangerous holder of it, and everyone else stops receiving it.
 ##### Withholding is visible
 
 The digest count and labels always travel, so a recipient knows a field exists and was
-withheld. Same posture as absent selected slots and `unavailable` responses: absence is
+withheld. Same posture as an unanswered query and an `unavailable` response: absence is
 legible and a policy may weight it, rather than being silently indistinguishable from a
 field that was never there.
 
@@ -6167,19 +6170,20 @@ several records reconstructs the subject's historical meeting graph; correlating
 witness sets maps neighbourhoods.
 
 Both properties are load-bearing and were adopted for good reasons — verifier
-responses sit in the record so a colluding participant cannot suppress a negative
-(§8.1), and cross-nomination stops a *participant* choosing friendly witnesses
-(§7.1). **Neither was assessed for what it leaks.** The anti-suppression
-requirement in particular was described as strictly dominating the alternative;
-under composition it is a trade, not a dominance.
+responses sit in the record because named responders are the evidence an
+evaluator weighs by recognition (§8.1, §16.1), and cross-nomination stops a
+*participant* choosing friendly witnesses (§7.1). **Neither was assessed for
+what it leaks.** The visibility requirement was once described as strictly
+dominating the alternative; under composition it is a trade, not a dominance.
 
 **This is a genuine tension with no clean resolution in the current design.**
-Anti-suppression requires the responses be visible; visibility exposes the
-historical relationships. The direction if it needs solving is **aggregate or
-threshold signatures.** Proving that *k* of the deterministically selected
-verifiers answered `match` without naming them, but that sacrifices the
-"absence of an expected verifier is visible" property (§8.1), which is doing real
-work. **Open.**
+The record's evidential value requires the responses be visible; visibility
+exposes the historical relationships. The direction once considered —
+**aggregate or threshold signatures**, proving *k* answered `match` without
+naming them — costs more since selection went to recognition (§8.1.2): an
+unnamed responder cannot be recognised, and recognition is what gives a
+response its weight to any evaluator, so anonymised corroboration is exactly
+the unrecognised history §16.1 prices at nothing. **Open.**
 
 **The selection input reaches a different party than the responses do.** To select
 the other's verifiers a participant needs a candidate set, and the subject supplies it

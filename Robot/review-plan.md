@@ -941,6 +941,17 @@ Stated plainly so it is not over-trusted:
 | 7 | **migration** | — | **DONE 2026-09-01**, in four stages. Not a review. Spec below, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §3 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
 | 8 | **0.9-after** | Purge | **DONE 2026-09-01.** Organisation again, on the migrated structure. **Confirmed nothing was orphaned or double-numbered in the move** — the pass's whole purpose, and the result was negative. What it found was local: three heading-level defects, three misfiled blocks, four chapters needing subsections, one real duplication and one that was not, and the change log's own heading collisions. Applied in four passes; dispositions in `review-tracking.md` |
 
+## Second cycle (2026-09-01 →)
+
+**The programme restarts from 0.1** [author, 2026-09-01]: the 0.8 rounds and the
+nine test-vector review passes changed enough — absence-is-the-encoding, the
+curated bundle, selection by recognition, the type-6 retirement, chain-wide
+monotonicity, ten encoding rulings — that the first cycle's findings describe a
+different design in places. A full consistency-and-coherence pass plus de-lint ran
+2026-09-01 to produce the baseline set (change-log records the numbers); cycle 2
+runs the same pass sequence against it, clean-room as before. First-cycle
+dispositions in `review-tracking.md` remain as-of-filing.
+
 **0.9 runs twice, before and after the migration** [author, 2026-08-28]. The
 first pass is about defects in what exists; the second is about the move itself.
 Splitting them keeps two failure modes apart: material that was already

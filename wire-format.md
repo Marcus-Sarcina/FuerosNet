@@ -562,8 +562,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   record already carries, and the other needs a clock the reader does not have.
 - **A presence record on the wire is always final.** A ceremony the participants
   abandon is local state and is not published; `finalized_at` records when
-  assembly closed, and **the verifier sample does not gate it** — unanswered
-  selected slots are simply absent (§5.5). Late responses arrive as
+  assembly closed, and **the verifier sample does not gate it** — an unanswered
+  query simply yields no response (§5.5). Late responses arrive as
   `LateResponse` objects (§7.4) and never alter the original record's validity.
 - **`strongest` MUST appear among the channels with `result = pass`, and no
   higher-ranked channel may appear with `pass`.** Ranking is UWB > NFC > optical >
@@ -1439,7 +1439,7 @@ malformed, not that a field is missing.
 
 **Withholding is visible, and that is deliberate.** All seven slots are always
 present, so a recipient always knows a field exists and was withheld. This is the
-same posture as §5.5's absent slots and `unavailable` responses: absence is
+same posture as §5.5's unanswered queries and `unavailable` responses: absence is
 legible rather than silent, and a policy may weight it.
 
 ##### Cost
@@ -2356,9 +2356,10 @@ LateResponse = {
 and visible (§5.5, §3.2). A late response is additional evidence an evaluator may
 weigh, never a change to what was decided — and never retro-inserted.
 
-**The verifier must have been in the selected set** for that subject, and the
-response must carry the same `query_id` the subject countersigned. Otherwise
-anyone could attach unsolicited assertions to a record naming someone else.
+**The response must carry a `query_id` the subject countersigned for that
+ceremony** — consent is the gate, there being no selected set to test against
+(§5.5). Otherwise anyone could attach unsolicited assertions to a record naming
+someone else.
 
 **Retention follows the record it supplements.** A `LateResponse`
 is evidence about one presence record; a holder keeps it while it keeps that record

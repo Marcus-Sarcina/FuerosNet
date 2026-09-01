@@ -154,8 +154,9 @@ that is noted in place.
   returns.** You enumerate the counterparty's prior counterparties in order to select
   from them, so you can see whether you recognise any of them before you see a single
   reply. **Tell the user when you recognise none of it**: a `match` from strangers
-  establishes nothing, however many you queried, and a manufactured candidate set
-  makes the detection arithmetic in design §7.3 return zero rather than merely less.
+  establishes nothing, however many you queried, and a candidate set holding
+  nobody you know defeats the shared-identity check outright rather than merely
+  weakening it (design §7.3).
 
   With the `nominated_by` check in §1.0, **these are the three checks that protect
   you against the person in front of you** rather than against an outsider.
