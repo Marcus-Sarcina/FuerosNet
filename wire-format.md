@@ -441,6 +441,7 @@ and it must be stated because *"the required signer set"* names an unordered thi
 | Disavowal (§4.3) | the issuing patron |
 | Peering (§4.4) | endpoint A, then endpoint B, as fields 1 and 2 |
 | Presence (§4.5) | the two participants in field 3's order, then witnesses in field 4's order |
+| Series reissue (§4.6) | node (field 1), then patron (field 2) |
 | Resource registration, abuse report (§6) | the single signer |
 
 **Getting this wrong is silent.** Every hash and signature still verifies while each
@@ -3782,7 +3783,11 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 1. **Queue cap value.** A per-node policy value; design §21.1.1 classifies it
    *freely tunable, forever*, and nothing here fixes one.
-2. **Canonical test vectors.** None exist. Positive and negative vectors are
-   required before two implementations can be shown to interoperate, but are best
-   written alongside a first implementation rather than ahead of it, since
-   vectors written from the spec alone encode the spec's own mistakes.
+2. **Canonical test vectors.** A draft set exists at `test-vectors/` —
+   spec-derived, generated, and verified by no implementation. Positive and
+   negative vectors are required before two implementations can be shown to
+   interoperate, and are best confirmed alongside a first implementation, since
+   vectors written from the spec alone encode the spec's own mistakes — the
+   draft's README states every interpretation it had to take so that each is a
+   review target rather than a silent choice. Canonical status waits on an
+   implementation reproducing every computed value.

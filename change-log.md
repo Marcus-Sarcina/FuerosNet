@@ -7012,3 +7012,44 @@ that only tests existence. Now cites `wire-format.md` §11 explicitly.
 **§24 step 7 carried a pre-migration range end**: *"(§7.2–6.5.3)"*, the old number for
 verification-by-query. The checker missed it because a range's second half carries no
 `§`. Now §7.2–7.3.
+
+### 2026-08-31 (draft test vectors, and what drafting them found)
+**`test-vectors/` now exists**: six documents and the generator that produces four of
+them, added to the document guide. Everything computable is computed — nothing
+hand-transcribed — and every generated value was re-verified with an independently
+written decoder before filing: all five bodies parse clean with sorted unique keys,
+every txid matches, and both Ed25519 envelope signatures verify against an
+independently reconstructed `Sig_structure`.
+
+**What the draft covers** is what the readiness evaluation recommended: build-order
+steps 1–2 plus verifier selection. Deterministic CBOR atoms, seqno, path, Locator; a
+complete end-to-end `SignedLocator` signature; bodies and txids for adoption,
+departure, disavowal, series reissue and a formation-subtype presence record; the
+adoption's full four-entry envelope; nonce commitments, the seed preimage,
+`required()` arithmetic, hash-rank sampling, window boundaries; and 44 negative
+vectors, each citing the rule it violates. **No ML-DSA-65 implementation was
+available**, so post-quantum slots carry their exact signing input and a marker.
+
+**Drafting is itself a review pass, and it found things**, as `wire-format.md` §13
+predicted it would:
+
+- **§3.1's signer-order table had no row for series reissue.** The table's own
+  generative rule yields node-then-patron; the row now exists. The table claimed to
+  enumerate what the rule generates and was one type short.
+- **Seven places the specification under-determines the bytes**, now standing in the
+  README as numbered interpretations for the external review to attack — chief among
+  them the `SignedLocator` payload (*"canonical CBOR of fields 1–2"* admits a map, an
+  array, or a concatenation reading) and the genesis back-pointer's hash input (raw
+  keyhash bytes versus a CBOR wrapping).
+
+**The vectors are deliberately pre-implementation.** §23.4 and `wire-format.md` §13
+both argued vectors written from the spec alone encode the spec's own mistakes — so
+the draft states every choice it made and goes to a different model family to have
+those choices attacked, before an implementation exists to inherit them. Both
+sections now record the changed status: drafts exist, canonical waits on an
+implementation reproducing every value.
+
+**Status sweep**: the document-set table gains a `test-vectors/` row; §23.4's
+*absent by decision* and `wire-format.md` §13's *none exist* are updated;
+`CLAUDE.md`'s root-contents sentence now names the folder. References across the
+five documents and the six vector files resolve at zero.

@@ -1,0 +1,130 @@
+# Test identities
+
+**Draft. Spec-derived, unverified by an implementation.** Derivation rules and
+status are in [README.md](README.md); regenerate with `tools/generate.py`.
+
+Every identity is synthetic and deterministic:
+
+- **Ed25519**: real keys. `seed = SHA-256("rhtn-test-vectors:<name>:ed25519-seed")`,
+  public key derived per RFC 8032.
+- **ML-DSA-65**: `pub` is 1,952 structurally valid bytes expanded from
+  `SHA-256("rhtn-test-vectors:<name>:ml-dsa-65-pub:<i>")` for i = 0, 1, … —
+  **not a valid lattice key**. Encoding and hashing vectors do not depend on key
+  validity; anything needing a real ML-DSA signature is marked.
+
+Per `wire-format.md` §2.2, `KeyMaterial = [COSE_Key, COSE_Key]` in fixed order
+classical-then-post-quantum, each key carrying exactly three labels, and
+`keyhash = SHA-256(deterministic CBOR of KeyMaterial)` (§2).
+
+The classical `COSE_Key` is `{1: 1, -1: 6, -2: x}`; deterministic map order
+sorts by the bytewise order of the **encoded** keys (`0x01` < `0x20` < `0x21`),
+so the entries appear as 1, −1, −2. The post-quantum `COSE_Key` is
+`{1: 7, 3: -49, -1: pub}`, appearing as 1, 3, −1.
+
+| Identity | Role in the vectors | Ed25519 public key | keyhash |
+|---|---|---|---|
+| alice | node / subject | `fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a` | `435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9b730e9a9` |
+| bob | patron | `e10996fba9fb4d1158766179de2837c77be29531347d302a4413829e8bab3750` | `5693d22ed3d6dd0cc82926601127d63226bb9ec918ab14db812911e2ab4be594` |
+| carol | counterparty | `2d952f29a29261715f9b1aefce27620f0705a4a848ac772ca2bdeca416064cf0` | `2535e9a92cef24e674fe0b7db0cfd67762cf55953336bca8cc7db8ab05049ced` |
+| w1 | witness | `a0855987914434fb5942870ba72be8d90d9aca2ff8dac412f8a90f54b149d5c0` | `69644d3e698b7c54622f1b8045880d696bcd98d459981f696e8bc76c8d1c5d57` |
+| w2 | witness | `642d6afb3e1a3bfa7d22a808b2f55398a86d2ae814dc213034eb863fa69420d3` | `be9d90754088a297896519ccc1eed484d2fa0d255d47bc0d51fc9972c47b1b9c` |
+| w3 | witness | `8e5d5a88df88cf1a11ddcffd10fc02a6f04e096820ea950a4ba44d64a340a2a6` | `b821af99267d56d032bd36070b68336492a16797d3811752a8ee2edd8a40f370` |
+| c1 | verifier candidate | `2b00306803c7f23192ae6272729a088ef1d8d26748a1f9ecce506fe8a7b97c8e` | `97634b94afb0544ddf5c242407bdd40f5835cd952c5ad51cae2783b7ab6e6382` |
+| c2 | verifier candidate | `bcf539e57801c7ab8c6bd6d27580c7fadedf90455106bc733f01e7bf292325b4` | `c5b39fbddddb4cccb46616616b9fe819ea3d1a40f0a246226e76ca23b0bd146d` |
+| c3 | verifier candidate | `5d59e2dbc3871d0b3f36b9615c168cf2f7b470ea5cdb6b2c15fdd59ed9b7c473` | `254f0e63c95058a9f407d14b9ba1ff886001c4e810cd4478fc2a9a8a962c4767` |
+| c4 | verifier candidate | `3c38a9069d16508e52a661762537488502894f931844fdf186eee0df7cfeb600` | `6492ad2aa932c1a6405e86d0e9f7ce7e71172ad7e037bd77151d76d5ea0cb6b2` |
+| c5 | verifier candidate | `5b801d2f689d09a5ed820155bb97e827c6869ea589842dce0678e185ca7cb7ac` | `9aae8a9244e7bcee9996538dcb1ee8248809f8bba3d8cb41a415cb9439f3fc3d` |
+
+## Worked example: alice
+
+Ed25519 seed (private key bytes):
+
+```
+10cca6af5565ee2be87cad39cdc59229063246c3d7880c11162471e16d4cf36f
+```
+
+Classical `COSE_Key`, deterministic CBOR (40 bytes):
+
+```
+a301012006215820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255
+c85f0b879313ac2a
+```
+
+Byte-level reading: `a3` map(3) · `01 01` kty: OKP · `20 06` crv: Ed25519 ·
+`21 58 20 …` x: 32-byte public key.
+
+Post-quantum `COSE_Key` (1962 bytes): `a3` map(3) · `01 07`
+kty: AKP · `03 38 30` alg: −49 · `20 59 07 a0 …` pub: 1,952 bytes. The `pub`
+bytes are in the appendix.
+
+`KeyMaterial` is the two-element array `82` followed by both keys
+(2003 bytes); its SHA-256 is the keyhash in the table.
+
+## Appendix: alice's synthetic ML-DSA-65 `pub`
+
+```
+7129c24cf6f6376ec694d49964cf29184f5bd414e781147a3ea0659c3f8da8c0
+2e3a2d49aea4bedf199381f3e94788d2a3afa3ad3d584cc328b90a0151ef343f
+579de22589eb1baef4576ce7de4766bb2cac7cf135957b0c6c95f36351bab055
+f311df1dc6d6716c651b594b9ba641056dbcc02675d7af4cc6e1e336fd9ae130
+20c3345af52e20c0b11ec2b2b3790a67ee965b787270a69834ecf52b3cbafa06
+99bd18def1a4472159f7f0fc06ef8b1da7517f45dd21909bca31fa5340e88e37
+82c51fdc5e569d9da8a2c2e90f4c14347598ca0ac1d7b8610a6a781ab8e355f6
+89cdb9e00d9bb06ff219d09ee802cf169c30166b6cc5655eb8f5bea13cb3b373
+4aa24a64f9add156683c34cc4b19d484cd8ce149af3fc3cd9f53e62c77d1a13f
+311577802026eeb4695b54645b16576d8df3a5f2d36378c006e31977f95f77d4
+cca72d351c0bcab8801157354d2bcbfb35b336bab1ff58d2510d2160e623f4a8
+d851757a0c4885703e645cbb9af9b9f59d7834cf676d02aeea33c732f37c9a16
+7570557b8f1115709b707d3934062d855e88d2a6b355bc24696b2558ff297ce7
+838ce11a5912d09d642dd0f5f0f0c90c53e65a75ea212acfff163767a8127dd6
+9dfbef0c8c0f168b2ccc9f0e9d708b8935bae3652b37208df1d42db504c85cfd
+85e453d2ef2afd527c64ce4972258f12c4b7112f623818410ef066fa97ea03a3
+eb53ffc11936951ed19be75ced0a2d2c654a6b435d4ac3d61182095c21cb1785
+fbb65a3703cdb6e8897962cd194006ef759b3ea932ffbec35dcb7a82a00ff5de
+24158e5287c00b383939d720eb54680bebebf7ae7bb76b5c1d9a6c67eeb898de
+51de59dfc9c003b7802fc4a44e5ea039ea8282a92f4e4029c412f3d34d68f03f
+e0956098744fb283b3cd123a392630437b7f3cd6a41bff111dc1cc7abec2ac6d
+cd32459b42cb8f85d7ecec0f279daae4314de135f17d5b77cc45f9d682dffb38
+36b1d2e854db7ea11865e8bfad558a145724ad21574a006b5ad5ed7c3f6a3479
+d172b484127e255188c946f5e73246dfda23000b57152f0e2104e18e4eb31744
+0cd4fd367d2aed64eca9c4f3540e86e969eb4c148c4b771efa851517dc80f280
+f2af4a1a77730faeff63b68180e08367f4314fe83996c8673dfc646b3220032b
+c19d60e61ad6ee9dc38f4fd7992ad8d6e770a6ce895f5622e85f409bdbba4518
+7f1a7dd24c4fb037dca31b24775deef1cd95b00ccd895fa37a84bd8151468b21
+b8967b20e0e637aff635a640d43e8a8d4382b5f7d8a6c1ba7b4070eb9cc413ad
+bd8f1aa01b0e5d54dbbf7b5543198adc431cd3d0520cf8ae09e22b705f935ca4
+5dd91949d6e1d354c084c95260ef8e5ee4862a0b3099ea34cf196b2851ce8826
+6d926d732917ce4e8deff744ac4e93bb46eece77feb4d1726b30c2eb29fa826d
+cdee922943f071dd18d09db03ddda3851e62a0dc9cb7d2c3df7ccbd3fbb5c20c
+2962a91e628a890da89540b6a425f535a111af4e233cb4ee7d107eeecac90a29
+97614ecf4034c8fb8a5dbc259757624ddeb23ca7d7c26f52dd046205e3060ba2
+54871802860ef3847fa29f1bc4fdd49e181e0687a7b89d2ec566650a95b84da2
+b51a9bbffb267f99fda95fc23c2c74449089bdd21b1a749e333974f4d9d7a8a6
+7bd306fc240fcf1440f2ce37e039620f9000c5998d74532e8c487944ac003207
+836c6e4c06d9d6fa00b960e53dd901073fef46fb5ce1e7c749885664adce52ba
+b170b766fc4664605cbfd6ac020420e9d7ea490ad81cd416ad7a3d24370c15ef
+c4af173644716cc70078b7cdf4ec591ea6b802d429c11d603a29b002792e1c6e
+e97203cca176f882f57a6e785bb2fd5b066546019c2b6c6cf590324b42920a40
+60296ff1fc26d5334f414a1e0b3e3c0783ffaa28034f6af469702113b149bc53
+d9e13d1e7d15e4df3107669d879521af6a27250ddcab0f4dff8d4b84fef92f32
+cce0d690484b42f43ecd0f532713dbe8403fe5978c9931b6f974a9a5bc6ac1f3
+0c7f88bdef0c42ea32f6a06a716c65182b9c5768d2324701d1b2b6694f1e2f5a
+7e85be66314cd46bb8dfa2f3d68e80aa5961fafdd57eb30d9cfed89fa447c9a9
+3f14956960029886ad61ed7bd933c7f0b74ebf8356dc9075077e8cf63897914a
+287ff32e8ef58b199b0aad6c07d50def4fd7fb241b1d7e81413e1d3b5539b34e
+8f8ab7801a85b65cb67674bd941f74b82188003a02b266fa7a0f5f3292364b66
+c1f978906ada55cd97056810124b570bada2d627bdc72c5309b928ebf4f23c8d
+5f953bed88bc0dc296c5fb1dd0c8fea34a2d1a6f6650b4cc6364a561f80eb84b
+ed161fbeb22cfe3e1818f3f072ba310bb3373c491b0d3b9aa422b3859d70a0c4
+07f441a0dde9e9d1c99c7a020c778d98e64f1fde460f120d38e303fb7c18b80b
+91245b4a0ce692e5a718040572ae22340e47c9545c2632b38ba43ead65b39e5c
+b9169a238507ca9d517ab3fd04081e98c026ed2d8c0dc1e43d20150842bd23b1
+2a85a17073a4c803a9968b241b3dfc69074e9c491669e8026f4f1f3f1d4d78b2
+76cd7692ec26f387e3c674240941190044c6d3c9c8c2f40f14ad04af42747537
+88379bea59cf413bda5c49eee92792312977878bf8699c6357b117aff7406ca9
+239dbfb2fe22b29d3aa600d6cb098b65c023f83cbf946a4ff5777685351203ba
+59bbfabc09fd5d682746ec8d5a6d242efaf0cbecc69e30c0422427ebc846ce61
+```
+
+Other identities' `pub` bytes follow the same derivation and are regenerable
+from the script.

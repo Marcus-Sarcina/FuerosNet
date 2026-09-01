@@ -90,6 +90,7 @@ and what a client does without asking.
 | `infra-client-requirements.md` | What an operator's software must do, including package hosting and sandboxing |
 | `resource-requirements.md` | What a resource must do to conform, and the credential and request framing it receives |
 | `change-log.md` | History. How the design reached its current form |
+| `test-vectors/` | Draft canonical vectors: encodings, hashes, signatures, selection arithmetic. Spec-derived and unverified by an implementation — a disagreement with the specifications is a finding against one of them (§23.4, `wire-format.md` §13) |
 
 **Requirements documents contain no protocol facts.** They cite sections here
 rather than restating them, because a restated fact is one that will drift.
@@ -6978,13 +6979,17 @@ tracked at §22.2.
 
 ### 23.4 Test vectors, and what a test suite would add
 
-**Canonical test vectors are absent by decision** (`wire-format.md` §13). They do
-not block *building*; they block **demonstrating** that two implementations agree,
-which is a later and different thing. Vectors written against a design still in
-motion become a second artefact to keep in sync, and cross-artefact drift is this
-project's dominant failure mode. They are also better produced by someone other
-than the designer, for the same reason review is: **tests written by the author
-encode the author's misunderstandings.**
+**Canonical test vectors are deferred by decision; draft vectors exist**
+(`test-vectors/`, `wire-format.md` §13). Vectors do not block *building*; they
+block **demonstrating** that two implementations agree, which is a later and
+different thing. Vectors written against a design still in motion become a second
+artefact to keep in sync, and cross-artefact drift is this project's dominant
+failure mode. They are also better produced by someone other than the designer,
+for the same reason review is: **tests written by the author encode the author's
+misunderstandings** — which is why the draft set states every interpretation it
+had to take and exists to be attacked before an implementation exists to confirm
+it. Canonical status waits on an independent implementation reproducing every
+computed value.
 
 **A test suite is the natural successor to §22.** Implementing a mechanism asks
 *can this be written?* and stubs the error paths; a test suite asks *what should happen when the input is wrong?*, which is exactly where those
