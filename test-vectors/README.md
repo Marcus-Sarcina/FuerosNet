@@ -46,15 +46,13 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-**One is open, surfaced by the third review**: the suite reads "transaction
-types" as the six **archive** transactions and excludes the abuse report, but
-the specification is contradictory about it — §4's table assigns type 6 to
-`AbuseReport` while §6.3 defines it as a standalone signed object with no
-key 0 and no carriage, and §3.1's signer-order table still names *resource
-registration*, retired as a transaction on 2026-08-28. **Author ruling
-pending**; no abuse vector until then.
+**None remain open.** The last — whether "transaction types" means the six
+archive transactions — was ruled 2026-09-01: **type 6 is retired** with a
+tombstone row, the abuse report is §6.3's standalone signed object, and the
+suite's reading was confirmed. Its signature-context vector stays queued in
+`records.md` under the signed contexts.
 
-Every byte-level choice, by contrast, is closed: Every choice this suite had to make where the
+Every byte-level choice is likewise closed: Every choice this suite had to make where the
 specification under-determined the bytes has been ruled on and written into the
 specification [author, 2026-08-31 through 2026-09-01]:
 
@@ -100,21 +98,12 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-1. **The type-6 / abuse-report taxonomy** (third review, finding 1): §4's
-   table says type 6 is the abuse report; §6.3 gives it no key 0, its own
-   embedded signature, and no carriage; §3.1's signer row still names the
-   registration retired on 2026-08-28. Either type 6 follows the registration
-   into retirement — the 08-28 rationale (*no archive advance, chains to
-   nothing, an envelope nothing walks*) applies verbatim — with a tombstone
-   row per the numbers-never-reused rule, or a type-6 envelope needs its key-0
-   semantics defined for a signer that keeps no archive.
-2. **Should `window_ordinal` be structurally checked?** Key 7 is defined as
-   `floor(started_at / 86400)` and both values are body fields, so a mismatch
-   is checkable with no clock — the same class as the `finalized_at` bounds.
-   The rule is currently implicit; one sentence would make R-family coverage
-   possible.
-
-Everything previously queued is ruled and applied — see `review-tracking.md`.
+**Nothing.** Both third-review questions were ruled 2026-09-01: type 6 is
+retired (tombstone row; the abuse report is §6.3's standalone object), and
+key 7 MUST equal `floor(started_at / 86400)` — structural, no clock needed
+(R14). Every question accumulated across three review rounds is ruled and
+applied — see `review-tracking.md`. What remains is the canonical bar:
+work, not decisions.
 
 ## The canonical bar
 

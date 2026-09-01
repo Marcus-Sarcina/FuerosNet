@@ -1841,3 +1841,14 @@ generalised two-party rule at the §4.1 schema and the prior≠new bullet in the
 consistency list each absorbed the pre-existing phrasing, and the successor-block
 duplicates are removed. The grep that failed searched for "self-adoption"-family
 phrasings and missed "authority over itself". Sweep by more than one phrasing.
+
+**Rulings on the third-review questions (2026-09-01)**: **type 6 is retired** — the
+abuse report is §6.3's standalone signed object; the §4 table carries a tombstone
+row on the registration-retirement grounds (*advances no archive, reaches only its
+addressee, chains to nothing*), and §3.1's stranded registration/abuse signer row is
+gone. **Key 7 MUST equal `floor(started_at / 86400)`** — structural, clockless, the
+`finalized_at` class; R14 added and the formation vector confirmed clean against it.
+Found in the sweep: the design's §4 scope list had omitted **series reissue** since
+type 7's introduction on 2026-08-30 — completed. The vectors' interpretation
+register and author queue are both empty again, this time with the taxonomy ruled
+rather than assumed.

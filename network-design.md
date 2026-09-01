@@ -646,7 +646,8 @@ payload, so apex load scales with churn and introductions, not with usage.
 - Server software (always-up infrastructure nodes)
 - Transaction types: **adoption**, which subsumes key rotation, recovery and
   transfer between patrons (§9.0, §6.2); **departure**, **disavowal**,
-  peering, **proof of presence**
+  peering, **proof of presence**, **series reissue** (§6.2.1,
+  `wire-format.md` §4.6)
 - **End-to-end payload encryption** to the addressed endpoint (§14.2). The
   endpoint may be another leaf, the patron, or a resource. Requirements sketched
   §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions open

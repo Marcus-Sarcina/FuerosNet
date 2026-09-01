@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` SHA-256 `05165711f6ee749fcdce938447a425052f979fa47e7cadddcfe27b4be6ef21ad` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `d7591e5f3a431ba73b2e8c543eef43e47ea16d1c3159cd3a4bc2516bf31b587b` and `network-design.md` SHA-256 `0ed4d17e2c3cab09230169ebcb7be14e56cd9d318bff77d0e63276eed2ff5ccd` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).

@@ -102,6 +102,7 @@ works, not inputs.
 | R8 | A formation record whose key 0 is not exactly `[SHA-256(signer keyhash)]` per signer | Structural genesis rule |
 | R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
 | R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
+| R14 | A record whose key 7 ≠ `floor(started_at / 86400)` | §3.2: both are body fields, so the check needs no clock; a mismatched ordinal lies about which window seeded the verifier sample |
 | R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | `checks[strongest] = fail` when revealed; withheld → `checks[strongest] = unverifiable(withheld)` — never valid, never malformed. Not a `selection` outcome: that dimension is verifier-selection recomputation |
 
 ### Transaction and record bindings (§4)

@@ -461,7 +461,6 @@ and it must be stated because *"the required signer set"* names an unordered thi
 | Peering (§4.4) | endpoint A, then endpoint B, as fields 1 and 2 |
 | Presence (§4.5) | the two participants in field 3's order, then witnesses in field 4's order |
 | Series reissue (§4.6) | node (field 1), then patron (field 2) |
-| Resource registration, abuse report (§6) | the single signer |
 
 **Getting this wrong is silent.** Every hash and signature still verifies while each
 predecessor is attributed to the wrong signer, so a mismatch surfaces only when
@@ -528,6 +527,11 @@ Rules a validator checks from the record alone. All were previously unstated.
   contradicts (design §8.1.2), which no validator can check. **Structural here,
   client-side there** — the difference is that this rule compares two values the
   record already carries, and the other needs a clock the reader does not have.
+- **Key 7 MUST equal `floor(started_at / 86400)`; a record where it does not is
+  malformed.** Both values are body fields, so the check needs no clock — the same
+  class as the `finalized_at` bounds above. The seed reads key 7 (§4.5.2), so a
+  record whose ordinal disagrees with its own `started_at` is lying about which
+  window seeded its verifier sample.
 - **A presence record on the wire is always final.** A ceremony whose threshold is
   unmet is local state and is not published; `finalized_at` therefore always
   records a threshold that was met. Late responses arrive as `LateResponse` objects (§7.3) and
@@ -746,10 +750,8 @@ accepting an unverified object.
 | 3 | Disavowal | patron only | Topology |
 | 4 | Peering | both infra nodes | Topology |
 | 5 | Presence record | participants + witnesses. **Verifiers are not envelope signers** — their responses are embedded evidence signed inside the body (§4.5) | Attestation |
-| 6 | Abuse report | the reporting resource only | Attestation (point-to-point, never broadcast) |
+| 6 | — | — | **Retired 2026-09-01.** The abuse report is §6.3's standalone signed object, not a transaction: it advances no archive, reaches only its addressee, and chains to nothing — the same grounds on which the registration transaction was retired 2026-08-28. Numbers are never reused |
 | 7 | Series reissue | node + patron | Topology |
-
-Type 6 carries an `AbuseReport` (design §11.6) addressed to a resource owner.
 
 **There is no registration transaction.** A resource registration is **not
 shared network state**: it is a signed `CatalogEntry` handed to one hosting node and

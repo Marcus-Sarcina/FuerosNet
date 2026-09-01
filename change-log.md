@@ -7272,3 +7272,21 @@ successor block carried both, in phrasings the verification grep did not try. Th
 author's rulings confirmed existing text, the additions duplicated it, and the
 duplicates are now consolidated into the ruled statements. One phrasing is not a
 sweep.
+
+### 2026-09-01 (type 6 retired; the window ordinal becomes structural)
+**Both third-review questions ruled.** Type 6 follows the registration into
+retirement: the abuse report is §6.3's standalone signed object — it advances no
+archive, reaches only its addressee, and chains to nothing, the same grounds as
+2026-08-28 — and the §4 table keeps a tombstone row because numbers are never
+reused. §3.1's signer-order row for "resource registration, abuse report", half
+stranded since 08-28, goes with it.
+
+**Key 7 MUST equal `floor(started_at / 86400)`.** Both values are body fields, so
+the check is clockless — the `finalized_at` class — and a record whose ordinal
+disagrees with its own `started_at` is lying about which window seeded its verifier
+sample. Negative vector R14; the formation vector already satisfies the rule.
+
+**The sweep found one more count adrift**: the design's §4 scope list still named
+five transaction types, missing series reissue since type 7 arrived on 2026-08-30.
+Completed. The vectors' interpretation register and author queue are empty again —
+this time with the taxonomy ruled rather than silently assumed.
