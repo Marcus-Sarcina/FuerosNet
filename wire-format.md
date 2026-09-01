@@ -2926,11 +2926,12 @@ AttachAck = {
                        ;   an unbounded interval lets a hostile server hold
                        ;   clients in never-failing sessions and makes QUIC idle
                        ;   timeouts unconfigurable. Prior art brackets this:
-                       ;   MQTT keep-alive practice is 30-300 s on mobile, and
-                       ;   UDP NAT bindings (RFC 4787) commonly expire in
-                       ;   30-120 s, so a server advertising near the cap loses
-                       ;   its push path through the client's NAT long before
-                       ;   liveness fails. Zero is malformed for its own reason:
+                       ;   MQTT 5.0 calls keep-alive application-specific,
+                       ;   typically a few minutes, and RFC 4787 requires UDP
+                       ;   NAT mapping timers of only two minutes minimum, five
+                       ;   recommended, so a server advertising near the cap
+                       ;   loses its push path through the client's NAT long
+                       ;   before liveness fails. Zero is malformed for its own reason:
                        ;   every session instantly overdue, failover permanent.
                        ;   Fixed for the session's lifetime — there is no update
                        ;   message, and changing it requires a fresh attach

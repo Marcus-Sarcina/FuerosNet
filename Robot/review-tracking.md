@@ -2169,3 +2169,61 @@ boundaries; formation record rebuilt without key 7; V1, V5, T23, C3 and R14
 tombstoned (ids not reused); T27 (selection_basis closed enum) and the
 `weight[subject]` result dimension added; V7 reframed; bars 2/3/4/11 rewritten.
 25 harness checks pass; references at zero.
+
+## Cycle 2, pass 0.1 — external-claims audit (2026-09-02, different model family, high effort)
+
+Reviewer consolidated the five documents, checked externally-checkable claims
+against authorities, and self-declared the audit **partial**: main standards,
+crypto, mobile-platform, networking, biometric and expressly-unsourced blocks
+complete; no final line-by-line pass for incidental assertions. 48 rows:
+38 CONFIRMED (no action), 4 CONTRADICTED, 6 PARTIALLY CORRECT, ~10 UNVERIFIABLE.
+
+**CONTRADICTED — all verified against text and applied:**
+- **RFC 6177 "/64 assignment floor"** (design §4 deferral package). Verified:
+  RFC 6177 makes no formal size recommendation; /64 is the least it contemplates.
+  Reworded: "the smallest end-site assignment RFC 6177 contemplates (it declines
+  to fix a formal size and expects most sites to receive more)".
+- **BGP NLRI "trailing bits zero"** (same passage). Verified: RFC 4271 calls the
+  trailing bits irrelevant. Zero-padding now owned as this document's
+  canonical-form rule; the section cite corrected §3.3 → §4.3 (UPDATE format),
+  a second defect the reviewer did not flag.
+- **RFC 4787 "30–120 s"** (wire §8.2 heartbeat comment). Verified: RFC 4787 REQ-5
+  is ≥2 min minimum, 5 min recommended default. Comment now carries the real
+  figures; the argument *strengthens* — a 3600 s heartbeat outlives even the
+  recommended binding. The MQTT clause (PARTIALLY CORRECT row) fixed in the same
+  block: "MQTT 5.0 calls keep-alive application-specific, typically a few
+  minutes".
+- **PQXDH signed-prekey compromise** (design §14.2.4). Verified against Signal's
+  PQXDH spec: without a one-time key, retrospective exposure needs IK_B, SPK_B
+  and PQSPK_B together, not the signed prekey alone. Sentence now reads
+  "long-lived private keys — identity key, signed prekey and PQ prekey together".
+  The prefetch trade-off argument survives; its stated cost was overstated.
+
+**PARTIALLY CORRECT — two more applied, three closed without change:**
+- **iOS current-BSSID** (design §7.6.1): applied — entitlement alone is not
+  enough; now "an entitled app meeting further conditions — precise-location
+  authorization among them". Strengthens the passage's own argument.
+- **Jury nullification "no statute / no judge"** (V7, §3.1.1): applied — the
+  categorical was false (New Hampshire et al.); now "Almost nowhere does a
+  statute grant this or a judge instruct a jury about it". The power-not-right
+  frame the vignette rests on is confirmed by the reviewer.
+- **7±2 / Dunbar** (§3.2): no change — the text already carries the exact hedge
+  requested ("does not establish a universal figure", "design heuristic, not an
+  empirical constant", "vernacular estimate").
+- **Face ageing "24 months"** (§7.5.1): no change without ruling — already
+  registered as **A18** with the §20.1 advisory "recast qualitatively unless a
+  longitudinal study is cited"; the reviewer's finding confirms the register row.
+  Recasting touches the two-year retention tier it motivates. **Queued for the
+  author.**
+- **Biometric legal exposure** (§7.2): no change — reviewer confirms the general
+  proposition; the text claims nothing jurisdiction-specific.
+
+**UNVERIFIABLE (~10 rows)** — no change: every one is already a §20.1 register
+row (rows 1, 7.1.4, 7.1.5, 7.1.5.1, 7.1.6, 7.1.6.3, 9.6, 11.1.1; assumptions A9,
+A14, A15, A18, A19, A26), which the reviewer acknowledges ("appropriately
+self-identified by the document as unsourced"). The register is the mechanism
+working as designed; elevating any row needs a named measurement, not wording.
+
+**Carried forward**: the reviewer's own caveat — the audit is not exhaustive for
+incidental external assertions. A completion run of 0.1 remains available before
+0.2.

@@ -1,7 +1,7 @@
 {
  "specs": {
-  "wire-format.md": "d449b25e5d6285bea06e1c813af58eaadccece622f313d664c0e3827e96ce0d4",
-  "network-design.md": "482b7d721ed6bd08835f4f236357e7e141b37e653b351d165344d8c528399623",
+  "wire-format.md": "987dd4cec185c734b7f06c9de8a06fcf01ca720b95b1f44e73e00ea9caa02f92",
+  "network-design.md": "3a79d43850bde19cfe8d329017770da58d06c45cd55c9e6feabff9343006bf1f",
   "light-client-requirements.md": "7cb488428ded2ce96b453ada1c1eb90285b2f3e7c13640465158cc03a972dd68"
  },
  "generator": "c72e17d0adc18a3a32b812cdd5b45382484a14bc0bd47e7021141acf6169a632",
@@ -11,12 +11,12 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "76fee0e3b2c70455d4e7e52deff6dcadaa3cb9c0e2818f2f64f4d7627220d1f0",
-  "primitives.md": "09f330cedd35e55820e0ce46c29fd410287b2945ab2121c0df766cf8d8e41333",
-  "transactions.md": "016637bde826e47b380ef3d6d4cbc968387774c842deb22401c80f2cff40e318",
-  "records.md": "7428cea57e52e71074129cf48b35ab8598bd1db0c34dd9192b528c7dd80f900a",
-  "verifier-selection.md": "ceced5d9ce3ab6167bcf795896edf7644ae5c6e641312514bc24d8f71174606b",
-  "README.md": "c871bfcc6b7da6be8da6c68eeab162539d0b4d1593f521215326717c5906ebf9",
-  "negative-vectors.md": "b8f6ace103c0fcab2733d5d193760dfc16c36a55834b58582e87c384581cfa80"
+  "keys.md": "785fb3ffb4c1352a9242b2250e8f04c59a799fb9eeaf733fe083a4f7d71e0e7e",
+  "primitives.md": "46c5d66771ca46e1b45b116ffbcfd8dc19e6c87360d27698161883c4b4d8c4db",
+  "transactions.md": "e71db2c70fb8c24d9e4f00c58599da5a38184cccc45bd6dad24f6e59ffcba947",
+  "records.md": "e961cf4d269436e8f57a486ed035ed4cbdd1c1d09c3829179b7daba317c2cccb",
+  "verifier-selection.md": "04a02d955fe72b27844fd0b669b949647d9369a554a8c866ec5e90d671949b0f",
+  "README.md": "56aed55bc0786cff5bf562fcdfa4ee03c21b418b221634bab95baf7d95e4421c",
+  "negative-vectors.md": "a13f8bd1222459ad47837480f258ca1aa771817269174012cf5b2e31e3bb27cb"
  }
 }

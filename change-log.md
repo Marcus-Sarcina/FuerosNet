@@ -7738,3 +7738,22 @@ the wire format, 31 / 37 / 44 in the three requirements documents — 1,095 acro
 the five-document set. References resolve at zero across the five documents and
 seven vector files; the 25-check harness passes against the regenerated vectors.
 `Robot/review-plan.md` opens the second cycle.
+
+### 2026-09-02 (cycle 2, pass 0.1: external-claims audit applied)
+The first pass of the second review cycle checked externally-checkable claims
+against their authorities: 48 rows, 38 confirmed. Six corrections applied, each
+verified against the source before the edit: RFC 6177 does not fix a /64
+"assignment floor" — the /64 is the smallest assignment it contemplates; BGP
+NLRI trailing bits are irrelevant per RFC 4271, so zero-padding is now owned as
+this document's canonical-form rule (and the cite corrected to §4.3); the
+heartbeat comment's prior art now carries RFC 4787's real figures — two-minute
+minimum, five recommended — and MQTT 5.0's "application-specific, typically a
+few minutes", which strengthens the argument they support; PQXDH first-message
+exposure without a one-time key requires the peer's identity key, signed prekey
+and PQ prekey together, not the signed prekey alone; iOS current-BSSID reads
+need entitlement plus further conditions; and V7's "no statute, no judge"
+became "almost nowhere", conceding the exceptions. The unverifiable block
+required no edits — every row was already registered in §20.1, as the reviewer
+acknowledged. One item queued for the author: A18's 24-month ageing figure,
+which the register already advises recasting and the two-year retention tier
+leans on.

@@ -495,8 +495,8 @@ choices** (network partitionability, permissionless infrastructure and free
 exit) rather than an intended feature, and the protocol does not model it.
 
 > **Vignette V7 — A power, not a right.**
-> Juries can refuse to convict against the evidence. No statute grants this and no
-> judge instructs a jury about it; it exists because juries are supreme on the
+> Juries can refuse to convict against the evidence. Almost nowhere does a
+> statute grant this or a judge instruct a jury about it; it exists because juries are supreme on the
 > facts and cannot be punished for their verdict. Lawyers therefore call
 > nullification a *power* of jurors rather than a *right*, a consequence of two
 > other rules, never a feature anyone wrote.
@@ -676,11 +676,14 @@ distinct from §22's open questions about mechanisms that *are* specified.
   of Sybil cost, and a 16-byte address in a `NetworkPoint` is malformed. IPv6
   dissolves per-address scarcity — a /64 holds 2^64 addresses — so admitting it
   means counting infrastructure by **delegated prefix** rather than address.
-  **The package to adopt when revisiting**: the reputation unit is the /64, per RFC 6177's assignment floor
-  and standing anti-abuse practice (Spamhaus lists IPv6 at /64; M3AAWG recommends
+  **The package to adopt when revisiting**: the reputation unit is the /64 — the
+  smallest end-site assignment RFC 6177 contemplates (it declines to fix a formal
+  size and expects most sites to receive more) — and standing anti-abuse practice (Spamhaus lists IPv6 at /64; M3AAWG recommends
   it as the rate-limiting unit), with larger delegations a per-observer policy
-  choice (§16.1); the encoding is BGP NLRI form (RFC 4271 §3.3) — `[length_bits,
-  truncated address bytes]`, trailing bits zero, one logical prefix one encoding;
+  choice (§16.1); the encoding is BGP NLRI form (RFC 4271 §4.3) — `[length_bits,
+  truncated address bytes]` — with trailing bits zero as this document's
+  canonical-form rule (RFC 4271 leaves trailing-bit values irrelevant), one
+  logical prefix one encoding;
   the assertion is self-made and weighed, not verified (§1.1), checkable against
   public routing data (RouteViews, RIPE RIS).
 - **Hard-fork departure and forwarding.** A departing node tells its former patron
@@ -2020,8 +2023,10 @@ three compounding reasons:
    does not catch. But UWB catches it, and NFC's physical-range
    friction makes it awkward, so the value is additive only on devices lacking
    both, and iOS blocks general
-   *nearby*-BSSID enumeration for ordinary apps in its public APIs (an entitled app can read the
-   **current** network's BSSID, which is not enough for this purpose).
+   *nearby*-BSSID enumeration for ordinary apps in its public APIs (an entitled
+   app meeting further conditions — precise-location authorization among them —
+   can read the **current** network's BSSID, which is not enough for this
+   purpose).
 
 Against that: PSI machinery, capability negotiation, BLE MAC rotation, and an
 uncalibrated overlap threshold that would silently penalise rural users where
@@ -5079,7 +5084,8 @@ indistinguishable from ordinary traffic.
 So: **reusable material prefetched for the whole org; a one-time key requested only
 when actually opening a session.** The cost is that a session opened from prefetched
 material alone lacks one-time-key forward secrecy **for its first message**: a later
-compromise of that peer's signed prekey exposes it. **Protection improves as ratchet
+compromise of that peer's long-lived private keys — identity key, signed prekey
+and PQ prekey together — exposes it. **Protection improves as ratchet
 contributions are incorporated**, not immediately — how quickly depends on the
 message pattern and the compromise model. Against announcing each intended
 conversation, that is still the better trade.
