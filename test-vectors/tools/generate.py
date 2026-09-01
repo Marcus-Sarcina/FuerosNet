@@ -16,11 +16,16 @@ computed — no implementation was available — so post-quantum signature slots
 carry their exact signing input (`Sig_structure`) and a placeholder marker.
 """
 
-import hashlib
+import hashlib, hmac, os
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 H = lambda b: hashlib.sha256(b).digest()
+
+_SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'wire-format.md')
+SPEC_SHA = hashlib.sha256(open(_SPEC, 'rb').read()).hexdigest()
+PIN = (f"Generated against `wire-format.md` SHA-256 `{SPEC_SHA}` — "
+       "regenerate after any specification change.")
 
 # ---------------------------------------------------------------- CBOR encoder
 # Deterministic encoding per RFC 8949 §4.2 as profiled by wire-format.md §1:
@@ -192,6 +197,8 @@ alice, bob, carol = IDS['alice'], IDS['bob'], IDS['carol']
 
 emit('keys.md', f"""# Test identities
 
+{PIN}
+
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
 
@@ -277,6 +284,8 @@ signed_locator = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
                         (e_uint(3), sl_cose)])
 
 emit('primitives.md', f"""# Primitives
+
+{PIN}
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -434,11 +443,16 @@ TS_FINAL = TS_START + 900
 WINDOW_ORDINAL = TS_START // 86400
 synthetic_root = H(b'rhtn-test-vectors:synthetic-disclosure-root:formation')
 participant = lambda i: e_map([(e_uint(1), e_bstr(i.keyhash))])
+# Field 3's order is DELIBERATELY the reverse of keyhash order, so that
+# participant order (which fixes back-pointer list order, §3.1) and envelope
+# kid order (which fixes signature entry order, §3.5) disagree — a decoder
+# conflating the two fails this vector.
+p_hi, p_lo = sorted([alice, carol], key=lambda i: i.keyhash, reverse=True)
 formation_body = e_map([
-    (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(carol.keyhash)])),
+    (e_uint(0), backptrs([genesis(p_hi.keyhash)], [genesis(p_lo.keyhash)])),
     (e_uint(1), e_uint(TS_START)),
     (e_uint(2), e_uint(TS_FINAL)),
-    (e_uint(3), e_arr([participant(alice), participant(carol)])),
+    (e_uint(3), e_arr([participant(p_hi), participant(p_lo)])),
     (e_uint(6), e_uint(1)),
     (e_uint(7), e_uint(WINDOW_ORDINAL)),
     (e_uint(8), e_bstr(synthetic_root)),
@@ -448,17 +462,71 @@ formation_txid = H(formation_body)
 alice_first, bob_first = sorted([alice, bob], key=lambda i: i.keyhash)
 ordered_names = [alice_first.name, bob_first.name]
 
+# --- Adoption where signer order and kid order DIVERGE: the node's keyhash
+# sorts after the patron's, so back-pointer list 0 belongs to the signer whose
+# envelope entries come second.
+div_node, div_patron = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)[0], \
+                       sorted([alice, bob], key=lambda i: i.keyhash)[0]
+div_loc = locator(div_patron.keyhash, path([2, 7]), seqno(9, 1))
+div_body = e_map([
+    (e_uint(0), backptrs([genesis(div_node.keyhash)], [genesis(div_patron.keyhash)])),
+    (e_uint(1), e_bstr(div_node.keyhash)),
+    (e_uint(2), e_bstr(div_patron.keyhash)),
+    (e_uint(3), div_loc),
+    (e_uint(4), e_uint(TS_ADOPT + 7200)),
+])
+div_txid = H(div_body)
+div_env, div_entries = envelope(1, 1, div_body, [div_node, div_patron])
+
+# --- Departure carrying a MERGE: alice's chain forked (the adoption and the
+# formation record both continue her genesis) and reunites here.
+# INTERPRETATION: §3.1 states no order for a merge list; ascending bytewise
+# is used and flagged (README).
+merge_heads = sorted([adopt_txid, formation_txid])
+merge_body = e_map([
+    (e_uint(0), backptrs(merge_heads)),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), seqno(5, 44)),
+    (e_uint(4), e_uint(TS_DEPART + 3600)),
+])
+merge_txid = H(merge_body)
+
+# --- Disavowal with an UNASSIGNED in-range code: MUST be accepted and
+# evaluated by band (§4.3's exception to the unknown-enum rule).
+code40_body = e_map([
+    (e_uint(0), backptrs([adopt_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(alice.keyhash)),
+    (e_uint(3), e_uint(TS_DEPART)),
+    (e_uint(4), e_uint(40)),
+])
+code40_txid = H(code40_body)
+
+# --- Adoption carrying a bounded unknown extension key: preserved,
+# re-serialised, and covered by txid and signatures (§1).
+ext_body = e_map([
+    (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), loc),
+    (e_uint(4), e_uint(TS_ADOPT)),
+    (e_uint(99), e_bstr(bytes.fromhex('c0ffee'))),
+])
+ext_txid = H(ext_body)
+
 emit('transactions.md', f"""# Transaction bodies, txids, and one full envelope
+
+{PIN}
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
 `txid = SHA-256(deterministic CBOR of the body map)`, signature array excluded
 (`wire-format.md` §1). Key 0 carries one back-pointer list per required signer
-in signer order (§3.1). **Series reissue is absent from §3.1's signer-order
-table** — the order used here, node then patron, follows the table's own
-generative rule (*the order the type's schema introduces its required
-signers*); the missing row is FINDING 1 in README.
+in signer order (§3.1). *Historical note: §3.1's table lacked its series-reissue
+row when this set was first drafted; drafting found it and the row was added the
+same day (README, Findings).*
 
 Timestamps: adoption `{TS_ADOPT}`, departure `{TS_DEPART}`, ceremony
 `started_at {TS_START}` / `finalized_at {TS_FINAL}`.
@@ -568,8 +636,12 @@ key 0 carries the genesis value for both signers, which for a formation record
 is also a structural rule (§3.2). `window_ordinal = floor({TS_START} / 86400) =
 {WINDOW_ORDINAL}`. Key 8's disclosure root is **synthetic**
 (`SHA-256("rhtn-test-vectors:synthetic-disclosure-root:formation")`) — the
-§4.5.1 digest-list construction is not yet covered by this draft (README,
-*Not yet covered*).
+§4.5.1 digest-list construction is not yet covered by this draft (README).
+
+**Field 3's order is deliberately {p_hi.name} then {p_lo.name} — the reverse of
+keyhash order.** Participant order fixes back-pointer list order (§3.1); kid
+order fixes envelope entry order (§3.5); here they disagree, so list 0 is
+{p_hi.name}'s genesis while an envelope's first entries would be {p_lo.name}'s.
 
 Body ({len(formation_body)} bytes):
 
@@ -577,16 +649,103 @@ Body ({len(formation_body)} bytes):
 {hexblock(formation_body)}
 ```
 
-txid: `{hx(formation_txid)}`""")
+txid: `{hx(formation_txid)}`
+
+## Adoption where signer order and kid order diverge — {div_node.name} adopted by {div_patron.name}
+
+The node's keyhash sorts **after** the patron's, so §3.1's signer order
+({div_node.name}, {div_patron.name}) and §3.5's entry order
+({div_patron.name}, {div_node.name}) disagree. **Back-pointer list 0 is
+{div_node.name}'s; the envelope's first two entries are {div_patron.name}'s.**
+An implementation deriving either order from the other passes the first
+adoption vector and fails this one — the confusion §3.1 warns is silent.
+
+Body ({len(div_body)} bytes):
+
+```
+{hexblock(div_body)}
+```
+
+txid: `{hx(div_txid)}`
+
+Envelope entry order and Ed25519 signatures (same construction as the first
+adoption; `Sig_structure`s omitted for brevity):
+""")
+
+for ident, alg, prot, tbs, sig in div_entries:
+    if alg == -8:
+        emit('transactions.md',
+             f"- {ident.name}, Ed25519: protected `{hx(prot)}`, signature\n  `{hx(sig)}`")
+    else:
+        emit('transactions.md',
+             f"- {ident.name}, ML-DSA-65: protected `{hx(prot)}`, signature requires an implementation")
+
+emit('transactions.md', f"""
+## Departure carrying a merge — alice reunites two branches
+
+Alice's chain forked: the first adoption and the formation record both continue
+her genesis. This departure closes the fork with a two-entry back-pointer list —
+**a merge is an ordinary transaction with a longer list; no merge type exists**
+(§3.1). The list is ascending bytewise (INTERPRETATION 5, README — §3.1 states
+no order for merge lists).
+
+Body ({len(merge_body)} bytes):
+
+```
+{hexblock(merge_body)}
+```
+
+txid: `{hx(merge_txid)}`
+
+## Disavowal with an unassigned in-range code — MUST ACCEPT
+
+Reason code **40**: unassigned in v1, inside the 0–63 space, with-prejudice
+band (bit 5 set). §4.3 makes disavowal codes an exception to §1's unknown-enum
+rule — **an unfamiliar in-range code is retained and evaluated by its band,
+never rejected.** A decoder rejecting this body is over-strict and
+non-conforming. (Code 64 is malformed — outside the code space, not
+"unassigned"; see negative vector T8.)
+
+Body ({len(code40_body)} bytes):
+
+```
+{hexblock(code40_body)}
+```
+
+txid: `{hx(code40_txid)}`
+
+## Adoption carrying a bounded unknown extension key — MUST ACCEPT AND PRESERVE
+
+The first adoption's body plus an unknown key `99` carrying `h'c0ffee'` —
+within §1's bounds (≤ 16 unknown keys, ≤ 1,024 encoded bytes each). A decoder
+MUST preserve it on re-serialisation, and it is covered by the txid and by
+every signature: note the txid differs from the first adoption's.
+
+Body ({len(ext_body)} bytes):
+
+```
+{hexblock(ext_body)}
+```
+
+txid: `{hx(ext_txid)}`""")
 
 # ================================================================ verifier-selection.md
 
 def commitment(w, nonce):
     return H(b'rhtn/1:nonce-commit' + w.keyhash + nonce)
 
-nonces = {n: H(b'rhtn-test-vectors:nonce:' + n.encode()) for n in ['w1', 'w2', 'w3']}
-witnesses_sorted = sorted(['w1', 'w2', 'w3'], key=lambda n: IDS[n].keyhash)
+# Witness nonces are DERIVED per wire §5.2.1: PRF(witness_secret,
+# "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal), PRF instantiated
+# as the expected HMAC-SHA-256. INTERPRETATION: the ordinal is encoded as
+# 8 bytes big-endian, matching §5.3's seed layout — §5.2.1 does not say.
 pa, pb = sorted([alice.keyhash, carol.keyhash])
+secrets = {n: H(b'rhtn-test-vectors:' + n.encode() + b':witness-secret')
+           for n in ['w1', 'w2', 'w3']}
+def derive_nonce(name, ordinal):
+    msg = b'rhtn/1:wnonce' + pa + pb + ordinal.to_bytes(8, 'big')
+    return hmac.new(secrets[name], msg, hashlib.sha256).digest()
+nonces = {n: derive_nonce(n, WINDOW_ORDINAL) for n in ['w1', 'w2', 'w3']}
+witnesses_sorted = sorted(['w1', 'w2', 'w3'], key=lambda n: IDS[n].keyhash)
 seed_input = (b'rhtn/1:verifier-seed' + pa + pb + WINDOW_ORDINAL.to_bytes(8, 'big')
               + b''.join(IDS[n].keyhash + nonces[n] for n in witnesses_sorted))
 seed = H(seed_input)
@@ -600,6 +759,8 @@ selected = ranked[:required]
 
 emit('verifier-selection.md', f"""# Verifier selection — recomputation
 
+{PIN}
+
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
 SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
@@ -608,14 +769,23 @@ SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
 ## Nonce commitment (§5.1)
 
 `commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)`,
-nonce exactly 32 bytes. Test nonces are
-`SHA-256("rhtn-test-vectors:nonce:<name>")`.
+nonce exactly 32 bytes.
 
-| Witness | Nonce | Commitment |
-|---|---|---|""")
+## Nonce derivation (§5.2.1)
+
+Nonces are **derived, not fresh**: `nonce = HMAC-SHA-256(witness_secret,
+"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`, the PRF being the
+expected choice, the participants this ceremony's pair, and the ordinal encoded
+as 8 bytes big-endian (INTERPRETATION 4, README). Same window, same nonce —
+re-deriving with these inputs MUST reproduce the table exactly, which is the
+anti-grinding stability the rule exists for. Test secrets are
+`SHA-256("rhtn-test-vectors:<name>:witness-secret")`:
+
+| Witness | witness_secret | Derived nonce | Commitment |
+|---|---|---|---|""")
 for n in ['w1', 'w2', 'w3']:
     emit('verifier-selection.md',
-         f"| {n} | `{hx(nonces[n])}` | `{hx(commitment(IDS[n], nonces[n]))}` |")
+         f"| {n} | `{hx(secrets[n])}` | `{hx(nonces[n])}` | `{hx(commitment(IDS[n], nonces[n]))}` |")
 
 emit('verifier-selection.md', f"""
 ## Seed (§5.3)

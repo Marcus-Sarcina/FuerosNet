@@ -7053,3 +7053,51 @@ implementation reproducing every value.
 *absent by decision* and `wire-format.md` §13's *none exist* are updated;
 `CLAUDE.md`'s root-contents sentence now names the folder. References across the
 five documents and the six vector files resolve at zero.
+
+### 2026-08-31 (test-vector review ingested; the vectors and the wire format both corrected)
+The first clean-room review of `test-vectors/` came back from a different model
+family. **It reran the generator byte-for-byte and independently confirmed the
+adoption txid and the `SignedLocator` signature — no arithmetic error.** What it
+found instead is fit, and three of its findings corrected `wire-format.md` itself:
+
+**Three stale references the missing end-to-end vectors had concealed.** §5.4's
+witness-only rule said *"names them in field 8, not field 4"* — pre-migration numbers
+for what are now fields 4 and 3. §4.5.2's recomputation row read seed inputs from
+*"body fields 4, 8, 11"* and the presence body has no key 11 — now 3, 4, 7. And §1.1's
+domain-separation table, which calls itself the current enumeration, was missing
+`rhtn/1:endpoints`; the row exists now, with a sentence separating the hash/PRF tag
+family from the `external_aad` signing contexts.
+
+**The vectors gained what the review showed they lacked.** Witness nonces are now
+derived per §5.2.1 — HMAC-SHA-256 from synthetic secrets, re-derived independently in
+verification — instead of arbitrary labels. A new adoption vector makes signer order
+and kid order diverge, and the formation record's participant order now runs against
+keyhash order, so an implementation conflating §3.1's ordering with §3.5's fails a
+vector instead of passing by coincidence. A real two-head merge reunites the adoption
+and formation branches of one chain. Two must-accept vectors — an unassigned in-range
+disavowal code and a bounded unknown extension key — give over-strict decoders
+something to fail. Every generated file now pins the SHA-256 of `wire-format.md` it
+was generated against.
+
+**The negative suite was rebuilt around the specification's own outcome vocabulary.**
+Malformed, unverifiable, incomplete, ineffective, accepted — five classes, and
+fixtures split into byte-level, context-dependent (bytes plus external state plus
+expected outcome) and method requirements. Six rows the review faulted were wrong and
+are fixed: E8's rationale inverted a banded exception, S9 misnamed the Recovery
+proof's COSE type, R9 and R10 pretended context-dependent judgments were byte-level
+rejections, T6 dropped *for one subject*, and T7 turned out to be **untestable as
+specified** — unknown keys are preserved and nothing marks a seed — which goes to the
+author as a testability gap rather than a fixture.
+
+**Three blockers stand, by design of the draft**: no fully valid envelope until real
+ML-DSA test keys exist (none reachable in this environment — and canonical promotion
+was always going to be wholesale regeneration, since the synthetic pubs have no
+private halves); no normal-subtype presence record; and selection tested as
+arithmetic rather than derived by traversal. These, with the disclosure-root
+construction and the boundary sweep, are now the README's **canonical bar** — the
+review's own priority order.
+
+**Dispositions in `Robot/review-tracking.md`. Five under-determinations stand as
+numbered interpretations awaiting the author**: the `SignedLocator` payload form, the
+genesis hash input, §5's raw-concatenation framing, §5.2.1's ordinal encoding, and
+merge-list order — each a one-sentence specification fix if confirmed.

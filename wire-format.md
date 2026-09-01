@@ -73,7 +73,10 @@ message.** A context is distinct whenever the same key could be asked to sign in
 more than one role; adding a role therefore means adding a tag, and the table below
 is the current enumeration rather than a closed set.
 
-Present encoding: `external_aad` holds the ASCII role tag.
+Present encoding: `external_aad` holds the ASCII role tag. *The hash and PRF
+domain tags — `rhtn/1:nonce-commit`, `rhtn/1:verifier-seed`, `rhtn/1:wnonce`
+(§5) — are a separate family: they prefix hash inputs and never appear in an
+`external_aad`.*
 
 | Role | `external_aad` |
 |---|---|
@@ -86,6 +89,7 @@ Present encoding: `external_aad` holds the ASCII role tag.
 | Abuse report (§4) | `rhtn/1:abuse` |
 | Standalone locator (§2.3) | `rhtn/1:locator` |
 | Anchor entry (§7.2) | `rhtn/1:anchor` |
+| Node endpoint record (§7.6) | `rhtn/1:endpoints` |
 | Prekey bundle (§7.8) | `rhtn/1:prekey` |
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
@@ -1393,7 +1397,7 @@ which reads adoptions and no presence record at all, and combines the two
 | Ceremony, at creation (design §7.1) | **All.** Both parties construct the body |
 | Witness signing (design §7.1) | **Location only**, which the witness corroborates |
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
-| Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 4, 8, 11 |
+| Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 3, 4, 7 |
 | Finalization threshold (§5.5) | **None.** Counts field 5 |
 | Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
@@ -1693,7 +1697,7 @@ Six definitions the selection rule depends on and did not carry.
 record commits for that subject, in which the subject is one of the two
 participants**, each once. **A record the subject signed
 only as a witness is in their chain and is not their meeting** — it names them in
-field 8, not field 4 — and counting it would raise *n* without adding a candidate,
+field 4, not field 3 — and counting it would raise *n* without adding a candidate,
 since a witnessed ceremony's participants met each other, not the witness. The same
 rule scopes the candidate set: a candidate is the *other participant* of a counted
 record. The archive is a Merkle DAG after a merge (design §10.3), so a transaction

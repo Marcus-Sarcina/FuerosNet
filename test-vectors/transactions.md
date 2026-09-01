@@ -1,14 +1,15 @@
 # Transaction bodies, txids, and one full envelope
 
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
 `txid = SHA-256(deterministic CBOR of the body map)`, signature array excluded
 (`wire-format.md` §1). Key 0 carries one back-pointer list per required signer
-in signer order (§3.1). **Series reissue is absent from §3.1's signer-order
-table** — the order used here, node then patron, follows the table's own
-generative rule (*the order the type's schema introduces its required
-signers*); the missing row is FINDING 1 in README.
+in signer order (§3.1). *Historical note: §3.1's table lacked its series-reissue
+row when this set was first drafted; drafting found it and the row was added the
+same day (README, Findings).*
 
 Timestamps: adoption `1775869200`, departure `1778461200`, ceremony
 `started_at 1767268800` / `finalized_at 1767269700`.
@@ -422,8 +423,12 @@ key 0 carries the genesis value for both signers, which for a formation record
 is also a structural rule (§3.2). `window_ordinal = floor(1767268800 / 86400) =
 20454`. Key 8's disclosure root is **synthetic**
 (`SHA-256("rhtn-test-vectors:synthetic-disclosure-root:formation")`) — the
-§4.5.1 digest-list construction is not yet covered by this draft (README,
-*Not yet covered*).
+§4.5.1 digest-list construction is not yet covered by this draft (README).
+
+**Field 3's order is deliberately alice then carol — the reverse of
+keyhash order.** Participant order fixes back-pointer list order (§3.1); kid
+order fixes envelope entry order (§3.5); here they disagree, so list 0 is
+alice's genesis while an envelope's first entries would be carol's.
 
 Body (200 bytes):
 
@@ -438,3 +443,97 @@ aa65d2c4edefb75db354b8678d3014fdce71596db0abb9b730e9a9a101582025
 ```
 
 txid: `788f856b8be57cd9baae59854fb77a992a31280969e4e56ffc1f514fbc8382ed`
+
+## Adoption where signer order and kid order diverge — bob adopted by alice
+
+The node's keyhash sorts **after** the patron's, so §3.1's signer order
+(bob, alice) and §3.5's entry order
+(alice, bob) disagree. **Back-pointer list 0 is
+bob's; the envelope's first two entries are alice's.**
+An implementation deriving either order from the other passes the first
+adoption vector and fails this one — the confusion §3.1 warns is silent.
+
+Body (197 bytes):
+
+```
+a500828158200fd3776b51f0d1b599db54c1153e9f10b2157e85a0a2b7edfb90
+a588ad4df3e3815820ce9e488f637a11ad3951f4ec71b9f9ddcfe6b4a7be2d47
+84f720c1327b2b8a170158205693d22ed3d6dd0cc82926601127d63226bb9ec9
+18ab14db812911e2ab4be594025820435c987e0caa65d2c4edefb75db354b867
+8d3014fdce71596db0abb9b730e9a903a3015820435c987e0caa65d2c4edefb7
+5db354b8678d3014fdce71596db0abb9b730e9a902a201412702020382090104
+1a69d9b930
+```
+
+txid: `f689a3f34762a660df142e437c5b0517992e8ed52671aa04434b71cdddabb914`
+
+Envelope entry order and Ed25519 signatures (same construction as the first
+adoption; `Sig_structure`s omitted for brevity):
+
+- alice, Ed25519: protected `a20127045820435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9b730e9a9`, signature
+  `45dbc121f7e2f16c858672d4888838800bdfd59b219de6ffd2a5ebd566e44d58faec34d972a0e162eb251e2dc90b7fbbc5bb8208f1c3191cdeef1a6db8553b0f`
+- alice, ML-DSA-65: protected `a2013830045820435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9b730e9a9`, signature requires an implementation
+- bob, Ed25519: protected `a201270458205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14db812911e2ab4be594`, signature
+  `0d2e0e818015d29b1b4efe2409aa53be28d91c41a84f849c482e20ddf469d1784a1d5f101077e7bd528b75c35b7006352873e9d90a07cdc5860b460da7151900`
+- bob, ML-DSA-65: protected `a20138300458205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14db812911e2ab4be594`, signature requires an implementation
+
+## Departure carrying a merge — alice reunites two branches
+
+Alice's chain forked: the first adoption and the formation record both continue
+her genesis. This departure closes the fork with a two-entry back-pointer list —
+**a merge is an ordinary transaction with a longer list; no merge type exists**
+(§3.1). The list is ascending bytewise (INTERPRETATION 5, README — §3.1 states
+no order for merge lists).
+
+Body (153 bytes):
+
+```
+a500818258206bac2abd90863f3fde8028515f4665cb6454fd51c95898e4ba41
+b4659672d8645820788f856b8be57cd9baae59854fb77a992a31280969e4e56f
+fc1f514fbc8382ed015820435c987e0caa65d2c4edefb75db354b8678d3014fd
+ce71596db0abb9b730e9a90258205693d22ed3d6dd0cc82926601127d63226bb
+9ec918ab14db812911e2ab4be594038205182c041a6a013820
+```
+
+txid: `c08278ffef28334453b6ca46c3558bf55fa38212df58fb8cae18ca1e47336ff9`
+
+## Disavowal with an unassigned in-range code — MUST ACCEPT
+
+Reason code **40**: unassigned in v1, inside the 0–63 space, with-prejudice
+band (bit 5 set). §4.3 makes disavowal codes an exception to §1's unknown-enum
+rule — **an unfamiliar in-range code is retained and evaluated by its band,
+never rejected.** A decoder rejecting this body is over-strict and
+non-conforming. (Code 64 is malformed — outside the code space, not
+"unassigned"; see negative vector T8.)
+
+Body (117 bytes):
+
+```
+a500818158206bac2abd90863f3fde8028515f4665cb6454fd51c95898e4ba41
+b4659672d8640158205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14
+db812911e2ab4be594025820435c987e0caa65d2c4edefb75db354b8678d3014
+fdce71596db0abb9b730e9a9031a6a012a10041828
+```
+
+txid: `f803849a88054ab7c982befe1d99d4b873c24240f50a62e1e8b71ae87f1f0d0f`
+
+## Adoption carrying a bounded unknown extension key — MUST ACCEPT AND PRESERVE
+
+The first adoption's body plus an unknown key `99` carrying `h'c0ffee'` —
+within §1's bounds (≤ 16 unknown keys, ≤ 1,024 encoded bytes each). A decoder
+MUST preserve it on re-serialisation, and it is covered by the txid and by
+every signature: note the txid differs from the first adoption's.
+
+Body (206 bytes):
+
+```
+a60082815820ce9e488f637a11ad3951f4ec71b9f9ddcfe6b4a7be2d4784f720
+c1327b2b8a178158200fd3776b51f0d1b599db54c1153e9f10b2157e85a0a2b7
+edfb90a588ad4df3e3015820435c987e0caa65d2c4edefb75db354b8678d3014
+fdce71596db0abb9b730e9a90258205693d22ed3d6dd0cc82926601127d63226
+bb9ec918ab14db812911e2ab4be59403a30158205693d22ed3d6dd0cc8292660
+1127d63226bb9ec918ab14db812911e2ab4be59402a201433141500205038205
+182a041a69d99d10186343c0ffee
+```
+
+txid: `fe68b7a7818aeb3ddbfa711e6f730bb27db68ad1714087da7b73006311e39398`

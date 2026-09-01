@@ -1,5 +1,7 @@
 # Verifier selection — recomputation
 
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
 SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
@@ -8,14 +10,23 @@ SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
 ## Nonce commitment (§5.1)
 
 `commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)`,
-nonce exactly 32 bytes. Test nonces are
-`SHA-256("rhtn-test-vectors:nonce:<name>")`.
+nonce exactly 32 bytes.
 
-| Witness | Nonce | Commitment |
-|---|---|---|
-| w1 | `f271aecc154e4c40edb0f70c35cc00085552ccb052e9126b6917c41670185a2b` | `979536b6d2320ba25e1e20607d4cf07c76af6a84faeef471e8f5081c1650bc43` |
-| w2 | `b6972f97b7363428c17878c5741a4f649e142c56c23b56511b101828cdb3dce8` | `c1a695e6772507de7b0aa4449c3a399609ca6535ff204dfabaf7a81ca16a4034` |
-| w3 | `17cc9a63f97f221fdb50e1f5dd1450611cfa3525fb4c98f3be0a051999f7ec47` | `30ece26f6b719ac7fbff1b3e1d983a73f1f242554c9325ba9e8574641e350b81` |
+## Nonce derivation (§5.2.1)
+
+Nonces are **derived, not fresh**: `nonce = HMAC-SHA-256(witness_secret,
+"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`, the PRF being the
+expected choice, the participants this ceremony's pair, and the ordinal encoded
+as 8 bytes big-endian (INTERPRETATION 4, README). Same window, same nonce —
+re-deriving with these inputs MUST reproduce the table exactly, which is the
+anti-grinding stability the rule exists for. Test secrets are
+`SHA-256("rhtn-test-vectors:<name>:witness-secret")`:
+
+| Witness | witness_secret | Derived nonce | Commitment |
+|---|---|---|---|
+| w1 | `89c2c5f5cc1413e7463b4aaa74a326ea97528403bd75c76ce9cb690fa38afa09` | `0bc651a024674169926210159703f8932de6bf50f5e70d3e8f004fd631ad64de` | `bb7fd4a1c8bab3f434d6734e758a351a0d6be9b7211352d0934c0602f307a77c` |
+| w2 | `822f8238b421166b8a097f2771690f5afd8df853e9c022192ff40c2098b18d5f` | `ff3f1bf03bfdd6bf0a79dec957017b5c4fe762f6d78fc43acb72127e65147490` | `63c2c9c848cdc29524f58cb749e640dc5c9c2abe0c560648be3363d313267605` |
+| w3 | `cb15d49a84376164def11fb02537d7fb8c3dabdf69301f44193af8fa9309631f` | `f982459b367ea5e2f183b846d39503fbe16a74326eab3212a723306c17f40b7f` | `4b1e8a0dd106dcf0e51cef8f649a839ce0c2d9e9f9ff05b6f36c5cfadd27711a` |
 
 ## Seed (§5.3)
 
@@ -34,15 +45,15 @@ Seed preimage (284 bytes = 20-byte tag + 32 + 32 + 8 + 3 × 64):
 7268746e2f313a76657269666965722d736565642535e9a92cef24e674fe0b7d
 b0cfd67762cf55953336bca8cc7db8ab05049ced435c987e0caa65d2c4edefb7
 5db354b8678d3014fdce71596db0abb9b730e9a90000000000004fe669644d3e
-698b7c54622f1b8045880d696bcd98d459981f696e8bc76c8d1c5d57f271aecc
-154e4c40edb0f70c35cc00085552ccb052e9126b6917c41670185a2bb821af99
-267d56d032bd36070b68336492a16797d3811752a8ee2edd8a40f37017cc9a63
-f97f221fdb50e1f5dd1450611cfa3525fb4c98f3be0a051999f7ec47be9d9075
-4088a297896519ccc1eed484d2fa0d255d47bc0d51fc9972c47b1b9cb6972f97
-b7363428c17878c5741a4f649e142c56c23b56511b101828cdb3dce8
+698b7c54622f1b8045880d696bcd98d459981f696e8bc76c8d1c5d570bc651a0
+24674169926210159703f8932de6bf50f5e70d3e8f004fd631ad64deb821af99
+267d56d032bd36070b68336492a16797d3811752a8ee2edd8a40f370f982459b
+367ea5e2f183b846d39503fbe16a74326eab3212a723306c17f40b7fbe9d9075
+4088a297896519ccc1eed484d2fa0d255d47bc0d51fc9972c47b1b9cff3f1bf0
+3bfdd6bf0a79dec957017b5c4fe762f6d78fc43acb72127e65147490
 ```
 
-seed: `8ed92a138845b1d3a3d2ab80bf559f2a47c85cdd9766c617bfcc37751fd1d533`
+seed: `c9d56659e9b5e3f01f85a65c223f634907b129c07c3ffbc2b18130a58ab32d65`
 
 ## Threshold (§5.4)
 
@@ -65,16 +76,16 @@ ascending rank, ties by ascending keyhash.
 
 | Candidate | rank |
 |---|---|
-| c1 | `df80fc6e4357c3697a68f3ca363856f5e015054bf127651660ecfd4e6b811f59` |
-| c2 | `f27dcf078f677b11debc3f1b7e0637a34a9bc3dc3227d37eb402cf75ced828c9` |
-| c3 | `2a99b708bebabf3fc3ddfe154fb1311d0be0404ffe841b7eef01980f6f4c28dc` |
-| c4 | `f221160e544a8730a558e0c2d249acbd3fa78cecf7b7e9c48a739f656e786f06` |
-| c5 | `34e95887b0e7a44032114acd301f96764bc6e3f8fd9e41abbbe6c433570cf960` |
+| c1 | `c3c9a73485e40f08104b6c0f79096447e732fbf8f4d5a8db1d31e37820023244` |
+| c2 | `f7a79e015812a21de92b774bf280dff96cc7c477747527fddbdbe75b0a2493c4` |
+| c3 | `5d2ee2fbb9254e6f65e2a17c8630301d2499c29dd7031abe4f00ba89c29dadad` |
+| c4 | `bd781a2fabbfa4cb12ab6a7a2f949cefff932ab2547bf59b4abe446c23a5c752` |
+| c5 | `0fd332f9eab5464c438503501b8dcea9540e3301b9bbade2390bc7508c75ac9b` |
 
-Rank order: c3 < c5 < c1 < c4 < c2.
+Rank order: c5 < c3 < c4 < c1 < c2.
 
 With n = 7 and these five candidates, `required = 3`;
-**selected: c3, c5, c1**. Exactly that many are queried (§5.4).
+**selected: c5, c3, c4**. Exactly that many are queried (§5.4).
 
 ## Window boundaries (§5.3.1)
 

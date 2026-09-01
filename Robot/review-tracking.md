@@ -1675,3 +1675,61 @@ row is orienting a reader who has met none of this yet, so *"a service, data sto
 application"* is doing the work everyday words do — §11's three-category table is the
 taxonomy, and it arrives when the reader needs one. **The fourth sense was never a
 collision**; it reads as the ordinary English word, which is the point.
+
+---
+
+## Test-vector review, first run (2026-08-31, different model family)
+
+**The reviewer reran the generator byte-for-byte and independently confirmed the
+adoption txid and the `SignedLocator` signature — no arithmetic error found.** The
+findings are about fit: what the vectors fail to exercise, and outcome semantics.
+
+### Blockers — confirmed, queued as the canonical bar (vectors README)
+
+| # | Finding | Disposition |
+|---|---|---|
+| B1 | No fully valid envelope; synthetic ML-DSA pubs have no private halves, so filling the slots later is impossible — **canonical promotion is a wholesale regeneration with real keypairs** | **CONFIRMED, blocked on tooling** (no ML-DSA implementation reachable; pip absent). Consequence recorded in README; mechanical when tooling exists, since every value flows from the generator |
+| B2 | Verifier selection tested as arithmetic, not recomputation — *n* and candidates supplied, never derived by DAG traversal | **CONFIRMED** — canonical bar item 3 |
+| B3 | No normal-subtype presence record connecting nonces, selection, consent, responses, threshold and signer set | **CONFIRMED** — canonical bar item 2 |
+
+### High — applied this pass
+
+| # | Finding | Disposition |
+|---|---|---|
+| H1 | Accept/reject is too coarse for the spec's outcome vocabulary | **APPLIED** — `negative-vectors.md` restructured: five outcome classes (malformed, unverifiable, incomplete, ineffective, accepted), three fixture kinds (byte-level, context + external state, method) |
+| H2 | E8's rationale wrong: disavowal codes 0–63 are a banded exception, retained and evaluated | **CONFIRMED, FIXED** — E8 re-pointed at a non-excepted enumeration; new T8 (code 64 malformed as out-of-space); new must-accept D1 with a generated code-40 body |
+| H3 | S9 misnames the Recovery proof as `COSE_Sign1` | **CONFIRMED, FIXED** — names the exact `COSE_Sign1` contexts; states Recovery field 3 is hybrid `COSE_Sign` and why the kid-omission rule still reaches its entries |
+| H4 | R9 cannot be an unconditional reject (a cheating established key mints one; no-history validators cannot tell) | **CONFIRMED, FIXED** — split R9/R9b context fixtures: fork-detected with the real chain, accepted without |
+| H5 | R10 conflates malformed with incomplete | **CONFIRMED, FIXED** — R10/R10b: predecessor present → malformed; unfetchable → incomplete |
+| H6 | T6 too broad — the rule is per `(subject, verifier)` slot | **CONFIRMED, FIXED**, with the one-verifier-two-subjects positive stated |
+| H7 | Signer order vs kid order never diverge, so a conflating implementation passes | **APPLIED** — new adoption vector where the node's keyhash sorts after the patron's (list 0 is the node's, first entries the patron's); the formation record's field-3 order reversed to disagree with keyhash order |
+| H8 | Witness nonces arbitrary; §5.2.1's derivation untested | **APPLIED** — nonces now derived (HMAC-SHA-256 per §5.2.1) from synthetic witness secrets; seed consumes them; independently re-derived in verification. New interpretation: the PRF's ordinal encoding is unstated (8-byte BE used, per §5.3's layout) |
+| H9 | Synthetic disclosure root — formation txid belongs to no valid presentation | **CONFIRMED** — canonical bar item 5 |
+| H10 | Negative vectors mostly prose | **PARTIAL** — outcome classes and the `bytes + context + state + outcome` fixture format adopted; machine-readable files are canonical bar item 6 |
+
+### Medium — applied or queued
+
+| # | Finding | Disposition |
+|---|---|---|
+| M1 | DAG semantics barely covered | **PARTIAL** — a real two-head merge added (the adoption and formation branches of one chain, reunited in a departure); 8/9 boundary queued (bar 7). **New under-determination found**: §3.1 states no order for a merge list — ascending bytewise used, flagged, since without a rule one logical merge has several txids |
+| M2 | Boundary/exception semantics under-covered | **QUEUED** — bar 7; four must-accept rows (D1–D5) added now |
+| M3 | README over-classifies determined choices as interpretations | **APPLIED** — old #4–#7 demoted to *Determined by the profile*; interpretations now the three genuine ones plus two new (PRF ordinal encoding, merge-list order) |
+| M4 | Stale generator commentary; no spec pin | **CONFIRMED, FIXED** — commentary updated; every generated file now embeds the SHA-256 of `wire-format.md` it was generated against |
+
+### Specification findings — all verified against the text, fixed
+
+| # | Finding | Fix |
+|---|---|---|
+| SP1 | §5.4's witness-only sentence: "names them in field 8, not field 4" — pre-migration numbers | Now "field 4, not field 3" |
+| SP2 | §4.5.2's recomputation row: "body fields 4, 8, 11" — no key 11 exists | Now "fields 3, 4, 7" |
+| SP3 | §1.1's context table missing `rhtn/1:endpoints`; hash/PRF tags conflatable with signing contexts | Row added; one-sentence family distinction added |
+
+### Open for the author
+
+- **T7 / the seed sentence** (§4.1): *"a record carrying one would be malformed"* is
+  untestable — unknown keys are preserved and nothing marks a seed. Reserve a key
+  range, or restate as a writer commitment. §1.1's own enforceability test.
+- **Five under-determinations** now standing as vector interpretations, each a
+  one-sentence spec clarification if confirmed: `SignedLocator` payload form,
+  genesis hash input, §5's raw-concatenation framing, §5.2.1's ordinal encoding,
+  merge-list order.
