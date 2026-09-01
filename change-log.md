@@ -7687,3 +7687,17 @@ ceremony bundle, defended by recognition, and the chained standing presentation 
 patron walks, defended by the chain. Consent, the verification process, and
 cross-selection are unchanged. Twenty-five harness checks pass against the
 regenerated vectors.
+
+### 2026-09-01 (§7.4.1's concentration note sharpened: the reference side, never the schema)
+The author challenged the redesigned oracle paragraph's wording — *"is this
+claiming a hostile counterparty can probe the underlying biometric with multiple
+schemas?"* — and the answer is no, with the machinery unchanged and now stated in
+place: the pre-commitment pins one profile per ceremony, the subject countersigns
+that profile or none, and every verifier rejects a profile differing from another
+countersigned under the same pre-commitment, under any selection rule. What
+selector choice permits is narrower and now said precisely: aiming **successive
+ceremonies'** single probes at the same verifier's stored captures, where the
+seed used to scatter them — a cleaner gradient against one reference set, still
+priced at a full witnessed ceremony per probe. The paragraph also names the
+tell: the same counterparty selecting the same verifier ceremony after ceremony
+is exactly the pattern the query-surfacing rule exists to show the subject.

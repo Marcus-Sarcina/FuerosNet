@@ -1518,15 +1518,23 @@ person in front of them as continuous with a history.
     that popped up each step would be asking someone mid-ceremony to adjudicate
     dozens of exchanges they cannot evaluate and did not initiate.
 
-  Selection by recognition (§8.1.2) means a hostile counterparty **does** choose
-  which verifiers are queried, and could try to concentrate probes on one
-  verifier's photographs across many ceremonies. Three controls remain, and
-  they are the real ones: **the subject's per-query grant** — each capture key
-  is released per selected verifier (§7.5.2), so the subject sees exactly who
-  is being probed and refuses; the per-subject and per-requester counters
-  above; and **bundle curation** — a subject can leave a verifier out of the
-  bundle entirely, and nobody can be queried through a record the subject
-  declines to show.
+  Selection by recognition (§8.1.2) changes the *reference* side of this attack,
+  and nothing else. **One profile per ceremony is unchanged**: the
+  pre-commitment pins it, the subject countersigns that one profile or none,
+  and every verifier rejects a profile differing from another countersigned
+  under the same pre-commitment — so a hostile counterparty can never probe
+  with multiple schemas in one ceremony, under any selection rule. What the
+  selector's choice permits is aiming **successive ceremonies'** single probes
+  at the *same* verifier's stored captures, where the seed used to scatter
+  them — a cleaner gradient against one reference set, still priced at a full
+  witnessed ceremony per probe. Three controls answer it: **the subject's
+  per-query grant** — each capture key is released per selected verifier
+  (§7.5.2), so the subject sees exactly who is being probed, and the same
+  counterparty selecting the same verifier ceremony after ceremony is
+  precisely the pattern the surfacing rule above exists to show them; the
+  per-subject and per-requester counters; and **bundle curation** — a subject
+  can leave a verifier out of the bundle entirely, and nobody can be queried
+  through a record the subject declines to show.
 
 #### 7.4.2 Consent
 
