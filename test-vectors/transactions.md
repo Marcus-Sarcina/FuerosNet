@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` SHA-256 `3d32b2bd748823990d4b8b212da12ec35811314b4165582ba08a645c509e27e2` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `46c143ebfcf55f2c7fa779f5583ba4c3254445cec6c3880fd09703f06c064fab` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -482,8 +482,8 @@ adoption; `Sig_structure`s omitted for brevity):
 Alice's chain forked: the first adoption and the formation record both continue
 her genesis. This departure closes the fork with a two-entry back-pointer list —
 **a merge is an ordinary transaction with a longer list; no merge type exists**
-(§3.1). The list is ascending bytewise (INTERPRETATION 5, README — §3.1 states
-no order for merge lists).
+(§3.1). The list is sorted ascending bytewise, as §3.1 requires — one logical
+merge, one encoding, one txid.
 
 Body (153 bytes):
 

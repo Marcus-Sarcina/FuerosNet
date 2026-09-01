@@ -176,8 +176,8 @@ def locator(anchor_kh, path_bytes, seqno_bytes):
                   (e_uint(3), seqno_bytes)])
 
 def genesis(keyhash):
-    """INTERPRETATION: SHA-256 over the raw 32 keyhash bytes, not over a CBOR
-    encoding of them (wire §3.1 says only 'SHA-256(the signer's keyhash)')."""
+    """Over the raw 32 keyhash bytes, not a CBOR encoding of them (wire §3.1,
+    stated since 2026-09-01)."""
     return H(keyhash)
 
 def backptrs(*lists):
@@ -363,7 +363,7 @@ example, seqno `[5, 42]` ({len(loc)} bytes):
 The one fully computable signature vector in this draft: classical-only by
 profile, so no ML-DSA slot.
 
-Payload — deterministic CBOR of fields 1–2 (INTERPRETATION 1, README):
+Payload — the map of exactly fields 1–2, per §1's fields-X–Y rule:
 
 ```
 {hexblock(sl_payload)}
@@ -416,8 +416,8 @@ Complete object ({len(sl2)} bytes):
 
 ## Genesis back-pointer (§3.1)
 
-`SHA-256(the signer's keyhash)` — over the raw 32 bytes (INTERPRETATION 2,
-README).
+`SHA-256(the signer's keyhash)` — over the raw 32 bytes, not a CBOR encoding
+(§3.1).
 
 | Signer | Genesis value |
 |---|---|
@@ -517,8 +517,8 @@ div_env, div_entries = envelope(1, 1, div_body, [div_node, div_patron])
 
 # --- Departure carrying a MERGE: alice's chain forked (the adoption and the
 # formation record both continue her genesis) and reunites here.
-# INTERPRETATION: §3.1 states no order for a merge list; ascending bytewise
-# is used and flagged (README).
+# §3.1: a merge list is sorted ascending bytewise — one logical merge, one
+# encoding.
 merge_heads = sorted([adopt_txid, formation_txid])
 merge_body = e_map([
     (e_uint(0), backptrs(merge_heads)),
@@ -571,8 +571,7 @@ peer_body = e_map([
 peer_txid = H(peer_body)
 
 # --- Node endpoint record (§7.6): classical-only COSE_Sign1, fully computable.
-# Payload reading: the map of fields 1-3 (INTERPRETATION 1 generalised — the
-# same phrase governs eight signed objects).
+# Payload: the map of exactly fields 1-3, per §1's fields-X–Y rule.
 AAD_ENDPOINTS = b'rhtn/1:endpoints'
 er_fields = [
     (e_uint(1), e_bstr(bob.keyhash)),
@@ -770,8 +769,8 @@ emit('transactions.md', f"""
 Alice's chain forked: the first adoption and the formation record both continue
 her genesis. This departure closes the fork with a two-entry back-pointer list —
 **a merge is an ordinary transaction with a longer list; no merge type exists**
-(§3.1). The list is ascending bytewise (INTERPRETATION 5, README — §3.1 states
-no order for merge lists).
+(§3.1). The list is sorted ascending bytewise, as §3.1 requires — one logical
+merge, one encoding, one txid.
 
 Body ({len(merge_body)} bytes):
 
@@ -865,8 +864,8 @@ emit('records.md', f"""# Standalone signed records (`wire-format.md` §7)
 [README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
 own domain-separation tag (§1.1) — this file grows toward one known-answer
 vector per signing context. Payload reading throughout: the deterministic CBOR
-of the map of the named fields (INTERPRETATION 1, README — the same phrase
-governs eight signed objects).
+of the map of exactly the named fields (§1's fields-X–Y rule, which governs
+all eight signed objects).
 
 ## Node endpoint record (§7.6) — complete, classical-only
 
@@ -912,8 +911,7 @@ def commitment(w, nonce):
 
 # Witness nonces are DERIVED per wire §5.2.1: PRF(witness_secret,
 # "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal), PRF instantiated
-# as the expected HMAC-SHA-256. INTERPRETATION: the ordinal is encoded as
-# 8 bytes big-endian, matching §5.3's seed layout — §5.2.1 does not say.
+# HMAC-SHA-256, normative (§5.2.1); ordinal 8 bytes big-endian.
 pa, pb = sorted([alice.keyhash, carol.keyhash])
 secrets = {n: H(b'rhtn-test-vectors:' + n.encode() + b':witness-secret')
            for n in ['w1', 'w2', 'w3']}
@@ -939,8 +937,8 @@ emit('verifier-selection.md', f"""# Verifier selection — recomputation
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
-SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
-(INTERPRETATION 3, README).
+SHA-256 — §5 states the convention: raw concatenation of the named byte
+strings, injective because every component after the domain tag is fixed-length.
 
 ## Nonce commitment (§5.1)
 

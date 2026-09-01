@@ -7210,3 +7210,28 @@ root — having no patron — cannot produce a type-7 at all, and §2.3 makes a 
 claim *proved, not inferred*, by a chain a root cannot produce for a transition.
 Advice on what a root's series therefore is, and what an unlinked series means to a
 consumer, is with the author.
+
+### 2026-09-01 (the last three interpretations become sentences; the root's rollup is an internal operation)
+**The vector suite's interpretations register is empty.** The genesis value hashes
+the raw 32 keyhash bytes, not a CBOR encoding (§3.1); §5 states its hash-input
+convention once — raw concatenation, safe there because every component after the
+domain tag is fixed-length, so the concatenation is injective, and unsafe as a
+convention anywhere else; and a merge back-pointer list sorts ascending bytewise
+(§3.1) — one logical merge, one encoding, one txid, where deterministic CBOR alone
+would have allowed as many txids as the heads have permutations. Negative vector
+E11 is the merge rule's complement.
+
+**The root series question closed on the author's refinement of the draft answer.**
+A root cannot produce a type-7 — the patron slot cannot name a distinct party and
+an exception could not be checked — but the *rollup point* survives without the
+transaction: the root continues its hashchain under a new series designator, an
+internal operation with no countersigner because for a root the countersignature
+never gated anything. The chain back-pointer is the real predecessor, so an
+observer holding the chain sees ordinary continuation, distinguishable from a
+genesis event; **presented as a history root it is logically equivalent to one**,
+which is what a rollup point is (§4.6, with §2.3 pointing at it). §2.3's currency
+rule stands unchanged: a series is proved by the chain into it, and one nobody can
+link stays unprovable.
+
+**With this, nothing about the test-vector suite awaits a decision.** What remains
+is the canonical bar — work, not rulings.

@@ -1,11 +1,11 @@
 # Verifier selection — recomputation
 
-Generated against `wire-format.md` SHA-256 `3d32b2bd748823990d4b8b212da12ec35811314b4165582ba08a645c509e27e2` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `46c143ebfcf55f2c7fa779f5583ba4c3254445cec6c3880fd09703f06c064fab` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
-SHA-256 (`wire-format.md` §5) — no CBOR wrapping anywhere in this file
-(INTERPRETATION 3, README).
+SHA-256 — §5 states the convention: raw concatenation of the named byte
+strings, injective because every component after the domain tag is fixed-length.
 
 ## Nonce commitment (§5.1)
 

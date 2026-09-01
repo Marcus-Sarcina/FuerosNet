@@ -358,7 +358,9 @@ is advanced only by §4.6's patron-countersigned reissue; **a new adoption
 establishes its relationship's series**, countersigned by the same party a
 reissue would need. Whether to adopt an established key that presents no
 history — a fresh series on a visibly non-fresh key — is the patron's
-discretion, like every adoption (design §16.7). **One series per patron relationship** is the expected
+discretion, like every adoption (design §16.7). A root's own line has neither
+counterparty nor gate: a root changes series by continuing its chain under a new
+designator — the uncountersigned rollup §4.6 closes with. **One series per patron relationship** is the expected
 shape — a node bound under two patrons keeps two, which is what stops its counts in one
 subnet disclosing its activity in another (design §19.4, P36).
 
@@ -477,7 +479,8 @@ the middle — an earlier head drops what is recent, a checkpoint drops what is 
 departure, disavowal and peering all advance their signers' chains.
 
 **A signer with no prior transaction uses the genesis value**, `SHA-256(the
-signer's keyhash)` — derivable by any verifier, so a claimed first transaction is
+signer's keyhash)` — over the 32 keyhash bytes themselves, not over a CBOR
+encoding of them — derivable by any verifier, so a claimed first transaction is
 checkable rather than assertable.
 
 **One back-pointer LIST per required signer**, since each signer has their own
@@ -487,6 +490,10 @@ independent archive. An adoption advances both the node's archive and the patron
 — typically from concurrent use of two devices — reunites it by supplying **both**
 branch heads in the next ordinary transaction. **No merge transaction type
 exists**; a merge is an ordinary transaction with a longer back-pointer list.
+**A list of length greater than one is sorted ascending bytewise** — one logical
+merge, one encoding, one txid. Deterministic CBOR orders map keys and not array
+elements, so without this rule the same merge would have as many valid txids as
+its heads have permutations.
 
 A merge **commits to both branches**: omitting one afterwards leaves a
 back-pointer unsatisfied and is detectable. The archive is therefore properly a
@@ -1504,6 +1511,24 @@ than stolen — nobody else holds the key, so the unsealed lines are dead space.
 Where it is stolen, the thief holds the key and could out-sign a seal anyway;
 the remedy is rotation (§4.1, design §18.3), not sealing.
 
+**A root cannot produce a reissue, and does not need the transaction — for a
+root its content is empty.** Type 7 requires a patron distinct from the node
+(§4.1), and a root has none; an exception could not be checked, since nothing in
+a record shows its signer is a root. What a root may still want is the **rollup
+point** — a Tx0 on a new series, electable as a checkpoint for retention and
+look-back exactly as a countersigned reissue is (design §10.0) — and that is an
+**internal operation**: the root simply continues its hashchain under a new
+series designator. The chain back-pointer is the real predecessor, not the
+genesis value, so to an observer holding the chain it is an ordinary
+continuation, distinguishable from a genesis event; **presented as a history
+root, it is logically equivalent to one**, which is what a rollup point is. What
+the internal transition lacks is what the countersignature supplied — a gate
+against a thief — and for a root that gate never existed: owner and thief are
+indistinguishable at the series layer, and root compromise is answered at the
+subnet level (design §12.7, §13). §2.3's currency rule is unchanged: a series
+claim is proved by showing the chain into it, and a series nobody can link stays
+unprovable.
+
 **A chain-holder does not need the seal.** Anyone holding §4.6.1's chain knows which
 series was abandoned and **MUST reject records in it** whatever their counter. The
 seal protects the parties who hold no chain — a cached locator and nothing else — and
@@ -1569,6 +1594,12 @@ of which a reissue touches, so cached locators keep working and no correspondent
 be told. What changes is only which records rank against which.
 
 ## 5. Verifier selection — recomputation
+
+**Every hash input in this chapter is the raw concatenation of the named byte
+strings — no CBOR framing.** That is safe here because every component after the
+domain tag is fixed-length, so the concatenation is injective; it would not be a
+safe convention for variable-length inputs, and nothing outside this chapter uses
+it.
 
 **Previously unspecified, and the record did not carry the inputs.** design §8.1.2
 requires that selection be recomputable by any party holding the subject's history,

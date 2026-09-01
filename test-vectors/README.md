@@ -46,25 +46,24 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-Places where the specification under-determines the bytes. **Each is a review
-target**: if the choice is wrong, the vector is wrong; if the specification
-permits more than one reading, the specification needs a sentence.
+**None remain open.** Every choice this suite had to make where the
+specification under-determined the bytes has been ruled on and written into the
+specification [author, 2026-08-31 through 2026-09-01]:
 
-1. **Genesis back-pointer input.** §3.1's `SHA-256(the signer's keyhash)` is
-   computed over the **raw 32 keyhash bytes**, not a CBOR `bstr` wrapping.
-2. **Verifier-selection hash inputs.** All §5 constructions are **raw byte
-   concatenations** — ASCII tags, raw hashes, the 8-byte big-endian ordinal —
-   with no CBOR framing.
-3. **Merge back-pointer list order.** §3.1 states no order; **ascending
-   bytewise** is used. Worth a rule: without one, the same logical merge has
-   multiple valid txids.
+- **"Canonical CBOR of fields X–Y" means the map** of exactly those fields —
+  one global sentence in §1 governing all eight signed objects, chosen partly
+  because a map is debuggable where a concatenation is not.
+- **§5.2.1's construction is normatively HMAC-SHA-256**, ordinal 8 bytes
+  big-endian — the nonce table is a client-conformance vector.
+- **The genesis value hashes the raw 32 keyhash bytes**, not a CBOR encoding
+  (§3.1).
+- **§5's hash inputs are raw concatenations**, stated once with the injectivity
+  argument that makes the convention safe there and nowhere else.
+- **A merge back-pointer list is sorted ascending bytewise** (§3.1) — one
+  logical merge, one encoding, one txid. E11 is the negative complement.
 
-Two former interpretations were resolved into the specification [author,
-2026-09-01]: **"canonical CBOR of fields X–Y" now means the map of exactly
-those fields** — one global sentence in §1, chosen partly because a map is
-debuggable where a concatenation is not — and **§5.2.1's construction is
-normatively HMAC-SHA-256 with the ordinal as 8 bytes big-endian**, making the
-nonce table a client-conformance vector.
+A future vector that needs a choice the specification does not force reopens
+this section; until then, every byte in the suite follows from the text.
 
 ## Determined by the profile — stated for the record
 
@@ -93,19 +92,15 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-Rulings of 2026-08-31/09-01 closed the earlier queue: the seed sentence is a
-writer commitment; the fields-X–Y payload is the map, globally; HMAC-SHA-256 is
-normative for §5.2.1; self-adoption is malformed (T13); `prior_key` MUST differ
-from the new key (T14). Still open:
-
-1. **Interpretations 1–3 above**, each a one-sentence specification fix if the
-   reading is confirmed — merge-list order is the one with consequences, since
-   without a rule one logical merge has several valid txids.
-2. **Whether and how a root changes series.** The degenerate pair is now
-   rejected for every two-party type [author, 2026-09-01], which closes the
-   self-countersigned reissue path — so a root, having no patron, cannot
-   produce a type-7 at all, and an unlinked fresh series is unprovable under
-   §2.3's proved-not-inferred rule. Advice pending.
+**Nothing.** The queue accumulated across both review rounds is fully ruled:
+the seed sentence is a writer commitment; the fields-X–Y payload is the map;
+HMAC-SHA-256 is normative; self-adoption and the degenerate pair in every
+two-party type are malformed (T13); `prior_key` MUST differ from the new key
+(T14); the three encoding interpretations are specification sentences; and a
+root changes series by continuing its chain under a new designator — an
+uncountersigned rollup, logically a genesis when presented as a history root
+(`wire-format.md` §4.6). What remains is the canonical bar below, which is
+work, not decisions.
 
 ## The canonical bar
 

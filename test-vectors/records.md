@@ -1,13 +1,13 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` SHA-256 `3d32b2bd748823990d4b8b212da12ec35811314b4165582ba08a645c509e27e2` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `46c143ebfcf55f2c7fa779f5583ba4c3254445cec6c3880fd09703f06c064fab` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
 own domain-separation tag (§1.1) — this file grows toward one known-answer
 vector per signing context. Payload reading throughout: the deterministic CBOR
-of the map of the named fields (INTERPRETATION 1, README — the same phrase
-governs eight signed objects).
+of the map of exactly the named fields (§1's fields-X–Y rule, which governs
+all eight signed objects).
 
 ## Node endpoint record (§7.6) — complete, classical-only
 

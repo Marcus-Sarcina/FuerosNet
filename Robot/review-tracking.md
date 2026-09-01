@@ -1795,3 +1795,15 @@ misreading the question and is reversed — **all two-party types reject field 1
 field 2**. Applied at `wire-format.md` §4.1; T13 widened to the five types. The
 root-reissue consequence (a root cannot produce a type-7 at all) is with the author
 as an advice question.
+
+**Final rulings (2026-09-01), closing the vector queue entirely**: the three encoding
+interpretations became specification sentences — genesis hashes the raw 32 keyhash
+bytes (§3.1); §5 states its raw-concatenation convention once, with the
+fixed-length-injectivity argument; a merge back-pointer list sorts ascending
+bytewise (§3.1), E11 added as the negative complement. **The root series question is
+resolved by the author's own refinement**: a root cannot produce a type-7 and does
+not need to — the rollup point is an *internal* operation, the chain simply
+continuing under a new series designator; the back-pointer distinguishes it from a
+genesis event, and presented as a history root it is logically equivalent to one
+(§4.6 closing paragraph; §2.3 carries the pointer). **The vectors' interpretations
+register is empty** — every byte in the suite now follows from the text.

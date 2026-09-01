@@ -45,6 +45,7 @@ works, not inputs.
 | E7 | An unknown extension key whose encoded value is 1,025 bytes | Exceeds the 1,024-byte encoded-slice bound |
 | E8 | A presence record with `subtype = 2` | §1's unknown-enum rule on a closed enumeration: field 6 is `0 normal, 1 formation` and load-bearing (§4.5). **Choosing the field matters** — two earlier instantiations of this row were wrong: disavowal codes are a banded exception (D1), and `ClientIntegrity.scheme` is an **open** namespace ("a validator checks only the shapes", §4.5) |
 | E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are **covered by every signature** — all four entries MUST fail. The unmutated envelope is must-accept D2 |
+| E11 | A merge back-pointer list out of ascending bytewise order | §3.1: one logical merge, one encoding, one txid — the positive merge vector shows the sorted form |
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
 
 ### Primitives (§2)

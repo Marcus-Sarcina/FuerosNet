@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` SHA-256 `3d32b2bd748823990d4b8b212da12ec35811314b4165582ba08a645c509e27e2` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `46c143ebfcf55f2c7fa779f5583ba4c3254445cec6c3880fd09703f06c064fab` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -64,7 +64,7 @@ ab4be59402a201433141500205038205182a
 The one fully computable signature vector in this draft: classical-only by
 profile, so no ML-DSA slot.
 
-Payload — deterministic CBOR of fields 1–2 (INTERPRETATION 1, README):
+Payload — the map of exactly fields 1–2, per §1's fields-X–Y rule:
 
 ```
 a2015820435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9
@@ -135,8 +135,8 @@ ae7bb650100a9344e13e1a7b0d9a55657d782e74fd27104042bebf39e0667791
 
 ## Genesis back-pointer (§3.1)
 
-`SHA-256(the signer's keyhash)` — over the raw 32 bytes (INTERPRETATION 2,
-README).
+`SHA-256(the signer's keyhash)` — over the raw 32 bytes, not a CBOR encoding
+(§3.1).
 
 | Signer | Genesis value |
 |---|---|
