@@ -2419,3 +2419,19 @@ moments (no retune, no membership change) leaves the table deliberately stale
 until the next moment — nothing says whether that staleness is intended or
 whether evidence arrival should be a third trigger. The documents are silent
 rather than contradictory.
+
+**The evidence-drift question ruled (2026-09-02).** The author: the span is
+narrow enough that recalculation is fine on events, and time-dependent values
+recalculate periodically for the whole table rather than continuously; a table
+update won't upgrade or close a connection already open — but where the node
+itself holds the session, dropping on an authorisation change is mandatory
+("if we are already dropping sessions, then make that mandatory"), while a
+non-intermediated connection can't be relied on to drop. Applied: design §11.4
+now evaluates predicates at four moments (config, membership, evidence arrival,
+periodic time pass) with the issuance-and-reconnection enforcement paragraph;
+infra §10.2 mirrors the four moments; infra §10.5's drop is stated as mandatory
+for node-held sessions and its brokered paragraph carries the can't-rely-on-drop
+statement; rr §7's departure bullet already stated the brokered half and stands.
+The periodic cadence joins §21.1's needs-measurement table and §21.1.1's
+freely-tunable list; §22.2's count moves to twelve. The 0.2 queue is empty
+again.

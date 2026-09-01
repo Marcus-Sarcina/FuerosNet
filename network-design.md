@@ -3514,17 +3514,31 @@ lookup**, not an evaluation.
 **The table is bounded, so materialising it costs nothing.** A Dunbar Org is 221
 nodes at f = 10 (§15.1); one row each, per resource.
 
-**Predicates are evaluated twice, and neither is on the request path:**
+**Predicates are evaluated at four moments, none on the request path:**
 
 1. **When an operator configures roles**, interactively — the predicate expands to
    a set of assignments the operator can see and adjust.
 2. **When a node enters or leaves the horizon**, in the background — a new member
    is scored against the standing predicates and given rows; a departing one has
    theirs removed.
+3. **When evidence about a standing member arrives** — a fresh presence record, a
+   disavowal, a change in what the metric reads. The span is narrow enough that
+   re-scoring on events is affordable [author, 2026-09-02].
+4. **Periodically, for time-dependent values.** Decay and currency move with time
+   alone, so they recalculate in a scheduled whole-table pass rather than
+   continuously; between passes the table stands.
 
 **Nothing recalculates on request.** A resource request consults the table as it
 stands, which makes authorisation deterministic, fast, and inspectable — an
 operator can read who has what, rather than deriving it.
+
+**A table update is enforced at issuance and reconnection, never against a
+connection already open** — it neither upgrades nor closes one mid-session. Where
+the node itself holds the session — a hosted package, or its own leg of a proxied
+path — dropping the affected sessions on an authorisation change is mandatory
+(`infra-client-requirements.md` §10.5). A non-intermediated connection, brokered
+past the node, cannot be relied on to drop: enforcement there is at
+establishment, and an existing session continues on the service's terms (§11.2).
 
 **So the predicate language needs no interoperable specification**, and neither does
 the table. **The network never sees a role.** It is internal to the owner's node
@@ -6652,6 +6666,7 @@ than by the chooser:
 | Prekey rotation cadence and last-resort policy | §14.2.4 |
 | Resolution cache TTL, how long a cached intermediate address stays valid | §12.6.1 |
 | Anchor caching threshold per node | §12.7.3 |
+| Periodic re-score cadence for time-dependent predicates | §11.4 |
 
 **Needs a policy decision.** Local, and legitimately different per node:
 
@@ -6674,7 +6689,8 @@ reconfiguration or costs the network a flag day.
 
 **Freely tunable, forever.** Each node chooses independently and may change its
 mind; nothing coordinates. Anchor caching threshold, inactivity-decay function,
-negative-evidence threshold, replication depth beyond the floor, cache TTLs, and
+negative-evidence threshold, replication depth beyond the floor, cache TTLs, the
+periodic re-score cadence for time-dependent predicates, and
 the **queue's per-subordinate storage cap**. These are §16.1's pluggable-policy
 territory and were never going to be fixed.
 
@@ -6731,7 +6747,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 
 ### 22.2 Decide during implementation
 
-- **Eleven unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
+- **Twelve unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
 - **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid

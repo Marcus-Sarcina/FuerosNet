@@ -378,10 +378,14 @@ everything, uniformly.
 evaluation — that makes it deterministic, cheap, and readable by the operator who
 configured it.
 
-**Re-evaluate predicates at exactly two moments**: when an operator is configuring
-roles, and in a background pass when a node enters or leaves the horizon. A new
-member is scored against standing predicates and given rows; a departing one has
-theirs removed.
+**Re-evaluate predicates at four moments, none of them a request**: when an
+operator is configuring roles; in a background pass when a node enters or leaves
+the horizon; when evidence about a standing member arrives, since the span is
+narrow enough that re-scoring on events is affordable (design §11.4); and
+periodically for time-dependent predicates, whose values move with time alone —
+a scheduled whole-table pass, not a continuous recomputation. A new member is
+scored against standing predicates and given rows; a departing one has theirs
+removed.
 
 **Scoring the changed member alone is correct for every predicate class but one.**
 A *relative* rank predicate — a percentile, a median, any quantile — has a cutoff
@@ -458,8 +462,10 @@ principal's sessions to hosted resources. They reconnect and are re-evaluated; i
 access.
 
 **This is local behaviour, not a network promise.** No protocol rule compels it and
-none could: the network cannot reach into an operator's node. It is nonetheless the
-correct behaviour, and this client does it.
+none could: the network cannot reach into an operator's node. **For sessions this
+node holds it is nonetheless mandatory conduct**: the node is already the party
+holding and dropping them, and nothing is gained by making the drop optional
+[author, 2026-09-02].
 
 **Termination requires no protocol, no acknowledgement, no latency budget and no
 rule for in-flight requests, which is why it is preferred here.** Telling a resource that a principal's roles changed would require a
@@ -472,8 +478,10 @@ ends under another.
 The resource's only obligation is to tolerate a session ending at any time, which
 any network service must regardless.
 
-**Brokered resources are outside this** (design §11.2). The node can drop its own
-leg; what the external service does with its session is that service's business.
+**Brokered resources are outside this** (design §11.2). A non-intermediated
+connection cannot be relied on to drop: the node can drop its own leg, but the
+client-to-service session is one it never held, so enforcement there is at
+establishment, and an existing session continues on the service's terms.
 
 ### 10.6 Show the hosting model when binding a resource
 

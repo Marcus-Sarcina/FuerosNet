@@ -7824,3 +7824,12 @@ two-moments rule's first moment and "ceasing to match" happens at either moment,
 so the cited texts cohere; the genuinely open point, whether evidence drift
 between moments should re-evaluate the table, is queued as a question rather
 than applied as a fix.
+
+The staleness question is ruled: predicates now re-evaluate at four moments —
+configuration, horizon membership, evidence arrival about a standing member
+(the span is narrow enough that events are affordable), and a periodic
+whole-table pass for time-dependent values, never continuously and never on
+request. A table update is enforced at issuance and reconnection; where the
+node itself holds the session the drop on authorisation change is mandatory,
+and a non-intermediated connection cannot be relied on to drop. The periodic
+cadence becomes the twelfth unset parameter.
