@@ -7769,3 +7769,15 @@ A18's 24-month figure is kept by ruling: the two-year tier needs a threshold,
 two years is a common one, and it is close enough on several axes, of which
 face ageing is only one. §20.1's advisory row records the ruling; the
 assumption row and the body text stand unchanged.
+
+### 2026-09-02 (cycle 2, pass 0.1, second run applied)
+A lower-effort re-run of the external-claims audit: ~50 rows, 31 confirmed —
+among them the first run's own corrections. Four edits: `rhtn-roles` is RFC 9110
+list syntax whose elements are HTTP `token`s, not itself a token (comma is not a
+`tchar`); the deterministic-CBOR sentence now says float *representation* and
+notes no schema in the wire format admits a float; the Dunbar anchor corrected
+from "around 200" to the canonical ~150 with the original interval of roughly
+100–230, inside which 221 still sits; and the browser-wasm transport gap is
+dated "today". Five partially-correct rows and all ten unverifiable rows needed
+no edit — each already registered in §20.1, already hedged, already ruled, or
+the design's own labelled inference.

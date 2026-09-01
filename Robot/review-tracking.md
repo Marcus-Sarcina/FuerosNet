@@ -2247,3 +2247,45 @@ ageing is only one. §20.1's advisory row now records the ruling in place of its
 §7.5.1's body already states the same frame ("a compromise, not an optimum on
 any axis... chosen, not derived"). The 0.1 queue is empty. The author re-runs
 0.1 at low-moderate effort next.
+
+## Cycle 2, pass 0.1 — second run (2026-09-02, low-moderate effort)
+
+The author re-ran 0.1 at lower effort. ~50 rows: 31 CONFIRMED — including both
+corrections from the first run, which now pass audit — 1 CONTRADICTED, 9
+PARTIALLY CORRECT, 10 UNVERIFIABLE. Every actionable row verified against the
+text before edit.
+
+**CONTRADICTED, applied**: resource-requirements §3 called all four HTTP header
+values `token`/`base64url`; RFC 9110's `token` excludes comma, so a
+comma-separated list of tokens is not itself a token. Reworded: `rhtn-roles` is
+RFC 9110 list syntax, each element an HTTP `token`, the comma the list
+delimiter. The no-escaping property survives; the misclassification does not.
+
+**PARTIALLY CORRECT, applied (3)**:
+- wire §1's "fixes ... float handling": RFC 8949 §4.2 fixes float
+  *representation* and leaves residual float semantics to protocols — now stated,
+  with the observation that no schema in the document admits a float, so the
+  residue is moot here.
+- design §3.2's "vernacular estimate of around 200": the canonical Dunbar figure
+  is ~150 (original 95% interval roughly 100–230). Corrected; 221 sits inside
+  the original interval, which the anchor paragraph now says — the
+  order-of-magnitude argument is unchanged and slightly strengthened.
+- design §5.2's "no production path" for browser wasm: hedged to "today" — the
+  passage already carried its own evidence and "until that closes".
+
+**PARTIALLY CORRECT, no change (5)**: UWB-strongest (registered 7.1.6.3);
+liveness motion/parallax (registered 7.1.1 — the reviewer's critique is the
+register row verbatim); regional gateways (registered 10.6.5 and 7.1.6);
+24 months (ruled 2026-09-02, kept); WebAuthn — the standards half is confirmed
+and the broker inference is the design's own, labelled "in practice".
+
+**UNVERIFIABLE (10), no change**: all registered — §20.1 rows and A9, A14, A15,
+A17 (fuzzy commitments), A19, A24 (records per decade); "mostly in cloud
+datacentres" is self-labelled *Expected deployment* and registered (4.3/4.4);
+0-RTT "saves battery" registered (11.1.3). The reviewer's own observation
+stands: the overprecision class is exactly the §20.1 register's contents.
+
+**Note carried**: the reviewer credits the profile-rule/RFC-rule distinction
+with preventing several false findings. Both 0.1 runs are now ingested; the
+high-effort run found four contradictions to this run's one, and the two runs'
+contradiction sets are disjoint.

@@ -16,7 +16,9 @@ Rationale: every archive-retained object in this protocol is signed, and **proto
 is explicitly not canonical** — Google's own documentation says so, citing
 unspecified field ordering and unknown-field handling, so the same logical
 message can serialize differently and signatures fail to verify. CBOR's deterministic profile fixes
-map key ordering, integer encoding, and float handling.
+map key ordering, integer encoding, and float representation; the residual
+float semantics RFC 8949 leaves to protocols are moot here — no schema in this
+document admits a float.
 
 **Signatures use real COSE (RFC 9052).** — *not* a custom map that merely
 resembles it.

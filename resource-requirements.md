@@ -118,10 +118,11 @@ the operator has granted nothing further** — decide for yourself what that pri
 may do, exactly as you would for any role set you do not recognise. It does not mean
 the node failed to populate the header.
 
-**Header encoding.** All four are `token`/`base64url` and carry no characters
-needing escaping: `rhtn-principal` and `rhtn-audience` are base64url keyhashes,
-`rhtn-session` is a base64url opaque identifier, `rhtn-roles` is a comma-separated
-list of role names. **base64url here is RFC 4648 §5 without padding** — no trailing
+**Header encoding.** No value carries characters needing escaping:
+`rhtn-principal` and `rhtn-audience` are base64url keyhashes, `rhtn-session` is
+a base64url opaque identifier, and `rhtn-roles` is RFC 9110 list syntax — a
+comma-separated list of role names, each an HTTP `token`, the comma being the
+list delimiter rather than part of any name. **base64url here is RFC 4648 §5 without padding** — no trailing
 `=`, since a strict parser given the other spelling rejects bytes that decode
 identically, and one of the two had to be named. **Role names are `[a-z0-9_-]`, 1–32 bytes, matched
 byte-for-byte** — no case folding, no escaping, and no comma admitted. **Their

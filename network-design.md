@@ -554,11 +554,12 @@ universal figure, and suitable spans range from 2–3 to 20+ with the nature of 
 work. Treat ~8 as a **design heuristic, not an empirical constant**. 10 allows
 an 8-person team with headroom so a new addition doesn't force a contemporaneous
 exit. It also puts the two-edge neighbourhood at **Dunbar scale** — 221 at f = 10
-(§15.1), against the vernacular estimate of around 200.
+(§15.1), against the canonical estimate of about 150 — Dunbar's original
+95% interval ran roughly 100–230.
 
-**The name is a heuristic anchor, not a bound**, and 221 overshooting 200 does not
-weaken it. What it fixes is the **order of magnitude**: the population of a small
-village, or the students in an elementary school. Bigger than a household or an
+**The name is a heuristic anchor, not a bound**, and 221 overshooting 150 does not
+weaken it — it still sits inside the original interval. What it fixes is the
+**order of magnitude**: the population of a small village, or the students in an elementary school. Bigger than a household or an
 extended family, smaller than a town or a nation state. Of the anchors available for
 a social graph at this scale, Dunbar's is close enough, and the alternative is a
 number with no intuition attached to it at all. **The cap applies to infrastructure nodes as well**, preserving the
@@ -825,7 +826,7 @@ explicit notices that they have not been independently audited**, and alternativ
 
 **The browser gap is the transport, not the primitives.** Native Rust
 plausibly covers the full profile — rustls/quinn expose `X25519MLKEM768`, RFC 7250
-raw public keys and 0-RTT — but browser `wasm32-unknown-unknown` has no
+raw public keys and 0-RTT — but browser `wasm32-unknown-unknown` today has no
 production path for that stack: no UDP sockets for QUIC, no ML-KEM-capable pure-wasm
 TLS provider, and entropy only via explicit `getrandom` `wasm_js` wiring. Native and
 browser conformance are **separate implementation targets** until that closes;
