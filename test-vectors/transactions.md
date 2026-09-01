@@ -768,7 +768,10 @@ key 0 carries the genesis value for both signers, which for a formation record
 is also a structural rule (§3.2). `window_ordinal = floor(1767268800 / 86400) =
 20454`. Key 8's disclosure root is **synthetic**
 (`SHA-256("rhtn-test-vectors:synthetic-disclosure-root:formation")`) — the
-§4.5.1 digest-list construction is not yet covered by this draft (README).
+§4.5.1 digest-list construction is not yet covered by this draft (README), so
+**a validator that recomputes disclosure roots cannot use this record as an
+integrated known-answer object**; it is a positive vector for the body
+encoding and the structural rules only.
 
 **Field 3's order is deliberately alice then carol — the reverse of
 keyhash order.** Participant order fixes back-pointer list order (§3.1); kid
@@ -1398,8 +1401,15 @@ An implementation can pass every minimal vector above without ever decoding
 reason, or peering's commitment and audit history. These three close that.
 
 **Adoption with fields 5, 7 and 8** — carried `KeyMaterial` (alice's, hashing
-to field 1 per §4.1), an archive head, and a proof-of-presence reference
-(2274 bytes):
+to field 1 per §4.1), an archive head, and a proof-of-presence reference.
+**Field 8 is a structurally valid encoding only**: it references the
+alice–carol formation record, while this adoption is alice–bob — dereference
+evaluation (§3.4) finds a record that does **not** name these two parties
+(context fixture V9). Deliberate, twice over: the only presence record in the
+suite names the wrong pair, and a second formation record naming alice would
+violate §3.2's one-formation-per-key rule inside the positive universe. The
+reference becomes genuinely supporting when the normal alice–bob record lands
+(canonical bar 2). (2274 bytes):
 
 ```
 a80082815820819a3ccd925a384a47b4efec09bec2932730dc300fb6c9782ed6

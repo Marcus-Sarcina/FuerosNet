@@ -1989,3 +1989,32 @@ Plus the two closing suggestions: the enumeration/extension **matrix** is bar 12
 (E8's two wrong instantiations being the argument for mechanical enumeration), and
 the rank tie-break is C3 — a comparator requirement the real-hash suite cannot
 instantiate without a SHA-256 collision.
+
+---
+
+## Test-vector review, seventh run (2026-09-01)
+
+**Independently re-hashed every pin — specs, generator, all seven outputs — exact
+match; no arithmetic discrepancy in anything recomputable.** The round found no new
+encoding ambiguity ("the supplied byte vectors appear derivable from the present
+text") and concentrated on semantic coherence and harness schema. Twelve findings
+plus four assumptions to record; all applied.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 2 | **The optionals adoption's field 8 references the alice–carol formation from an alice–bob adoption** — structurally legal, semantically non-supporting, presented as a positive exercise | **CONFIRMED, LABELLED** — the vector now states the mismatch is deliberate and why the clean fix must wait: the suite's only presence record names the wrong pair, and a second formation naming alice would violate §3.2's one-formation-per-key rule inside the positive universe. Swaps to the genuine alice–bob record at bar 2; V9/V9b are the dereference context fixtures |
+| 3 | No stated home for failed/unavailable reference evaluation in the result model | **CONFIRMED, DECIDED** — `checks[...]` extends to dereference evaluation (`fail` / `unverifiable(unfetchable)`); `effective` and `chain` explicitly do not absorb it. Recorded assumption 1 |
+| 4 | README overclaimed the harness ("every mutation and arithmetic claim") | **CONFIRMED, FIXED** — "every *generated* mutation and arithmetic claim it currently reaches" |
+| 5 | The harness discovers fixtures by parsing Markdown conventions | **CONFIRMED** — folded into bar 6: machine-readable fixture *identity*, not only expected results; Markdown is presentation, never an interface. Recorded assumption 2 |
+| 6 | The selection-derivation fixture deserves promotion-blocking status | **CONFIRMED** — bars 2 and 3 so marked, with the reviewer's framing kept: the arithmetic tables test none of the specification's hardest derivation |
+| 7 | The synthetic disclosure root makes the formation vector non-compositional | **ACKNOWLEDGED, now stated in the vector itself**: a root-recomputing validator cannot use it as an integrated known-answer object |
+| 8 | The enum matrix must reach unsigned-family result codes and their evaluation-order traces | **CONFIRMED** — bar 12 amended (`ResourceResponse`'s six statuses named) |
+| 9 | Cross-context signature substitution beats the artificial empty-AAD case | **CONFIRMED** — bar 8 amended: valid context-X signature presented as context Y must fail under Y's reconstructed tag |
+| 10 | The hash-disjointness invariant had living witnesses but no mechanical guard | **CONFIRMED, FIXED** — the generator now asserts the language classifications over every generated body, `KeyMaterial`, and the reserved query language; a schema change breaking disjointness fails generation |
+| 11 | `e_map`'s generality is an assumption | **CONFIRMED, DOCUMENTED** — it implements RFC 8949 §4.2.1's bytewise-encoded-key order via unique-key pair sorting (the current rule, not RFC 7049's length-first); exercised only over the suite's key domains. Recorded assumption 3 |
+| 12 | Rank ties define a fixture class, not just an exception | **CONFIRMED** — the unit-fixture class joins bar 6's schema. Recorded assumption 4 |
+
+Findings 1 (declared gaps are real) and the execution note (the reviewer could not
+run `verify.py` without `dilithium_py` — environment, not suite) required no
+change. **The four recorded assumptions now live in the README as their own
+section, distinct from encoding interpretations.**

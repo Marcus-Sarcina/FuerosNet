@@ -26,8 +26,9 @@ re-running it reproduces them byte-for-byte. **`tools/verify.py` is the
 independent harness** — its own decoder and Sig_structure reconstruction,
 sharing no code with the generator — re-deriving every key, verifying every
 signature (ML-DSA under pyca `cryptography`'s independent implementation where
-available), and checking every mutation and arithmetic claim; run it after any
-regeneration. `tools/spec-pins.json` gates generation: a changed specification
+available), and checking **every generated mutation and arithmetic claim it
+currently reaches** — not the prose-described fixtures, which await bar 6; run
+it after any regeneration. `tools/spec-pins.json` gates generation: a changed specification
 needs `--accept-spec-change`, a changed generator `--accept-generator-change`,
 a missing pin file `--bootstrap-pins`; it records the producer's and every
 output's SHA-256. **Each generated file pins the SHA-256 of both
@@ -147,10 +148,14 @@ negatives (T9–T12). Still open:
    placeholder slots remain, and a second implementation confirmed keygen and
    signatures. What canonical status still awaits is unchanged in kind: an
    independent implementation reproducing the *whole suite*.
-2. **A normal-subtype presence record** whose participant, witness, seed and
-   `kid` orders all deliberately differ, with witnesses, embedded responses,
-   and its 36-entry envelope.
-3. **Real history behind that record** — a merge forming a **diamond** (an
+2. **Promotion-blocking.** A normal-subtype presence record whose
+   participant, witness, seed and `kid` orders all deliberately differ, with
+   witnesses, embedded responses, and its 36-entry envelope — which also
+   supplies the alice–bob record the optionals adoption's field 8 swaps to
+   (V9's deliberate mismatch until then).
+3. **Promotion-blocking — the specification's hardest derivation, and the
+   arithmetic tables test none of it.** Real history behind that record — a
+   merge forming a **diamond** (an
    in-window qualifying presence transaction reachable through *both* merge
    heads, asserted to contribute **one** to *n*, which is the fixture that
    fails chain-oriented code with no visited set), a repeated counterparty, a
@@ -169,15 +174,23 @@ negatives (T9–T12). Still open:
 6. **Machine-instantiable fixtures throughout**: every byte-level, context
    and must-accept case resolves to **exact bytes, or an unambiguous
    deterministic mutation of a named positive vector**, plus machine-readable
-   expected dimensions in the structured result model. Until then the negative
-   suite is a conformance-test *specification*, not yet a corpus — two
-   implementations should not each have to construct a malformed input before
-   testing it (fifth review).
+   expected dimensions in the structured result model — and **machine-readable
+   fixture identity**: stable fixture IDs carrying their own bytes and
+   context, so no harness ever parses Markdown headings as an interface
+   (seventh review). The fixture classes are bytes · mutation · context ·
+   trace · **unit** — the last for requirements no natural wire input can
+   instantiate, like C3's rank tie-break, which would need a SHA-256
+   collision. Until then the negative suite is a conformance-test
+   *specification*, not yet a corpus.
 7. **The boundary sweep** at every bound in the declared scope (list at the
    end of `negative-vectors.md`).
 8. **The remaining signed contexts** in `records.md` — one known-answer
    signature per domain-separation context, which is also the sweep that
-   catches a missing table row like `rhtn/1:endpoints`.
+   catches a missing table row like `rhtn/1:endpoints`. With them,
+   **cross-context substitution fixtures**: a valid signature from context X
+   presented as context Y must fail under Y's reconstructed tag — the fixture
+   that catches two real paths sharing a hard-coded AAD while the artificial
+   empty-AAD case (S12) still passes (seventh review).
 9. **The unsigned message families** — positive known-answer encodings plus
    each family's characteristic malformed and must-accept cases: control
    frames and `Attach`/`AttachAck`, heartbeat and sibling updates, resolution,
@@ -207,10 +220,34 @@ negatives (T9–T12). Still open:
     review; E8's two wrong instantiations are the argument): every closed
     enumeration gets an unknown-value rejection fixture, every deliberately
     open namespace a must-accept fixture — enumerated mechanically from the
-    schemas, not remembered.
+    schemas, not remembered, and **not limited to transaction bodies**: the
+    unsigned families carry closed result codes too (`ResourceResponse`'s six
+    statuses with a normative evaluation order), which need both the
+    unknown-code fixture and the trace fixture proving the right code wins
+    when several conditions hold at once (seventh review).
 13. **Optionals-exercised positives grow with every schema**: no optional
     field should exist that no positive vector ever decodes
     (`transactions.md` now carries the first three).
+
+## Recorded assumptions of the harness schema
+
+Different in kind from encoding interpretations — none changes generated
+bytes; each is a decision the machine-readable corpus depends on (seventh
+review):
+
+1. **Reference evaluation lands in `checks[...]`** — `fail` for a dereference
+   that does not establish the claim, `unverifiable(unfetchable)` when the
+   object cannot be fetched; `effective` stays topology/grant, `chain` stays
+   predecessor history (V9/V9b instantiate it).
+2. **Fixture identity is machine-readable**: stable IDs carrying bytes,
+   context and expected dimensions; generated Markdown is presentation, never
+   a harness interface.
+3. **`e_map` implements RFC 8949 §4.2.1's bytewise-encoded-key order** via
+   unique-key pair sorting — correct generally, exercised here only over uint
+   keys and the COSE structures' fixed labels.
+4. **A unit-fixture class exists** for conformance requirements no natural
+   wire input can instantiate (C3's tie-break); prose is not their permanent
+   home.
 
 ## Reviewing this draft
 

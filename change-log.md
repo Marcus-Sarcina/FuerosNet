@@ -7469,3 +7469,34 @@ mutations breaking all four signatures; and three optionals-exercised bodies, so
 no schema field exists that no positive vector decodes. Fixture rows P15–P18,
 T24, V8, C3 and bar items 12–13 complete the round. Dispositions in
 `Robot/review-tracking.md`.
+
+### 2026-09-01 (seventh vector review: semantic coherence, and the harness schema decided)
+The round re-hashed every pin independently — exact match — and found **no new
+encoding ambiguity**: for the first time, a review states that every supplied byte
+vector appears derivable from the present text. What it found instead was one
+semantic incoherence and a set of harness-schema decisions being made silently.
+
+**The optionals adoption's field 8 pointed from an alice–bob adoption at the
+alice–carol formation record** — structurally legal, since dereference is an
+evaluation step and not a structural one, but presented as a positive exercise of
+the field while referencing a record that cannot support the adoption. The vector
+now says exactly what it is and why: the suite's only presence record names the
+wrong pair, and generating a supporting one today would put alice in two formation
+records, violating §3.2 inside the positive universe. The reference swaps to a
+genuine alice–bob record when the normal-subtype fixture lands, and V9/V9b turn
+the mismatch into what it should have been from the start — the dereference
+context fixtures, under a **newly decided home for reference evaluation**:
+`checks[proof_of_presence] = fail | unverifiable(unfetchable)`, with `effective`
+and `chain` explicitly not absorbing it.
+
+**The hash-disjointness invariant now has a mechanical guard**: generation asserts
+the four preimage-language classifications over every body and key, so a schema
+change that broke disjointness would fail the generator rather than wait for a
+reviewer. The harness's claim is narrowed to what it proves; bars 2 and 3 are
+marked promotion-blocking in the reviewer's own framing — the arithmetic tables
+test none of the specification's hardest derivation; and the canonical bar
+absorbed cross-context signature substitution, unsigned-family result-code
+matrices, machine-readable fixture identity, and a unit-fixture class for
+requirements no natural wire input can instantiate. **Four harness-schema
+assumptions are now recorded in the README as their own register**, distinct from
+the retired encoding interpretations.

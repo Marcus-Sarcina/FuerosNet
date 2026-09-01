@@ -20,7 +20,7 @@ it names:
 | `signatures[signer, alg]` | verified · **failed** · unverifiable(key) — per signer **and algorithm**; a bad signature and a missing key are different outcomes, and E10 needs the first | §3.4, §3.5 |
 | `chain` | complete · **incomplete** — an unfetchable predecessor is a fact, not an error | §3.4 |
 | `selection[subject]` | verified · unverifiable — **per subject**; verifier-selection recomputation only | §5.5 |
-| `checks[name]` | pass · fail · unverifiable(withheld) — per revealed-field rule; the `strongest`-channel check is the case in point | §3.2, §4.5.1 |
+| `checks[name]` | pass · fail · unverifiable(reason) — per named rule **and per reference evaluation**: the `strongest`-channel check when revealed; `checks[proof_of_presence]` and every other dereference (§3.4's evaluation step) — `fail` when the referenced object does not establish what the citing object claims, `unverifiable(unfetchable)` when it cannot be fetched. `effective` stays topology/grant evaluation; `chain` stays predecessor history — neither absorbs reference evaluation, by decision (seventh review) | §3.2, §3.4, §4.5.1 |
 | `effective` | yes · **no** — structurally valid may still grant nothing for this evaluator | §6.8 |
 | `evidentiary` | free-form flags (fork-detected, …) — findings against history, not against the object | §3.2 |
 
@@ -174,6 +174,8 @@ photo comparison without its template version is unverifiable as evidence:
 | V6 | The two `EndpointRecord`s of `records.md`'s conflict pair | Both held | **Malformed condition, not a tie** — equal `seqno`, different contents (§7.6, §7.7.3); a reader MUST NOT prefer either. The pair can only mean equivocation or a key in two hands |
 | V7 | A normal presence record whose field 5 fills fewer slots than the recomputed selection | Selection recomputable from the subject's bundle | **Accepted** — the threshold sizes the sample and does not gate finalization (§5.5): the absent slots are visible evidence weight, not a defect. A decoder requiring a full slot set rejects valid records and is non-conforming [author, 2026-09-01] |
 | V8 | A perfectly valid, correctly signed envelope supplied in answer to a request for a **different** txid | The requested txid | **Content-address mismatch** — `chain` cannot advance through it. §5.4 counts history only when canonicality, **content address**, and signatures all check; this isolates the txid recomputation from signature verification, catching an implementation that trusts its storage index instead of hashing what it received |
+| V9 | The optionals-exercised adoption (`transactions.md`), field 8 dereferenced | The referenced formation record | `structural = valid`, **`checks[proof_of_presence] = fail`** — the record exists and verifies but names alice–carol, not this adoption's alice–bob (§3.4: dereference confirms the record *names these two parties*) |
+| V9b | The same adoption | The referenced record unfetchable | `structural = valid`, `checks[proof_of_presence] = unverifiable(unfetchable)` — the §3.4 posture: neither confirmed nor failed |
 
 ## C. Method requirements — how a decoder works
 

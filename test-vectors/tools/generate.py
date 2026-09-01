@@ -122,6 +122,12 @@ def e_tstr(s):  b = s.encode(); return head(3, len(b)) + b
 def e_arr(items):  # items are pre-encoded byte strings
     return head(4, len(items)) + b''.join(items)
 def e_map(pairs):  # pairs of (encoded_key, encoded_value)
+    # RFC 8949 §4.2.1 core deterministic ordering: bytewise lexicographic order
+    # of the keys' deterministic encodings. Sorting (key, value) pairs is
+    # equivalent because keys are unique, so the key alone decides. This is the
+    # CURRENT rule, not RFC 7049's retired length-first order — and it holds
+    # for arbitrary key types, though this suite only exercises uint keys and
+    # the fixed negative labels of the COSE structures.
     keys = [k for k, _ in pairs]
     assert len(keys) == len(set(keys)), 'duplicate map key in a positive vector'
     return head(5, len(pairs)) + b''.join(k + v for k, v in sorted(pairs))
@@ -891,7 +897,10 @@ key 0 carries the genesis value for both signers, which for a formation record
 is also a structural rule (§3.2). `window_ordinal = floor({TS_START} / 86400) =
 {WINDOW_ORDINAL}`. Key 8's disclosure root is **synthetic**
 (`SHA-256("rhtn-test-vectors:synthetic-disclosure-root:formation")`) — the
-§4.5.1 digest-list construction is not yet covered by this draft (README).
+§4.5.1 digest-list construction is not yet covered by this draft (README), so
+**a validator that recomputes disclosure roots cannot use this record as an
+integrated known-answer object**; it is a positive vector for the body
+encoding and the structural rules only.
 
 **Field 3's order is deliberately {p_hi.name} then {p_lo.name} — the reverse of
 keyhash order.** Participant order fixes back-pointer list order (§3.1); kid
@@ -1044,8 +1053,15 @@ An implementation can pass every minimal vector above without ever decoding
 reason, or peering's commitment and audit history. These three close that.
 
 **Adoption with fields 5, 7 and 8** — carried `KeyMaterial` (alice's, hashing
-to field 1 per §4.1), an archive head, and a proof-of-presence reference
-({len(adopt_full_body)} bytes):
+to field 1 per §4.1), an archive head, and a proof-of-presence reference.
+**Field 8 is a structurally valid encoding only**: it references the
+alice–carol formation record, while this adoption is alice–bob — dereference
+evaluation (§3.4) finds a record that does **not** name these two parties
+(context fixture V9). Deliberate, twice over: the only presence record in the
+suite names the wrong pair, and a second formation record naming alice would
+violate §3.2's one-formation-per-key rule inside the positive universe. The
+reference becomes genuinely supporting when the normal alice–bob record lands
+(canonical bar 2). ({len(adopt_full_body)} bytes):
 
 ```
 {hexblock(adopt_full_body)}
@@ -1284,6 +1300,23 @@ With `started_at = {TS_START}`, the 730-day window is
 
 import os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+# ---- hash-language disjointness (wire §1.1's invariant, asserted) ----
+# The four untagged hash preimage languages must stay pairwise disjoint. A
+# schema change that broke this would otherwise pass generation silently.
+def _assert_hash_languages(bodies):
+    for b in bodies:  # txid preimages: maps whose first encoded key is 0
+        assert b[0] >> 5 == 5 and b[1] == 0x00, 'body map must begin with key 0'
+        assert len(b) > 32, 'body shorter than a genesis preimage'
+    for i in IDS.values():  # keyhash preimages: arrays, first byte 0x82
+        assert i.key_material[0] == 0x82 and len(i.key_material) > 32
+    # query_id preimages: five-entry maps beginning key 1 (0xa5 0x01) — no
+    # query is generated yet, but the language stays reserved and disjoint:
+    # bodies begin a? 00, KeyMaterial begins 82, genesis input is exactly 32B.
+_assert_hash_languages([adopt_body, depart_body, disavow_body, reissue_body,
+                        formation_body, div_body, merge_body, code40_body,
+                        ext_body, reissue2_body, adopt_full_body, depart_r_body,
+                        peer_full_body, peer_body])
+
 _outputs = {}
 for fname, parts in OUT.items():
     data = '\n'.join(parts) + '\n'

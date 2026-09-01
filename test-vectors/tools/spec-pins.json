@@ -4,14 +4,14 @@
   "network-design.md": "67f5d245694bcd47ad6755a66494ab629035d9517ddca2a10a8ad1e71b98c96d",
   "light-client-requirements.md": "69c5ac5837304937cee93243af9a5737a1f7d8c131108a04f179e9319940bf6f"
  },
- "generator": "32d48074ebafefb9c83e371d47eb6acac607b20d133d7b04d3210ede027978b4",
+ "generator": "748123e4cb1963f8d711a7ee953e29bede529cb20c0c9609c12a54dd128b1525",
  "outputs": {
   "keys.md": "673a421115a2de800df89cc6c4598c1e7b6b0d98682c1de18e37d2e78cc8ec10",
   "primitives.md": "c9a656c55a2b4c0824d4bdba8fada0c9cdcbd4251f469084ed966b6926aea3d5",
-  "transactions.md": "7be8c18f714e0ccd67cb3d8e1f48f5d9cfd3a195b42730ae095b9e0ce4acd264",
+  "transactions.md": "1f4bb4b7736697d6800407bd0344db4d464825209bdbd4e75ec0fb97f8f486db",
   "records.md": "de4b1b77a290386e200fe478cd14cc4f7196da012c150d4d858b4311c8b53541",
   "verifier-selection.md": "7773e8663debbc1998dac71cdb4f8d9627610f17d1dc302ed80b281ee83c09ef",
-  "README.md": "576c78c9262a849829f48ea05d820399e97bf9421909ac8bf517e4123556a4cf",
-  "negative-vectors.md": "3c713058d32bd16f4bd58d20f420d2dfb374c342c96e553498eaf43151ba687a"
+  "README.md": "7005504e29ab7399694b1371de57edf10c14adb5a5061b00f0afacce5aecd002",
+  "negative-vectors.md": "bf07cd7fd2f37c341a16dc138e510714ffa657eb68cd68f1b2a138a329d56628"
  }
 }
