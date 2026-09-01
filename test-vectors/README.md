@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
+**Pinned**: wire-format.md `fbe06543a44d520f1af87098a654c38b863ac57ca81bbf888f423508342a2672` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 **Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
 named **client-conformance** vectors where a client rule is normative and
@@ -246,22 +246,14 @@ negatives (T9–T12). Still open:
 
 ## Open for the author
 
-Two questions from the ninth review, both with vector consequences:
-
-1. **May the default port be encoded explicitly?** `NetworkPoint.3` absent
-   means 7431; nothing says whether `3: 7431` written out is valid, a
-   non-canonical spelling to reject, or a distinct value — and §7.6's
-   distinct-entries rule needs the answer: are `{ip}` and `{ip, 3: 7431}` one
-   destination twice or two entries? The profile's one-object-one-encoding
-   philosophy suggests: **a field equal to its stated default MUST be
-   omitted**, the scalar analogue of §1's optional-empty rule.
-2. **What may an unknown extension value be?** §1 bounds it as "the complete
-   encoded slice … measurable for every value type". If *every value type*
-   means the full deterministic CBOR model (floats, tags), harnesses must
-   preserve slices opaquely rather than reconstruct through typed models — the
-   recommended reading, needing one sentence: *unknown extension values are
-   preserved as opaque encoded slices and never interpreted*. If the profile
-   instead narrows the admissible types, §1 should say so.
+**Nothing.** The ninth review's two questions were ruled 2026-09-01: **a field
+equal to its stated default MUST be omitted** — §1 carries the scalar analogue
+of the optional-empty rule, writing 7431 out is malformed (E22), and §7.6's
+distinctness never meets one destination twice — and **unknown extension
+values are opaque encoded slices, preserved and never interpreted**:
+uninterpretable state kept for a reader that may understand it later, any
+deterministic CBOR item admissible (D18). Every question accumulated across
+nine review rounds is ruled and applied.
 
 ## Recorded assumptions of the harness schema
 

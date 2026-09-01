@@ -131,7 +131,13 @@ context rather than content also makes the check free.
 - Shortest-form integers.
 - No duplicate map keys; a decoder MUST reject them rather than take the last.
 - Unknown map keys MUST be preserved when re-serializing for signature
-  verification, and MUST NOT be silently dropped.
+  verification, and MUST NOT be silently dropped. **Their values are opaque
+  encoded slices, preserved and never interpreted** [author, 2026-09-01]:
+  uninterpretable state kept for a reader that may understand it later. Any
+  deterministically encoded CBOR item is admissible — the profile's encoding
+  rules govern the slice's framing, and its meaning is nobody else's to
+  evaluate, which is why preservation works by slice and never by
+  reconstruction through a typed model.
 - **Validate the bytes as received; do not decode and re-encode to compare.**
   A decode-then-re-encode check erases the evidence it is meant to find — duplicate
   keys collapse, and an unknown key's original encoding is lost. Keep the received
@@ -145,6 +151,12 @@ context rather than content also makes the check free.
   an unsigned message is never re-serialised for one, so there is nothing for
   preservation to protect — and accepting unknown keys on an unsigned message is
   accepting unbounded input from an unauthenticated peer.
+- **An OPTIONAL field whose value equals its stated default MUST be omitted,
+  never written out** [author, 2026-09-01] — the scalar analogue of the rule
+  below: a written-out default gives one logical object two encodings, and
+  every distinctness rule would then have to answer whether `{ip}` and
+  `{ip, port: default}` are one destination or two. Omission is the one
+  spelling.
 - **An OPTIONAL field whose value would be an empty array or map MUST be omitted,
   never encoded empty.** Absent and present-but-empty produce different bytes
   and therefore different signatures and txids; without this the same logical object
@@ -1139,7 +1151,11 @@ NetworkPoint = {
                        ;   IPv6 endpoints are deferred by decision (design §4),
                        ;   and a 16-byte address here is malformed in v1
   2: ? uint,           ; ASN. U32 RANGE per RFC 6793 4-byte ASNs
-  3: ? uint            ; UDP port, u16 range. Absent means the default 7431.
+  3: ? uint            ; UDP port, u16 range. Absent means the default 7431,
+                       ;   and WRITING 7431 OUT IS MALFORMED (§1's
+                       ;   default-omission rule) — omission is the one
+                       ;   spelling, so §7.6's distinct-entries rule never
+                       ;   meets the same destination twice.
                        ;   ZERO IS MALFORMED — it is never a destination
 }
 

@@ -7574,3 +7574,19 @@ recommended no, a field equal to its default MUST be omitted, the scalar analogu
 of the optional-empty rule, and §7.6's distinctness needs the ruling either way —
 and what an unknown extension value may be, with slice-opacity recommended over
 type narrowing.
+
+### 2026-09-01 (two §1 rules: defaults are omitted, extensions are opaque slices)
+**Author's rulings on the ninth review's questions.** A field equal to its stated
+default MUST be omitted — the scalar analogue of the optional-empty rule, for the
+same reason: a written-out default gives one logical object two encodings, and
+§7.6's distinct-entries rule would otherwise have to decide whether `{ip}` and
+`{ip, port: 7431}` are one destination or two. Omission is the one spelling; E22
+is the negative, and the generator's constructor now refuses the mistake.
+
+**And unknown extension values are opaque encoded slices, preserved and never
+interpreted** — *uninterpretable state kept for a reader that may understand it
+later*. Any deterministically encoded CBOR item is admissible; the profile
+governs the slice's framing and nobody else evaluates its meaning, which is why
+preservation works by slice and never by reconstruction through a typed model.
+D18 is the fixture that catches exactly that reconstruction. With these, every
+question accumulated across nine review rounds is ruled and applied.

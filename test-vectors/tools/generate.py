@@ -753,6 +753,8 @@ ext_env, ext_entries = envelope(1, 1, ext_body, [alice, bob])
 # --- Peering (type 4): bob and carol as infra peers; alternative continuations
 # of their existing chain heads (bob: the adoption; carol: the formation).
 def network_point(ip, asn=None, port=None):
+    assert port != 7431, 'the default port is never written out (§1, §4.4)'
+    assert port is None or 1 <= port <= 65535, 'port: u16, never zero'
     pairs = [(e_uint(1), e_bstr(bytes(ip)))]
     if asn is not None: pairs.append((e_uint(2), e_uint(asn)))
     if port is not None: pairs.append((e_uint(3), e_uint(port)))

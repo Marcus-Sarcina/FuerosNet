@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
+**Pinned**: wire-format.md `fbe06543a44d520f1af87098a654c38b863ac57ca81bbf888f423508342a2672` · network-design.md `5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae`
 
 ## The result model is structured, not a single status
 
@@ -149,6 +149,7 @@ works, not inputs.
 | T24 | A non-presence transaction whose `timestamp` precedes a committed predecessor's effective time — the temporal bridge | §3.3's monotonicity now binds **every** type; a merge variant where only one head violates the bound MUST also reject |
 | T17 | An `EndpointRecord` listing the same `NetworkPoint` twice | §7.6: entries are distinct; a repetition is malformed — it expresses nothing the order does not already say |
 | T18 | A `NetworkPoint` with port 65536 | u16 range (§4.4); 65535 is the valid ceiling and MUST be accepted |
+| E22 | A `NetworkPoint` writing the default port out — `3: 7431` | §1's default-omission rule [author, 2026-09-01]: a field equal to its stated default MUST be omitted; omission is the one spelling, which is what keeps §7.6's distinct-entries rule decidable |
 | T13 | Any two-party transaction whose two identity fields are equal — adoption, departure, disavowal, peering, series reissue | The degenerate pair is rejected across every two-party type (§4.1), as equal participants already are for presence (§3.2, R1). Self-adoption is also the degenerate cycle — the one a validator sees from the record alone (design §6.2.5) |
 | T14 | A `Recovery` whose `prior_key` equals the enclosing adoption's field 1 | A same-key Recovery is vacuous evidence (§4.1) — the retained-key, lost-archive case is served by archive fetch, fresh adoption and merge, never by Recovery |
 
@@ -222,6 +223,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D15 | One verifier answering once for **each** participant — two `(subject, verifier)` slots | §5.5: only duplicate slots are malformed; a verifier may have met both (T6's positive complement) |
 | D16 | A record whose witnesses all carry the same `nominated_by` | Wire-valid (§3.2 requires only that each names a participant); the nomination split is the reference client's warning, never a validity condition (`light-client-requirements.md` §1.0) |
 | D17 | The counter-jump pair read as state: `[5,42]` then `[5,100]` | `state_action = replace` — and the reverse order is `ignore_stale`, not an error: absence of prior state is acceptable and staleness is ordinary (§2.3) |
+| D18 | A bounded unknown extension whose value is a tagged item, float, or any other deterministic CBOR item outside the schemas' types | §1 [author, 2026-09-01]: **opaque encoded slices, preserved and never interpreted** — uninterpretable state kept for a reader that may understand it later. An implementation reconstructing extensions through a typed model drops what it cannot type, and fails here |
 
 ## Resolved: the seed sentence is a writer commitment
 

@@ -1,22 +1,22 @@
 {
  "specs": {
-  "wire-format.md": "a2c7967e6c487eb3ba873ce0ae91b86fda38446f09537ed2cb2fdf3642a7035c",
+  "wire-format.md": "fbe06543a44d520f1af87098a654c38b863ac57ca81bbf888f423508342a2672",
   "network-design.md": "5fd849a259c8df458862836f7e001b0489fe3c13ea8447bc782c8fbac5b5c6ae",
   "light-client-requirements.md": "69c5ac5837304937cee93243af9a5737a1f7d8c131108a04f179e9319940bf6f"
  },
- "generator": "05aa700d5cdc3b759ed621dc99e136ce96791ac79db598faccc45c4c585838b7",
+ "generator": "4dae4b601c5d861e8423690e92069121d81c06e37643e85d5e14256ff5cfc362",
  "verifier": "ae83282dab258646fecebb64c64e00ec06acbc0e9eff4fa028990aca62d54f8d",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "696f8ebf9d35392286bc35fa70ec9f92bcda76dbd3494af038d079ef75dd61c9",
-  "primitives.md": "bfdd55b7a387dd4a5454f12e763d8626b6cd2b343f5b5135f4ba4de4989a85b0",
-  "transactions.md": "ee2ade7d8493b8b52a996d9ad30bb179134d476f41fe75264de18dbe91866b27",
-  "records.md": "be40248443b5f43717c5eef29ca0a42c76f7d746b8cd40a678ff4ea9869b937d",
-  "verifier-selection.md": "fcdf1649ef7115349394da3bd1555cea8a7c2cf3dc88adfab16a610509ca681c",
-  "README.md": "7a83af52756ad46b3eea8c814bff38c33e15e37452c10ac938a105c3d8699166",
-  "negative-vectors.md": "888c83c805433360b327b22b23edc2a1082870adbcd8d83f670e74a351370d49"
+  "keys.md": "4be987be4f93acc5eac6966a9803c0ea6a91611d3010fbd3bc51621c1652ac21",
+  "primitives.md": "fcf1a8afdb0277a11783f4044aa4bd6c9c43af8da9b03fe6e55d1db106616b1c",
+  "transactions.md": "53fe07de9d85a98d8d3c0ccc54a5ded13f481036cdfde3a3a0a8d6ceae7479fe",
+  "records.md": "a2391a767725ea72ad9bdfc8d068591bb271e356d98eb21676a33b35be5638a6",
+  "verifier-selection.md": "b8ea5c248eae3925d74d25006a84c28a73581364d92014b7e78e336285614fc1",
+  "README.md": "2b4cd7095f2e87379a04957e2fd1d0f3dd6cb704ad0c66d76ece8ec4390ea3a2",
+  "negative-vectors.md": "4fd019ea22310074a839c9cac29a9495ee01be56e491cdf85c90076016624309"
  }
 }

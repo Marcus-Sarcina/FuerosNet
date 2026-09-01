@@ -2072,3 +2072,13 @@ own bound table.
 | 8 | The equal-seqno rule tested on one of two decoding paths | **CONFIRMED, FIXED** — a **generated** `SignedLocator` conflict partner (same subject, same `[5,100]`, different path), harness-verified; V12, plus D17's replace/ignore_stale reading of the existing pair |
 | 9 | Output hashes recorded but not gated; dependencies unrecorded; the ML-DSA independence env-dependent | **CONFIRMED, FIXED** — the generator now compares regenerated outputs against the stored pins when specs and tools are unchanged and refuses drift without `--accept-output-change` (tested: clean rerun reproduces byte-for-byte); dependency versions recorded in the pins; the harness already names which ML-DSA path ran in its output |
 | 10 | Generic CBOR negatives exercised two parser branches | **CONFIRMED, FIXED** — E19 (non-shortest length headers), E20 (indefinite across major types), E21 (invalid UTF-8), S24 (non-canonical map inside the protected-header bstr) |
+
+**Rulings on the ninth-review questions (2026-09-01)**: **a field equal to its
+stated default MUST be omitted** — §1 carries the rule as the scalar analogue of
+the optional-empty rule, the `NetworkPoint` comment names its instance, writing
+7431 out is malformed (E22), and the positive constructor asserts it — and
+**unknown extension values are opaque encoded slices, preserved and never
+interpreted**, in the author's words *uninterpretable state kept for a reader
+that may understand it later*; any deterministic CBOR item is admissible, and
+D18 is the fixture that fails typed-model reconstruction. The vectors' author
+queue is empty across all nine rounds.
