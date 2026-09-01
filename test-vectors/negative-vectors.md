@@ -15,9 +15,10 @@ it names:
 | Dimension | Values | Where stated |
 |---|---|---|
 | `structural` | valid · **malformed** | `wire-format.md` §1, §3.2 |
-| `signatures` | verified · unverifiable(signer) — per signer, a missing key is a third outcome, not failure | §3.4 |
+| `signatures[signer, alg]` | verified · **failed** · unverifiable(key) — per signer **and algorithm**; a bad signature and a missing key are different outcomes, and E10 needs the first | §3.4, §3.5 |
 | `chain` | complete · **incomplete** — an unfetchable predecessor is a fact, not an error | §3.4 |
-| `selection[subject]` | verified · unverifiable — **per subject**; a holder with one archive verifies one half | §5.5 |
+| `selection[subject]` | verified · unverifiable — **per subject**; verifier-selection recomputation only | §5.5 |
+| `checks[name]` | pass · fail · unverifiable(withheld) — per revealed-field rule; the `strongest`-channel check is the case in point | §3.2, §4.5.1 |
 | `effective` | yes · **no** — structurally valid may still grant nothing for this evaluator | §6.8 |
 | `evidentiary` | free-form flags (fork-detected, …) — findings against history, not against the object | §3.2 |
 
@@ -44,7 +45,7 @@ works, not inputs.
 | E6 | A body carrying 17 unknown extension keys | Exceeds the 16-per-map bound |
 | E7 | An unknown extension key whose encoded value is 1,025 bytes | Exceeds the 1,024-byte encoded-slice bound |
 | E8 | A presence record with `subtype = 2` | §1's unknown-enum rule on a closed enumeration: field 6 is `0 normal, 1 formation` and load-bearing (§4.5). **Choosing the field matters** — two earlier instantiations of this row were wrong: disavowal codes are a banded exception (D1), and `ClientIntegrity.scheme` is an **open** namespace ("a validator checks only the shapes", §4.5) |
-| E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are **covered by every signature** — all four entries MUST fail. The unmutated envelope is must-accept D2 |
+| E10 | The extended adoption (`transactions.md`) with its unknown key's value mutated `c0ffee` → `c0ffef` | Unknown retained keys are covered by every signature: `signatures[·, -8] = failed` for **both** Ed25519 entries. The rule binds the ML-DSA entries identically, but their slots are placeholders and **non-oracular** until canonical bar 1. The unmutated envelope is D2 |
 | E11 | A merge back-pointer list out of ascending bytewise order | §3.1: one logical merge, one encoding, one txid — the positive merge vector shows the sorted form |
 | T8 | A disavowal with reason code **64** | Outside the 0–63 code space (§4.3) — malformed for that reason, **not** because it is unassigned; unassigned in-range codes are accepted (D1) |
 
@@ -59,6 +60,12 @@ works, not inputs.
 | P5 | Path `{1: h'31415000', 2: 5}` | Packed bytes ≠ `ceil(5/2)` = 3 — surplus is malformed, not ignorable |
 | P7 | A `COSE_Key` in `KeyMaterial` carrying a fourth label (`kid`) | Exactly three labels per component — any addition is a different identity |
 | P8 | `KeyMaterial` ordered `[post-quantum, classical]` | Fixed order, classical first |
+| P9 | `KeyMaterial` with one component, or three | Exactly two, classical then post-quantum (§2.2) |
+| P10 | A component missing a required label (`x` absent; `pub` absent) | RFC 9053 / RFC 9964 requirements, restated by the profile (§2.2) |
+| P11 | Wrong parameter values: classical `kty ≠ 1` or `crv ≠ 6`; post-quantum `kty ≠ 7` or `alg ≠ -49` | The profile fixes all four (§2.2); a generic COSE library accepts other curves and algorithms |
+| P12 | A post-quantum component carrying `priv` (label −2) | RFC 9964 forbids it in a public key, and the profile inherits the rule (§2.2) |
+| P13 | Classical `x` not exactly 32 bytes | An Ed25519 public key is 32 bytes; any other width is not one |
+| P14 | Post-quantum `pub` not exactly 1,952 bytes | ML-DSA-65's public-key size; another width is another parameter set or garbage (§2.2) |
 
 ### COSE profile, envelope and signer set (§1, §3.5, §3.6)
 
@@ -78,6 +85,8 @@ works, not inputs.
 | S12 | An envelope entry verifying under `external_aad = ""` or a wrong tag | Every context carries its own tag and the verifier reconstructs it **from context, never from the message** (§1.1, C2) — a generic COSE library left at defaults accepts this |
 | S13 | A protected header carrying any parameter beyond `alg` (+ `kid` where required) | "Nothing else appears in either header" (§3.5) — an extra parameter changes the protected bytes and is malformed, not a tolerable extension |
 | S14 | An envelope entry with `alg = -7` (ES256) | Outside the profile: any `alg` other than −8/−49 in a signer group is malformed (§3.5) |
+| S15 | A `COSE_Sign` whose **outer** protected header is nonempty | §3.5: the outer protected header is empty — a `COSE_Sign` carries no signature of its own, so it has no algorithm to name; generic libraries permit content there |
+| S16 | A `COSE_Sign` whose **outer** unprotected header is nonempty | §3.5's nonempty-unprotected rule covers every COSE header, the outer pair included |
 
 ### Presence-record structural rules (§3.2, §3.3)
 
@@ -91,7 +100,9 @@ works, not inputs.
 | R6 | A participant listed among the witnesses | Not an independent witness |
 | R7 | A witness whose `nominated_by` is neither participant | MUST be one of the two |
 | R8 | A formation record whose key 0 is not exactly `[SHA-256(signer keyhash)]` per signer | Structural genesis rule |
-| R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | Checked only on reveal; withheld → `selection`-style unverifiable, never valid, never malformed |
+| R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
+| R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
+| R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | `checks[strongest] = fail` when revealed; withheld → `checks[strongest] = unverifiable(withheld)` — never valid, never malformed. Not a `selection` outcome: that dimension is verifier-selection recomputation |
 
 ### Transaction and record bindings (§4)
 
@@ -107,6 +118,8 @@ works, not inputs.
 | T10 | A `Recovery` whose responses carry no `match` | "At least one, and at least one `match`" (§4.1) |
 | T11 | A `Recovery` old-key proof that is `COSE_Sign1`, or a `COSE_Sign` with a single entry | The old identity is hybrid: one logical signer, two entries (§4.1, §3.5) |
 | T12 | An old-key successor statement whose `new_key` ≠ the enclosing adoption's field 1 | Field 1 is "the ONLY successor authorised" (§4.1) — the cross-object binding that stops one observed proof authorising competing successors |
+| T15 | An old-key successor statement whose `patron_key` ≠ the enclosing adoption's field 2 | The symmetric assembly error: §4.1 requires a verifier to check **both** bindings and reject on mismatch — the right successor under the wrong patron is still a forged assembly |
+| T16 | A series reissue whose field 4 counter is not 0 | §4.6: the new series opens at counter 0 |
 | T13 | Any two-party transaction whose two identity fields are equal — adoption, departure, disavowal, peering, series reissue | The degenerate pair is rejected across every two-party type (§4.1), as equal participants already are for presence (§3.2, R1). Self-adoption is also the degenerate cycle — the one a validator sees from the record alone (design §6.2.5) |
 | T14 | A `Recovery` whose `prior_key` equals the enclosing adoption's field 1 | A same-key Recovery is vacuous evidence (§4.1) — the retained-key, lost-archive case is served by archive fetch, fresh adoption and merge, never by Recovery |
 
@@ -122,7 +135,8 @@ works, not inputs.
 | R10b | The same record | Predecessor unfetchable | `chain = incomplete` — not malformed (§3.4) |
 | V1 | A record needing threshold recomputation for both subjects | One subject's bundle held | `selection[A] = verified`, `selection[B] = unverifiable` (§5.5) |
 | V2 | A scope naming a position the evaluator cannot compute | Topology does not reach it | `structural = valid`, `effective = no` — MUST NOT reject (§6.8) |
-| V3 | A signer's key material never seen and no resolver | Any signed object | `signatures = unverifiable(that signer)` — a third outcome; collapsing it into invalid discards a fetchable object (§3.4) |
+| V3 | A signer's key material never seen and no resolver | Any signed object | `signatures[signer] = unverifiable(key)` — a third outcome; collapsing it into invalid discards a fetchable object (§3.4) |
+| V4 | A series reissue naming a series the node previously occupied | Evaluator holds the node's chain | **Reject** — §4.6: a chain-holder MUST reject a reissue naming a series already in the chain; reuse brings the abandoned line's high counters back into comparison |
 
 ## C. Method requirements — how a decoder works
 
@@ -137,7 +151,7 @@ works, not inputs.
 | # | Input | Rule |
 |---|---|---|
 | D1 | The disavowal with unassigned in-range code 40 (`transactions.md`) | §4.3's banded exception: retained and evaluated by band |
-| D2 | The adoption carrying unknown key `99: h'c0ffee'`, **with its full envelope** (`transactions.md`) | §1: preserved, re-serialised, and covered — the signatures verify over bytes including the unknown key; E10 is the mutation complement |
+| D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and both **classical** signatures verify over bytes including the unknown key; the PQ slots are non-oracular until canonical bar 1. E10 is the mutation complement |
 | D3 | A `LocationEvidence` method value of 9 | The location-method registry is deliberately open (§4.5) |
 | D4 | A `Witness.attestation` with a reserved bit (3+) set | Reserved bits retained; interpret only 0–2 (§4.5) |
 | D5 | Verifier responses in any array order | Array order is not canonicalised (§5.4) |
@@ -158,15 +172,21 @@ needing to leave the device.
 This suite is **wire-format/protocol interoperability**, not a certification
 of client and operator behavioural commitments — those are deliberately
 unenforceable from bytes (design §1.1) and live in the requirements documents.
-Covered positively so far: the six transaction types **including peering**, the
-formation-subtype presence record, `SignedLocator`, `EndpointRecord`. Not yet
-covered: the remaining §7 standalone objects (currency attestation, anchor
-entry, capture key grant, late response, subtree acknowledgement, resolution,
-prekey distribution, archive fetch), session messages, catalog and abuse
-objects, topology frames, resource requests. The boundary sweep covers **every
-bound within the declared scope** — back-pointers 1/8/9, witnesses 16/17,
-responses 32/33, path 24/25, unknown keys 16/17, values 1024/1025, u32/u64
-edges, epoch saturation, ordinal transitions; bounds belonging to out-of-scope
-objects (prekey blobs, catalog sizes, capabilities, sibling lists, audit
-history, scope lists, corroborations, proximity channels, asserted locations,
-recovery responses) join the sweep when their objects do.
+
+**Covered positively so far**: body and txid vectors for the six transaction
+types including peering; full envelopes for the adoption (two-signer) and the
+departure (single-signer); the formation-subtype presence record;
+`SignedLocator`; `EndpointRecord`. **Not yet covered**: the remaining signed
+contexts and the unsigned message encodings, as `records.md` now classifies
+them; session messages; topology frames; resource requests.
+
+**The boundary sweep is planned, not present** (canonical bar 7) — the third
+review caught the previous wording claiming otherwise. Its target list is
+**every bound belonging to a covered object**, which includes bounds of
+covered objects' fields previously mislabelled out-of-scope: back-pointers
+1/8/9, witnesses 16/17, responses 32/33, path 24/25, unknown keys 16/17,
+extension values 1024/1025, **peering audit history 8/9 and `NetworkPoint`
+lists 8/9 per endpoint record**, u32/u64 edges, epoch saturation, ordinal
+transitions. Bounds of genuinely uncovered objects (prekey blobs, catalog
+sizes, capabilities, sibling lists, scope lists, corroborations, proximity
+channels, asserted locations, recovery responses) join when their objects do.

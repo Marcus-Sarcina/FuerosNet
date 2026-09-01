@@ -814,10 +814,10 @@ Recovery = {
 }
 ```
 
-**The node and the patron MUST differ, and the rule holds for every two-party
-type** [author, 2026-09-01]: departure, disavowal, peering and series reissue
-reject the degenerate pair identically, as presence records already reject equal
-participants (§3.2). For adoption it is also the degenerate cycle — the proposed
+**The node and the patron MUST differ — a node cannot hold authority over
+itself — and the rule holds for every two-party type** [author, 2026-09-01]:
+departure, disavowal, peering and series reissue reject the degenerate pair
+identically, as presence records already reject equal participants (§3.2). For adoption it is also the degenerate cycle — the proposed
 patron *is* the node — and the one cycle a validator can see from the record
 alone, where design §6.2.5's rule otherwise needs topology state. For the
 two-signer types the envelope layer agrees independently: a required signer set
@@ -853,7 +853,8 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   Field 7's protection is anti-oracle and expires with the ceremony window; field 9's
   is permanent. Cost follows: ~10 responses at 3,373 B is ~34 KB, one pair each.
 
-**`prior_key` MUST differ from field 1** [author, 2026-09-01]. A holder who kept
+**`prior_key` MUST differ from field 1** — identical keys represent no rotation
+  at all [author, 2026-09-01]. A holder who kept
   their key and lost their archive needs no `Recovery`: refetch from a holder
   (§7.9), or adopt afresh on a new series and merge the old branch back when its
   head resurfaces (§3.1, design §10.3). A same-key `Recovery` would be vacuous
@@ -926,13 +927,7 @@ and reject on mismatch.** An unchecked binding is the same as no binding.
 statement names the fields it needs directly, which avoids the circularity without
 leaving the payload empty.
 
-**The node and patron identities MUST differ** — adoption creates an authority
-relationship, and a node cannot hold authority over itself. This mirrors the rule
-that a presence record's two participants must differ (§4.5), and is stated rather
-than left to follow from the signer-set requirement.
 
-**`prior_key` MUST differ from the adopted node's key** — identical keys
-represent no rotation at all.
 
 **Field 8 — proof of presence.** Expected on a *fresh*
 adoption, meaning the patron holds no prior PoP with this node. **Optional in the

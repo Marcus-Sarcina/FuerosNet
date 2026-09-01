@@ -2,14 +2,13 @@
 """Generate the draft canonical test vectors for the RHTN wire format.
 
 Everything computable is computed; nothing is hand-transcribed. Re-running this
-script regenerates keys.md, primitives.md, transactions.md and
-verifier-selection.md byte-for-byte. README.md and negative-vectors.md are
+script regenerates keys.md, primitives.md, transactions.md, records.md and
+verifier-selection.md byte-for-byte, each pinned to the SHA-256 of both
+`network-design.md` and `wire-format.md`. README.md and negative-vectors.md are
 authored by hand.
 
-Status: DRAFT, derived from `wire-format.md` alone and verified by no
-implementation. Interpretations this script had to take where the specification
-under-determines the bytes are marked INTERPRETATION here and collected in
-README.md.
+Status: DRAFT, derived from the specifications and verified by no
+implementation.
 
 Requires: Python 3, `cryptography` (for Ed25519). ML-DSA-65 values are not
 computed — no implementation was available — so post-quantum signature slots
@@ -450,6 +449,7 @@ depart_body = e_map([
     (e_uint(4), e_uint(TS_DEPART)),
 ])
 depart_txid = H(depart_body)
+dep_env, dep_entries = envelope(1, 2, depart_body, [alice])
 
 # --- Disavowal: bob disavows alice, reason 4.
 disavow_body = e_map([
@@ -688,6 +688,25 @@ Body ({len(depart_body)} bytes):
 
 txid: `{hx(depart_txid)}`
 
+### The departure envelope — the single-signer shape
+
+One logical signer, **two** `COSE_Signature` entries, and a decoder MUST NOT
+expect the old patron's signature (§4.2) — an implementation deriving the
+signer set from the identities the body names, rather than from the type's
+required-signer rule, fails here. Ed25519 signature (protected
+`{hx(dep_entries[0][2])}`):
+
+```
+{hexblock(dep_entries[0][4])}
+```
+
+Envelope bytes ({len(dep_env)} bytes; the ML-DSA slot is a placeholder,
+STRUCTURAL as in the adoption envelope):
+
+```
+{hexblock(dep_env)}
+```
+
 ## Disavowal (type 3) — bob disavows alice, reason code 4
 
 Single signer; bob's back-pointer is the adoption's txid. Body
@@ -812,9 +831,11 @@ Body ({len(ext_body)} bytes):
 
 txid: `{hx(ext_txid)}`
 
-**The envelope over this body is fully constructed** — the unknown key is
-inside the signed payload, so its bytes are covered by every signature: mutate
-`c0ffee` and all four signatures fail (negative suite, E10). Ed25519
+**The envelope over this body is constructed, and the unknown key is inside
+the signed payload.** Mutating `c0ffee` breaks **both Ed25519 signatures**
+(negative suite, E10); the coverage rule binds the ML-DSA entries identically,
+but their slots are placeholders until canonical bar 1, so they are
+**non-oracular** — nothing about them can be proved or disproved yet. Ed25519
 signatures ({ext_entries[0][0].name} then {ext_entries[2][0].name}, by kid):
 
 ```
@@ -897,12 +918,23 @@ Complete `EndpointRecord` ({len(endpoint_record)} bytes):
 {hexblock(endpoint_record)}
 ```
 
-## Not yet present
+## The §7 object model — signed contexts versus unsigned encodings
 
-Currency attestation, anchor table entry, capture key grant, late verifier
-response, subtree acknowledgement, resolution messages, prekey distribution,
-archive fetch — one known-answer vector per context is the target (README,
-canonical bar).""")
+**Not every §7 object is signed, and the target list must not imply otherwise**
+(third review). One known-answer signature per *signing context* remains the
+goal — but only for objects that have one:
+
+- **Signed, queued**: currency attestation (§7.1), anchor table entry (§7.2),
+  subtree acknowledgement (§7.5), prekey bundle (§7.8) — plus, outside §7,
+  the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
+  successor statement (§4.1), and the verifier response and consent contexts
+  (§4.5, §5.6).
+- **Unsigned message encodings — no signature exists to generate**: the capture
+  key grant (§7.3, transient end-to-end payload), the late-response wrapper
+  (§7.4 — its embedded `VerifierResponse` is already signed; the wrapper adds
+  no signature), resolution messages (§7.7.3), archive fetch (§7.9), and the
+  session messages of §8. These get **encoding** vectors, not signature
+  vectors.""")
 
 # ================================================================ verifier-selection.md
 

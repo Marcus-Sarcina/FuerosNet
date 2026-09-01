@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` SHA-256 `46c143ebfcf55f2c7fa779f5583ba4c3254445cec6c3880fd09703f06c064fab` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `05165711f6ee749fcdce938447a425052f979fa47e7cadddcfe27b4be6ef21ad` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
@@ -47,9 +47,20 @@ c11c050bfd7fbb7377db937cb21c36157b57c4d363e9561a02b300796f3153cc
 8ba70a
 ```
 
-## Not yet present
+## The §7 object model — signed contexts versus unsigned encodings
 
-Currency attestation, anchor table entry, capture key grant, late verifier
-response, subtree acknowledgement, resolution messages, prekey distribution,
-archive fetch — one known-answer vector per context is the target (README,
-canonical bar).
+**Not every §7 object is signed, and the target list must not imply otherwise**
+(third review). One known-answer signature per *signing context* remains the
+goal — but only for objects that have one:
+
+- **Signed, queued**: currency attestation (§7.1), anchor table entry (§7.2),
+  subtree acknowledgement (§7.5), prekey bundle (§7.8) — plus, outside §7,
+  the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
+  successor statement (§4.1), and the verifier response and consent contexts
+  (§4.5, §5.6).
+- **Unsigned message encodings — no signature exists to generate**: the capture
+  key grant (§7.3, transient end-to-end payload), the late-response wrapper
+  (§7.4 — its embedded `VerifierResponse` is already signed; the wrapper adds
+  no signature), resolution messages (§7.7.3), archive fetch (§7.9), and the
+  session messages of §8. These get **encoding** vectors, not signature
+  vectors.

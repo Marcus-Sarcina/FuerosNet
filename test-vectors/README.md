@@ -1,8 +1,8 @@
 # Test vectors — DRAFT
 
-**Status: spec-derived; two clean-room review rounds by a second model family
-(2026-08-31, both reran the generator byte-for-byte and found no arithmetic
-error); verified by no implementation.** These vectors were written from the
+**Status: spec-derived; three clean-room review rounds by a second model
+family (2026-08-31 / 2026-09-01, each reran the generator byte-for-byte and
+found no arithmetic error); verified by no implementation.** These vectors were written from the
 specifications alone, which is exactly the condition `wire-format.md` §13 warns
 about: *vectors written from the spec alone encode the spec's own mistakes.*
 That is their purpose — **a disagreement between a vector and the
@@ -26,8 +26,8 @@ vector. This file and `negative-vectors.md` are authored by hand.
 |---|---|
 | `keys.md` | The synthetic test identities: Ed25519 keys (real), ML-DSA-65 public keys (structurally valid, cryptographically meaningless), `KeyMaterial` encodings, keyhashes |
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
-| `transactions.md` | Bodies and txids for all six transaction types **including peering**, a formation-subtype presence record, and adversarial variants: signer-order/kid-order divergence, a two-head merge, a must-accept unassigned disavowal code, a must-accept reissue to a numerically smaller series, and a fully-signed unknown-extension adoption. Plus the adoption's full four-entry envelope |
-| `records.md` | §7 standalone signed objects, one known-answer signature per domain-separation context — `EndpointRecord` complete; the rest queued |
+| `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record, and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
+| `records.md` | One known-answer signature per **signing** context — `EndpointRecord` complete; the remaining signed contexts queued, and the **unsigned** §7/§8 message encodings explicitly separated so nobody generates signatures the specification does not define |
 | `verifier-selection.md` | §5.2.1 nonce derivation (**HMAC-SHA-256, normative for clients — a conformance vector**), commitments, the seed preimage and seed, the `required()` table, hash-rank sampling, window boundaries |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
@@ -46,7 +46,15 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-**None remain open.** Every choice this suite had to make where the
+**One is open, surfaced by the third review**: the suite reads "transaction
+types" as the six **archive** transactions and excludes the abuse report, but
+the specification is contradictory about it — §4's table assigns type 6 to
+`AbuseReport` while §6.3 defines it as a standalone signed object with no
+key 0 and no carriage, and §3.1's signer-order table still names *resource
+registration*, retired as a transaction on 2026-08-28. **Author ruling
+pending**; no abuse vector until then.
+
+Every byte-level choice, by contrast, is closed: Every choice this suite had to make where the
 specification under-determined the bytes has been ruled on and written into the
 specification [author, 2026-08-31 through 2026-09-01]:
 
@@ -92,15 +100,21 @@ each instantiation must be checked against its field.
 
 ## Open for the author
 
-**Nothing.** The queue accumulated across both review rounds is fully ruled:
-the seed sentence is a writer commitment; the fields-X–Y payload is the map;
-HMAC-SHA-256 is normative; self-adoption and the degenerate pair in every
-two-party type are malformed (T13); `prior_key` MUST differ from the new key
-(T14); the three encoding interpretations are specification sentences; and a
-root changes series by continuing its chain under a new designator — an
-uncountersigned rollup, logically a genesis when presented as a history root
-(`wire-format.md` §4.6). What remains is the canonical bar below, which is
-work, not decisions.
+1. **The type-6 / abuse-report taxonomy** (third review, finding 1): §4's
+   table says type 6 is the abuse report; §6.3 gives it no key 0, its own
+   embedded signature, and no carriage; §3.1's signer row still names the
+   registration retired on 2026-08-28. Either type 6 follows the registration
+   into retirement — the 08-28 rationale (*no archive advance, chains to
+   nothing, an envelope nothing walks*) applies verbatim — with a tombstone
+   row per the numbers-never-reused rule, or a type-6 envelope needs its key-0
+   semantics defined for a signer that keeps no archive.
+2. **Should `window_ordinal` be structurally checked?** Key 7 is defined as
+   `floor(started_at / 86400)` and both values are body fields, so a mismatch
+   is checkable with no clock — the same class as the `finalized_at` bounds.
+   The rule is currently implicit; one sentence would make R-family coverage
+   possible.
+
+Everything previously queued is ruled and applied — see `review-tracking.md`.
 
 ## The canonical bar
 

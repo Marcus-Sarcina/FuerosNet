@@ -1807,3 +1807,37 @@ continuing under a new series designator; the back-pointer distinguishes it from
 genesis event, and presented as a history root it is logically equivalent to one
 (§4.6 closing paragraph; §2.3 carries the pointer). **The vectors' interpretations
 register is empty** — every byte in the suite now follows from the text.
+
+---
+
+## Test-vector review, third run (2026-09-01, verification round)
+
+**Reran the generator; all five outputs byte-for-byte, both pins matched.** Twelve
+findings, every one verified against the text; eleven applied, one to the author.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Type-6/abuse-report taxonomy contradictory; the suite silently chose the archive-six reading | **CONFIRMED — AUTHOR RULING NEEDED.** §4's table assigns type 6 to `AbuseReport`; §6.3 defines it with no key 0, an embedded signature and no carriage; §3.1's signer row still names *resource registration*, retired 2026-08-28 — a missed propagation from that retirement, whose rationale applies verbatim to the abuse report. The suite's reading is now declared an open interpretation; no abuse vector until ruled |
+| 2 | `records.md` queued unsigned objects for known-answer signatures | **CONFIRMED, FIXED** — KeyGrant is transient E2E payload, the late-response wrapper adds no signature, resolution and archive-fetch messages are unsigned: all verified. `records.md` now separates signed contexts from unsigned encodings |
+| 3 | D2/E10 claim four failing signatures; placeholders can prove two | **CONFIRMED, FIXED** — constrained to both classical signatures, PQ slots named non-oracular until canonical bar 1, in the fixture rows and the generated text |
+| 4 | Result model cannot express `failed` signatures or the withheld-`strongest` outcome | **CONFIRMED, FIXED** — `signatures[signer, alg]` gains `failed`; new `checks[name]` dimension (pass/fail/unverifiable(withheld)); R11 re-expressed and unhooked from `selection` |
+| 5 | Boundary-sweep wording claims coverage that does not exist; audit/endpoint bounds mislabelled out-of-scope | **CONFIRMED, FIXED** — "planned, not present"; peering-audit and NetworkPoint-list bounds moved into the target list, since their objects are covered |
+| 6 | `patron_key` binding untested | **CONFIRMED, FIXED** — §4.1 requires checking both successor bindings; T15 |
+| 7 | Reissue counter-0 and series-reuse negatives missing | **CONFIRMED, FIXED** — both rules verified as stated (§4.6); T16 byte-level, V4 context |
+| 8 | "All six types" overstates: bodies, not envelopes | **CONFIRMED, FIXED** — restated as positive body vectors; **a departure envelope added and independently verified** — the single-signer shape, two entries, with §4.2's decoder-MUST-NOT-expect-the-patron rule stated |
+| 9 | KeyMaterial negatives thin against the identity profile | **CONFIRMED, FIXED** — P9–P14: cardinality, missing labels, wrong kty/crv/alg, forbidden `priv`, wrong key widths |
+| 10 | Outer `COSE_Sign` headers not explicitly pinned | **CONFIRMED, FIXED** — S15/S16 |
+| 11 | Formation inverses missing | **CONFIRMED, FIXED** — R12/R13 (witnesses or responses present on a formation record). The `window_ordinal` consistency rule is implicit in the spec; **proposed to the author** as one sentence, same class as the `finalized_at` bounds |
+| 12 | Generator docstring stale | **CONFIRMED, FIXED** — five files, both pins |
+
+### A correction to this file's own record
+
+**Review round 2's "stated nowhere" was wrong, and the round-2 verification here
+missed it**: `wire-format.md` §4.1's successor block already carried both rules —
+*"a node cannot hold authority over itself"* and *"identical keys represent no
+rotation at all"*. The author's rulings were therefore confirmations of existing
+text, and the round-2 additions created duplicates, now consolidated: the
+generalised two-party rule at the §4.1 schema and the prior≠new bullet in the
+consistency list each absorbed the pre-existing phrasing, and the successor-block
+duplicates are removed. The grep that failed searched for "self-adoption"-family
+phrasings and missed "authority over itself". Sweep by more than one phrasing.

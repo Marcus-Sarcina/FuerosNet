@@ -7235,3 +7235,40 @@ link stays unprovable.
 
 **With this, nothing about the test-vector suite awaits a decision.** What remains
 is the canonical bar — work, not rulings.
+
+### 2026-09-01 (third vector review: eleven applied, one for the author, and a duplicate the record must own)
+The verification round reran the generator — five outputs byte-for-byte, both pins
+matched — and found no arithmetic drift. Its findings are taxonomy, object model and
+result model, and **eleven of twelve are applied**.
+
+**The one that needs the author is the type-6 taxonomy.** §4's table assigns type 6
+to the abuse report while §6.3 defines that object with no key 0, its own embedded
+signature and no carriage — and §3.1's signer-order row still names *resource
+registration*, which stopped being a transaction on 2026-08-28. That retirement's
+rationale — *no archive advance, chains to nothing, an envelope nothing walks* —
+reads on the abuse report verbatim, so the question is whether type 6 follows it
+into retirement with a tombstone row, or a type-6 envelope gets key-0 semantics for
+a signer that keeps no archive. The vectors' claim of "no open interpretations" did
+not survive this finding and now says so.
+
+**Applied**: `records.md` no longer implies signatures the specification does not
+define — the capture key grant, late-response wrapper, resolution and archive-fetch
+messages are unsigned encodings, verified one by one, and are now listed as such
+apart from the signed contexts. D2/E10 claim what placeholders can prove — both
+classical signatures, the PQ slots non-oracular. The result model gains `failed`
+and a per-check dimension, unhooking the withheld-`strongest` outcome from the
+selection dimension it was leaning on. **A departure envelope joins the adoption's**
+— the single-signer shape, two entries, independently verified, carrying §4.2's
+rule that a decoder MUST NOT expect the patron's signature. Fifteen negative rows
+join the suite: the KeyMaterial family (P9–P14), the outer `COSE_Sign` headers
+(S15/S16), formation inverses (R12/R13), the successor `patron_key` binding (T15),
+the reissue counter-0 rule (T16) and series reuse as a context fixture (V4). The
+boundary sweep now says *planned*, and its target list absorbs the peering-audit
+and endpoint-list bounds that were mislabelled out-of-scope.
+
+**And a correction owned in `review-tracking.md`**: round 2's claim that
+self-adoption and prior-equals-new were *stated nowhere* was false — §4.1's
+successor block carried both, in phrasings the verification grep did not try. The
+author's rulings confirmed existing text, the additions duplicated it, and the
+duplicates are now consolidated into the ruled statements. One phrasing is not a
+sweep.
