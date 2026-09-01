@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -537,3 +537,55 @@ bb9ec918ab14db812911e2ab4be59403a30158205693d22ed3d6dd0cc8292660
 ```
 
 txid: `fe68b7a7818aeb3ddbfa711e6f730bb27db68ad1714087da7b73006311e39398`
+
+**The envelope over this body is fully constructed** — the unknown key is
+inside the signed payload, so its bytes are covered by every signature: mutate
+`c0ffee` and all four signatures fail (negative suite, E10). Ed25519
+signatures (alice then bob, by kid):
+
+```
+f57844786184efe2020d72c101c24b430ba98e305ef98f532e3ad514cbc3516573dcee747383228c63e841a5bd86ba11ac026b99835759a3777ca42525d2ba09
+237f20fb12ee9ada8e86b2384209806a9fb374e4ab5d1415b4ff0d0775983331a1fce1b6f77781cd9ff263b6e7e4ba7b5db48445032e99b93ae67d5383da4b0d
+```
+
+## Peering (type 4) — bob and carol as infra peers
+
+Signer order: endpoint A then endpoint B, as fields 1 and 2 (§3.1). The chains
+continue bob's adoption and carol's formation record. Field 3's `NetworkPoint`
+carries ASN and an explicit port; field 4's carries neither — the port absent
+means the default 7431, and neither optional field is ever encoded empty.
+Field 7 (audits) is omitted entirely per §1's optional-empty rule.
+
+Body (173 bytes):
+
+```
+a600828158206bac2abd90863f3fde8028515f4665cb6454fd51c95898e4ba41
+b4659672d864815820788f856b8be57cd9baae59854fb77a992a31280969e4e5
+6ffc1f514fbc8382ed0158205693d22ed3d6dd0cc82926601127d63226bb9ec9
+18ab14db812911e2ab4be5940258202535e9a92cef24e674fe0b7db0cfd67762
+cf55953336bca8cc7db8ab05049ced03a301440a0000010219fbff03191d0804
+a10144c0000207051a6a014630
+```
+
+txid: `7f10f241a217f1b19c6408f27501a7b90739ef74eefe37534c652086c5bb6aa7`
+
+## Series reissue to a numerically smaller series — MUST ACCEPT
+
+Alice reissues again: the series she leaves is `0xDEADBEEF` at counter 17, the
+new series is **2** — numerically far below it. `series` is an arbitrary label,
+never ordered and never assumed to increment (§2.3): an implementation treating
+it as a generation number rejects this valid reissue and is non-conforming
+(negative suite, D7). Both chains continue the first reissue.
+
+Body (161 bytes):
+
+```
+a60082815820ac2bcab936e774640f3e9834f9ac190cf940401242628816ce34
+8bedb700158e815820ac2bcab936e774640f3e9834f9ac190cf9404012426288
+16ce348bedb700158e015820435c987e0caa65d2c4edefb75db354b8678d3014
+fdce71596db0abb9b730e9a90258205693d22ed3d6dd0cc82926601127d63226
+bb9ec918ab14db812911e2ab4be59403821adeadbeef1104820200051a6a03cd
+10
+```
+
+txid: `ef15e662dde1e06ffed01676a8bc114404cf83f3cb4c5c49e0e083f5b727f64e`

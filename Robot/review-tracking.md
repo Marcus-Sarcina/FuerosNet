@@ -1733,3 +1733,34 @@ findings are about fit: what the vectors fail to exercise, and outcome semantics
   one-sentence spec clarification if confirmed: `SignedLocator` payload form,
   genesis hash input, §5's raw-concatenation framing, §5.2.1's ordinal encoding,
   merge-list order.
+
+---
+
+## Test-vector review, second run (2026-08-31, different model family)
+
+**Reran the generator byte-for-byte against the pinned spec; no transcription
+drift.** All findings are fit and coverage. Every one was verified against the text;
+all held, including one that corrected the previous round's correction.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | **E8 wrong again**: `ClientIntegrity.scheme` is an open namespace — *"a validator checks only the shapes"* | **CONFIRMED, FIXED** — E8 now uses presence `subtype = 2`, a genuinely closed load-bearing enum. The row's two wrong instantiations are recorded in it: the closed-enum default has enough exceptions that every instantiation needs checking |
+| 2 | The nonce table cannot be a conformance vector — §5.2.1 admits any 32-byte PRF | **CONFIRMED, RELABELLED** — now an HMAC-SHA-256 reference example; what is conformance-testable (commitment equation, seed) is stated. Whether to harden HMAC as normative → **author queue** |
+| 3 | Pinning `wire-format.md` alone misses the authority model — the design wins on disagreement | **CONFIRMED, FIXED** — every generated file pins both documents' SHA-256 |
+| 4 | A single-enum expected outcome recreates the boolean collapse the prose warns against | **CONFIRMED, FIXED** — structured result model: structural / signatures(per signer) / chain / selection(per subject) / effective / evidentiary |
+| 5 | Peering and §7 standalone objects absent and unacknowledged | **CONFIRMED, PART-FIXED** — positive peering vector (optional-field omission shown live) and a complete classical `EndpointRecord` under `rhtn/1:endpoints` (new `records.md`, one known-answer per signing context as the growth path); the rest scoped explicitly |
+| 6 | COSE profile under-tested for what a default library accepts | **CONFIRMED, FIXED** — S10 embedded payload, S11 tagged nested COSE, S12 wrong/empty `external_aad`, S13 extra protected parameter, S14 out-of-profile alg; method rule C2, tag from context never content |
+| 7 | seqno vectors do not force strictly-greater or series-arbitrariness | **CONFIRMED, FIXED** — counter-jump `SignedLocator` pair [5,42]→[5,100] (D6) and a reissue to a numerically smaller series, 0xDEADBEEF→2 (D7), both fully signed where applicable |
+| 8 | Recovery cross-object bindings untested | **PART-FIXED** — T9 empty response set, T10 no `match`, T11 non-hybrid old-key proof, T12 successor `new_key` ≠ adoption field 1: all four verified as stated rules. **Two of the reviewer's cases are stated nowhere** — self-adoption (field 1 = field 2) and `prior_key` = new key — and went to the author instead of into vectors. A complete Recovery adoption is canonical bar 4 |
+| 9 | D2 does not prove signature coverage of unknown keys | **CONFIRMED, FIXED** — the extended adoption now carries its full envelope; independent verification confirms both Ed25519 signatures verify and mutating `c0ffee`→`c0ffef` breaks both (E10) |
+| 10 | Verifier-selection backlog missing the verified-only and pruning-boundary traps | **CONFIRMED** — added to canonical bar 3 |
+| 11 | Selective-disclosure needs its negative family | **CONFIRMED** — added to canonical bar 5 |
+| 12 | "Every explicit bound" overclaims | **CONFIRMED, FIXED** — scoped to bounds within the declared suite scope, remainder enumerated as joining with their objects |
+| 13 | Real ML-DSA needs an independent deterministic keygen recipe, not generator-as-oracle | **CONFIRMED** — canonical bar 1 now requires the recipe first |
+| 14 | Interpretation 1 recurs across eight signed objects | **CONFIRMED, GENERALISED** — one global sentence proposed; `EndpointRecord`'s vector instantiates the same map reading |
+
+**Author queue after this round** (also in the vectors README): the §4.1 seed
+sentence's testability; the five interpretations (one sentence each, the
+canonical-CBOR one resolving eight objects); HMAC-SHA-256 normative or reference;
+whether self-adoption is structurally malformed; whether `prior_key` may equal the
+new key.

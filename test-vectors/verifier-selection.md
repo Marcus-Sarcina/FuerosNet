@@ -1,6 +1,6 @@
 # Verifier selection — recomputation
 
-Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with
@@ -14,11 +14,17 @@ nonce exactly 32 bytes.
 
 ## Nonce derivation (§5.2.1)
 
-Nonces are **derived, not fresh**: `nonce = HMAC-SHA-256(witness_secret,
-"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`, the PRF being the
-expected choice, the participants this ceremony's pair, and the ordinal encoded
-as 8 bytes big-endian (INTERPRETATION 4, README). Same window, same nonce —
-re-deriving with these inputs MUST reproduce the table exactly, which is the
+Nonces are **derived, not fresh**: `nonce = PRF(witness_secret,
+"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`. **The table below
+is a reference example, not a protocol-conformance vector**: §5.2.1 admits any
+32-byte-output PRF and names HMAC-SHA-256 only as the expected choice, so a
+conforming witness using another PRF produces different nonces and fails
+nothing — the nonce never leaves the witness except by its own reveal. What
+*is* conformance-testable is downstream of the reveal: the commitment equation
+(§5.1) and the seed (§5.3), which this file's later sections cover against
+whatever nonces are revealed. This table instantiates HMAC-SHA-256 with the
+ordinal as 8 bytes big-endian (INTERPRETATION 4, README); same window, same
+nonce — re-derivation under the same PRF choice reproduces it exactly, the
 anti-grinding stability the rule exists for. Test secrets are
 `SHA-256("rhtn-test-vectors:<name>:witness-secret")`:
 

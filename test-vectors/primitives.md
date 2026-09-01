@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -102,6 +102,35 @@ db812911e2ab4be59402a201433141500205038205182a038443a10127a0f658
 40e6efbe52c205493d4a7eef6b5ae5aeb046a7a9a4d51f72c8370fb4e5c4a658
 d7ddeaeef30c57de86215c3ebf4a682418989a401459fe8daa8a7ebae3a6058d
 06
+```
+
+## Same-series counter jump — MUST ACCEPT (§2.3)
+
+A second `SignedLocator` by alice, same series, counter **42 → 100**. Within a
+series a new counter must be **strictly greater** — deliberately not
+previous+1, since a verifier may have missed intervening updates. An
+implementation requiring contiguity rejects this valid supersession and is
+non-conforming (negative suite, D6).
+
+Payload (87 bytes):
+
+```
+a2015820435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9
+b730e9a902a30158205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14
+db812911e2ab4be59402a2014331415002050382051864
+```
+
+Signature: `4495fb50df514d96a16dca2b93922bb68bc1611d032c0b708d09ddad2b3bbaae7bb650100a9344e13e1a7b0d9a55657d782e74fd27104042bebf39e066779103`
+
+Complete object (161 bytes):
+
+```
+a3015820435c987e0caa65d2c4edefb75db354b8678d3014fdce71596db0abb9
+b730e9a902a30158205693d22ed3d6dd0cc82926601127d63226bb9ec918ab14
+db812911e2ab4be59402a2014331415002050382051864038443a10127a0f658
+404495fb50df514d96a16dca2b93922bb68bc1611d032c0b708d09ddad2b3bba
+ae7bb650100a9344e13e1a7b0d9a55657d782e74fd27104042bebf39e0667791
+03
 ```
 
 ## Genesis back-pointer (§3.1)

@@ -22,10 +22,15 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 H = lambda b: hashlib.sha256(b).digest()
 
-_SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'wire-format.md')
-SPEC_SHA = hashlib.sha256(open(_SPEC, 'rb').read()).hexdigest()
-PIN = (f"Generated against `wire-format.md` SHA-256 `{SPEC_SHA}` — "
-       "regenerate after any specification change.")
+_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
+def _sha(name):
+    return hashlib.sha256(open(os.path.join(_ROOT, name), 'rb').read()).hexdigest()
+WIRE_SHA = _sha('wire-format.md')
+DESIGN_SHA = _sha('network-design.md')
+PIN = ("Generated against `wire-format.md` SHA-256 `" + WIRE_SHA + "` and "
+       "`network-design.md` SHA-256 `" + DESIGN_SHA + "` — the design wins on "
+       "any disagreement, so a design-only semantic change also stales these "
+       "vectors. Regenerate after any change to either.")
 
 # ---------------------------------------------------------------- CBOR encoder
 # Deterministic encoding per RFC 8949 §4.2 as profiled by wire-format.md §1:
@@ -283,6 +288,16 @@ sl_cose = e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl_sig)])
 signed_locator = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc),
                         (e_uint(3), sl_cose)])
 
+# --- Same-series counter jump: a second SignedLocator by alice, seqno [5,100].
+# Strictly greater, deliberately not previous+1 (§2.3).
+loc2 = locator(bob.keyhash, path([3, 1, 4, 1, 5]), seqno(5, 100))
+sl2_payload = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2)])
+sl2_tbs = sig_structure_sign1(sl_protected, AAD_LOCATOR, sl2_payload)
+sl2_sig = alice.sign(sl2_tbs)
+sl2 = e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), loc2),
+             (e_uint(3), e_arr([e_bstr(sl_protected), b'\xa0', NULL, e_bstr(sl2_sig)]))])
+
+
 emit('primitives.md', f"""# Primitives
 
 {PIN}
@@ -375,6 +390,28 @@ Complete `SignedLocator` ({len(signed_locator)} bytes) — field 3 is the untagg
 
 ```
 {hexblock(signed_locator)}
+```
+
+## Same-series counter jump — MUST ACCEPT (§2.3)
+
+A second `SignedLocator` by alice, same series, counter **42 → 100**. Within a
+series a new counter must be **strictly greater** — deliberately not
+previous+1, since a verifier may have missed intervening updates. An
+implementation requiring contiguity rejects this valid supersession and is
+non-conforming (negative suite, D6).
+
+Payload ({len(sl2_payload)} bytes):
+
+```
+{hexblock(sl2_payload)}
+```
+
+Signature: `{hx(sl2_sig)}`
+
+Complete object ({len(sl2)} bytes):
+
+```
+{hexblock(sl2)}
 ```
 
 ## Genesis back-pointer (§3.1)
@@ -514,6 +551,53 @@ ext_body = e_map([
     (e_uint(99), e_bstr(bytes.fromhex('c0ffee'))),
 ])
 ext_txid = H(ext_body)
+ext_env, ext_entries = envelope(1, 1, ext_body, [alice, bob])
+
+# --- Peering (type 4): bob and carol as infra peers; alternative continuations
+# of their existing chain heads (bob: the adoption; carol: the formation).
+def network_point(ip, asn=None, port=None):
+    pairs = [(e_uint(1), e_bstr(bytes(ip)))]
+    if asn is not None: pairs.append((e_uint(2), e_uint(asn)))
+    if port is not None: pairs.append((e_uint(3), e_uint(port)))
+    return e_map(pairs)
+peer_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [formation_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(carol.keyhash)),
+    (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+    (e_uint(4), network_point([192, 0, 2, 7])),
+    (e_uint(5), e_uint(TS_DEPART + 7200)),
+])
+peer_txid = H(peer_body)
+
+# --- Node endpoint record (§7.6): classical-only COSE_Sign1, fully computable.
+# Payload reading: the map of fields 1-3 (INTERPRETATION 1 generalised — the
+# same phrase governs eight signed objects).
+AAD_ENDPOINTS = b'rhtn/1:endpoints'
+er_fields = [
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_arr([network_point([10, 0, 0, 1], asn=64511, port=7432)])),
+    (e_uint(3), seqno(9, 2)),
+]
+er_payload = e_map(er_fields)
+er_protected = sig_protected(-8)
+er_tbs = sig_structure_sign1(er_protected, AAD_ENDPOINTS, er_payload)
+er_sig = bob.sign(er_tbs)
+er_cose = e_arr([e_bstr(er_protected), b'\xa0', NULL, e_bstr(er_sig)])
+endpoint_record = e_map(er_fields + [(e_uint(4), er_cose)])
+
+
+# --- Second reissue: to a NUMERICALLY SMALLER series. Series are arbitrary
+# labels (§2.3); an implementation treating them as generations rejects this.
+reissue2_body = e_map([
+    (e_uint(0), backptrs([reissue_txid], [reissue_txid])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), seqno(0xDEADBEEF, 17)),
+    (e_uint(4), seqno(2, 0)),
+    (e_uint(5), e_uint(TS_DEPART + 2 * 86400)),
+])
+reissue2_txid = H(reissue2_body)
 
 emit('transactions.md', f"""# Transaction bodies, txids, and one full envelope
 
@@ -727,7 +811,99 @@ Body ({len(ext_body)} bytes):
 {hexblock(ext_body)}
 ```
 
-txid: `{hx(ext_txid)}`""")
+txid: `{hx(ext_txid)}`
+
+**The envelope over this body is fully constructed** — the unknown key is
+inside the signed payload, so its bytes are covered by every signature: mutate
+`c0ffee` and all four signatures fail (negative suite, E10). Ed25519
+signatures ({ext_entries[0][0].name} then {ext_entries[2][0].name}, by kid):
+
+```
+{hx([e for e in ext_entries if e[1] == -8][0][4])}
+{hx([e for e in ext_entries if e[1] == -8][1][4])}
+```
+
+## Peering (type 4) — bob and carol as infra peers
+
+Signer order: endpoint A then endpoint B, as fields 1 and 2 (§3.1). The chains
+continue bob's adoption and carol's formation record. Field 3's `NetworkPoint`
+carries ASN and an explicit port; field 4's carries neither — the port absent
+means the default 7431, and neither optional field is ever encoded empty.
+Field 7 (audits) is omitted entirely per §1's optional-empty rule.
+
+Body ({len(peer_body)} bytes):
+
+```
+{hexblock(peer_body)}
+```
+
+txid: `{hx(peer_txid)}`
+
+## Series reissue to a numerically smaller series — MUST ACCEPT
+
+Alice reissues again: the series she leaves is `0xDEADBEEF` at counter 17, the
+new series is **2** — numerically far below it. `series` is an arbitrary label,
+never ordered and never assumed to increment (§2.3): an implementation treating
+it as a generation number rejects this valid reissue and is non-conforming
+(negative suite, D7). Both chains continue the first reissue.
+
+Body ({len(reissue2_body)} bytes):
+
+```
+{hexblock(reissue2_body)}
+```
+
+txid: `{hx(reissue2_txid)}`""")
+
+# ================================================================ records.md
+
+emit('records.md', f"""# Standalone signed records (`wire-format.md` §7)
+
+{PIN}
+
+**Draft. Spec-derived, unverified by an implementation.** See
+[README.md](README.md). Each §7 object is a standalone `COSE_Sign1` under its
+own domain-separation tag (§1.1) — this file grows toward one known-answer
+vector per signing context. Payload reading throughout: the deterministic CBOR
+of the map of the named fields (INTERPRETATION 1, README — the same phrase
+governs eight signed objects).
+
+## Node endpoint record (§7.6) — complete, classical-only
+
+Bob publishes one endpoint; `external_aad = "rhtn/1:endpoints"`. Fields 1–3
+({len(er_payload)} bytes):
+
+```
+{hexblock(er_payload)}
+```
+
+Protected header `{{1: -8}}` → `{hx(er_protected)}`; no `kid` — field 1 names
+the signer (§3.5).
+
+`Sig_structure`:
+
+```
+{hexblock(er_tbs)}
+```
+
+Ed25519 signature by bob:
+
+```
+{hexblock(er_sig)}
+```
+
+Complete `EndpointRecord` ({len(endpoint_record)} bytes):
+
+```
+{hexblock(endpoint_record)}
+```
+
+## Not yet present
+
+Currency attestation, anchor table entry, capture key grant, late verifier
+response, subtree acknowledgement, resolution messages, prekey distribution,
+archive fetch — one known-answer vector per context is the target (README,
+canonical bar).""")
 
 # ================================================================ verifier-selection.md
 
@@ -773,11 +949,17 @@ nonce exactly 32 bytes.
 
 ## Nonce derivation (§5.2.1)
 
-Nonces are **derived, not fresh**: `nonce = HMAC-SHA-256(witness_secret,
-"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`, the PRF being the
-expected choice, the participants this ceremony's pair, and the ordinal encoded
-as 8 bytes big-endian (INTERPRETATION 4, README). Same window, same nonce —
-re-deriving with these inputs MUST reproduce the table exactly, which is the
+Nonces are **derived, not fresh**: `nonce = PRF(witness_secret,
+"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`. **The table below
+is a reference example, not a protocol-conformance vector**: §5.2.1 admits any
+32-byte-output PRF and names HMAC-SHA-256 only as the expected choice, so a
+conforming witness using another PRF produces different nonces and fails
+nothing — the nonce never leaves the witness except by its own reveal. What
+*is* conformance-testable is downstream of the reveal: the commitment equation
+(§5.1) and the seed (§5.3), which this file's later sections cover against
+whatever nonces are revealed. This table instantiates HMAC-SHA-256 with the
+ordinal as 8 bytes big-endian (INTERPRETATION 4, README); same window, same
+nonce — re-derivation under the same PRF choice reproduces it exactly, the
 anti-grinding stability the rule exists for. Test secrets are
 `SHA-256("rhtn-test-vectors:<name>:witness-secret")`:
 

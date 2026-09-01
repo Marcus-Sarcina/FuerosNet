@@ -1,6 +1,6 @@
 # Test identities
 
-Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` — regenerate after any specification change.
+Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.

@@ -7101,3 +7101,39 @@ review's own priority order.
 numbered interpretations awaiting the author**: the `SignedLocator` payload form, the
 genesis hash input, §5's raw-concatenation framing, §5.2.1's ordinal encoding, and
 merge-list order — each a one-sentence specification fix if confirmed.
+
+### 2026-08-31 (test-vector review, second run: the result model, and E8 corrected twice)
+The second clean-room round reran the generator byte-for-byte against the pinned
+specification and found no drift; its findings are fit and coverage, and **every one
+verified**. The sharpest corrected the previous round's own correction: **E8's
+replacement enum was wrong too** — `ClientIntegrity.scheme` is open (*"a validator
+checks only the shapes"*), so the row now uses the presence `subtype`, and carries its
+own history as a warning that the closed-enum default has exceptions enough that every
+instantiation needs checking against its field.
+
+**The single-outcome fixture model is gone.** The suite's own cases — *valid for one
+subject, unverifiable for the other* — never fit one scalar, as the reviewer observed;
+fixtures now constrain named dimensions of a structured result: structural,
+signatures per signer, chain completeness, selection per subject, effectiveness,
+evidentiary flags. Over-strictness is stated as non-conformance alongside
+over-acceptance.
+
+**Generated files now pin both documents.** The design wins on disagreement, so a
+design-only semantic change stales vectors the wire pin alone would call green.
+
+**Coverage added, every value independently re-verified**: a positive peering vector
+(showing optional-field omission live); a complete classical `EndpointRecord` under
+`rhtn/1:endpoints`, opening `records.md` toward one known-answer signature per
+domain-separation context; a counter-jump `SignedLocator` pair and a reissue to a
+numerically smaller series, the two must-accepts that catch contiguity and
+generation-counter misreadings of §2.3; the unknown-extension adoption now fully
+signed, with independent confirmation that mutating the unknown key breaks all
+signatures; five COSE-profile negatives a default library would pass (embedded
+payload, tagged nesting, wrong `external_aad`, extra protected parameter,
+out-of-profile alg); and four Recovery cross-binding negatives, each checked against
+a stated rule.
+
+**Two of the reviewer's proposed Recovery negatives were declined**: self-adoption
+and `prior_key` equal to the new key are stated nowhere, so they went to the author
+as questions rather than into vectors asserting rules the text does not carry. The
+author queue now holds five items; dispositions in `Robot/review-tracking.md`.
