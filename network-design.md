@@ -6793,8 +6793,8 @@ does block.
 
 **Resource interaction is specified on both halves.** The catalog path —
 registration, query and reply, entry lifecycle as local state (`wire-format.md`
-§6) — and the request/response path — §8.2's normative evaluation order and
-refusal behaviour, with the role row consulted as a lookup.
+§6) — and the request/response path — `wire-format.md` §11's normative evaluation
+order and refusal behaviour, with the role row consulted as a lookup.
 
 ---
 
@@ -7008,7 +7008,7 @@ rules that conflict only on malformed input.
 6. Proof-of-presence ceremony and record (§7–7.3). Sequence the co-presence
    channels by availability: optical first since it needs no special hardware,
    then NFC, then UWB.
-7. Verification-by-query and the local face store (§7.2–6.5.3).
+7. Verification-by-query and the local face store (§7.2–7.3).
 8. Recovery adoption (§9), depends on 7, since the local photo archives are
    the recovery substrate.
 9. End-to-end payload encryption (§14.2) — **integrate PQXDH and the Triple
@@ -7018,8 +7018,9 @@ rules that conflict only on malformed input.
 9b. **ICE for the direct payload path** (§14.1.1), with the serving infra node as
     STUN and TURN. The relayed path must work first: direct is an optimisation
     over it, and a substantial minority of connections will never get it.
-10. Resources (§11), object, catalog and abuse reporting specified; the
-    interaction protocol is not (§11.7).
+10. Resources (§11): object, catalog, abuse reporting and the request path are
+    all specified — HTTP/3 over the existing session (`resource-requirements.md`
+    §3, `wire-format.md` §11).
 
 Existing stacks (libp2p, Iroh) can absorb step 1 if the novelty is elsewhere —
 and it is. Prior art worth reading rather than rediscovering: **Secure

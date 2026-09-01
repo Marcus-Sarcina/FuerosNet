@@ -6991,3 +6991,24 @@ deleted"*. Rewriting these to current numbering would make every one of them fal
 
 **Verified**: only `change-log.md` changed; the five design documents are untouched and
 still resolve at zero. No line now carries the same section number twice by accident.
+
+### 2026-08-31 (three stale sites in the two chapters an implementer reads first)
+Found while evaluating readiness for implementation, in §22 and §24 — the
+consolidating chapters, decaying on schedule.
+
+**§24 step 10 contradicted §22.1.** The build order still said *"the interaction
+protocol is not [specified]"* — a statement that was true until 2026-08-16, when the
+protocol closed as HTTP/3 over the existing session and §22.1's blocker list emptied.
+§22.1 was updated that day; the build order was the missed propagation site, and its
+citation had meanwhile migrated onto §11.7, which is Gateways.
+
+**§22.1's request-path citation survived the migration by accident.** It read *"§8.2's
+normative evaluation order"* — old `wire-format.md` §8.2, today's wire §11, where
+`ResourceResponse` declares its evaluation order normative. The bare number escaped
+every checker pass because the design has its own §8.2, presence transactions at the
+network layer. A reference that resolves to the wrong section is invisible to a checker
+that only tests existence. Now cites `wire-format.md` §11 explicitly.
+
+**§24 step 7 carried a pre-migration range end**: *"(§7.2–6.5.3)"*, the old number for
+verification-by-query. The checker missed it because a range's second half carries no
+`§`. Now §7.2–7.3.
