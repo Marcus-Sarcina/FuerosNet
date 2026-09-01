@@ -1,6 +1,6 @@
 # Verifier selection — recomputation
 
-Generated against `wire-format.md` SHA-256 `587cac31f2eade76702761d2e3ae692e3670ce1c6add7ceaafa24ecb3dc35a89` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
+Generated against `wire-format.md` SHA-256 `933eda71a4c639d177955dd578d886c0dde46d8b79514fcdf37c4ef3997b1935` and `network-design.md` SHA-256 `9973a20365dc1832c5b497b872b685d3ebf3ebcb0461299c5528852454dc5084` — the design wins on any disagreement, so a design-only semantic change also stales these vectors. Regenerate after any change to either.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). All inputs are raw byte concatenations hashed with

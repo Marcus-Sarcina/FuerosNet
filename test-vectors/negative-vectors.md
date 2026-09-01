@@ -106,6 +106,7 @@ works, not inputs.
 | T10 | A `Recovery` whose responses carry no `match` | "At least one, and at least one `match`" (§4.1) |
 | T11 | A `Recovery` old-key proof that is `COSE_Sign1`, or a `COSE_Sign` with a single entry | The old identity is hybrid: one logical signer, two entries (§4.1, §3.5) |
 | T12 | An old-key successor statement whose `new_key` ≠ the enclosing adoption's field 1 | Field 1 is "the ONLY successor authorised" (§4.1) — the cross-object binding that stops one observed proof authorising competing successors |
+| T13 | An adoption whose fields 1 and 2 are equal | Self-adoption is the degenerate cycle, and the one a validator sees from the record alone (§4.1, design §6.2.5) |
 
 ## B. Context-dependent — bytes plus external state, structured result
 

@@ -7137,3 +7137,14 @@ a stated rule.
 and `prior_key` equal to the new key are stated nowhere, so they went to the author
 as questions rather than into vectors asserting rules the text does not carry. The
 author queue now holds five items; dispositions in `Robot/review-tracking.md`.
+
+### 2026-08-31 (self-adoption is structurally malformed)
+**Author's ruling.** An adoption whose node and patron are the same identity is
+rejected from the bytes. The framing that makes it belong in `wire-format.md` §4.1:
+a self-adoption is the **degenerate cycle** — the proposed patron *is* the node —
+and it is the one cycle a validator can see from the record alone, where design
+§6.2.5's rule otherwise requires topology state and rejects on positive knowledge
+only. Negative vector T13 added; the vector set regenerated against the new
+specification hash. **The sibling question — whether departure, disavowal, peering
+and series reissue reject the same degenerate pair — is put to the author, not
+assumed.**

@@ -794,6 +794,11 @@ Recovery = {
 }
 ```
 
+**The node and the patron MUST differ** [author, 2026-08-31]. A self-adoption is
+the degenerate cycle — the proposed patron *is* the node — and it is the one cycle a
+validator can see from the record alone, where design §6.2.5's rule otherwise needs
+topology state and rejects on positive knowledge only.
+
 `Recovery` is present on a rotation and absent otherwise. **There are no
 variants of it**: every rotation carries both halves, the old key's signature and a
 prior counterparty's `match` (below).
