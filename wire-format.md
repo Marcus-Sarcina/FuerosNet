@@ -82,12 +82,11 @@ message.** A context is distinct whenever the same key could be asked to sign in
 more than one role; adding a role therefore means adding a tag, and the table below
 is the current enumeration rather than a closed set.
 
-Present encoding: `external_aad` holds the ASCII role tag. *The hash and PRF
-domain tags — `rhtn/1:nonce-commit`, `rhtn/1:verifier-seed`, `rhtn/1:wnonce`
-(§5) — are a separate family: they prefix hash inputs and never appear in an
-`external_aad`. A `VerificationQuery` is hashed, never signed — `query_id` is
+Present encoding: `external_aad` holds the ASCII role tag. *A `VerificationQuery` is hashed, never signed — `query_id` is
 SHA-256 of its canonical form (§4.5), and what gets signed is the resulting id,
-under `rhtn/1:consent`.*
+under `rhtn/1:consent`. The `rhtn/1:nonce-commit`, `rhtn/1:verifier-seed` and
+`rhtn/1:wnonce` hash tags were retired 2026-09-01 with deterministic selection
+and are not reused.*
 
 **Four hashes carry no tag, and their safety is structural rather than tagged**:
 `txid` (a body map, whose first key is always 0), `keyhash` (the two-element
@@ -551,8 +550,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   reader's time, which is why it can be structural where §3.3's timestamp rules
   cannot. 24 hours is far beyond any honest finalization — an unanswered slot is simply
   absent from the record (§5.5), so a ceremony never waits on an absent
-  verifier — and reuses the seed window's figure rather than introducing another
-  (design §21).
+  verifier — and 24 hours is a figure the design already carries rather than a new
+  one (design §21).
 
   **This bounds the gap, not `started_at` itself**, and the two need different
   mechanisms. A body claiming `started_at` in 2100 with `finalized_at` an hour later
@@ -561,11 +560,6 @@ Rules a validator checks from the record alone. All were previously unstated.
   contradicts (design §8.1.2), which no validator can check. **Structural here,
   client-side there** — the difference is that this rule compares two values the
   record already carries, and the other needs a clock the reader does not have.
-- **Key 7 MUST equal `floor(started_at / 86400)`; a record where it does not is
-  malformed.** Both values are body fields, so the check needs no clock — the same
-  class as the `finalized_at` bounds above. The seed reads key 7 (§4.5.2), so a
-  record whose ordinal disagrees with its own `started_at` is lying about which
-  window seeded its verifier sample.
 - **A presence record on the wire is always final.** A ceremony the participants
   abandon is local state and is not published; `finalized_at` records when
   assembly closed, and **the verifier sample does not gate it** — unanswered
@@ -637,9 +631,9 @@ non-presence transaction bridge backward through the chain and break both.
 **Without that bound, backdating collapses verification.** `started_at` determines
 the 730-day window, so *n* — and therefore the selection threshold — is computed
 relative to a value the proposer chooses. **Claiming a `started_at` earlier than
-one's own history yields n = 0 and a required verifier count of zero.** The same
-field derives `window_ordinal`, so varying the claimed day also yields fresh
-verifier and witness samples without waiting for one.
+one's own history yields n = 0 and a required verifier count of zero** — and
+shifts the qualification window itself (§5.3), so the claimed day decides which
+records may be counted at all.
 
 **The back-pointer is what makes this checkable.** It is inside the signature and
 names a record with its own `finalized_at`, so a subject cannot claim a ceremony
@@ -649,10 +643,11 @@ with no global time.
 
 **It is a floor, and not a rate limit.** Everything at or after the predecessor's
 effective time is admissible, including days in the future, so the bound closes
-backdating without closing the reroll it is sometimes read as closing. A signer's
-grinding budget is the span from its last committed record to the day it is willing
-to claim, and design §8.1.2 rests the remaining limit on witnesses declining a day
-their own clocks contradict — not on anything checkable here.
+backdating without licensing the claimed day: what limits an implausible
+`started_at` is a witness declining to attest a ceremony dated far from its own
+clock (design §8.1.2) — not anything checkable here. *(With deterministic
+selection retired, there is no sample to reroll; the claimed day now decides only
+the qualification window, §5.3.)*
 
 ### 3.4 What structural verification decides, and what it does not
 
@@ -1194,7 +1189,8 @@ Field-for-field per design §8.1.
                        ;   §13.2). In the body, not disclosable: structurally
                        ;   load-bearing, and a formation record's absent keys 4
                        ;   and 5 announce it regardless
-  7: uint,             ; seed window ordinal = floor(started_at / 86400)
+  ; key 7 (the seed-window ordinal) was RETIRED 2026-09-01 with deterministic
+  ; selection; the number is not reused
   8: bstr .size 32     ; disclosure root (§4.5.1) — commits to the seven
                        ;   disclosable fields (§4.5.1's label set): proximity,
                        ;   capture, location, and each Participant's retention
@@ -1264,14 +1260,14 @@ Witness = {
                        ;   ceremony's cross-nomination claim (design §7.1),
                        ;   not checkable from the record; evaluation is the
                        ;   reader's
-  3: uint,             ; attestation bitfield:
+  3: uint              ; attestation bitfield:
                        ;   bit 0 protocol_ran
                        ;   bit 1 both_responsive
                        ;   bit 2 latency_bound
                        ;   bits 3+ reserved; a decoder retains them and
                        ;   interprets only 0-2
-  4: bstr .size 32,    ; nonce commitment, published BEFORE capture
-  5: bstr .size 32     ; revealed nonce, published AFTER capture (design §8.1.2)
+  ; fields 4-5 (nonce commitment and reveal) were RETIRED 2026-09-01 with
+  ; deterministic selection; the numbers are not reused
 }
 
 VerificationQuery = {
@@ -1317,6 +1313,10 @@ VerifierResponse = {
                        ; A verifier MUST reject a query lacking it, and MUST reject
                        ; one whose fuzzed profile differs from another countersigned
                        ; under the same ceremony pre-commitment
+  10: uint,            ; selection basis, the SELECTOR's claim (§5.5):
+                       ;   0 known (met, or in a trust horizon of the selector)
+                       ;   1 reachable (one further edge, §5.1 tiers 3-4)
+                       ;   2 discretionary fill
   8: ? keyhash,        ; PRIOR identity being matched against. REQUIRED when this
                        ; response appears inside a Recovery block (§4.1), absent
                        ; otherwise. **MUST equal that Recovery's `prior_key`** —
@@ -1326,8 +1326,8 @@ VerifierResponse = {
                        ; names the old identity it is attesting continuity with,
                        ; and the assertion the recovery rests on is unsigned
   9: COSE_Sign1 / COSE_Sign
-                       ; BY THE VERIFIER. Payload: canonical CBOR of fields 1-8 of
-                       ; THIS map. External_aad = "rhtn/1:verifier".
+                       ; BY THE VERIFIER. Payload: canonical CBOR of fields 1-8
+                       ; and 10 of THIS map. External_aad = "rhtn/1:verifier".
                        ; **COSE_Sign1, classical, in a presence record.**
                        ; **COSE_Sign, hybrid, inside a Recovery block** (§4.1) —
                        ; untagged, detached, one Ed25519 and one ML-DSA-65 entry.
@@ -1488,8 +1488,8 @@ which reads adoptions and no presence record at all, and combines the two
 | Ceremony, at creation (design §7.1) | **All.** Both parties construct the body |
 | Witness signing (design §7.1) | **Location only**, which the witness corroborates |
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
-| Verifier-selection recomputation (§5) | **None.** Seed inputs are body fields 3, 4, 7 |
-| Selected-slot accounting (§5.5) | **None.** Counts field 5 against the recomputed selection |
+| Verifier selection (§5) | **None.** Selection is the selector's judgment over the handed bundle; nothing in the record replays it |
+| Response accounting (§5.5) | **None.** Counts and reads field 5 |
 | Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
@@ -1645,307 +1645,152 @@ equivocation everywhere: made visible rather than prevented.
 of which a reissue touches, so cached locators keep working and no correspondent has to
 be told. What changes is only which records rank against which.
 
-## 5. Verifier selection — recomputation
+## 5. Verifier selection — recognition, not recomputation
 
-**Every hash input in this chapter is the raw concatenation of the named byte
-strings — no CBOR framing.** That is safe here because every component after the
-domain tag is fixed-length, so the concatenation is injective; it would not be a
-safe convention for variable-length inputs, and nothing outside this chapter uses
-it.
+**Selection is by recognition, and the deterministic machinery is retired**
+[author, 2026-09-01]. Two facts killed it. The candidate pool is a bundle the
+subject curates (§5.4), and a deterministic pick over an adversary-populated
+list is the adversary's pick with extra steps. And the determinism never served
+the parties present — it existed to prove the pick's regularity to a distant
+audience, who could only have checked it against the subject's full history as
+of the ceremony, which the bundle model and the privacy posture both withhold.
+The evaluation principle that was already true everywhere else (design §16.1)
+now governs selection too: **what protects a party is recognising who answered,
+not auditing how they were chosen.**
 
-**Previously unspecified, and the record did not carry the inputs.** design §8.1.2
-requires that selection be recomputable by any party holding the subject's history,
-so a missing verifier is
-visible, but the nonce commitments and reveals it depends on were nowhere in the
-presence record, so the anti-suppression property could not be checked at all.
+### 5.1 Who selects, and how
 
-### 5.1 Nonce commitment
+**Each participant selects the other's verifiers** — the party who performs a
+selection is never the party it is about — from the counterparty's handed
+bundle (§5.4), by the selector's own knowledge, in descending order of
+trustworthiness:
 
-```
-commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)
-```
+1. **users the selector has met** — a PoP of their own with the candidate;
+2. **users in any of the selector's trust horizons** — the two-edge walk of
+   any subnet the selector belongs to (design §2);
+3. **users someone in any of the selector's trust horizons has met**;
+4. **users in the trust horizons of users the selector has met** — to the
+   extent foreign topology is visible at all, which it usually is not.
 
-The nonce is exactly 32 bytes. Domain separation and the witness identity are
-included so a commitment cannot be replayed by a different witness.
+Tiers 3 and 4 are one further edge over the graph of meetings and
+horizon-mates: **a two-edge walk is the halting condition**, mirroring the
+trust horizon itself. Reachability is the **selector's own judgment over their
+own knowledge** — computed locally, provable to nobody, owed to nobody
+(design §1.1).
 
-A validator MUST recompute every commitment from the revealed nonce and reject the
-record on any mismatch.
+**Where the initial bundles surface no common acquaintance, the parties go
+fishing**: either may propose further candidates from their own history so the
+other can test them against tiers 1–4 — an exchange over the ceremony's direct
+channel, carried by no wire object and recorded nowhere. **After common
+acquaintances are exhausted, the selector fills the remaining slots at its own
+discretion** from the counterparty's pool; responses from strangers are weak
+evidence and are marked as such (§5.5).
 
-### 5.2 Recomputability invariant — binding on any future change to seeding
-
-**Each participant selects the other's verifiers.** A queries B's prior
-counterparties to establish that B is B, and B queries A's. So the party who
-*performs* a selection is never the party the selection is *about*.
-
-**The subject of a selection MUST be able to recompute it from the presence record
-plus their own history, and from nothing else.** State it from the subject's side,
-because the subject is the party with the interest: **B must be able to demonstrate
-that B's verification was honestly conducted.** If B cannot recompute the selection
-A performed, B can never clear themselves, the record is immutable, and no later
-action fixes it.
-
-Two consequences, both normative:
-
-- **The seed MUST draw only on values carried in the record.** Not on the
-  counterparty's archive, not on either party's chain head, not on network state,
-  device state, or anything else about the moment of the ceremony that a validator
-  years later cannot reproduce.
-- **The candidate set MUST come only from the subject's own history**, never from
-  the counterparty's.
-
-**Each party MUST verify the other's selection before signing.** If A selects
-B's verifiers off-seed and B signs regardless, **B is left holding a record that
-fails recomputation permanently**. B cannot repair it afterwards. This check
-protects the signer *against their counterparty*, which is the opposite direction
-from the rest of the ceremony's checks — every other one guards against outsiders
-or against the pair colluding. A client that signs without performing it exposes
-its own user.
-
-**Why this needs stating rather than assuming.** The construction below satisfies
-it, but nothing about the construction announces the requirement. Adding, say, a
-hash of the counterparty's chain head to the seed for extra entropy would leave it
-deterministic, unpredictable and ungrindable — every property design §8.1.2 asks for —
-while making selection **silently unverifiable** by anyone who does not hold the
-counterparty's archive. The failure would be invisible in testing, because a
-developer with both archives sees everything work.
-
-#### 5.2.1 Witness nonce derivation — required for the anti-grinding property
-
-**A witness derives its nonce deterministically from the participant pair and the
-window**, not freshly per attempt:
-
-```
-nonce = HMAC-SHA-256(witness_secret,
-                     "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)
-```
-
-`witness_secret` is the witness's own long-lived secret and never leaves it. The
-ordinal is 8 bytes big-endian, matching §5.3's seed layout. **The construction is
-HMAC-SHA-256, named rather than left open** — nothing interoperates on the value,
-so the choice costs nothing, and naming it makes a client's derivation testable
-and closes the one real risk: an honest implementation reaching for something
-that is not actually a PRF and silently losing the stability the property rests
-on. Like every client-side rule it is unenforceable from the wire (Appendix A);
-RFC 6979 and Ed25519 made the same move for the same reason.
-
-**`window_ordinal` is an input, so an honest witness following this rule still emits
-a fresh nonce for a fabricated day.** Stability holds across attempts *within* an
-ordinal and nowhere else, and the ordinal is the proposer's claim (§5.3.1). The
-derivation cannot distinguish a retry from a re-dated first attempt; only the
-witness's own clock can, before it commits (design §8.1.2).
-
-**Without this the anti-grinding property does not exist.** §5.2 claims an honest
-retry within the window reproduces the same verifier sample while an aborting
-attacker gets one fresh sample per ordinal. Both depend on the nonce being
-stable across attempts, a witness generating fresh randomness each time hands a
-grinding participant a new sample per abort, which is the attack the commit-reveal
-was introduced to close.
-
-**A validator cannot check this from a record**, and no rule makes it checkable.
-The property rests on the witnesses being honest, and **nothing supplies that** —
-cross-nomination does a different job. It makes the sample *representative*: a
-participant does not choose their own witnesses, so in a balanced set half the
-witnesses are each party's own nominees and are uncurated by the counterparty
-(design §7.1). That is not honesty, and it is not a Sybil defence, which no
-topology rule can be (design §17.2).
-
-**What that leaves for grinding.** Against a **participant** seeking a favourable
-sample it works: the participant must corrupt its counterparty's nominees, having
-none of its own. Against a **witness grinding on its own behalf** it does nothing,
-and the sole-witness case is where that bites — the seed's only input the
-participants do not fix is the witness nonces (§5.3), so one witness, or a set
-under one actor, chooses the seed outright by committing to a nonce whose sample it
-has already computed. **Two or more independent witnesses close this with no
-further rule**: every commitment is published before capture and a commitment
-reveals nothing about its nonce, so no witness can compute the final seed before
-binding its own. Whether the set is independent is what the `nominated_by` split
-(§3.2) lets a participant judge before signing.
-
-### 5.3 Seed
-
-```
-seed = SHA-256(
-    "rhtn/1:verifier-seed"
- || min(participant_a, participant_b)      ; 32 bytes, bytewise comparison
- || max(participant_a, participant_b)      ; 32 bytes
- || window_ordinal                          ; 8 bytes, big-endian
- || for each witness in ascending keyhash order:
-        witness_keyhash || revealed_nonce   ; 64 bytes each
-)
-```
-
-**Participant order is canonicalised** so that which party is listed first cannot
-become another grinding variable.
-
-**The window ordinal is `floor(unix_seconds / 86400)`.** A 24-hour window, epoch
-aligned. This fills the parameter design §20 marked UNSET. Long is safe here: an
-honest retry inside the window reproduces the *same* sample, which is exactly what
-retry should do.
-
-**The seconds are `started_at`'s, so the window is claimed and not elapsed** (§5.3.1).
-An attacker aborting to reroll therefore gets one fresh sample per *admissible*
-ordinal rather than one per day, and §3.3's monotonicity bounds admissibility only
-from below — the budget is the span between the signer's last committed record and
-the day it claims. Nothing in a record shows which it was. What limits it is a
-witness declining to commit a nonce against a day far from its own clock, which no
-validator can check and which design §8.1.2 states as a client commitment.
-
-#### 5.3.1 The window, the horizon, and who is eligible
-
-Six definitions the selection rule depends on and did not carry.
-
-- **`window_ordinal` is derived from `started_at`**, not `finalized_at`. The seed
-  must be fixed before capture completes, or a participant could steer it by
-  controlling when the record finalises.
-- **"Two years" is 730 days**, measured back from the record's `started_at`. Not a
-  calendar interval — calendar arithmetic differs across implementations and
-  timezones for no benefit here.
-- **The lower bound saturates at zero.** Timestamps are unsigned; for a record
-  less than 730 days after the epoch the subtraction would underflow, and the
-  window simply starts at zero. Irrelevant in practice, and cheaper to state than
-  to leave each implementation to discover.
-- **The window is exclusive at both ends** [author, 2026-09-01]: a prior record
-  counts if `started_at - 730d < its finalized_at < started_at` — **previously
-  completed ceremonies only**, so a record finalising at this ceremony's own
-  start instant is out, as is one finalising exactly 730 days earlier. The prose
-  and the formula must agree at the boundary instant, or two implementations
-  resolve it differently.
-- **The candidate horizon is the same window.** A counterparty met more than 730
-  days ago is not a candidate, even though the meeting remains in the archive
-  permanently — *n* and the candidate set are drawn from the same interval, and
-  drawing them from different ones would let the threshold exceed the pool.
-- **The current counterparty is never a candidate for their own verification.**
-  They are the party being established; asking them is not evidence.
-- **Formation records count**, both toward *n* and as candidates. They record real
-  meetings; what they lack is corroboration, which is a weight question for policy
-  (design §16.1), not a structural one.
-
-
-### 5.4 Candidate set and sampling
-
-***n* counts the qualifying presence transactions in the bundle the subject hands
-over, and the bundle is the subject's to curate** [author, 2026-09-01]: any
-presence records they choose, **from any of their series, with no intervening
-transactions exposed and no chaining between them**. A bundle is a set of
-individually verifiable records, not a stretch of archive — nobody walks another
-party's archive (design §8.1.2), and nothing requires the handed records to
-connect.
-
-**A record qualifies when it verifies alone**: canonical, its content address
-checks, its signatures verify, it names the subject as one of the two
-participants, and its `finalized_at` falls inside the window (§5.3.1). **A record
-the subject signed only as a witness does not qualify** — it names them in field
-4, not field 3, and a witnessed ceremony's participants met each other, not the
-witness. Duplicates count once, by `txid`. A record that fails its checks
-contributes nothing — with no completeness to protect, it is simply not in the
-pool, rather than making anything incomplete. The candidate set follows: a
-candidate is the *other participant* of a counted record.
-
-**Understatement is free, and self-defeating rather than dangerous.** A subject
-who hands fewer records gets a smaller *n*, a smaller sample, and a record that
-advertises thinner corroboration — §5.5's absent-slot posture one layer up.
-Overstatement is impossible, since every record must verify. What protects the
-selector is **recognition, not completeness** (design §8.1.2): a pool holding
-nobody they know is worth what unrecognised history is worth.
-
-**What pins the bundle is the record's own selection, not a chain.** Each party
-verifies the other's selection before signing (design §8.1.2), and afterwards the
-responder slots in field 5 are the durable commitment: recomputing the selection
-over any *other* bundle fails to reproduce them. An evaluator handed the
-ceremony's bundle confirms that the selection it derives equals the record's
-slots; handed anything else, the recomputation visibly fails — which is all a
-later party can check, and all they need to.
-
-**Responses have no canonical array order.** Deterministic CBOR
-orders map keys, not array elements. A validator evaluates field 5 as a set of
-`(subject, verifier)` slots and MUST NOT reject an order; different orders are
-different signed bodies and different txids, all valid.
-
-**The root of that traversal is the committed back-pointer, not the subject's
-current head.** The record's key 0 fixes each signer's predecessor at signing
-time, and that is the only history the record itself attests to. **Counting from a
-current head lets a subject backfill**: append records after the ceremony, present
-the enlarged archive to a later evaluator, and *n* — and therefore the threshold the
-record was supposed to meet — comes out different from what any witness saw. The
-committed back-pointer is inside the signature and cannot move.
-
-**Candidates are distinct prior counterparties, deduplicated by keyhash.** A
-subject who met the same person twenty times has one candidate, not twenty — the
-threshold counts *transactions*, the candidate set counts *people*, and the two
-must not be conflated.
+### 5.2 The reasonableness criterion
 
 ```
 required(subject) = min( floor(n / 2), 10, |candidates| )
 ```
 
-`floor`, explicitly, an unstated rounding differs by one required response at
-every odd *n*. **The `|candidates|` term is necessary**: without it a subject with
-twenty meetings against one counterparty needs ten verifiers from a pool of one.
+`floor`, explicitly — an unstated rounding differs by one at every odd *n*. The
+`|candidates|` term is necessary: without it a subject with twenty meetings
+against one counterparty needs ten verifiers from a pool of one.
 
-Sampling is by hash rank:
+***n* is entirely the subject's claim** — it counts a bundle the subject
+curates — so the formula is a **reasonableness criterion, not a security
+check**: it sizes how many verifiers the selector should seek, and an evaluator
+comparing a record's response count against it learns whether the ceremony was
+diligent, never whether the subject's history is complete. Understating is
+free and self-defeating (§5.4); no credence beyond that is warranted or
+intended.
 
-```
-rank(c) = SHA-256(seed || subject || c)
-```
+### 5.3 Qualification and the window
 
-Candidates are ordered by ascending `rank`, ties broken by ascending keyhash, and
-the first `required(subject)` are selected. **Exactly that many are queried**, and each selected slot is
-either answered in field 5 or **visibly absent** against the recomputed
-selection — which is what makes *a missing verifier is visible* precise.
+A record **qualifies** for *n* and the candidate pool when it verifies alone —
+canonical, its content address checks, its signatures verify — names the
+subject as one of the two participants, and its `finalized_at` falls inside
+the window. Precisely:
 
-### 5.5 The selected slots, and what the record carries
+- **"Two years" is 730 days**, measured back from the record's `started_at`.
+  Not a calendar interval — calendar arithmetic differs across implementations
+  and timezones for no benefit here.
+- **The window is exclusive at both ends** [author, 2026-09-01]: a prior record
+  counts if `started_at - 730d < its finalized_at < started_at` — **previously
+  completed ceremonies only**, so a record finalising at this ceremony's own
+  start instant is out, as is one finalising exactly 730 days earlier.
+- **The lower bound saturates at zero.** Timestamps are unsigned; for a record
+  less than 730 days after the epoch the subtraction would underflow.
+- **A record the subject signed only as a witness does not qualify** — it names
+  them in field 4, not field 3, and a witnessed ceremony's participants met
+  each other, not the witness.
+- **Formation records count**, both toward *n* and as candidates. They record
+  real meetings; what they lack is corroboration, which is a weight question
+  for policy (design §16.1), not a structural one.
+- **The current counterparty is never a candidate for their own verification.**
+  They are the party being established; asking them is not evidence.
+- **Duplicates count once, by `txid`; candidates are distinct prior
+  counterparties, deduplicated by keyhash.** The count counts transactions,
+  the pool counts people, and the two must not be conflated.
 
-**The threshold sizes the sample; it does not gate finalization** [author,
-2026-09-01]. `required(subject)` verifiers are selected and queried; the record
-carries whatever structurally valid responses arrived by assembly, and **a
-selected verifier that did not answer is an absent slot** — visible to any
-evaluator recomputing the selection, since the selected set is deterministic and
-each member is either answered in field 5 or missing from it.
+### 5.4 The candidate pool is the curated bundle
 
-**There is no `pending` on the wire.** A reachable verifier that cannot evaluate
-answers `unavailable`, under its own signature; an unreachable one answers
-nothing, and **absence is the encoding** — nobody signs on an absent verifier's
-behalf, and its patron holds no authority to answer for it. A reply that misses
-the ceremony resolves **privately to the participants** and is never
+**The bundle is the subject's to curate** [author, 2026-09-01]: any presence
+records they choose, **from any of their series, with no intervening
+transactions exposed and no chaining between them**. A bundle is a set of
+individually verifiable records, not a stretch of archive — nobody walks
+another party's archive (design §8.1.2), and nothing requires the handed
+records to connect. A record that fails its checks contributes nothing; with
+no completeness to protect, it is simply not in the pool.
+
+**Understatement is free, and self-defeating rather than dangerous.** A subject
+who hands fewer records gets a smaller *n*, a smaller sample, and a record that
+advertises thinner corroboration. Overstatement is impossible, since every
+record must verify. What protects the selector is **recognition, not
+completeness** (design §8.1.2): a pool holding nobody they know is worth what
+unrecognised history is worth — and a curated pool of strangers announces
+itself to the one party it is aimed at.
+
+### 5.5 What the record carries
+
+**The record carries the responses gathered, and nothing defines which slots
+"should" exist.** An evaluator weighs the response count against §5.2's
+criterion — knowing *n* is the subject's claim — and weighs each responder by
+their own recognition of them, which is the same act §16.1 asks of every
+evaluator everywhere.
+
+**Structural rules that remain, all checkable from the record and its
+queries**:
+
+- **A response is structurally valid with respect to its query when its
+  `query_id` matches one the subject countersigned and its `subject` names one
+  of the two participants.** There is no selected-set membership to check —
+  no set exists apart from the selector's judgment.
+- **Duplicate responses from one verifier for one subject are malformed**, so a
+  single verifier cannot occupy multiple slots. One identity answering once
+  for each participant is two slots and valid.
+- **Each response carries the selector's claim of its basis** — field 10:
+  `0 known` (tier 1 or 2), `1 reachable` (tier 3 or 4), `2 discretionary
+  fill`. The claim is the selector's, recorded because an evaluator reading
+  the record cannot reconstruct the selector's acquaintance graph; like
+  `nominated_by`, the schema records the claim and evaluation is the
+  reader's.
+- **Responses that are present count content-blind** — match, no-match,
+  inconclusive, unavailable each fill a slot; content is evidence weighed by
+  policy (design §15.1), never an input to structural validity.
+
+**There is no `pending` on the wire.** A reachable verifier that cannot
+evaluate answers `unavailable`, under its own signature; an unreachable one
+answers nothing — nobody signs on an absent verifier's behalf. A reply that
+misses the ceremony resolves **privately to the participants** and is never
 retro-inserted: the record is immutable, and a responder who wants its late
 answer durable has §7.4's `LateResponse`.
 
-**Responses that are present count content-blind.** Match, no-match,
-inconclusive, unavailable — each fills its slot; content is evidence weighed by
-policy (design §15.1), never an input to structural validity. A record with most
-slots absent or `unavailable` is **visibly weak**, which is the correct place
-for that weakness to be handled — and it is why an attacker who can make
-verifiers unreachable gains no block on finalization: what suppression produces
-is not a stuck ceremony but a record that advertises its own thinness.
-
-**Duplicate responses from one verifier for one subject are malformed**, so a
-single verifier cannot occupy multiple slots.
-
-**Validation is per-subject, and a validator may hold one history and not the
-other.** Structural and cryptographic checks cover the whole record; the
-selection and threshold checks are computed **per participant** against that
-participant's handed bundle. A holder with one subject's bundle can verify that
-half and must report the other as **unverifiable** — which is neither valid nor invalid, and
-collapsing the two lets a caller overclaim what it checked (§4.1).
-
 **`inconclusive` covers a failure to decrypt, and `no-match` never does.** A
-truncated or unauthenticated sealed capture, or an absent capture key, tells the
-verifier nothing about the subject. **Reporting it as `no-match` would turn a
-corrupted store into adverse evidence**, which is the one outcome a storage fault
-must not produce. `unavailable` is for having no capture at all; `inconclusive` is
-for having one it could not read.
-
-**A response is structurally valid with respect to its query when its `query_id`
-matches one the subject countersigned, its `subject` names one of the two
-participants, and its `verifier` is in the selected set for that subject.**
-
-**A response failing any of those makes the record malformed** where the validator
-holds the bundle that determines the selected set, not merely unweighted. The
-same treatment as duplicates, and for the same reason: "present but ignored" leaves
-room between the 32-entry array bound and the 20 legitimate responses for a
-participant to pad the record with material nobody asked for. A validator lacking
-the subject's bundle cannot make this determination and treats the responses it
-cannot place as unverifiable rather than invalid.
+truncated or unauthenticated sealed capture, or an absent capture key, tells
+the verifier nothing about the subject. **Reporting it as `no-match` would turn
+a corrupted store into adverse evidence**, which is the one outcome a storage
+fault must not produce. `unavailable` is for having no capture at all;
+`inconclusive` is for having one it could not read.
 
 ### 5.6 Consent is signed over the query id
 
@@ -1977,24 +1822,17 @@ previously carry.
 
 ### 5.7 Who can verify what, the property is holder-relative
 
-**Anti-suppression is per-subject, and an evaluator can check only the subjects
-whose history it holds.**
+**Validation is per-subject, and an evaluator can weigh only what it can
+recognise.** A record's two halves are independent: an evaluator who knows
+some of subject A's responders and none of B's has learned something about A
+and nothing about B, and reports the two separately rather than collapsing
+them (§4.1's valid-versus-unverifiable discipline).
 
-To check that subject A's verifier set is complete, an evaluator needs A's
-candidate set, which comes from A's archive. An evaluator holding A's history but
-not B's can verify A's half of a record and **not** B's.
-
-**This is the right scope, not a shortfall.** An evaluator assessing A cares
-whether *A* suppressed verifiers; B's verification is evidence about B. A record's
-two halves are independently checkable by different parties, and **nobody verifies
-both unless they hold both archives.** Which, given that archives are presented
-selectively to parties one is dealing with (design §16.7), is uncommon.
-
-**design §8.1.2 states the same thing.** Recomputation is available to any party
-**holding that subject's history**, and it notes that *"recomputable by any third
-party"* would be stronger than achievable. A stranger holding only the record can
-verify signatures, structure and the seed, but cannot determine which verifiers
-*should* have appeared.
+**A stranger holding only the record can verify signatures, structure, consent
+and the bindings of §5.5 — and can weigh nothing**, because weight comes from
+recognising responders (design §16.1), which no distant audience can do. That
+is not a shortfall; it is the design's statement of who presence evidence is
+*for*: the people connected enough to recognise the people in it.
 
 ## 6. Resource registration, the catalog, and abuse reports
 

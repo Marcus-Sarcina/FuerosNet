@@ -18,8 +18,7 @@ every claim it can reach:
     and the wrong-signer negative (must NOT verify under the named subject);
   - the extension-coverage mutations: E10 (top-level and nested) and E13 must
     break their signatures;
-  - the verifier-selection arithmetic: nonces (HMAC per §5.2.1), commitments,
-    seed, ranks, selection, required() table rows, window-boundary table;
+  - the reasonableness arithmetic: required() table rows against the formula;
   - the formation record's structural claims (R8 genesis form, R14 ordinal).
 
 Exit status 0 only if every check passes.
@@ -182,7 +181,7 @@ SCHEMAS = {  # type: (required {field: predicate}, signer-role fields)
          5: lambda v: isinstance(v, int)}, (1, 2)),
     5: ({1: lambda v: isinstance(v, int), 2: lambda v: isinstance(v, int),
          3: lambda v: isinstance(v, list) and len(v) == 2,
-         6: lambda v: v in (0, 1), 7: lambda v: isinstance(v, int),
+         6: lambda v: v in (0, 1),
          8: is_h32}, None),  # signer set is dynamic: participants + witnesses
 }
 def validate_body(t, obj):
@@ -350,27 +349,6 @@ for m in re.finditer(r'\*\*(Fully revealed|Partial|Minimal)\*\*.*?```\n([0-9a-f\
         pres_ok += 1
 check(pres_ok == 3, 'all three presentations recompute the root against the envelope body')
 v = read('verifier-selection.md')
-rows = re.findall(r'\| (w\d) \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|', v)
-pa, pb = sorted([bytes.fromhex(KH['alice']), bytes.fromhex(KH['carol'])])
-ordinal = int(re.search(r'86400\) = (\d+)', v).group(1))
-good = True
-for name, sec, nonce, comm in rows:
-    n2 = hmac.new(bytes.fromhex(sec), b'rhtn/1:wnonce' + pa + pb + ordinal.to_bytes(8, 'big'),
-                  hashlib.sha256).digest()
-    good &= (n2.hex() == nonce)
-    good &= (H(b'rhtn/1:nonce-commit' + bytes.fromhex(KH[name]) + n2).hex() == comm)
-check(good, 'nonces and commitments re-derived per §5.2.1/§5.1')
-ws = sorted(['w1', 'w2', 'w3'], key=lambda n: KH[n])
-pre = b'rhtn/1:verifier-seed' + pa + pb + ordinal.to_bytes(8, 'big')
-for n in ws:
-    pre += bytes.fromhex(KH[n]) + bytes.fromhex([r[2] for r in rows if r[0] == n][0])
-seed = H(pre)
-check(seed.hex() == re.search(r'seed: `([0-9a-f]{64})`', v).group(1), 'seed re-derived per §5.3')
-ranks = {c: H(seed + bytes.fromhex(KH['alice']) + bytes.fromhex(KH[c])).hex()
-         for c in ['c1', 'c2', 'c3', 'c4', 'c5']}
-check(all(re.search(rf'\| {c} \| `{ranks[c]}` \|', v) for c in ranks), 'ranks re-derived per §5.4')
-sel = sorted(ranks, key=lambda c: (ranks[c], KH[c]))[:3]
-check(f"selected: {', '.join(sel)}" in v, 'selection: first 3 by ascending rank')
 good = True
 for n, c, r in re.findall(r'\| (\d+) \| (\d+) \| (\d+) \|', v):
     good &= (min(int(n) // 2, 10, int(c)) == int(r))
@@ -383,7 +361,7 @@ p0, p1 = obj[3][0][1], obj[3][1][1]
 check(4 not in obj and 5 not in obj and obj[6] == 1, 'formation: keys 4/5 absent, subtype 1')
 check(obj[0] == [[H(bytes.fromhex(p0)).hex()], [H(bytes.fromhex(p1)).hex()]],
       'formation R8: key 0 is exactly the genesis value per signer')
-check(obj[7] == obj[1] // 86400, 'formation R14: ordinal equals floor(started_at/86400)')
+check(7 not in obj, 'formation: retired key 7 absent')
 
 print()
 if FAILURES:

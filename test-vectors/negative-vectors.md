@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `52cd1de9c3e3d7ac0a8b6e34c9e97da5a3401e0d735790c7a9fed0fac6ddee4a` · network-design.md `76786811432739e58f1389bf947ffa697f9490d7725645e275a620791f7dc77e`
+**Pinned**: wire-format.md `5b007a7bc61cb1d6575f15b217ce85984b3f28d152deec4a4d3ac3f5ee1d4c1c` · network-design.md `230b10b564f25197489b805dc795ea239e577b0a166c3304dd0cf1841b9fd579`
 
 ## The result model is structured, not a single status
 
@@ -19,7 +19,7 @@ it names:
 | `structural` | valid · **malformed** | `wire-format.md` §1, §3.2 |
 | `signatures[signer, alg]` | verified · **failed** · unverifiable(key) — per signer **and algorithm**; a bad signature and a missing key are different outcomes, and E10 needs the first | §3.4, §3.5 |
 | `chain` | complete · **incomplete** — an unfetchable predecessor is a fact, not an error | §3.4 |
-| `selection[subject]` | verified · unverifiable — **per subject**; verifier-selection recomputation only | §5.5 |
+| `weight[subject]` | the evaluator's own recognition of that subject's responders — never a validation verdict, and never recomputable by a distant party (§5.7). *Replaced `selection[subject]` when deterministic selection was retired, 2026-09-01* | §5.5, §5.7 |
 | `checks[name]` | pass · fail · unverifiable(reason) — per named rule **and per reference evaluation**: the `strongest`-channel check when revealed; `checks[proof_of_presence]` and every other dereference (§3.4's evaluation step) — `fail` when the referenced object does not establish what the citing object claims, `unverifiable(unfetchable)` when it cannot be fetched. `effective` stays topology/grant evaluation; `chain` stays predecessor history — neither absorbs reference evaluation, by decision (seventh review) | §3.2, §3.4, §4.5.1 |
 | `effective` | yes · **no** — structurally valid may still grant nothing for this evaluator | §6.8 |
 | `evidentiary` | free-form flags (fork-detected, …) — findings against history, not against the object | §3.2 |
@@ -127,7 +127,7 @@ works, not inputs.
 | R8 | A formation record whose key 0 is not exactly `[SHA-256(signer keyhash)]` per signer | Structural genesis rule |
 | R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
 | R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
-| R14 | A record whose key 7 ≠ `floor(started_at / 86400)` | §3.2: both are body fields, so the check needs no clock; a mismatched ordinal lies about which window seeded the verifier sample |
+| R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. A record carrying key 7 is now an unknown-extension key, preserved under §1's rules |
 | R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | **Revealed and violated → `structural = malformed`** — it is a structural rule like any other, and §3.2 now says so explicitly. Withheld → `checks[strongest] = unverifiable(withheld)`, never valid and never malformed. *An earlier revision of this row said the revealed case was a failed check rather than malformed — the sixth review caught the drift* |
 
 ### Transaction and record bindings (§4)
@@ -165,7 +165,8 @@ photo comparison without its template version is unverifiable as evidence:
 | T20 | `result` 3 (`unavailable`) with `basis` present | MUST be absent — no truthful value existed. *There is no result 4: `pending` left the enum on 2026-09-01 — an unreachable verifier's slot is absent, and a response claiming result 4 is an unknown enum value, rejected per E8's rule* |
 | T21 | `basis` 0 or 2 with `template_version` absent | REQUIRED for photo bases |
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
-| T23 | A structurally valid response from a verifier outside the recomputed selection | Context fixture: the selection is deterministic (§5.4) and exactly the selected are queried — an unselected response is a slot nothing allocated |
+| T23 | ~~response from an unselected verifier~~ | **Retired 2026-09-01**: no selected set exists apart from the selector's judgment (§5.5); any consenting-queried verifier's response is structurally fine. The id is not reused |
+| T27 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–2 | §5.5: required, closed enumeration — the selector's claim of known / reachable / discretionary |
 | T25 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T26 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
 
@@ -179,14 +180,14 @@ photo comparison without its template version is unverifiable as evidence:
 | R9b | The same record | No history held | `structural = valid` — a no-history validator cannot tell (§3.2) |
 | R10 | `started_at` precedes the committed predecessor's effective time | Predecessor supplied and verified | `structural = malformed` (§3.3) |
 | R10b | The same record | Predecessor unfetchable | `chain = incomplete` — not malformed (§3.4) |
-| V1 | A record needing threshold recomputation for both subjects | One subject's bundle held | `selection[A] = verified`, `selection[B] = unverifiable` (§5.5) |
+| V1 | ~~per-subject selection recomputation~~ | — | **Retired 2026-09-01** with deterministic selection; per-subject evaluation survives as `weight[subject]` — recognition, not recomputation (§5.7). The id is not reused |
 | V2 | A scope naming a position the evaluator cannot compute | Topology does not reach it | `structural = valid`, `effective = no` — MUST NOT reject (§6.8) |
 | V3 | A signer's key material never seen and no resolver | Any signed object | `signatures[signer] = unverifiable(key)` — a third outcome; collapsing it into invalid discards a fetchable object (§3.4) |
 | V4 | A series reissue naming a series the node previously occupied | Evaluator holds the node's chain | **Reject** — §4.6: a chain-holder MUST reject a reissue naming a series already in the chain; reuse brings the abandoned line's high counters back into comparison |
-| V5 | A normal presence record whose witness commitment does not recompute from its revealed nonce | The record alone | `structural = malformed` — §5.1: a validator MUST recompute every commitment and reject on mismatch; an implementation that seeds from reveals without checking commitments defeats the commit-reveal ordering and passes every arithmetic vector |
+| V5 | ~~witness commitment mismatch~~ | — | **Retired 2026-09-01**: witness nonce commitments left the schema with deterministic selection. The id is not reused |
 | V6 | The two `EndpointRecord`s of `records.md`'s conflict pair | Both held | **Malformed condition, not a tie** — equal `seqno`, different contents (§7.6, §7.7.3); a reader MUST NOT prefer either. The pair can only mean equivocation or a key in two hands |
-| V7 | A normal presence record whose field 5 fills fewer slots than the recomputed selection | Selection recomputable from the subject's bundle | **Accepted** — the threshold sizes the sample and does not gate finalization (§5.5): the absent slots are visible evidence weight, not a defect. A decoder requiring a full slot set rejects valid records and is non-conforming [author, 2026-09-01] |
-| V8 | A perfectly valid, correctly signed envelope supplied in answer to a request for a **different** txid | The requested txid | **Content-address mismatch** — `chain` cannot advance through it. §5.4 counts history only when canonicality, **content address**, and signatures all check; this isolates the txid recomputation from signature verification, catching an implementation that trusts its storage index instead of hashing what it received |
+| V7 | A normal presence record carrying fewer responses than §5.2's criterion suggests | The subject's bundle, for *n* | **Accepted** — the criterion sizes diligence and gates nothing (§5.2, §5.5): a thin response set is visible evidence weight, not a defect. A decoder enforcing a response minimum rejects valid records and is non-conforming |
+| V8 | A perfectly valid, correctly signed envelope supplied in answer to a request for a **different** txid | The requested txid | **Content-address mismatch** — `chain` cannot advance through it. §5.3 counts a record only when canonicality, **content address**, and signatures all check; this isolates the txid recomputation from signature verification, catching an implementation that trusts its storage index instead of hashing what it received |
 | V9 | The optionals-exercised adoption (`transactions.md`), field 8 dereferenced | The referenced formation record | `structural = valid`, **`checks[proof_of_presence] = fail`** — the record exists and verifies but names alice–carol, not this adoption's alice–bob (§3.4: dereference confirms the record *names these two parties*) |
 | V9b | The same adoption | The referenced record unfetchable | `structural = valid`, `checks[proof_of_presence] = unverifiable(unfetchable)` — the §3.4 posture: neither confirmed nor failed |
 | V10 | A valid reissue followed by an otherwise-valid high-counter record in the **abandoned** series | The reissue chain held | **Reject the old-series record at any counter** — §4.6.1: a chain-holder knows which series were abandoned and MUST reject records in them whatever their counter. A different bug from V4's reuse: here the old record, not the reissue, is the attack |
@@ -200,7 +201,7 @@ photo comparison without its template version is unverifiable as evidence:
 | E9 | Validate the bytes as received; decode-then-re-encode equality is non-conforming | It erases the evidence it should find (§1) |
 | C1 | Duplicate-key rejection happens before the map is materialised | Parsing into a map first collapses the duplicate (§1) |
 | C2 | The domain-separation tag is derived from the verification context, **never** read from the message | §1.1 — a tag taken from content lets the message choose its own role; pairs with S12 |
-| C3 | Rank ties break by ascending keyhash (§5.4) | A **comparator requirement, not a byte fixture**: instantiating a real SHA-256 rank tie would require a collision, so the known-answer suite cannot exercise this branch — test the comparator directly |
+| C3 | ~~rank tie-break comparator~~ | **Retired 2026-09-01** with hash-rank sampling. The id is not reused; the *unit fixture class* it motivated stays in the corpus schema |
 
 ## D. Must-accept — over-strictness is non-conformance
 
@@ -210,7 +211,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its full envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and **all four signatures** verify over bytes including the unknown key. E10 is the mutation complement |
 | D3 | A `LocationEvidence` method value of 9 | The location-method registry is deliberately open (§4.5) |
 | D4 | A `Witness.attestation` with a reserved bit (3+) set | Reserved bits retained; interpret only 0–2 (§4.5) |
-| D5 | Verifier responses in any array order | Array order is not canonicalised (§5.4) |
+| D5 | Verifier responses in any array order | Array order is not canonicalised (§5.5) |
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
 | D8 | The `EndpointRecord` carrying unknown key `99: h'c0ffee'` (`records.md`) | §1: preserved and **covered on the standalone `COSE_Sign1` path** — the signature verifies over the payload including the unknown key. E13 is the mutation complement |

@@ -7646,3 +7646,44 @@ count-*n* bullet now says verify-per-record and pin-by-selection, and the
 canonical bar's fixture sheds its diamond, committed-predecessor and
 bundle-minus-one cases — machinery for a model that no longer exists. What
 remains to build is simpler: records that exist and verify, curated into bundles.
+
+### 2026-09-01 (verifier selection redesigned: recognition replaces recomputation)
+**The author's redesign, and the deepest simplification since the roles table.**
+The PoP is a connection between individual users, outside any subnet boundary; what
+it must deliver is the participants' own confidence in who they met, provable to
+another person who has met the same counterparty. Against that purpose the
+deterministic machinery was doubly wrong: a hash-rank sample over a bundle the
+subject curates is the curator's pick with extra steps — *"Eeny, meeny, miny, moe
+over a list populated by someone else is the same as just letting them select the
+output"* — and the determinism only ever served a distant audience, one that could
+not verify the pick without the complete history the bundle model and the privacy
+posture both refuse to grant.
+
+**Selection is now by recognition.** Each party still selects the other's
+verifiers; the number sought is still `min(floor(n/2), 10, |candidates|)` — but
+stated for what it always was, a reasonableness criterion over a number entirely
+under the verified party's control. The selector picks people it can vouch for, in
+four descending tiers: users it has met; users in any of its **trust horizons**
+(the operative term for the two-edge walk — self-centred, no fixed set; *Dunbar
+Org* remains the theory chapters' name for it); users its horizon-mates have met;
+users in the horizons of users it has met. Two edges over the graph of meetings
+and horizon-mates is the halting condition — a second two-edge walk, mirroring the
+horizon itself. Where the bundles surface no common acquaintance, the parties **go
+fishing** — proposing further candidates over the direct channel, carried by no
+wire object — and fill the remainder at their discretion, **each response carrying
+the selector's claim of its basis** (new field 10: known, reachable,
+discretionary).
+
+**What fell**: the witness nonce commitments and reveals (Witness fields 4–5), the
+seed and its window ordinal (body key 7), hash-rank sampling, the anti-grinding
+property, the recomputability invariant, §5.2.1's freshly-normative HMAC, three
+hash-domain tags, a §21 parameter, and every fixture that tested them — all
+retired with numbers and ids unreused. **What was rebuilt on the surviving legs**:
+§7.4.1's oracle defence now rests on per-query grants, the counters, and bundle
+curation rather than scatter; §7.3's shared-identity detection rests on the
+selector's acquaintances being beyond the confederates' reach; §10.1's
+tamper-evidence argument now distinguishes the two presentations — the curated
+ceremony bundle, defended by recognition, and the chained standing presentation a
+patron walks, defended by the chain. Consent, the verification process, and
+cross-selection are unchanged. Twenty-five harness checks pass against the
+regenerated vectors.

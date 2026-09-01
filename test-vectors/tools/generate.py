@@ -734,7 +734,6 @@ formation_body = e_map([
     (e_uint(2), e_uint(TS_FINAL)),
     (e_uint(3), e_arr([participant(p_hi), participant(p_lo)])),
     (e_uint(6), e_uint(1)),
-    (e_uint(7), e_uint(WINDOW_ORDINAL)),
     (e_uint(8), e_bstr(form_root)),
 ])
 formation_txid = H(formation_body)
@@ -1038,13 +1037,10 @@ txid: `{hx(reissue_txid)}`
 
 Keys 4 and 5 are **omitted entirely** (§3.2: absence means empty); key 6 is 1;
 key 0 carries the genesis value for both signers, which for a formation record
-is also a structural rule (§3.2). `window_ordinal = floor({TS_START} / 86400) =
-{WINDOW_ORDINAL}`. Key 8's disclosure root is **synthetic**
-(`SHA-256("rhtn-test-vectors:synthetic-disclosure-root:formation")`) — the
-§4.5.1 digest-list construction is not yet covered by this draft (README), so
-**a validator that recomputes disclosure roots cannot use this record as an
-integrated known-answer object**; it is a positive vector for the body
-encoding and the structural rules only.
+is also a structural rule (§3.2). *(Key 7, the seed-window ordinal, was
+retired 2026-09-01 with deterministic selection; the number is not reused.)*
+**Key 8 is the real §4.5.1 root** — the record is a fully integrated
+known-answer object, and the three presentations below verify against it.
 
 **Field 3's order is deliberately {p_hi.name} then {p_lo.name} — the reverse of
 keyhash order.** Participant order fixes back-pointer list order (§3.1); kid
@@ -1376,86 +1372,18 @@ goal — but only for objects that have one:
 
 # ================================================================ verifier-selection.md
 
-def commitment(w, nonce):
-    return H(b'rhtn/1:nonce-commit' + w.keyhash + nonce)
-
-# Witness nonces are DERIVED per wire §5.2.1: PRF(witness_secret,
-# "rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal), PRF instantiated
-# HMAC-SHA-256, normative (§5.2.1); ordinal 8 bytes big-endian.
-pa, pb = sorted([alice.keyhash, carol.keyhash])
-secrets = {n: H(b'rhtn-test-vectors:' + n.encode() + b':witness-secret')
-           for n in ['w1', 'w2', 'w3']}
-def derive_nonce(name, ordinal):
-    msg = b'rhtn/1:wnonce' + pa + pb + ordinal.to_bytes(8, 'big')
-    return hmac.new(secrets[name], msg, hashlib.sha256).digest()
-nonces = {n: derive_nonce(n, WINDOW_ORDINAL) for n in ['w1', 'w2', 'w3']}
-witnesses_sorted = sorted(['w1', 'w2', 'w3'], key=lambda n: IDS[n].keyhash)
-seed_input = (b'rhtn/1:verifier-seed' + pa + pb + WINDOW_ORDINAL.to_bytes(8, 'big')
-              + b''.join(IDS[n].keyhash + nonces[n] for n in witnesses_sorted))
-seed = H(seed_input)
-
-cands = ['c1', 'c2', 'c3', 'c4', 'c5']
-ranks = {c: H(seed + alice.keyhash + IDS[c].keyhash) for c in cands}
-ranked = sorted(cands, key=lambda c: (ranks[c], IDS[c].keyhash))
-n_example = 7
-required = min(n_example // 2, 10, len(cands))
-selected = ranked[:required]
-
-emit('verifier-selection.md', f"""# Verifier selection — recomputation
+emit('verifier-selection.md', f"""# Verifier selection — the reasonableness criterion
 
 {PIN}
 
 **Draft. Spec-derived, unverified by an implementation.** See
-[README.md](README.md). All inputs are raw byte concatenations hashed with
-SHA-256 — §5 states the convention: raw concatenation of the named byte
-strings, injective because every component after the domain tag is fixed-length.
+[README.md](README.md). *The nonce-commitment, seed and hash-rank vectors that
+lived here were retired 2026-09-01 with deterministic selection
+(`wire-format.md` §5): selection is by recognition — the selector's own
+judgment over the handed bundle — and produces nothing recomputable to vector.
+What remains checkable is the arithmetic below.*
 
-## Nonce commitment (§5.1)
-
-`commitment = SHA-256("rhtn/1:nonce-commit" || witness_keyhash || nonce)`,
-nonce exactly 32 bytes.
-
-## Nonce derivation (§5.2.1)
-
-Nonces are **derived, not fresh**, and the construction is **normative for
-conforming clients** [author, 2026-09-01]: `nonce = HMAC-SHA-256(witness_secret,
-"rhtn/1:wnonce" || min(a,b) || max(a,b) || window_ordinal)`, ordinal as 8 bytes
-big-endian (§5.2.1). This table is therefore a **client-conformance vector** —
-a conforming implementation reproduces it exactly — while remaining, like every
-client-side rule, unenforceable from the wire: nothing downstream of the reveal
-can tell which PRF ran, and what wire-side validation covers is the commitment
-equation (§5.1) and the seed (§5.3), which later sections exercise against the
-revealed values. Same window, same nonce — the anti-grinding stability the rule
-exists for. Test secrets are
-`SHA-256("rhtn-test-vectors:<name>:witness-secret")`:
-
-| Witness | witness_secret | Derived nonce | Commitment |
-|---|---|---|---|""")
-for n in ['w1', 'w2', 'w3']:
-    emit('verifier-selection.md',
-         f"| {n} | `{hx(secrets[n])}` | `{hx(nonces[n])}` | `{hx(commitment(IDS[n], nonces[n]))}` |")
-
-emit('verifier-selection.md', f"""
-## Seed (§5.3)
-
-Ceremony: participants alice and carol, `started_at = {TS_START}`, so
-`window_ordinal = floor({TS_START} / 86400) = {WINDOW_ORDINAL}`, encoded as 8
-bytes big-endian: `{hx(WINDOW_ORDINAL.to_bytes(8, 'big'))}`.
-
-Participants canonicalise bytewise: min is
-{'alice' if pa == alice.keyhash else 'carol'}, max is
-{'carol' if pa == alice.keyhash else 'alice'}. Witnesses in ascending keyhash
-order: {', '.join(witnesses_sorted)}.
-
-Seed preimage ({len(seed_input)} bytes = 20-byte tag + 32 + 32 + 8 + 3 × 64):
-
-```
-{hexblock(seed_input)}
-```
-
-seed: `{hx(seed)}`
-
-## Threshold (§5.4)
+## The reasonableness criterion (§5.2)
 
 `required(subject) = min(floor(n / 2), 10, |candidates|)` (rows generated from
 the formula itself):
@@ -1465,26 +1393,11 @@ the formula itself):
 {chr(10).join(f'| {n} | {c} | {min(n // 2, 10, c)} |' for n, c in
               [(0, 0), (1, 1), (2, 1), (3, 2), (7, 5), (20, 1), (25, 12)])}
 
-## Sampling (§5.4)
-
-`rank(c) = SHA-256(seed || subject || c)`, subject alice, candidates c1–c5;
-ascending rank, ties by ascending keyhash.
-
-| Candidate | rank |
-|---|---|""")
-for c in cands:
-    emit('verifier-selection.md', f"| {c} | `{hx(ranks[c])}` |")
-emit('verifier-selection.md', f"""
-Rank order: {' < '.join(ranked)}.
-
-With n = {n_example} and these five candidates, `required = {required}`;
-**selected: {', '.join(selected)}**. Exactly that many are queried (§5.4).
-
-## Window boundaries (§5.3.1)
+## Window boundaries (§5.3)
 
 With `started_at = {TS_START}`, the 730-day window is
 `{TS_START} − 63072000 = {TS_START - 63072000} < finalized_at < {TS_START}` —
-**exclusive at both ends: previously completed ceremonies only** (§5.3.1):
+**exclusive at both ends: previously completed ceremonies only** (§5.3):
 
 | Prior record `finalized_at` | Counted? |
 |---|---|

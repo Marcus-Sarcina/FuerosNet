@@ -54,8 +54,7 @@ Aug. 2026
 **Status:** Design. No implementation yet.
 
 **Specified.** Topology and transactions; the archive, its genesis rule and its
-merge semantics; proof of presence, including verifier selection and its
-recomputation; addressing, resolution and routing; session establishment, failover and the
+merge semantics; proof of presence, including selection by recognition; addressing, resolution and routing; session establishment, failover and the
 transport handshake; the trust model; the resource layer — object, permission
 scopes, catalog, abuse reporting, credential, and request framing; group
 operations. Encoding for all of it is in
@@ -454,7 +453,8 @@ latency for a stranger's key**, not bandwidth.
 | **Light client** | The participant-facing client software, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the client software, infra operators included** — it is where user actions happen — so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it — or itself: **a root self-anchors**, with an empty path (`wire-format.md` §2.1). Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
-| **Dunbar Org** | Every node within a **two-edge walk** over adoption and sibling edges. At f = 10, **221** (§15.1). Not a subtree, and not a tier band — cousins and nephews' children fall at three edges |
+| **Trust horizon** | Every node within a **two-edge walk** over adoption and sibling edges, centred on the observer. At f = 10, **221** (§15.1). Not a subtree, not a tier band, and not a fixed set — every user's horizon is different and centred on themselves. **The operative term in mechanical text** [author, 2026-09-01]; *Dunbar Org* names the same set where the thesis and theory chapters speak of it as a team |
+| **Dunbar Org** | The introductory and theory name for a trust horizon — the framing *a team you have joined* (§1.4). Same set, same walk |
 | **Witness** | A node nominated by the *counterparty* to notarise a presence ceremony (§7.1) |
 | **Verifier** | A prior counterparty queried to confirm a subject's identity (§7.3) |
 | **Presence record** | The signed artifact of a face-to-face ceremony (§8.1) |
@@ -1140,7 +1140,7 @@ recognise the other, and each has grown their own graph by a party they trust on
 their own account — §1.2.1's second property already says a participant knows which
 meetings happened where a holder of identical records does not. **The record is the
 residue a ceremony leaves for people who were not there**, and everything spent on
-witnesses, verifiers and deterministic selection is spent on that residue rather than
+witnesses and verifiers is spent on that residue rather than
 on the meeting.
 
 **So a thin ceremony is weaker evidence, not a weaker meeting.** Fewer witnesses, or
@@ -1199,16 +1199,20 @@ end node, starting from its own local records of people it has met.
    deterministically selected sample of that identity's prior counterparties.
    **The subject sends each selected verifier the capture key** for that verifier's
    stored images, directly and in parallel, so the verifier can decrypt what it
-   holds (§7.5.2). The queries ask
-   asking whether it matches what they hold. Responses — match, no-match,
-   inconclusive, unavailable — are signed by the verifier and carried in the
-   record; a selected verifier that does not answer within the ceremony appears
-   as an **absent slot**, visible against the recomputed selection (§8.1). A
-   colluding participant can neither fabricate a response nor hide an absence.
-   `min(floor(n/2), 10, |candidates|)` verifiers are selected and queried (§8.1).
-7. **Each party verifies the other's selection before signing.** Because A selects
-   B's verifiers and B selects A's, a participant who signs without checking may be
-   left holding a record that **fails recomputation permanently.** And cannot
+   holds (§7.5.2). The queries ask whether it matches what they hold.
+   Responses — match, no-match, inconclusive, unavailable — are signed by the
+   verifier and carried in the record; a verifier that does not answer within
+   the ceremony simply does not appear, and the record's response count against
+   the `min(floor(n/2), 10, |candidates|)` criterion is part of what any
+   evaluator reads (§8.1). **Selection is by recognition** (§8.1.2): each party
+   picks the other's verifiers from the handed bundle, preferring people they
+   have met or share a trust horizon with, going fishing for common
+   acquaintances where the bundles surface none, and filling the remainder at
+   their own discretion — each response carrying the selector's claim of which
+   it was.
+7. **Each party reviews the other's selection before signing.** Because A selects
+   B's verifiers and B selects A's, a participant who signs without looking may be
+   left holding a record whose responders they cannot stand behind. And cannot
    repair it, since the record is immutable. This is the one ceremony check that
    protects a signer **against their counterparty**, rather than against outsiders
    or against the pair colluding.
@@ -1313,12 +1317,10 @@ require, and a meeting where only one other node could serve is a real case a ha
 rule would invalidate. `nominated_by` is in the record, so the split reads directly.
 
 **The split is a signing check before it is an evaluator's.** It bears on the
-signer's own verifier sample, because the seed draws on nothing the participants
-control except the witness nonces (`wire-format.md` §5.3). A party whose
-counterparty nominated every witness has its verifier selection derived entirely
-from that counterparty's nominees. §8.1.2 already requires each participant to
-verify the other's selection before signing, and this is the same check for the same
-reason — it protects the signer against their counterparty, not against an outsider.
+attestation's representativeness: a party whose counterparty nominated every
+witness holds a record attested entirely by that counterparty's nominees.
+§8.1.2's review-before-signing is the same posture for the same reason — it
+protects the signer against their counterparty, not against an outsider.
 
 ### 7.2 Local face storage, no biometrics in network state
 
@@ -1406,11 +1408,15 @@ the shared-identity attack succeeds most of the time.
 
 **Sizing the query count.** Write **q** for the number of queries made — *not*
 to be confused with **n**, the subject's prior-meeting count used in §8.1's
-selection threshold. Against k humans sharing one identity, a random prior
-counterparty met a *different* confederate with probability (k−1)/k, so q
-independent queries detect with probability 1 − (1/k)^q. For k=2: q=3 gives
-87.5%, q=5 gives 96.9%. Small q suffices, the cost of the check is low and the
-detection rate is high.
+reasonableness criterion. Against k humans sharing one identity, detection
+turns on querying counterparties who met a *different* confederate than the one
+standing here — and with selection by recognition (§8.1.2), which
+counterparties get queried is the **selector's** choice from its own
+acquaintance, not the subject's to steer and not a random draw whose odds can
+be quoted. The confederates can curate the bundle toward records involving
+today's human, but they cannot curate the selector's acquaintances into it:
+a bundle emptied of everyone the selector knows is exactly the pool of
+strangers §16.1 prices at nothing.
 
 **The arithmetic assumes the sampled counterparties are honest and independent of
 the subject, and nothing structural makes them so.** Candidates are the subject's
@@ -1512,10 +1518,15 @@ person in front of them as continuous with a history.
     that popped up each step would be asking someone mid-ceremony to adjudicate
     dozens of exchanges they cannot evaluate and did not initiate.
 
-  Note the synergy with deterministic verifier selection (§8.1.2): because the
-  attacker cannot choose *which* verifiers are queried, probes scatter across
-  verifiers holding different photographs — different session, lighting and
-  angle, so repeated probing does not converge on any single template.
+  Selection by recognition (§8.1.2) means a hostile counterparty **does** choose
+  which verifiers are queried, and could try to concentrate probes on one
+  verifier's photographs across many ceremonies. Three controls remain, and
+  they are the real ones: **the subject's per-query grant** — each capture key
+  is released per selected verifier (§7.5.2), so the subject sees exactly who
+  is being probed and refuses; the per-subject and per-requester counters
+  above; and **bundle curation** — a subject can leave a verifier out of the
+  bundle entirely, and nobody can be queried through a record the subject
+  declines to show.
 
 #### 7.4.2 Consent
 
@@ -1540,8 +1551,8 @@ person in front of them as continuous with a history.
   **An impostor gains nothing, where the counterparty is honest.** The profile is
   generated by that counterparty from what they captured, so signing it means signing
   a profile of *oneself* — which is precisely what produces `no_match`. Refusing to
-  sign leaves a visible absence against the recomputed selection (§8.1), so refusal
-  is self-incriminating.
+  sign leaves the record with fewer responses than its own claim suggests (§8.1),
+  so refusal is legible.
 
   **The premise is the honest counterparty, and it excludes the malicious one.**
   A client performing the capture can send a **substituted** profile — synthetic, or
@@ -2236,7 +2247,10 @@ PresenceRecord {
     query_id        : H(query)
     result          : enum{match, no_match, inconclusive, unavailable}
                                        # no pending value: an unreachable
-                                       # verifier's slot is simply absent
+                                       # verifier simply does not appear
+    selection_basis : enum{known, reachable, discretionary}
+                                       # the SELECTOR's claim of why this
+                                       # verifier was picked (§8.1.2)
     basis           : enum{photo_match, personal_knowledge, both}
                                        # absent when result is unavailable —
                                        # no evaluation, no basis
@@ -2281,24 +2295,23 @@ exposes a sample of the subject's *prior* counterparties to every future
 evaluator see §19.2, which treats the resulting social-graph leakage as an
 open finding.
 
-**The verifier sample.** *Newly created encounter evidence must query an
-independent sample of the subject's recent prior counterparties, bounded above by
-a fixed maximum, and every queried slot must be visible in the result — answered
-or absent.* The sample sizes the evidence; **it does not gate finalization**
-[author, 2026-09-01]: coupling finalization to verifier availability would let
-whoever controls reachability stall ceremonies, so the record finalises with
-whatever responses arrived, and a selected verifier that did not answer appears
-as an absent slot against the recomputed selection. Late replies reach the
-participants privately and are never retro-inserted (`wire-format.md` §5.5).
-Present encoding:
+**The verifier sample.** *Newly created encounter evidence should query a
+sample of the subject's prior counterparties, sized by a reasonableness
+criterion and selected by the counterparty's own recognition.* The sample sizes
+the evidence; **it does not gate finalization** [author, 2026-09-01]: the record
+finalises with whatever responses arrived, an evaluator reads the count against
+the criterion, and late replies reach the participants privately, never
+retro-inserted (`wire-format.md` §5.5). Present encoding:
 
 > For a subject with *n* recorded presence transactions in the preceding 730 days,
-> select and query **min(floor(n/2), 10, |candidates|)** verifiers,
+> seek **min(floor(n/2), 10, |candidates|)** verifiers,
 > where `|candidates|` is the count of **distinct** prior counterparties. The third
 > term is necessary because *n* counts transactions while candidates are people:
 > twenty meetings with one person would otherwise demand ten verifiers from a pool
 > of one. Rounding is **floor**, stated explicitly because an unstated rule differs
-> by one query at every odd *n*.
+> by one query at every odd *n*. ***n* is the subject's own claim** — it counts a
+> bundle the subject curates — so this is a **reasonableness criterion**, never a
+> security check (§8.1.2).
 
 A brand-new identity has n=0 and queries none; an established one caps at ten, so
 the check never scales with history. Non-responsive verifiers are noticed and
@@ -2314,8 +2327,8 @@ partial presentation against the same signature. Encoding: `wire-format.md` §4.
 **Disclosable — seven fields:** location evidence, per-participant retention,
 client integrity, capture parameters, and proximity channels. *`started_at` and
 `subtype` are body fields rather than disclosable ones: the structural rules
-consume them, and withholding them would conceal nothing — `finalized_at` and the
-seed-window ordinal already show the ceremony's day, and a formation record's
+consume them, and withholding them would conceal nothing — `finalized_at` already shows the
+ceremony's day, and a formation record's
 absent evidence arrays announce its subtype regardless.*
 
 **This was scoped by a sweep, not by preference.** Eleven exchanges transmit or
@@ -2326,8 +2339,8 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Ceremony, at creation (§7.1) | everything | were there |
 | Witness signing (§7.1) | its own corroboration | **contributes it** |
 | Verification by query (§7.3) | a fuzzed profile and a query id — **not the record**, which does not exist yet | no |
-| Verifier-selection recomputation (§8.1.2) | nonces, seed, candidate set | no |
-| Selected-slot accounting (§8.1) | verifier responses against the recomputed selection | no |
+| Verifier selection (§8.1.2) | the handed bundle — the selector's own act, replayed by nobody | no |
+| Response accounting (§8.1) | verifier responses | no |
 | Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
@@ -2350,12 +2363,12 @@ forgeable.
 
 **So P2 and C2 are untouched** — the verifier and witness graph is the High finding
 this cannot help with. §19.2 records the only direction that would, threshold or
-aggregate signatures, and what it costs: the visible-absence property.
+aggregate signatures, and what it costs: the legibility of who answered.
 
-**Nor the verification machinery.** Chain back-pointers, participant and witness
-keyhashes, `finalized_at`, the seed window ordinal and the verifier responses all stay
-in the body, because §8.1.2's recomputability invariant depends on them — *if B cannot
-recompute the selection A performed, B can never clear themselves.*
+**Nor the record's evidential core.** Chain back-pointers, participant and
+witness keyhashes, `finalized_at` and the verifier responses all stay in the
+body: they are what an evaluator weighs by recognition (§16.1), and who took
+part is the one thing a presence record exists to say.
 
 ##### The use and the harm are the same computation
 
@@ -2390,175 +2403,51 @@ signatures — so this buys disclosure control and not bandwidth.
 
 #### 8.1.2 Verifier selection
 
-**Deterministic verifier selection.** Which prior counterparties get queried
-must **not** be chosen by the participants — otherwise a C colluding with a fake
-B simply queries friendly verifiers. **The parties being verified must not be able to influence which prior
-counterparties are selected**, including by varying anything produced after
-verification begins. Selection must therefore be derived from information
-committed *before* any verifier response is known, and must be recomputable **by
-any party holding that subject's history**, so that a missing verifier is visible
-to them.
+**Selection is by recognition, and determinism is retired** [author,
+2026-09-01]. The old rule — a hash-rank sample over committed nonces, so the
+parties could not influence which prior counterparties were selected — rested
+on a pool the parties do not control. The pool is a bundle the subject curates
+(`wire-format.md` §5.4), and a deterministic pick over a curated list is the
+curator's pick. It also served the wrong audience: the pick's regularity was
+provable only to someone holding the subject's full history as of the
+ceremony, which the bundle model and §19's privacy posture both refuse to
+grant anyone. What every evaluator actually does — here and everywhere else
+(§16.1) — is weigh who answered by whether they recognise them.
 
-**Each participant selects the other's verifiers.** A queries B's prior
-counterparties to establish that B is B, and B queries A's, so the party who
-*performs* a selection is never the party it is *about*.
+**The PoP is a connection between individual users, not between subnets.** Its
+most important property is that the participants themselves are confident in
+who they met, and can prove that meeting to another person who has met the
+same counterparty. Selection now serves exactly that property:
 
-**The candidate set comes from a bundle the subject hands over, not from a walk.**
-A counterparty computes *n* and the candidate set from presence records the subject
-supplies. **Nobody walks another party's archive to discover their meetings** —
-there is no entitlement to it and no mechanism for it. §16.7's fetch-and-walk is the
-*adoption* disclosure, driven by a prospective patron deciding how much evidence it
-wants; this is not that. What a bundle's recipient can check is that each record verifies — **the records
-need not chain** [author, 2026-09-01]: the bundle is curated freely, from any of
-the subject's series, with no intervening transactions exposed. What they cannot
-check is that the bundle is complete, and nothing needs them to.
+- **Each participant selects the other's verifiers** — the party who performs
+  a selection is never the party it is about. Unchanged.
+- **The selector picks people it can vouch for**, in descending
+  trustworthiness: users it has met; users in any of its trust horizons;
+  users someone in any of its trust horizons has met; users in the trust
+  horizons of users it has met, where foreign topology is visible at all. Two
+  edges over the graph of meetings and horizon-mates is the halting
+  condition.
+- **Where the bundles surface no common acquaintance, the parties go
+  fishing**: either proposes further candidates from its own history for the
+  other to test against its own knowledge — a conversation over the direct
+  channel, recorded nowhere.
+- **The remainder is discretionary fill**, and marked as such: each response
+  carries the selector's claim of its basis (`wire-format.md` §5.5), because
+  a later evaluator cannot reconstruct the selector's acquaintance graph and
+  should not be invited to guess.
 
-**So the pool is the subject's and the sample within it is not**, which is the
-precise scope of the rule above. Determinism stops a participant steering the sample;
-it does not stop them choosing what to put in front of the selector. **What protects
-the selector is recognition, not completeness** (§16.1): a pool holding nobody they
-know returns `match` from strangers, worth what any unrecognised history is worth to
-them. A curated bundle therefore costs its author credibility rather than buying them
-a verdict, and that is the same intersection test applied everywhere else here.
+**The number sought is `min(floor(n/2), 10, |candidates|)` — a reasonableness
+criterion, not a security check.** *n* counts a bundle the subject curates, so
+it is entirely the subject's claim; the formula sizes diligence, and an
+evaluator comparing a record's response count against it learns how thorough
+the ceremony was, never how complete the history is.
 
-**State the property from the subject's side, because the subject is the party with
-the interest.** B must be able to demonstrate that B's verification was honestly
-conducted, using the record and B's own history. **If B cannot recompute the
-selection A performed, B can never clear themselves.** The record is immutable and
-no later action repairs it. *"Recomputable by any third party"* is the natural way
-to state this and is both stronger than achievable and aimed at the wrong party:
-the evaluator is not the one who needs it.
-
-**Consequence: each participant MUST verify the other's selection before signing.**
-If A selects B's verifiers off-seed and B signs anyway, B is left holding a record
-that fails recomputation permanently. This check protects the signer **against
-their counterparty.** The opposite direction from every other check in the
-ceremony, which guard against outsiders or against the pair colluding.
-
-**Also holder-relative for evaluators.** An evaluator holding A's history but not
-B's can verify A's half of a record and not B's, so **nobody validates both halves
-unless they hold both archives.** Less likely given selective presentation (§16.7).
-
-**Binding constraint on any future change to seeding** (`wire-format.md` §5.2):
-a subject's selection must be recomputable from **the record plus that subject's
-own history and nothing else.** So the seed may draw only on values carried in the
-record, and the candidate set only on the subject's own history. Adding
-counterparty-derived or environmental entropy would leave the seed deterministic,
-unpredictable and ungrindable while making selection **silently unverifiable** to
-anyone lacking the counterparty's archive. The failure would not show up in
-testing, because a developer holding both archives sees everything work.
-
-**Ordering requirement.** The seed must include a contribution from parties
-neither participant controls, **revealed only after both participants have
-committed to the ceremony**. Without that ordering the rule above is violated by
-a **grinding attack**: a participant retries at different times until the seed
-yields a verifier sample favourable to it. Timestamps are free to vary, so the
-attacker gets unlimited attempts.
-
-The present encoding therefore seeds from **witness nonces**, committed by the
-witnesses and revealed after both participants have committed. Witnesses are
-cross-nominated (§7.1), so neither participant chooses the other's.
-
-**Commit-reveal stops value grinding, not attempt grinding**, and the distinction
-is easy to miss. It does not raise grinding to "compromising both neighbourhoods".
-A participant cannot change a nonce after seeing it, but nothing forces them to
-*finish the attempt*. So: begin a ceremony, commit, obtain the revelation,
-compute the sample locally, and **abort if the sample is unfavourable**. Restart
-for a fresh nonce set. Every individual attempt obeys the ordering rule; the
-control variable is which completed attempt is allowed to survive. With fraction
-*p* of candidates favourable and sample size *q*, expected attempts are 1/p^q —
-roughly 32 for p=0.5, q=5, and far fewer if the goal is merely avoiding one
-dangerous verifier or landing several `unavailable` slots.
-
-**Encoding is specified** in `wire-format.md` §5 — commitment construction, seed
-bytes, the 24-hour window, hash-rank sampling, and the candidate set. **The nonce
-commitments and reveals must be in the record**, or selection cannot be recomputed
-from it at all and the anti-suppression property this section rests on is
-unverifiable.
-
-**Two rules close it, and both are required:**
-
-1. **Seed deterministically from the participant pair and a coarse time window.**
-   Witnesses derive their nonce contribution from a value fixed by *who is
-   meeting*, not by *when this attempt started*, so restarting within the window
-   reproduces the same sample and gains nothing. The window is meant to set the
-   grinding rate at one fresh sample per window rather than one per attempt — it
-   does not, for the reason below.
-2. **Reveal nonces only after the physically expensive steps are complete** —
-   after capture (§7.1 step 5), never before. This makes an abort cost a real
-   in-person meeting rather than a round trip, which is the friction the whole
-   design rests on. **The revelation point determines whether abort-grinding is
-   cheap or ruinous**, so leaving it unstated leaves the defence undefined.
-
-Both are needed: (1) alone lets an attacker wait out the window; (2) alone leaves
-each attempt merely expensive rather than futile.
-
-**Rule (1) does not set the rate it appears to, because the window is claimed rather
-than elapsed.** The ordinal derives from `started_at` (`wire-format.md` §5.3.1),
-which the proposer chooses, and monotonicity against the committed back-pointer
-(`wire-format.md` §3.3) bounds that choice **only from below**. So the budget is not
-one sample per day; it is one sample per *admissible* day, and **the number of
-admissible days is the number of days since the signer's own last committed record**.
-An identity transacting weekly has a handful; a dormant one has as many as it has
-been dormant. Future ordinals are structurally valid too — no clock check exists to
-reject them — at the cost of burning the signer's forward timeline, since the next
-`started_at` must clear this record's `finalized_at`. And the same choice moves the
-730-day candidate horizon and *n*, so a claimed day steers the seed, the pool and the
-threshold together.
-
-**`finalized_at` is bounded structurally and `started_at` is not**, which divides the
-work between the two checks. `wire-format.md` §3.2 caps the gap between them at 24
-hours, so a body cannot name a distant future finalization and freeze every signer's
-chain through the monotonicity rule. It cannot bound `started_at`, because doing so
-needs a clock the reader does not have — that is the witness check below, and it is
-what stops the same attack conducted by moving the whole ceremony forward instead.
-
-**What binds it is the witness's clock.** A witness is the only party to a ceremony
-with an independent clock and no stake in the sample, and it is asked to commit a
-nonce while the ceremony is happening. The reference client therefore declines to
-commit when the claimed `started_at` is far from the time it observes. **This is not
-checkable by a later validator** — a completed record carries no evidence of what any
-witness's clock read — so it is a commitment in Appendix A's sense and not a MUST.
-
-**Cross-nomination is what makes that binding hold**, and this is a second job for
-it beyond §7.1's. A grinding participant cannot select lenient witnesses, because
-its witnesses are nominated by the counterparty; a fabricated day must therefore pass
-witnesses the grinding party did not choose. Every witness nonce feeds the seed, so
-one refusal is enough to deny the attempt. What is left is one sample per day that
-actually elapses, which is what rule (1) was for.
-
-**Both rules are aimed at a participant, and a witness is better placed than one.**
-A witness reveals *after* the capture is spent, so it decides with the sample in
-hand and the meeting already paid for by two other people; and since every witness
-is a required envelope signer, it can instead wait for the verifier responses and
-withhold its signature once it has seen them. Neither move forges anything. Rule (1)
-does not bind it either: re-deriving a fresh nonce on a retry violates
-`wire-format.md` §5.2.1 and is invisible in a completed record, so a hostile
-witness gets a fresh sample per attempt where an honest one gets one per window.
-
-**The design's usual answer — make it visible and let policy weight it — is not
-available here**, and that is the sharp part rather than the cost asymmetry. An
-attempt that never finalises is never published, so a withheld reveal or signature
-leaves no artifact to attribute and is indistinguishable from a dropped connection.
-The nominator does learn which of its nominees failed to complete, and that is
-local knowledge it can act on when nominating again; nothing carries it further.
-This is a denial of service against a specific pair, not a route to false evidence
-— a witness still cannot produce a participant's signature (§8.1), alter a signed
-verifier response, or obtain the capture by witnessing (§7.5.2).
-
-Participant-supplied values (locators, `started_at`) **must not be sufficient to
-determine the seed.** Seeding from them is grindable through `started_at`, which
-a participant controls. `txid` is disqualified for a different reason: it depends
-on the responses.
-
-**Late responses.** A verifier should answer long-queued requests even
-after the record finalised. Late answers arrive as `LateResponse` objects (`wire-format.md` §7.4) referencing
-`txid`; they do not alter the record's validity, and they accrue to **the
-responder's own reliability record** as evidence of good citizenship.
-
-**What is deliberately absent:** biometric templates, photographs, raw latency
-measurements, precise coordinates. Everything the ceremony produced that could
-identify a person stays on the participants' devices.
+**What protects each party is their own act, not a recomputation.** The
+selector queried people *it* trusts about the counterparty's continuity; the
+subject consented to every query about itself (§7.4.2) and released every
+capture key (§7.5.2); and a later evaluator weighs the responders by its own
+recognition. Nobody owes anyone a proof of how the picking was done, and no
+distant audience could have checked one.
 
 ### 8.2 Presence transactions at the network layer
 
@@ -3018,17 +2907,16 @@ else. **The chaining below makes a presented history complete and tamper-evident
 it does not make it interesting.** A complete archive of meetings with strangers
 tells an evaluator nothing, which is why fabricating one gains nothing.
 
-**Why the archive must be tamper-evident.** The verifier threshold is
-`min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence
-transactions in the preceding 730 days, and **the evaluator learns *n* from the
-subject** —
-presence records are pull-only and never globally enumerated (§12.3, §12.4).
-
-If a subject could present an arbitrary *subset*, one with 40 records could
-disclose 4 chosen for friendly or unavailable counterparties, collapsing the
-threshold from 10 to 2 while witness nonces selected honestly **from the wrong
-universe**. Every signature valid, the algorithm running exactly as specified, and
-§7.3's detection probability reduced to zero.
+**Why the archive must be tamper-evident — and which presentation it defends.**
+Two presentations exist and they are different animals [author, 2026-09-01]. A
+**ceremony bundle** is deliberately curated: the subject cherry-picks presence
+records from any series, no chaining, no completeness — and what defends the
+selector there is recognition, not the chain (§8.1.2, `wire-format.md` §5.4).
+An **archive presentation for standing** — the history a prospective patron
+walks at adoption (§16.7) — is the opposite claim: *this range is unbroken*,
+and that claim is exactly what the chain makes checkable. Trimming a standing
+presentation trims apparent standing in the same stroke, which is what keeps
+the freedom to curate from being a freedom to launder.
 
 **The archive is therefore a hash chain.**
 
@@ -5517,9 +5405,10 @@ drawn from. What answers this is that **the party who selects is the party at ri
 enumerates that candidate set in order to choose from it and sees who is in it. A
 sample drawn wholly from identities the selector has never heard of returns `match`
 from strangers, which is worth what any fabricated history is worth to them —
-nothing. The intersection argument governs the sample too; it is not suspended
-because the protocol chose it. `wire-format.md` §5.7 already makes recomputation
-holder-relative, and this is the same property one step further out.
+nothing. The intersection argument governs the sample too — with selection by
+recognition it *is* the selection rule (§8.1.2), and `wire-format.md` §5.7 states
+the same property at evaluation time: weight comes from recognising responders,
+so it is holder-relative all the way down.
 
 **Credibility is constructive and partitioned by domain.** You start at zero in
 every subnet and build by engaging there. There is no universal permanent record and
@@ -6287,8 +6176,8 @@ work. **Open.**
 **The selection input reaches a different party than the responses do.** To select
 the other's verifiers a participant needs a candidate set, and the subject supplies it
 as records rather than names, since `wire-format.md` §5.4 counts only what verifies.
-§8.1.1's sweep already records the fact, giving verifier-selection recomputation's
-reads as *"nonces, seed, candidate set"*; what was never priced is who receives it —
+§8.1.1's sweep already records the fact — the selection row reads the handed
+bundle; what was never priced is who receives it —
 the person in front of you rather than a later evaluator.
 
 **The disclosure is elective, and the pressure is what makes it wide.** Nobody walks
@@ -6353,7 +6242,7 @@ and a citation to a missing number resolves there.
 | **P15** | **Service catalog entries reveal what a node runs, to anyone in its horizon who asks.** Resource type, instance name and connection info are served on request (§11.5) | Medium | `discover_scope` filtering at the source limits the audience to those who could use the resource, which is a genuine mitigation. Residual: running a resource at all is visible to everyone in scope, and the *set* of resources a node runs is a fingerprint. Unassessed under §19.1 **Subsumes the former P8** (*topology deanonymisation by association*), withdrawn: identifying one member by real name yields their job, not a label for any of their subtrees — §3.1.1's membership plurality means a member belongs to several, and nothing in the protocol says which is a workplace rather than a bowling team. **What labels a subtree is its catalog**, which is this finding — and the catalog is answered on request within horizon, so a party holding topology from further away cannot obtain the labels at all. An attacker who holds both the topology and a real-name link within their horizon gets the disclosures membership carries (§1.2) |
 | P16 | **The resource owner accumulates signed reports about its own resources** (§11.6) | Low | Never broadcast, so no public accusation is created — that was deliberate (§6.2.2). Because the resource reports and the owner receives (§11.6), these are records of the owner's own operation rather than of who complained about whom. **The residual is what a report describes**, not who filed it |
 | **P17** | **A direct payload connection reveals each peer's IP address to the other** (§14.1.1) | Low–Medium | New with direct-first payload, and **bounded by limiting direct connection to the horizon** (§12.6.3), the set that already holds your locator and topology, so IP is incremental rather than novel there. Residual: the horizon is up to 111 nodes at or below plus siblings and cousins a user may never have met, so exposure is *bounded* rather than *chosen*. §7.6 establishes IP gives coarse location, so an in-horizon party gains an ongoing location signal. **Both defaults must be overridable**, and the reference client must say what each option discloses |
-| **P18** | **A verification query tells a prior counterparty that the subject is *right now* in a witnessed ceremony with someone** (§7.3) | Medium | Intrinsic to verification, and never analysed as a cost, the oracle protections address what a verifier *learns about the biometric*, not what they learn about the subject's current activity. Repeated queries reveal activity cadence. Bounded by deterministic selection sampling only a subset of prior counterparties per event |
+| **P18** | **A verification query tells a prior counterparty that the subject is *right now* in a witnessed ceremony with someone** (§7.3) | Medium | Intrinsic to verification, and never analysed as a cost, the oracle protections address what a verifier *learns about the biometric*, not what they learn about the subject's current activity. Repeated queries reveal activity cadence. Bounded by the selector querying only a handful of the subject's counterparties per event — and, since 2026-09-01, by the subject's curation: nobody is queryable through a record the subject declines to bundle |
 | **P19** | **Archive presentation hands a new patron an intelligible history of prior relationships** (§16.7) | High | The prefix is chosen by the user, but the chain forbids arbitrary omission, so the choice is coarse. Selective disclosure within records (§19.3) is now specified, and does not help here: what a prospective patron reads is counterparty identity, which no field-level measure withholds (§8.1.1). See also C4 in §19.8, which is worse |
 | **P20** | **Resource access logs, where an implementation creates them, bind network identity to application actions** (§11.7) | High for sensitive resources | Flagged as unfinished but never analysed. A resource already authenticates by network identity and topological scope, so a log connects *who* to *what they did, when, and under which organisational relationship* |
 | **P21** | **Coarse location becomes behavioural location under temporal correlation** (§7.7) | **Medium, mitigated**; High for at-risk users | A single precision-3 geohash is ~156 km. A *time series* of them plus counterparties reveals commuting, travel, conference attendance, employment and residence, and coarsening reduces precision rather than longitudinal inference. **Location is now withholdable** (§8.1.1) and ten of eleven exchanges never receive it. **The residual is structural**: §7.7's impossible-travel check and this leak are the same computation over the same series, so the one recipient with a legitimate use — a prospective patron — is also the dangerous holder. Graph position no longer compounds it (§8.1) |
@@ -6700,7 +6589,7 @@ are all **chosen**, not derived.
 | h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
 | — | Cross-tree peers per infra node | ≥2 **recommended** | For fault independence — hierarchical replication has cut 1. **Not required**: peering is voluntary and zero peers is a supported, degraded state (§6.3, §12.7.5) |
 | λ | Trust decay per hop (if decay metric used) | < 1/f | Convergence requirement (§16.2) |
-| — | Verifiers selected and queried per subject | min(floor(n/2), 10, \|candidates\|) | n = subject's presence txns in last 2y; candidates = distinct prior counterparties (§8.1) |
+| — | Verifiers sought per subject | min(floor(n/2), 10, \|candidates\|) | A reasonableness criterion — n is the subject's own claim (§8.1.2); candidates = distinct prior counterparties (§8.1) |
 | — | Capture retention | 2 years | Schelling point; §7.5.1 |
 | — | Images per capture | 3–5 | Guided variation, not burst; doubles as liveness (§7.5) |
 | — | Location precision | geohash 3 (default) | ~156 × 156 km; precision 4 is ~39 × 19.5 km (§7.7) |
@@ -6709,7 +6598,6 @@ are all **chosen**, not derived.
 | — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2) |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
-| — | Verifier-selection seed window | **24 hours**, epoch-aligned | An honest retry inside the window reproduces the *same* sample, which is what retry should do. It does **not** bound an aborting attacker to one sample per day: the ordinal comes from the claimed `started_at`, so the budget is the span since the signer's last committed record (§8.1.2, `wire-format.md` §5.3) |
 | — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 
 ### 21.1 Unset parameters, the implementation checklist

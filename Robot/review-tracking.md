@@ -2126,3 +2126,46 @@ fixture plan sheds its diamond, committed-predecessor and bundle-minus-one cases
 which tested the dissolved model. This also simplifies the upcoming build: no
 chain bootstrap is needed for bundle purposes — records need only exist and
 verify.
+
+---
+
+## The verifier-selection redesign: recognition replaces recomputation (2026-09-01)
+
+**Author's redesign, applied in full after a four-question clarification round.**
+The PoP is a connection between individual users, outside subnet boundaries; its
+central property is that the participants are confident in who they met and can
+prove the meeting to someone who has met the same counterparty. Deterministic
+selection died twice over: a hash-rank pick over a curated bundle is the
+curator's pick, and the determinism only ever served a distant audience that
+could not check it without the full history the design withholds.
+
+**The rulings**: *trust horizon* is the operative term for the two-edge walk
+(self-centred, not a fixed set; *Dunbar Org* stays for thesis and theory);
+reachability is a second two-edge walk over meetings and horizon-mates, in four
+descending tiers, judged locally and provable to nobody; "Go Fish" candidate
+proposal is client conversation, carried by no wire object; Witness fields 4–5
+and body key 7 are retired (numbers not reused); `VerifierResponse` gains
+field 10 `selection_basis` (0 known / 1 reachable / 2 discretionary), the
+selector's claim, covered by field 9.
+
+**Applied**: wire §5 rewritten end to end (recognition ladder, reasonableness
+criterion, qualification and window, curated pool, what the record carries;
+§5.6 consent unchanged; §5.7 reframed holder-relative-by-recognition); design
+§8.1.2 rewritten; the ceremony steps, §7.4.1's oracle defence (per-query grants,
+counters, bundle curation replace the dead scatter argument), §7.3's
+shared-identity analysis (recognition replaces the q/k randomness math), §10.1's
+tamper-evidence argument (re-grounded on the standing presentation, with the
+two presentations explicitly distinguished), the nominated_by rationale, both
+reads-table rows, the §21 parameter rows (seed window deleted; "verifiers
+sought" as reasonableness), P18's bound, and the front matter. Light-client:
+witness duties lose the nonce bullets and keep the clock check; the selection
+duty becomes pick-by-recognition-and-say-which; the bundle bullet reads *n* as
+the counterparty's claim. §1.1's hash-tag family note records the three retired
+tags; §3.3's reroll rationale notes there is no sample left to reroll.
+
+**Vectors**: the nonce/commitment/seed/rank vectors retired;
+verifier-selection.md is now the reasonableness criterion and window
+boundaries; formation record rebuilt without key 7; V1, V5, T23, C3 and R14
+tombstoned (ids not reused); T27 (selection_basis closed enum) and the
+`weight[subject]` result dimension added; V7 reframed; bars 2/3/4/11 rewritten.
+25 harness checks pass; references at zero.

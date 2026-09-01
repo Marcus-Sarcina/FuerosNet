@@ -10,15 +10,16 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `52cd1de9c3e3d7ac0a8b6e34c9e97da5a3401e0d735790c7a9fed0fac6ddee4a` · network-design.md `76786811432739e58f1389bf947ffa697f9490d7725645e275a620791f7dc77e`
+**Pinned**: wire-format.md `5b007a7bc61cb1d6575f15b217ce85984b3f28d152deec4a4d3ac3f5ee1d4c1c` · network-design.md `230b10b564f25197489b805dc795ea239e577b0a166c3304dd0cf1841b9fd579`
 
-**Scope**: wire-format/protocol **interoperability** vectors, plus explicitly
-named **client-conformance** vectors where a client rule is normative and
-computable — today the §5.2.1 nonce derivation, which is why
-`light-client-requirements.md` is pinned alongside the two protocol documents.
-Beyond those named vectors this is not a certification suite for client and
-operator behavioural commitments, which are deliberately unenforceable from
-bytes (design §1.1).
+**Scope**: wire-format/protocol **interoperability** vectors.
+`light-client-requirements.md` is pinned alongside the two protocol documents
+because client rules shape fixture expectations even where they are not
+themselves vectorable — the nonce-derivation conformance vector this scope
+once named was retired 2026-09-01 with deterministic selection, its section
+with it. This is
+not a certification suite for client and operator behavioural commitments,
+which are deliberately unenforceable from bytes (design §1.1).
 
 The generated documents are produced by `tools/generate.py` (Python 3 with
 the `cryptography` package for Ed25519 and **`dilithium-py` for ML-DSA-65**);
@@ -45,7 +46,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
 | `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record — now a **fully integrated object**: real §4.5.1 disclosure root, its type-5 envelope, and three verified presentations — and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
 | `records.md` | One known-answer signature per **signing** context — `EndpointRecord` complete; the remaining signed contexts queued, and the **unsigned** §7/§8 message encodings explicitly separated so nobody generates signatures the specification does not define |
-| `verifier-selection.md` | §5.2.1 nonce derivation (**HMAC-SHA-256, normative for clients — a conformance vector**), commitments, the seed preimage and seed, the `required()` table, hash-rank sampling, window boundaries |
+| `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
 ## What every vector assumes
@@ -84,8 +85,9 @@ specification [author, 2026-08-31 through 2026-09-01]:
 - **"Canonical CBOR of fields X–Y" means the map** of exactly those fields —
   one global sentence in §1 governing all eight signed objects, chosen partly
   because a map is debuggable where a concatenation is not.
-- **§5.2.1's construction is normatively HMAC-SHA-256**, ordinal 8 bytes
-  big-endian — the nonce table is a client-conformance vector.
+- **The witness-nonce PRF was normatively HMAC-SHA-256** while it lived — the
+  construction and its section retired 2026-09-01 with deterministic
+  selection.
 - **The genesis value hashes the raw 32 keyhash bytes**, not a CBOR encoding
   (§3.1).
 - **§5's hash inputs are raw concatenations**, stated once with the injectivity
@@ -156,10 +158,14 @@ negatives (T9–T12). Still open:
    signatures. What canonical status still awaits is unchanged in kind: an
    independent implementation reproducing the *whole suite*.
 2. **Promotion-blocking.** A normal-subtype presence record whose
-   participant, witness, seed and `kid` orders all deliberately differ, with
-   witnesses, embedded responses, and its 36-entry envelope — which also
-   supplies the alice–bob record the optionals adoption's field 8 swaps to
-   (V9's deliberate mismatch until then).
+   participant, witness and `kid` orders deliberately differ (the seed order
+   died with the seed), with witnesses, embedded responses carrying
+   `selection_basis`, and its 36-entry envelope — which also supplies the
+   alice–bob record the optionals adoption's field 8 swaps to (V9's
+   deliberate mismatch until then). **Simplified 2026-09-01** by selection by
+   recognition: no nonces, no commitments, no seed — responses are gathered
+   from whoever the selector picked, and the record carries their claimed
+   basis.
 3. **Promotion-blocking.** The **curated-bundle fixture** [author,
    2026-09-01: *"you can cherry-pick whatever PoP transactions you wish from
    any of your series and do not have to expose the intervening
@@ -170,15 +176,16 @@ negatives (T9–T12). Still open:
    out-of-window record at the exclusive boundary, a duplicate txid (counts
    once), a non-verifying record (contributes nothing — not "incomplete"),
    the current counterparty (never a candidate for their own verification),
-   an understatement variant (a smaller bundle: smaller selection, both
-   records valid), and **the binding case** — the selection recomputed over a
-   different bundle fails to reproduce the record's responder slots, which is
-   what pins the bundle in place of the chain that never existed. *The
-   diamond, committed-predecessor and bundle-minus-one cases of earlier
-   revisions dissolved with the chaining model they tested.*
+   an understatement variant (a smaller bundle: a smaller criterion, both
+   records valid), and the reasonableness reading — response count against
+   §5.2's formula as evidence, never as a gate. *The diamond,
+   committed-predecessor, bundle-minus-one and selection-binding cases of
+   earlier revisions dissolved with the chaining and determinism they
+   tested.*
 4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
    vectors**, both authentication forms (presence/classical,
-   Recovery/hybrid), and a complete Recovery adoption as its own target.
+   Recovery/hybrid), the `selection_basis` matrix (T27), and a complete
+   Recovery adoption as its own target.
 5. **The selective-disclosure construction** — *construction and
    presentations done 2026-09-01*: the formation record now carries a real
    §4.5.1 root (its synthetic-root caveat is gone), and full, partial and
@@ -232,9 +239,9 @@ negatives (T9–T12). Still open:
     finalized on `no-match`, `inconclusive`, `unavailable`, and on **absent
     selected slots** — the threshold sizes the sample and does not gate
     finalization, `pending` having left the enum entirely (V7); the
-    commitment-mismatch fixture (V5); and the bundle-binding case — the
-    record's responder slots against a substituted bundle (bar 3), the check
-    that replaced the dissolved committed-predecessor trap.
+    response-count must-accepts (V7) — the criterion gates nothing, and
+    over-strict decoders fail here. *(The commitment-mismatch and
+    bundle-binding cases retired 2026-09-01 with the machinery they tested.)*
 12. **The enumeration/extension posture as a systematic matrix** (sixth
     review; E8's two wrong instantiations are the argument): every closed
     enumeration gets an unknown-value rejection fixture, every deliberately

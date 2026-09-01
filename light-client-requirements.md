@@ -55,17 +55,11 @@ that is noted in place.
 
 #### 1.0.1 Acting as a witness
 
-- **Decline to commit a nonce for a ceremony whose claimed `started_at` is far from
-  the time you observe.** Your nonce is derived over the day ordinal, so a
-  participant who picks a different day gets a different verifier sample without
-  waiting for one; your clock is the only independent one at the ceremony, and the
-  bound is worth nothing unless witnesses apply it (design §8.1.2). No later
-  validator can check that you did — set the tolerance you can defend and refuse
-  outside it.
-- **Derive your nonce as the PRF specifies, and never freshly per attempt.** A fresh
-  nonce on a retry hands the participants a new sample per abort, which is the attack
-  commit-reveal exists to close, and a completed record cannot show that you did it
-  (`wire-format.md` §5.2.1).
+- **Decline to witness a ceremony whose claimed `started_at` is far from the
+  time you observe.** Your clock is the only independent one at the ceremony,
+  and the chronology bound (`wire-format.md` §3.3) is worth nothing unless
+  witnesses apply it. No later validator can check that you did — set the
+  tolerance you can defend and refuse outside it.
 
 ### 1.1 Capture
 
@@ -142,17 +136,18 @@ that is noted in place.
   evidence of identity continuity must issue the queries without asking; a client
   that skips them silently produces evidence weaker than it appears (design
   §7.3).
-- **Verify the counterparty's verifier selection before signing.** If they
-  selected off-seed and you sign anyway, you hold a record that fails
-  recomputation permanently and cannot be repaired (design §8.1.2).
-- **Compute *n* over the bundle handed to you, and pin it by the selection, not
-  by a chain** (`wire-format.md` §5.4). The bundle is the counterparty's to
+- **Select your counterparty's verifiers by your own recognition, and say which
+  was which** (design §8.1.2): people you have met, people in any of your trust
+  horizons, then one further edge — and go fishing for common acquaintances
+  before filling the remainder at your discretion, marking each response's
+  basis honestly (`wire-format.md` §5.5). **Review who was selected for you
+  before signing**: the record will carry those responders forever, and you
+  cannot repair it.
+- **Compute *n* over the bundle handed to you, and treat it as your
+  counterparty's claim** (`wire-format.md` §5.2 and `wire-format.md` §5.4). The bundle is theirs to
   curate — records from any of their series, no chaining, no completeness — so
-  verify each record alone, count qualifying ones once by txid, and **before
-  signing, confirm that the selection over that bundle equals the responder
-  slots the record will carry**: the slots are what any later evaluator
-  recomputes against, and they are what stops a different bundle being
-  presented afterwards.
+  verify each record alone, count qualifying ones once by txid, and read the
+  result as sizing your diligence, never as a fact about their history.
 - **Report a record as unverifiable, not invalid, when you lack a participant's
   history.** Those are different answers and a caller may act on the difference.
 - **Look at the candidate population you are sampling, not only at the answers it
