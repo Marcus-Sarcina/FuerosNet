@@ -39,7 +39,7 @@ that is noted in place.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
-- **Include each sibling's full `KeyMaterial` in the list** wherever the client may not already hold it — the field is optional on the wire (`wire-format.md` §8) so a node that knows the client has it may omit it, but omitting it from a client that does not is what makes first failover fail
+- **Include each sibling's full `KeyMaterial` in the list** unless this node itself already supplied that sibling's key material to this client in an earlier `AttachAck` or `SiblingUpdate` — the only omission the wire permits (`wire-format.md` §8.2); omitting it from a client that lacks it is what makes first failover fail
   (`wire-format.md` §8). A client that has never contacted a sibling cannot
   authenticate it otherwise, the handshake presents the classical component while
   the keyhash commits to the pair.
@@ -497,8 +497,9 @@ should simply know which they are getting.
 ## 11. Catalog
 
 **Answer catalog queries; do not propagate entries** (design §11.5). A node in your
-horizon asks what you have; you return the entries you **own** and that asker may
-see. Nothing floods, nothing is replicated, and nothing needs invalidating.
+horizon asks what you have; you return the eligible entries you **hold** — your
+own and those registered with you, since ownership decides who signs an entry,
+not who answers for it (design §11.5) — and that asker may see. Nothing floods, nothing is replicated, and nothing needs invalidating.
 
 - **Accept registrations only from the owner's own session** (`wire-format.md`
   §6, request type 7). An entry is owner-signed and therefore relayable by

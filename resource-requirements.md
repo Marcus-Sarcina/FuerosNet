@@ -27,9 +27,11 @@ that is noted in place.
 
 **The infra node is the front door; the resource is behind it.**
 
-This is a reverse proxy with an authenticating gateway. Implementers have priors
-for that arrangement, which is the whole benefit claimed for it. Implementers have priors for it, and the novelty stays
-confined to *how the gateway decides*, which is where the novelty belongs.
+This is an authenticating gateway — a reverse proxy where the node carries the
+resource's traffic, a broker where it authenticates and hands off (§3).
+Implementers have priors for that arrangement, which is the whole benefit claimed
+for it, and the novelty stays confined to *how the gateway decides*, which is
+where the novelty belongs.
 
 **The resource never reads network state.** The infra node evaluates access and
 presents the result as a credential; the resource sees an authenticated principal
@@ -630,8 +632,8 @@ operator's side of the same fact is `infra-client-requirements.md` §9.
 ## 9. Sandboxing
 
 **A plugin inside the infra client is inside the trust boundary.** The design works
-hard to ensure a patron sees metadata and not content (design §14.2); a hostile or
-compromised extension sees everything the node sees.
+hard to ensure a patron sees metadata and not content (design §14.2); run outside
+a sandbox, a hostile or compromised extension would see everything the node sees.
 
 The current threat model assumes the **operator's conduct** is the risk. It has no
 model for **code the operator installed**, which is a different and probably larger

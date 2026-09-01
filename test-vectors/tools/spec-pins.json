@@ -1,8 +1,8 @@
 {
  "specs": {
-  "wire-format.md": "9b1e4cd3573e2fe98cf78de2f5d7cb6e5e17abd016eaf43143eab6b8b3eb48c4",
-  "network-design.md": "1143db49dc63d3bf90abb354749bad0f432470b7452a1655f550282947808d5d",
-  "light-client-requirements.md": "7cb488428ded2ce96b453ada1c1eb90285b2f3e7c13640465158cc03a972dd68"
+  "wire-format.md": "94498dc93583276ef11f2769211c0c9b9a1b49db00376d386aefd141980e38cf",
+  "network-design.md": "a30198ad5eaacfd358e58271dfc711b2952fe3ca6261dd96e8f1cef427328358",
+  "light-client-requirements.md": "bc0ebf1d1794b602a87895076166e6139177eaf12fa975853d8142acd95e9711"
  },
  "generator": "c72e17d0adc18a3a32b812cdd5b45382484a14bc0bd47e7021141acf6169a632",
  "verifier": "22e56afdca782e6c486bb5c8a2be03eaf07b8afd2c1bb7a2e93825c6f7bb4011",
@@ -11,12 +11,12 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "1659f5b5e3ed5f7d62f12d0b15e2ace57ab0433d67dbb5b39271026649c72880",
-  "primitives.md": "46cfec42f5c140435d711e2a78541e797c19b84c4a0820e29fd57f936ef5f0cb",
-  "transactions.md": "90653e36e3968a78176062fc91e0e35337a5b3c3778a1c1c65bf0c9e07796035",
-  "records.md": "f4355a515cd136e1d57518b7391f54c488a01874e30a59fee48cbd41015a577e",
-  "verifier-selection.md": "3392bcf5d9fcb241e342aa3d17c1976f5e132c5872795befe3543624e653a632",
-  "README.md": "6732fa2a10be2df496de28022e342cd6f14511f411c7e2397e97440394473e02",
-  "negative-vectors.md": "2f753c7db5f4529ce46f83b0b646003a0e10446c8465d5440a745f29a8436eb9"
+  "keys.md": "82a18b0356e0f8c72419a1a2db3ec6590dbe0fdca6523cbaf3e7eced4e12e033",
+  "primitives.md": "911fd21fb364f7ca8554e7b32d5143ce35920067b0c65bd6842347cd75825e69",
+  "transactions.md": "3a079271267d743bd29e4bf97576936e14a16fc939c1ab0a3a8f8329f304f858",
+  "records.md": "23789703dc14662dd9b5c8ef873c18204cf421a03125bad0dbfa27fcef84a48c",
+  "verifier-selection.md": "86020f4a43f008e6257f61233e8d2505e7d48e0b1fb4b7359d8a8fb216a7ca2b",
+  "README.md": "0a175809dc9b8fbd3826c9be1768bb81126b4a3e0fb47f0cd5be2b4e24f4b080",
+  "negative-vectors.md": "e70692352568f878dbf5affbffb41da383cacbf7662921316920d089d8622c0f"
  }
 }

@@ -49,7 +49,7 @@ that is noted in place.
 - **Check the `nominated_by` split before you sign, and tell the user when your own
   nominees are absent or outnumbered.** The witness set is only representative to
   the extent you nominated half of it; where the counterparty nominated all of it,
-  your verifier sample derives entirely from their nominees (design §7.1.1). This
+  the attestation rests entirely on their nominees (design §7.1.1). This
   is not a validity condition — such a record is well-formed — which is why the
   client has to surface it.
 
@@ -71,13 +71,14 @@ that is noted in place.
   meeting (design §7.5).
 - **Run the guided capture sequence.** Randomised prompts, 3–5 images over 10–15
   seconds (design §7.5).
-- **Seal captures under keys derived from the seed the subject supplied, and never
-  retain a released key after the ceremony** (design §7.5.2). A compliant client holds
-  no decryptable likeness of another person; it regains access only when that person
-  releases a capture key again in a later ceremony.
-- **Release the capture key while the retention window is open, and not after.**
-  That is how the window is enforced: it is the subject's key, and declining to send
-  it is the whole mechanism (design §7.5.2).
+- **Seal captures under the capture key the subject supplied, discard it once the
+  capture is sealed, and never retain a key released later** (design §7.5.2). A
+  compliant client holds no decryptable likeness of another person; it regains
+  access only when that person releases the capture key again.
+- **Release the capture key on the user's policy — the declared window is their
+  default, not a rule** (design §7.5.2): they may enforce it, shorten it, or
+  extend it by continuing to supply. It is the subject's key, and declining to
+  send it is the whole mechanism.
 - **Back up seeds with the rest of device state.** Losing them costs the ability to
   unlock your likeness everywhere, in the same way and for the same reason as losing
   portable standing (design §10.2).
@@ -101,8 +102,9 @@ that is noted in place.
   unauthenticated ciphertext says nothing about the subject, and reporting it as
   evidence would let a corrupted store become an adverse result (design §7.5.2).
 - **Store your own seeds privately**, in your record of the transaction. They are
-  what lets you unlock your likeness on a counterparty's device later, and they die
-  with the device exactly as portable standing does (design §10.2).
+  what lets you unlock your likeness on a counterparty's device later, and absent
+  a restored backup they die with the device exactly as portable standing does
+  (design §10.2).
 - **Send the capture key directly to a selected verifier**, bypassing the
   counterparty running the ceremony and every witness (design §7.5.2).
 - **Let the user set their own retention horizon, and tell them what it costs.**
@@ -267,9 +269,10 @@ session secrecy. The client implements them; it does not reinvent them.
   well before exhaustion (`wire-format.md` §7.8).
 - **Rotate the signed prekey on a policy interval**, and never reuse a one-time
   prekey.
-- **Only leaf-to-leaf needs this.** Sessions to a patron or a resource terminate at
-  an endpoint that is online by definition and are already covered by the transport
-  handshake (design §14.2.4).
+- **Only leaf-to-leaf needs this.** Sessions to a patron or a resource terminate
+  at an endpoint that is online by definition and already run over an
+  authenticated transport — the `rhtn/1` session, or the service's own TLS on a
+  brokered connection (design §14.2.4, `resource-requirements.md` §3).
 - **Prefetch reusable prekey material for the whole Dunbar Org as a batch request**
   (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
@@ -451,4 +454,4 @@ session secrecy. The client implements them; it does not reinvent them.
 - Whether recovery should restore archive history, and how, without handing an
   attacker the same path (design §22).
 - Multi-device behaviour beyond merge: which device holds what, and how a user
-  understands their archive spanning several (design §23.1).
+  understands their archive spanning several (design §23.3).

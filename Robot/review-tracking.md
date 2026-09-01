@@ -2289,3 +2289,90 @@ stands: the overprecision class is exactly the §20.1 register's contents.
 with preventing several false findings. Both 0.1 runs are now ingested; the
 high-effort run found four contradictions to this run's one, and the two runs'
 contradiction sets are disjoint.
+
+## Cycle 2, pass 0.2 — internal contradictions (2026-09-02, high effort)
+
+25 findings: 1 BLOCKING, 16 SERIOUS, 8 MINOR. **All 25 verified against the text
+and all 25 held** — none died on inspection. All applied this session.
+
+**The seed-custody cluster (1–5), all in the §7.5.2 complex:**
+1. BLOCKING — "gives the other a 32-byte seed" contradicted "never held the
+   seed" and the construction block. Resolved on the construction's own terms:
+   the subject derives a per-ceremony capture key from a seed only they hold,
+   hands the *key* at capture time, and the holder discards it once sealed.
+   The KeyGrant (wire §7.3, k_capture only), every security claim, and the
+   light client's never-retain duty all pointed the same way. **Flagged for
+   author confirmation as the one BLOCKING item.**
+2. Light §1.1's "and not after" forbade the extension design §7.5.2 expressly
+   permits; the bullet now carries the default-not-rule model.
+3. "Seeds die with the device" vs "back up seeds": both design and light now say
+   *absent a restored backup*; the §7.5.2 Open question (re-release after
+   restore) is untouched.
+4. "If A and B never meet again" ignored the key release during A's ceremony
+   with C four paragraphs later; now "if A never releases the key again".
+5. Wire §7.3's "names the latest" now defers to the design's
+   subject's-choice rule, latest as the ordinary case.
+
+**Redesign residue and mode conflation (6–13):**
+6. §10.1's pruning argument still traversed "from the committed back-pointer";
+   rebuilt on the current model — only in-window records qualify for a bundle,
+   so the pruning boundary aligns with qualification. The dead n=1 clause went.
+   **Rationale reconstructed from the redesign's own rules; author should
+   glance.**
+7. Infra §1's "knows the client has it" loosened wire §8.2's sender-history
+   test; now states the only omission the wire permits.
+8. Infra §11's "entries you own" excluded third-party registrations the same
+   section requires holding; now "eligible entries you hold", ownership deciding
+   who signs.
+9. Appendix A's "without its operator knowing" contradicted §19.6's mandatory
+   disclosure; now "without pausing for approval — §19.6's disclosure still
+   reaches the operator, as notice rather than a question".
+10. rr §1's categorical "reverse proxy" (and design §11.5's) now: gateway —
+    proxy where the node carries traffic, broker where it hands off. A
+    duplicated sentence in rr §1 died in the same edit.
+11. Light §3's "covered by the transport handshake" now names which transport:
+    rhtn/1, or the service's own TLS on a brokered connection.
+12. §24 step 10's "HTTP/3 over the existing session" contradicted rr §3's
+    you-cannot-layer-HTTP/3 rule; now ResourceRequest on rhtn/1, HTTP on the
+    outbound leg.
+13. rr §9's "sees everything the node sees" now "run outside a sandbox, would
+    see" — the baseline that motivates infra §9.2's no-hooks model.
+14. §16.6's "an infra node is required to exceed 110 users" inverted §3.3's
+    rule; now "infrastructure becomes required only once a branch would exceed
+    110 users under two light levels".
+15./18. §4's scope bullet said interaction protocol and owner-movement rule
+    deferred; both are specified (§22.1, §11.2). Bullet updated.
+16. Wire §4.5.2's witness reads-row said "Location only"; design §8.1.1 makes
+    the patron the sole recipient and design's own table says the witness
+    *contributes* corroboration. Row now **None**. This makes the ten-of-eleven
+    sentence (both documents) arithmetically true — the previously-left tension
+    dissolves.
+17. §14.2.4's Still-to-settle has five items; the preface (twice), P12 and
+    §22.2 said four and omitted payload-type demultiplexing. All four sites now
+    say five and §22.2 carries the item.
+
+**Stale numbers and cross-references (19–25):**
+19. §21's chosen-enumeration listed a forwarding TTL wire §10.1 explicitly
+    eliminates; dropped.
+20. Light Open's multi-device pointer §23.1 → §23.3.
+21. §20.1's section column remapped throughout (7.1.x → current 7.x, 10.6.5 →
+    7.6/12.6.5, 11.1.x → 14.1.x, 9.6 → 16.6, 7.2 → 12.2, 7.4 → 12.7.1, 4.3/4.4
+    → 3.3, A.1 → B.1, the extension row → `resource-requirements.md` §9;
+    6.2.5 and the §1 rows were still correct). **Two duplicate rows found
+    beyond the finding** — radio latency and regional gateways each appeared
+    twice from separate additions — merged, statuses combined.
+22. §23.1's "beyond the seven" → "beyond the current six" with the tombstone
+    noted.
+23. Wire §4.5.1's "nine for a typical record" → seven, and the proof cost
+    four → three hashes (ceil(log2 7) = 3), consistent with "sending every
+    digest costs seven" in the same sentence.
+24. §20.2's "twenty-six below" → thirty-one; the table runs A1–A31 and §20's
+    intro already said 31.
+25. Light §1.0's "your verifier sample derives entirely from their nominees" —
+    stale selection-era wording — now "the attestation rests entirely on their
+    nominees".
+
+Checks after: §21.1 counts eleven parameter rows across its three tables as
+§22.2 claims; the wire reads-table counts eleven exchanges with the patron the
+sole field recipient; §23.2 clean; residual sweeps for every replaced phrase
+return nothing.

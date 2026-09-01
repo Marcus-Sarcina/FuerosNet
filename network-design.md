@@ -61,7 +61,7 @@ operations. Encoding for all of it is in
 `wire-format.md`.
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
-the Triple Ratchet* (§14.2.4) rather than designed here, with four integration
+the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
 decisions open. Multi-device beyond archive merge (§23.3). **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
@@ -651,9 +651,10 @@ payload, so apex load scales with churn and introductions, not with usage.
   `wire-format.md` §4.6)
 - **End-to-end payload encryption** to the addressed endpoint (§14.2). The
   endpoint may be another leaf, the patron, or a resource. Requirements sketched
-  §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions open
-- **Resources** (§11): object, permission scopes, service catalog and abuse
-  reporting specified; the interaction protocol and owner-movement rule deferred
+  §14.2.4 adopts PQXDH and the Triple Ratchet; five integration decisions open
+- **Resources** (§11): object, permission scopes, service catalog, abuse
+  reporting and the interaction protocol specified (§22.1, `wire-format.md` §11);
+  the owner-movement rule stated (§11.2)
 - **Self-chained transaction archive** (§10). Each transaction carries a hash
   of the subject's previous one, making sequence position tamper-evident
 - Addressing, resolution, and routing
@@ -1749,9 +1750,10 @@ more PII — rely on §7.4.3's subject-set retention policy and expect elevated
 
 #### 7.5.2 Keystream-encrypted captures: the subject holds the key
 
-**Each participant gives the other a 32-byte seed during the ceremony, and each
-seals its captures of the other party under keys derived from the seed that party
-supplied.**
+**Each participant derives a per-ceremony capture key from a seed only they hold,
+and hands the other that key at capture time; each seals its captures of the
+other party under the key that party supplied, discarding it once the capture is
+sealed.**
 
 So A's images sit on B's device sealed under keys **only A can derive**. B
 stores ciphertext. A stores the seed, privately, in its own record of the
@@ -1759,8 +1761,9 @@ transaction. B can decrypt only when A releases a capture key and hands it over
 directly, which happens during a subsequent ceremony involving A.
 
 **Retention stops being a promise and becomes a consequence of meeting cadence.**
-If A and B never meet again, B's copies are permanently inaccessible without anyone
-deleting anything. Compare §7.5.1, where the two-year window is a commitment
+If A never releases the key again — no further ceremony with B, and no later
+ceremony of A's that selects B as a verifier — B's copies are permanently
+inaccessible without anyone deleting anything. Compare §7.5.1, where the two-year window is a commitment
 nobody can verify.
 
 **The subject holds the key to their own likeness on someone else's device.** Every
@@ -1851,11 +1854,11 @@ key-release channel makes it symmetric without a new message type.
 
 ##### Interaction with recovery
 
-**Seeds die with the device, and that is consistent rather than a new fragility.**
+**Absent a restored backup, seeds die with the device — consistent rather than a new fragility.**
 A rotated or recovered key inherits only local standing (§9); rotation never
 carries state forward from beyond the local trust horizon. So a participant who
-loses their device loses the ability to unlock their likeness on every
-counterparty's device, in the same way and for the same reason they lose portable
+loses their device and its backup loses the ability to unlock their likeness on
+every counterparty's device, in the same way and for the same reason they lose portable
 standing (§10.2).
 
 The practical consequence is that a post-loss recovery ceremony rests on
@@ -1898,8 +1901,8 @@ same face, and cannot be replayed against a later ceremony. Without that binding
 subject releasing a key to one counterparty would silently release every copy in
 existence.
 
-**And the transfer problem disappears.** The subject sends a **32-byte seed, or a
-derived key** — not megabytes of expanded keystream. §7.5.2's earlier note about
+**And the transfer problem disappears.** The subject sends a **32-byte derived key** — not megabytes of expanded
+keystream. §7.5.2's earlier note about
 NFC and BLE throughput was chasing a problem that only existed because the
 mechanism was described in terms of the expanded stream rather than what generates
 it. **Any channel carries 32 bytes.**
@@ -2995,14 +2998,14 @@ met — does not depend on the chain's continuity. Pruning the chain therefore d
 license discarding presence records, sealed captures or capture seeds, and
 `light-client-requirements.md` §2 requires they be kept.
 
-**Except inside the 730-day window, where they are still required.** Verifier
-selection counts *n* and draws the candidate set by traversing what is reachable from
-the committed back-pointer (`wire-format.md` §5.4), so a checkpoint that discarded
-recent history would shrink both — letting a subject choose its own verification
-burden, down to the `n = 1` case that requires **zero** verifiers (§6.4). **Pruning is
-therefore permitted only beyond the window**, which costs nothing anyone wants: the
-storage saving and the elision of early history are both about records the candidate
-set has already aged out.
+**Except inside the 730-day window, where they are still required.** Only
+in-window records qualify for a ceremony bundle (`wire-format.md` §5.4), so what a
+subject holds inside the window is what it can offer a counterparty to select
+verifiers from — and its own recovery substrate (§9). **Pruning is therefore
+permitted only beyond the window**, which aligns the boundary with qualification
+and costs nothing anyone wants: beyond it, a record can no longer appear in any
+bundle, so the storage saving and the elision of early history concern records
+the candidate set has already aged out.
 
 **The archive's scope across bindings is left unstated**, and no claim is made
 that one chain spans them. Seqno series (§10.0) postdate the question, and no reader
@@ -3090,9 +3093,11 @@ is what the network is *for* once naming and authentication work: §1 frames the
 product as letting people **coordinate** with their social graph rather than
 merely communicate with it (V6), and resources are how coordination happens.
 
-**The infra node is the front door; the resource sits behind it.** A reverse proxy
-with an authenticating gateway, a conventional shape, which is a good sign: the
-novelty stays confined to *how the gateway decides*, which is where it belongs.
+**The infra node is the front door; the resource sits behind it.** An
+authenticating gateway, a conventional shape — a reverse proxy where the node
+carries the resource's traffic, a broker handing off a credential where it does
+not (`resource-requirements.md` §3) — which is a good sign: the novelty stays
+confined to *how the gateway decides*, which is where it belongs.
 
 **The resource never reads network state.** The node evaluates access and presents
 the result as a credential; the resource sees an authenticated principal holding
@@ -5605,8 +5610,9 @@ policy parameter computed locally, so it requires no protocol change.
 
 ### 16.6 Reliability weight is not social trust
 
-Infrastructure status is open to anyone, no restriction on running a node. An
-infra node is required to exceed **110** users (f = 10, L = 2, §3.3). But any user
+Infrastructure status is open to anyone, no restriction on running a node.
+Infrastructure becomes *required* only once a branch would exceed **110** users
+under two light levels (f = 10, L = 2, §3.3). But any user
 may launch a
 server instance and sign it with their key; having one does not cause or require
 a hundred people to follow them. Cost is a low-spec VM plus a static IP, roughly
@@ -6255,7 +6261,7 @@ and a citation to a missing number resolves there.
 | P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, and operator logging, which §1.1 cannot reach |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§13.7, §13.7.1). The device is the global correlation point the network architecture otherwise avoids |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
-| **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |
+| **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §14.2.4 adopts PQXDH and the Triple Ratchet; five integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |
 | **P13** | **Retention promises are undetectable against hostile clients**, though §7.5.2's keystream encryption makes a *compliant* client structurally unable to retain, a client that retains photographs past its declared window runs the match and reports `basis = personal_knowledge` | Medium | §13.7.1. No protocol fix exists, and the mechanism is not detectable by its own use |
 | P14 | **Chain back-pointers leak activity level to counterparties.** Signing over a predecessor hash reveals the subject's chain head, so a counterparty meeting the same person twice sees how far it advanced | Low | **Accepted, not open.** It discloses nothing past §8.1's selection threshold, which is `min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence count and **the evaluator learns *n* from the subject by design**. Activity level is already an input every evaluator receives; a chain head is a coarser view of the same fact, given to a party who has met them |
 | **P15** | **Service catalog entries reveal what a node runs, to anyone in its horizon who asks.** Resource type, instance name and connection info are served on request (§11.5) | Medium | `discover_scope` filtering at the source limits the audience to those who could use the resource, which is a genuine mitigation. Residual: running a resource at all is visible to everyone in scope, and the *set* of resources a node runs is a fingerprint. Unassessed under §19.1 **Subsumes the former P8** (*topology deanonymisation by association*), withdrawn: identifying one member by real name yields their job, not a label for any of their subtrees — §3.1.1's membership plurality means a member belongs to several, and nothing in the protocol says which is a workplace rather than a bowling team. **What labels a subtree is its catalog**, which is this finding — and the catalog is answered on request within horizon, so a party holding topology from further away cannot obtain the labels at all. An attacker who holds both the topology and a real-name link within their horizon gets the disclosures membership carries (§1.2) |
@@ -6491,30 +6497,28 @@ mistaken for established results.
 
 | § | Assumption | Status |
 |---|---|---|
-| 7.1.4 | Hill-climbing against binary-output matchers needs "thousands to tens of thousands" of queries | Query counts depend on modality, matcher, and information exposed. **Needs a specific cited attack** if used as a security-cost input |
-| 7.1.4 | Cross-device face matching gives "a few percent" false-reject rate | NIST evaluations show error rates vary strongly with algorithm, image quality, pose and threshold. **No externally valid figure exists** until matcher, dataset, threshold and capture conditions are specified |
+| 7.4.1 | Hill-climbing against binary-output matchers needs "thousands to tens of thousands" of queries | Query counts depend on modality, matcher, and information exposed. **Needs a specific cited attack** if used as a security-cost input |
+| 7.4.4 | Cross-device face matching gives "a few percent" false-reject rate | NIST evaluations show error rates vary strongly with algorithm, image quality, pose and threshold. **No externally valid figure exists** until matcher, dataset, threshold and capture conditions are specified |
 | 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it |
 | 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
 | 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
 | 1.2.4 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |
-| 7.1.6.3 | UWB is "the strongest available proximity channel" | The channel ranking (§7.6.3). Comparative claim with no comparison against the other handset-available channels under a stated attacker |
-| 10.6.5 | Carriers aggregate traffic through a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; carrier topology varies and is not published |
-| 7.1.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by radio generation, load and core placement |
-| 5 | A hostile installed extension is a larger attack surface than operator conduct | SUPPORTING. Comparative claim about two surfaces neither of which is measured |
-| 4.3, 4.4 | Infra will deploy "mostly in cloud datacentres", concentrated in "a handful of clouds" | SUPPORTING. Strengthens the case for making ASN/region visible; the concentration signal stands without the prediction |
+| 7.6.3 | UWB is "the strongest available proximity channel" | The channel ranking (§7.6.3). Comparative claim with no comparison against the other handset-available channels under a stated attacker |
+| 7.6 | Carriers aggregate to a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; a documented deployment pattern rather than a universal property, and carrier topology varies and is not published |
+| 7.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by generation, radio state, operator and load, and the term is ambiguous between one-way, RTT and access procedure. **Tie to a specific technology and measurement** |
+| `resource-requirements.md` §9 | A hostile installed extension is a larger attack surface than operator conduct | SUPPORTING. Comparative claim about two surfaces neither of which is measured |
+| 3.3 | Infra will deploy "mostly in cloud datacentres", concentrated in "a handful of clouds" | SUPPORTING. Strengthens the case for making ASN/region visible; the concentration signal stands without the prediction |
 | 6.2.5 | Bootstrap mutual adoption is a "likely accident" | SUPPORTING. Cycle prevention must work regardless of whether cycles are accidental or malicious |
-| 7.2 | "Real early networks will be thousands to tens of thousands of nodes" | SUPPORTING. Characterises expected early operation; the anchor mechanism is stress-tested independently |
-| 10.6.5 | "The industry direction is away from long-lived credentials" toward short-lived ones | SUPPORTING. Persuasive background; the local renewal mechanism does not depend on the trend |
-| 7.4 | "Creating a new identity is cheaper than recovery" | SUPPORTING. The stronger structural reason is that a Genesis identity has no accumulated history to recover |
-| 11.1.3 | 0-RTT "saves battery" and permits a lazy heartbeat | SUPPORTING. Heartbeat interval is unset; this affects tuning, not architecture |
-| 11.1.1 | "A substantial minority" of connections will fall back to TURN relay | Drawn from general familiarity with WebRTC-style deployments, not measured for this topology. **Two mobile peers behind CGNAT is the worst case and the common case here**, so the true fraction may be much higher, which would put the infra economics of §16.6 back in question |
-| 7.1.1 | Randomised motion prompts "constitute the liveness check" against print, replay and generated video | Presentation-attack detection is method- and attack-dependent. Motion and parallax are **inputs** to a PAD system, not a defence in themselves. **Needs evaluation of a named algorithm against a specified attack suite**, particularly for generated video |
-| 7.1.5 | A face crop runs 30–80 KB | Depends entirely on dimensions, codec and quality. **State the assumptions and derive** |
-| 7.1.5.1 | Ageing is modest for adults, severe for minors, "substantial in 24 months" | Degradation with age and particular difficulty with children are supported; the sharp threshold and the 24-month figure are not. **Kept by ruling** [author, 2026-09-02]: the tier needs a threshold, two years is a common one, and it is close enough on several axes, of which face ageing is only one — the figure locates a chosen threshold, it does not derive it (§7.5.1 says the same: a compromise, not an optimum on any axis) |
-| A.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
-| 7.1.6 | Radio access latency runs 20–80 ms | Varies by generation, radio state, operator and load, and the term is ambiguous between one-way, RTT and access procedure. **Tie to a specific technology and measurement** |
-| 7.1.6 | Carriers aggregate to a small number of regional gateways | A documented deployment pattern, not a universal property of cellular networks |
-| 9.6 | Infra costs ~$20/month retail, ~$5–7 marginal to an attacker | Budgeting assumptions. Cloud pricing varies by provider, region and commitment. **Specify configuration and date if used as threat-model inputs** |
+| 12.2 | "Real early networks will be thousands to tens of thousands of nodes" | SUPPORTING. Characterises expected early operation; the anchor mechanism is stress-tested independently |
+| 12.6.5 | "The industry direction is away from long-lived credentials" toward short-lived ones | SUPPORTING. Persuasive background; the local renewal mechanism does not depend on the trend |
+| 12.7.1 | "Creating a new identity is cheaper than recovery" | SUPPORTING. The stronger structural reason is that a Genesis identity has no accumulated history to recover |
+| 14.1.3 | 0-RTT "saves battery" and permits a lazy heartbeat | SUPPORTING. Heartbeat interval is unset; this affects tuning, not architecture |
+| 14.1.1 | "A substantial minority" of connections will fall back to TURN relay | Drawn from general familiarity with WebRTC-style deployments, not measured for this topology. **Two mobile peers behind CGNAT is the worst case and the common case here**, so the true fraction may be much higher, which would put the infra economics of §16.6 back in question |
+| 7.1 | Randomised motion prompts "constitute the liveness check" against print, replay and generated video | Presentation-attack detection is method- and attack-dependent. Motion and parallax are **inputs** to a PAD system, not a defence in themselves. **Needs evaluation of a named algorithm against a specified attack suite**, particularly for generated video |
+| 7.5 | A face crop runs 30–80 KB | Depends entirely on dimensions, codec and quality. **State the assumptions and derive** |
+| 7.5.1 | Ageing is modest for adults, severe for minors, "substantial in 24 months" | Degradation with age and particular difficulty with children are supported; the sharp threshold and the 24-month figure are not. **Kept by ruling** [author, 2026-09-02]: the tier needs a threshold, two years is a common one, and it is close enough on several axes, of which face ageing is only one — the figure locates a chosen threshold, it does not derive it (§7.5.1 says the same: a compromise, not an optimum on any axis) |
+| B.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
+| 16.6 | Infra costs ~$20/month retail, ~$5–7 marginal to an attacker | Budgeting assumptions. Cloud pricing varies by provider, region and commitment. **Specify configuration and date if used as threat-model inputs** |
 
 The 2-year retention parameter (§7.5.1) partly rests on the ageing assumption
 above, so its basis is weaker than the surrounding argument implies.
@@ -6524,7 +6528,7 @@ above, so its basis is weaker than the surrounding argument implies.
 ### 20.2 Load-bearing assumptions
 
 **Distilled from the claims this design makes without establishing them.**
-Most are rhetorical intensifiers or parameter choices. The twenty-six below are
+Most are rhetorical intensifiers or parameter choices. The thirty-one below are
 different:
 **each supports a design decision that would change if the assumption is false.**
 None is currently validated. They are the list to attack first, and the natural
@@ -6596,8 +6600,8 @@ unset ones by that criterion, and the same reasoning applies to the set ones.
 **derived** only where the document supplies a calculation that produces them.
 Most are **chosen.** A judgement with stated rationale, which is not the same
 thing. `L`, `S`, `h_store`, `h_process`, the retention window, `min(n/2,10)`, the
-image count, the geohash default, the forwarding TTL and the currency lifetime
-are all **chosen**, not derived.
+image count, the geohash default and the currency lifetime are all **chosen**,
+not derived.
 
 | Symbol | Meaning | Value | Basis |
 |---|---|---|---|
@@ -6727,7 +6731,8 @@ order and refusal behaviour, with the role row consulted as a lookup.
   which is a change worth noting rather than a permanent property.
 - **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid
   identity; whether prekeys are served only by the patron or also by siblings; prekey
-  rotation cadence and last-resort policy; and §5.2's crate-maturity caveat.
+  rotation cadence and last-resort policy; payload-type demultiplexing on the
+  end-to-end channel; and §5.2's crate-maturity caveat.
 - **The canonical biometric profile** (§7.5): extractor, template format and
   fixed length per modality version, fuzzing algorithm, matcher and version
   registry, plus the sealed store's AEAD parameters — cipher, nonce derivation,
@@ -6812,7 +6817,7 @@ line here says *this is not being built yet*.
   be implemented in this or any intervening version.
 - **Canonical test vectors** (`wire-format.md` §13), until the encoding stops moving
   and someone other than the author writes them.
-- **Transaction types beyond the seven**, and **multiple identities per client** (§4) —
+- **Transaction types beyond the current six** (seven numbers allocated; type 6 is a tombstone), and **multiple identities per client** (§4) —
   a v1 client-scope exclusion, not a protocol limit.
 - **IPv6 endpoints and prefix-based reputation** (§4). v1 demands IPv4; the
   /64 unit, NLRI encoding and prior art are recorded with the deferral.
@@ -6945,7 +6950,8 @@ rules that conflict only on malformed input.
     STUN and TURN. The relayed path must work first: direct is an optimisation
     over it, and a substantial minority of connections will never get it.
 10. Resources (§11): object, catalog, abuse reporting and the request path are
-    all specified — HTTP/3 over the existing session (`resource-requirements.md`
+    all specified — a `ResourceRequest` stream on the existing session, ordinary
+    HTTP on the node-to-service leg where one exists (`resource-requirements.md`
     §3, `wire-format.md` §11).
 
 Existing stacks (libp2p, Iroh) can absorb step 1 if the novelty is elsewhere —
@@ -7002,9 +7008,11 @@ one node.
 adoptions, acknowledging subtree membership (§11.2.1), replication and issuing
 resource credentials all proceed without user intervention. **Witnessing and
 answering a verifier query are automatic too, despite resembling human acts**: the
-witness's client observes a ceremony, tests the evidence and signs without its
-operator knowing the ceremony occurred, and a verifier's client compares a profile
-against what it already holds without asking anyone (§7.1, §7.3). **A user
+witness's client observes a ceremony, tests the evidence and signs without pausing
+for its operator's approval — §19.6's disclosure still reaches the operator, as
+notice rather than a question — and a verifier's client compares a profile
+against what it already holds without asking anyone's permission (§7.1, §7.3,
+§19.6). **A user
 wanting less sets policy in advance rather than being interrupted** — the switch is
 theirs, set asynchronously to any traffic it governs, which is §16.1's
 pluggable-policy shape applied to attention instead of to trust.

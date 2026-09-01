@@ -7781,3 +7781,27 @@ from "around 200" to the canonical ~150 with the original interval of roughly
 dated "today". Five partially-correct rows and all ten unverifiable rows needed
 no edit — each already registered in §20.1, already hedged, already ruled, or
 the design's own labelled inference.
+
+### 2026-09-02 (cycle 2, pass 0.2 applied: 25 internal contradictions, 25 held)
+The high-effort contradiction pass found 25 and every one survived verification.
+The blocking find was seed custody in §7.5.2: the opening sentence had
+participants exchanging seeds while the construction, the KeyGrant and the
+security claims all require the seed never to leave the subject — the text now
+hands over a per-ceremony derived key at capture, discarded once the capture is
+sealed. Around it, the retention window is now everywhere the subject's default
+rather than a hard stop; seeds die with the device only absent a restored
+backup; "never meet again" became "never releases the key again"; and the grant
+defers to the subject's choice of eligible capture. Redesign residue in §10.1's
+pruning argument (chain traversal) was rebuilt on bundle qualification. Mode
+conflations were split: gateway as proxy-or-broker in both documents naming it,
+the transport-coverage claim now names which transport, and §24's step 10 no
+longer directs HTTP/3 onto a connection §3 of the resource document forbids it
+on. The 110 rule reads in the right direction again; the §4 scope bullet
+concedes the interaction protocol and owner-movement rule are specified; the
+integration-decision count is five at all four sites with demultiplexing
+restored to §22.2; the witness reads-row is None, which makes ten-of-eleven
+arithmetically true in both documents; the forwarding TTL left §21; the
+twenty-six became the thirty-one it always was; nine leaves became seven and
+four proof hashes three; and §20.1's section column was remapped wholesale,
+merging two duplicate rows found in the process. Sweeps for every replaced
+phrase return nothing.

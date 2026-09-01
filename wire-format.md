@@ -1395,8 +1395,8 @@ is looking at without a table. **Exactly seven, in ascending byte order**:
 | `pN.integrity` | `{ 1: bool, 2: uint, 3: ? bstr }` — attested, scheme, evidence (design §7.8) |
 
 **Why not a Merkle tree.** design §19.3 proposed one, following SD-JWT loosely. At
-the leaf count here — nine for a typical record — a tree buys nothing: inclusion
-proofs would cost four hashes each where sending every digest costs seven, and a tree
+the leaf count here — seven — a tree buys nothing: inclusion
+proofs would cost three hashes each where sending every digest costs seven, and a tree
 adds real hazards a flat list does not have, **odd-node handling and the
 duplicated-node second-preimage class**. SD-JWT's own construction is a digest array
 for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
@@ -1488,7 +1488,7 @@ which reads adoptions and no presence record at all, and combines the two
 | Exchange | Disclosable fields |
 |---|---|
 | Ceremony, at creation (design §7.1) | **All.** Both parties construct the body |
-| Witness signing (design §7.1) | **Location only**, which the witness corroborates |
+| Witness signing (design §7.1) | **None.** The witness contributes its own corroboration (design §7.6.2); it receives no disclosed field |
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier selection (§5) | **None.** Selection is the selector's judgment over the handed bundle; nothing in the record replays it |
 | Response accounting (§5.5) | **None.** Counts and reads field 5 |
@@ -2326,9 +2326,10 @@ never propagates**: a grant is a momentary release, and an object that persisted
 would defeat the retention property the whole scheme exists for.
 
 **Field 1 disambiguates which capture.** A verifier who has met the subject several
-times holds several sealed captures; **the grant names the one to open**, and the
-subject names the latest finalized eligible meeting in the committed history
-(§4.5). Without field 1 the holder would guess.
+times holds several sealed captures; **the grant names the one to open** — ordinarily the latest finalized eligible
+meeting in the committed history (§4.5), though which eligible capture to grant
+against is the subject's choice (design §7.5.2). Without field 1 the holder
+would guess.
 
 **Field 2 binds the grant to a query.** A grant arriving unattached to a query the
 subject countersigned is an unsolicited key release, and a holder should treat it as
