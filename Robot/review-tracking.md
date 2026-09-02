@@ -2723,3 +2723,45 @@ formation's corroborations), while `[ + … ]` and `1*8` minima make emptiness a
 schema violation. "Open for the author" remains **nothing**. What canonical
 status still awaits is unchanged in kind: an independent implementation
 reproducing the whole suite — and 0.6.1's phase 2 has begun exactly that.
+
+## Cycle 2, pass 0.6 — implementation attempt, resolution (phase 1, 2026-09-02)
+
+Clean-room Rust attempt on target 2 (resolve a locator against an anchor
+table). **Structurally clean: no wire fields added** — no consumed-prefix, no
+target-type bit, no arrival equation; progress is local state and arrival is
+the `ServingInfra` reply, exactly the §7.7 design. Eight behavioural
+questions, thirteen type decisions; every claim verified against text.
+
+**No change (deliberately local or already specified)**: U1 — the
+anchor-ingestion model is the implementer's stated choice by design (infra
+§4.1 "state plainly which model you implement"; the reviewer chose the
+unverified gossip cache and said so); U3 retry policy; U5
+malformed-endpoint handling; U6 higher-anchor re-resolution is the caller's
+(design §12.3); U7 cache TTL (§21.1); U8 pin-timing (local, and the
+provisional-until-handshake choice is sound). T1–T13 all legitimately local;
+T4's warning about reconstructed KeyMaterial bytes is exactly why keys.md
+carries the worked canonical-encoding example.
+
+**One reviewer divergence, no spec change**: U4's "never dial a post-anchor
+hop unauthenticated" is stricter than the design. Wire §7.7.3 states the
+posture explicitly — a referrer's identity is not what protects the requester,
+a hostile chain costs a failed dial, disclose nothing beyond the query to a
+party you cannot authenticate — and its sibling-difference callout
+anticipates precisely this confusion. The implementation's MissingKeyMaterial
+failure at referral hops would strand resolutions the design completes.
+
+**Two wire nits found via U2/U4, fixed**: `AnchorEntry` field 2 said bare
+`[ + NetworkPoint ]` against §1's ceiling of 8 — now `1*8` with the ceiling
+noted; `Referral` field 2 and `AnchorEntry` field 2 now state the
+publisher's-preference-order semantic the other endpoint lists already
+carried; and `Referral` field 4's comment — the likely source of the
+divergence — now says CAN, an option not a requirement, with the
+disclose-nothing rule and the terminal-ServingInfra distinction inline.
+
+**Crate maturity**: consistent with design §5.2's caveats; the reviewer adds
+that rustls's AWS-LC provider prefers X25519MLKEM768 by default (the profile
+must restrict rather than accept defaults — rr/wire already require
+offering only that group), that AWS-LC's WASM support is experimental
+(emscripten, not browser wasm32), and that browser QUIC remains
+relay-experimental — all inside §5.2's "today" hedge. No change. Phase 2
+(the resolution messages now sit in messages.md and the corpus) not yet run.

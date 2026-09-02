@@ -7922,3 +7922,15 @@ finalization must-accepts, the enumeration matrix, six newly-covered
 optionals, and the schema-shape matrix. The harness runs 64 checks, all
 passing, every signature real. Nothing is open for the author; promotion
 awaits only an independent implementation reproducing the suite.
+
+### 2026-09-02 (cycle 2, 0.6 resolution target, phase 1)
+The clean-room resolution attempt added no wire fields and validated the
+no-arrival-equation design end to end. Two wire nits fixed: AnchorEntry's
+endpoint list was unbounded in the schema against §1's ceiling of 8, and the
+endpoint lists of Referral and AnchorEntry now state the
+publisher's-preference semantic the other lists already carried. Referral
+field 4's comment now says a requester CAN authenticate the next hop — an
+option, not a requirement — naming the disclose-nothing rule and the
+terminal-ServingInfra distinction, after the reviewer's implementation read
+it as mandatory and would have stranded resolutions the design completes.
+Everything else was deliberately local policy, correctly exercised.

@@ -2310,7 +2310,10 @@ Freshness is by `seqno`, strictly greater `counter` to replace **within a series
 ```
 AnchorEntry = {
   1: keyhash,          ; 32
-  2: [ + NetworkPoint ],
+  2: [ 1*8 NetworkPoint ],
+                       ; §1's ceiling, stated here too — the earlier `+` left
+                       ;   this schema unbounded against the table. Publisher's
+                       ;   preference order, as everywhere endpoints are listed
   3: uint,             ; subtree size. U64 RANGE, the design's ~4-byte sizing
                        ; arithmetic is a storage estimate, not a validity bound
   4: seqno,
@@ -2555,16 +2558,24 @@ ResolveReply = {
 
 Referral = {
   1: keyhash,                ; the next hop to query
-  2: [ 1*8 NetworkPoint ],   ; its endpoints
+  2: [ 1*8 NetworkPoint ],   ; its endpoints, in the publisher's preference
+                             ;   order — the same semantic as `ServingInfra`
+                             ;   and §7.6; selection and retry are local policy
   3: uint,                   ; path indices this referral advances past, counted
                              ;   INCREMENTALLY from the referring node's own
                              ;   position, not as an offset from the anchor.
                              ;   MUST be >= 1: a referral that advances nothing
                              ;   is a loop, and a node with nothing to add
                              ;   reports failure instead
-  4: ? KeyMaterial           ; so a requester with nothing pinned can authenticate
-                             ;   the next hop (§9.1). Same reason `ServingInfra`
-                             ;   carries it
+  4: ? KeyMaterial           ; so a requester with nothing pinned CAN authenticate
+                             ;   the next hop (§9.1) — an option, not a
+                             ;   requirement [2026-09-02]: a hop without it is
+                             ;   still dialled, under the disclose-nothing rule
+                             ;   below, because a referrer's identity is not what
+                             ;   protects the requester. Only a terminal
+                             ;   `ServingInfra` needs authenticatable material to
+                             ;   proceed past resolution. Same field, same
+                             ;   reason, as `ServingInfra` carries
 }
 
 ServingInfra = {
