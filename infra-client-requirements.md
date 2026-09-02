@@ -376,7 +376,10 @@ everything, uniformly.
 **Materialise role assignments per resource, one row per Dunbar Org member**
 (design §11.4). **Authorisation at request time is a lookup**, never a predicate
 evaluation — that makes it deterministic, cheap, and readable by the operator who
-configured it.
+configured it. **A row carries at most 64 roles**
+(`resource-requirements.md` §3); refuse to materialise one wider [2026-09-02] —
+the operator hears about it at configuration time, never a requester at request
+time.
 
 **Re-evaluate predicates at four moments, none of them a request**: when an
 operator is configuring roles; in a background pass when a node enters or leaves
@@ -458,8 +461,18 @@ automatic** or the federation pattern does not happen
 sessions rather than notifying the relying party.** Departure, disavowal, a
 predicate ceasing to match, an operator revoking a grant, the cause does not
 matter, and enumerating causes would mean missing one. Present encoding: drop that
-principal's sessions to hosted resources. They reconnect and are re-evaluated; if the roles are gone, so is the
-access.
+principal's sessions to hosted resources — and **the session dropped is the
+resource-facing one** [2026-09-02]. A hosted session is the node-held identifier
+under which the resource sees a principal's requests
+(`resource-requirements.md` §2), not the caller's rhtn/1 transport session,
+which may be carrying sessions to other resources and control traffic besides.
+Ending it means retiring the identifier and resetting any of that pair's
+requests still in flight; the caller's next request to that resource is
+evaluated afresh and, where it still passes, arrives under a new identifier —
+which is how the resource observes the change, since there is no teardown
+message on the hosting path. The transport session is untouched: an
+authorisation change at one resource is not a connectivity event. If the roles
+are gone, so is the access.
 
 **This is local behaviour, not a network promise.** No protocol rule compels it and
 none could: the network cannot reach into an operator's node. **For sessions this

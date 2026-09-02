@@ -127,7 +127,14 @@ comma-separated list of role names, each an HTTP `token`, the comma being the
 list delimiter rather than part of any name. **base64url here is RFC 4648 §5 without padding** — no trailing
 `=`, since a strict parser given the other spelling rejects bytes that decode
 identically, and one of the two had to be named. **Role names are `[a-z0-9_-]`, 1–32 bytes, matched
-byte-for-byte** — no case folding, no escaping, and no comma admitted. **Their
+byte-for-byte** — no case folding, no escaping, and no comma admitted. **They
+form a set** [2026-09-02]: duplicates carry no meaning and a conforming node
+does not emit them. **A principal holds at most 64 application roles per
+resource** [2026-09-02] — bounding the header near 2 KB, inside common HTTP
+stack limits, and the bound is enforced where it can be seen: a node refuses
+to *materialise* a row it could not encode, so the operator hears about an
+over-wide role assignment at configuration time and no request-time failure
+code exists, because none can occur. **Their
 order is not significant and carries no information**, so do not key a cache on the
 header's bytes; match names, not the string.
 

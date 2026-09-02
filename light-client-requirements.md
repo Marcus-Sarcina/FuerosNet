@@ -203,7 +203,7 @@ job.
   separate kind of history that stays usable under any sequence and in any subtree
   (design §10.0). Deleting it with the chain would discard the evidence a later
   adoption and a later recovery both depend on, and would put a patron's willingness
-  to countersign a series reissue astride evidence §6.4 says it must not gate.
+  to countersign a series reissue astride evidence design §6.4 says it must not gate.
 - **Keep retention and disclosure as separate controls.** Choosing how far back to
   *disclose* must never delete anything: disclosure is reversible and can be widened
   later, up to what is retained. Deleting is the one-way door, and it caps every

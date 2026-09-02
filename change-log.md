@@ -8060,3 +8060,32 @@ byte-entries pass with zero failures, and its first full run produced a real
 finding — the unknown-extension boundary fixtures measured payload where the
 ceiling bounds the encoded slice, now corrected in both fixtures and checked
 by both harnesses.
+
+### 2026-09-02 (cycle 2, 0.6 resource-authorization target, phase 1)
+
+The seventh implementation-attempt round — authorize a user to a hosted
+resource — produced no wire changes and eleven unspecified items, six of
+which were rulings the documents now state. Every type-6 request is in
+§9.2's 0-RTT-forbidden class: the gateway deliberately does not interpret
+application semantics, so it cannot certify any method effect-free, and §9.2
+now says a resource request is never read-only whatever its method. A backend
+failing mid-handoff is answered `resource unavailable` and the gateway never
+retries on its own — it cannot know whether the application committed an
+effect. Role names in the resource-facing header form a set, and a principal
+holds at most 64 application roles per resource, enforced where it can be
+seen: a node refuses to materialise an over-wide row, so the operator hears
+at configuration time and no request-time failure code exists. The session
+dropped on an authorisation change is the resource-facing one — the node-held
+identifier the resource correlates by — never the caller's transport session:
+retire the identifier, reset that pair's in-flight requests, and the next
+request arrives under a new identifier, which is how a resource observes the
+change on a path that has no teardown message. A local-socket backend's
+`Host` authority is whatever the installation recorded. The remaining five
+items are local by design and recorded as such.
+
+The round also exposed an interop surface: the pairwise principal is
+computed by whichever node currently hosts the resource, so implementations
+must agree byte-for-byte or a provider migration renames every user a
+resource knows. A known-answer vector now pins the construction, recomputed
+by the Python harness (79 checks). A reference sweep fixed two pre-existing
+bare cross-document citations in wire §5.5 and light §2.

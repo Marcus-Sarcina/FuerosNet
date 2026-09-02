@@ -3145,3 +3145,48 @@ selection_basis triple checked), the TopologyPush inner envelope fully
 verified as an envelope, and cross-entry bindings — push payload ==
 adoption bytes; KeyGrant == (recomputed prior-record txid, recomputed current
 query_id). **145 pass, 0 fail.**
+
+## Cycle 2, pass 0.6 — resource authorization (phase 1, 2026-09-02)
+
+Target 7: authorize a user to a hosted resource, incoming request through to
+the framing handed to the resource. The reviewer added no wire fields (all
+authorization inputs are local snapshot state; only the four `rhtn-*` headers
+cross), ordered the checks exists→member→ack→connect→HTTP-validity→availability
+with availability last per the operational-privacy rule, and computed the
+pairwise principal with the exact specified formula — verified against
+`resource-requirements.md` §2 and design §11.0.2, byte-identical construction.
+Zero implementation bugs claimed and none found. Eleven UNSPECIFIED items;
+the reviewer's own priority order was U9, U8, then U6.
+
+| # | Item | Disposition |
+|---|---|---|
+| U1 | Session-id byte width/generation | LOCAL BY DESIGN — rr §3 already forbids resources assuming a width; no change |
+| U2 | Local-socket ABI (fd passing, socket kind) | LOCAL — packaging, below the protocol; no change |
+| U3 | `Host` authority for a local-socket backend | APPLIED — wire §11: a backend with no network authority gets whatever authority the installation recorded; binding state, not protocol |
+| U4 | What "availability" measures | LOCAL — deliberately operator-defined; no change |
+| U5 | Canonical HTTP reserialization bytes | LOCAL BY DESIGN — wire §11 already says "from your parse, deterministically", explicitly not byte-interoperable; no change |
+| U6 | 0-RTT for opaque application requests | APPLIED — wire §11: every type-6 request is in §9.2's forbidden class, since the gateway deliberately does not interpret application semantics and so cannot certify any method effect-free; §9.2 gets the mirror sentence (a resource request is never read-only, whatever the method). The reviewer's conservative reading is now the specified one |
+| U7 | Duplicate role names in the header | APPLIED — rr §3: role names form a set; duplicates carry no meaning and a conforming node does not emit them |
+| U8 | No bound on role count / header size | APPLIED — rr §3: at most 64 application roles per principal per resource (header stays near 2 KB, inside common HTTP stack limits). Enforced where visible: a node refuses to MATERIALISE an over-wide row (infra §10.2 carries the actor side), so the failure is configuration-time and no request-time failure code exists because none can occur. Component bound, so it lives in the component docs per §21.1's placement rule |
+| U9 | Hosted-session termination granularity | APPLIED (derived, flag for author sign-off) — infra §10.5: the session dropped is the RESOURCE-FACING one: the node-held identifier under which the resource sees the principal's requests (rr §2), not the caller's rhtn/1 transport session. Retire the identifier, reset that pair's in-flight requests; the next request is evaluated afresh and arrives under a new identifier, which is how the resource observes the change — rr §3 already states there is no teardown message and sessions are observed ending by requests ceasing. The transport session is untouched: an authorisation change at one resource is not a connectivity event. Derivation, not invention: rr's no-teardown observation model and design §11.4's end-not-mutate rule jointly determine it; the whole-transport reading would end sessions with unaffected resources and the control plane |
+| U10 | Backend dies mid-handoff | APPLIED — wire §11: answered `resource unavailable` (status 2) and the gateway NEVER retries on its own; it cannot know whether the application committed an effect, so retry is the requester's decision |
+| U11 | Timing equalization for refusals | ALREADY OPEN — acknowledged in the spec as such; no change |
+
+**Interop surface the round exposed**: the pairwise principal is computed by
+whichever node currently hosts the resource, so two node implementations must
+agree byte-for-byte or a provider migration renames every user a resource
+knows. Known-answer added: `records.md` gets a pairwise-principal KAT
+(resource c1, user alice), `verify.py` recomputes it (79 checks now, was 77).
+The corpus schema has no derivation class; prose KATs recomputed by the
+harness are the standing convention (HKDF, pre-commitment), and this follows
+it.
+
+**Reference sweep after the edits** found two pre-existing bare cross-doc
+refs and fixed both: wire §5.5's "§16.1" and light §2's "§6.4" each meant the
+design and now say so (wire has no §16; light has its own §6, so that one was
+locally ambiguous). Eight other flags were checker false-negatives (RFC
+sections, capitalized "Design §", list-continuation refs) — each inspected,
+each resolves.
+
+**Both harnesses green after regeneration**: Python 79/79, Rust runner
+145 pass 0 fail.

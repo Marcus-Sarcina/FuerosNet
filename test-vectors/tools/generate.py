@@ -2919,7 +2919,21 @@ k_capture:
 ```
 
 The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal
-record's txid and its first worked query.""")
+record's txid and its first worked query.
+
+## Pairwise principal (design §11.0.2) — known answer
+
+`SHA-256("rhtn/1:pairwise" || resource_keyhash || user_keyhash)` — computed by
+whichever node currently hosts the resource, so two node implementations MUST
+agree byte-for-byte or a provider migration renames every user the resource
+knows. Resource c1, user alice (keyhashes in `keys.md`):
+
+principal_id:
+
+```
+{hx(H(b'rhtn/1:pairwise' + IDS['c1'].keyhash + alice.keyhash))}
+```
+""")
 
 # ---------------------------------------------------------------- write files
 

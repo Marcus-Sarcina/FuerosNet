@@ -503,6 +503,13 @@ _seed = bytes.fromhex(hk.group(1).replace('\n', ''))
 _info = bytes.fromhex(hk.group(2).replace('\n', ''))
 _k = hk.group(3).replace('\n', '')
 check(_hkdf(_seed, _info).hex() == _k, 'capture-key HKDF-SHA-256 known answer recomputes')
+
+pp = re.search(r'## Pairwise principal.*?principal_id:\n\n```\n([0-9a-f\n]+?)```', rc, re.S)
+check(pp is not None, 'pairwise-principal known answer present')
+if pp:
+    _pp = pp.group(1).replace('\n', '')
+    _want = hashlib.sha256(b'rhtn/1:pairwise' + bytes.fromhex(KH['c1']) + bytes.fromhex(KH['alice'])).hexdigest()
+    check(_pp == _want, 'pairwise principal recomputes from c1 and alice keyhashes')
 pcm = re.search(r'## Ceremony pre-commitment construction.*?```\n([0-9a-f]{32})\n([0-9a-f]{32})\n```.*?pre-commitment:\n\n```\n([0-9a-f\n]+?)```', rc, re.S)
 _c1, _c2 = bytes.fromhex(pcm.group(1)), bytes.fromhex(pcm.group(2))
 _pair = (_c1, _c2) if KH['alice'] < KH['bob'] else (_c2, _c1)

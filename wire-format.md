@@ -1815,7 +1815,7 @@ itself to the one party it is aimed at.
 **The record carries the responses gathered, and nothing defines which slots
 "should" exist.** An evaluator weighs the response count against §5.2's
 criterion — knowing *n* is the subject's claim — and weighs each responder by
-their own recognition of them, which is the same act §16.1 asks of every
+their own recognition of them, which is the same act design §16.1 asks of every
 evaluator everywhere.
 
 **Structural rules that remain, all checkable from the record and its
@@ -3359,7 +3359,8 @@ an application effect the requester never asked for twice (§11), a consumed
 one-time prekey (§7.8), a spent anti-oracle count (§5), a replayed registration
 that reverts an owner's current entry (§6.5). **Read-only lookups are unaffected** — resolution,
 archive fetch and catalog queries answer the same way however often they are
-replayed, which is what makes 0-RTT still worth having. §8.2's rule for `Attach` is
+replayed, which is what makes 0-RTT still worth having. A resource request is
+never in the read-only class, whatever the HTTP method inside (§11). §8.2's rule for `Attach` is
 this rule's other instance, on the other stream class.
 
 - Bidirectional streams: request/response — the request types tabled above
@@ -3705,6 +3706,16 @@ behaviour, not a rule anyone enforces.
 
 **A resource request rides a bidirectional stream on a session the requester holds
 with the *hosting* node**, tagged request type 6 (§9.2), one request per stream.
+**Every type-6 request is in §9.2's 0-RTT-forbidden class** [2026-09-02]: the
+gateway deliberately does not interpret application semantics, so it cannot
+certify any HTTP method effect-free — a `ResourceRequest` stream is never
+processed in early data, whatever the method inside.
+
+**A backend failing during the handoff is answered `resource unavailable`, and
+the gateway NEVER retries on its own** [2026-09-02]: it cannot know whether
+the application received enough of a side-effecting request to commit, so an
+automatic retry could duplicate an effect. Retry is the requester's decision —
+the requester knows its request's semantics; the gateway does not.
 
 ```
 ResourceRequest = {
@@ -3855,7 +3866,9 @@ other as a fresh request — with the node's authenticated headers attached to i
   (§11). They are ordinary HTTP and they do not fit here.
 - **Route by the resource keyhash, never by anything the caller wrote.** Convert an
   absolute-form target to origin form and replace `Host` with the backend you
-  selected. Field 1 already named the resource; letting a header re-aim the request
+  selected — for a backend with no network authority (a local socket), with
+  whatever authority your installation recorded for it: binding state, not
+  protocol [2026-09-02]. Field 1 already named the resource; letting a header re-aim the request
   is how a proxy is turned into someone else's client.
 - **Insert your headers after stripping, into the re-serialised message.**
 

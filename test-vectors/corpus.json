@@ -1,9 +1,9 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "dc5c08628200cbeb62457b77068680baea2e5f7cd045ac87e4806a456697ad1d",
+  "wire-format.md": "9d7a11a8a173dc3502495b9d2b34011c31df088d4f23113640e55f6d8debb637",
   "network-design.md": "cff13d0301ad51215c8e6cad2039277ad681dbf51261272b3e90467b27478b81",
-  "light-client-requirements.md": "bc0ebf1d1794b602a87895076166e6139177eaf12fa975853d8142acd95e9711"
+  "light-client-requirements.md": "8cc2ee2788f4f81dedd696b2566d3add0d0c58f9a8f813f95be166498067e954"
  },
  "classes": {
   "bytes": "hex is the complete input",

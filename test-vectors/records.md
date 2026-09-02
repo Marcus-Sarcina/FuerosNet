@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `dc5c08628200cbeb…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `9d7a11a8a173dc35…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -301,3 +301,17 @@ k_capture:
 
 The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal
 record's txid and its first worked query.
+
+## Pairwise principal (design §11.0.2) — known answer
+
+`SHA-256("rhtn/1:pairwise" || resource_keyhash || user_keyhash)` — computed by
+whichever node currently hosts the resource, so two node implementations MUST
+agree byte-for-byte or a provider migration renames every user the resource
+knows. Resource c1, user alice (keyhashes in `keys.md`):
+
+principal_id:
+
+```
+0cb4d9074d2c56b823785bbfef3e8134717f52abbd1aa5fe22178a0b0d6959b0
+```
+
