@@ -2517,3 +2517,42 @@ document, with network-design saying what is always true of the whole, except
 where an implementation-variable characteristic impacts the security model or
 similar and must be weighed in the design too. Recorded in
 authoring-conventions "Where invariants live". The 0.4 queue is empty.
+
+## Cycle 2, pass 0.5 — fragile rules (2026-09-02)
+
+18 rules flagged as identifier-bound. Verified each against the "Where
+invariants live" test: does a role-form statement of the invariant exist
+anywhere in the set?
+
+**Eleven needed no change — the invariant already precedes the encoding**, in
+most cases in the document's own role-rule-then-"Present encoding" idiom:
+countersigning (#1, design §6.4 states the authority-must-not-gate-unobserved-
+evidence rule verbatim), disavowal codes (#12, wire states the bounded-adverse-
+attestation rule verbatim), Attach identity binding (#18, wire §9.1's mutual-
+authentication paragraph), recovery binding (#13, design §9.4's italic
+invariant), 0-RTT Attach (#17, explicitly "one instance of §9.2's general
+rule"), the KeyGrant/late-response query bindings (#14, #15 — "a query the
+subject countersigned" is already role language), series reissue (#7 — "series"
+is a schema concept whose rename would sweep the set regardless), pruning (#8 —
+lc §2 grounds it in §10.0's kinds-of-history), tenant isolation (#11 — the
+bullet's rationale is role-stated), and resource-registration classing (#4 —
+covered by the archive criterion added under #3).
+
+**Seven anchors added:**
+- #2: §9.2's "departure is not blockable" now cites §6.2's standing rule —
+  formed bilaterally, ended unilaterally; the holder gets no gate over the act
+  that ends the authority. (The old veto-exemption formulation left the
+  document when the veto did; this restores the surviving invariant.)
+- #3: §10 now states the archive criterion above its list — transaction-hood is
+  earned by durably changing topology or constituting portable evidence of a
+  meeting; the list remains as current state.
+- #5: §15.2's memo restriction now states its criterion — only membership slots
+  this chain governs; outside relationships are not its business to summarise.
+- #6: §7.5.2's decryption-failure constraint now carries "a verifier reports an
+  identity judgment only where it ran the comparison that supports one".
+- #9: infra §1's KeyMaterial bullet now opens with the invariant — a client
+  must be able to authenticate every failover peer before it needs one.
+- #10: infra §11's registration bullet — possession of a signed entry is not
+  authority to install it; only the owner's live authenticated channel is.
+- #16: wire §7.7's referral check now leads with strict-forward-progress before
+  the `advances` encoding.

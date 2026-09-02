@@ -7862,3 +7862,16 @@ match the documents' own basis labels throughout.
 component-local policy bounds live with their mechanisms in the component
 documents — two tables in sync is one more surface for error. The general
 placement doctrine is recorded in the authoring conventions.
+
+### 2026-09-02 (cycle 2, pass 0.5: seven role-invariant anchors)
+The fragile-rules pass flagged eighteen identifier-bound rules; eleven already
+carried their invariant in role form beside the encoding — the
+role-rule-then-"Present encoding" idiom doing its job — and seven anchors were
+added: departure's unblockability cites §6.2's formed-bilaterally-ended-
+unilaterally rule (restoring the invariant that left with the veto), the
+archive gains its transaction-hood criterion above the type list, the rootward
+memo states it summarises only slots its chain governs, a verifier reports an
+identity judgment only where it ran the supporting comparison, a client must be
+able to authenticate every failover peer before it needs one, possession of a
+signed catalog entry is not authority to install it, and a referral moves the
+requester strictly forward.

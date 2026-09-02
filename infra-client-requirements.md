@@ -39,7 +39,7 @@ that is noted in place.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.
-- **Include each sibling's full `KeyMaterial` in the list** unless this node itself already supplied that sibling's key material to this client in an earlier `AttachAck` or `SiblingUpdate` — the only omission the wire permits (`wire-format.md` §8.2); omitting it from a client that lacks it is what makes first failover fail
+- **A client must be able to authenticate every failover peer before it needs one.** Include each sibling's full `KeyMaterial` in the list unless this node itself already supplied that sibling's key material to this client in an earlier `AttachAck` or `SiblingUpdate` — the only omission the wire permits (`wire-format.md` §8.2); omitting it from a client that lacks it is what makes first failover fail
   (`wire-format.md` §8). A client that has never contacted a sibling cannot
   authenticate it otherwise, the handshake presents the classical component while
   the keyhash commits to the pair.
@@ -513,8 +513,9 @@ not who answers for it (design §11.5) — and that asker may see. Nothing flood
   §6, request type 7). An entry is owner-signed and therefore relayable by
   anyone, so accepting one from any peer means accepting a **replayed earlier
   envelope** — and because you keep whichever you applied last, that silently
-  reverts the owner's current entry. The check is free: the owner is attached to
-  you and the handshake already named it.
+  reverts the owner's current entry. Possession of a signed entry is not
+  authority to install it — only the owner's live authenticated channel is. The
+  check is free: the owner is attached to you and the handshake already named it.
 - **The requested `discover_scope` is a request.** You compose the answer, so you
   may narrow it or ignore it, and the owner cannot check. An owner who delegates
   hosting delegates this, and should be told so rather than discovering it.

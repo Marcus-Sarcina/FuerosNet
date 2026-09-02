@@ -2577,8 +2577,9 @@ which portion of the path is still ahead of it. **Arrival is announced by the re
 of `advances` needs to be kept, and **no arrival-consistency equation is checked**
 — such an equation would reject the direct-serving answer design §12.6.1 permits,
 for no gain, since no node depends on any requester-side total. What remains
-checkable per referral: `advances` MUST be ≥ 1, and a referral
-advancing past the path's end is malformed.
+checkable per referral: a referrer moves the requester strictly forward along
+the path and never claims progress past its end — `advances` MUST be ≥ 1, and a
+referral advancing past the path's end is malformed.
 
 **Why not carry the consumed prefix:** a field the requester computes and every node
 must trust is state an intermediary could misreport. Deriving position from a node's

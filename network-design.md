@@ -1931,7 +1931,8 @@ counterparty's access remotely without the counterparty acting or knowing.
   and no partial grant.
 - **Truncated or unauthenticated ciphertext is a decryption failure**, reported as
   such. It is not evidence about the subject and must not be reported as a
-  no-match.
+  no-match: a verifier reports an identity judgment only where it ran the
+  comparison that supports one.
 
 ##### One sealed capture per presence record
 
@@ -2833,7 +2834,9 @@ anything can be blocked:
   a compromise visible; disavowal and resource revocation are what happens next.
   A second credential would add a key to steal without adding a power anyone can
   exercise.
-- **Departure is not blockable and does not need to be**, for the same reason.
+- **Departure is not blockable and does not need to be**, for the same reason —
+  §6.2's standing rule: an authority relationship is formed bilaterally and ended
+  unilaterally, so its holder gets no gate over the act that ends it.
 
 What remains is a thief cashing out **in place**, which notification and
 behavioural anomaly weighting surface rather than prevent, with presence-based
@@ -2880,6 +2883,11 @@ same connection.* Present encoding: rotation records chain old key to new.
 disavowal, peering, series reissue and presence alike. The archive is what makes a history
 presentable to a party who was not there, and what stops that history being edited
 after the fact.
+
+**The criterion is not the list.** An act earns transaction-hood — and with it
+the archive — by durably changing who stands where in the topology, or by
+constituting portable evidence that two people met; what fails that test stays a
+standalone signed object however thoroughly it is signed.
 
 **That list is exhaustive, and the exclusions matter.** A resource
 registration (§11.5) and an abuse report (§11.6) are signed, but neither advances an
@@ -5335,7 +5343,9 @@ it, because it reached the subtree on the patron's authority and ceases to exist
 the subtree's point of view when that authority is withdrawn.
 
 **Restricted to membership operations, and the restriction is load-bearing.**
-Adoption, departure and disavowal travel rootward; **peering does not.** A peering
+Adoption, departure and disavowal travel rootward; **peering does not.** The
+memo summarises only changes to the membership slots this chain governs; a
+relationship formed outside its authority is not its business to summarise. A peering
 record carries each endpoint's network point plus ASN (§6.3), and
 C8 maps that composition to a natural person. A memo carries keys and positions, so
 an ancestor accumulating them holds structure and no routable or identifying
