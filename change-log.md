@@ -8047,3 +8047,16 @@ CatalogReply was unproducible as built — continuation present entails more
 than 111 qualifying entries and exactly the first 111 returned — and is
 rebuilt conformingly with 111 sorted entries and the withheld 112th's type
 as the hint, harness-pinned.
+
+### 2026-09-02 (the Rust conformance runner)
+The suite gains an executable second validator: a self-contained Rust crate
+with its own strict deterministic-CBOR parser, identities re-derived from
+the stated seed recipe, and every signature in the corpus verified through
+the Rust ecosystem's implementations — which makes the post-quantum half
+cross-implementation for the first time, dilithium-py's signatures verifying
+under RustCrypto's ml-dsa: envelopes, embedded consents and responses, the
+recovery block's hybrid evidence, presentations and standalone records. 143
+byte-entries pass with zero failures, and its first full run produced a real
+finding — the unknown-extension boundary fixtures measured payload where the
+ceiling bounds the encoded slice, now corrected in both fixtures and checked
+by both harnesses.

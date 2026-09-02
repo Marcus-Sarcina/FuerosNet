@@ -577,6 +577,42 @@ b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))
 check(len(b17[4]) == 17, 'corpus: the 17-witness boundary fixture carries 17 witnesses')
 check(len(canonical(bytes.fromhex(byid['B-backptrs-9']['hex']))[0][0]) == 9,
       'corpus: the 9-head boundary fixture carries 9 heads')
+_ev = bytes.fromhex(byid['B-ext-value-1024']['hex'])
+# encoded-extension-slice bound (Rust runner finding, 2026-09-02):
+def _ext_slices(bh):
+    p, out = 0, []
+    def head(b, p):
+        ai = b[p] & 0x1f
+        n = ai; adv = 1
+        if ai == 24: n = b[p+1]; adv = 2
+        elif ai == 25: n = int.from_bytes(b[p+1:p+3], 'big'); adv = 3
+        elif ai == 26: n = int.from_bytes(b[p+1:p+5], 'big'); adv = 5
+        return b[p] >> 5, n, adv
+    def skip(b, p):
+        mt, n, adv = head(b, p)
+        q = p + adv
+        if mt in (0, 1): return q
+        if mt in (2, 3): return q + n
+        if mt == 4:
+            for _ in range(n): q = skip(b, q)
+            return q
+        if mt == 5:
+            for _ in range(n): q = skip(b, q); q = skip(b, q)
+            return q
+        return q  # simple
+    mt, n, adv = head(bh, 0)
+    q = adv
+    for _ in range(n):
+        kmt, kn, kadv = head(bh, q)
+        kend = q + kadv
+        vend = skip(bh, kend)
+        if kmt == 0 and kn > 8:
+            out.append(vend - kend)
+        q = vend
+    return out
+check(max(_ext_slices(_ev)) == 1024, 'B-ext-value-1024: encoded slice exactly at the ceiling')
+check(max(_ext_slices(bytes.fromhex(byid['B-ext-value-1025']['hex']))) == 1025,
+      'B-ext-value-1025: encoded slice one over')
 
 # ---------------------------------------------------------------- normal record (bar 2)
 BYNAME = {KH[n]: n for n in NAMES}

@@ -3107,3 +3107,34 @@ boundary note stands: receiver-side tolerance of a NONCONFORMING host's
 short-plus-continuation reply is untested and unspecified — a client cannot
 verify the producer's qualifying count, so the object is receiver-valid;
 nothing added, recorded as observed.
+
+## The Rust conformance runner (2026-09-02, author-directed high-effort window)
+
+Built under the expiring-credit directive: the highest-value artifact
+available without an external party is an EXECUTABLE second validation of the
+suite. `test-vectors/runner-rs` is a self-contained crate — its own
+byte-level deterministic-CBOR parser, all 25 identities re-derived from the
+stated seed recipe (RustCrypto ml-dsa `SigningKey::from_seed` = FIPS 204
+KeyGen_internal), and full signature verification through the Rust ecosystem:
+every envelope (signer sets derived per type, both algorithms, the normal
+record's 36 entries), the embedded evidence layer (consents over raw
+query-ids, classical field-9s over map-minus-9, the recovery block's HYBRID
+responses and successor proof), all presentations' roots, and the standalone
+records with wrong-signer analogues failing as required.
+
+**Result: 143 byte-entries pass, 0 fail** (39 skipped: traces/contexts/units
+are structured, plus rejects of kinds the runner does not yet validate).
+**The post-quantum half is now cross-implementation**: signatures produced by
+dilithium-py verify under RustCrypto's ml-dsa.
+
+**One real finding on the first full run**: B-ext-value-1024/1025 measured
+payload bytes where §1's ceiling bounds the ENCODED slice ("1024 bytes of
+encoded CBOR — the complete encoded slice for the value"). Both fixtures were
+over the ceiling as built; corrected to encoded-slice targets, and the bound
+taught to the Python harness, which had never checked it. The runner also
+found four of its own bugs en route (nested-offset parsing, a mis-firing
+disavowal classifier, missing shape rules) — each fixed against the spec, not
+the fixtures. Honesty note recorded in its README: same author, so this is
+cross-language/cross-crypto validation, not the independent-party
+reproduction promotion ultimately wants — but it is the artifact such a
+party starts from.

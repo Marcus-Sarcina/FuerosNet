@@ -2586,14 +2586,19 @@ reg('B-path-25', 'bytes', REJ('Locator', 'schema', '25 nibbles exceed the ceilin
     e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), _pth(25)), (e_uint(3), seqno(5, 0))]))
 def _adopt_ext(nkeys, vlen):
     ext = [(e_uint(100 + i), e_bstr(b'x')) for i in range(nkeys)]
-    if vlen: ext = [(e_uint(100), e_bstr(b'v' * vlen))]
+    if vlen:
+        # vlen is the ENCODED slice target: s1's ceiling is 1024 bytes of
+        # encoded CBOR, not payload [Rust runner finding, 2026-09-02] - a
+        # bstr header for this size is 3 bytes (0x59 + u16 length)
+        ext = [(e_uint(100), e_bstr(b'v' * (vlen - 3)))]
+        assert len(ext[0][1]) == vlen
     return e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
                   (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
                   (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT))] + ext)
 reg('B-ext-keys-16', 'bytes', ACC('body', 'sixteen unknown keys, the ceiling'), _adopt_ext(16, 0))
 reg('B-ext-keys-17', 'bytes', REJ('body', 'schema', 'seventeen unknown keys exceed the ceiling'), _adopt_ext(17, 0))
-reg('B-ext-value-1024', 'bytes', ACC('body', 'an unknown value at the 1024-byte ceiling'), _adopt_ext(0, 1024))
-reg('B-ext-value-1025', 'bytes', REJ('body', 'schema', '1025 encoded bytes exceed the ceiling'), _adopt_ext(0, 1025))
+reg('B-ext-value-1024', 'bytes', ACC('body', 'an unknown value whose ENCODED slice is exactly the 1024-byte ceiling'), _adopt_ext(0, 1024))
+reg('B-ext-value-1025', 'bytes', REJ('body', 'schema', '1025 ENCODED bytes exceed the ceiling'), _adopt_ext(0, 1025))
 def _peer_with_audits(k):
     audits = e_arr([e_map([(e_uint(1), e_uint(TS_DEPART + i)), (e_uint(2), b'\xf5'),
                            (e_uint(3), e_bstr(carol.keyhash))]) for i in range(k)])
