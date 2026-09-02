@@ -2771,7 +2771,35 @@ for cid, inputs, expect in [
 ]:
     reg(cid, 'context', expect, inputs=inputs)
 
+pc_a = H(b'rhtn-test-vectors:precommit-contribution:alice')[:16]
+pc_b = H(b'rhtn-test-vectors:precommit-contribution:bob')[:16]
+pc_first, pc_second = (pc_a, pc_b) if alice.keyhash < bob.keyhash else (pc_b, pc_a)
+pc_demo = H(b'rhtn/1:ceremony' + pc_first + pc_second)
+
 emit('records.md', f"""
+## Ceremony pre-commitment construction (design §7.5.2) — known answer
+
+Contributory: SHA-256 of the ASCII tag `rhtn/1:ceremony` followed by each
+participant's 16 random bytes, in ascending participant-keyhash order
+(here {'alice then bob' if alice.keyhash < bob.keyhash else 'bob then alice'}).
+
+contributions (alice, bob):
+
+```
+{hx(pc_a)}
+{hx(pc_b)}
+```
+
+pre-commitment:
+
+```
+{hx(pc_demo)}
+```
+
+*(The presence-record fixtures predate this construction and carry arbitrary
+32-byte pre-commitments; construction is unobservable from a record, so they
+remain valid inputs.)*
+
 ## Capture-key derivation (design §7.5.2) — known answer
 
 HKDF-SHA-256, salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture`

@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `298fb66184c88567…`, `network-design.md` `25a19790a75f1034…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `cfc7e8a308349805…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -246,6 +246,29 @@ a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e4
 ddff2b622dbb4f10ce4c2c9d97ef1cd65c97b57428c051fd402743c8576cf277
 4f94ae4c10a6f8de4919a53f6255388dbe4863d4443b8d5006
 ```
+
+## Ceremony pre-commitment construction (design §7.5.2) — known answer
+
+Contributory: SHA-256 of the ASCII tag `rhtn/1:ceremony` followed by each
+participant's 16 random bytes, in ascending participant-keyhash order
+(here bob then alice).
+
+contributions (alice, bob):
+
+```
+57c54784788abe36a304be6d2eff43d4
+d43a0b07379cf934c8b7e4b54629f95c
+```
+
+pre-commitment:
+
+```
+cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b18
+```
+
+*(The presence-record fixtures predate this construction and carry arbitrary
+32-byte pre-commitments; construction is unobservable from a record, so they
+remain valid inputs.)*
 
 ## Capture-key derivation (design §7.5.2) — known answer
 

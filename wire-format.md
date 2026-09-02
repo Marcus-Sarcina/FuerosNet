@@ -1317,7 +1317,8 @@ Witness = {
 VerificationQuery = {
   1: keyhash,          ; subject
   2: keyhash,          ; querier
-  3: bstr .size 32,    ; ceremony pre-commitment (design §7.4.1)
+  3: bstr .size 32,    ; ceremony pre-commitment (design §7.4.1; contributory
+                       ;   construction, design §7.5.2 [2026-09-02])
   4: bstr .size (1..4096),   ; fuzzed profile
   5: uint,             ; TEMPLATE VERSION the profile in field 4 was produced
                        ;   under (design §7.4.4). 0..=65535 — design §8.1's
@@ -2421,7 +2422,10 @@ local policy. **The authenticated sender MUST be the subject** [2026-09-02]:
 the seed never leaves the subject, so a grant arriving from anyone else is
 replay or fabrication, and the holder rejects it. **Duplicates are ignored, and
 so is a differing second grant for a query already satisfied** — the first
-authenticated grant stands: one release, one answer.
+authenticated grant stands: one release, one answer. **A grant naming a record
+the holder does not hold yields `unavailable`** [2026-09-02]: there is nothing
+to compare, and nothing about the subject is thereby evidenced — the same
+posture as every other absence.
 
 ### 7.4 Late verifier response
 

@@ -8010,3 +8010,14 @@ reply is one VerifierResponse; malformed queries close the stream; a grant's
 sender must be the subject, duplicates and rivals ignored. The capture-key
 handover and the selected verifier's identity ride the ceremony's direct
 channel, carried by no wire object.
+
+### 2026-09-02 (capture/query re-run: pre-commitment construction ruled)
+The re-run against the corrected specification confirmed every prior ruling
+and found the custody fix's one unswept instance — the ceremony summary still
+exchanged seeds, and now hands the derived key. The ceremony pre-commitment,
+previously fixed-unique-countersigned but constructed by nobody, is now
+contributory: SHA-256 of the tag and both participants' 16-byte contributions
+in ascending keyhash order, so neither party can force a repeat of the value
+that consents and capture keys bind to — with a known-answer vector the
+harness recomputes. A grant naming a record the holder does not hold yields
+unavailable, the absence posture.

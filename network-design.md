@@ -1195,9 +1195,10 @@ end node, starting from its own local records of people it has met.
    prompts — turn slightly, change expression, which supplies both the angle and
    lighting *diversity* that defeats correlated within-session failure, and the
    motion and parallax that constitute the **liveness check** against a printed
-   photo, a screen replay or generated video. **Each party also gives the other a
-   32-byte seed, and seals its captures under keys derived from the seed the
-   *subject* supplied** (§7.5.2), so a compliant client holds no decryptable
+   photo, a screen replay or generated video. **Each party also hands the other a
+   per-ceremony capture key — derived from a seed only the *subject* holds —
+   and seals its captures under the key that subject supplied, discarding it
+   once sealed** (§7.5.2), so a compliant client holds no decryptable
    likeness of anyone but itself. Images stay on the device **for the declared
    retention period** (§7.5.1) and are then deleted; nothing biometric enters the
    record at any point.
@@ -1900,6 +1901,14 @@ body **including verifier responses**, and sealing happens at capture, before ei
 exists. The pre-commitment is fixed before capture begins, is countersigned by both
 parties and the witnesses, and is unique per ceremony — everything the binding
 needed, available when the binding is made.
+
+**Its construction is contributory** [2026-09-02]: each participant contributes
+16 random bytes over the direct channel, and the pre-commitment is the SHA-256
+of the ASCII tag `rhtn/1:ceremony` followed by the two contributions in
+ascending participant-keyhash order. Either party's honest randomness makes
+the value unique, so **neither party can force a repeat** — and a forced repeat
+is the one thing worth forcing, since consents and capture keys bind to this
+value. Stated exactly because both clients must compute the same 32 bytes.
 
 The capture is sealed under an AEAD. **The subject grants access by releasing the
 key, and withholds it by not**: there is nothing partial to grant.

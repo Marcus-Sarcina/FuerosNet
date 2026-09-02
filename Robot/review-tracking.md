@@ -2992,3 +2992,36 @@ U11 (payload demultiplexing, §14.2.4's standing fifth decision), U15
 U17/U18 (local). The segment-key concept confirmed dead; review-plan target
 5's stale wording fixed. Type decisions sound throughout, including the
 affirmative no-segment-types and no-wire-demux-enum decisions.
+
+## Cycle 2, pass 0.6 — capture/query re-run against the corrected spec (2026-09-02)
+
+The re-run validates every ruling from the first run — the request-4 triple,
+the unavailable/inconclusive precedence with the basis rule, the exact HKDF
+(their code implements it byte-identically), the KeyGrant sender and
+first-stands rules (their GrantInbox is a direct implementation), and the
+ceremony-channel carriage. Three findings:
+
+1. **A custody sweep failure of ours, fixed**: the §7.1 ceremony summary still
+   said "each party also gives the other a 32-byte seed" — the phrasing the
+   §7.5.2 custody fix replaced at its own site but not here. The summary now
+   hands the derived per-ceremony key, seed retained by the subject. One
+   phrasing is not a sweep, once again.
+2. **The pre-commitment construction, ruled (new mechanism — flagged)**: the
+   32 bytes were specified as fixed-before-capture, unique, countersigned —
+   and constructed by nobody. Now contributory: SHA-256 of `rhtn/1:ceremony`
+   followed by each participant's 16 random bytes in ascending
+   participant-keyhash order. Either party's honest randomness forces
+   uniqueness, and a forced repeat is the one thing worth forcing, since
+   consents and capture keys bind to the value. Known-answer vector added and
+   harness-recomputed; the presence fixtures' arbitrary pre-commitments remain
+   valid inputs (construction is unobservable from a record) and are noted as
+   predating the rule.
+3. **Unknown-txid grants yield `unavailable`** (their U12): nothing to
+   compare, nothing evidenced — the absence posture, now stated in wire §7.3.
+
+The remaining unspecified items (U4–U11, U13, U14) are the standing §22.2 /
+§21.1 / Open-bullet set, correctly mapped. Type decisions sound throughout —
+the Zeroizing seed/key ownership, the no-Unknown-variant enums, the raw-slice
+extension preservation, and the affirmative refusal to give ReleasePolicy a
+transmitted reason code (withholding must stay indistinguishable). Crate
+assessment matches §5.2. Harness: 72 checks, all passing.
