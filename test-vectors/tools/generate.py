@@ -2724,9 +2724,10 @@ reg('P-channel-retry-presentation', 'bytes', ACC('presentation', 'fully revealed
     cr_pres)
 
 # ---- traces and contexts (structured, no bytes)
+TRACE_ONE_OF = {'TR2': ['defer_until_handshake', 'reject']}
 for trid, seq, actions, cite in [
     ('TR1', 'control frame with unknown frame_type 99 arrives mid-session', ['skip_frame', 'session_survives'], '§8.0'),
-    ('TR2', 'Attach arrives in TLS 1.3 0-RTT early data', ['defer_until_handshake'], '§8.2, §9.2'),
+    ('TR2', 'Attach arrives in TLS 1.3 0-RTT early data', ['never_process_as_early_data'], '§8.2, §9.2'),
     ('TR3', 'bidirectional stream opens with unknown request_type 99', ['close_stream', 'session_survives'], '§9.2'),
     ('TR4', 'malformed SiblingUpdate arrives', ['ignore_whole', 'previous_list_stands', 'session_survives'], '§8.2'),
     ('TR5', 'second Attach on an attached session', ['fail_attach'], '§8.2'),
@@ -2740,7 +2741,10 @@ for trid, seq, actions, cite in [
     ('TR13', 'a failover attach to a cached sibling returns AttachAck mode 0 (primary)', ['accept_server_mode', 'no_client_inference'], '§8.2'),
     ('TR14', 'a ServingInfra reply arrives after two of five path indices were consumed', ['resolution_complete', 'no_arrival_equation'], '§7.7.3'),
 ]:
-    reg(trid, 'trace', {'actions': actions, 'cite': cite}, note=seq)
+    exp = {'actions': actions, 'cite': cite}
+    if trid in TRACE_ONE_OF:
+        exp['one_of'] = TRACE_ONE_OF[trid]
+    reg(trid, 'trace', exp, note=seq)
 for cid, inputs, expect in [
     ('V9', {'adoption': 'P-adopt-optionals', 'dereference': 'P-normal-record'},
      {'structural': 'valid', 'checks': {'proof_of_presence': 'pass'}}),
@@ -2764,7 +2768,7 @@ with open('corpus.json', 'w', encoding='utf-8', newline='\n') as f:
                          'light-client-requirements.md': LIGHT_SHA},
                 'classes': {'bytes': 'hex is the complete input',
                             'unit': 'no bytes: note carries a deterministic recipe',
-                            'trace': 'a session event sequence with required actions',
+                            'trace': 'a session event sequence with required actions; where the spec permits alternatives, one_of lists them and satisfying any one conforms',
                             'context': 'named fixture inputs with an expected evaluation'},
                 'entries': REG}, f, indent=1, sort_keys=False)
     f.write('\n')

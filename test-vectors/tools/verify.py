@@ -524,6 +524,10 @@ check(byid['P-normal-record']['hex'] ==
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 14
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: fourteen traces and five contexts')
+tr2 = byid['TR2']['expect']
+check(tr2['actions'] == ['never_process_as_early_data']
+      and sorted(tr2.get('one_of', [])) == ['defer_until_handshake', 'reject'],
+      'corpus: TR2 carries the reject-or-defer disjunction, not one branch')
 cr = canonical(bytes.fromhex(byid['P-channel-retry-presentation']['hex']))
 cr_env_o, cr_slots_o = cr
 cr_ds = []

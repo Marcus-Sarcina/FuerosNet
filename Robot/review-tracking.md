@@ -2923,3 +2923,30 @@ produced ten entries (README's new table). Six needed new fixtures:
 Four were already stressed (D6, TR1, the open-registry D-rows, V7's
 finalization fixtures) and are now listed under the family so the register is
 one place. Traces stand at fourteen; harness at 67 checks, all passing.
+
+## Cycle 2, pass 0.6 — attach target, phase 2 (2026-09-02)
+
+Run on the pre-stress-family vector set (the pin gate flagged the staleness to
+the reviewer exactly as designed — they noted the wire hash mismatch and
+classified against the current spec). Tally: **one implementation bug, one
+vector defect, zero spec ambiguities.**
+
+- **Implementation bug — TR7's heartbeat gap**: their exact-expected-counter
+  guard permanently poisons the sequence after one lost beat and fails over
+  against a live server — precisely the over-strictness the trace was built
+  for, caught before any interop. (The prose anchor and TR12's concrete
+  sequence landed the same day, independently.)
+- **Vector defect — TR2's machine encoding, fixed**: the spec permits
+  reject-or-defer for an Attach in 0-RTT; messages.md's table said so, but
+  corpus.json required only defer_until_handshake — a conforming rejecting
+  server would fail it. TR2 now requires never_process_as_early_data with a
+  one_of carrying both branches, and the trace class documents the one_of
+  convention. Harness checks the disjunction. Swept the other traces: TR2 was
+  the only alternative-permitting rule.
+- **TR9/TR10 epistemics**: the reviewer correctly notes vectors do not
+  retroactively disambiguate prose — and against their snapshot the prose was
+  indeed silent. The wire §9 scope rules landed in the same commit as the
+  traces; under the current spec the sentences exist. Timeline noted.
+
+Everything else agreed at decision level or fell honestly outside the
+target's implemented boundary. Harness: 68 checks, all passing.

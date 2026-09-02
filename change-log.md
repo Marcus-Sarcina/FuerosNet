@@ -7987,3 +7987,10 @@ spelling while accepting the absent one, and accept the retried channel kind
 — four already present and now listed. Where the prose could not prevent the
 misreading, the corpus now catches it. Fourteen traces; 67 checks, all
 passing.
+
+Phase 2 of the attach target: the heartbeat-gap trace caught the reviewer's
+exact-expected-counter bug — the over-strictness family earning its keep on
+its first outing — and exposed one real vector defect: the machine-readable
+TR2 required only the defer branch where the specification permits reject or
+defer. TR2 now requires never-process-as-early-data with a one_of carrying
+both conforming branches, a convention the corpus format now documents.
