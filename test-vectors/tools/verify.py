@@ -131,7 +131,7 @@ def sig_sign1(prot, aad, payload):
     return hd(4, 4) + ts('Signature1') + bs(prot) + bs(aad) + bs(payload)
 
 # ---------------------------------------------------------------- identities
-NAMES = ['alice', 'bob', 'carol', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']
+NAMES = ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']
 ED, PQ, KH = {}, {}, {}
 for n in NAMES:
     ed = Ed25519PrivateKey.from_private_bytes(H(f'rhtn-test-vectors:{n}:ed25519-seed'.encode()))
@@ -364,6 +364,40 @@ check(4 not in obj and 5 not in obj and obj[6] == 1, 'formation: keys 4/5 absent
 check(obj[0] == [[H(bytes.fromhex(p0)).hex()], [H(bytes.fromhex(p1)).hex()]],
       'formation R8: key 0 is exactly the genesis value per signer')
 check(7 not in obj, 'formation: retired key 7 absent')
+
+# ---------------------------------------------------------------- recovery adoption
+sect = tx[tx.index('## Recovery adoption'):]
+blocks = re.findall(r'```\n([0-9a-f\n]+?)```', sect)
+r_query = canonical(bytes.fromhex(blocks[0].replace('\n', '')))
+r_body_hex = re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', sect).group(1)
+r_body = canonical(bytes.fromhex(r_body_hex.replace('\n', '')))
+rq15 = enc({k: r_query[k] for k in (1, 2, 3, 4, 5)})
+check(H(rq15).hex() == r_query[6], 'recovery query_id = SHA-256 of fields 1-5')
+rec = r_body[6]; resp = rec[2][0]
+check(len(rec[2]) >= 1 and resp[4] == 0, 'recovery carries at least one match')
+check(resp[3] == r_query[6] and resp[2] == r_body[1] and resp[8] == rec[1]
+      and rec[1] != r_body[1] and resp[10] == 0 and 6 not in resp and resp[5] == 1,
+      'recovery response bindings: query_id, subject, prior_key, basis, selection_basis 0')
+check(r_query[1] == r_body[1] and r_query[2] == resp[1],
+      'recovery querier IS the verifier; query subject is the new key (design s9.1)')
+con_prot, con_sig = bytes.fromhex(resp[7][0]), bytes.fromhex(resp[7][3])
+check(verify_sig('alice2', -8, con_sig,
+                 sig_sign1(con_prot, b'rhtn/1:consent', bytes.fromhex(r_query[6]))),
+      'recovery consent verifies: Ed25519 by the NEW key over raw query_id')
+vr_payload = enc({k: resp[k] for k in (1, 2, 3, 4, 5, 7, 8, 10)})
+def sig_sign(prot, aad, payload):
+    return hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(aad) + bs(payload)
+ok9 = 0
+for e in resp[9][3]:
+    prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
+    ok9 += verify_sig('carol', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:verifier', vr_payload))
+check(ok9 == 2 and len(resp[9][3]) == 2, 'recovery field 9: hybrid COSE_Sign by the verifier, both entries verify')
+succ = enc([rec[1], r_body[1], r_body[2]])
+oks = 0
+for e in rec[3][3]:
+    prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
+    oks += verify_sig('alice', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:successor', succ))
+check(oks == 2 and len(rec[3][3]) == 2, 'recovery successor proof: hybrid by the OLD key over [prior, new, patron]')
 
 print()
 if FAILURES:

@@ -7896,3 +7896,15 @@ any-order rule predated the ascending-verifier-keyhash ordering and cited a
 non-canonicalisation sentence the wire format never contained; T28 carries the
 malformed case. The complete positive Recovery vector remains the queued
 canonical-bar item, blocked on the recovery selector ruling.
+
+### 2026-09-02 (the recovery selector ruled; canonical bar 4's Recovery half lands)
+The open selector question resolved from §9.1's own text: recovery runs §7.3
+in reverse, so the counterparty is its own querier — the subject stands in
+front of the party answering — the meeting opens as a ceremony whose
+pre-commitment binds the query, and selection_basis is 0, the only value a
+Recovery block admits, since a recovery verifier is by definition a prior
+counterparty. §9.1 states the mechanics; wire §4.1 carries both rules. The
+complete positive recovery adoption now sits in the vectors: query, consent
+over the raw query_id, hybrid verifier response, successor proof, and the
+adoption presenting the old chain head — every signature real and verified by
+the harness, which grows to 28 checks, all passing.

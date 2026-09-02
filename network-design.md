@@ -2756,6 +2756,17 @@ why every rotation carries it (§9.0.1). Run §7.3 in reverse:
 one: a template match is a machine agreeing that two images resemble each other,
 where recognition is somebody who knows you saying so.
 
+**Mechanically, the counterparty is its own querier** [2026-09-02]
+(`wire-format.md` §4.1): the subject stands in front of
+the party answering, so that party's client generates the verification query
+and answers it — §7.3 run in reverse needs no third role. The meeting opens as
+a ceremony (§7.5.2 calls a post-loss recovery exactly that), whose countersigned
+pre-commitment binds the query; the subject's new key countersigns for the
+anti-oracle rule (§7.4.2), and continuity rests on the response's prior-key
+binding and the old key's proof, never on the consent. And because a recovery
+verifier is by definition a prior counterparty recognising the subject, its
+`selection_basis` is *known* — the encoding fixes it (`wire-format.md` §4.1).
+
 **Retention does not gate rotation.** The presence *record* is permanent; only the
 photograph expires. A counterparty who personally knows the subject still holds
 signed proof of the original meeting, and recognises them without needing a stored

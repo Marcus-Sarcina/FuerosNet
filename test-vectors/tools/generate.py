@@ -196,7 +196,7 @@ class Identity:
         return ML_DSA_65.sign(self.pq_sk, data, deterministic=True)
 
 IDS = {n: Identity(n) for n in
-       ['alice', 'bob', 'carol', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']}
+       ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']}
 
 # ---------------------------------------------------------------- COSE pieces
 
@@ -305,7 +305,7 @@ def emit(fname, text):
 
 # ================================================================ keys.md
 
-alice, bob, carol = IDS['alice'], IDS['bob'], IDS['carol']
+alice, bob, carol, alice2 = IDS['alice'], IDS['bob'], IDS['carol'], IDS['alice2']
 
 emit('keys.md', f"""# Test identities
 
@@ -337,9 +337,10 @@ so the entries appear as 1, −1, −2. The post-quantum `COSE_Key` is
 | Identity | Role in the vectors | Ed25519 public key | keyhash |
 |---|---|---|---|""")
 
-for name in ['alice', 'bob', 'carol', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']:
+for name in ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']:
     i = IDS[name]
     role = {'alice': 'node / subject', 'bob': 'patron', 'carol': 'counterparty',
+            'alice2': "alice's replacement key (recovery adoption)",
             'w1': 'witness', 'w2': 'witness', 'w3': 'witness'}.get(name, 'verifier candidate')
     emit('keys.md', f"| {name} | {role} | `{hx(i.ed_pub)}` | `{hx(i.keyhash)}` |")
 
@@ -1278,6 +1279,155 @@ txid: `{hx(depart_r_txid)}`
 
 txid: `{hx(peer_full_txid)}`""")
 
+# --- Recovery adoption (type 1): alice2 recovers alice's identity, adopted by
+# bob; carol (a prior counterparty of alice: the formation ceremony) is the
+# verifier. Per design s9.1 the verifier is its own querier; selection_basis is
+# 0 (known) by rule; personal_knowledge is the ordinary basis, so response
+# field 6 is absent. The recovery meeting's pre-commitment binds the query.
+AAD_CONSENT = b'rhtn/1:consent'
+AAD_VERIFIER = b'rhtn/1:verifier'
+AAD_SUCCESSOR = b'rhtn/1:successor'
+
+rec_precommit = H(b'rhtn-test-vectors:recovery-ceremony-precommitment')
+rec_profile = H(b'rhtn-test-vectors:recovery-fuzzed-profile')
+REC_TPL_V = 3
+rq15 = e_map([(e_uint(1), e_bstr(alice2.keyhash)),
+              (e_uint(2), e_bstr(carol.keyhash)),   # querier IS the verifier (design s9.1)
+              (e_uint(3), e_bstr(rec_precommit)),
+              (e_uint(4), e_bstr(rec_profile)),
+              (e_uint(5), e_uint(REC_TPL_V))])
+rec_qid = H(rq15)
+rec_query = e_map([(e_uint(1), e_bstr(alice2.keyhash)),
+                   (e_uint(2), e_bstr(carol.keyhash)),
+                   (e_uint(3), e_bstr(rec_precommit)),
+                   (e_uint(4), e_bstr(rec_profile)),
+                   (e_uint(5), e_uint(REC_TPL_V)),
+                   (e_uint(6), e_bstr(rec_qid))])
+
+# Consent: COSE_Sign1, Ed25519 only, no kid; payload = RAW 32 bytes of query_id.
+con_prot = sig_protected(-8)
+con_tbs = sig_structure_sign1(con_prot, AAD_CONSENT, rec_qid)
+con_sig = alice2.sign(con_tbs)
+rec_consent = e_arr([e_bstr(con_prot), b'\xa0', NULL, e_bstr(con_sig)])
+
+# Response fields 1-8 and 10 (field 6 absent: basis 1), the field-9 payload.
+resp_unsigned_pairs = [(e_uint(1), e_bstr(carol.keyhash)),
+                       (e_uint(2), e_bstr(alice2.keyhash)),
+                       (e_uint(3), e_bstr(rec_qid)),
+                       (e_uint(4), e_uint(0)),          # match
+                       (e_uint(5), e_uint(1)),          # personal_knowledge
+                       (e_uint(7), rec_consent),
+                       (e_uint(8), e_bstr(alice.keyhash)),
+                       (e_uint(10), e_uint(0))]         # known - MUST be 0 (s4.1)
+resp_payload = e_map(resp_unsigned_pairs)
+
+# Field 9: hybrid COSE_Sign by carol, untagged, detached, no kid, empty outer.
+vr_entries = []
+for alg in (-8, -49):
+    prot = sig_protected(alg)
+    tbs = sig_structure_sign(prot, AAD_VERIFIER, resp_payload)
+    sig = carol.sign(tbs) if alg == -8 else carol.sign_pq(tbs)
+    vr_entries.append(cose_signature_entry(prot, sig))
+rec_vr_sig = e_arr([e_bstr(b''), b'\xa0', NULL, e_arr(vr_entries)])
+rec_response = e_map(resp_unsigned_pairs[:5]
+                     + [(e_uint(7), rec_consent),
+                        (e_uint(8), e_bstr(alice.keyhash)),
+                        (e_uint(9), rec_vr_sig),
+                        (e_uint(10), e_uint(0))])
+
+# Old-key successor proof: hybrid COSE_Sign by alice's OLD key over the array.
+succ_stmt = e_arr([e_bstr(alice.keyhash), e_bstr(alice2.keyhash), e_bstr(bob.keyhash)])
+succ_entries = []
+for alg in (-8, -49):
+    prot = sig_protected(alg)
+    tbs = sig_structure_sign(prot, AAD_SUCCESSOR, succ_stmt)
+    sig = alice.sign(tbs) if alg == -8 else alice.sign_pq(tbs)
+    succ_entries.append(cose_signature_entry(prot, sig))
+rec_succ = e_arr([e_bstr(b''), b'\xa0', NULL, e_arr(succ_entries)])
+
+rec_block = e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                   (e_uint(2), e_arr([rec_response])),
+                   (e_uint(3), rec_succ)])
+
+TS_RECOVER = TS_DEPART + 90 * 86400
+rec_loc = locator(bob.keyhash, path([6]), seqno(11, 0))  # opens series: counter 0
+rec_body = e_map([
+    (e_uint(0), backptrs([genesis(alice2.keyhash)], [adopt_txid])),
+    (e_uint(1), e_bstr(alice2.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), rec_loc),
+    (e_uint(4), e_uint(TS_RECOVER)),
+    (e_uint(5), alice2.key_material),
+    (e_uint(6), rec_block),
+    (e_uint(7), e_bstr(depart_txid)),   # alice's old chain head: genesis -> adopt -> depart
+])
+rec_txid = H(rec_body)
+rec_env, rec_entries = envelope(1, 1, rec_body, [alice2, bob])
+
+emit('transactions.md', f"""
+## Recovery adoption (type 1) — alice2 recovers alice's identity, adopted by bob
+
+The complete positive `Recovery` object (canonical bar 4). Carol — a prior
+counterparty of alice via the formation ceremony — meets the recovering subject
+in person and recognises them (design §9.1). **The verifier is its own
+querier**: the query's field 2 names carol, its pre-commitment is the recovery
+meeting's own, and the subject's **new** key countersigns. Basis is
+`personal_knowledge` (the ordinary case, design §9.1), so response field 6 is
+absent; `selection_basis` is **0 (known)**, the only value a `Recovery` block
+admits (§4.1). The old key signs the successor statement, never the Recovery
+map. Field 7 presents alice's old chain head (the departure); the locator opens
+series 11 at counter 0.
+
+`VerificationQuery` ({len(rec_query)} bytes; field 6 is the SHA-256 of fields 1–5):
+
+```
+{hexblock(rec_query)}
+```
+
+query_id: `{hx(rec_qid)}`
+
+Subject consent (COSE_Sign1, Ed25519 by alice2, external_aad `rhtn/1:consent`,
+payload the RAW query_id bytes; {len(rec_consent)} bytes):
+
+```
+{hexblock(rec_consent)}
+```
+
+Verifier response ({len(rec_response)} bytes — field 9 is a hybrid `COSE_Sign`
+by carol over canonical CBOR of fields 1–8 and 10, external_aad
+`rhtn/1:verifier`):
+
+```
+{hexblock(rec_response)}
+```
+
+Successor statement (deterministic CBOR array `[prior, new, patron]`,
+{len(succ_stmt)} bytes) and the old key's hybrid proof over it, external_aad
+`rhtn/1:successor` ({len(rec_succ)} bytes):
+
+```
+{hexblock(succ_stmt)}
+```
+
+```
+{hexblock(rec_succ)}
+```
+
+Body ({len(rec_body)} bytes):
+
+```
+{hexblock(rec_body)}
+```
+
+txid: `{hx(rec_txid)}`
+
+Envelope bytes ({len(rec_env)} bytes — final; the envelope signers are the NEW
+key and the patron, per §3.1 — the old key signs only the embedded proof):
+
+```
+{hexblock(rec_env)}
+```""")
+
 # ================================================================ records.md
 
 emit('records.md', f"""# Standalone signed records (`wire-format.md` §7)
@@ -1358,9 +1508,10 @@ goal — but only for objects that have one:
 
 - **Signed, queued**: currency attestation (§7.1), anchor table entry (§7.2),
   subtree acknowledgement (§7.5), prekey bundle (§7.8) — plus, outside §7,
-  the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
-  successor statement (§4.1), and the verifier response and consent contexts
-  (§4.5, §5.6).
+  the catalog entry (§6.1) and the abuse report's embedded signature (§6.3).
+  The successor statement (§4.1) and the verifier response and consent
+  contexts (§4.5, §5.6) landed 2026-09-02 with the recovery adoption in
+  `transactions.md`, known-answer signatures included.
 - **Unsigned message encodings — no signature exists to generate**: the
   currency request and reply (§7.1), the capture key grant (§7.3, transient
   end-to-end payload), the late-response wrapper (§7.4 — its embedded

@@ -2644,3 +2644,34 @@ exists in the corpus — query → consent → hybrid response → Recovery bloc
 remains the queued canonical-bar work, and it is exactly what would exercise
 the open selector/querier question. Blocked on that ruling; unblocking it
 builds the vector next.
+
+## The recovery selector ruled by derivation; the Recovery vector lands (2026-09-02)
+
+On the author's go-ahead, UNSPECIFIED #3 was resolved from design §9.1's own
+steps rather than by invention: "run §7.3 in reverse" — the subject meets a
+prior counterparty in person, who recognises them. **The counterparty is its
+own querier** (the subject stands in front of the party answering; no third
+role exists), the meeting opens as a ceremony (§7.5.2 already calls a
+post-loss recovery exactly that), whose countersigned pre-commitment binds the
+query, and **selection_basis MUST be 0 (known)** — a recovery verifier is by
+definition a prior counterparty. Design §9.1 carries the mechanical paragraph;
+wire §4.1 carries both rules as consistency bullets. **Derived, not
+author-worded — flagged for his review.**
+
+**Canonical bar 4's Recovery half is built.** transactions.md now carries the
+complete positive recovery adoption: alice2 recovers alice, adopted by bob,
+carol (prior counterparty via the formation ceremony) verifying. The chain:
+VerificationQuery (querier = carol) → query_id → Ed25519 consent by the NEW
+key over the raw query_id → hybrid COSE_Sign verifier response over fields 1–8
+and 10 → [prior, new, patron] successor proof by the OLD key → Recovery block
+→ adoption whose locator opens series 11 at counter 0, presenting alice's old
+chain head, envelope-signed by the new key and the patron only. alice2 joins
+the identity set (12 identities). The harness gains seven checks — query_id
+recomputation, all bindings, querier-is-verifier, and real signature
+verification of consent, both response entries and both successor entries —
+**28 checks, ALL PASS**. One generator bug caught during the build (an
+unwrapped txid in body field 7 leaving 21 stray bytes) — caught by the
+harness's own canonicality gate, which is the division of labour working.
+records.md's queued list and README bar 4 updated; still open there: the
+presence/classical form and the selection_basis matrix, which need bar 2's
+normal record.

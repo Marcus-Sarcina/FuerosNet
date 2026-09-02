@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `6dc8240ecc46f082dcd74881f2979ec345b4080196e0516531156dd889f37f71` · network-design.md `89a68e17ae795f2ef5a63eead4050f78ee6ec2a5ddc3c42847ad540f53be4fd5`
+**Pinned**: wire-format.md `61737e92c2fb7149df2f97915697246a7c87893af6f65395c1e4c855d0541a08` · network-design.md `7a0e2b40b05e384699101ffa3ce781475f80341bfd030e93718f3f45c6fb121e`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -131,8 +131,8 @@ hashes (`txid`, `keyhash`, `query_id`, genesis) have pairwise structurally
 disjoint preimage languages, and any future hashed object must stay disjoint
 or carry a tag. The suite's positive hash vectors are the invariant's living
 witnesses — a txid preimage begins `a? 00`, a keyhash preimage begins `82`, a
-genesis preimage is exactly 32 bytes — and a `query_id` vector joins them with
-the query/consent set (canonical bar 4).
+genesis preimage is exactly 32 bytes — and the `query_id` vector joined them
+2026-09-02 with the recovery adoption's query/consent set (canonical bar 4).
 
 Both fourth-review contradictions were ruled 2026-09-01: **absence is the
 encoding of an unanswered query** — `pending` left the enum, the threshold
@@ -183,9 +183,14 @@ negatives (T9–T12). Still open:
    earlier revisions dissolved with the chaining and determinism they
    tested.*
 4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
-   vectors**, both authentication forms (presence/classical,
-   Recovery/hybrid), the `selection_basis` matrix (T27), and a complete
-   Recovery adoption as its own target.
+   vectors** — *the Recovery/hybrid half landed 2026-09-02*: a complete
+   positive recovery adoption in `transactions.md` carries the query, the raw
+   query_id consent, a hybrid `COSE_Sign` verifier response over fields 1–8
+   and 10, the `[prior, new, patron]` successor proof, and `selection_basis`
+   0 — the only value a `Recovery` block admits; the harness verifies every
+   signature. **Still open**: the presence/classical authentication form and
+   the wider `selection_basis` matrix (T27), which need the normal record
+   (bar 2).
 5. **The selective-disclosure construction** — *construction and
    presentations done 2026-09-01*: the formation record now carries a real
    §4.5.1 root (its synthetic-root caveat is gone), and full, partial and

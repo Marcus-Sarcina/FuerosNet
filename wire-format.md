@@ -920,6 +920,17 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   party attests something else.
 - **Duplicate responses from one verifier are malformed**, as they are in a
   presence record (§4.5) and for the same reason: one verifier occupies one slot.
+- **The querier is the verifier** (design §9.1): recovery runs §7.3 in reverse,
+  the subject standing in front of the party answering, so each response's
+  `query_id` derives from a `VerificationQuery` whose field 2 names the
+  responding verifier — a mismatch is malformed where the query is held. The
+  pre-commitment in that query is the recovery meeting's own: the meeting opens
+  as a ceremony (design §7.5.2) and yields this block instead of a presence
+  record.
+- **`selection_basis` MUST be 0 (known) in every response here** [2026-09-02]: a
+  recovery verifier is by definition a prior counterparty who recognises the
+  subject (design §9.1). Values 1 and 2 are malformed inside a `Recovery`
+  block.
 - **An old-key proof and verifier responses both appear, always.** They are
   independent evidence of the same continuity — one cryptographic, one human — and
   **neither substitutes for the other**, which is why both are required rather than

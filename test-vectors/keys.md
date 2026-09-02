@@ -1,6 +1,6 @@
 # Test identities
 
-Generated against `wire-format.md` `6dc8240ecc46f082…`, `network-design.md` `89a68e17ae795f2e…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `61737e92c2fb7149…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
@@ -30,6 +30,7 @@ so the entries appear as 1, −1, −2. The post-quantum `COSE_Key` is
 | alice | node / subject | `fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a` | `8410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a` |
 | bob | patron | `e10996fba9fb4d1158766179de2837c77be29531347d302a4413829e8bab3750` | `6bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c375` |
 | carol | counterparty | `2d952f29a29261715f9b1aefce27620f0705a4a848ac772ca2bdeca416064cf0` | `71591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf2` |
+| alice2 | alice's replacement key (recovery adoption) | `57810e812a41bfa4d2b973c99b98a9655bf5524ccf8a3055856b899d6f9ec27b` | `37f827013ad509ef5a4d30abed1c99f06c8c554e83b8c68f4c497fe6458a3ae4` |
 | w1 | witness | `a0855987914434fb5942870ba72be8d90d9aca2ff8dac412f8a90f54b149d5c0` | `efe7876868352e6f8cabae9ba591a3e5ca61cf64950d19eb40ab82120738587f` |
 | w2 | witness | `642d6afb3e1a3bfa7d22a808b2f55398a86d2ae814dc213034eb863fa69420d3` | `5c5f9a52ddbd9c7cfd08d87c82183a5b730379cc55df76ab85a6e06b54bf5ab3` |
 | w3 | witness | `8e5d5a88df88cf1a11ddcffd10fc02a6f04e096820ea950a4ba44d64a340a2a6` | `f7415dbb4ce281fcd37b40f25b258537f7fcccd439520b77d86077c76f9e39df` |

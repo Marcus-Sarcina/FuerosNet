@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `6dc8240ecc46f082…`, `network-design.md` `89a68e17ae795f2e…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `61737e92c2fb7149…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -91,9 +91,10 @@ goal — but only for objects that have one:
 
 - **Signed, queued**: currency attestation (§7.1), anchor table entry (§7.2),
   subtree acknowledgement (§7.5), prekey bundle (§7.8) — plus, outside §7,
-  the catalog entry (§6.1), the abuse report's embedded signature (§6.3), the
-  successor statement (§4.1), and the verifier response and consent contexts
-  (§4.5, §5.6).
+  the catalog entry (§6.1) and the abuse report's embedded signature (§6.3).
+  The successor statement (§4.1) and the verifier response and consent
+  contexts (§4.5, §5.6) landed 2026-09-02 with the recovery adoption in
+  `transactions.md`, known-answer signatures included.
 - **Unsigned message encodings — no signature exists to generate**: the
   currency request and reply (§7.1), the capture key grant (§7.3, transient
   end-to-end payload), the late-response wrapper (§7.4 — its embedded
