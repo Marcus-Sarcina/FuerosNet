@@ -304,7 +304,8 @@ for m in re.finditer(r'```\n(a[45][0-9a-f\n]+?)```', rc):
         obj = canonical(b)
     except Exception:
         continue
-    if isinstance(obj, dict) and 4 in obj and isinstance(obj[4], list):
+    if (isinstance(obj, dict) and 4 in obj and isinstance(obj[4], list)
+            and len(obj[4]) == 4 and isinstance(obj[4][0], str)):
         payload = enc({k: v for k, v in obj.items() if k != 4})
         prot = bytes.fromhex(obj[4][0]); sig = bytes.fromhex(obj[4][3])
         good = verify_sig(BY[obj[1]], -8, sig, sig_sign1(prot, b'rhtn/1:endpoints', payload))
@@ -413,6 +414,41 @@ for e in rec[3][3]:
     prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
     oks += verify_sig('alice', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:successor', succ))
 check(oks == 2 and len(rec[3][3]) == 2, 'recovery successor proof: hybrid by the OLD key over [prior, new, patron]')
+
+# ------------------------------------------- remaining signed contexts (bars 8/10)
+CTX = [  # (caption, sig_slot, aad, signer-field or fixed name, wrong-signer name)
+    ('Currency attestation', 7, b'rhtn/1:currency', 6, 'carol'),
+    ('Catalog entry', 8, b'rhtn/1:catalog', 2, 'carol'),
+    ('Abuse report', 5, b'rhtn/1:abuse', 1, 'carol'),
+    ('Anchor table entry', 5, b'rhtn/1:anchor', 1, 'carol'),
+    ('Subtree acknowledgement', 5, b'rhtn/1:subtree-ack', 2, 'bob'),
+    ('Prekey bundle', 5, b'rhtn/1:prekey', 1, 'carol'),
+]
+csect = rc[rc.index('## The remaining signed contexts'):]
+ok_pos = ok_wrong = ok_cross = 0
+tags = [c[2] for c in CTX]
+for i, (cap, slot, aad, sfield, wrong) in enumerate(CTX):
+    seg = csect[csect.index('**' + cap + '**'):]
+    hexes = re.findall(r'```\n([0-9a-f\n]+?)```', seg)[:2]
+    obj, prot, sig, tbs = sign1_object(hexes[0], aad, slot)
+    name = BY[obj[sfield]]
+    ok_pos += verify_sig(name, -8, sig, tbs)
+    # cross-context: the same signature under the NEXT context's tag must fail
+    payload = enc({k: v for k, v in obj.items() if k != slot})
+    other = tags[(i + 1) % len(tags)]
+    ok_cross += not verify_sig(name, -8, sig, sig_sign1(prot, other, payload))
+    wobj, wprot, wsig, wtbs = sign1_object(hexes[1], aad, slot)
+    ok_wrong += (not verify_sig(BY[wobj[sfield]], -8, wsig, wtbs)) and \
+                verify_sig(wrong, -8, wsig, wtbs)
+check(ok_pos == 6, 'signed contexts: all six known-answer signatures verify under the named signer')
+check(ok_wrong == 6, 'wrong-signer analogues: valid under the wrong key, never under the named one')
+check(ok_cross == 6, 'cross-context substitution: every signature fails under another context tag')
+anch = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```',
+        csect[csect.index('**Anchor table entry**'):])[0].replace('\n', '')))
+check(3 not in anch[2][0], 'anchor NetworkPoint: default port is ABSENT, never written out')
+ab = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```',
+        csect[csect.index('**Abuse report**'):])[0].replace('\n', '')))
+check(ab[1] == KH['c5'], 'abuse report: field 1 is both the resource and the signer')
 
 # ---------------------------------------------------------------- normal record (bar 2)
 BYNAME = {KH[n]: n for n in NAMES}

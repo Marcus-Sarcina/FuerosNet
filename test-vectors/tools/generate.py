@@ -1835,12 +1835,12 @@ signature fails (E13). Complete record ({len(er_ext)} bytes):
 (third review). One known-answer signature per *signing context* remains the
 goal — but only for objects that have one:
 
-- **Signed, queued**: currency attestation (§7.1), anchor table entry (§7.2),
-  subtree acknowledgement (§7.5), prekey bundle (§7.8) — plus, outside §7,
-  the catalog entry (§6.1) and the abuse report's embedded signature (§6.3).
-  The successor statement (§4.1) and the verifier response and consent
-  contexts (§4.5, §5.6) landed 2026-09-02 with the recovery adoption in
-  `transactions.md`, known-answer signatures included.
+- **Signed — complete 2026-09-02.** Every domain-separation context now has a
+  known-answer signature: locator and endpoints (below), currency, catalog,
+  abuse, anchor, subtree-ack and prekey (the bar-8 section at the end of this
+  file, each with its wrong-signer analogue), and successor, verifier and
+  consent (the recovery adoption and normal record in `transactions.md`).
+  The envelope tag is every transaction's.
 - **Unsigned message encodings — no signature exists to generate**: the
   currency request and reply (§7.1), the capture key grant (§7.3, transient
   end-to-end payload), the late-response wrapper (§7.4 — its embedded
@@ -1928,6 +1928,162 @@ record's response count against `required` learns whether the ceremony was
 diligent — never whether the subject's history is complete. The criterion
 gates nothing; the finalization must-accepts in `transactions.md` are the
 positive proof.""")
+
+# --- Canonical bar 8: the remaining signed contexts, one known-answer
+# signature per domain-separation tag, each with a wrong-signer analogue
+# (bar 10) signed by carol's key while the object names its true signer.
+def sign1_slot(pairs, sig_slot, aad, signer):
+    """Build {pairs..., sig_slot: COSE_Sign1(payload = map without sig_slot)}."""
+    payload = e_map(pairs)
+    prot = sig_protected(-8)
+    tbs = sig_structure_sign1(prot, aad, payload)
+    cose = e_arr([e_bstr(prot), b'\xa0', NULL, e_bstr(signer.sign(tbs))])
+    allp = sorted(pairs + [(e_uint(sig_slot), cose)], key=lambda p: p[0])
+    return e_map(allp)
+
+AAD_CURRENCY = b'rhtn/1:currency'
+AAD_CATALOG = b'rhtn/1:catalog'
+AAD_ABUSE = b'rhtn/1:abuse'
+AAD_ANCHOR = b'rhtn/1:anchor'
+AAD_SUBTREE = b'rhtn/1:subtree-ack'
+AAD_PREKEY = b'rhtn/1:prekey'
+
+TS_REC = TS_C2 + 10 * 86400
+res = IDS['c5']   # the resource's own keys; bob owns and hosts it
+
+cur_pairs = [(e_uint(1), e_bstr(alice.keyhash)),
+             (e_uint(2), e_bstr(alice.keyhash)),
+             (e_uint(3), e_uint(TS_REC)),
+             (e_uint(4), e_uint(TS_REC + 10 * 3600)),
+             (e_uint(5), e_uint(0)),
+             (e_uint(6), e_bstr(bob.keyhash))]
+currency = sign1_slot(cur_pairs, 7, AAD_CURRENCY, bob)
+currency_wrong = sign1_slot(cur_pairs, 7, AAD_CURRENCY, carol)
+
+cat_pairs = [(e_uint(1), e_bstr(res.keyhash)),
+             (e_uint(2), e_bstr(bob.keyhash)),
+             (e_uint(3), e_tstr('rhtn-forum')),
+             (e_uint(4), e_tstr('The Reading Room')),
+             (e_uint(5), e_bstr(b'quic://198.51.100.7:4433')),
+             (e_uint(7), e_bstr(b'v=1')),
+             (e_uint(9), e_uint(1))]
+catalog = sign1_slot(cat_pairs, 8, AAD_CATALOG, bob)
+catalog_wrong = sign1_slot(cat_pairs, 8, AAD_CATALOG, carol)
+
+abuse_pairs = [(e_uint(1), e_bstr(res.keyhash)),
+               (e_uint(2), e_uint(TS_REC + 3600)),
+               (e_uint(3), e_uint(2)),
+               (e_uint(4), e_bstr(b'burst of 9k requests/min'))]
+abuse = sign1_slot(abuse_pairs, 5, AAD_ABUSE, res)
+abuse_wrong = sign1_slot(abuse_pairs, 5, AAD_ABUSE, carol)
+
+np1 = e_map([(e_uint(1), e_bstr(bytes([198, 51, 100, 7]))),
+             (e_uint(2), e_uint(64500))])   # port ABSENT: default 7431, written out is malformed
+anchor_pairs = [(e_uint(1), e_bstr(bob.keyhash)),
+                (e_uint(2), e_arr([np1])),
+                (e_uint(3), e_uint(111)),
+                (e_uint(4), seqno(1, 7))]
+anchor = sign1_slot(anchor_pairs, 5, AAD_ANCHOR, bob)
+anchor_wrong = sign1_slot(anchor_pairs, 5, AAD_ANCHOR, carol)
+
+ack_pairs = [(e_uint(1), e_bstr(adopt_txid)),
+             (e_uint(2), e_bstr(carol.keyhash)),
+             (e_uint(3), e_bstr(alice.keyhash)),
+             (e_uint(4), e_uint(TS_ADOPT + 600))]
+ack = sign1_slot(ack_pairs, 5, AAD_SUBTREE, carol)
+ack_wrong = sign1_slot(ack_pairs, 5, AAD_SUBTREE, bob)
+
+pk_material = H(b'rhtn-test-vectors:prekey-material-1') + H(b'rhtn-test-vectors:prekey-material-2')
+pk_pairs = [(e_uint(1), e_bstr(alice.keyhash)),
+            (e_uint(2), e_uint(1)),
+            (e_uint(3), e_bstr(pk_material)),
+            (e_uint(4), e_uint(TS_REC))]
+prekey = sign1_slot(pk_pairs, 5, AAD_PREKEY, alice)
+prekey_wrong = sign1_slot(pk_pairs, 5, AAD_PREKEY, carol)
+
+emit('records.md', f"""
+## The remaining signed contexts (canonical bar 8)
+
+One known-answer `COSE_Sign1` per domain-separation tag. Every payload is the
+object's canonical map **without its signature slot**; protected header
+`{{1: -8}}`, no kid (the object names its signer), empty unprotected, detached
+payload. Each is followed by its **wrong-signer analogue** (canonical bar 10):
+byte-identical fields, the signature cryptographically valid under a key the
+object does **not** name — the binding, not the mathematics, is the defect
+(S23's rule). And each signature is bound to its tag: verified under any other
+context's `external_aad`, it MUST fail — the cross-context substitution family
+(S24).
+
+**Currency attestation** — subject alice, issuer bob (role 0, patron), ~10 h
+expiry ({len(currency)} bytes; wrong-signer: carol):
+
+```
+{hexblock(currency)}
+```
+
+```
+{hexblock(currency_wrong)}
+```
+
+**Catalog entry** — resource c5, owner bob, `connect_scope` absent (no
+prediction offered), `data_practice` 1; the endpoint is the SRV analogue
+({len(catalog)} bytes; wrong-signer: carol):
+
+```
+{hexblock(catalog)}
+```
+
+```
+{hexblock(catalog_wrong)}
+```
+
+**Abuse report** — the resource c5 reports excessive load to its own owner;
+field 1 is both the resource and the signer ({len(abuse)} bytes;
+wrong-signer: carol, violating the field-1-equals-signer binding):
+
+```
+{hexblock(abuse)}
+```
+
+```
+{hexblock(abuse_wrong)}
+```
+
+**Anchor table entry** — bob, one `NetworkPoint` with the port **absent**
+(default 7431; writing it out is malformed, §1's default-omission rule),
+subtree size 111 ({len(anchor)} bytes; wrong-signer: carol):
+
+```
+{hexblock(anchor)}
+```
+
+```
+{hexblock(anchor_wrong)}
+```
+
+**Subtree acknowledgement** — carol as grandpatron acknowledges alice's
+adoption by bob (the tree above bob is asserted for the fixture, not built)
+({len(ack)} bytes; wrong-signer: bob, who is the patron and exactly the party
+that must not substitute for the grandpatron):
+
+```
+{hexblock(ack)}
+```
+
+```
+{hexblock(ack_wrong)}
+```
+
+**Prekey bundle** — subject alice, construction 1 (PQXDH), 64 bytes of opaque
+reusable material ({len(prekey)} bytes; wrong-signer: carol):
+
+```
+{hexblock(prekey)}
+```
+
+```
+{hexblock(prekey_wrong)}
+```""")
 
 # ---------------------------------------------------------------- write files
 

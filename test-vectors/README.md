@@ -201,13 +201,14 @@ negatives (T9–T12). Still open:
    *specification*, not yet a corpus.
 7. **The boundary sweep** at every bound in the declared scope (list at the
    end of `negative-vectors.md`).
-8. **The remaining signed contexts** in `records.md` — one known-answer
-   signature per domain-separation context, which is also the sweep that
-   catches a missing table row like `rhtn/1:endpoints`. With them,
-   **cross-context substitution fixtures**: a valid signature from context X
-   presented as context Y must fail under Y's reconstructed tag — the fixture
-   that catches two real paths sharing a hard-coded AAD while the artificial
-   empty-AAD case (S12) still passes (seventh review).
+8. ~~The remaining signed contexts~~ **DONE 2026-09-02**: every
+   domain-separation tag has a known-answer signature — currency, catalog,
+   abuse, anchor, subtree-ack and prekey in `records.md`; successor, verifier
+   and consent in `transactions.md`; locator, endpoints and envelope already
+   present — and the **cross-context substitution family is live** (S24): the
+   harness verifies every `records.md` signature fails under a neighbouring
+   tag, the check that catches two real paths sharing a hard-coded AAD while
+   S12's artificial empty-AAD case still passes.
 9. **The unsigned message families** — positive known-answer encodings plus
    each family's characteristic malformed and must-accept cases, the family
    inventory **enumerated mechanically from the wire-format schemas** (the
@@ -223,12 +224,14 @@ negatives (T9–T12). Still open:
    `session_survives`, `defer_until_handshake`) — because a static
    `bytes → result` fixture cannot express rules like *unknown control frames
    are skipped while the session survives* (sixth review).
-10. **Signer-to-role binding everywhere a signer is named** — every
-    transaction type (S17), and every **standalone signed object** (S23's
-    generalisation; the wrong-signer `SignedLocator` exists as generated
-    bytes, and each remaining signed context gets its analogue with its
-    positive vector). The defect is always the same: a cryptographically
-    valid signature under a key the object does not name.
+10. **Signer-to-role binding everywhere a signer is named** — *the
+    standalone half is DONE 2026-09-02*: every signed context in `records.md`
+    carries its wrong-signer analogue beside its positive vector, valid under
+    the wrong key and never under the named one (S23's generalisation; the
+    subtree-ack's wrong signer is deliberately the patron). The
+    transaction-type half (S17) is a mutation family and lands with the
+    corpus format (bar 6). The defect is always the same: a
+    cryptographically valid signature under a key the object does not name.
 11. ~~Finalization semantics on the normal record~~ **DONE 2026-09-02**:
     the main record finalizes over match/match/`unavailable`; the
     must-accepts carry a record finalized on a lone `no-match` and one with
