@@ -1320,7 +1320,8 @@ VerificationQuery = {
   3: bstr .size 32,    ; ceremony pre-commitment (design §7.4.1)
   4: bstr .size (1..4096),   ; fuzzed profile
   5: uint,             ; TEMPLATE VERSION the profile in field 4 was produced
-                       ;   under (design §7.4.4). A verifier that cannot compare
+                       ;   under (design §7.4.4). 0..=65535 — design §8.1's
+                       ;   uint16, the same bound field 6 echoes [2026-09-02]. A verifier that cannot compare
                        ;   under this version answers `3 unavailable` with no
                        ;   basis — it has not evaluated. Without it a mismatched
                        ;   engine compares anyway and signs a `no-match`
@@ -1359,7 +1360,9 @@ VerifierResponse = {
                        ; A verifier MUST reject a query lacking it, and MUST reject
                        ; one whose fuzzed profile differs from another countersigned
                        ; under the same ceremony pre-commitment
-  10: uint,            ; selection basis, the SELECTOR's claim (§5.5):
+  10: uint,            ; selection basis, the SELECTOR's claim (§5.5),
+                       ;   carried to the verifier as the third element of the
+                       ;   type-4 request body (§5.6) [2026-09-02]:
                        ;   0 known (met, or in a trust horizon of the selector)
                        ;   1 reachable (one further edge, §5.1 tiers 3-4)
                        ;   2 discretionary fill
@@ -1837,11 +1840,16 @@ retro-inserted: the record is immutable, and a responder who wants its late
 answer durable has §7.4's `LateResponse`.
 
 **`inconclusive` covers a failure to decrypt, and `no-match` never does.** A
-truncated or unauthenticated sealed capture, or an absent capture key, tells
-the verifier nothing about the subject. **Reporting it as `no-match` would turn
-a corrupted store into adverse evidence**, which is the one outcome a storage
-fault must not produce. `unavailable` is for having no capture at all;
-`inconclusive` is for having one it could not read.
+truncated or unauthenticated sealed capture tells the verifier nothing about
+the subject. **Reporting it as `no-match` would turn a corrupted store into
+adverse evidence**, which is the one outcome a storage fault must not produce.
+**An absent capture key is `unavailable`, not `inconclusive`** [2026-09-02,
+design §7.5.2's precedence]: withholding is the subject's deliberate act and
+is deliberately indistinguishable from a verifier with no capture at all —
+`unavailable` is for evidence that never reached the comparison;
+`inconclusive` is for a capture in hand that could not be read, and it carries
+**basis 0 and the query's template version** — the attempted mechanism, not an
+assertion that comparison ran [2026-09-02].
 
 ### 5.6 Consent is signed over the query id
 
@@ -1863,13 +1871,33 @@ Carrying the query itself would add up to 64 KB to a record with sixteen respons
 for no verification benefit.
 
 **How consent reaches the verifier**: request type 4's body is the
-two-element array `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's
-consent beside it, never inside it. It cannot be a query field: the consent signs
+array `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's
+consent beside it, never inside it, and the selector's `selection_basis` claim.
+Consent cannot be a query field: it signs
 `query_id`, which hashes fields 1–5, so placing it in the map it authorises would be
 the §5.6 circularity again one level up. The verifier checks the consent against
 the query's own `query_id` before anything else; **a query arriving without consent
 is rejected**, which is what field 7's rule already required and the wire could not
 previously carry.
+
+**How `selection_basis` reaches the verifier** [2026-09-02]: the third element,
+a bare uint 0–2. Response field 10 is the selector's claim inside the
+verifier's signature, and no earlier element carried it — the specified
+response was unconstructible from the specified request. It travels outside
+every signature because the transport already authenticates the requester, who
+is the selector making the claim; the verifier echoes it into field 10 and
+signs the echo. The recovery form is untouched: there the verifier is its own
+querier (§4.1) and no type-4 request travels.
+
+**Field 2 MUST name the authenticated requester** [2026-09-02]: on a type-4
+stream the querier is the transport-authenticated peer, and a mismatch is
+rejected — otherwise field 2 chooses its own rate-limit bucket.
+
+**The successful reply body is a single `VerifierResponse`** [2026-09-02],
+framed as every reply is (§9.2). A malformed query — consent absent or
+failing, recomputed `query_id` mismatching — is answered by **closing the
+stream**: no error schema exists, and no signed response is fabricated for
+input that is not evidence.
 
 ### 5.7 Who can verify what, the property is holder-relative
 
@@ -2389,7 +2417,11 @@ malformed rather than as an invitation to open its store. **Arrival order is not
 guaranteed**: the grant and the query travel different paths, so a
 holder may buffer an unopened grant briefly awaiting its query — bounded and brief,
 since an indefinite buffer defeats the momentary-release property. The bound is
-local policy.
+local policy. **The authenticated sender MUST be the subject** [2026-09-02]:
+the seed never leaves the subject, so a grant arriving from anyone else is
+replay or fabrication, and the holder rejects it. **Duplicates are ignored, and
+so is a differing second grant for a query already satisfied** — the first
+authenticated grant stands: one release, one answer.
 
 ### 7.4 Late verifier response
 
@@ -3271,7 +3303,7 @@ no continuation to preserve.
 | 1 | `ResolveRequest` (§7.7) |
 | 2 | `ArchiveRequest` (§7.9) |
 | 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§7.8) |
-| 4 | `[ VerificationQuery, COSE_Sign1 ]` — the query and the subject's consent (§5) |
+| 4 | `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's consent, and the selector's `selection_basis` claim (§5) |
 | 5 | `CatalogQuery` (§6.4) |
 | 6 | `ResourceRequest` (§11) |
 | 7 | `ResourceRegistration` (§6.2) |

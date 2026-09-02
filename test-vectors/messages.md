@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `b80c647e24e4ce87…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `298fb66184c88567…`, `network-design.md` `25a19790a75f1034…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -450,10 +450,10 @@ d4ea8a0c8dcfc852aa6a02010350f217bc86de45dab740e765e1608109db
 d82f611b0794ac9c32c37558208410def778a5de3a25991aba399716bc8eccfd
 a9ad57d4ea8a0c8dcfc852aa6a0250af83c0b777b81bf35d69ddc64c1b1917
 ```
-**Query plus consent (request 4) — the normal record's worked query** (258 bytes, length prefix included):
+**Query, consent, and the selector's selection_basis claim (request 4) — the normal record's worked query** (259 bytes, length prefix included):
 
 ```
-000000fe820482a60158208410def778a5de3a25991aba399716bc8eccfda9ad
+000000ff820483a60158208410def778a5de3a25991aba399716bc8eccfda9ad
 57d4ea8a0c8dcfc852aa6a0258206bcf8a3e8899fc206bc603744414d58b01db
 857986d82f611b0794ac9c32c375035820e583bc9b190ee9eff334cb1d21a75e
 128105cbcaf366e955766750a09bcb0ba5045820ecf4f5edfe42c7cbfdacd64b
@@ -461,7 +461,7 @@ a9ad57d4ea8a0c8dcfc852aa6a0250af83c0b777b81bf35d69ddc64c1b1917
 b8679c9458ad1f140f6462b6d46a7e77a00683a4fbe9435b868443a10127a0f6
 58400541785e5022ed97927c9bba0e403b5a3443e505c426e5b3b555061b0e49
 f9f5ecf597f82baf3ddcc798179c0387f3e03abf3a51bdefee9f905f540da200
-ae07
+ae0700
 ```
 **CatalogQuery (request 5) — filtered to `rhtn-forum`** (37 bytes, length prefix included):
 
@@ -876,8 +876,8 @@ a2015071b5e974259b3aff3d013b1c67cc9fe30200
 ```
 a30158207992ab78fe0b413eb9c00eb4cded6c9b3571c07a1723bda78bf15792
 a2e3407902582056a295563ed967b8679c9458ad1f140f6462b6d46a7e77a006
-83a4fbe9435b860358201e1a8edd2061d33197bcff10a629f8f7505b11feaa8d
-ce6e024959eddcd3219f
+83a4fbe9435b86035820dd66cad905f5be5887981cd0f91a5142038ce535cd14
+634904eb731f05e7a7e6
 ```
 **LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
 

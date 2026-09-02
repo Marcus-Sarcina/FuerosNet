@@ -7994,3 +7994,19 @@ its first outing — and exposed one real vector defect: the machine-readable
 TR2 required only the defer branch where the specification permits reject or
 defer. TR2 now requires never-process-as-early-data with a one_of carrying
 both conforming branches, a convention the corpus format now documents.
+
+### 2026-09-02 (cycle 2, 0.6 capture/query target, phase 1)
+The capture-and-query attempt surfaced the cycle's one wire-schema change:
+request type 4 now carries the selector's selection_basis claim as its third
+element — response field 10 sits inside the verifier's signature and no
+specified request element carried it, so the specified response was
+unconstructible from the specified bytes. It also settled a design/wire
+contradiction by precedence — an absent capture key is unavailable, not
+inconclusive, and a decryption failure reports basis 0 with the query's
+template version — and pinned the capture-key derivation as HKDF-SHA-256 to
+the byte, with a known-answer vector and the KeyGrant fixture carrying the
+derived key. The querier field binds to the authenticated requester; the
+reply is one VerifierResponse; malformed queries close the stream; a grant's
+sender must be the subject, duplicates and rivals ignored. The capture-key
+handover and the selected verifier's identity ride the ceremony's direct
+channel, carried by no wire object.

@@ -2163,7 +2163,7 @@ r_pk = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
 r_pk_fail = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
                    (e_uint(4), e_uint(0))])
 
-f_query = frame(4, e_arr([npr_query0, consent_over(npr_q0, alice)]))
+f_query = frame(4, e_arr([npr_query0, consent_over(npr_q0, alice), e_uint(0)]))
 f_catq = frame(5, e_map([(e_uint(1), e_tstr('rhtn-forum')),
                          (e_uint(2), e_bstr(NONCE(b'catalog')))]))
 r_cat = e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))),
@@ -2201,15 +2201,28 @@ _msg_pairs = [
     ('ArchiveRequest (request 2) — head ABSENT: the recovery case, a must-accept', f_archive),
     ('PrekeyRequest (request 3) — reusable plus a one-time key', f_pk1),
     ('PrekeyBatchRequest (request 3) — two subjects, ascending', f_pkb),
-    ('Query plus consent (request 4) — the normal record\'s worked query', f_query),
+    ('Query, consent, and the selector\'s selection_basis claim (request 4) — the normal record\'s worked query', f_query),
     ('CatalogQuery (request 5) — filtered to `rhtn-forum`', f_catq),
     ('ResourceRequest (request 6) — an HTTP/1.1 GET inside the frame', f_rr),
     ('ResourceRegistration (request 7) — the signed catalog entry, requested scope absent', f_reg),
     ('CurrencyRequest (request 8)', f_cur),
 ]
+def hkdf_sha256(ikm, info, length=32):
+    prk = hmac.new(b'\x00' * 32, ikm, hashlib.sha256).digest()  # empty salt
+    out, t, i = b'', b'', 1
+    while len(out) < length:
+        t = hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest()
+        out += t; i += 1
+    return out[:length]
+
+# k_capture for the capture c1 (the first verifier) holds of alice, sealed at
+# the normal ceremony: subject alice, holder c1, ceremony npr_precommit (§7.5.2).
+demo_seed = H(b'rhtn-test-vectors:capture-seed:alice:c1')
+demo_k = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash
+                     + IDS['c1'].keyhash + npr_precommit)
 kg = e_map([(e_uint(1), e_bstr(npr_txid)),
             (e_uint(2), e_bstr(npr_q0)),
-            (e_uint(3), e_bstr(H(b'rhtn-test-vectors:k-capture-demo')))])
+            (e_uint(3), e_bstr(demo_k))])
 late = e_map([(e_uint(1), e_bstr(npr_txid)),
               (e_uint(2), e_bstr(alice.keyhash)),
               (e_uint(3), classical_response(IDS['c4'], alice, npr_q0,
@@ -2757,6 +2770,35 @@ for cid, inputs, expect in [
      {'n': 4, 'candidates': 1, 'required': 1}),
 ]:
     reg(cid, 'context', expect, inputs=inputs)
+
+emit('records.md', f"""
+## Capture-key derivation (design §7.5.2) — known answer
+
+HKDF-SHA-256, salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture`
+followed by the raw subject keyhash, holder keyhash and ceremony
+pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the normal
+record's pre-commitment.
+
+seed:
+
+```
+{hx(demo_seed)}
+```
+
+info (14-byte tag + 3 × 32 bytes):
+
+```
+{hexblock(b'rhtn/1:capture' + alice.keyhash + IDS['c1'].keyhash + npr_precommit)}
+```
+
+k_capture:
+
+```
+{hx(demo_k)}
+```
+
+The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal
+record's txid and its first worked query.""")
 
 # ---------------------------------------------------------------- write files
 

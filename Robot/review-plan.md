@@ -477,7 +477,8 @@ below.)*
    (`wire-format.md` §4.5.1).
 4. Client attach with sibling failover.
 5. Run a capture and a verifier query, including sealed-capture handling and
-   segment-key release.
+   capture-key release. *(This target once said "segment-key release"; the
+   segment concept died with the keystream, 2026-08-31.)*
 6. Register a resource and answer a catalog query for it.
 7. Authorise a user to a hosted resource, from the incoming request through to the
    framing handed to the resource.

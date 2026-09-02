@@ -486,6 +486,23 @@ check(len(re.findall(r'\| TR\d+ ', ms)) == 14, 'messages: fourteen session trace
 qc = frame_objs[12][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes')
+check(len(qc) == 3 and qc[2] in (0, 1, 2),
+      'request-4 body carries the selection_basis claim as its third element')
+
+# ---------------------------------------------------------------- HKDF (s7.5.2)
+import hmac as _hmac
+def _hkdf(ikm, info, length=32):
+    prk = _hmac.new(b'\x00' * 32, ikm, hashlib.sha256).digest()
+    out, t, i = b'', b'', 1
+    while len(out) < length:
+        t = _hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest()
+        out += t; i += 1
+    return out[:length]
+hk = re.search(r'## Capture-key derivation.*?seed:\n\n```\n([0-9a-f\n]+?)```.*?info[^`]*```\n([0-9a-f\n]+?)```.*?k_capture:\n\n```\n([0-9a-f\n]+?)```', rc, re.S)
+_seed = bytes.fromhex(hk.group(1).replace('\n', ''))
+_info = bytes.fromhex(hk.group(2).replace('\n', ''))
+_k = hk.group(3).replace('\n', '')
+check(_hkdf(_seed, _info).hex() == _k, 'capture-key HKDF-SHA-256 known answer recomputes')
 
 # ---------------------------------------------------------------- corpus.json (bar 6)
 import json as _json
@@ -524,6 +541,8 @@ check(byid['P-normal-record']['hex'] ==
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 14
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: fourteen traces and five contexts')
+_kg = canonical(bytes.fromhex(byid['P-reply-13']['hex']))
+check(_kg[3] == _k, 'the KeyGrant carries the derived capture key')
 tr2 = byid['TR2']['expect']
 check(tr2['actions'] == ['never_process_as_early_data']
       and sorted(tr2.get('one_of', [])) == ['defer_until_handshake', 'reject'],

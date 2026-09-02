@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `b80c647e24e4ce87…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `298fb66184c88567…`, `network-design.md` `25a19790a75f1034…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -246,3 +246,34 @@ a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e4
 ddff2b622dbb4f10ce4c2c9d97ef1cd65c97b57428c051fd402743c8576cf277
 4f94ae4c10a6f8de4919a53f6255388dbe4863d4443b8d5006
 ```
+
+## Capture-key derivation (design §7.5.2) — known answer
+
+HKDF-SHA-256, salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture`
+followed by the raw subject keyhash, holder keyhash and ceremony
+pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the normal
+record's pre-commitment.
+
+seed:
+
+```
+298a1bd33f525f98915dd373e76cfe00badeb753751b7a11622284adc63e466d
+```
+
+info (14-byte tag + 3 × 32 bytes):
+
+```
+7268746e2f313a636170747572658410def778a5de3a25991aba399716bc8ecc
+fda9ad57d4ea8a0c8dcfc852aa6a96664caec817f958a439b6d326c45f5ab7bb
+b3671ebb447eca25a411b975e73ae583bc9b190ee9eff334cb1d21a75e128105
+cbcaf366e955766750a09bcb0ba5
+```
+
+k_capture:
+
+```
+dd66cad905f5be5887981cd0f91a5142038ce535cd14634904eb731f05e7a7e6
+```
+
+The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal
+record's txid and its first worked query.

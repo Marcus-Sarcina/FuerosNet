@@ -2950,3 +2950,45 @@ vector defect, zero spec ambiguities.**
 
 Everything else agreed at decision level or fell honestly outside the
 target's implemented boundary. Harness: 68 checks, all passing.
+
+## Cycle 2, pass 0.6 — capture + verifier query (phase 1, 2026-09-02)
+
+The deepest round: 18 UNSPECIFIED items, one design/wire contradiction, one
+real carriage gap. Dispositions:
+
+**Design-precedence contradiction, fixed**: wire §5.5 classed an absent
+capture key as `inconclusive`; design §7.5.2 makes withholding deliberately
+look like unavailability. Wire now: absent key is `unavailable`; a capture in
+hand that cannot be read is `inconclusive` — carrying **basis 0 and the
+query's template version** (U14's rule: the attempted mechanism, never an
+assertion comparison ran).
+
+**The carriage gap (U4), fixed with the cycle's one field addition**:
+response field 10 is the selector's claim under the verifier's signature, and
+no specified request element carried it — the specified response was
+unconstructible from the specified bytes. Request type 4's body is now
+`[VerificationQuery, COSE_Sign1, uint]`: the claim rides third, outside every
+signature, because the transport authenticates the requester who is the
+selector; the verifier echoes it into field 10 and signs the echo. Recovery
+untouched (its verifier self-queries; no type-4 request travels). **Flagged
+for the author as the round's substantive protocol change.**
+
+**Ruled and applied**: U1 — HKDF-SHA-256 stated to the byte (salt empty, IKM
+seed, info tag‖subject‖holder‖ceremony, L=32; divergence is catastrophic) with
+a known-answer vector the harness recomputes and the KeyGrant fixture now
+carrying the derived key; U2/U3 — the capture-key handover and the
+selected-verifier identity ride the ceremony's direct channel, carried by no
+wire object (§8.1.2's rule), now stated in §7.5.2; U8 — query field 2 MUST
+name the authenticated requester; U9 — the reply body is a single
+VerifierResponse; U10 — a malformed query closes the stream, no signed
+fabrication; U12 — a KeyGrant's authenticated sender MUST be the subject;
+U13 — duplicates and differing second grants are ignored, the first stands;
+query field 5 bounded 0..=65535 (the reviewer's u64/u16 asymmetry).
+
+**Already open or local, no change**: U5 (canonical biometric profile,
+§22.2), U6 (AEAD/framing, §22.2), U7 (anti-oracle values, §21.1-class local),
+U11 (payload demultiplexing, §14.2.4's standing fifth decision), U15
+(querier patience, §21.1), U16 (restore re-release, the §7.5.2 Open bullet),
+U17/U18 (local). The segment-key concept confirmed dead; review-plan target
+5's stale wording fixed. Type decisions sound throughout, including the
+affirmative no-segment-types and no-wire-demux-enum decisions.
