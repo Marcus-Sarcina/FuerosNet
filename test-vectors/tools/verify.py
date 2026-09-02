@@ -522,8 +522,10 @@ check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 8
-      and len([e for e in corpus['entries'] if e['class'] == 'context']) == 4,
-      'corpus: eight traces and four contexts')
+      and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
+      'corpus: eight traces and five contexts')
+check(byid['N-wrong-signer-anchor'].get('precondition') == 'the named key is pinned',
+      'corpus: the anchor wrong-signer expect carries its pinned-key precondition')
 b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))
 check(len(b17[4]) == 17, 'corpus: the 17-witness boundary fixture carries 17 witnesses')
 check(len(canonical(bytes.fromhex(byid['B-backptrs-9']['hex']))[0][0]) == 9,

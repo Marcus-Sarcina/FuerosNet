@@ -7934,3 +7934,10 @@ option, not a requirement — naming the disclose-nothing rule and the
 terminal-ServingInfra distinction, after the reviewer's implementation read
 it as mandatory and would have stranded resolutions the design completes.
 Everything else was deliberately local policy, correctly exercised.
+
+Phase 2 of the resolution target: zero implementation bugs, zero vector
+defects; the one classified ambiguity exposed a fixture-expectation defect —
+the wrong-signer anchor's unconditional reject omitted the pinned-key
+precondition that separates infra §4.1's two permitted ingestion models, and
+now states it. The reviewer's coverage observation closed the last referral
+gap: advances-zero as bytes, overshoot as a context fixture. 65 checks pass.

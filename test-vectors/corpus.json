@@ -593,17 +593,6 @@
    "note": "LateResponse \u2014 the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record"
   },
   {
-   "id": "N-wrong-signer-currency",
-   "class": "bytes",
-   "expect": {
-    "outcome": "reject",
-    "kind": "CurrencyAttestation",
-    "layer": "semantic",
-    "reason": "signature valid under a key the object does not name"
-   },
-   "hex": "a70158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a031a6a431510041a6a43a1b005000658206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c375078443a10127a0f658405dcb3b26b8c637d2de08b6433d3dc2cf42689286f15a005d99ab1d93f2c27e4cd59d3037829964ce275fd3f295324a8514044a4dd08d15543b09c694f6f4b609"
-  },
-  {
    "id": "N-wrong-signer-catalog",
    "class": "bytes",
    "expect": {
@@ -626,17 +615,6 @@
    "hex": "a5015820f2d688318409d89353636efb04014ae130f282e207d4d7f9146a3316125790ea021a6a43232003020458186275727374206f6620396b2072657175657374732f6d696e058443a10127a0f65840b8dd73e3819c805d6d0284d34658dcaf9e2ecb14d65fdd9a57ef510e23b0f3e534fc345c1f1390df81cef5018c783dc377ddb944acc0e6d907d484661f884c01"
   },
   {
-   "id": "N-wrong-signer-anchor",
-   "class": "bytes",
-   "expect": {
-    "outcome": "reject",
-    "kind": "AnchorEntry",
-    "layer": "semantic",
-    "reason": "signature valid under a key the object does not name"
-   },
-   "hex": "a50158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c3750281a20144c63364070219fbf403186f04820107058443a10127a0f65840b3f985f3f2ce2f1bc03cf8006dadd1b4b162ba70a7e03ad529fd7843863838f90aa08d8a42c60bed2ac519d86a70265048399652466f05cb63eb04b5d594e106"
-  },
-  {
    "id": "N-wrong-signer-ack",
    "class": "bytes",
    "expect": {
@@ -657,6 +635,56 @@
     "reason": "signature valid under a key the object does not name"
    },
    "hex": "a50158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510058443a10127a0f6584003861cefc0c6c0ddff2b622dbb4f10ce4c2c9d97ef1cd65c97b57428c051fd402743c8576cf2774f94ae4c10a6f8de4919a53f6255388dbe4863d4443b8d5006"
+  },
+  {
+   "id": "N-wrong-signer-currency",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "CurrencyAttestation",
+    "layer": "semantic",
+    "reason": "signature valid under a key the object does not name"
+   },
+   "hex": "a70158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a031a6a431510041a6a43a1b005000658206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c375078443a10127a0f658405dcb3b26b8c637d2de08b6433d3dc2cf42689286f15a005d99ab1d93f2c27e4cd59d3037829964ce275fd3f295324a8514044a4dd08d15543b09c694f6f4b609",
+   "note": "Inside an Attach the consequence is treat-as-ABSENT, not a rejected session (TR8): currency gates trust, never connectivity."
+  },
+  {
+   "id": "N-wrong-signer-anchor",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "AnchorEntry",
+    "layer": "semantic",
+    "reason": "signature valid under a key the entry does not name"
+   },
+   "hex": "a50158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c3750281a20144c63364070219fbf403186f04820107058443a10127a0f65840b3f985f3f2ce2f1bc03cf8006dadd1b4b162ba70a7e03ad529fd7843863838f90aa08d8a42c60bed2ac519d86a70265048399652466f05cb63eb04b5d594e106",
+   "note": "Conditional by design [0.6 phase 2, 2026-09-02]: infra s4.1 permits an unverified gossip cache, under which this defect is undetectable at ingestion and surfaces only at first authenticated contact (or never, the anchor exception). Only a verified-on-acceptance implementation, or one holding the pinned key, rejects at ingest.",
+   "precondition": "the named key is pinned"
+  },
+  {
+   "id": "N-referral-advances-0",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "ResolveReply",
+    "layer": "schema",
+    "reason": "advances MUST be >= 1 - a referral that advances nothing is a loop"
+   },
+   "hex": "a301508a1fa28b9dcb80a96414db89c0b411d4020205a301582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf20281a20144c63364070219fbf40300"
+  },
+  {
+   "id": "CTX-referral-overshoot",
+   "class": "context",
+   "expect": {
+    "outcome": "reject",
+    "layer": "semantic",
+    "reason": "a referral advancing past the path end is malformed"
+   },
+   "note": "Schema-valid bytes; the defect is relative to the request, so this is a context fixture.",
+   "inputs": {
+    "request": "P-frame-09 (five path nibbles, none yet consumed)",
+    "reply": "the P-reply-02 referral with field 5.3 = 6"
+   }
   },
   {
    "id": "N-envelope-wrong-signers",

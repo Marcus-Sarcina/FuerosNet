@@ -2765,3 +2765,27 @@ offering only that group), that AWS-LC's WASM support is experimental
 (emscripten, not browser wasm32), and that browser QUIC remains
 relay-experimental — all inside §5.2's "today" hedge. No change. Phase 2
 (the resolution messages now sit in messages.md and the corpus) not yet run.
+
+## Cycle 2, pass 0.6 — resolution target, phase 2 (2026-09-02)
+
+Run against the corpus and vectors as promoted. **Zero implementation bugs,
+zero vector defects; one SPEC AMBIGUITY, correctly cross-referenced to phase
+1's U1** — and on verification the defect was the fixture's expectation, not
+the spec or the implementation: `N-wrong-signer-anchor` gave an unconditional
+`reject` while infra §4.1 expressly permits the unverified-gossip-cache model,
+under which a wrong-signer entry is undetectable at ingestion and surfaces at
+first authenticated contact. **The entry now carries its precondition** ("the
+named key is pinned") and a note naming both permitted models.
+`N-wrong-signer-currency` gained the treat-as-absent note (TR8's posture:
+currency gates trust, never connectivity).
+
+**Coverage observation accepted and closed**: the suite had the positive
+advances=2 referral and no malformed-progress counterpart. Added
+`N-referral-advances-0` (bytes; MUST be ≥ 1) and `CTX-referral-overshoot`
+(context — schema-valid bytes whose defect is relative to the request's
+remaining path). U2/U3/U5–U8 are local policy and correctly not fixtures.
+
+The NOT-COVERED classifications (EndpointRecord maintenance, raw-byte
+decoding, COSE-shape checks) reflect the phase-1 implementation's deliberate
+todo!() boundary, honestly reported rather than credited — the phase-2
+protocol working as written. Harness: 65 checks, all pass.

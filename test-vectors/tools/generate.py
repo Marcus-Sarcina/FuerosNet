@@ -2339,14 +2339,42 @@ for i, (cap, by) in enumerate(_msg_pairs):
 for i, (cap, by) in enumerate(_reply_pairs):
     reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap)
 for fid, by, why in [
-    ('N-wrong-signer-currency', currency_wrong, 'CurrencyAttestation'),
     ('N-wrong-signer-catalog', catalog_wrong, 'CatalogEntry'),
     ('N-wrong-signer-abuse', abuse_wrong, 'AbuseReport'),
-    ('N-wrong-signer-anchor', anchor_wrong, 'AnchorEntry'),
     ('N-wrong-signer-ack', ack_wrong, 'SubtreeAck'),
     ('N-wrong-signer-prekey', prekey_wrong, 'PrekeyBundle'),
 ]:
     reg(fid, 'bytes', REJ(why, 'semantic', 'signature valid under a key the object does not name'), by)
+reg('N-wrong-signer-currency', 'bytes',
+    REJ('CurrencyAttestation', 'semantic', 'signature valid under a key the object does not name'),
+    currency_wrong,
+    note='Inside an Attach the consequence is treat-as-ABSENT, not a rejected '
+         'session (TR8): currency gates trust, never connectivity.')
+reg('N-wrong-signer-anchor', 'bytes',
+    REJ('AnchorEntry', 'semantic', 'signature valid under a key the entry does not name'),
+    anchor_wrong,
+    precondition='the named key is pinned',
+    note='Conditional by design [0.6 phase 2, 2026-09-02]: infra s4.1 permits '
+         'an unverified gossip cache, under which this defect is undetectable '
+         'at ingestion and surfaces only at first authenticated contact (or '
+         'never, the anchor exception). Only a verified-on-acceptance '
+         'implementation, or one holding the pinned key, rejects at ingest.')
+
+# ---- referral progress negatives [0.6 phase 2, 2026-09-02]: the corpus had a
+# positive advances=2 referral and no malformed-progress counterpart.
+reg('N-referral-advances-0', 'bytes',
+    REJ('ResolveReply', 'schema', 'advances MUST be >= 1 - a referral that advances nothing is a loop'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))),
+           (e_uint(2), e_uint(2)),
+           (e_uint(5), e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                              (e_uint(2), e_arr([np1])),
+                              (e_uint(3), e_uint(0))]))]))
+reg('CTX-referral-overshoot', 'context',
+    {'outcome': 'reject', 'layer': 'semantic',
+     'reason': 'a referral advancing past the path end is malformed'},
+    inputs={'request': 'P-frame-09 (five path nibbles, none yet consumed)',
+            'reply': 'the P-reply-02 referral with field 5.3 = 6'},
+    note='Schema-valid bytes; the defect is relative to the request, so this is a context fixture.')
 
 # ---- bar 10, transaction half: envelope whose signer set mismatches body roles
 ws_env, _ = envelope(1, 1, adopt_body, [alice, carol])
