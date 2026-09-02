@@ -2467,3 +2467,13 @@ class is the author's rhetoric (the A18 precedent: rhetoric, not proof, and
 his); the supporting class repeats claims already registered or self-evidently
 labelled. Row 91's ten-of-eleven "enumeration needed" is satisfied by the
 eleven-row reads table itself, verified during 0.2.
+
+**0.3 elevation rulings (2026-09-02).** Trust-emanates is not an assumption:
+"a primordial design parameter — the network concept was created to reify a
+model of observer-relative trust." The §20.1 row added during 0.3 ingestion is
+removed as a mischaracterisation; §1.2.1 now carries the author's framing in
+place of any register entry. Compromised-resource confinement "is load
+bearing": elevated to **A32** (numbers never reused; A-table now A1–A32), dual
+with its §20.1 row, so the duals sentence reads seven (A14–A19, A32) and the
+census sentence reads 32. The 123/79 strict counts are unaffected — they count
+claims, not rows. The 0.3 queue is empty.

@@ -7843,3 +7843,8 @@ no-capacity-study note, or existing §20.1 rows; seven rows now cover those
 eight (the two SSO claims share one). And one adjective became arithmetic: the
 greased-id collision probability is k/2^64 per draw, derived from the id
 space wire §8.1.1 already states.
+
+Two elevation rulings closed 0.3: trust-emanates is a primordial design
+parameter rather than an assumption — §1.2.1 says so and its register row is
+withdrawn — and the compromised-resource confinement claim is load-bearing,
+now A32. The duals are seven; §20.2 lists thirty-two.

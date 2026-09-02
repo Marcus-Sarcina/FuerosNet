@@ -267,7 +267,9 @@ what the records say, with no way to separate real from fabricated without
 independent reach into the graph. This is why trust is per-observer (§16.1) rather
 than a global score: the same evidence genuinely supports different conclusions for
 differently-placed parties, and a global number would have to discard that
-difference.
+difference. **This is a primordial design parameter, not an empirical claim the
+document defends**: the network concept was created to reify a model of
+observer-relative trust [author, 2026-09-02].
 
 **A user's baseline exposure to surveillance is the floor of their overall
 security.** The design does not aim at absolute confidentiality. It treats the
@@ -6487,7 +6489,7 @@ does all three at once.
 **This register is curated, not exhaustive, and the difference should be stated.**
 A strict reading, one that counts every claim lacking a derivation, mechanism or
 source — finds **79 load-bearing unsupported claims** across the document set and 123
-in total, against the 31 listed in §20.2. The gap is not concealment: most of it
+in total, against the 32 listed in §20.2. The gap is not concealment: most of it
 is §21's parameters and `wire-format.md` §1's array bounds, which both documents
 declare as chosen operating points and conservative ceilings rather than derived
 values.
@@ -6504,8 +6506,8 @@ that the rest are supported.
 
 What the design rests on that is not established here. §20.1 records claims
 made without a source; §20.2 records claims whose failure would change a design
-decision. **The two are orthogonal.** A claim can be both, and the six that are
-(A14–A19) are the highest-priority items in the document.
+decision. **The two are orthogonal.** A claim can be both, and the seven that are
+(A14–A19, A32) are the highest-priority items in the document.
 
 ### 20.1 Unsourced assumptions
 
@@ -6539,7 +6541,6 @@ mistaken for established results.
 | B.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
 | 16.6 | Infra costs ~$20/month retail, ~$5–7 marginal to an attacker | Budgeting assumptions. Cloud pricing varies by provider, region and commitment. **Specify configuration and date if used as threat-model inputs** |
 | 1 | Account age and engagement are "cheap to manufacture" | The rejection of those scarcity mechanisms in favour of physical presence. No comparative Sybil-cost measurement |
-| 1.2.1 | "Trust emanates from the user", so a subject's confidence in their own evidence outranks an attacker's | Per-observer trust rather than global scoring rests partly on it. An epistemic claim, argued rather than demonstrated |
 | 1.2.4 | "Disaggregation defeats bulk collection" | The privacy mechanism's headline. The per-target half is registered above; the bulk half has no collection-cost model behind it |
 | 1.3 | "Any SaaS supporting enterprise SSO is most of the way to being usable here"; federation "turns an integration project into a configuration task" | The SSO-adaptor adoption path. No representative integration has been exercised |
 | 7.1.1 | "A large fraction of the nodes a party would like to nominate are inactive" at ceremony time | Probe-after-selection rather than advertise-and-select. An availability claim with no measurement |
@@ -6554,7 +6555,7 @@ above, so its basis is weaker than the surrounding argument implies.
 ### 20.2 Load-bearing assumptions
 
 **Distilled from the claims this design makes without establishing them.**
-Most are rhetorical intensifiers or parameter choices. The thirty-one below are
+Most are rhetorical intensifiers or parameter choices. The thirty-two below are
 different:
 **each supports a design decision that would change if the assumption is false.**
 None is currently validated. They are the list to attack first, and the natural
@@ -6593,6 +6594,7 @@ targets for simulation.
 | **A29** | **Fabricating a whole fictitious graph is easy**, and convincing synthetic histories are within reach of a motivated party | §1.2.1's deniability property — if fabrication is harder than assumed, correlated evidence is *more* probative and the deniability shrinks | Asserted from the observation that a fabricator holds every key. Nobody has built one, and a graph that survives an evaluator with local reach may be considerably harder than one that survives a distant reader |
 | **A30** | **A remote evaluator cannot distinguish a synthesised subnet from a real one** | The same property, and §1.2.2's claim that the discount falls hardest on the classes least able to defeat it | Follows from A29 plus the absence of cold lookup. Untested against an evaluator applying statistical structure analysis rather than key-checking |
 | **A31** | **To an attacker accountable to no evidentiary standard, cryptographic attestation adds nothing** | §1.2.2's three-class taxonomy, and the conclusion that on-device encryption is the whole defence against that class | A claim about how such parties actually decide, asserted rather than observed. If signed evidence does shift their behaviour, the archive's non-repudiability costs more than recorded |
+| **A32** | **A compromised resource leaks its own data, not the owner's archive** | The credential gateway instead of a scoped archive-read API (§11, `resource-requirements.md` §1) | Also §20.1. A confinement conclusion over every interface and side channel; if false, the read-surface question §11 claims to dissolve returns [author, 2026-09-02] |
 
 **§20.1 and §20.2 are orthogonal registers.**
 §20.1 records what is **unsourced**; §20.2 records what is **load-bearing**. A
