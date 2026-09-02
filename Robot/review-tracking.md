@@ -2507,3 +2507,13 @@ general client cache lifetimes (lc §4) and attach timeout/backoff (wire §8.2)
 are named-but-unset in the subsidiary documents and absent from the checklist.
 All five are client-local policy; whether §21.1 should enumerate them or its
 scope statement should disclaim them is a curation call.
+
+**0.4's curation question ruled (2026-09-02): scope sentence, not enumeration.**
+§21.1 now states it lists the design's parameters and that component-local
+bounds live with their mechanisms — "keeping two tables in sync is just one
+more surface for error." The author stated the general doctrine: what is
+optional or variable for a software component favours inclusion in its own
+document, with network-design saying what is always true of the whole, except
+where an implementation-variable characteristic impacts the security model or
+similar and must be weighed in the design too. Recorded in
+authoring-conventions "Where invariants live". The 0.4 queue is empty.

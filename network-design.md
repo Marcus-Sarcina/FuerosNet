@@ -6653,6 +6653,12 @@ not derived.
 
 ### 21.1 Unset parameters, the implementation checklist
 
+**This table lists the design's parameters.** A bound that is optional or local
+policy for a single component — a client's clock tolerance or cache lifetimes,
+a node's rate-limit values or retry backoff, a buffer bound — lives with its
+mechanism in that component's document and is deliberately not repeated here:
+keeping two tables in sync is one more surface for error [author, 2026-09-02].
+
 Grouped by what settling each requires.
 
 **Needs a security argument.** Each of the following bounds an attacker, so a value chosen

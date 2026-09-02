@@ -56,6 +56,17 @@ taxonomy change then removes the invariant and nothing looks wrong afterwards.
 > veto an action whose sole effect is to end that authority"* survives a
 > refactor.
 
+**What is component-variable lives in the component's document** [author,
+2026-09-02]. Anything optional or variable for a software component — local
+policy bounds, tunable knobs, per-client behaviour — favours inclusion in that
+component's requirements document, with `network-design.md` saying what is
+always true of the system as a whole. The design does not mirror component
+parameter lists: keeping two tables in sync is one more surface for error
+(§21.1 states this for its own table). The exception runs the other way:
+an implementation-variable characteristic whose setting impacts the system
+argument — the security model, the privacy posture — must additionally be
+named in the design where that impact is weighed.
+
 **Generalising a rule can break design §1.1, and has.** Abstraction widens scope, and a
 wider rule may reach past the enforcement boundary that the narrower one respected.
 design §9.6's abuse-report rule began as *"addressed to the owner and not broadcast"* —

@@ -7857,3 +7857,8 @@ and wire §12's minimised-presentation figure still said ~288 B — the nine-lea
 arithmetic — where seven 32-byte digests are 224 B. Both fixed; the ~112 B
 salts figure beside it was already right. The census's derived/borrowed calls
 match the documents' own basis labels throughout.
+
+§21.1 now carries its scope rule: it lists the design's parameters, and
+component-local policy bounds live with their mechanisms in the component
+documents — two tables in sync is one more surface for error. The general
+placement doctrine is recorded in the authoring conventions.
