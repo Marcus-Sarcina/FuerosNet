@@ -164,19 +164,14 @@ negatives (T9–T12). Still open:
    envelope — and the optionals adoption's field 8 now references it (V9
    pass; the mismatch case moved to the divergence adoption, V9a). The
    harness verifies every signature and every binding.
-3. **Promotion-blocking.** The **curated-bundle fixture** [author,
-   2026-09-01: *"you can cherry-pick whatever PoP transactions you wish from
-   any of your series and do not have to expose the intervening
-   transactions"*]: a set of individually verifiable records — **no chaining,
-   no completeness, no traversal** — over which *n* and the candidate set are
-   computed (wire §5.4). Its cases: a repeated counterparty (three records,
-   one candidate), a witness-only record handed anyway (does not qualify), an
-   out-of-window record at the exclusive boundary, a duplicate txid (counts
-   once), a non-verifying record (contributes nothing — not "incomplete"),
-   the current counterparty (never a candidate for their own verification),
-   an understatement variant (a smaller bundle: a smaller criterion, both
-   records valid), and the reasonableness reading — response count against
-   §5.2's formula as evidence, never as a gate. *The diamond,
+3. ~~The curated-bundle fixture~~ **DONE 2026-09-02**
+   (`verifier-selection.md`): a six-entry bundle over real fixtures — the
+   repeated counterparty (formation + ac1 + ac2, one candidate), the
+   duplicate txid (once), the current counterparty (qualifies, never a
+   candidate), the mutated non-verifying record (absent, not "incomplete") —
+   plus the witness-only and understatement cases and the reasonableness
+   reading, all with harness-recomputed arithmetic. The out-of-window
+   exclusive boundary is the window table above it. *The diamond,
    committed-predecessor, bundle-minus-one and selection-binding cases of
    earlier revisions dissolved with the chaining and determinism they
    tested.*

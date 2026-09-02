@@ -967,6 +967,41 @@ fin_ab_body = e_map([
 fin_ab_txid = H(fin_ab_body)
 fin_ab_env, _ = envelope(1, 5, fin_ab_body, fin_ab_signers)
 
+# --- Two more alice-carol normal records (canonical bar 3's repeated
+# counterparty), minimal shape: one witness, no responses. ac2 continues ac1
+# on both chains; ac1 forks alice from her merge and carol from the formation.
+ac1_slots, ac1_root = disclosure_set('ac1', npr_values)
+ac1_signers = [s for s in sorted([alice, carol], key=lambda i: i.keyhash, reverse=True)] + [IDS['w3']]
+ac1_body = e_map([
+    (e_uint(0), backptrs(*[[merge_txid] if s is alice else [formation_txid]
+                           if s is carol else [genesis(s.keyhash)] for s in ac1_signers])),
+    (e_uint(1), e_uint(TS_C2 + 5 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 5 * 86400 + 1200)),
+    (e_uint(3), e_arr([participant(ac1_signers[0]), participant(ac1_signers[1])])),
+    (e_uint(4), e_arr([witness_entry(IDS['w3'], carol, 7)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(ac1_root)),
+])
+ac1_txid = H(ac1_body)
+ac1_env, _ = envelope(1, 5, ac1_body, ac1_signers)
+
+ac2_slots, ac2_root = disclosure_set('ac2', npr_values)
+ac2_signers = ac1_signers
+ac2_body = e_map([
+    (e_uint(0), backptrs(*[[ac1_txid] if s in (alice, carol) else [genesis(s.keyhash)]
+                           for s in ac2_signers])),
+    (e_uint(1), e_uint(TS_C2 + 6 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 6 * 86400 + 1200)),
+    (e_uint(3), e_arr([participant(ac2_signers[0]), participant(ac2_signers[1])])),
+    (e_uint(4), e_arr([witness_entry(IDS['w3'], alice, 3)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(ac2_root)),
+])
+ac2_txid = H(ac2_body)
+ac2_env, _ = envelope(1, 5, ac2_body, ac2_signers)
+
+TS_EVAL = TS_C2 + 100 * 86400   # a hypothetical next alice-bob ceremony's started_at
+
 # --- Peering (type 4): bob and carol as infra peers; alternative continuations
 # of their existing chain heads (bob: the adoption; carol: the formation).
 def network_point(ip, asn=None, port=None):
@@ -1441,6 +1476,44 @@ txid: `{hx(depart_r_txid)}`
 txid: `{hx(peer_full_txid)}`""")
 
 emit('transactions.md', f"""
+## Two further alice–carol records — the bundle's repeated counterparty
+
+Minimal normal records (one witness, no responses — key 5 absent per §1) for
+canonical bar 3: with the formation, alice holds **three** records naming
+carol, which the curated-bundle fixture in `verifier-selection.md` counts as
+**one candidate**. ac2 continues ac1 on both participants' chains; ac1 forks
+alice from her merge and carol from the formation, which the archive-as-DAG
+permits.
+
+ac1 body ({len(ac1_body)} bytes):
+
+```
+{hexblock(ac1_body)}
+```
+
+txid: `{hx(ac1_txid)}`
+
+ac1 envelope ({len(ac1_env)} bytes):
+
+```
+{hexblock(ac1_env)}
+```
+
+ac2 body ({len(ac2_body)} bytes):
+
+```
+{hexblock(ac2_body)}
+```
+
+txid: `{hx(ac2_txid)}`
+
+ac2 envelope ({len(ac2_env)} bytes):
+
+```
+{hexblock(ac2_env)}
+```""")
+
+emit('transactions.md', f"""
 ## Normal presence record — alice and bob, sixteen witnesses, 36-entry envelope
 
 Canonical bar 2. Subtype 0; participant order is reverse-keyhash
@@ -1814,7 +1887,47 @@ With `started_at = {TS_START}`, the 730-day window is
 | {TS_START - 63072000} (exactly 730 days) | no — boundary instant is out |
 | {TS_START - 63072000 + 1} | yes |
 | {TS_START - 1} | yes |
-| {TS_START} | no — not before `started_at` |""")
+| {TS_START} | no — not before `started_at` |
+
+## The curated bundle (§5.4) — canonical bar 3
+
+Alice hands bob a bundle at a hypothetical next ceremony,
+`started_at = {TS_EVAL}` (window floor {TS_EVAL - 63072000}, exclusive both
+ends; every record below finalized inside it). **Six entries handed, one a
+duplicate and one non-verifying**:
+
+| # | Handed | Qualifies? |
+|---|---|---|
+| 1 | formation record `{hx(formation_txid)[:16]}…` (alice–carol) | yes — formations count (§5.3) |
+| 2 | ac1 `{hx(ac1_txid)[:16]}…` (alice–carol) | yes |
+| 3 | ac2 `{hx(ac2_txid)[:16]}…` (alice–carol) | yes |
+| 4 | ac1 again, byte-identical | counts **once** — duplicates dedupe by txid (§5.3) |
+| 5 | normal record `{hx(npr_txid)[:16]}…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
+| 6 | the formation envelope with any signed-body byte mutated | **not in the pool** — a record that fails its checks contributes nothing; there is no "incomplete", it is simply absent (§5.4) |
+
+The arithmetic, stated so a harness can recompute it:
+
+```
+n = 4          (distinct qualifying records: 1, 2, 3, 5)
+candidates = 1 (distinct prior counterparties {{carol, bob}} minus the current counterparty bob)
+required = min(floor(4 / 2), 10, 1) = 1
+```
+
+**Witness-only does not qualify** (§5.3): the same normal record handed by
+**w1** as subject names w1 only in field 4 — a witnessed ceremony's
+participants met each other, not the witness. For w1 that bundle yields
+`n = 0, candidates = 0, required = 0`.
+
+**Understatement is free and self-defeating** (§5.4): alice handing only
+`[ac1, npr]` yields `n = 2, candidates = 1, required = min(1, 10, 1) = 1` —
+a smaller claim, a thinner record, and both withheld records remain
+individually valid wherever else she presents them.
+
+**The reasonableness reading** (§5.2): an evaluator comparing a finalized
+record's response count against `required` learns whether the ceremony was
+diligent — never whether the subject's history is complete. The criterion
+gates nothing; the finalization must-accepts in `transactions.md` are the
+positive proof.""")
 
 # ---------------------------------------------------------------- write files
 

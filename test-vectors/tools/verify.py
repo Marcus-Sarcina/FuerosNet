@@ -357,6 +357,20 @@ for n, c, r in re.findall(r'\| (\d+) \| (\d+) \| (\d+) \|', v):
     good &= (min(int(n) // 2, 10, int(c)) == int(r))
 check(good, 'required() table rows match the formula')
 
+# ---------------------------------------------------------------- curated bundle (bar 3)
+bsect = v[v.index('## The curated bundle'):]
+arith = re.search(r'n = (\d+).*?candidates = (\d+).*?required = min\(floor\((\d+) / 2\), 10, (\d+)\) = (\d+)', bsect, re.S)
+bn, bc, fn, fc, br = map(int, arith.groups())
+check(bn == fn and bc == fc and min(fn // 2, 10, fc) == br,
+      'bundle arithmetic: required recomputes from the stated n and candidates')
+tx_txids = {t for _, t in bodies}
+named = re.findall(r'`([0-9a-f]{16})…`', bsect)
+check(len(named) == 4 and all(any(t.startswith(p) for t in tx_txids) for p in named),
+      'bundle: all four qualifying txids resolve to transactions.md fixtures')
+for n_, c_, r_ in re.findall(r'n = (\d+), candidates = (\d+), required = (?:min\([^)]*\) = )?(\d+)', bsect):
+    check(min(int(n_) // 2, 10, int(c_)) == int(r_),
+          f'bundle case n={n_}: required matches the formula')
+
 # ---------------------------------------------------------------- formation structural
 m = re.search(r'## Presence record.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 obj = canonical(bytes.fromhex(m.group(1).replace('\n', '')))

@@ -36,3 +36,43 @@ With `started_at = 1767268800`, the 730-day window is
 | 1704196801 | yes |
 | 1767268799 | yes |
 | 1767268800 | no — not before `started_at` |
+
+## The curated bundle (§5.4) — canonical bar 3
+
+Alice hands bob a bundle at a hypothetical next ceremony,
+`started_at = 1790557200` (window floor 1727485200, exclusive both
+ends; every record below finalized inside it). **Six entries handed, one a
+duplicate and one non-verifying**:
+
+| # | Handed | Qualifies? |
+|---|---|---|
+| 1 | formation record `262a7e58b63c11f5…` (alice–carol) | yes — formations count (§5.3) |
+| 2 | ac1 `8c41bb66fba76b20…` (alice–carol) | yes |
+| 3 | ac2 `64dc98a2935b5d87…` (alice–carol) | yes |
+| 4 | ac1 again, byte-identical | counts **once** — duplicates dedupe by txid (§5.3) |
+| 5 | normal record `7992ab78fe0b413e…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
+| 6 | the formation envelope with any signed-body byte mutated | **not in the pool** — a record that fails its checks contributes nothing; there is no "incomplete", it is simply absent (§5.4) |
+
+The arithmetic, stated so a harness can recompute it:
+
+```
+n = 4          (distinct qualifying records: 1, 2, 3, 5)
+candidates = 1 (distinct prior counterparties {carol, bob} minus the current counterparty bob)
+required = min(floor(4 / 2), 10, 1) = 1
+```
+
+**Witness-only does not qualify** (§5.3): the same normal record handed by
+**w1** as subject names w1 only in field 4 — a witnessed ceremony's
+participants met each other, not the witness. For w1 that bundle yields
+`n = 0, candidates = 0, required = 0`.
+
+**Understatement is free and self-defeating** (§5.4): alice handing only
+`[ac1, npr]` yields `n = 2, candidates = 1, required = min(1, 10, 1) = 1` —
+a smaller claim, a thinner record, and both withheld records remain
+individually valid wherever else she presents them.
+
+**The reasonableness reading** (§5.2): an evaluator comparing a finalized
+record's response count against `required` learns whether the ceremony was
+diligent — never whether the subject's history is complete. The criterion
+gates nothing; the finalization must-accepts in `transactions.md` are the
+positive proof.
