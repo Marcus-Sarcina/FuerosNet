@@ -3058,3 +3058,32 @@ NOT-COVERED classifications (personal-knowledge evaluation, recovery
 response, LateResponse assembly, COSE-shape internals, selection arithmetic)
 all honest boundary reports. No covered-path implementation bug. Harness: 74
 checks, all passing.
+
+## Cycle 2, pass 0.6 — catalog registration and query (phase 1, 2026-09-02)
+
+A clean round: no fields added, the registration/entry/roles/UI split exactly
+right, the reply construction matching the specified
+resource-then-owner-keyhash ordering and continuation rule verbatim, and the
+raw-splice reply encoder honouring the serve-unchanged rule. Seven questions:
+
+**Ruled and applied:**
+- U2 — a FIRST registration with field 2 absent defaults to `self`, the
+  least-disclosing scope (the withhold-by-default posture); broader
+  visibility is the owner's to request.
+- U4 — "ascending keyhash" is stated once, at the keyhash definition:
+  lexicographic over the raw 32 bytes, identical to big-endian numeric, so no
+  little-endian reading survives (their truncation-page divergence case).
+- U6 — failure signalling split: malformed framing resets the stream;
+  well-framed registrations failing the owner/signature/conflict checks get
+  `refused`, the reply existing to carry exactly that answer.
+- U3 — the reviewer's local-binding requirement was OVER-STRICT for brokered
+  resources: a registration is complete in itself, nothing structural
+  requires a local backend, and the stress family gains the row (existing
+  fixtures P-frame-16/P-catalog already exercise a brokered endpoint).
+
+**Already local (U1, U5, U7)**: scope-choice algorithm, admission policy, and
+the 0-RTT reject-or-defer disjunction (TR2's one_of). Type decisions all
+sound — notably the OPEN DataPractice newtype where a closed enum would
+violate the extension rule, and the Arc-raw-plus-view entry representation.
+Crate assessment adds cbor2's RawValue as a fitting strict-codec substrate;
+consistent with §5.2 otherwise.

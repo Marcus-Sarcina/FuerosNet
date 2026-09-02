@@ -8031,3 +8031,13 @@ re-derive from its contributory pre-commitment, and the harness pins the
 prior-record and current-query bindings. The end-to-end payloads moved to
 their own messages.md section claiming no framing — the demultiplexing
 decision stays open, and the replies caption no longer overreaches.
+
+### 2026-09-02 (cycle 2, 0.6 catalog target, phase 1)
+The catalog attempt ruled three small gaps: a first registration with no
+requested scope defaults to self, the least-disclosing rule; "ascending
+keyhash" is defined once at the keyhash definition as lexicographic raw
+bytes; and registration failure signalling splits — malformed framing resets
+the stream, well-formed failures are answered refused. The reviewer's
+require-a-local-backend assumption was over-strict for brokered resources —
+a registration is complete in itself, now stated, and the stress family
+gains the row.

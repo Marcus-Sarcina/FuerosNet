@@ -243,6 +243,11 @@ rather than down.
 
 ```
 keyhash   = bstr .size 32          ; SHA-256 of the deterministic CBOR encoding
+                                   ; "ASCENDING keyhash" anywhere in this
+                                   ;   document is LEXICOGRAPHIC order of the
+                                   ;   raw 32 bytes [2026-09-02] — identical to
+                                   ;   big-endian numeric order; stated so no
+                                   ;   little-endian reading survives
                                    ; of KeyMaterial (§2.2), the fixed-order
                                    ; PAIR of COSE_Keys, never one of them
 timestamp = uint                   ; seconds since Unix epoch; u64 RANGE.
@@ -2006,7 +2011,10 @@ ResourceRegistration = {
                      ;   instruction: the host composes the answer and may
                      ;   narrow or ignore this, and the owner cannot check
                      ;   (design §11.5). Absent leaves the host's existing rule
-                     ;   for this resource in place
+                     ;   for this resource in place — and on a FIRST
+                     ;   registration, with no existing rule, the default is
+                     ;   `self`, the least-disclosing scope [2026-09-02]:
+                     ;   broader visibility is the owner's to request
   3: bstr .size 16   ; nonce, echoed in the reply
 }
 
@@ -2015,6 +2023,17 @@ ResourceRegistrationReply = {
   2: uint            ; 0 recorded | 1 refused
 }
 ```
+
+**Failure signalling** [2026-09-02]: malformed framing or non-canonical CBOR
+resets the stream, §9.2's generic rule; a well-framed registration failing the
+owner-session binding, the entry's signature, or the one-owner-per-keyhash
+check is answered `refused` — the reply exists to carry exactly that answer.
+
+**A registration is complete in itself** [2026-09-02]: nothing structural
+requires a local backend — a brokered resource's endpoint belongs to the
+external service, and any admission requirement beyond the checks here is host
+policy. A host refusing every entry that lacks a locally installed package
+refuses valid brokered registrations.
 
 **The authenticated peer MUST be the owner named in the entry.** An entry is
 owner-signed and so may be relayed by anyone, which means a host accepting one from
