@@ -2,8 +2,8 @@
 """Generate the draft canonical test vectors for the RHTN wire format.
 
 Everything computable is computed; nothing is hand-transcribed. Re-running this
-script regenerates keys.md, primitives.md, transactions.md, records.md and
-verifier-selection.md byte-for-byte, each pinned to the SHA-256 of both
+script regenerates keys.md, primitives.md, transactions.md, records.md,
+messages.md and verifier-selection.md byte-for-byte, each pinned to the SHA-256 of both
 `network-design.md` and `wire-format.md`. README.md and negative-vectors.md are
 authored by hand.
 
@@ -1841,17 +1841,14 @@ goal — but only for objects that have one:
   file, each with its wrong-signer analogue), and successor, verifier and
   consent (the recovery adoption and normal record in `transactions.md`).
   The envelope tag is every transaction's.
-- **Unsigned message encodings — no signature exists to generate**: the
-  currency request and reply (§7.1), the capture key grant (§7.3, transient
-  end-to-end payload), the late-response wrapper (§7.4 — its embedded
-  `VerifierResponse` is already signed; the wrapper adds no signature),
-  resolution messages (§7.7.3), archive fetch (§7.9), resource registration
-  and its reply (§6.2), the catalog query and reply (§6.4), resource
-  request/response (§11), and the session messages of §8. These get
-  **encoding** vectors, not signature vectors. *This inventory is maintained
-  by hand until the canonical corpus enumerates it mechanically from the
-  wire-format schemas (eighth review) — a hand list can itself omit a family,
-  and did: the currency messages were missing from it until then.*""")
+- **Unsigned message encodings — landed 2026-09-02 in `messages.md`**
+  (canonical bar 9): every family in this inventory has a positive
+  known-answer encoding there — session frames, topology push and memo,
+  resolution, archive, prekey, query-plus-consent, catalog, resource
+  request/response, registration and reply, currency, the capture key grant
+  and the late-response wrapper — plus the session-trace table. *The
+  inventory remains hand-maintained until the corpus format enumerates it
+  mechanically from the schemas (bar 6).*""")
 
 # ================================================================ verifier-selection.md
 
@@ -2084,6 +2081,213 @@ reusable material ({len(prekey)} bytes; wrong-signer: carol):
 ```
 {hexblock(prekey_wrong)}
 ```""")
+
+# --- Canonical bar 9: the unsigned message families. Every framed message
+# family gets a positive known-answer encoding; session semantics get trace
+# rows. frame = u32-be length || CBOR [type, body] on stream 0 (64 KiB) and
+# bidirectional streams (256 KiB).
+def frame(t, body):
+    c = e_arr([e_uint(t), body])
+    return len(c).to_bytes(4, 'big') + c
+
+CAP_BATCH = int.from_bytes(H(b'rhtn/cap:max-archive-batch')[:8], 'big')
+CAP_GREASE = int.from_bytes(H(b'rhtn-test-vectors:grease-id')[:8], 'big')
+caps_client = e_map(sorted([(e_uint(CAP_BATCH), e_bstr(b'\x01\x00')),
+                            (e_uint(CAP_GREASE), e_bstr(H(b'rhtn-test-vectors:grease-value')[:8]))],
+                           key=lambda p: p[0]))
+caps_server = e_map([(e_uint(CAP_BATCH), e_bstr(b'\x00\x40'))])
+
+NONCE = lambda tag: H(b'rhtn-test-vectors:nonce:' + tag)[:16]
+
+f_attach = frame(1, e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                           (e_uint(2), currency),
+                           (e_uint(3), caps_client)]))
+sib_ref = e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                 (e_uint(2), e_arr([np1])),
+                 (e_uint(3), carol.key_material)])
+f_ack = frame(2, e_map([(e_uint(1), e_uint(0)),
+                        (e_uint(2), e_arr([sib_ref])),
+                        (e_uint(3), e_uint(300)),
+                        (e_uint(4), e_uint(0)),
+                        (e_uint(5), caps_server)]))
+f_hb = frame(3, e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_uint(TS_REC))]))
+f_sib = frame(4, e_map([(e_uint(1), e_arr([sib_ref]))]))
+f_sib_none = frame(4, e_map([]))
+f_push = frame(5, e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_bstr(adopt_env))]))
+f_memo = frame(6, e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                         (e_uint(2), root_loc),
+                         (e_uint(3), e_uint(4)),
+                         (e_uint(4), e_uint(TS_ADOPT)),
+                         (e_uint(5), e_bstr(alice.keyhash))]))
+f_memo_empty = frame(6, e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                               (e_uint(2), root_loc),
+                               (e_uint(3), e_uint(4)),
+                               (e_uint(4), e_uint(TS_DEPART))]))
+
+f_resolve = frame(1, e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                            (e_uint(2), e_bstr(bob.keyhash)),
+                            (e_uint(3), p_odd),
+                            (e_uint(4), e_bstr(NONCE(b'resolve')))]))
+serving = e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                 (e_uint(2), e_arr([np1])),
+                 (e_uint(3), path([])),
+                 (e_uint(4), bob.key_material)])
+r_serving = e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))),
+                   (e_uint(2), e_uint(0)),
+                   (e_uint(3), serving)])
+r_referral = e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))),
+                    (e_uint(2), e_uint(2)),
+                    (e_uint(5), e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                                       (e_uint(2), e_arr([np1])),
+                                       (e_uint(3), e_uint(2))]))])
+r_fail = e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))),
+                (e_uint(2), e_uint(1)),
+                (e_uint(4), e_uint(0))])
+
+f_archive = frame(2, e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                            (e_uint(3), e_uint(16)),
+                            (e_uint(5), e_bstr(NONCE(b'archive')))]))
+r_archive = e_map([(e_uint(1), e_bstr(NONCE(b'archive'))),
+                   (e_uint(2), e_arr([adopt_env])),
+                   (e_uint(3), b'\xf4')])
+
+f_pk1 = frame(3, e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                        (e_uint(2), e_uint(1)),
+                        (e_uint(3), e_bstr(NONCE(b'prekey')))]))
+batch_khs = sorted([alice.keyhash, bob.keyhash])
+f_pkb = frame(3, e_map([(e_uint(1), e_arr([e_bstr(k) for k in batch_khs])),
+                        (e_uint(2), e_bstr(NONCE(b'prekey-batch')))]))
+r_pk = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
+              (e_uint(2), prekey),
+              (e_uint(3), e_bstr(H(b'rhtn-test-vectors:one-time-prekey')))])
+r_pk_fail = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
+                   (e_uint(4), e_uint(0))])
+
+f_query = frame(4, e_arr([npr_query0, consent_over(npr_q0, alice)]))
+f_catq = frame(5, e_map([(e_uint(1), e_tstr('rhtn-forum')),
+                         (e_uint(2), e_bstr(NONCE(b'catalog')))]))
+r_cat = e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))),
+               (e_uint(2), e_arr([catalog]))])
+
+http_req = (b'GET /threads/42 HTTP/1.1\r\nhost: reading-room.internal\r\n'
+            b'rhtn-principal: ' + hx(H(b'rhtn-test-vectors:pairwise-principal'))[:43].encode()
+            + b'\r\n\r\n')
+f_rr = frame(6, e_map([(e_uint(1), e_bstr(res.keyhash)),
+                       (e_uint(2), e_bstr(http_req))]))
+http_resp = b'HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok'
+r_rr = e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_bstr(http_resp))])
+r_rr_refused = e_map([(e_uint(1), e_uint(1))])
+
+f_reg = frame(7, e_map([(e_uint(1), catalog),
+                        (e_uint(3), e_bstr(NONCE(b'register')))]))
+f_cur = frame(8, e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                        (e_uint(2), e_bstr(NONCE(b'currency')))]))
+r_cur = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
+               (e_uint(2), e_uint(0)),
+               (e_uint(3), currency)])
+r_cur_no = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
+                  (e_uint(2), e_uint(1))])
+
+_msg_pairs = [
+    ('Attach (frame 1) — carrying the currency attestation and two capability parameters, one greased', f_attach),
+    ('AttachAck (frame 2) — primary mode, one sibling with full KeyMaterial, heartbeat 300 s', f_ack),
+    ('Heartbeat (frame 3) — counter 0', f_hb),
+    ('SiblingUpdate (frame 4) — replacing the list', f_sib),
+    ('SiblingUpdate, no siblings — field 1 absent, the empty map', f_sib_none),
+    ('TopologyPush (frame 5) — kind 0, carrying the first adoption envelope byte-for-byte', f_push),
+    ('TopologyMemo (frame 6) — slot 4 occupied by alice', f_memo),
+    ('TopologyMemo — the same slot EMPTIED (field 5 absent: departure or disavowal)', f_memo_empty),
+    ('ResolveRequest (request 1)', f_resolve),
+    ('ArchiveRequest (request 2) — head ABSENT: the recovery case, a must-accept', f_archive),
+    ('PrekeyRequest (request 3) — reusable plus a one-time key', f_pk1),
+    ('PrekeyBatchRequest (request 3) — two subjects, ascending', f_pkb),
+    ('Query plus consent (request 4) — the normal record\'s worked query', f_query),
+    ('CatalogQuery (request 5) — filtered to `rhtn-forum`', f_catq),
+    ('ResourceRequest (request 6) — an HTTP/1.1 GET inside the frame', f_rr),
+    ('ResourceRegistration (request 7) — the signed catalog entry, requested scope absent', f_reg),
+    ('CurrencyRequest (request 8)', f_cur),
+]
+kg = e_map([(e_uint(1), e_bstr(npr_txid)),
+            (e_uint(2), e_bstr(npr_q0)),
+            (e_uint(3), e_bstr(H(b'rhtn-test-vectors:k-capture-demo')))])
+late = e_map([(e_uint(1), e_bstr(npr_txid)),
+              (e_uint(2), e_bstr(alice.keyhash)),
+              (e_uint(3), classical_response(IDS['c4'], alice, npr_q0,
+                                             consent_over(npr_q0, alice),
+                                             2, basis=1, sb=0))])
+r_reg = e_map([(e_uint(1), e_bstr(NONCE(b'register'))), (e_uint(2), e_uint(0))])
+
+_reply_pairs = [
+    ('ResolveReply — serving (code 0, `ServingInfra` with KeyMaterial and empty residual path)', r_serving),
+    ('ResolveReply — referral (code 2, advances 2)', r_referral),
+    ('ResolveReply — failure (code 1, reason 0: no such child)', r_fail),
+    ('ArchiveReply — one envelope, no more remaining', r_archive),
+    ('PrekeyReply — bundle plus one-time key', r_pk),
+    ('PrekeyReply — failure 0, unknown subject', r_pk_fail),
+    ('CatalogReply — one entry, no truncation', r_cat),
+    ('ResourceResponse — 0 delivered, HTTP/1.1 200 inside', r_rr),
+    ('ResourceResponse — 1 refused, field 2 absent', r_rr_refused),
+    ('CurrencyReply — attestation follows', r_cur),
+    ('CurrencyReply — 1 cannot issue', r_cur_no),
+    ('ResourceRegistrationReply — 0 recorded', r_reg),
+    ('KeyGrant — transient end-to-end payload, never a record: the one key sealing the normal record\'s capture, bound to its query', kg),
+    ('LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record', late),
+]
+_msg_md = []
+for cap, by in _msg_pairs:
+    _msg_md.append(f"""**{cap}** ({len(by)} bytes, length prefix included):
+
+```
+{hexblock(by)}
+```""")
+for cap, by in _reply_pairs:
+    _msg_md.append(f"""**{cap}** ({len(by)} bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+{hexblock(by)}
+```""")
+
+emit('messages.md', f"""# Unsigned message families (`wire-format.md` §§6–11)
+
+{PIN}
+
+**Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
+one positive known-answer encoding per framed message family. Framing is
+`u32-be length || deterministic CBOR of [type, body]`; stream 0 frames bound
+at 64 KiB (65,536 B), bidirectional request streams at 256 KiB (262,144 B).
+Unknown **control frames are skipped** and the session survives; unknown
+**request types are rejected**. Signed objects embedded below (the currency
+attestation, catalog entry, prekey bundle, adoption envelope, query consent)
+are byte-identical to their fixtures in `records.md` and `transactions.md`.
+
+## Control frames (stream 0)
+
+{chr(10).join(_msg_md[:8])}
+
+## Requests (bidirectional streams)
+
+{chr(10).join(_msg_md[8:17])}
+
+## Replies
+
+{chr(10).join(_msg_md[17:])}
+
+## Session traces (canonical bar 9's trace class)
+
+A static bytes-to-result fixture cannot express sequence rules; each trace is
+a sequence of events with the required actions.
+
+| Trace | Sequence | Required actions |
+|---|---|---|
+| TR1 | control frame with unknown `frame_type` 99 arrives mid-session | `skip_frame`, `session_survives` (§8.0) |
+| TR2 | `Attach` arrives in TLS 1.3 0-RTT early data | `defer_until_handshake` or reject — never process (§8.2, §9.2) |
+| TR3 | bidirectional stream opens with unknown `request_type` 99 | `close_stream`, `session_survives` (§9.2) |
+| TR4 | malformed `SiblingUpdate` arrives | ignore whole, previous list stands, `session_survives` (§8.2) |
+| TR5 | second `Attach` on an attached session | `fail_attach` — protocol error (§8.2) |
+| TR6 | stream-0 frame with length prefix over 65,536 | protocol error — the stream 0 bound, distinct from §9.2's 262,144 (§8.0) |
+| TR7 | heartbeat counter gap observed | liveness accounting only — 3 consecutive missed INTERVALS drive failover, not counter arithmetic (§8.2) |
+| TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
+""")
 
 # ---------------------------------------------------------------- write files
 

@@ -95,17 +95,14 @@ goal — but only for objects that have one:
   file, each with its wrong-signer analogue), and successor, verifier and
   consent (the recovery adoption and normal record in `transactions.md`).
   The envelope tag is every transaction's.
-- **Unsigned message encodings — no signature exists to generate**: the
-  currency request and reply (§7.1), the capture key grant (§7.3, transient
-  end-to-end payload), the late-response wrapper (§7.4 — its embedded
-  `VerifierResponse` is already signed; the wrapper adds no signature),
-  resolution messages (§7.7.3), archive fetch (§7.9), resource registration
-  and its reply (§6.2), the catalog query and reply (§6.4), resource
-  request/response (§11), and the session messages of §8. These get
-  **encoding** vectors, not signature vectors. *This inventory is maintained
-  by hand until the canonical corpus enumerates it mechanically from the
-  wire-format schemas (eighth review) — a hand list can itself omit a family,
-  and did: the currency messages were missing from it until then.*
+- **Unsigned message encodings — landed 2026-09-02 in `messages.md`**
+  (canonical bar 9): every family in this inventory has a positive
+  known-answer encoding there — session frames, topology push and memo,
+  resolution, archive, prekey, query-plus-consent, catalog, resource
+  request/response, registration and reply, currency, the capture key grant
+  and the late-response wrapper — plus the session-trace table. *The
+  inventory remains hand-maintained until the corpus format enumerates it
+  mechanically from the schemas (bar 6).*
 
 ## The remaining signed contexts (canonical bar 8)
 

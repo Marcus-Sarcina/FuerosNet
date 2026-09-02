@@ -450,6 +450,43 @@ ab = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```',
         csect[csect.index('**Abuse report**'):])[0].replace('\n', '')))
 check(ab[1] == KH['c5'], 'abuse report: field 1 is both the resource and the signer')
 
+# ---------------------------------------------------------------- messages (bar 9)
+ms = read('messages.md')
+blocks = re.findall(r'```\n([0-9a-f\n]+?)```', ms)
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 3, 3, 4, 5, 6, 7, 8]
+frames_ok = 0
+frame_objs = []
+for i, hexs in enumerate(blocks[:17]):
+    b = bytes.fromhex(hexs.replace('\n', ''))
+    n = int.from_bytes(b[:4], 'big')
+    obj = canonical(b[4:])
+    good = (n == len(b) - 4 and isinstance(obj, list) and len(obj) == 2
+            and obj[0] == EXPECT_FRAMES[i])
+    frames_ok += good
+    frame_objs.append(obj)
+check(frames_ok == 17, 'messages: all 17 frames length-prefixed, canonical, correctly typed')
+replies_ok = sum(canonical(bytes.fromhex(h.replace('\n', ''))) is not None
+                 for h in blocks[17:31])
+check(replies_ok == 14, 'messages: all 14 replies and payloads canonical')
+late_obj = canonical(bytes.fromhex(blocks[30].replace('\n', '')))
+lr = late_obj[3]
+lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
+check(verify_sig(BY[lr[1]], -8, bytes.fromhex(lr[9][3]),
+                 sig_sign1(bytes.fromhex(lr[9][0]), b'rhtn/1:verifier', lp)),
+      'LateResponse: the embedded verifier signature verifies')
+push_body = frame_objs[5][1]
+adopt_env_hex = re.search(r'#### Envelope bytes — final, all four signatures real.*?```\n([0-9a-f\n]+?)```', tx, re.S)
+check(push_body[2] == adopt_env_hex.group(1).replace('\n', ''),
+      'TopologyPush carries the first adoption envelope byte-for-byte')
+srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
+check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
+      if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
+      'ServingInfra: KeyMaterial hashes to the named keyhash')
+check(len(re.findall(r'\| TR\d ', ms)) == 8, 'messages: eight session traces')
+qc = frame_objs[12][1]
+check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
+      'request-4 query frame: embedded query_id recomputes')
+
 # ---------------------------------------------------------------- normal record (bar 2)
 BYNAME = {KH[n]: n for n in NAMES}
 nsect = tx[tx.index('## Normal presence record'):tx.index('## Finalization must-accepts')]

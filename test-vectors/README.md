@@ -45,7 +45,8 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `keys.md` | The synthetic test identities — **both components real**: Ed25519 and ML-DSA-65 keypairs from stated seeds, `KeyMaterial` encodings, keyhashes |
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
 | `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record — now a **fully integrated object**: real §4.5.1 disclosure root, its type-5 envelope, and three verified presentations — and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
-| `records.md` | One known-answer signature per **signing** context — `EndpointRecord` complete; the remaining signed contexts queued, and the **unsigned** §7/§8 message encodings explicitly separated so nobody generates signatures the specification does not define |
+| `records.md` | One known-answer signature per **signing** context — complete 2026-09-02, each with its wrong-signer analogue |
+| `messages.md` | The unsigned message families (bar 9): every framed message's positive encoding, replies and transient payloads, and the session-trace table |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
@@ -209,21 +210,14 @@ negatives (T9–T12). Still open:
    harness verifies every `records.md` signature fails under a neighbouring
    tag, the check that catches two real paths sharing a hard-coded AAD while
    S12's artificial empty-AAD case still passes.
-9. **The unsigned message families** — positive known-answer encodings plus
-   each family's characteristic malformed and must-accept cases, the family
-   inventory **enumerated mechanically from the wire-format schemas** (the
-   hand list omitted the currency request/reply until the eighth review):
-   control frames and `Attach`/`AttachAck`, heartbeat and sibling updates,
-   resolution, currency request/reply, archive/prekey/catalog requests,
-   registration and reply, topology push and memo, resource
-   request/response. The families differ on exactly the points a generic
-   implementation gets wrong: unknown control-frame types versus unknown
-   request types extend differently, and stream 0's 64 KB bound is not §9.2's
-   256 KB. **Session semantics additionally need trace fixtures** — sequences
-   with expected actions (`skip_frame`, `fail_attach`, `close_stream`,
-   `session_survives`, `defer_until_handshake`) — because a static
-   `bytes → result` fixture cannot express rules like *unknown control frames
-   are skipped while the session survives* (sixth review).
+9. ~~The unsigned message families~~ **DONE 2026-09-02** (`messages.md`):
+   seventeen positive frames (control and request, correctly typed and
+   length-prefixed), fourteen replies and transient payloads (the capture key
+   grant and late-response wrapper included), embedded objects byte-identical
+   to their signed fixtures, and the **session-trace table** TR1–TR8 —
+   skip_frame, defer_until_handshake, close_stream, session_survives,
+   fail_attach, the 64 KiB/256 KiB bound split, heartbeat-interval liveness
+   and the invalid-attestation must-accept (sixth review).
 10. **Signer-to-role binding everywhere a signer is named** — *the
     standalone half is DONE 2026-09-02*: every signed context in `records.md`
     carries its wrong-signer analogue beside its positive vector, valid under
