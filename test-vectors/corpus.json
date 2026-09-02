@@ -1914,6 +1914,18 @@
    "note": "a non-member request names a resource whose snapshot still holds a stale role row for the requester"
   },
   {
+   "id": "TR18",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "answer_status_3",
+     "no_stream_reset"
+    ],
+    "cite": "\u00a79.2, \u00a711"
+   },
+   "note": "a frame parses as [6, body] but the body is not a well-formed ResourceRequest"
+  },
+  {
    "id": "V9",
    "class": "context",
    "expect": {

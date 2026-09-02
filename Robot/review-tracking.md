@@ -3227,3 +3227,42 @@ eighteen uncovered behaviours:
 Trace count 14 → 17; the two harness checks pinning fourteen updated
 (the counts-drift rule, again). Python harness 79/79; Rust runner 145 pass,
 0 fail, the new traces in its structured-skip set. Corpus at 185 entries.
+
+## Cycle 2, pass 0.6 — refused resource request (phase 1, 2026-09-02)
+
+Target 8. **The cleanest round of the family: every claim verified against
+the text, zero spec changes required.** The reviewer's implementation
+reproduced wire §11's normative evaluation order exactly, split malformed
+input at the step-0 boundary the way §9.2 states it ("once the type is known,
+a defect in the body is that type's business"), kept status 1 opaque to
+strangers, contacted no resource on any refusal, and correctly named the two
+deliberately absent types (no requester field in the request, no reason
+payload on a refusal). The 0.6.7 rulings returned as quoted specification
+this round — the type-6 0-RTT class and the never-retry rule were cited, not
+rediscovered.
+
+Seven unspecified items, all verified as local or specified-open:
+
+| # | Item | Disposition |
+|---|---|---|
+| U1 | Snapshot atomicity mechanism | LOCAL — infra §10.1 mandates the observable property (one coherent read per request), not the storage mechanism |
+| U2 | QUIC error code for the stream-failure reset | SPECIFIED AS UNASSIGNED — §9.2: "No application error code is assigned for the reset, and none is needed: the reset is the whole message." The reviewer's disposition (local code, requester attaches no meaning) is the specified reading |
+| U3 | Timing equalisation across code-1 paths | SPECIFIED OPEN — §11's closing paragraph says the opacity is in what is said, not how long it takes; equalising is optional hardening |
+| U4 | Which parser performs the byte-level checks | LOCAL — the accepted byte language is normative (wire §1), the library is not |
+| U5 | Machine width for type/status | LOCAL — CBOR uint, shortest-form; any width encodes identically |
+| U6 | Owned vs borrowed byte strings | LOCAL — nothing on this path is signed, so no preimage-lifetime question exists |
+| U7 | Requester-side API shape | LOCAL — light §8's duty (show roles so a user distinguishes policy denial from breakage) verified as UI conduct, not a wire field |
+
+Crate-maturity check: design §5.2 verified still accurate — it makes no
+coset claim (so coset 0.4.2's new ML-DSA identifiers stale nothing), and the
+January 2026 ml-dsa timing advisory predates the 0.1.1 release the Rust
+runner pins (verification-only use regardless); the advisory reinforces
+§5.2's unaudited caveat rather than contradicting it.
+
+**One trace added under the stress directive — TR18**: a frame parsing as
+`[6, body]` whose body is not a well-formed ResourceRequest is ANSWERED with
+status 3, never reset — and the boundary does not generalise across types,
+since a malformed type-4 body closes the stream (§5.6: "no error schema
+exists"). Each type answers in its own terms; an implementer generalising
+either rule to the other type diverges visibly. Trace count 17 → 18, both
+count checks updated. Python 79/79; Rust 145/0.

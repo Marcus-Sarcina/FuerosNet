@@ -8105,3 +8105,15 @@ hosted sessions survive. TR17 pins the evaluation order that keeps
 member-specific refusal statuses inside the membership. The remaining
 uncovered behaviours are operator conduct the suite's own remit excludes.
 Seventeen traces; both harnesses green.
+
+### 2026-09-02 (cycle 2, 0.6 refused-request target, phase 1)
+
+The eighth implementation attempt required no specification changes at all —
+the first round of the family to close without one. The evaluation order,
+the step-0 malformed-body boundary, the unassigned reset code, the open
+timing question and the user-presentation duty were each cited from the
+text rather than rediscovered, including two rules written only six rounds
+ago. One trace was added to pin the boundary that almost invites
+generalisation: a malformed type-6 body is answered with status 3 while a
+malformed type-4 body closes the stream, because each type answers defects
+in its own terms. Eighteen traces; both harnesses green.

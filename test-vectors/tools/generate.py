@@ -2376,6 +2376,7 @@ a sequence of events with the required actions.
 | TR15 | a `ResourceRequest` (type 6, an HTTP GET inside) arrives in TLS 1.3 0-RTT early data | `defer_until_handshake` or reject — never process (§9.2, §11): the gateway does not interpret application semantics, so no method is certifiably effect-free, GET included |
 | TR16 | one transport session carries hosted sessions to resources A and B; the caller's role row for A changes | retire A's resource-facing session identifier; the transport session and B's hosted session survive, and an in-flight A request completes under its starting snapshot (`infra-client-requirements.md` §10.1, §10.5) — an implementation closing the transport punishes B and the control plane for an authorisation change at A |
 | TR17 | a non-member's request names a resource whose snapshot still holds a stale role row for them | status 1 `refused`, never 4 or 5 (§11) — membership is evaluated before acknowledgement and roles, and the specific statuses are answers only members receive; an implementation reaching the role row first hands a stranger member-only information |
+| TR18 | a frame parses as `[6, body]` but the body is not a well-formed `ResourceRequest` | answer status 3, no stream reset (§9.2, §11) — once the type is known, a body defect is that type's business, answered in its own terms. The boundary does not generalise across types: a malformed type-4 body closes the stream, because that is *that* type's term |
 """)
 
 # ================================================================ corpus.json
@@ -2852,6 +2853,7 @@ for trid, seq, actions, cite in [
     ('TR15', 'a ResourceRequest (type 6, an HTTP GET inside) arrives in TLS 1.3 0-RTT early data', ['never_process_as_early_data'], '§9.2, §11'),
     ('TR16', 'one transport session carries hosted sessions to resources A and B; the caller role row for A changes', ['retire_A_resource_session_id', 'transport_survives', 'B_session_unaffected', 'in_flight_A_completes_under_starting_snapshot'], 'infra-client-requirements.md §10.1, §10.5'),
     ('TR17', 'a non-member request names a resource whose snapshot still holds a stale role row for the requester', ['status_refused', 'never_a_member_specific_status'], '§11'),
+    ('TR18', 'a frame parses as [6, body] but the body is not a well-formed ResourceRequest', ['answer_status_3', 'no_stream_reset'], '§9.2, §11'),
 ]:
     exp = {'actions': actions, 'cite': cite}
     if trid in TRACE_ONE_OF:
