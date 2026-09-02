@@ -2376,6 +2376,26 @@ reg('CTX-referral-overshoot', 'context',
             'reply': 'the P-reply-02 referral with field 5.3 = 6'},
     note='Schema-valid bytes; the defect is relative to the request, so this is a context fixture.')
 
+# ---- retired-number tombstones (T29, 2026-09-02) and a non-witness corroborator
+reg('N-retired-body-key-7', 'bytes',
+    REJ('body', 'schema', 'retired key 7 is a tombstone, not extension space (T29)'),
+    e_map([(e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in (n_hi, n_lo, IDS['w2'])])),
+           (e_uint(1), e_uint(TS_C2)), (e_uint(2), e_uint(TS_C2F)),
+           (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+           (e_uint(4), e_arr([witness_entry(IDS['w2'], bob, 7)])),
+           (e_uint(6), e_uint(0)), (e_uint(7), e_uint(5)),
+           (e_uint(8), e_bstr(fin_ab_root))]))
+reg('N-retired-witness-key-4', 'bytes',
+    REJ('Witness', 'schema', 'retired key 4 is a tombstone, not extension space (T29)'),
+    e_map([(e_uint(1), e_bstr(IDS['w1'].keyhash)),
+           (e_uint(2), e_bstr(alice.keyhash)),
+           (e_uint(3), e_uint(7)),
+           (e_uint(4), e_bstr(H(b'rhtn-test-vectors:dead-nonce-commitment')))]))
+reg('U-corroboration-non-witness', 'unit',
+    REJ('presentation', 'semantic',
+        'a revealed location naming a corroborator absent from body field 4 attests nothing'),
+    note='recipe: any normal record whose committed location value cites a keyhash outside field 4; checkable only when location is revealed (s4.5, 2026-09-02)')
+
 # ---- bar 10, transaction half: envelope whose signer set mismatches body roles
 ws_env, _ = envelope(1, 1, adopt_body, [alice, carol])
 reg('N-envelope-wrong-signers', 'bytes',

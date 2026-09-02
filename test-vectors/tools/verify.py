@@ -551,8 +551,8 @@ check(len(wit) == 16 and wit == sorted(wit, key=lambda w: w[1])
 pset = {n_body[3][0][1], n_body[3][1][1]}
 check(all(w[2] in pset for w in wit), 'normal record: every nominated_by names a participant')
 resps = n_body[5]
-check(resps == sorted(resps, key=lambda r: r[1]) and len(resps) == 3,
-      'normal record: responses sorted ascending by verifier keyhash')
+check(resps == sorted(resps, key=lambda r: (r[1], r[2])) and len(resps) == 3,
+      'normal record: responses sorted by (verifier, subject) keyhash')
 check({r[10] for r in resps} == {0, 1, 2}, 'normal record: selection_basis matrix covered')
 legal = [(0, 0, True), (0, 1, False), (3, None, False)]
 seen = sorted(((r[4], r.get(5), 6 in r) for r in resps))

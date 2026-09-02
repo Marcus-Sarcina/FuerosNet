@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `53feeb6e481b8bfcd26d7648d742c5f94fb08202dee2460005fa76680d45bace` · network-design.md `7a0e2b40b05e384699101ffa3ce781475f80341bfd030e93718f3f45c6fb121e`
+**Pinned**: wire-format.md `f14f3a4207fb43e86eac71e509d977b7b28b0a58731b52a14f0ea5c9adda7509` · network-design.md `7a0e2b40b05e384699101ffa3ce781475f80341bfd030e93718f3f45c6fb121e`
 
 ## The result model is structured, not a single status
 
@@ -168,9 +168,10 @@ photo comparison without its template version is unverifiable as evidence:
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
 | T23 | ~~response from an unselected verifier~~ | **Retired 2026-09-01**: no selected set exists apart from the selector's judgment (§5.5); any consenting-queried verifier's response is structurally fine. The id is not reused |
 | T27 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–2 | §5.5: required, closed enumeration — the selector's claim of known / reachable / discretionary |
+| T29 | A presence body carrying retired key 7, or a `Witness` carrying retired key 4 or 5 | §4.5 [2026-09-02]: retired numbers are tombstones, not extension space — a decoder meeting one rejects, the §4 type-6 rule. An unknown key is one the schema never assigned; a retired key is one it remembers |
 | T25 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T26 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
-| T28 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding. An implementation preserving assembly order emits bytes a validator rejects |
+| T28 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash, ties by ascending subject keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding; the tie is D15's one-verifier-both-participants case. An implementation preserving assembly order emits bytes a validator rejects |
 
 ## B. Context-dependent — bytes plus external state, structured result
 
@@ -224,7 +225,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D12 | The identical `EndpointRecord` received twice — same `seqno`, same contents | §7.6: republishing an unchanged set replays the record; idempotent reconciliation, **not** V6's equal-`seqno` conflict, which requires differing contents |
 | D13 | The root's self-anchored `SignedLocator` (`primitives.md`) — anchor = the node itself, path `{1: h'', 2: 0}` | **Roots legitimately self-anchor** (§2.1) [author, 2026-09-01]: the empty path is the zero-hop case, and a decoder asserting a minimum path length rejects every root's locator |
 | D14 | A normal presence record in which one identity is both a witness (envelope signer) and a verifier (embedded response) | One identity, one logical signer per capacity (§3.2) — the roles are different objects, and rejecting the overlap is over-strict |
-| D15 | One verifier answering once for **each** participant — two `(subject, verifier)` slots | §5.5: only duplicate slots are malformed; a verifier may have met both (T6's positive complement) |
+| D15 | One verifier answering once for **each** participant — two `(subject, verifier)` slots | §5.5: only duplicate slots are malformed; a verifier may have met both (T6's positive complement). The two slots sort by ascending subject keyhash (§4.5's tie rule, 2026-09-02) |
 | D16 | A record whose witnesses all carry the same `nominated_by` | Wire-valid (§3.2 requires only that each names a participant); the nomination split is the reference client's warning, never a validity condition (`light-client-requirements.md` §1.0) |
 | D17 | The counter-jump pair read as state: `[5,42]` then `[5,100]` | `state_action = replace` — and the reverse order is `ignore_stale`, not an error: absence of prior state is acceptable and staleness is ordinary (§2.3) |
 | D18 | A bounded unknown extension whose value is a tagged item, float, or any other deterministic CBOR item outside the schemas' types | §1 [author, 2026-09-01]: **opaque encoded slices, preserved and never interpreted** — uninterpretable state kept for a reader that may understand it later. An implementation reconstructing extensions through a typed model drops what it cannot type, and fails here |

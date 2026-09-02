@@ -2789,3 +2789,46 @@ The NOT-COVERED classifications (EndpointRecord maintenance, raw-byte
 decoding, COSE-shape checks) reflect the phase-1 implementation's deliberate
 todo!() boundary, honestly reported rather than credited — the phase-2
 protocol working as written. Harness: 65 checks, all pass.
+
+## Cycle 2, pass 0.6 — implementation attempt, presence validation (phase 1, 2026-09-02)
+
+Clean-room Rust attempt on target 3. **The reviewer independently reproduced
+the whole redesign**: no seed to restore, the formula as reasonableness never
+a gate, absence as the encoding, the disclosure construction hashed over
+received bytes, and a multi-dimensional report instead of a boolean. Their
+monotonicity reading (current started_at against predecessors' effective
+times) matches §3.3 exactly. Six UNSPECIFIED questions; four produced rules,
+two were already local.
+
+**Ruled and applied (each from existing precedent or determinism):**
+1. **Retired numbers are tombstones** — a decoder meeting body key 7 or
+   Witness keys 4/5 REJECTS. Derived from the two standing precedents (§4's
+   type 6, Scope's tag 3): an unknown key is one the schema never assigned; a
+   retired key is one it remembers. T29 added; two byte fixtures in the
+   corpus.
+2. **Response ordering ties break by ascending subject keyhash** — D15's
+   one-verifier-both-participants case was a legal tie with no rule, the most
+   wire-significant gap found (same set, different txids). §4.5, T28 and D15
+   updated; harness checks the pair sort.
+3. **A Channel kind may repeat** — a retried channel is two measurements,
+   both evidence; no uniqueness rule, now stated rather than inferable.
+4. **A Corroboration MUST name a field-4 witness** — its authority is its
+   maker's envelope signature over the disclosure root, so a non-witness
+   corroborator attests nothing; checkable only where location is revealed.
+   Unit-recipe fixture registered.
+5. **Bundle carriage and size (#5, #6)**: correctly local — the bundle rides
+   the ceremony channel; §5.4 now states it has no protocol ceiling and that
+   truncation is a visible local act (it changes n).
+
+**One divergence resolved in the fixture's favour**: the reviewer read normal
+field 5 as required-with-empty-array for zero responses; the shipped
+finalization fixture omits the key. §4.5 now states the rule — fields 4/5 are
+subtype-conditional (`?`/`+`), and zero responses OMIT key 5, §1's one-
+encoding principle extended to a subtype-conditional field.
+
+**Type decisions (25)**: all legitimately local; the closed/open enum split
+matches the spec's registry declarations throughout, including the
+deliberately-open location-method registry. **Crate maturity**: consistent
+with §5.2; the additions (RustCrypto's fixed rc-series advisories, the
+rustls-WASM-provider issue closed as not-planned) sit inside the existing
+caveats. ML-KEM correctly identified as off this code path.

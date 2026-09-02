@@ -1204,16 +1204,27 @@ Field-for-field per design §8.1.
                        ;   the ceremony's day in every presentation
   2: timestamp,        ; finalized_at
   3: [ Participant, Participant ],
-  4: [ * Witness ],
-  5: [ * VerifierResponse ],
-                       ;   sorted ascending by verifier keyhash — the witness
-                       ;   rule, one set one encoding
+  4: ? [ + Witness ],  ; PRESENT on a normal record (1..=16), ABSENT on a
+                       ;   formation — subtype-conditional, never free choice
+  5: ? [ + VerifierResponse ],
+                       ;   sorted ascending by verifier keyhash, ties broken by
+                       ;   ascending subject keyhash [2026-09-02] — the tie is
+                       ;   D15's one-verifier-answering-for-both-participants
+                       ;   case; one set, one encoding. PRESENT iff at least
+                       ;   one response arrived: ZERO RESPONSES OMIT THE KEY —
+                       ;   §1's empty rule extended to this subtype-conditional
+                       ;   field, so one logical record has one encoding, and a
+                       ;   normal record with none is announced by key 4 and
+                       ;   subtype regardless. ABSENT always on a formation
   6: uint,             ; record subtype: 0 = normal, 1 = formation (design
                        ;   §13.2). In the body, not disclosable: structurally
                        ;   load-bearing, and a formation record's absent keys 4
                        ;   and 5 announce it regardless
   ; key 7 (the seed-window ordinal) was RETIRED 2026-09-01 with deterministic
-  ; selection; the number is not reused
+  ; selection; the number is not reused — and a decoder meeting it REJECTS
+  ; [2026-09-02]: retired numbers are tombstones, not extension space, the
+  ; same rule as §4's type 6 and Scope's tag 3. An unknown key is one the
+  ; schema never assigned; a retired key is one it remembers
   8: bstr .size 32     ; disclosure root (§4.5.1) — commits to the seven
                        ;   disclosable fields (§4.5.1's label set): proximity,
                        ;   capture, location, and each Participant's retention
@@ -1241,7 +1252,10 @@ Proximity = {
   2: uint              ; strongest channel that passed
 }
 Channel = {
-  1: uint,             ; 1 uwb, 2 nfc, 3 optical, 4 latency
+  1: uint,             ; 1 uwb, 2 nfc, 3 optical, 4 latency. A KIND MAY
+                       ;   REPEAT [2026-09-02]: a channel retried is two
+                       ;   measurements, both evidence — validators impose no
+                       ;   uniqueness rule here
   2: uint,             ; 0 pass, 1 fail, 2 unavailable
   3: ? uint,           ; claimed resolution, metres. Syntactically optional with
                        ;   no presence condition: whether a kind carries one is
@@ -1263,7 +1277,12 @@ LocationEvidence = {
   2: [ * Corroboration ]
 }
 Asserted      = { 1: uint, 2: tstr }              ; method, geohash
-Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km
+Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km.
+                     ; Field 1 MUST name an entry of body field 4 [2026-09-02]:
+                     ; a corroboration's authority is its maker's envelope
+                     ; signature over the disclosure root, so one naming a
+                     ; non-witness attests nothing. Checkable only where the
+                     ; location disclosure is revealed
 
 ; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2:
 ;   0 GNSS · 1 serving-cell · 2 network egress · 3 latency bound.
@@ -1290,7 +1309,9 @@ Witness = {
                        ;   bits 3+ reserved; a decoder retains them and
                        ;   interprets only 0-2
   ; fields 4-5 (nonce commitment and reveal) were RETIRED 2026-09-01 with
-  ; deterministic selection; the numbers are not reused
+  ; deterministic selection; the numbers are not reused — and a decoder
+  ; meeting either REJECTS [2026-09-02]: tombstones, not extension space
+  ; (§4's type-6 rule, Scope's tag 3)
 }
 
 VerificationQuery = {
@@ -1766,6 +1787,11 @@ individually verifiable records, not a stretch of archive — nobody walks
 another party's archive (design §8.1.2), and nothing requires the handed
 records to connect. A record that fails its checks contributes nothing; with
 no completeness to protect, it is simply not in the pool.
+
+**The bundle has no protocol ceiling** [2026-09-02]. It rides the ceremony
+channel and is retained nowhere, so what a client will hold is local resource
+policy — and truncation is a local act with a visible price, since it changes
+*n* and the candidate pool.
 
 **Understatement is free, and self-defeating rather than dangerous.** A subject
 who hands fewer records gets a smaller *n*, a smaller sample, and a record that

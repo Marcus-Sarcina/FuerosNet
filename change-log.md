@@ -7941,3 +7941,17 @@ the wrong-signer anchor's unconditional reject omitted the pinned-key
 precondition that separates infra §4.1's two permitted ingestion models, and
 now states it. The reviewer's coverage observation closed the last referral
 gap: advances-zero as bytes, overshoot as a context fixture. 65 checks pass.
+
+### 2026-09-02 (cycle 2, 0.6 presence-validation target, phase 1)
+The clean-room presence validator reproduced the redesign wholesale and
+surfaced four under-determinations, all now ruled: retired field numbers are
+tombstones a decoder rejects (the type-6 and Scope-tag-3 rule, T29);
+verifier-response ordering breaks ties by ascending subject keyhash — D15's
+legal tie was the most wire-significant gap, two encoders producing two txids
+for one response set; a proximity channel kind may repeat, a retried channel
+being two measurements; and a corroboration must name a field-4 witness,
+since its authority is its maker's envelope signature over the root. Fields
+4/5 are now marked subtype-conditional and zero responses omit key 5 — one
+logical record, one encoding — resolving the reviewer's reading in favour of
+the shipped fixture. The curated bundle explicitly has no protocol ceiling;
+truncation is a visible local act.
