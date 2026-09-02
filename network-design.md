@@ -62,7 +62,7 @@ operations. Encoding for all of it is in
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
-decisions open. Multi-device beyond archive merge (§23.3). **Eleven parameters
+decisions open. Multi-device beyond archive merge (§23.3). **Twelve parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until the encoding stops moving.

@@ -7848,3 +7848,12 @@ Two elevation rulings closed 0.3: trust-emanates is a primordial design
 parameter rather than an assumption — §1.2.1 says so and its register row is
 withdrawn — and the compromised-resource confinement claim is load-bearing,
 now A32. The duals are seven; §20.2 lists thirty-two.
+
+### 2026-09-02 (cycle 2, pass 0.4: parameter census; two counts repaired)
+The parameter census classified every operating value and found two numeric
+conflicts, both stale counts: the Preface still said eleven unset parameters
+(a sweep that caught "Eleven unset" missed "Eleven parameters remain unset")
+and wire §12's minimised-presentation figure still said ~288 B — the nine-leaf
+arithmetic — where seven 32-byte digests are 224 B. Both fixed; the ~112 B
+salts figure beside it was already right. The census's derived/borrowed calls
+match the documents' own basis labels throughout.

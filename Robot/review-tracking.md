@@ -2477,3 +2477,33 @@ bearing": elevated to **A32** (numbers never reused; A-table now A1–A32), dual
 with its §20.1 row, so the duals sentence reads seven (A14–A19, A32) and the
 census sentence reads 32. The 123/79 strict counts are unaffected — they count
 claims, not rows. The 0.3 queue is empty.
+
+## Cycle 2, pass 0.4 — parameter census (2026-09-02)
+
+Full taxonomy over every operating parameter, bound, width and knob
+(ASSERTED / DERIVED / BORROWED / UNSET — the classifications are the reviewer's
+overlay and required no document changes; the derived and borrowed calls match
+the documents' own basis labels, λ<1/f and the Kerberos anchor included).
+
+**Two numeric conflicts found; both verified and fixed:**
+1. Preface said "Eleven parameters remain unset" against §22.2's twelve and
+   §21.1's twelve rows. **An incomplete sweep of ours**: when the periodic
+   re-score cadence became the twelfth parameter, the §22.2 count was updated
+   via a search for "Eleven unset" — the Preface's different phrasing ("remain
+   unset") escaped it. One phrasing is not a sweep, again. Fixed to twelve.
+2. Wire §12's minimised-presentation figure said "at most ~288 B" — nine-leaf
+   residue (9 × 32) surviving the 0.2 nine→seven fix, which corrected §4.5.1
+   (224 B) but not the size-estimate prose. Fixed to 224 B. The adjacent
+   ~112 B salts figure was already correct (7 × 16).
+
+**Verified non-conflicts, agreeing with the reviewer**: CatalogReply's 111
+against the 127 frame ceiling (chosen bound vs calculated maximum), and the
+4 KB prekey global ceiling against the unannotated local bstr.
+
+**Flagged for the author, not applied**: §21.1 is not exhaustive of unset
+quantities — the witness clock tolerance (lc §1.0.1), the one-time-key issuance
+rate limit (infra §6 / wire §7.8), the KeyGrant buffer bound (wire §7.3),
+general client cache lifetimes (lc §4) and attach timeout/backoff (wire §8.2)
+are named-but-unset in the subsidiary documents and absent from the checklist.
+All five are client-local policy; whether §21.1 should enumerate them or its
+scope statement should disclaim them is a curation call.

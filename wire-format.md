@@ -3760,7 +3760,7 @@ classical column applies only to session-layer traffic.
 | Anchor entry | ~60 B | ~60 B (hashes only) |
 
 **Selective disclosure does not reduce a presentation.** A minimised record replaces
-each withheld field with a 32-byte digest, at most ~288 B, against ~34 KB of signatures
+each withheld field with a 32-byte digest, at most 224 B, against ~34 KB of signatures
 that cannot be omitted — the envelope requires exactly the required signer set. It buys
 disclosure control, not bandwidth (§4.5.1).
 
