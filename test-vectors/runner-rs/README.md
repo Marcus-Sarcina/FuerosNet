@@ -32,7 +32,12 @@ block's hybrid responses and `[prior, new, patron]` successor proof), all
 four presentations (roots recomputed from exact received slices), and the
 standalone signed records under their named signers with the wrong-signer
 analogues required to fail. Trace/context/unit entries are structured, not
-bytes, and are skipped by design.
+bytes, and are skipped by design. Cross-entry bindings are checked after the
+sweep: the TopologyPush payload is byte-identical to the minimal adoption
+envelope (and that inner envelope is itself fully verified), and the KeyGrant
+binds the prior alice–c1 record's recomputed txid to the current worked
+query's recomputed query_id, whose consent verifies under alice. 145 entries
+pass.
 
 **Findings log.** 2026-09-02: caught `B-ext-value-1024/1025` measuring
 payload bytes where §1's ceiling bounds the **encoded slice** — a fixture

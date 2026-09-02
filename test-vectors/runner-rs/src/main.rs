@@ -928,6 +928,23 @@ fn schema_check(ctx: &Ctx, kind: &str, item: &Item) -> Result<(), String> {
             }
             Ok(())
         }
+        "VerificationQuery" => {
+            let Item::Map(m) = item else { return Err("not map".into()) };
+            let qid = match map_get(m, 6) {
+                Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
+                _ => return Err("no qid".into()),
+            };
+            let f15 = map_without_key(b, 6).ok_or("fields 1-5")?;
+            if sha(&f15).to_vec() != qid {
+                return Err("query_id does not recompute".into());
+            }
+            if let Some(v) = map_get(m, 5).and_then(as_uint) {
+                if v > 65535 {
+                    return Err("template version over uint16".into());
+                }
+            }
+            Ok(())
+        }
         "Witness" => {
             let Item::Map(m) = item else { return Err("not map".into()) };
             if map_get(m, 4).is_some() || map_get(m, 5).is_some() {
@@ -1113,6 +1130,12 @@ fn main() {
     let mut skipped = 0u32;
     let mut deep_env = 0u32;
     let mut deep_pres = 0u32;
+    // cross-entry state
+    let mut adopt_min_bytes: Vec<u8> = Vec::new();
+    let mut pc1_txid: Vec<u8> = Vec::new();
+    let mut normal_qid: Vec<u8> = Vec::new();
+    let mut push_payload: Vec<u8> = Vec::new();
+    let mut keygrant: Vec<u8> = Vec::new();
 
     for e in corpus["entries"].as_array().unwrap() {
         let id = e["id"].as_str().unwrap();
@@ -1188,11 +1211,116 @@ fn main() {
             _ => Err("unhandled".into()),
         };
 
+        // stash cross-entry material
+        match id {
+            "P-adopt-min" => adopt_min_bytes = raw.clone(),
+            "P-alice-c1-record" => {
+                if let Some(r) = value_slice(&raw, 3) {
+                    pc1_txid = sha(&raw[r]).to_vec();
+                }
+            }
+            "P-frame-13" => {
+                // frame = [4, [query, consent, sb]] — deep-verify the triple
+                if let Ok(Item::Array(fa)) = parse_all(&raw) {
+                    let Item::Array(body3) = &fa[1] else {
+                        report(&mut fail, id, "request-4 body not array");
+                        continue;
+                    };
+                    if body3.len() != 3 {
+                        report(&mut fail, id, "request-4 arity != 3");
+                        continue;
+                    }
+                    let p = Parser { b: &raw };
+                    let (_, _, fadv) = p.head(0).unwrap();
+                    // skip the type uint, then the body array header
+                    let (_, tend) = p.item(fadv).unwrap();
+                    let (_, _, badv) = p.head(tend).unwrap();
+                    let adv = tend + badv;
+                    if let Ok((_, qend)) = p.item(adv) {
+                        let qslice = &raw[adv..qend];
+                        if let Some(r6) = value_slice(qslice, 6) {
+                            normal_qid = qslice[r6.start + 2..r6.end].to_vec();
+                        }
+                        let f15 = map_without_key(qslice, 6).unwrap_or_default();
+                        if sha(&f15).to_vec() != normal_qid {
+                            report(&mut fail, id, "frame-13 query_id fails");
+                            continue;
+                        }
+                        // consent: second element, Sign1 by alice over raw qid
+                        if let Ok((_, cend)) = p.item(qend) {
+                            let cslice = &raw[qend..cend];
+                            if let Ok(Item::Array(ca)) = parse_all(cslice) {
+                                let gp = |it: &Item| match it {
+                                    Item::Bytes(r) => cslice[r.clone()].to_vec(),
+                                    _ => Vec::new(),
+                                };
+                                let alice = ids.iter().find(|i| i.name == "alice").unwrap();
+                                let tbs = sig_structure_sign1(
+                                    &gp(&ca[0]),
+                                    b"rhtn/1:consent",
+                                    &normal_qid,
+                                );
+                                if !verify_ed(alice, &gp(&ca[3]), &tbs) {
+                                    report(&mut fail, id, "frame-13 consent fails");
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "P-frame-06" => {
+                // TopologyPush: kind 0, payload is a full envelope — verify it
+                if let Some(r2) = value_slice(&raw, 2).or(None) {
+                    let _ = r2;
+                }
+                if let Ok(Item::Array(fa)) = parse_all(&raw) {
+                    if let Item::Map(fm) = &fa[1] {
+                        if let Some(Item::Bytes(pr)) = map_get(fm, 2) {
+                            push_payload = raw[pr.clone()].to_vec();
+                            if let Err(e2) = verify_envelope(&ids, &push_payload) {
+                                report(&mut fail, id, &format!("inner envelope: {e2}"));
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+            "P-e2e-01" => keygrant = raw.clone(),
+            _ => {}
+        }
+
         match verdict {
             Ok(()) => pass += 1,
             Err(msg) => report(&mut fail, id, &msg),
         }
     }
+
+    // ---- cross-entry bindings ----
+    let mut xchecks = 0u32;
+    if !push_payload.is_empty() && push_payload == adopt_min_bytes {
+        xchecks += 1;
+    } else {
+        report(&mut fail, "X-push-carries-adoption", "TopologyPush payload != P-adopt-min bytes");
+    }
+    if !keygrant.is_empty() {
+        if let Ok(Item::Map(kg)) = parse_all(&keygrant) {
+            let gb = |k: u64| match map_get(&kg, k) {
+                Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(),
+                _ => Vec::new(),
+            };
+            if gb(1) == pc1_txid && gb(2) == normal_qid {
+                xchecks += 1;
+            } else {
+                report(
+                    &mut fail,
+                    "X-keygrant-bindings",
+                    "KeyGrant does not bind the prior record and current query",
+                );
+            }
+        }
+    }
+    pass += xchecks;
 
     eprintln!(
         "\nrhtn-conformance: {pass} pass, {fail} fail, {skipped} skipped \
@@ -1221,6 +1349,7 @@ fn implemented_kind(kind: &str) -> bool {
             | "Witness"
             | "body"
             | "SignedLocator"
+            | "VerificationQuery"
     )
 }
 

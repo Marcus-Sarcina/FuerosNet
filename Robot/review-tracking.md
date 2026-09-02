@@ -3138,3 +3138,10 @@ the fixtures. Honesty note recorded in its README: same author, so this is
 cross-language/cross-crypto validation, not the independent-party
 reproduction promotion ultimately wants — but it is the artifact such a
 party starts from.
+
+**Runner deepened (same session)**: query_id recomputation for the standalone
+query and the request-4 frame (with its consent verified under alice and the
+selection_basis triple checked), the TopologyPush inner envelope fully
+verified as an envelope, and cross-entry bindings — push payload ==
+adoption bytes; KeyGrant == (recomputed prior-record txid, recomputed current
+query_id). **145 pass, 0 fail.**
