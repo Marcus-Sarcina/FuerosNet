@@ -3087,3 +3087,23 @@ sound — notably the OPEN DataPractice newtype where a closed enum would
 violate the extension rule, and the Arc-raw-plus-view entry representation.
 Crate assessment adds cbor2's RawValue as a fitting strict-codec substrate;
 consistent with §5.2 otherwise.
+
+## Cycle 2, pass 0.6 — catalog target, phase 2 (2026-09-02)
+
+Ten of eleven target vectors hand-traced to agreement; zero implementation
+bugs; zero spec ambiguities (the reviewer correctly noted that P-frame-16's
+absent field 2 does not settle U2 — the vector shows the encoding, not the
+host's installed rule, and U2's `self` default was ruled in phase 1's
+ingestion regardless).
+
+**One vector defect, real and fixed**: P-catalog-reply-truncated carried one
+entry plus a continuation — unproducible by a conforming host, whose
+continuation-present state entails MORE than 111 qualifying entries and
+exactly the first 111 returned. Rebuilt conformingly: 111 owner-signed
+entries sorted by resource keyhash, continuation naming the withheld 112th's
+type (its all-high resource id provably sorts last). The harness pins the
+111-count, the sort, and the continuation's coexistence. The reviewer's
+boundary note stands: receiver-side tolerance of a NONCONFORMING host's
+short-plus-continuation reply is untested and unspecified — a client cannot
+verify the producer's qualifying count, so the object is receiver-valid;
+nothing added, recorded as observed.

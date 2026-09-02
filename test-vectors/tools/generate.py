@@ -2753,8 +2753,25 @@ reg('P-archive-reply-continued', 'bytes', ACC('ArchiveReply', 'more remaining, c
            (e_uint(3), b'\xf5'), (e_uint(4), e_bstr(adopt_txid))]))
 reg('P-catalog-scoped', 'bytes', ACC('CatalogEntry', 'connect_scope present: dunbar'),
     sign1_slot(sorted(cat_pairs + [(e_uint(6), e_uint(5))], key=lambda p: p[0]), 8, AAD_CATALOG, bob))
-reg('P-catalog-reply-truncated', 'bytes', ACC('CatalogReply', 'truncation continuation present'),
-    e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))), (e_uint(2), e_arr([catalog])),
+# A conforming truncated reply [0.6 phase 2, 2026-09-02]: continuation present
+# entails MORE than 111 qualifying entries, and the node returns the FIRST 111
+# by (resource, owner) keyhash with the withheld 112th's type as the hint. The
+# earlier one-entry-plus-continuation object was unproducible by a conforming
+# host. 111 forum entries sort below the wiki entry's all-high resource id.
+def _cat_variant(res_kh, stype):
+    pairs = [(e_uint(1), e_bstr(res_kh)), (e_uint(2), e_bstr(bob.keyhash)),
+             (e_uint(3), e_tstr(stype)), (e_uint(4), e_tstr('The Reading Room')),
+             (e_uint(5), e_bstr(b'quic://198.51.100.7:4433'))]
+    return sign1_slot(pairs, 8, AAD_CATALOG, bob)
+_trunc_ids = sorted(H(b'rhtn-test-vectors:trunc-res:%d' % i) for i in range(111))
+_trunc_entries = [_cat_variant(r, 'rhtn-forum') for r in _trunc_ids]
+# the withheld 112th: resource id above every SHA-256 output here
+_wiki_id = b'\xff' * 31 + b'\x01'
+assert all(r < _wiki_id for r in _trunc_ids)
+reg('P-catalog-reply-truncated', 'bytes',
+    ACC('CatalogReply', 'a CONFORMING truncated reply: the first 111 entries by (resource, owner) keyhash, continuation naming the withheld 112th entry type'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))),
+           (e_uint(2), e_arr(_trunc_entries)),
            (e_uint(3), e_tstr('rhtn-wiki'))]))
 reg('P-channel-bound', 'bytes', ACC('Channel', 'claimed resolution and session-key binding both present'),
     e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(0)), (e_uint(3), e_uint(1)),

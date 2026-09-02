@@ -8041,3 +8041,9 @@ the stream, well-formed failures are answered refused. The reviewer's
 require-a-local-backend assumption was over-strict for brokered resources —
 a registration is complete in itself, now stated, and the stress family
 gains the row.
+
+Phase 2 of the catalog target: ten of eleven vectors agree; the truncated
+CatalogReply was unproducible as built — continuation present entails more
+than 111 qualifying entries and exactly the first 111 returned — and is
+rebuilt conformingly with 111 sorted entries and the withheld 112th's type
+as the hint, harness-pinned.

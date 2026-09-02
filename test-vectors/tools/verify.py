@@ -546,6 +546,10 @@ check(byid['P-normal-record']['hex'] ==
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 14
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: fourteen traces and five contexts')
+_tr = canonical(bytes.fromhex(byid['P-catalog-reply-truncated']['hex']))
+_res_ids = [e[1] for e in _tr[2]]
+check(len(_tr[2]) == 111 and 3 in _tr and _res_ids == sorted(_res_ids),
+      'truncated CatalogReply: exactly 111 entries, sorted, continuation present')
 _kg = canonical(bytes.fromhex(byid['P-e2e-01']['hex']))
 check(_kg[3] == _k, 'the KeyGrant carries the derived capture key')
 _pc1 = canonical(bytes.fromhex(byid['P-alice-c1-record']['hex']))
