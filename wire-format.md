@@ -3001,7 +3001,8 @@ AttachAck = {
                        ;   Fixed for the session's lifetime — there is no update
                        ;   message, and changing it requires a fresh attach
   4: uint,             ; messages queued for this client AT THE RESPONDING NODE;
-                       ;   advisory. In a degraded session this cannot include
+                       ;   U64 RANGE [2026-09-02] — stated so no implementation
+                       ;   narrows it by inference. Advisory. In a degraded session this cannot include
                        ;   the dark patron's mailbox — siblings hold no queue
                        ;   state (design §14.1.6) — so a failover value is
                        ;   normally 0 and a client MUST NOT present it as a
@@ -3038,7 +3039,14 @@ Heartbeat = {
                        ; from 0, +1 each beat. Both sides send
                        ; (§9.2), and a shared sequence is unimplementable:
                        ; neither peer can know the interleaving order. Each side
-                       ; gap-detects the other's sequence alone.
+                       ; gap-detects the other's sequence alone — FOR
+                       ;   INFORMATION, NEVER FOR LIVENESS [2026-09-02]: any
+                       ;   valid beat carrying a counter not yet seen resets
+                       ;   the liveness clock, and failover is driven by three
+                       ;   missed INTERVALS, not by counter arithmetic. An
+                       ;   implementation accepting only the exact expected
+                       ;   counter ignores every beat after one loss and
+                       ;   fails over against a live server.
                        ; On reaching u64 max, end the session rather than
                        ; wrapping, a wrap would silently reset gap detection.
                        ; NOT the node's locator seqno, a heartbeat needs gap
@@ -3157,7 +3165,13 @@ addresses will say the same — which gives `light-client-requirements.md`'s exi
 retry floor the carrier it lacked. Every other outcome — any other close code,
 reset, timeout, no valid `AttachAck` — is an **endpoint** failure: the client tries
 the remaining candidates in the order received, and when all fail it is disconnected
-and a later fresh attach begins with the primary again. Timeout and backoff are
+and a later fresh attach begins with the primary again. **Two scope rules for
+the refusal itself** [2026-09-02]: a primary's refusal does **not** open
+sibling failover — the failover triggers are unreachability at attach and the
+three-missed-intervals rule, and a refusal is an answer, not an outage, so
+siblings are not a channel for overriding it. And during failover, one
+sibling's refusal forecloses **that sibling alone**: the remaining candidates
+are tried in the order received. Timeout and backoff are
 local policy. *Code 0 is not used for refusal, since it is the conventional
 no-error close.*
 

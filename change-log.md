@@ -7965,3 +7965,14 @@ presentations, the formula and boundary arithmetic, and fourteen semantic
 rows traced to agreement; the one implementation bug (silently skipped
 missing-key embedded signatures) is the reviewer's, and demonstrates the
 unverifiable(key) dimension.
+
+### 2026-09-02 (cycle 2, 0.6 attach target, phase 1)
+The attach attempt surfaced the two refusal-scope gaps and both are ruled the
+way the reviewer assumed: a primary's application-close-1 refusal does not
+open sibling failover — the triggers are unreachability and the three-miss
+rule, and a refusal is an answer, not an outage — while a failover sibling's
+refusal forecloses that sibling alone. Traces TR9 and TR10 carry both.
+AttachAck's queue count is stated U64 RANGE. And the heartbeat comment now
+says gap-detection is for information, never liveness — an
+exact-expected-counter implementation ignores every beat after one loss and
+fails over against a live server, which is TR7 read backwards.

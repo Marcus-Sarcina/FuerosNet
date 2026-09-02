@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `f14f3a4207fb43e8…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `b80c647e24e4ce87…`, `network-design.md` `7a0e2b40b05e3846…` and `light-client-requirements.md` `bc0ebf1d1794b602…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -910,4 +910,6 @@ a sequence of events with the required actions.
 | TR6 | stream-0 frame with length prefix over 65,536 | protocol error — the stream 0 bound, distinct from §9.2's 262,144 (§8.0) |
 | TR7 | heartbeat counter gap observed | liveness accounting only — 3 consecutive missed INTERVALS drive failover, not counter arithmetic (§8.2) |
 | TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
+| TR9 | the primary serving node closes with application code 1 (`refused`) at attach | no sibling failover — a refusal is an answer, not an outage; the client is refused, not disconnected (§9.2) |
+| TR10 | during failover, a sibling closes with code 1 | that sibling alone is foreclosed; the next cached candidate is tried in order (§9.2) |
 

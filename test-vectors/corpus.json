@@ -1,7 +1,7 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "f14f3a4207fb43e86eac71e509d977b7b28b0a58731b52a14f0ea5c9adda7509",
+  "wire-format.md": "b80c647e24e4ce87fb7d3d630b42487b78a59bebdfc56b1b4d18ac0d63ccded2",
   "network-design.md": "7a0e2b40b05e384699101ffa3ce781475f80341bfd030e93718f3f45c6fb121e",
   "light-client-requirements.md": "bc0ebf1d1794b602a87895076166e6139177eaf12fa975853d8142acd95e9711"
  },
@@ -1752,6 +1752,30 @@
     "cite": "\u00a78.2"
    },
    "note": "Attach carries an attestation failing validation"
+  },
+  {
+   "id": "TR9",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "no_sibling_failover",
+     "attach_refused"
+    ],
+    "cite": "\u00a79.2"
+   },
+   "note": "primary closes with application code 1 (refused) at attach"
+  },
+  {
+   "id": "TR10",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "foreclose_that_sibling_only",
+     "try_next_candidate"
+    ],
+    "cite": "\u00a79.2"
+   },
+   "note": "a failover sibling closes with code 1"
   },
   {
    "id": "V9",

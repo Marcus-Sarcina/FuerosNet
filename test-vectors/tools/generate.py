@@ -2287,6 +2287,8 @@ a sequence of events with the required actions.
 | TR6 | stream-0 frame with length prefix over 65,536 | protocol error — the stream 0 bound, distinct from §9.2's 262,144 (§8.0) |
 | TR7 | heartbeat counter gap observed | liveness accounting only — 3 consecutive missed INTERVALS drive failover, not counter arithmetic (§8.2) |
 | TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
+| TR9 | the primary serving node closes with application code 1 (`refused`) at attach | no sibling failover — a refusal is an answer, not an outage; the client is refused, not disconnected (§9.2) |
+| TR10 | during failover, a sibling closes with code 1 | that sibling alone is foreclosed; the next cached candidate is tried in order (§9.2) |
 """)
 
 # ================================================================ corpus.json
@@ -2683,6 +2685,8 @@ for trid, seq, actions, cite in [
     ('TR6', 'stream-0 frame with length prefix over 65,536', ['protocol_error'], '§8.0'),
     ('TR7', 'heartbeat counter gap observed', ['liveness_by_intervals_only'], '§8.2'),
     ('TR8', 'Attach carries an attestation failing validation', ['treat_attestation_absent', 'session_attaches'], '§8.2'),
+    ('TR9', 'primary closes with application code 1 (refused) at attach', ['no_sibling_failover', 'attach_refused'], '§9.2'),
+    ('TR10', 'a failover sibling closes with code 1', ['foreclose_that_sibling_only', 'try_next_candidate'], '§9.2'),
 ]:
     reg(trid, 'trace', {'actions': actions, 'cite': cite}, note=seq)
 for cid, inputs, expect in [

@@ -482,7 +482,7 @@ srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
-check(len(re.findall(r'\| TR\d ', ms)) == 8, 'messages: eight session traces')
+check(len(re.findall(r'\| TR\d+ ', ms)) == 10, 'messages: ten session traces')
 qc = frame_objs[12][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes')
@@ -521,9 +521,9 @@ _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presen
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
-check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 8
+check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 10
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
-      'corpus: eight traces and five contexts')
+      'corpus: ten traces and five contexts')
 check(byid['N-wrong-signer-anchor'].get('precondition') == 'the named key is pinned',
       'corpus: the anchor wrong-signer expect carries its pinned-key precondition')
 b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))

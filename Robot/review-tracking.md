@@ -2862,3 +2862,40 @@ lands as independent confirmation that the ruling was needed.
 Everything else — the disclosure roots across all six presentations, the
 formula table, the exclusive window and 24-hour boundaries, the seeding
 retirement, fourteen R/T/D semantic rows — hand-traced to agreement.
+
+## Cycle 2, pass 0.6 — implementation attempt, attach + failover (phase 1, 2026-09-02)
+
+Clean-room Rust attempt on target 4. The attach path held up well: no fields
+added, the UI/wire split honoured (degraded visibility stays a product
+obligation), the 0-RTT rule, sibling-pin safety, whole-list replacement, and
+the requirement-classification table all match. Five UNSPECIFIED questions.
+
+**No change (expressly local)**: #1 timeout/backoff; #2 endpoint-selection
+strategy (the lc floors — alternatives-not-first-failure and
+refusal-binds-the-node — correctly identified as the only constraints).
+
+**Ruled and applied:**
+- **#3 — a primary's refusal does not open sibling failover.** Derived from
+  the enumerated triggers (unreachable at attach; three missed intervals): a
+  refusal is an answer, not an outage, and siblings are not a channel for
+  overriding it. The reviewer's assumption agreed, and flagged it as their
+  most important open question — now wire §9's text. Trace TR9.
+- **#4 — one sibling's refusal forecloses that sibling alone**; the sweep
+  continues in order. The reviewer's assumption agreed. Wire §9; trace TR10.
+- **#5 — AttachAck field 4 is U64 RANGE**, stated so no implementation
+  narrows it by inference (the reviewer's exact worry: a u32 reading rejects
+  what a u64 reading accepts).
+
+**One latent implementation divergence anchored in prose**: their heartbeat
+sketch accepts only the exact expected counter, so after a single lost beat
+every subsequent one is ignored and a live server fails over — TR7's rule
+read backwards. The Heartbeat comment now states gap-detection is for
+information, never liveness: any not-yet-seen counter resets the clock, and
+failover counts intervals. Phase 2 would have caught it against TR7; the
+prose now says what the trace encoded.
+
+**Type decisions**: all sound, including the deliberately-open integer-first
+frame-type decode (a closed deserializing enum would tear down sessions on
+future frames). **Crate maturity**: transport assessment consistent with
+§5.2; the aws-lc-rs platform-table detail (emscripten tested, browser wasm
+not) sits inside the existing hedge.
