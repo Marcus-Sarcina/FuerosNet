@@ -2556,3 +2556,11 @@ covered by the archive criterion added under #3).
   authority to install it; only the owner's live authenticated channel is.
 - #16: wire §7.7's referral check now leads with strict-forward-progress before
   the `advances` encoding.
+
+**0.6 gains phase 2 (2026-09-02).** Vectors join the pass as acceptance data
+delivered after the clean-room attempt, never before, and never the tools
+directory — generate.py is a reference implementation in disguise. Divergences
+classify as implementation bug (noise), spec ambiguity (merges into phase-1
+findings; the vector is evidence of under-determination, not its resolution),
+or vector defect (a finding against the generator: verify, fix, regenerate).
+Prompt recorded in review-plan.md §0.6.
