@@ -2832,3 +2832,33 @@ deliberately-open location-method registry. **Crate maturity**: consistent
 with §5.2; the additions (RustCrypto's fixed rc-series advisories, the
 rustls-WASM-provider issue closed as not-planned) sit inside the existing
 caveats. ML-KEM correctly identified as off this code path.
+
+## Cycle 2, pass 0.6 — presence target, phase 2 (2026-09-02, version skew)
+
+The author purged the first phase-1 response early; phase 1 was re-run against
+the same (pre-ruling) documents and phase 2 then saw the CURRENT vectors
+against the OLD spec. The skew is itself informative: all three spec-level
+divergences are this morning's rulings read from the other side, and each
+lands as independent confirmation that the ruling was needed.
+
+- **V1 (vector defect: absent key 5)** — correct against the old schema,
+  where field 5 was unmarked-required and §1's empty rule explicitly excludes
+  required fields (the reviewer's quote verified). The morning ruling made
+  fields 4/5 subtype-conditional with omission mandated for zero responses, so
+  under the current spec the fixtures are well-formed and the bundle
+  arithmetic (n = 4) stands. Their corrected figures apply only to the
+  superseded reading.
+- **A1 (retired keys)** — their R14-vs-T29 catch was real: R14's tombstone
+  note, written 2026-09-01 under the preserve-as-extension reading,
+  contradicted 2026-09-02's tombstone ruling. R14's note now records the
+  supersession. The wire carries the reject rule; the suite is internally
+  consistent again.
+- **A2 (ordering tie)** — the ruling the morning pass produced; T28 was not
+  "inventing" the secondary key but encoding it. Current wire §4.5 states it.
+- **I1 (implementation bug: silently skipped missing-key embedded
+  signatures)** — the reviewer's own, correctly classified, and a live
+  demonstration of V3's unverifiable(key) dimension earning its place.
+
+Everything else — the disclosure roots across all six presentations, the
+formula table, the exclusive window and 24-hour boundaries, the seeding
+retirement, fourteen R/T/D semantic rows — hand-traced to agreement.

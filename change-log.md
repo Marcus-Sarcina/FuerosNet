@@ -7955,3 +7955,13 @@ since its authority is its maker's envelope signature over the root. Fields
 logical record, one encoding — resolving the reviewer's reading in favour of
 the shipped fixture. The curated bundle explicitly has no protocol ceiling;
 truncation is a visible local act.
+
+Phase 2 of the presence target ran under version skew (current vectors,
+pre-ruling spec) and returned the morning's three rulings as its three
+divergences — independent confirmation each was needed. One real repair
+resulted: R14's tombstone note still carried the superseded
+preserve-as-extension reading and now records the tombstone rule. All six
+presentations, the formula and boundary arithmetic, and fourteen semantic
+rows traced to agreement; the one implementation bug (silently skipped
+missing-key embedded signatures) is the reviewer's, and demonstrates the
+unverifiable(key) dimension.

@@ -128,7 +128,7 @@ works, not inputs.
 | R8 | A formation record whose key 0 is not exactly `[SHA-256(signer keyhash)]` per signer | Structural genesis rule |
 | R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
 | R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
-| R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. A record carrying key 7 is now an unknown-extension key, preserved under §1's rules |
+| R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. *The note this row briefly carried — key 7 as a preserved unknown extension — was superseded 2026-09-02 by the tombstone ruling*: a decoder meeting a retired number REJECTS (§4.5, T29) |
 | R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | **Revealed and violated → `structural = malformed`** — it is a structural rule like any other, and §3.2 now says so explicitly. Withheld → `checks[strongest] = unverifiable(withheld)`, never valid and never malformed. *An earlier revision of this row said the revealed case was a failed check rather than malformed — the sixth review caught the drift* |
 
 ### Transaction and record bindings (§4)
