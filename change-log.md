@@ -7888,3 +7888,11 @@ verifier-response arrays sort ascending by verifier keyhash, the witness rule.
 One genuine design gap is queued: recovery reuses the verifier-response schema
 but defines no selector or querier role for its queries. KeyMaterial-omission
 policy confirmed deliberately local.
+
+Phase 2 of the implementation attempt returned no vector defects and one
+implementation bug — the nested-extension fixture caught its intended failure
+class in an independent implementation. Must-accept row D5 is retired: its
+any-order rule predated the ascending-verifier-keyhash ordering and cited a
+non-canonicalisation sentence the wire format never contained; T28 carries the
+malformed case. The complete positive Recovery vector remains the queued
+canonical-bar item, blocked on the recovery selector ruling.

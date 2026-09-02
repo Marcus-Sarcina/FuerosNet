@@ -169,6 +169,7 @@ photo comparison without its template version is unverifiable as evidence:
 | T27 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–2 | §5.5: required, closed enumeration — the selector's claim of known / reachable / discretionary |
 | T25 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T26 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
+| T28 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding. An implementation preserving assembly order emits bytes a validator rejects |
 
 ## B. Context-dependent — bytes plus external state, structured result
 
@@ -211,7 +212,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its full envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and **all four signatures** verify over bytes including the unknown key. E10 is the mutation complement |
 | D3 | A `LocationEvidence` method value of 9 | The location-method registry is deliberately open (§4.5) |
 | D4 | A `Witness.attestation` with a reserved bit (3+) set | Reserved bits retained; interpret only 0–2 (§4.5) |
-| D5 | Verifier responses in any array order | Array order is not canonicalised (§5.5) |
+| D5 | ~~Verifier responses in any array order~~ | **Retired 2026-09-02**: responses sort ascending by verifier keyhash — the witness rule (§4.5, §4.1) — so arbitrary order is now T28's malformed case. The §5.5 citation was also an overreach: no such non-canonicalisation sentence existed. The id is not reused |
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
 | D8 | The `EndpointRecord` carrying unknown key `99: h'c0ffee'` (`records.md`) | §1: preserved and **covered on the standalone `COSE_Sign1` path** — the signature verifies over the payload including the unknown key. E13 is the mutation complement |

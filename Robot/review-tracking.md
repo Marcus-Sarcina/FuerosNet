@@ -2620,3 +2620,27 @@ the missing-key third verification state absorbs the failure mode.
 supported as the reviewer found; the rest are legitimately local. **(d) crate
 maturity** — matches design §5.2's existing unaudited-crates caveat; no change.
 Phase 2 (vectors as acceptance data) not yet run for this target.
+
+## Cycle 2, pass 0.6.1 — phase 2, vectors as acceptance data (2026-09-02)
+
+Run against the pre-0.6.1 documents. **No vector defects in the examined
+targets; no new spec ambiguities; one implementation bug** — the reviewer's
+typed Locator dropped the nested unknown extension, exactly the failure class
+the top-level-AND-nested extension vector was built to catch. First independent
+confirmation that a fixture catches its intended bug in a real second
+implementation. All four adoption vectors and eighteen negative/must-accept
+rows hand-traced to agreement; V9/V9b correctly outside the structural
+operation; the crypto octets not independently reproduced (same-preimage
+equivalence argued instead), as the phase-2 protocol permits.
+
+**One reconciliation ours**: must-accept row D5 ("verifier responses in any
+array order") predated the ordering rule this pass's phase 1 produced, and its
+rationale cell cited a §5.5 non-canonicalisation sentence that never existed.
+D5 retired (id not reused); T28 added — unsorted responses are malformed under
+the ascending-verifier-keyhash rule.
+
+**Coverage gap confirmed and carried**: no complete positive Recovery adoption
+exists in the corpus — query → consent → hybrid response → Recovery block
+remains the queued canonical-bar work, and it is exactly what would exercise
+the open selector/querier question. Blocked on that ruling; unblocking it
+builds the vector next.
