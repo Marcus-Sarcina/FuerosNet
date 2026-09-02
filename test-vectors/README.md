@@ -157,15 +157,13 @@ negatives (T9–T12). Still open:
    placeholder slots remain, and a second implementation confirmed keygen and
    signatures. What canonical status still awaits is unchanged in kind: an
    independent implementation reproducing the *whole suite*.
-2. **Promotion-blocking.** A normal-subtype presence record whose
-   participant, witness and `kid` orders deliberately differ (the seed order
-   died with the seed), with witnesses, embedded responses carrying
-   `selection_basis`, and its 36-entry envelope — which also supplies the
-   alice–bob record the optionals adoption's field 8 swaps to (V9's
-   deliberate mismatch until then). **Simplified 2026-09-01** by selection by
-   recognition: no nonces, no commitments, no seed — responses are gathered
-   from whoever the selector picked, and the record carries their claimed
-   basis.
+2. ~~A normal-subtype presence record~~ **DONE 2026-09-02**: alice–bob,
+   sixteen witnesses (the ceiling), participant/witness/kid orders all
+   different, three classical responses covering the `selection_basis`
+   matrix, a real disclosure set with a witness corroboration, the 36-entry
+   envelope — and the optionals adoption's field 8 now references it (V9
+   pass; the mismatch case moved to the divergence adoption, V9a). The
+   harness verifies every signature and every binding.
 3. **Promotion-blocking.** The **curated-bundle fixture** [author,
    2026-09-01: *"you can cherry-pick whatever PoP transactions you wish from
    any of your series and do not have to expose the intervening
@@ -182,23 +180,19 @@ negatives (T9–T12). Still open:
    committed-predecessor, bundle-minus-one and selection-binding cases of
    earlier revisions dissolved with the chaining and determinism they
    tested.*
-4. **Full `VerificationQuery` → `query_id` → consent → `VerifierResponse`
-   vectors** — *the Recovery/hybrid half landed 2026-09-02*: a complete
-   positive recovery adoption in `transactions.md` carries the query, the raw
-   query_id consent, a hybrid `COSE_Sign` verifier response over fields 1–8
-   and 10, the `[prior, new, patron]` successor proof, and `selection_basis`
-   0 — the only value a `Recovery` block admits; the harness verifies every
-   signature. **Still open**: the presence/classical authentication form and
-   the wider `selection_basis` matrix (T27), which need the normal record
-   (bar 2).
+4. ~~Full query → consent → response vectors~~ **DONE 2026-09-02**: both
+   authentication forms — Recovery/hybrid (the recovery adoption) and
+   presence/classical (the normal record's three responses, with a worked
+   ceremony-form query where the querier is the counterparty) — and the
+   `selection_basis` matrix: 0/1/2 positively across the normal record's
+   responses, 0-only inside a `Recovery` block, T27 carrying the malformed
+   cases. The harness verifies every signature in both forms.
 5. **The selective-disclosure construction** — *construction and
-   presentations done 2026-09-01*: the formation record now carries a real
-   §4.5.1 root (its synthetic-root caveat is gone), and full, partial and
-   minimal `PresentedRecord`s verify against the same envelope; the harness
-   recomputes every digest and all three roots. **Still open**: the negative
-   family — wrong slot count, duplicate or wrong labels, wrong salt width,
-   root mismatch, mutation of a revealed field — lands with the corpus format
-   (bar 6), and the normal record (bar 2) gets its own set.
+   presentations done 2026-09-01; the normal record's own presentation set
+   landed 2026-09-02* (full, partial, minimal, all recomputed by the
+   harness). **Still open**: the negative family — wrong slot count,
+   duplicate or wrong labels, wrong salt width, root mismatch, mutation of a
+   revealed field — lands with the corpus format (bar 6).
 6. **Machine-instantiable fixtures throughout**: every byte-level, context
    and must-accept case resolves to **exact bytes, or an unambiguous
    deterministic mutation of a named positive vector**, plus machine-readable
@@ -240,13 +234,14 @@ negatives (T9–T12). Still open:
     bytes, and each remaining signed context gets its analogue with its
     positive vector). The defect is always the same: a cryptographically
     valid signature under a key the object does not name.
-11. **Finalization semantics on the normal record**: must-accept records
-    finalized on `no-match`, `inconclusive`, `unavailable`, and on **absent
-    selected slots** — the threshold sizes the sample and does not gate
-    finalization, `pending` having left the enum entirely (V7); the
-    response-count must-accepts (V7) — the criterion gates nothing, and
-    over-strict decoders fail here. *(The commitment-mismatch and
-    bundle-binding cases retired 2026-09-01 with the machinery they tested.)*
+11. ~~Finalization semantics on the normal record~~ **DONE 2026-09-02**:
+    the main record finalizes over match/match/`unavailable`; the
+    must-accepts carry a record finalized on a lone `no-match` and one with
+    key 5 absent entirely — the threshold sizes the sample and gates nothing
+    (V7 instantiated). *(The commitment-mismatch and bundle-binding cases
+    retired 2026-09-01 with the machinery they tested; `inconclusive` is
+    exercised positively at the response level by T19–T22's legal-combination
+    matrix when the corpus format lands.)*
 12. **The enumeration/extension posture as a systematic matrix** (sixth
     review; E8's two wrong instantiations are the argument): every closed
     enumeration gets an unknown-value rejection fixture, every deliberately

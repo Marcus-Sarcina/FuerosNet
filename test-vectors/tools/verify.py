@@ -131,7 +131,8 @@ def sig_sign1(prot, aad, payload):
     return hd(4, 4) + ts('Signature1') + bs(prot) + bs(aad) + bs(payload)
 
 # ---------------------------------------------------------------- identities
-NAMES = ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']
+NAMES = (['alice', 'bob', 'carol', 'alice2'] + [f'w{i}' for i in range(1, 17)]
+         + ['c1', 'c2', 'c3', 'c4', 'c5'])
 ED, PQ, KH = {}, {}, {}
 for n in NAMES:
     ed = Ed25519PrivateKey.from_private_bytes(H(f'rhtn-test-vectors:{n}:ed25519-seed'.encode()))
@@ -349,7 +350,7 @@ for m in re.finditer(r'\*\*(Fully revealed|Partial|Minimal)\*\*.*?```\n([0-9a-f\
             ds.append(H(b'\x00' + D))
     if H(b'\x01' + b''.join(ds)).hex() == env[3][8]:
         pres_ok += 1
-check(pres_ok == 3, 'all three presentations recompute the root against the envelope body')
+check(pres_ok == 6, 'all six presentations (formation and normal record) recompute their roots')
 v = read('verifier-selection.md')
 good = True
 for n, c, r in re.findall(r'\| (\d+) \| (\d+) \| (\d+) \|', v):
@@ -398,6 +399,53 @@ for e in rec[3][3]:
     prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
     oks += verify_sig('alice', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:successor', succ))
 check(oks == 2 and len(rec[3][3]) == 2, 'recovery successor proof: hybrid by the OLD key over [prior, new, patron]')
+
+# ---------------------------------------------------------------- normal record (bar 2)
+BYNAME = {KH[n]: n for n in NAMES}
+nsect = tx[tx.index('## Normal presence record'):tx.index('## Finalization must-accepts')]
+n_body = canonical(bytes.fromhex(re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', nsect)
+                                 .group(1).replace('\n', '')))
+n_query = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```', nsect)[0]
+                                  .replace('\n', '')))
+check(H(enc({k: n_query[k] for k in (1, 2, 3, 4, 5)})).hex() == n_query[6],
+      'normal record: worked query_id recomputes from fields 1-5')
+check(n_query[2] != n_query[1]
+      and n_query[2] in (n_body[3][0][1], n_body[3][1][1])
+      and n_query[1] in (n_body[3][0][1], n_body[3][1][1]),
+      'normal record: querier and subject are the two participants (ceremony form)')
+wit = n_body[4]
+check(len(wit) == 16 and wit == sorted(wit, key=lambda w: w[1])
+      and len({w[1] for w in wit}) == 16,
+      'normal record: sixteen witnesses, ascending, distinct')
+pset = {n_body[3][0][1], n_body[3][1][1]}
+check(all(w[2] in pset for w in wit), 'normal record: every nominated_by names a participant')
+resps = n_body[5]
+check(resps == sorted(resps, key=lambda r: r[1]) and len(resps) == 3,
+      'normal record: responses sorted ascending by verifier keyhash')
+check({r[10] for r in resps} == {0, 1, 2}, 'normal record: selection_basis matrix covered')
+legal = [(0, 0, True), (0, 1, False), (3, None, False)]
+seen = sorted(((r[4], r.get(5), 6 in r) for r in resps))
+check(seen == sorted(legal), 'normal record: result/basis/template combinations are the legal set')
+ok_c = ok_v = 0
+for r in resps:
+    cp, cs = bytes.fromhex(r[7][0]), bytes.fromhex(r[7][3])
+    ok_c += verify_sig(BYNAME[r[2]], -8, cs, sig_sign1(cp, b'rhtn/1:consent', bytes.fromhex(r[3])))
+    vp, vs = bytes.fromhex(r[9][0]), bytes.fromhex(r[9][3])
+    payload = enc({k: r[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in r})
+    ok_v += verify_sig(BYNAME[r[1]], -8, vs, sig_sign1(vp, b'rhtn/1:verifier', payload))
+check(ok_c == 3 and ok_v == 3,
+      'normal record: every consent and verifier signature verifies (classical form)')
+n_env_hex = re.findall(r'```\n([0-9a-f\n]+?)```', nsect)
+n_env = canonical(bytes.fromhex([h for h in n_env_hex if len(h) > 60000][0].replace('\n', '')))
+check(len(n_env[4][3]) == 36, 'normal record: 36 envelope entries')
+
+fsect = tx[tx.index('## Finalization must-accepts'):tx.index('## Recovery adoption')]
+f_bodies = [canonical(bytes.fromhex(h.replace('\n', '')))
+            for h, _ in re.findall(r'```\n([0-9a-f\n]+?)```\n\ntxid: `([0-9a-f]{64})`', fsect)]
+check(len(f_bodies) == 2 and f_bodies[0][5][0][4] == 1,
+      'finalization: the lone no-match record is a positive vector')
+check(5 not in f_bodies[1] and f_bodies[1][6] == 0 and 4 in f_bodies[1],
+      'finalization: zero responses encode as an ABSENT key 5 on a normal record')
 
 print()
 if FAILURES:

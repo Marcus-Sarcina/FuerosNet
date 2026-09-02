@@ -196,7 +196,8 @@ class Identity:
         return ML_DSA_65.sign(self.pq_sk, data, deterministic=True)
 
 IDS = {n: Identity(n) for n in
-       ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']}
+       ['alice', 'bob', 'carol', 'alice2'] + [f'w{i}' for i in range(1, 17)]
+       + ['c1', 'c2', 'c3', 'c4', 'c5']}
 
 # ---------------------------------------------------------------- COSE pieces
 
@@ -337,11 +338,12 @@ so the entries appear as 1, −1, −2. The post-quantum `COSE_Key` is
 | Identity | Role in the vectors | Ed25519 public key | keyhash |
 |---|---|---|---|""")
 
-for name in ['alice', 'bob', 'carol', 'alice2', 'w1', 'w2', 'w3', 'c1', 'c2', 'c3', 'c4', 'c5']:
+for name in (['alice', 'bob', 'carol', 'alice2'] + [f'w{i}' for i in range(1, 17)]
+             + ['c1', 'c2', 'c3', 'c4', 'c5']):
     i = IDS[name]
     role = {'alice': 'node / subject', 'bob': 'patron', 'carol': 'counterparty',
-            'alice2': "alice's replacement key (recovery adoption)",
-            'w1': 'witness', 'w2': 'witness', 'w3': 'witness'}.get(name, 'verifier candidate')
+            'alice2': "alice's replacement key (recovery adoption)"}.get(
+        name, 'witness' if name.startswith('w') else 'verifier candidate')
     emit('keys.md', f"| {name} | {role} | `{hx(i.ed_pub)}` | `{hx(i.keyhash)}` |")
 
 emit('keys.md', f"""
@@ -761,6 +763,7 @@ div_body = e_map([
     (e_uint(2), e_bstr(div_patron.keyhash)),
     (e_uint(3), div_loc),
     (e_uint(4), e_uint(TS_ADOPT + 7200)),
+    (e_uint(8), e_bstr(formation_txid)),
 ])
 div_txid = H(div_body)
 div_env, div_entries = envelope(1, 1, div_body, [div_node, div_patron])
@@ -806,6 +809,163 @@ ext_body = e_map([
 ])
 ext_txid = H(ext_body)
 ext_env, ext_entries = envelope(1, 1, ext_body, [alice, bob])
+
+# --- Normal presence record (canonical bar 2): alice and bob, 16 witnesses,
+# three embedded classical verifier responses covering the selection_basis
+# matrix, a real disclosure set, and the 36-entry envelope. Participant order
+# is reverse-keyhash so participant, witness and kid orders all differ.
+AAD_CONSENT = b'rhtn/1:consent'
+AAD_VERIFIER = b'rhtn/1:verifier'
+AAD_SUCCESSOR = b'rhtn/1:successor'
+
+TS_C2 = TS_DEPART + 40 * 86400
+TS_C2F = TS_C2 + 3600
+W16 = sorted([IDS[f'w{i}'] for i in range(1, 17)], key=lambda i: i.keyhash)
+n_hi, n_lo = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)
+
+def witness_entry(w, nominated_by, bits):
+    return e_map([(e_uint(1), e_bstr(w.keyhash)),
+                  (e_uint(2), e_bstr(nominated_by.keyhash)),
+                  (e_uint(3), e_uint(bits))])
+
+# nominated_by alternates between the participants; attestation bits vary
+# within the interpreted 0-2 range (7 = all three, 3 = ran+responsive, 5 =
+# ran+latency).
+npr_witnesses = [witness_entry(w, alice if i % 2 == 0 else bob, (7, 3, 5)[i % 3])
+                 for i, w in enumerate(W16)]
+
+def vquery(subject, querier, precommit, profile_seed, tplv):
+    prof = H(profile_seed)
+    q15 = e_map([(e_uint(1), e_bstr(subject.keyhash)),
+                 (e_uint(2), e_bstr(querier.keyhash)),
+                 (e_uint(3), e_bstr(precommit)),
+                 (e_uint(4), e_bstr(prof)),
+                 (e_uint(5), e_uint(tplv))])
+    qid = H(q15)
+    full = e_map([(e_uint(1), e_bstr(subject.keyhash)),
+                  (e_uint(2), e_bstr(querier.keyhash)),
+                  (e_uint(3), e_bstr(precommit)),
+                  (e_uint(4), e_bstr(prof)),
+                  (e_uint(5), e_uint(tplv)),
+                  (e_uint(6), e_bstr(qid))])
+    return qid, full
+
+def consent_over(qid, subject):
+    prot = sig_protected(-8)
+    tbs = sig_structure_sign1(prot, AAD_CONSENT, qid)
+    return e_arr([e_bstr(prot), b'\xa0', NULL, e_bstr(subject.sign(tbs))])
+
+def classical_response(verifier, subject, qid, consent, result,
+                       basis=None, tplv=None, sb=0):
+    """Presence-record form: field 9 is COSE_Sign1, classical, over the
+    canonical CBOR of the present fields 1-8 and 10 (wire s4.5)."""
+    pairs = [(e_uint(1), e_bstr(verifier.keyhash)),
+             (e_uint(2), e_bstr(subject.keyhash)),
+             (e_uint(3), e_bstr(qid)),
+             (e_uint(4), e_uint(result))]
+    if basis is not None:
+        pairs.append((e_uint(5), e_uint(basis)))
+    if tplv is not None:
+        pairs.append((e_uint(6), e_uint(tplv)))
+    pairs.append((e_uint(7), consent))
+    payload = e_map(pairs + [(e_uint(10), e_uint(sb))])
+    prot = sig_protected(-8)
+    tbs = sig_structure_sign1(prot, AAD_VERIFIER, payload)
+    vsig = e_arr([e_bstr(prot), b'\xa0', NULL, e_bstr(verifier.sign(tbs))])
+    return e_map(pairs + [(e_uint(9), vsig), (e_uint(10), e_uint(sb))])
+
+npr_precommit = H(b'rhtn-test-vectors:normal-ceremony-precommitment')
+npr_verifiers = sorted([IDS['c1'], IDS['c2'], IDS['c3']], key=lambda i: i.keyhash)
+npr_q0, npr_query0 = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-0', 3)
+npr_q1, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-1', 3)
+npr_q2, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-2', 3)
+npr_responses = [
+    classical_response(npr_verifiers[0], alice, npr_q0, consent_over(npr_q0, alice),
+                       0, basis=0, tplv=3, sb=0),   # match, photo, known
+    classical_response(npr_verifiers[1], alice, npr_q1, consent_over(npr_q1, alice),
+                       0, basis=1, sb=1),           # match, personal, reachable
+    classical_response(npr_verifiers[2], alice, npr_q2, consent_over(npr_q2, alice),
+                       3, sb=2),                    # unavailable, discretionary
+]
+
+npr_values = {
+    'capture':      e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_uint(4)),
+                           (e_uint(3), e_uint(0)), (e_uint(4), e_uint(2))]),
+    'location':     e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)),
+                                                     (e_uint(2), e_tstr('u4pr'))])])),
+                           (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[0].keyhash)),
+                                                     (e_uint(2), e_uint(3)),
+                                                     (e_uint(3), e_uint(5))])]))]),
+    'p0.integrity': e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(1))]),
+    'p0.retention': e_uint(2),
+    'p1.integrity': e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(0))]),
+    'p1.retention': e_uint(3),
+    'proximity':    e_map([(e_uint(1), e_arr([
+                            e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
+                            e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])])),
+                           (e_uint(2), e_uint(2))]),
+}
+npr_slots, npr_root = disclosure_set('normal', npr_values)
+
+npr_signers = [n_hi, n_lo] + W16
+def _npr_head(s):
+    if s is alice: return [merge_txid]
+    if s is bob: return [adopt_txid]
+    return [genesis(s.keyhash)]
+npr_body = e_map([
+    (e_uint(0), backptrs(*[_npr_head(s) for s in npr_signers])),
+    (e_uint(1), e_uint(TS_C2)),
+    (e_uint(2), e_uint(TS_C2F)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr(npr_witnesses)),
+    (e_uint(5), e_arr(npr_responses)),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(npr_root)),
+])
+npr_txid = H(npr_body)
+npr_env, npr_entries = envelope(1, 5, npr_body, npr_signers)
+npr_full = presented(npr_env, npr_slots, set(LABELS))
+npr_min = presented(npr_env, npr_slots, set())
+npr_part = presented(npr_env, npr_slots, {'location', 'p1.retention'})
+
+# --- Finalization must-accepts (canonical bar 11, V7): a record finalized on
+# a lone no-match, and one finalized with NO responses at all (key 5 absent -
+# the empty array is never encoded). Both fork alice's and bob's chains, which
+# the archive-as-DAG permits.
+fin_precommit_a = H(b'rhtn-test-vectors:fin-nomatch-precommitment')
+fin_qa, _ = vquery(alice, bob, fin_precommit_a, b'rhtn-test-vectors:fin-nm-profile', 3)
+fin_nm_resp = classical_response(IDS['c4'], alice, fin_qa, consent_over(fin_qa, alice),
+                                 1, basis=0, tplv=3, sb=0)   # no-match
+fin_nm_slots, fin_nm_root = disclosure_set('fin-nomatch', npr_values)
+fin_nm_signers = [n_hi, n_lo, IDS['w1']]
+fin_nm_body = e_map([
+    (e_uint(0), backptrs(*[_npr_head(s) if s in (alice, bob) else [genesis(s.keyhash)]
+                           for s in fin_nm_signers])),
+    (e_uint(1), e_uint(TS_C2 + 86400)),
+    (e_uint(2), e_uint(TS_C2 + 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w1'], alice, 7)])),
+    (e_uint(5), e_arr([fin_nm_resp])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(fin_nm_root)),
+])
+fin_nm_txid = H(fin_nm_body)
+fin_nm_env, _ = envelope(1, 5, fin_nm_body, fin_nm_signers)
+
+fin_ab_slots, fin_ab_root = disclosure_set('fin-absent', npr_values)
+fin_ab_signers = [n_hi, n_lo, IDS['w2']]
+fin_ab_body = e_map([
+    (e_uint(0), backptrs(*[_npr_head(s) if s in (alice, bob) else [genesis(s.keyhash)]
+                           for s in fin_ab_signers])),
+    (e_uint(1), e_uint(TS_C2 + 2 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 2 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w2'], bob, 7)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(fin_ab_root)),
+])
+fin_ab_txid = H(fin_ab_body)
+fin_ab_env, _ = envelope(1, 5, fin_ab_body, fin_ab_signers)
 
 # --- Peering (type 4): bob and carol as infra peers; alternative continuations
 # of their existing chain heads (bob: the adoption; carol: the formation).
@@ -881,11 +1041,11 @@ adopt_full_body = e_map([
     (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
     (e_uint(1), e_bstr(alice.keyhash)),
     (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), loc),
+    (e_uint(3), adopt_loc),
     (e_uint(4), e_uint(TS_ADOPT)),
     (e_uint(5), alice.key_material),
     (e_uint(7), e_bstr(depart_txid)),
-    (e_uint(8), e_bstr(formation_txid)),
+    (e_uint(8), e_bstr(npr_txid)),
 ])
 adopt_full_txid = H(adopt_full_body)
 depart_r_body = e_map([
@@ -1109,6 +1269,10 @@ three verify against the same body root under the same envelope signatures.
 
 ## Adoption where signer order and kid order diverge — {div_node.name} adopted by {div_patron.name}
 
+Field 8 references the alice–carol formation record while this adoption is
+between {div_node.name} and {div_patron.name} — the dereference-mismatch case
+(context fixture V9a): structurally valid, `checks[proof_of_presence] = fail`.
+
 The node's keyhash sorts **after** the patron's, so §3.1's signer order
 ({div_node.name}, {div_patron.name}) and §3.5's entry order
 ({div_patron.name}, {div_node.name}) disagree. **Back-pointer list 0 is
@@ -1246,14 +1410,11 @@ reason, or peering's commitment and audit history. These three close that.
 
 **Adoption with fields 5, 7 and 8** — carried `KeyMaterial` (alice's, hashing
 to field 1 per §4.1), an archive head, and a proof-of-presence reference.
-**Field 8 is a structurally valid encoding only**: it references the
-alice–carol formation record, while this adoption is alice–bob — dereference
-evaluation (§3.4) finds a record that does **not** name these two parties
-(context fixture V9). Deliberate, twice over: the only presence record in the
-suite names the wrong pair, and a second formation record naming alice would
-violate §3.2's one-formation-per-key rule inside the positive universe. The
-reference becomes genuinely supporting when the normal alice–bob record lands
-(canonical bar 2). ({len(adopt_full_body)} bytes):
+**Field 8 references the normal alice–bob presence record** (canonical bar 2,
+landed 2026-09-02): dereference evaluation (§3.4) finds a record naming exactly
+these two parties — context fixture V9's *pass* case. The mismatch case lives
+on the divergence adoption above, whose field 8 references the alice–carol
+formation record (context fixture V9a). ({len(adopt_full_body)} bytes):
 
 ```
 {hexblock(adopt_full_body)}
@@ -1279,15 +1440,110 @@ txid: `{hx(depart_r_txid)}`
 
 txid: `{hx(peer_full_txid)}`""")
 
+emit('transactions.md', f"""
+## Normal presence record — alice and bob, sixteen witnesses, 36-entry envelope
+
+Canonical bar 2. Subtype 0; participant order is reverse-keyhash
+({n_hi.name} first), witness order is ascending keyhash, and envelope entries
+sort by kid — three orders, all different, so a decoder conflating any two
+fails here. Sixteen witnesses is the §1 ceiling: with both participants that
+is eighteen logical signers and **36 envelope entries**. `nominated_by`
+alternates between the participants; attestation bits vary within the
+interpreted 0–2 range. Field 5 carries three classical responses **sorted
+ascending by verifier keyhash**, covering the `selection_basis` matrix — 0
+(known) with a photo match, 1 (reachable) with personal knowledge (no
+template version, per the field-6 presence rule), 2 (discretionary) with
+`unavailable` (no basis, no template). Disclosure salts derive from nickname
+`normal` (the formation's recipe); the location value carries a witness
+corroboration. Back-pointers: alice continues her merge, bob his adoption,
+every witness its genesis.
+
+Worked verification query for the first response (querier is **bob**, the
+counterparty — the ceremony form, against the recovery form where the
+verifier is its own querier):
+
+```
+{hexblock(npr_query0)}
+```
+
+query_id: `{hx(npr_q0)}`
+
+Body ({len(npr_body)} bytes):
+
+```
+{hexblock(npr_body)}
+```
+
+txid: `{hx(npr_txid)}`
+
+Envelope bytes ({len(npr_env)} bytes — final, all 36 signatures real):
+
+```
+{hexblock(npr_env)}
+```
+
+### Presentations of the normal record
+
+**Fully revealed** ({len(npr_full)} bytes):
+
+```
+{hexblock(npr_full)}
+```
+
+**Partial** — location and p1.retention revealed ({len(npr_part)} bytes):
+
+```
+{hexblock(npr_part)}
+```
+
+**Minimal** — all seven withheld ({len(npr_min)} bytes):
+
+```
+{hexblock(npr_min)}
+```
+
+## Finalization must-accepts (V7) — the threshold gates nothing
+
+Two normal records an over-strict decoder wrongly rejects. Both fork alice's
+and bob's chains, which the archive-as-DAG permits (§3.1).
+
+**Finalized on a lone no-match** — one witness, one response, result 1. A
+no-match is evidence, not a validity failure ({len(fin_nm_body)} bytes):
+
+```
+{hexblock(fin_nm_body)}
+```
+
+txid: `{hx(fin_nm_txid)}`
+
+Envelope ({len(fin_nm_env)} bytes):
+
+```
+{hexblock(fin_nm_env)}
+```
+
+**Finalized with no responses at all** — key 5 absent (§1: the empty array is
+never encoded). Absent slots are the encoding of unanswered queries; the
+criterion sizes the sample and does not gate finalization
+({len(fin_ab_body)} bytes):
+
+```
+{hexblock(fin_ab_body)}
+```
+
+txid: `{hx(fin_ab_txid)}`
+
+Envelope ({len(fin_ab_env)} bytes):
+
+```
+{hexblock(fin_ab_env)}
+```""")
+
 # --- Recovery adoption (type 1): alice2 recovers alice's identity, adopted by
 # bob; carol (a prior counterparty of alice: the formation ceremony) is the
 # verifier. Per design s9.1 the verifier is its own querier; selection_basis is
 # 0 (known) by rule; personal_knowledge is the ordinary basis, so response
 # field 6 is absent. The recovery meeting's pre-commitment binds the query.
-AAD_CONSENT = b'rhtn/1:consent'
-AAD_VERIFIER = b'rhtn/1:verifier'
-AAD_SUCCESSOR = b'rhtn/1:successor'
-
 rec_precommit = H(b'rhtn-test-vectors:recovery-ceremony-precommitment')
 rec_profile = H(b'rhtn-test-vectors:recovery-fuzzed-profile')
 REC_TPL_V = 3

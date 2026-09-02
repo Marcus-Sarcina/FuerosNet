@@ -2675,3 +2675,8 @@ harness's own canonicality gate, which is the division of labour working.
 records.md's queued list and README bar 4 updated; still open there: the
 presence/classical form and the selection_basis matrix, which need bar 2's
 normal record.
+
+**The querier derivation confirmed by the author (2026-09-02): "Yes."** §9.1's
+counterparty-is-its-own-querier stands as ruled. **New standing practice, same
+date**: close all open work before proceeding with further review passes — the
+author hopes to make cycle 2 the final cycle. Open work therefore precedes 0.6.2+.
