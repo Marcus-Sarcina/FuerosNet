@@ -7833,3 +7833,13 @@ request. A table update is enforced at issuance and reconnection; where the
 node itself holds the session the drop on authorisation change is mandatory,
 and a non-intermediated connection cannot be relied on to drop. The periodic
 cadence becomes the twelfth unset parameter.
+
+### 2026-09-02 (cycle 2, pass 0.3: the census holds)
+The unsupported-claims pass independently counted 123 total and 79 load-bearing
+— the same figures §20's own census sentence has carried, so the register's
+arithmetic is externally reproduced. Of the 79, all but eight were already
+disclosed by the A-register, §21's chosen-basis table, the wire ceilings'
+no-capacity-study note, or existing §20.1 rows; seven rows now cover those
+eight (the two SSO claims share one). And one adjective became arithmetic: the
+greased-id collision probability is k/2^64 per draw, derived from the id
+space wire §8.1.1 already states.

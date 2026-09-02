@@ -6538,6 +6538,13 @@ mistaken for established results.
 | 7.5.1 | Ageing is modest for adults, severe for minors, "substantial in 24 months" | Degradation with age and particular difficulty with children are supported; the sharp threshold and the 24-month figure are not. **Kept by ruling** [author, 2026-09-02]: the tier needs a threshold, two years is a common one, and it is close enough on several axes, of which face ageing is only one — the figure locates a chosen threshold, it does not derive it (§7.5.1 says the same: a compromise, not an optimum on any axis) |
 | B.1 | Face entropy makes fuzzy commitments' security margins weak | Depends on representation, entropy estimate and helper-data construction. **A design concern, not a settled result** |
 | 16.6 | Infra costs ~$20/month retail, ~$5–7 marginal to an attacker | Budgeting assumptions. Cloud pricing varies by provider, region and commitment. **Specify configuration and date if used as threat-model inputs** |
+| 1 | Account age and engagement are "cheap to manufacture" | The rejection of those scarcity mechanisms in favour of physical presence. No comparative Sybil-cost measurement |
+| 1.2.1 | "Trust emanates from the user", so a subject's confidence in their own evidence outranks an attacker's | Per-observer trust rather than global scoring rests partly on it. An epistemic claim, argued rather than demonstrated |
+| 1.2.4 | "Disaggregation defeats bulk collection" | The privacy mechanism's headline. The per-target half is registered above; the bulk half has no collection-cost model behind it |
+| 1.3 | "Any SaaS supporting enterprise SSO is most of the way to being usable here"; federation "turns an integration project into a configuration task" | The SSO-adaptor adoption path. No representative integration has been exercised |
+| 7.1.1 | "A large fraction of the nodes a party would like to nominate are inactive" at ceremony time | Probe-after-selection rather than advertise-and-select. An availability claim with no measurement |
+| 11 | "A compromised resource leaks its own data, not the owner's archive" (also `resource-requirements.md` §1) | The credential gateway instead of a scoped archive-read API. A confinement conclusion stated, not demonstrated across interfaces and side channels |
+| `resource-requirements.md` §4.1 | "A resource application can be any scale" via per-patron federation | Neighbourhood-scoped resources instead of wider protocol scope. No federated instance has been built |
 
 The 2-year retention parameter (§7.5.1) partly rests on the ageing assumption
 above, so its basis is weaker than the surrounding argument implies.

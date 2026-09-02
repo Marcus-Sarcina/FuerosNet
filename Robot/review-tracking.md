@@ -2435,3 +2435,35 @@ statement; rr §7's departure bullet already stated the brokered half and stands
 The periodic cadence joins §21.1's needs-measurement table and §21.1.1's
 freely-tunable list; §22.2's count moves to twelve. The 0.2 queue is empty
 again.
+
+## Cycle 2, pass 0.3 — unsupported-claims census (2026-09-02)
+
+**The reviewer's independent count reproduces the register's own arithmetic
+exactly**: 123 unsupported claims, 79 load-bearing, against §20's stated "79
+load-bearing... and 123 in total, against the 31 listed in §20.2". The A–E
+categories and the SUPPORTING/COLOUR split are the reviewer's overlay. The
+reviewer accepts §20's curation frame and its chosen-is-disclosure distinction,
+and excludes the derived numbers (18 envelope signers, 36 COSE entries, λ<1/f)
+on the same boundary the documents draw.
+
+**Structure of the 79**: 31 = the A-register (all registered); 18 = §21's chosen
+operating points (self-declared); 17 = wire §1's ceilings (self-declared "no
+capacity study"); 13 = other structural, of which five were already §20.1 rows.
+**The true delta was eight claims registered nowhere** (census rows 67, 73–79).
+Seven §20.1 rows added covering them (the two §1.3 SSO claims share a row):
+cheap-to-manufacture, trust-emanates, disaggregation-defeats-bulk, the SSO
+adoption path, nominee inactivity (§7.1.1), the compromised-resource confinement
+conclusion (§11 + rr §1), and rr §4.1's any-scale federation claim. §20.2's
+A-table is untouched at A1–A31; the census sentence needs no change since it
+counts claims, not rows.
+
+**One derivation applied**: wire §8.1.1's greased-id collision "negligible
+probability" is now stated as k/2^64 per draw against a peer holding k
+unpublished capabilities — computed from the section's own 64-bit id space, in
+the style of its existing 2^32 birthday bound.
+
+**Left alone deliberately**: the 32 SUPPORTING and 12 COLOUR rows. The colour
+class is the author's rhetoric (the A18 precedent: rhetoric, not proof, and
+his); the supporting class repeats claims already registered or self-evidently
+labelled. Row 91's ten-of-eleven "enumeration needed" is satisfied by the
+eleven-row reads table itself, verified during 0.2.

@@ -2853,8 +2853,9 @@ node except its serving node's siblings.
 #### 8.1.1 Greasing — required, not decorative
 
 *A greased id is drawn avoiding ids the sender knows; collision with an id known
-only to the peer is accepted at its negligible probability, and the peer treats
-the value as an ordinary unknown parameter.*
+only to the peer is accepted at its probability — k/2^64 per draw against a peer
+holding k unpublished capabilities, negligible at any real k — and the peer
+treats the value as an ordinary unknown parameter.*
 
 **Every implementation MUST tolerate receiving parameters whose ids it does not
 recognise.** That is checkable by anyone: send one and observe whether the session
