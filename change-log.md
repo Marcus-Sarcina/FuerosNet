@@ -7875,3 +7875,16 @@ identity judgment only where it ran the supporting comparison, a client must be
 able to authenticate every failover peer before it needs one, possession of a
 signed catalog entry is not authority to install it, and a referral moves the
 requester strictly forward.
+
+### 2026-09-02 (cycle 2, pass 0.6.1 phase 1: adoption implementation attempt)
+The clean-room implementation attempt surfaced two real conflicts and two
+under-determinations, all fixed in the wire format: the Recovery-presence prose
+no longer says every rotation carries the block — design §9's plain rotation
+carries nothing and is an ordinary adoption on the wire; template_version is
+bounded to uint16 per design §8.1; an adoption's locator now explicitly opens
+its series at counter 0, the reissue rule, with all three adoption fixtures
+regenerated from arbitrary counters and a harness check added; and both
+verifier-response arrays sort ascending by verifier keyhash, the witness rule.
+One genuine design gap is queued: recovery reuses the verifier-response schema
+but defines no selector or querier role for its queries. KeyMaterial-omission
+policy confirmed deliberately local.

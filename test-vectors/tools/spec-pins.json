@@ -1,22 +1,22 @@
 {
  "specs": {
-  "wire-format.md": "9d4919ad7717c945bdf5bf22684d970c41f7b29e0bda88c8620eab746a1ef611",
+  "wire-format.md": "6dc8240ecc46f082dcd74881f2979ec345b4080196e0516531156dd889f37f71",
   "network-design.md": "89a68e17ae795f2ef5a63eead4050f78ee6ec2a5ddc3c42847ad540f53be4fd5",
   "light-client-requirements.md": "bc0ebf1d1794b602a87895076166e6139177eaf12fa975853d8142acd95e9711"
  },
- "generator": "c72e17d0adc18a3a32b812cdd5b45382484a14bc0bd47e7021141acf6169a632",
- "verifier": "22e56afdca782e6c486bb5c8a2be03eaf07b8afd2c1bb7a2e93825c6f7bb4011",
+ "generator": "b6dc0be97a7e485b9c90fbe2a5ffbe638c637ecc68a6fcc6ed318708e7889a49",
+ "verifier": "1afdab8dec18697c847291b5449c961061d6c90111cced478a775cdc0e31f268",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "017214097d30c5fb48d9f2d42c61656f1c898ad11aabb462cf002170456968ae",
-  "primitives.md": "2fb551b653880ee3e2f767b62ca44bcc82a3d5c5c419d23997c954a613518f43",
-  "transactions.md": "913290f1426e06496dcae5b2be80fe9bfc900342aa03c02438d5b522ecab8f3a",
-  "records.md": "1116a0821859dbc777b0a4caa6fcfce9c4824bb3038e86b12615f495d6011510",
-  "verifier-selection.md": "fe6e0ec9ce82b122dc460523e4cb63dff3335b23d399f1b0b4197bd62da09081",
-  "README.md": "88cf1bafbd9fac57067978383c7299c1c2fb485cc6b027fec668ab7f4471ed77",
-  "negative-vectors.md": "0cd9f29d21b3c7a7d80e744cb39e179925287a6a0d6827fa00c4ce34bedbd783"
+  "keys.md": "c8f27e7e7a7e9a5c596ad0f723c5e01c23af1bbf9e3977cee2e6450b04a34464",
+  "primitives.md": "e2f7329aa6f82196edc54ec59b4e7691cacf38de70be4384298b56e1580a6b33",
+  "transactions.md": "c719c42124548103de236f7a4c7b383044653a51a40df0227033001de6e35b56",
+  "records.md": "9b14583a8e3f48cba442abd31ed9163564388c29a734d2b699820dfbec229107",
+  "verifier-selection.md": "0297bd9e76564b2d0d4f5d8e69d36732268d0e60b8ba4ad1cbb61afdb672f2ec",
+  "README.md": "5c473d57d1c5f1689064ee852e0cc018f0ebab5956e8caf290458aab35f58293",
+  "negative-vectors.md": "7cec888ddab511b6978ae07554560b46efeb1e6c0557fde13a098c345d3c88a9"
  }
 }

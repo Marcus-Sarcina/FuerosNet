@@ -2564,3 +2564,59 @@ classify as implementation bug (noise), spec ambiguity (merges into phase-1
 findings; the vector is evidence of under-determination, not its resolution),
 or vector defect (a finding against the generator: verify, fix, regenerate).
 Prompt recorded in review-plan.md §0.6.
+
+## Cycle 2, pass 0.6.1 — implementation attempt, adoption + recovery (phase 1, 2026-09-02)
+
+Clean-room Rust attempt. Two claimed conflicts and four UNSPECIFIED questions;
+every claim verified against text.
+
+**Conflict 1 — real, wire fixed.** Wire §4.1's prose said "`Recovery` is
+present on a rotation and absent otherwise... every rotation carries both
+halves", against its own schema comment ("present iff this is a recovery
+adoption") and design §9's explicit case split: "A plain rotation carries
+nothing... A recovery adoption is the other case and publishes the link
+deliberately." The word *rotation* was doing double duty. The prose now reads:
+present iff the adoption claims a predecessor's history; a plain rotation is an
+ordinary adoption on the wire and carries no Recovery; the no-variants rule now
+binds the block itself. The reviewer's precedence resolution (Option<Recovery>)
+was correct.
+
+**Conflict 2 — real, wire fixed.** Design §8.1's schema says `template_version:
+uint16`; wire's VerifierResponse field 6 said bare `uint`. Now bounded
+0..=65535 with values above malformed, citing design §8.1.
+
+**UNSPECIFIED #1 — applied as a rule.** Initial counter for an
+adoption-established series was unstated; a reissue explicitly opens at 0.
+Wire §4.1's locator comment now states: the adoption's seqno opens the
+relationship's series at counter 0, the reissue rule. All three adoption
+fixtures carried arbitrary counters (42, 1, 42) and were regenerated at 0 —
+which also makes the fixture narrative coherent (later locators at 42/100/max
+all advance from the opening). Harness gains the check. **Author should
+confirm the rule**; interop requires one and the reissue precedent selects it.
+
+**UNSPECIFIED #2 — applied as a rule.** Neither response array (presence field
+5, Recovery field 2) had an ordering rule, against a unanimous house precedent:
+witnesses, merge heads, disclosure labels and catalog populations all sort
+ascending. Both arrays now sort ascending by verifier keyhash ("the witness
+rule, one set one encoding"). Fixtures unaffected (no multi-response array
+exists yet). **Author should confirm.**
+
+**UNSPECIFIED #3 — genuine design gap, queued for the author.** Recovery
+responses reuse VerifierResponse: field 10 is "the selector's claim" and
+query_id derives from a VerificationQuery carrying a querier — but recovery
+defines no selector or querier role. In a ceremony the counterparty selects; in
+recovery, is the querier the adopting patron, or the recovering subject
+approaching prior counterparties directly — and what does selection_basis mean
+there? Two implementations independently producing recovery evidence would
+populate incompatible signed bytes. Not invented; the reviewer likewise
+stopped at the module boundary.
+
+**UNSPECIFIED #4 — no change.** KeyMaterial omission is deliberately local
+policy; an archived object faces many future recipients, so the sibling rule's
+sender-history test cannot apply. Both presence and absence are conforming and
+the missing-key third verification state absorbs the failure mode.
+
+**(c) type decisions** — no document changes: the constrained ones are
+supported as the reviewer found; the rest are legitimately local. **(d) crate
+maturity** — matches design §5.2's existing unaudited-crates caveat; no change.
+Phase 2 (vectors as acceptance data) not yet run for this target.

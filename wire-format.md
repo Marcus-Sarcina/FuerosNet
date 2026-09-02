@@ -830,7 +830,9 @@ Subsumes key rotation and recovery.
 {
   1: keyhash,          ; node being adopted
   2: keyhash,          ; patron
-  3: Locator,          ; node's resulting position
+  3: Locator,          ; node's resulting position. Its seqno opens the
+                       ;   relationship's series at counter 0 — the same rule
+                       ;   a series reissue states for its new series (§4.6)
   4: timestamp,
   5: ? KeyMaterial,    ; the ADOPTED NODE's key material, never the patron's
                        ;   — there is no discriminator on the wire, so the profile
@@ -851,7 +853,9 @@ Recovery = {
   1: keyhash,          ; prior key whose history is claimed
   2: [ + VerifierResponse ],     ; at least one, and at least one `match`.
                        ;   The PRESENCE half: a prior counterparty who met the
-                       ;   subject again and recognised them
+                       ;   subject again and recognised them.
+                       ;   Sorted ascending by verifier keyhash — the witness
+                       ;   rule, one set one encoding
   3: COSE_Sign         ; by the OLD key. The KEY half. COSE_Sign rather than
                        ; COSE_Sign1 because the old identity is hybrid and one
                        ; logical signer contributes two entries (§3.5)
@@ -867,9 +871,12 @@ alone, where design §6.2.5's rule otherwise needs topology state. For the
 two-signer types the envelope layer agrees independently: a required signer set
 collapsing to one identity collides with §3.5's no-duplicate-signers rule.
 
-`Recovery` is present on a rotation and absent otherwise. **There are no
-variants of it**: every rotation carries both halves, the old key's signature and a
-prior counterparty's `match` (below).
+`Recovery` is present iff the adoption claims a predecessor's history — the
+recovery adoption of design §9 — and absent otherwise. A **plain rotation
+carries nothing** (design §9): on the wire it is an ordinary adoption,
+indistinguishable from a fresh one, and no `Recovery` appears. **There are no
+variants of the block itself**: every claim of predecessor history carries both
+halves, the old key's signature and a prior counterparty's `match` (below).
 
 **Keystream seeds are local, private and never on the wire.** A participant's
 seed for a counterparty's captures lives in that participant's own record of the
@@ -1188,6 +1195,8 @@ Field-for-field per design §8.1.
   3: [ Participant, Participant ],
   4: [ * Witness ],
   5: [ * VerifierResponse ],
+                       ;   sorted ascending by verifier keyhash — the witness
+                       ;   rule, one set one encoding
   6: uint,             ; record subtype: 0 = normal, 1 = formation (design
                        ;   §13.2). In the body, not disclosable: structurally
                        ;   load-bearing, and a formation record's absent keys 4
@@ -1305,7 +1314,9 @@ VerifierResponse = {
                        ; demand a template version that may not exist, and
                        ; personal_knowledge as a sentinel is structurally valid
                        ; and false
-  6: ? uint,           ; template version. REQUIRED when basis is 0 or 2;
+  6: ? uint,           ; template version, 0..=65535 — design §8.1's schema
+                       ;   says uint16, and a larger value is malformed.
+                       ;   REQUIRED when basis is 0 or 2;
                        ; MUST be absent when basis = 1 or absent. The optional
                        ; marker is syntax; result and basis determine presence
   7: COSE_Sign1,       ; SUBJECT's countersignature. Payload: the RAW 32 BYTES of

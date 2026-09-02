@@ -392,6 +392,9 @@ p_even = path([3, 1, 4, 1])
 sq = seqno(5, 42)
 sq_max = seqno(5, 0xFFFFFFFF)
 loc = locator(bob.keyhash, p_odd, sq)
+# An adoption's locator opens the relationship's series at counter 0 (§4.1);
+# the standalone SignedLocator fixtures above keep sq's later counter values.
+adopt_loc = locator(bob.keyhash, p_odd, seqno(5, 0))
 
 # SignedLocator: COSE_Sign1 by the subject over canonical CBOR of fields 1-2,
 # external_aad "rhtn/1:locator", classical only, no kid (embedded/named signer).
@@ -626,7 +629,7 @@ adopt_body = e_map([
     (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
     (e_uint(1), e_bstr(alice.keyhash)),
     (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), loc),
+    (e_uint(3), adopt_loc),
     (e_uint(4), e_uint(TS_ADOPT)),
 ])
 adopt_txid = H(adopt_body)
@@ -750,7 +753,7 @@ ordered_names = [alice_first.name, bob_first.name]
 # envelope entries come second.
 div_node, div_patron = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)[0], \
                        sorted([alice, bob], key=lambda i: i.keyhash)[0]
-div_loc = locator(div_patron.keyhash, path([2, 7]), seqno(9, 1))
+div_loc = locator(div_patron.keyhash, path([2, 7]), seqno(9, 0))
 div_body = e_map([
     (e_uint(0), backptrs([genesis(div_node.keyhash)], [genesis(div_patron.keyhash)])),
     (e_uint(1), e_bstr(div_node.keyhash)),
@@ -790,7 +793,7 @@ code40_txid = H(code40_body)
 # re-serialised, and covered by txid and signatures (§1).
 ext_loc = e_map([(e_uint(1), e_bstr(bob.keyhash)),
                  (e_uint(2), path([3, 1, 4, 1, 5])),
-                 (e_uint(3), seqno(5, 42)),
+                 (e_uint(3), seqno(5, 0)),
                  (e_uint(99), e_bstr(bytes.fromhex('beef')))])  # NESTED unknown key
 ext_body = e_map([
     (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),

@@ -222,6 +222,8 @@ for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
     t = obj[2]
     err = validate_body(t, obj[3])
     assert err is None, f'type-{t} body schema: {err}'
+    if t == 1:
+        assert obj[3][3][3][1] == 0, 'adoption locator must open its series at counter 0 (s4.1)'
     if SCHEMAS[t][1] is None:  # presence: participants + witnesses
         derived = {pp[1] for pp in obj[3][3]}
         derived |= {w[1] for w in obj[3].get(4, [])}
