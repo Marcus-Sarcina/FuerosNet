@@ -166,6 +166,7 @@ loudly.
 | general (enum posture) | reject open-registry values | D1 (disavowal band), D3 (location method), D4 (witness bits), greased capabilities |
 | general (finalization) | enforce a response minimum | V7's fixtures — a lone no-match and no responses at all both finalize |
 | catalog U3 (0.6.6) | require a locally installed backend for every registration | `P-frame-16` + `P-catalog` — a brokered entry whose endpoint belongs to the external service registers validly |
+| authorization U9 (0.6.7) | terminate the caller's whole transport session on a role-row change | TR16 — retire the resource-facing identifier; the transport and other resources' hosted sessions survive |
 
 The family grows with every implementation round: when a divergence recurs
 despite the spec deciding it, the deciding fixture lands here.

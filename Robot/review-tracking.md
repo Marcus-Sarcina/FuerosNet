@@ -3190,3 +3190,40 @@ each resolves.
 
 **Both harnesses green after regeneration**: Python 79/79, Rust runner
 145 pass 0 fail.
+
+## Cycle 2, pass 0.6 — resource-authorization phase 2 (2026-09-02)
+
+**Zero divergences in all three classes**, and the reviewer's six-vector hand
+trace verified accurate on every checkable claim: P-frame-15 is 163 bytes
+carrying c5's resource keyhash and the spoofed `rhtn-principal` inside the
+HTTP bytes; P-reply-08/09 are 46 and 3 bytes as read; N-enum-resource-status
+is `a10109`; N-shape-frame-arity is `[3]`; TR3 is the type-99 trace. The
+side observation (c5 serves as both catalog resource and this fixture's
+resource) is correct and intended — identities are fixtures, not roles.
+
+**The payload is the coverage report**: the vectors reach the wire shapes and
+shared framing but none of the authorization mechanism. Disposition of the
+eighteen uncovered behaviours:
+
+- **Vectored now (stress directive, author 2026-09-02)** — three traces:
+  TR15 (type-6 in 0-RTT early data: defer-or-reject, never process — pins
+  U6's ruling; the phase-1 reviewer got this right but the spec should not
+  require rediscovery), TR16 (role-row change retires the resource-facing
+  identifier; transport and other resources' sessions survive, in-flight
+  completes under its starting snapshot — pins U9 against the whole-transport
+  reading the phase-1 attempt itself adopted; README stress row added),
+  TR17 (a non-member with a stale role row in the snapshot gets status 1,
+  never 4 or 5 — the evaluation order is what keeps member-specific statuses
+  inside the membership).
+- **Already closed between their phases**: the pairwise-principal KAT landed
+  in the phase-1 ingest; their vector set predated it.
+- **Deliberately out of remit, no change**: exact node→resource
+  reserialization bytes (explicitly non-interoperable), local-socket
+  authority, availability meaning, session-id representation, audience/
+  header emission and stripping conduct, backend-death races, timing
+  equalization — behavioural client/operator commitments the README already
+  says this suite does not certify. Recorded, not vectored.
+
+Trace count 14 → 17; the two harness checks pinning fourteen updated
+(the counts-drift rule, again). Python harness 79/79; Rust runner 145 pass,
+0 fail, the new traces in its structured-skip set. Corpus at 185 entries.

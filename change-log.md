@@ -8089,3 +8089,19 @@ must agree byte-for-byte or a provider migration renames every user a
 resource knows. A known-answer vector now pins the construction, recomputed
 by the Python harness (79 checks). A reference sweep fixed two pre-existing
 bare cross-document citations in wire §5.5 and light §2.
+
+### 2026-09-02 (cycle 2, 0.6 resource-authorization target, phase 2)
+
+The clean-room implementation and the draft vectors agree everywhere they
+meet: zero implementation bugs, zero spec ambiguities, zero vector defects.
+What phase 2 actually delivered is a coverage map — the resource-path vectors
+exercise wire shapes and shared framing, not the authorization mechanism —
+and three traces now close the compatibility-relevant part of that gap. TR15
+pins the 0-RTT rule for opaque requests (never process, whatever the method).
+TR16 pins termination granularity — the very reading the implementation
+attempt got wrong before the spec ruled: a role-row change retires the
+resource-facing identifier while the transport session and other resources'
+hosted sessions survive. TR17 pins the evaluation order that keeps
+member-specific refusal statuses inside the membership. The remaining
+uncovered behaviours are operator conduct the suite's own remit excludes.
+Seventeen traces; both harnesses green.
