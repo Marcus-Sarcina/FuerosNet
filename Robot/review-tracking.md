@@ -3025,3 +3025,36 @@ the Zeroizing seed/key ownership, the no-Unknown-variant enums, the raw-slice
 extension preservation, and the affirmative refusal to give ReleasePolicy a
 transmitted reason code (withholding must stay indistinguishable). Crate
 assessment matches §5.2. Harness: 72 checks, all passing.
+
+## Cycle 2, pass 0.6 — capture/query phase 2 (2026-09-02)
+
+**Two real vector defects, both ours, both the same root error, both fixed**:
+the KeyGrant chain treated the record under assembly as the sealing context.
+The fixture's field 1 named the current alice–bob record's txid — circular,
+since that txid embeds the very responses the grant unlocks — and the
+derivation used the current ceremony's pre-commitment for a capture c1 could
+only hold from a meeting c1 participated in. The fixture universe did not even
+contain such a meeting. Built now: **the prior alice–c1 record**
+(`P-alice-c1-record`), with its own contributory pre-commitment; the
+derivation and the KeyGrant re-derive from it; the harness pins both the
+prior-record binding and the current-query binding, so the circularity class
+cannot recur silently. Wire §7.3's field-1 comment already said "ordinarily
+the latest finalized eligible meeting" — the generator simply violated it, and
+the reviewer's hand-trace of their own release path produced the correct shape
+the fixture now has.
+
+**One caption defect fixed with structure**: the replies-group caption claimed
+the u32-be prefix applies on the wire — true for stream replies, an
+overreach for the two end-to-end payloads, whose framing is §14.2.4's open
+demultiplexing decision. messages.md now has a separate **End-to-end
+payloads** section claiming no framing; KeyGrant and LateResponse re-register
+as `P-e2e-01/02` (their U15 refinement of U10, honestly recorded as open).
+
+**The pre-commitment epistemics**: same timeline note as prior rounds — their
+snapshot's spec lacked the contributory construction; it landed with the
+vector in c368542. Under the current spec the construction is normative.
+
+NOT-COVERED classifications (personal-knowledge evaluation, recovery
+response, LateResponse assembly, COSE-shape internals, selection arithmetic)
+all honest boundary reports. No covered-path implementation bug. Harness: 74
+checks, all passing.

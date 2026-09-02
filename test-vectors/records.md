@@ -274,8 +274,9 @@ remain valid inputs.)*
 
 HKDF-SHA-256, salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture`
 followed by the raw subject keyhash, holder keyhash and ceremony
-pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the normal
-record's pre-commitment.
+pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the
+**prior alice–c1 meeting's** contributory pre-commitment (`transactions.md`) —
+the ceremony that sealed the capture, never the one under assembly.
 
 seed:
 
@@ -288,14 +289,14 @@ info (14-byte tag + 3 × 32 bytes):
 ```
 7268746e2f313a636170747572658410def778a5de3a25991aba399716bc8ecc
 fda9ad57d4ea8a0c8dcfc852aa6a96664caec817f958a439b6d326c45f5ab7bb
-b3671ebb447eca25a411b975e73ae583bc9b190ee9eff334cb1d21a75e128105
-cbcaf366e955766750a09bcb0ba5
+b3671ebb447eca25a411b975e73aab9c3a6457a92a1ab0738104359b0712fad9
+e4df0f53f5a29829855d4d1d58f5
 ```
 
 k_capture:
 
 ```
-dd66cad905f5be5887981cd0f91a5142038ce535cd14634904eb731f05e7a7e6
+6157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22c89d2b1fe2fea7b2985c
 ```
 
 The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal

@@ -467,7 +467,7 @@ for i, hexs in enumerate(blocks[:17]):
 check(frames_ok == 17, 'messages: all 17 frames length-prefixed, canonical, correctly typed')
 replies_ok = sum(canonical(bytes.fromhex(h.replace('\n', ''))) is not None
                  for h in blocks[17:31])
-check(replies_ok == 14, 'messages: all 14 replies and payloads canonical')
+check(replies_ok == 14, 'messages: all 12 replies and 2 end-to-end payloads canonical')
 late_obj = canonical(bytes.fromhex(blocks[30].replace('\n', '')))
 lr = late_obj[3]
 lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
@@ -546,8 +546,11 @@ check(byid['P-normal-record']['hex'] ==
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 14
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: fourteen traces and five contexts')
-_kg = canonical(bytes.fromhex(byid['P-reply-13']['hex']))
+_kg = canonical(bytes.fromhex(byid['P-e2e-01']['hex']))
 check(_kg[3] == _k, 'the KeyGrant carries the derived capture key')
+_pc1 = canonical(bytes.fromhex(byid['P-alice-c1-record']['hex']))
+check(_kg[1] == H(enc(_pc1[3])).hex(), 'the KeyGrant names the PRIOR alice-c1 record, never the record under assembly')
+check(_kg[2] == frame_objs[12][1][0][6], 'the KeyGrant binds the prior capture to the CURRENT query')
 tr2 = byid['TR2']['expect']
 check(tr2['actions'] == ['never_process_as_early_data']
       and sorted(tr2.get('one_of', [])) == ['defer_until_handshake', 'reject'],

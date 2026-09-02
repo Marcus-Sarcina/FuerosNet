@@ -871,15 +871,22 @@ a20150b47726402c6bd7c1ec5962ca894492d20201
 ```
 a2015071b5e974259b3aff3d013b1c67cc9fe30200
 ```
-**KeyGrant — transient end-to-end payload, never a record: the one key sealing the normal record's capture, bound to its query** (106 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+## End-to-end payloads
+
+Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
+request/reply stream. Their on-channel framing and type discrimination are the
+open demultiplexing decision; the bytes below are the objects alone.
+
+**KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record's first query** (106 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
 
 ```
-a30158207992ab78fe0b413eb9c00eb4cded6c9b3571c07a1723bda78bf15792
-a2e3407902582056a295563ed967b8679c9458ad1f140f6462b6d46a7e77a006
-83a4fbe9435b86035820dd66cad905f5be5887981cd0f91a5142038ce535cd14
-634904eb731f05e7a7e6
+a3015820f37f5cf39c99688361915a219a05f5a2c1b70ab773e9adab41492983
+5fd3f82502582056a295563ed967b8679c9458ad1f140f6462b6d46a7e77a006
+83a4fbe9435b860358206157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22
+c89d2b1fe2fea7b2985c
 ```
-**LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+**LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
 
 ```
 a30158207992ab78fe0b413eb9c00eb4cded6c9b3571c07a1723bda78bf15792

@@ -8021,3 +8021,13 @@ in ascending keyhash order, so neither party can force a repeat of the value
 that consents and capture keys bind to — with a known-answer vector the
 harness recomputes. A grant naming a record the holder does not hold yields
 unavailable, the absence posture.
+
+Phase 2 of the capture/query target caught the suite's most instructive
+defect yet: the KeyGrant chain used the record under assembly as its sealing
+context — a circularity the design's own construction note forbids, and a
+holder mismatch besides, since c1 held no capture of alice from any fixture
+meeting. The prior alice–c1 record now exists, the derivation and grant
+re-derive from its contributory pre-commitment, and the harness pins the
+prior-record and current-query bindings. The end-to-end payloads moved to
+their own messages.md section claiming no framing — the demultiplexing
+decision stays open, and the replies caption no longer overreaches.

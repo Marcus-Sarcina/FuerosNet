@@ -1000,6 +1000,30 @@ ac2_body = e_map([
 ac2_txid = H(ac2_body)
 ac2_env, _ = envelope(1, 5, ac2_body, ac2_signers)
 
+# The prior alice-c1 meeting (canonical bar: the capture context): c1 can hold
+# a capture of alice only from a ceremony c1 participated in. Sealed at THIS
+# ceremony's pre-commitment; the later KeyGrant names THIS record's txid -
+# never the record under assembly, whose txid embeds the very responses the
+# grant unlocks (s7.5.2's circularity note).
+pc1_ca = H(b'rhtn-test-vectors:precommit-contribution:alice:c1-meeting')[:16]
+pc1_cb = H(b'rhtn-test-vectors:precommit-contribution:c1')[:16]
+_p1, _p2 = (pc1_ca, pc1_cb) if alice.keyhash < IDS['c1'].keyhash else (pc1_cb, pc1_ca)
+pc1_precommit = H(b'rhtn/1:ceremony' + _p1 + _p2)
+pc1_slots, pc1_root = disclosure_set('alice-c1', npr_values)
+pc1_signers = [s for s in sorted([alice, IDS['c1']], key=lambda i: i.keyhash, reverse=True)] + [IDS['w2']]
+pc1_body = e_map([
+    (e_uint(0), backptrs(*[[merge_txid] if s is alice else [genesis(s.keyhash)]
+                           for s in pc1_signers])),
+    (e_uint(1), e_uint(TS_DEPART + 10 * 86400)),
+    (e_uint(2), e_uint(TS_DEPART + 10 * 86400 + 1500)),
+    (e_uint(3), e_arr([participant(pc1_signers[0]), participant(pc1_signers[1])])),
+    (e_uint(4), e_arr([witness_entry(IDS['w2'], alice, 7)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(pc1_root)),
+])
+pc1_txid = H(pc1_body)
+pc1_env, _ = envelope(1, 5, pc1_body, pc1_signers)
+
 TS_EVAL = TS_C2 + 100 * 86400   # a hypothetical next alice-bob ceremony's started_at
 
 # --- Peering (type 4): bob and carol as infra peers; alternative continuations
@@ -1511,6 +1535,31 @@ ac2 envelope ({len(ac2_env)} bytes):
 
 ```
 {hexblock(ac2_env)}
+```""")
+
+emit('transactions.md', f"""
+## The prior alice–c1 record — the capture context
+
+The normal record's first verifier, c1, answers by photo — which requires a
+capture of alice sealed at a ceremony **c1 participated in**. This is that
+meeting: one witness, no responses, finalized well before the normal record.
+The `KeyGrant` in `messages.md` names **this** record's txid and derives its
+key from **this** ceremony's contributory pre-commitment — never the record
+under assembly, whose txid embeds the very responses the grant unlocks
+(design §7.5.2).
+
+Body ({len(pc1_body)} bytes):
+
+```
+{hexblock(pc1_body)}
+```
+
+txid: `{hx(pc1_txid)}`
+
+Envelope ({len(pc1_env)} bytes):
+
+```
+{hexblock(pc1_env)}
 ```""")
 
 emit('transactions.md', f"""
@@ -2215,12 +2264,14 @@ def hkdf_sha256(ikm, info, length=32):
         out += t; i += 1
     return out[:length]
 
-# k_capture for the capture c1 (the first verifier) holds of alice, sealed at
-# the normal ceremony: subject alice, holder c1, ceremony npr_precommit (§7.5.2).
+# k_capture for the capture c1 holds of alice, sealed at their PRIOR meeting's
+# ceremony (pc1) - released against the CURRENT query. Field 1 names the prior
+# record; the current record's txid cannot appear, since it embeds the very
+# response this grant unlocks [0.6 phase 2, 2026-09-02].
 demo_seed = H(b'rhtn-test-vectors:capture-seed:alice:c1')
 demo_k = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash
-                     + IDS['c1'].keyhash + npr_precommit)
-kg = e_map([(e_uint(1), e_bstr(npr_txid)),
+                     + IDS['c1'].keyhash + pc1_precommit)
+kg = e_map([(e_uint(1), e_bstr(pc1_txid)),
             (e_uint(2), e_bstr(npr_q0)),
             (e_uint(3), e_bstr(demo_k))])
 late = e_map([(e_uint(1), e_bstr(npr_txid)),
@@ -2243,7 +2294,9 @@ _reply_pairs = [
     ('CurrencyReply — attestation follows', r_cur),
     ('CurrencyReply — 1 cannot issue', r_cur_no),
     ('ResourceRegistrationReply — 0 recorded', r_reg),
-    ('KeyGrant — transient end-to-end payload, never a record: the one key sealing the normal record\'s capture, bound to its query', kg),
+]
+_e2e_pairs = [
+    ('KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record\'s first query', kg),
     ('LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record', late),
 ]
 _msg_md = []
@@ -2255,6 +2308,12 @@ for cap, by in _msg_pairs:
 ```""")
 for cap, by in _reply_pairs:
     _msg_md.append(f"""**{cap}** ({len(by)} bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+{hexblock(by)}
+```""")
+for cap, by in _e2e_pairs:
+    _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
 
 ```
 {hexblock(by)}
@@ -2283,7 +2342,15 @@ are byte-identical to their fixtures in `records.md` and `transactions.md`.
 
 ## Replies
 
-{chr(10).join(_msg_md[17:])}
+{chr(10).join(_msg_md[17:29])}
+
+## End-to-end payloads
+
+Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
+request/reply stream. Their on-channel framing and type discrimination are the
+open demultiplexing decision; the bytes below are the objects alone.
+
+{chr(10).join(_msg_md[29:])}
 
 ## Session traces (canonical bar 9's trace class)
 
@@ -2343,6 +2410,7 @@ for fid, by, kind in [
     ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
     ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
     ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
+    ('P-alice-c1-record', pc1_env, 'envelope'),
     ('P-presented-full', npr_full, 'presentation'), ('P-presented-partial', npr_part, 'presentation'),
     ('P-presented-minimal', npr_min, 'presentation'),
     ('P-signedlocator', signed_locator, 'SignedLocator'), ('P-signedlocator-jump', sl2, 'SignedLocator'),
@@ -2357,6 +2425,8 @@ for i, (cap, by) in enumerate(_msg_pairs):
     reg(f'P-frame-{i+1:02d}', 'bytes', ACC('frame'), by, note=cap)
 for i, (cap, by) in enumerate(_reply_pairs):
     reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap)
+for i, (cap, by) in enumerate(_e2e_pairs):
+    reg(f'P-e2e-{i+1:02d}', 'bytes', ACC('e2e-payload'), by, note=cap)
 for fid, by, why in [
     ('N-wrong-signer-catalog', catalog_wrong, 'CatalogEntry'),
     ('N-wrong-signer-abuse', abuse_wrong, 'AbuseReport'),
@@ -2804,8 +2874,9 @@ remain valid inputs.)*
 
 HKDF-SHA-256, salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture`
 followed by the raw subject keyhash, holder keyhash and ceremony
-pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the normal
-record's pre-commitment.
+pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the
+**prior alice–c1 meeting's** contributory pre-commitment (`transactions.md`) —
+the ceremony that sealed the capture, never the one under assembly.
 
 seed:
 
@@ -2816,7 +2887,7 @@ seed:
 info (14-byte tag + 3 × 32 bytes):
 
 ```
-{hexblock(b'rhtn/1:capture' + alice.keyhash + IDS['c1'].keyhash + npr_precommit)}
+{hexblock(b'rhtn/1:capture' + alice.keyhash + IDS['c1'].keyhash + pc1_precommit)}
 ```
 
 k_capture:
