@@ -7976,3 +7976,14 @@ AttachAck's queue count is stated U64 RANGE. And the heartbeat comment now
 says gap-detection is for information, never liveness — an
 exact-expected-counter implementation ignores every beat after one loss and
 fails over against a live server, which is TR7 read backwards.
+
+### 2026-09-02 (the over-strictness stress family)
+By direction, every case where a clean-room implementer read the
+specification more strictly than written is now a named stress family in the
+suite: ten entries accumulated from the 0.6 rounds, six newly built — dial
+the unkeyed referral hop, accept the gapped heartbeat, accept the server's
+mode, accept the early ServingInfra, reject the empty-array response
+spelling while accepting the absent one, and accept the retried channel kind
+— four already present and now listed. Where the prose could not prevent the
+misreading, the corpus now catches it. Fourteen traces; 67 checks, all
+passing.

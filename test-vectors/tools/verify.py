@@ -482,7 +482,7 @@ srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
-check(len(re.findall(r'\| TR\d+ ', ms)) == 10, 'messages: ten session traces')
+check(len(re.findall(r'\| TR\d+ ', ms)) == 14, 'messages: fourteen session traces')
 qc = frame_objs[12][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes')
@@ -521,9 +521,21 @@ _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presen
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
-check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 10
+check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 14
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
-      'corpus: ten traces and five contexts')
+      'corpus: fourteen traces and five contexts')
+cr = canonical(bytes.fromhex(byid['P-channel-retry-presentation']['hex']))
+cr_env_o, cr_slots_o = cr
+cr_ds = []
+for i, slot in enumerate(cr_slots_o):
+    D_ = enc(slot)
+    cr_ds.append(H(b'\x00' + D_))
+check(H(b'\x01' + b''.join(cr_ds)).hex() == cr_env_o[3][8],
+      'channel-retry presentation recomputes its root')
+cr_prox = cr_slots_o[6][2]
+check([c[1] for c in cr_prox[1]] == [3, 3] and [c[2] for c in cr_prox[1]] == [1, 0]
+      and cr_prox[2] == 3,
+      'channel-retry: the repeated kind carries fail-then-pass and strongest is the retried channel')
 check(byid['N-wrong-signer-anchor'].get('precondition') == 'the named key is pinned',
       'corpus: the anchor wrong-signer expect carries its pinned-key precondition')
 b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))

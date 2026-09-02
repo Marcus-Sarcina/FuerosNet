@@ -2289,6 +2289,10 @@ a sequence of events with the required actions.
 | TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
 | TR9 | the primary serving node closes with application code 1 (`refused`) at attach | no sibling failover — a refusal is an answer, not an outage; the client is refused, not disconnected (§9.2) |
 | TR10 | during failover, a sibling closes with code 1 | that sibling alone is foreclosed; the next cached candidate is tried in order (§9.2) |
+| TR11 | a `Referral` arrives without `key_material` and the requester holds no pin for the next hop | **dial it** — unauthenticated, disclosing nothing beyond the query (§7.7.3): a referrer's identity is not what protects the requester. An implementation failing with missing-key-material strands resolutions the design completes |
+| TR12 | heartbeats 0 and 2 arrive; beat 1 was lost | accept the gapped beat, reset liveness, no failover (§8.2) — an implementation accepting only the exact expected counter ignores every beat after one loss and fails over against a live server |
+| TR13 | a failover attach returns `AttachAck` mode 0 (primary) | accept the server's determination (§8.2) — the server is authoritative; a client inferring degraded from having dialled a sibling reports wrong state on stale topology |
+| TR14 | a `ServingInfra` reply arrives after two of five path indices consumed | resolution complete (§7.7.3) — arrival is announced by the reply; an implementation checking a consumed-equals-length equation rejects a deeper-caching node's valid answer |
 """)
 
 # ================================================================ corpus.json
@@ -2675,6 +2679,50 @@ reg('P-channel-bound', 'bytes', ACC('Channel', 'claimed resolution and session-k
 reg('P-integrity-evidence', 'bytes', ACC('ClientIntegrity', 'evidence bstr present'),
     e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(2)), (e_uint(3), e_bstr(H(b'attest-quote')))]))
 
+# ---- Over-strictness stress family [author, 2026-09-02]: each entry stresses
+# a spot where a clean-room implementer in the 0.6 rounds adopted logic
+# stricter than the specification - divergences the spec alone demonstrably
+# did not prevent, so the suite must catch them.
+os_empty_body = e_map([
+    (e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in (n_hi, n_lo, IDS['w1'])])),
+    (e_uint(1), e_uint(TS_C2 + 3 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 3 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w1'], alice, 7)])),
+    (e_uint(5), e_arr([])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(fin_nm_root)),
+])
+reg('N-responses-empty-array', 'bytes',
+    REJ('body', 'schema', 'zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T30)'),
+    os_empty_body,
+    note='Stress: an implementer reading field 5 as required-with-empty-array emits and accepts this; P-fin-absent is the one valid spelling.')
+
+retry_values = dict(npr_values)
+retry_values['proximity'] = e_map([(e_uint(1), e_arr([
+    e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(1))]),   # optical, FAIL
+    e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])])), # optical retried, PASS
+    (e_uint(2), e_uint(3))])
+cr_slots, cr_root = disclosure_set('channel-retry', retry_values)
+cr_signers = [n_hi, n_lo, IDS['w3']]
+cr_body = e_map([
+    (e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in cr_signers])),
+    (e_uint(1), e_uint(TS_C2 + 4 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 4 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w3'], bob, 7)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(cr_root)),
+])
+cr_txid = H(cr_body)
+cr_env, _ = envelope(1, 5, cr_body, cr_signers)
+cr_pres = presented(cr_env, cr_slots, set(LABELS))
+reg('P-channel-retry', 'bytes', ACC('envelope', 'a repeated channel kind: optical failed, optical retried and passed (D19)'),
+    cr_env,
+    note='Stress: a validator imposing one-entry-per-kind rejects this valid record; a retried channel is two measurements (s4.5).')
+reg('P-channel-retry-presentation', 'bytes', ACC('presentation', 'fully revealed; the proximity strongest-rule passes over the retried channel'),
+    cr_pres)
+
 # ---- traces and contexts (structured, no bytes)
 for trid, seq, actions, cite in [
     ('TR1', 'control frame with unknown frame_type 99 arrives mid-session', ['skip_frame', 'session_survives'], '§8.0'),
@@ -2687,6 +2735,10 @@ for trid, seq, actions, cite in [
     ('TR8', 'Attach carries an attestation failing validation', ['treat_attestation_absent', 'session_attaches'], '§8.2'),
     ('TR9', 'primary closes with application code 1 (refused) at attach', ['no_sibling_failover', 'attach_refused'], '§9.2'),
     ('TR10', 'a failover sibling closes with code 1', ['foreclose_that_sibling_only', 'try_next_candidate'], '§9.2'),
+    ('TR11', 'a Referral arrives without key_material and the requester holds no pin for the next hop', ['dial_unauthenticated', 'disclose_nothing_beyond_query'], '§7.7.3'),
+    ('TR12', 'heartbeats 0 and 2 arrive; beat 1 was lost in transit', ['accept_gapped_beat', 'reset_liveness', 'no_failover'], '§8.2'),
+    ('TR13', 'a failover attach to a cached sibling returns AttachAck mode 0 (primary)', ['accept_server_mode', 'no_client_inference'], '§8.2'),
+    ('TR14', 'a ServingInfra reply arrives after two of five path indices were consumed', ['resolution_complete', 'no_arrival_equation'], '§7.7.3'),
 ]:
     reg(trid, 'trace', {'actions': actions, 'cite': cite}, note=seq)
 for cid, inputs, expect in [

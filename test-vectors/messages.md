@@ -912,4 +912,8 @@ a sequence of events with the required actions.
 | TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
 | TR9 | the primary serving node closes with application code 1 (`refused`) at attach | no sibling failover — a refusal is an answer, not an outage; the client is refused, not disconnected (§9.2) |
 | TR10 | during failover, a sibling closes with code 1 | that sibling alone is foreclosed; the next cached candidate is tried in order (§9.2) |
+| TR11 | a `Referral` arrives without `key_material` and the requester holds no pin for the next hop | **dial it** — unauthenticated, disclosing nothing beyond the query (§7.7.3): a referrer's identity is not what protects the requester. An implementation failing with missing-key-material strands resolutions the design completes |
+| TR12 | heartbeats 0 and 2 arrive; beat 1 was lost | accept the gapped beat, reset liveness, no failover (§8.2) — an implementation accepting only the exact expected counter ignores every beat after one loss and fails over against a live server |
+| TR13 | a failover attach returns `AttachAck` mode 0 (primary) | accept the server's determination (§8.2) — the server is authoritative; a client inferring degraded from having dialled a sibling reports wrong state on stale topology |
+| TR14 | a `ServingInfra` reply arrives after two of five path indices consumed | resolution complete (§7.7.3) — arrival is announced by the reply; an implementation checking a consumed-equals-length equation rejects a deeper-caching node's valid answer |
 

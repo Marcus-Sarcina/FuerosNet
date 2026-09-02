@@ -2899,3 +2899,27 @@ frame-type decode (a closed deserializing enum would tear down sessions on
 future frames). **Crate maturity**: transport assessment consistent with
 §5.2; the aws-lc-rs platform-table detail (emscripten tested, browser wasm
 not) sits inside the existing hedge.
+
+## The over-strictness stress family (author-directed, 2026-09-02)
+
+The author: accumulate the cases where the review-implementer adopted
+over-strict logic and add tests specifically stressing those areas — where
+the spec cannot prevent a compatibility-breaking misunderstanding, the
+integration test must catch it. Inventory across the four 0.6 rounds
+produced ten entries (README's new table). Six needed new fixtures:
+- TR11 (dial an unkeyed referral hop, disclose-nothing) — resolution U4's
+  never-dial reading would strand resolutions;
+- TR12 (a gapped heartbeat resets liveness) — the exact-expected-counter
+  sketch fails over against a live server;
+- TR13 (the server's AttachAck mode is authoritative) — client inference
+  reports wrong state on stale topology;
+- TR14 (early ServingInfra completes resolution) — the arrival-equation trap;
+- N-responses-empty-array + T30 (the empty-array spelling rejects — the
+  complement of P-fin-absent, so both directions of the field-5 reading are
+  pinned);
+- P-channel-retry + D19 (a repeated channel kind, failed-then-passed, with a
+  fully revealed presentation whose root and strongest-rule the harness
+  recomputes).
+Four were already stressed (D6, TR1, the open-registry D-rows, V7's
+finalization fixtures) and are now listed under the family so the register is
+one place. Traces stand at fourteen; harness at 67 checks, all passing.

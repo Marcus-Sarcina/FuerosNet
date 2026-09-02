@@ -144,6 +144,30 @@ participants' private information (V7 is the must-accept complement) — and
 ceremonies only. Everything else accumulated across four review rounds is
 ruled and applied — see `review-tracking.md`.
 
+## The over-strictness stress family
+
+**Accumulated from the 0.6 clean-room rounds** [author, 2026-09-02]: every
+case where an implementer adopted logic stricter than the specification —
+divergences the prose demonstrably did not prevent, so the suite must catch
+them. A conforming implementation passes each; an over-strict one fails
+loudly.
+
+| Origin | Over-strict reading | Stress fixture |
+|---|---|---|
+| resolution U4 | never dial a referral hop without key material | TR11 — dial it, disclosing nothing beyond the query |
+| resolution (documented trap) | require a consumed-equals-length arrival equation | TR14 — a deeper-caching node's early `ServingInfra` is complete |
+| attach (heartbeat sketch) | accept only the exact expected counter | TR12 — a gapped beat resets liveness; TR7 states the rule |
+| attach (noted trap) | infer degraded mode from having dialled a sibling | TR13 — the server's mode determination is authoritative |
+| presence #11 | field 5 required-with-empty-array; reject the absent spelling | P-fin-absent (valid absent) + N-responses-empty-array / T30 (the empty spelling rejects) |
+| presence #3 | one Proximity entry per channel kind | P-channel-retry / D19 — optical failed, retried, passed |
+| presence phase 1 (first run) | reject counters that skip (`+1` contiguity) | D6 — `[5,42] → [5,100]` is a valid supersession |
+| general (frame decode) | closed deserializing enum over control-frame types | TR1 — unknown frames are skipped, the session survives |
+| general (enum posture) | reject open-registry values | D1 (disavowal band), D3 (location method), D4 (witness bits), greased capabilities |
+| general (finalization) | enforce a response minimum | V7's fixtures — a lone no-match and no responses at all both finalize |
+
+The family grows with every implementation round: when a divergence recurs
+despite the spec deciding it, the deciding fixture lands here.
+
 ## The canonical bar
 
 What must exist before promotion, merging both reviews' requirements. Applied
