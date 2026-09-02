@@ -47,6 +47,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record — now a **fully integrated object**: real §4.5.1 disclosure root, its type-5 envelope, and three verified presentations — and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
 | `records.md` | One known-answer signature per **signing** context — complete 2026-09-02, each with its wrong-signer analogue |
 | `messages.md` | The unsigned message families (bar 9): every framed message's positive encoding, replies and transient payloads, and the session-trace table |
+| `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
@@ -183,25 +184,30 @@ negatives (T9–T12). Still open:
    `selection_basis` matrix: 0/1/2 positively across the normal record's
    responses, 0-only inside a `Recovery` block, T27 carrying the malformed
    cases. The harness verifies every signature in both forms.
-5. **The selective-disclosure construction** — *construction and
-   presentations done 2026-09-01; the normal record's own presentation set
-   landed 2026-09-02* (full, partial, minimal, all recomputed by the
-   harness). **Still open**: the negative family — wrong slot count,
-   duplicate or wrong labels, wrong salt width, root mismatch, mutation of a
-   revealed field — lands with the corpus format (bar 6).
-6. **Machine-instantiable fixtures throughout**: every byte-level, context
-   and must-accept case resolves to **exact bytes, or an unambiguous
-   deterministic mutation of a named positive vector**, plus machine-readable
-   expected dimensions in the structured result model — and **machine-readable
-   fixture identity**: stable fixture IDs carrying their own bytes and
-   context, so no harness ever parses Markdown headings as an interface
-   (seventh review). The fixture classes are bytes · mutation · context ·
-   trace · **unit** — the last for requirements no natural wire input can
-   instantiate, like C3's rank tie-break, which would need a SHA-256
-   collision. Until then the negative suite is a conformance-test
-   *specification*, not yet a corpus.
-7. **The boundary sweep** at every bound in the declared scope (list at the
-   end of `negative-vectors.md`).
+5. ~~The selective-disclosure construction~~ **DONE 2026-09-02**: both
+   records' presentation sets recompute, and the negative family is in the
+   corpus — six-slot, eight-slot, label-position mismatch, 15-byte salt,
+   flipped withheld digest, mutated revealed value
+   (`N-disclosure-*`).
+6. ~~Machine-instantiable fixtures~~ **DONE 2026-09-02** (`corpus.json`,
+   format `rhtn-test-corpus/1`): every fixture carries a stable id and one of
+   four classes — **bytes** (exact hex), **unit** (a deterministic recipe
+   where the identity set or a 100 KB+ body makes full bytes unreasonable),
+   **trace** (session event sequences with required actions), **context**
+   (named fixture inputs with an expected evaluation) — plus a structured
+   expect: outcome, kind, rejection layer (`cbor` / `schema` / `semantic` /
+   `session`) and reason. The reference harness executes the encoding layer
+   of every byte entry and the arithmetic of every context; layers above
+   that are the implementation under test's to find, which is the corpus's
+   purpose.
+7. ~~The boundary sweep~~ **DONE 2026-09-02** (`B-*` in the corpus): every
+   bound in the declared scope with byte fixtures at the bound and past it —
+   back-pointers, witnesses, path nibbles, unknown keys and values, audits,
+   NetworkPoint lists and ports, prekey blobs, catalog total size, scope
+   lists, capabilities, siblings, channels, asserted locations,
+   corroborations, geohash lengths and case, archive bounds, the
+   finalization gap at 86,400/86,401 — with the two over-identity-set counts
+   and the two 100 KB frame bounds as unit recipes.
 8. ~~The remaining signed contexts~~ **DONE 2026-09-02**: every
    domain-separation tag has a known-answer signature — currency, catalog,
    abuse, anchor, subtree-ack and prekey in `records.md`; successor, verifier
@@ -218,14 +224,12 @@ negatives (T9–T12). Still open:
    skip_frame, defer_until_handshake, close_stream, session_survives,
    fail_attach, the 64 KiB/256 KiB bound split, heartbeat-interval liveness
    and the invalid-attestation must-accept (sixth review).
-10. **Signer-to-role binding everywhere a signer is named** — *the
-    standalone half is DONE 2026-09-02*: every signed context in `records.md`
-    carries its wrong-signer analogue beside its positive vector, valid under
-    the wrong key and never under the named one (S23's generalisation; the
-    subtree-ack's wrong signer is deliberately the patron). The
-    transaction-type half (S17) is a mutation family and lands with the
-    corpus format (bar 6). The defect is always the same: a
-    cryptographically valid signature under a key the object does not name.
+10. ~~Signer-to-role binding~~ **DONE 2026-09-02**: every standalone signed
+    object carries its wrong-signer analogue, and the transaction half is
+    `N-envelope-wrong-signers` — a cryptographically valid envelope whose
+    kids are alice and carol over a body naming alice and bob. The defect is
+    always the same: a valid signature under a key the object does not
+    name.
 11. ~~Finalization semantics on the normal record~~ **DONE 2026-09-02**:
     the main record finalizes over match/match/`unavailable`; the
     must-accepts carry a record finalized on a lone `no-match` and one with
@@ -234,23 +238,25 @@ negatives (T9–T12). Still open:
     retired 2026-09-01 with the machinery they tested; `inconclusive` is
     exercised positively at the response level by T19–T22's legal-combination
     matrix when the corpus format lands.)*
-12. **The enumeration/extension posture as a systematic matrix** (sixth
-    review; E8's two wrong instantiations are the argument): every closed
-    enumeration gets an unknown-value rejection fixture, every deliberately
-    open namespace a must-accept fixture — enumerated mechanically from the
-    schemas, not remembered, and **not limited to transaction bodies**: the
-    unsigned families carry closed result codes too (`ResourceResponse`'s six
-    statuses with a normative evaluation order), which need both the
-    unknown-code fixture and the trace fixture proving the right code wins
-    when several conditions hold at once (seventh review).
-13. **Optionals-exercised positives grow with every schema**: no optional
-    field should exist that no positive vector ever decodes
-    (`transactions.md` now carries the first three).
-14. **The schema-shape matrix** (ninth review): for every covered schema, a
-    missing-required-field fixture and a wrong-major-type fixture — E15–E18
-    seed it — because a decoder that defaults absent fields or coerces types
-    passes every well-formed vector, and the schema-aware harness checks
-    positives, not an implementation under test.
+12. ~~The enumeration/extension matrix~~ **DONE 2026-09-02** (`N-enum-*`,
+    `D-enum-*`): unknown-value byte fixtures for every closed enumeration —
+    result, basis, selection_basis, disavowal 64, currency role, resolve
+    code, push kind, memo slot, resource status, attach mode — and
+    must-accepts for the open namespaces (location method, witness reserved
+    bits, greased capabilities, unknown extensions), the unsigned families'
+    closed codes included; the right-code-wins evaluation order remains a
+    trace concern (TR-class).
+13. ~~Optionals-exercised positives~~ **DONE 2026-09-02**: the sweep found
+    six optionals no positive decoded — connect_scope, catalog-reply
+    truncation, archive head and stop-timestamp, archive-reply continuation,
+    channel resolution and session binding, integrity evidence — now
+    `P-*` corpus entries; the recovery and normal records had already closed
+    adoption fields 5–8 and the response optionals.
+14. ~~The schema-shape matrix~~ **DONE 2026-09-02** (`N-shape-*`):
+    missing-required and wrong-major-type fixtures across the core schemas —
+    adoption, presence, response, currency, catalog, Attach, frame arity,
+    Locator, and the 31/33-byte keyhash widths — seeded by E15–E18 and now
+    exact bytes in the corpus.
 
 ## Open for the author
 

@@ -487,6 +487,48 @@ qc = frame_objs[12][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes')
 
+# ---------------------------------------------------------------- corpus.json (bar 6)
+import json as _json
+corpus = _json.load(open('corpus.json', encoding='utf-8'))
+check(corpus['format'] == 'rhtn-test-corpus/1' and len(corpus['entries']) >= 160,
+      f"corpus: format tag present, {len(corpus['entries'])} entries")
+ids = [e['id'] for e in corpus['entries']]
+check(len(ids) == len(set(ids)), 'corpus: fixture ids are unique')
+acc_ok = rej_cbor_ok = rej_up_ok = 0
+n_acc = n_cbor = n_up = 0
+for e in corpus['entries']:
+    if e['class'] != 'bytes':
+        continue
+    b = bytes.fromhex(e['hex'])
+    if e['expect'].get('kind') == 'frame':
+        if len(b) < 4 or int.from_bytes(b[:4], 'big') != len(b) - 4:
+            b = None
+        else:
+            b = b[4:]
+    parsed = canonical(b) if b is not None else None
+    if e['expect']['outcome'] == 'accept':
+        n_acc += 1; acc_ok += parsed is not None
+    elif e['expect'].get('layer') == 'cbor':
+        n_cbor += 1; rej_cbor_ok += parsed is None
+    else:
+        n_up += 1; rej_up_ok += parsed is not None
+check(acc_ok == n_acc, f'corpus: all {n_acc} accept-class byte fixtures parse canonically')
+check(rej_up_ok == n_up,
+      f'corpus: all {n_up} above-encoding rejects parse canonically (the defect is theirs to find)')
+check(n_cbor == rej_cbor_ok, f'corpus: all {n_cbor} cbor-layer rejects fail the byte-level scanner')
+byid = {e['id']: e for e in corpus['entries']}
+_npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presence record'):])
+check(byid['P-normal-record']['hex'] ==
+      [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
+      'corpus: P-normal-record is byte-identical to the transactions.md envelope')
+check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 8
+      and len([e for e in corpus['entries'] if e['class'] == 'context']) == 4,
+      'corpus: eight traces and four contexts')
+b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))
+check(len(b17[4]) == 17, 'corpus: the 17-witness boundary fixture carries 17 witnesses')
+check(len(canonical(bytes.fromhex(byid['B-backptrs-9']['hex']))[0][0]) == 9,
+      'corpus: the 9-head boundary fixture carries 9 heads')
+
 # ---------------------------------------------------------------- normal record (bar 2)
 BYNAME = {KH[n]: n for n in NAMES}
 nsect = tx[tx.index('## Normal presence record'):tx.index('## Finalization must-accepts')]

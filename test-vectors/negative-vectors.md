@@ -244,15 +244,18 @@ This suite is **wire-format/protocol interoperability**, not a certification
 of client and operator behavioural commitments — those are deliberately
 unenforceable from bytes (design §1.1) and live in the requirements documents.
 
-**Covered positively so far**: body and txid vectors for the six transaction
-types including peering; full envelopes for the adoption (two-signer) and the
-departure (single-signer); the formation-subtype presence record;
-`SignedLocator`; `EndpointRecord`. **Not yet covered**: the remaining signed
-contexts and the unsigned message encodings, as `records.md` now classifies
-them; session messages; topology frames; resource requests.
+**Covered positively**: body and txid vectors for the six transaction types;
+full envelopes for the adoption family, the formation and normal presence
+records, the finalization must-accepts, the alice–carol pair and the recovery
+adoption; every standalone signed context with its wrong-signer analogue;
+every unsigned message family (`messages.md`); presentations of both records;
+and the machine-readable corpus (`corpus.json`) carrying all of it under
+stable ids.
 
-**The boundary sweep is planned, not present** (canonical bar 7) — the third
-review caught the previous wording claiming otherwise. Its target list is
+**The boundary sweep is present** (canonical bar 7, 2026-09-02): `B-*`
+corpus entries instantiate the list below at and past each bound, with the
+over-identity-set counts and 100 KB frame bounds as unit recipes. The target
+list is
 **every bound belonging to a covered object**, which includes bounds of
 covered objects' fields previously mislabelled out-of-scope: back-pointers
 1/8/9, witnesses 16/17, responses 32/33, path 24/25, unknown keys 16/17,

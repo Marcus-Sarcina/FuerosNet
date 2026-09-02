@@ -2289,10 +2289,381 @@ a sequence of events with the required actions.
 | TR8 | `Attach` carries an attestation that fails validation | treat as ABSENT, session attaches — currency gates trust, never connectivity (§8.2) |
 """)
 
+# ================================================================ corpus.json
+# Canonical bar 6: machine-readable fixture identity. Every entry carries a
+# stable id, a class (bytes | trace | context | unit), an expect object, and
+# for byte fixtures the exact hex. Negative families (bars 5, 7, 12, 14 and
+# bar 10's transaction half) are enumerated here as full bytes wherever the
+# identity set permits; bounds needing more identities than exist, or bodies
+# over 100 KB, are class "unit" with a deterministic recipe instead.
+import json as _json
+REG = []
+def reg(fid, cls, expect, by=None, note='', **extra):
+    e = {'id': fid, 'class': cls, 'expect': expect}
+    if by is not None:
+        e['hex'] = by.hex()
+    if note:
+        e['note'] = note
+    e.update(extra)
+    REG.append(e)
+
+def ACC(kind, note=''):
+    d = {'outcome': 'accept', 'kind': kind}
+    if note: d['reason'] = note
+    return d
+def REJ(kind, layer, why):
+    return {'outcome': 'reject', 'kind': kind, 'layer': layer, 'reason': why}
+
+# ---- positives (envelopes, bodies, standalone objects, presentations, frames)
+for fid, by, kind in [
+    ('P-adopt-min', adopt_env, 'envelope'), ('P-adopt-divergent', div_env, 'envelope'),
+    ('P-adopt-extensions', ext_env, 'envelope'), ('P-adopt-optionals', adopt_full_body, 'body'),
+    ('P-departure', depart_body, 'body'), ('P-departure-merge', merge_body, 'body'),
+    ('P-disavowal-code40', code40_body, 'body'), ('P-peering', peer_body, 'body'),
+    ('P-reissue', reissue_body, 'body'), ('P-formation', formation_env, 'envelope'),
+    ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
+    ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
+    ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
+    ('P-presented-full', npr_full, 'presentation'), ('P-presented-partial', npr_part, 'presentation'),
+    ('P-presented-minimal', npr_min, 'presentation'),
+    ('P-signedlocator', signed_locator, 'SignedLocator'), ('P-signedlocator-jump', sl2, 'SignedLocator'),
+    ('P-signedlocator-root', sl_root, 'SignedLocator'), ('P-endpointrecord', endpoint_record, 'EndpointRecord'),
+    ('P-currency', currency, 'CurrencyAttestation'), ('P-catalog', catalog, 'CatalogEntry'),
+    ('P-abuse', abuse, 'AbuseReport'), ('P-anchor', anchor, 'AnchorEntry'),
+    ('P-subtree-ack', ack, 'SubtreeAck'), ('P-prekey', prekey, 'PrekeyBundle'),
+    ('P-verification-query', rec_query, 'VerificationQuery'),
+]:
+    reg(fid, 'bytes', ACC(kind), by)
+for i, (cap, by) in enumerate(_msg_pairs):
+    reg(f'P-frame-{i+1:02d}', 'bytes', ACC('frame'), by, note=cap)
+for i, (cap, by) in enumerate(_reply_pairs):
+    reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap)
+for fid, by, why in [
+    ('N-wrong-signer-currency', currency_wrong, 'CurrencyAttestation'),
+    ('N-wrong-signer-catalog', catalog_wrong, 'CatalogEntry'),
+    ('N-wrong-signer-abuse', abuse_wrong, 'AbuseReport'),
+    ('N-wrong-signer-anchor', anchor_wrong, 'AnchorEntry'),
+    ('N-wrong-signer-ack', ack_wrong, 'SubtreeAck'),
+    ('N-wrong-signer-prekey', prekey_wrong, 'PrekeyBundle'),
+]:
+    reg(fid, 'bytes', REJ(why, 'semantic', 'signature valid under a key the object does not name'), by)
+
+# ---- bar 10, transaction half: envelope whose signer set mismatches body roles
+ws_env, _ = envelope(1, 1, adopt_body, [alice, carol])
+reg('N-envelope-wrong-signers', 'bytes',
+    REJ('envelope', 'semantic', 'envelope kids are alice+carol; body roles are alice+bob'), ws_env)
+
+# ---- bar 12: closed-enum unknown values (each otherwise valid)
+reg('N-enum-result', 'bytes', REJ('VerifierResponse', 'schema', 'result 9 outside 0-3'),
+    classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 9, basis=0, tplv=3, sb=0))
+reg('N-enum-basis', 'bytes', REJ('VerifierResponse', 'schema', 'basis 9 outside 0-2'),
+    classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=9, tplv=3, sb=0))
+reg('N-enum-selection-basis', 'bytes', REJ('VerifierResponse', 'schema', 'selection_basis 9 outside 0-2 (T27)'),
+    classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=0, tplv=3, sb=9))
+reg('N-enum-disavowal-64', 'bytes', REJ('body', 'schema', 'code 64 outside the 0-63 space (T8) — contrast P-disavowal-code40'),
+    e_map([(e_uint(0), backptrs([adopt_txid])), (e_uint(1), e_bstr(bob.keyhash)),
+           (e_uint(2), e_bstr(alice.keyhash)), (e_uint(3), e_uint(TS_DEPART)), (e_uint(4), e_uint(64))]))
+reg('N-enum-currency-role', 'bytes', REJ('CurrencyAttestation', 'schema', 'issuer role 9 outside 0-3'),
+    sign1_slot([p if p[0] != e_uint(5) else (e_uint(5), e_uint(9)) for p in cur_pairs], 7, AAD_CURRENCY, bob))
+reg('N-enum-resolve-code', 'bytes', REJ('ResolveReply', 'schema', 'result 9 outside 0-2'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))), (e_uint(2), e_uint(9))]))
+reg('N-enum-push-kind', 'bytes', REJ('frame', 'schema', 'TopologyPush kind 2 outside 0-1'),
+    frame(5, e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_bstr(adopt_env))])))
+reg('N-enum-memo-slot', 'bytes', REJ('frame', 'schema', 'memo slot 10 outside the nibble range 0-9'),
+    frame(6, e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc),
+                    (e_uint(3), e_uint(10)), (e_uint(4), e_uint(TS_ADOPT))])))
+reg('N-enum-resource-status', 'bytes', REJ('ResourceResponse', 'schema', 'status 9 outside 0-5'),
+    e_map([(e_uint(1), e_uint(9))]))
+reg('N-enum-attach-mode', 'bytes', REJ('frame', 'schema', 'AttachAck mode 9 outside 0-1'),
+    frame(2, e_map([(e_uint(1), e_uint(9)), (e_uint(3), e_uint(300)), (e_uint(4), e_uint(0)),
+                    (e_uint(5), caps_server)])))
+reg('D-enum-location-method', 'bytes', ACC('LocationEvidence', 'method 9: the registry is deliberately open (D3)'),
+    e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(9)), (e_uint(2), e_tstr('u4p'))])])),
+           (e_uint(2), e_arr([]))]))
+reg('D-enum-witness-reserved-bits', 'bytes', ACC('Witness', 'bits 3+ retained, 0-2 interpreted (D4)'),
+    witness_entry(IDS['w1'], alice, 0b1111))
+
+# ---- bar 14: schema-shape — missing-required and wrong-major-type per core schema
+reg('N-shape-adoption-missing-locator', 'bytes', REJ('body', 'schema', 'field 3 required'),
+    e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
+           (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
+           (e_uint(4), e_uint(TS_ADOPT))]))
+reg('N-shape-adoption-timestamp-tstr', 'bytes', REJ('body', 'schema', 'field 4 must be uint'),
+    e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
+           (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
+           (e_uint(3), adopt_loc), (e_uint(4), e_tstr('yesterday'))]))
+reg('N-shape-presence-missing-root', 'bytes', REJ('body', 'schema', 'field 8 required'),
+    e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(carol.keyhash)])),
+           (e_uint(1), e_uint(TS_START)), (e_uint(2), e_uint(TS_FINAL)),
+           (e_uint(3), e_arr([participant(alice), participant(carol)])),
+           (e_uint(6), e_uint(1))]))
+reg('N-shape-presence-subtype-tstr', 'bytes', REJ('body', 'schema', 'field 6 must be uint'),
+    e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(carol.keyhash)])),
+           (e_uint(1), e_uint(TS_START)), (e_uint(2), e_uint(TS_FINAL)),
+           (e_uint(3), e_arr([participant(alice), participant(carol)])),
+           (e_uint(6), e_tstr('normal')), (e_uint(8), e_bstr(form_root))]))
+reg('N-shape-response-missing-consent', 'bytes', REJ('VerifierResponse', 'schema', 'field 7 required'),
+    e_map([(e_uint(1), e_bstr(KH_c1 := IDS['c1'].keyhash)), (e_uint(2), e_bstr(alice.keyhash)),
+           (e_uint(3), e_bstr(npr_q0)), (e_uint(4), e_uint(0)), (e_uint(5), e_uint(1)),
+           (e_uint(10), e_uint(0))]))
+reg('N-shape-currency-missing-issuer', 'bytes', REJ('CurrencyAttestation', 'schema', 'field 6 required'),
+    sign1_slot([p for p in cur_pairs if p[0] != e_uint(6)], 7, AAD_CURRENCY, bob))
+reg('N-shape-catalog-missing-endpoint', 'bytes', REJ('CatalogEntry', 'schema', 'field 5 required'),
+    sign1_slot([p for p in cat_pairs if p[0] != e_uint(5)], 8, AAD_CATALOG, bob))
+reg('N-shape-attach-missing-identity', 'bytes', REJ('frame', 'schema', 'Attach field 1 required'),
+    frame(1, e_map([(e_uint(3), caps_client)])))
+reg('N-shape-frame-arity', 'bytes', REJ('frame', 'schema', 'a frame is [type, body], not [type]'),
+    (lambda c: len(c).to_bytes(4, 'big') + c)(e_arr([e_uint(3)])))
+reg('N-shape-locator-missing-path', 'bytes', REJ('Locator', 'schema', 'field 2 required'),
+    e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(3), seqno(5, 0))]))
+reg('N-shape-keyhash-31', 'bytes', REJ('SignedLocator', 'schema', 'field 1 must be exactly 32 bytes'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash[:31])), (e_uint(2), loc), (e_uint(3), sl_cose)]))
+reg('N-shape-keyhash-33', 'bytes', REJ('SignedLocator', 'schema', 'field 1 must be exactly 32 bytes'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash + b'\x00')), (e_uint(2), loc), (e_uint(3), sl_cose)]))
+
+# ---- bar 7: the boundary sweep (declared-scope list, negative-vectors.md)
+def _depart_with_heads(k):
+    heads = sorted(H(b'rhtn-test-vectors:head:%d' % i) for i in range(k))
+    key0 = e_arr([e_arr([e_bstr(h) for h in heads])])   # bypasses backptrs()'s own 1..8 guard
+    return e_map([(e_uint(0), key0), (e_uint(1), e_bstr(alice.keyhash)),
+                  (e_uint(2), e_bstr(bob.keyhash)), (e_uint(3), seqno(5, 50)),
+                  (e_uint(4), e_uint(TS_DEPART + 7200))])
+reg('B-backptrs-8', 'bytes', ACC('body', 'a merge of eight heads, the ceiling'), _depart_with_heads(8))
+reg('B-backptrs-9', 'bytes', REJ('body', 'schema', 'nine heads exceed the 1..8 bound'), _depart_with_heads(9))
+w17 = [witness_entry(w, alice, 7) for w in W16] + [witness_entry(IDS['c1'], bob, 7)]
+reg('B-witnesses-17', 'bytes', REJ('body', 'schema', 'seventeen witnesses exceed the 16 ceiling'),
+    e_map([(e_uint(0), backptrs(*([[genesis(alice.keyhash)], [genesis(bob.keyhash)]]
+                                  + [[genesis(w.keyhash)] for w in W16] + [[genesis(IDS['c1'].keyhash)]]))),
+           (e_uint(1), e_uint(TS_C2)), (e_uint(2), e_uint(TS_C2F)),
+           (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+           (e_uint(4), e_arr(w17)), (e_uint(6), e_uint(0)), (e_uint(8), e_bstr(npr_root))]))
+def _pth(n):
+    packed = bytearray()
+    nb = [1] * n
+    for i in range(0, n - 1, 2): packed.append(nb[i] << 4 | nb[i + 1])
+    if n % 2: packed.append(nb[-1] << 4)
+    return e_map([(e_uint(1), e_bstr(bytes(packed))), (e_uint(2), e_uint(n))])
+reg('B-path-24', 'bytes', ACC('Locator', 'path at the 24-nibble ceiling'),
+    e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), _pth(24)), (e_uint(3), seqno(5, 0))]))
+reg('B-path-25', 'bytes', REJ('Locator', 'schema', '25 nibbles exceed the ceiling'),
+    e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), _pth(25)), (e_uint(3), seqno(5, 0))]))
+def _adopt_ext(nkeys, vlen):
+    ext = [(e_uint(100 + i), e_bstr(b'x')) for i in range(nkeys)]
+    if vlen: ext = [(e_uint(100), e_bstr(b'v' * vlen))]
+    return e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
+                  (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
+                  (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT))] + ext)
+reg('B-ext-keys-16', 'bytes', ACC('body', 'sixteen unknown keys, the ceiling'), _adopt_ext(16, 0))
+reg('B-ext-keys-17', 'bytes', REJ('body', 'schema', 'seventeen unknown keys exceed the ceiling'), _adopt_ext(17, 0))
+reg('B-ext-value-1024', 'bytes', ACC('body', 'an unknown value at the 1024-byte ceiling'), _adopt_ext(0, 1024))
+reg('B-ext-value-1025', 'bytes', REJ('body', 'schema', '1025 encoded bytes exceed the ceiling'), _adopt_ext(0, 1025))
+def _peer_with_audits(k):
+    audits = e_arr([e_map([(e_uint(1), e_uint(TS_DEPART + i)), (e_uint(2), b'\xf5'),
+                           (e_uint(3), e_bstr(carol.keyhash))]) for i in range(k)])
+    return e_map([(e_uint(0), backptrs([adopt_txid], [formation_txid])),
+                  (e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), e_bstr(carol.keyhash)),
+                  (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+                  (e_uint(4), network_point([192, 0, 2, 7])),
+                  (e_uint(5), e_uint(TS_DEPART + 7200)), (e_uint(7), audits)])
+reg('B-audits-8', 'bytes', ACC('body', 'eight peering audits, the ceiling'), _peer_with_audits(8))
+reg('B-audits-9', 'bytes', REJ('body', 'schema', 'nine audits exceed the ceiling'), _peer_with_audits(9))
+def _er_np(k):
+    nps = e_arr([network_point([10, 0, 0, i + 1]) for i in range(k)]) if k else e_arr([])
+    return e_map(er_fields[:1] + [(e_uint(2), nps)] + er_fields[2:] + [(e_uint(4), er_cose)])
+reg('B-endpoints-8', 'bytes', ACC('EndpointRecord', 'eight NetworkPoints, the ceiling (signature stale by design: shape fixture)'), _er_np(8))
+reg('B-endpoints-9', 'bytes', REJ('EndpointRecord', 'schema', 'nine NetworkPoints exceed 1..8'), _er_np(9))
+reg('B-endpoints-0', 'bytes', REJ('EndpointRecord', 'schema', 'field 2 is 1*8 — an empty list violates the minimum'), _er_np(0))
+reg('B-port-65535', 'bytes', ACC('NetworkPoint', 'maximum non-default port'), network_point([10, 0, 0, 1], port=65535))
+_np_raw = lambda p: e_map([(e_uint(1), e_bstr(bytes([10, 0, 0, 1]))), (e_uint(3), e_uint(p))])
+reg('B-port-65536', 'bytes', REJ('NetworkPoint', 'schema', 'port exceeds u16'), _np_raw(65536))
+reg('B-port-0', 'bytes', REJ('NetworkPoint', 'schema', 'zero is never a destination'), _np_raw(0))
+reg('B-prekey-4096', 'bytes', ACC('PrekeyBundle', 'blob at the 4 KB ceiling'),
+    sign1_slot([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_uint(1)),
+                (e_uint(3), e_bstr(b'k' * 4096)), (e_uint(4), e_uint(TS_REC))], 5, AAD_PREKEY, alice))
+reg('B-prekey-4097', 'bytes', REJ('PrekeyBundle', 'schema', 'blob exceeds the 4 KB ceiling'),
+    sign1_slot([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_uint(1)),
+                (e_uint(3), e_bstr(b'k' * 4097)), (e_uint(4), e_uint(TS_REC))], 5, AAD_PREKEY, alice))
+reg('B-archive-max-0', 'bytes', REJ('ArchiveRequest', 'schema', 'max_records below 1'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(3), e_uint(0)), (e_uint(5), e_bstr(NONCE(b'a0')))]))
+reg('B-archive-max-256', 'bytes', ACC('ArchiveRequest', 'max_records at the ceiling'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(3), e_uint(256)), (e_uint(5), e_bstr(NONCE(b'a256')))]))
+reg('B-archive-max-257', 'bytes', REJ('ArchiveRequest', 'schema', 'max_records above 256'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(3), e_uint(257)), (e_uint(5), e_bstr(NONCE(b'a257')))]))
+for gh, exp in [('u4', REJ('LocationEvidence', 'schema', 'two geohash characters')),
+                ('u4pqr', REJ('LocationEvidence', 'schema', 'five geohash characters')),
+                ('U4P', REJ('LocationEvidence', 'schema', 'upper case is malformed'))]:
+    reg(f'B-geohash-{gh}', 'bytes', exp,
+        e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_tstr(gh))])])),
+               (e_uint(2), e_arr([]))]))
+def _prox(k):
+    return e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])] * 1
+                                    if k == 1 else
+                                    [e_map([(e_uint(1), e_uint(1 + (i % 4))), (e_uint(2), e_uint(0)),
+                                            (e_uint(3), e_uint(i + 1))]) for i in range(k)])),
+                  (e_uint(2), e_uint(3))])
+reg('B-channels-8', 'bytes', ACC('Proximity', 'eight channels, the ceiling'), _prox(8))
+reg('B-channels-9', 'bytes', REJ('Proximity', 'schema', 'nine channels exceed the ceiling'), _prox(9))
+def _loc_ev(nass, ncorr):
+    return e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_tstr('u4p'))])
+                                     for _ in range(nass)])),
+                  (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[i % 16].keyhash)),
+                                            (e_uint(2), e_uint(3)), (e_uint(3), e_uint(5))])
+                                     for i in range(ncorr)]))])
+reg('B-asserted-4', 'bytes', ACC('LocationEvidence', 'four asserted locations, the ceiling'), _loc_ev(4, 1))
+reg('B-asserted-5', 'bytes', REJ('LocationEvidence', 'schema', 'five asserted locations exceed the ceiling'), _loc_ev(5, 1))
+reg('B-corroborations-16', 'bytes', ACC('LocationEvidence', 'sixteen corroborations, the ceiling'), _loc_ev(1, 16))
+reg('B-corroborations-17', 'bytes', REJ('LocationEvidence', 'schema', 'seventeen corroborations exceed the ceiling'), _loc_ev(1, 17))
+_gap = lambda g: e_map([(e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in (n_hi, n_lo, IDS['w2'])])),
+                        (e_uint(1), e_uint(TS_C2)), (e_uint(2), e_uint(TS_C2 + g)),
+                        (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+                        (e_uint(4), e_arr([witness_entry(IDS['w2'], bob, 7)])),
+                        (e_uint(6), e_uint(0)), (e_uint(8), e_bstr(fin_ab_root))])
+reg('B-finalization-gap-86400', 'bytes', ACC('body', 'gap at exactly 24 hours, the maximum'), _gap(86400))
+reg('B-finalization-gap-86401', 'bytes', REJ('body', 'schema', 'gap exceeds the 24-hour bound'), _gap(86401))
+def _scope_list(k, sortit=True, dupe=False):
+    khs = sorted(H(b'rhtn-test-vectors:scope:%d' % i) for i in range(k))
+    if not sortit: khs = list(reversed(khs))
+    if dupe: khs[1] = khs[0]
+    return e_arr([e_uint(6), e_arr([e_bstr(x) for x in khs])])
+reg('B-scope-256', 'bytes', ACC('Scope', 'list at the 256 ceiling'), _scope_list(256))
+reg('B-scope-257', 'bytes', REJ('Scope', 'schema', '257 keyhashes exceed the ceiling'), _scope_list(257))
+reg('N-scope-unordered', 'bytes', REJ('Scope', 'schema', 'the list must ascend'), _scope_list(4, sortit=False))
+reg('N-scope-duplicate', 'bytes', REJ('Scope', 'schema', 'duplicates are malformed'), _scope_list(4, dupe=True))
+reg('P-scope-down2', 'bytes', ACC('Scope', 'down(2), the [tag, n] form'), e_arr([e_uint(1), e_uint(2)]))
+reg('P-scope-self', 'bytes', ACC('Scope', 'the bare-uint form'), e_uint(0))
+reg('B-caps-64', 'bytes', ACC('Capabilities', 'sixty-four parameters, the ceiling'),
+    e_map(sorted([(e_uint(int.from_bytes(H(b'cap%d' % i)[:8], 'big')), e_bstr(b'v')) for i in range(64)],
+                 key=lambda p: p[0])))
+reg('B-caps-65', 'bytes', REJ('Capabilities', 'schema', 'sixty-five parameters exceed the ceiling'),
+    e_map(sorted([(e_uint(int.from_bytes(H(b'cap%d' % i)[:8], 'big')), e_bstr(b'v')) for i in range(65)],
+                 key=lambda p: p[0])))
+reg('B-caps-value-1025', 'bytes', REJ('Capabilities', 'schema', 'a 1025-byte value exceeds the ceiling'),
+    e_map([(e_uint(CAP_BATCH), e_bstr(b'v' * 1025))]))
+reg('B-siblings-9', 'bytes', ACC('frame', 'AttachAck with nine SiblingRefs, the f-1 ceiling'),
+    frame(2, e_map([(e_uint(1), e_uint(0)),
+                    (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[i].keyhash)),
+                                              (e_uint(2), e_arr([network_point([10, 0, 1, i + 1])]))])
+                                       for i in range(9)])),
+                    (e_uint(3), e_uint(300)), (e_uint(4), e_uint(0)), (e_uint(5), caps_server)])))
+reg('B-siblings-10', 'bytes', REJ('frame', 'schema', 'AttachAck with ten SiblingRefs exceeds f-1 = 9'),
+    frame(2, e_map([(e_uint(1), e_uint(0)),
+                    (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[i].keyhash)),
+                                              (e_uint(2), e_arr([network_point([10, 0, 1, i + 1])]))])
+                                       for i in range(10)])),
+                    (e_uint(3), e_uint(300)), (e_uint(4), e_uint(0)), (e_uint(5), caps_server)])))
+def _catalog_padded(target):
+    # Reach the exact total via a legal connect_scope keyhash list (coarse,
+    # 33 bytes per entry) plus metadata padding (fine, 1 byte per byte) — the
+    # metadata field's own 1024-byte bound cannot reach 2048 alone.
+    for k in range(2, 40):
+        scope = e_arr([e_uint(6), e_arr([e_bstr(H(b'rhtn-test-vectors:pad:%d' % i))
+                                         for i in range(k)])])
+        for pad in range(0, 700):
+            pairs = sorted([p for p in cat_pairs if p[0] != e_uint(7)]
+                           + [(e_uint(6), scope), (e_uint(7), e_bstr(b'v=1' + b'.' * pad))],
+                           key=lambda p: p[0])
+            out = sign1_slot(pairs, 8, AAD_CATALOG, bob)
+            if len(out) == target:
+                return out
+    raise AssertionError('could not pad catalog entry to %d' % target)
+reg('B-catalog-2048', 'bytes', ACC('CatalogEntry', 'total encoded size at the 2048 ceiling'), _catalog_padded(2048))
+reg('B-catalog-2049', 'bytes', REJ('CatalogEntry', 'schema', '2049 encoded bytes exceed the ceiling'), _catalog_padded(2049))
+reg('B-batch-1-subject', 'bytes', REJ('PrekeyBatchRequest', 'schema', 'a batch names at least two subjects'),
+    e_map([(e_uint(1), e_arr([e_bstr(alice.keyhash)])), (e_uint(2), e_bstr(NONCE(b'b1')))]))
+reg('U-responses-33', 'unit',
+    REJ('body', 'schema', 'thirty-three verifier responses exceed the 32 ceiling'),
+    note='recipe: any normal record with 33 distinct-verifier responses; the suite holds fewer distinct identities than the bound')
+reg('U-recovery-responses-33', 'unit',
+    REJ('Recovery', 'schema', 'thirty-three responses exceed the 32 ceiling'),
+    note='recipe: a Recovery block with 33 distinct-verifier responses')
+reg('U-frame-65537', 'unit',
+    REJ('frame', 'session', 'a stream-0 frame over 65,536 bytes'),
+    note='recipe: frame(3, heartbeat) with body padded by one unknown 65,000-byte capability value; length prefix 65,537')
+reg('U-request-262145', 'unit',
+    REJ('frame', 'session', 'a request frame over 262,144 bytes'),
+    note='recipe: request 2 (ArchiveRequest) padded past the bidirectional bound')
+
+# ---- bar 5: the disclosure negative family (from the normal record)
+_np_slots = [npr_slots[lab] for lab in LABELS]
+def _pres(slots_arr):
+    return e_arr([npr_env, e_arr(slots_arr)])
+full7 = [npr_slots[lab][0] for lab in LABELS]
+reg('N-disclosure-six-slots', 'bytes', REJ('presentation', 'schema', 'six slots — exactly seven always'),
+    _pres(full7[:6]))
+reg('N-disclosure-eight-slots', 'bytes', REJ('presentation', 'schema', 'eight slots — exactly seven always'),
+    _pres(full7 + [e_bstr(npr_slots['capture'][1])]))
+reg('N-disclosure-label-mismatch', 'bytes', REJ('presentation', 'schema',
+    "slot 0 carries the 'location' disclosure — a revealed label must match its slot position"),
+    _pres([npr_slots['location'][0]] + full7[1:]))
+reg('N-disclosure-salt-15', 'bytes', REJ('presentation', 'schema', 'a 15-byte salt is malformed'),
+    _pres([e_arr([e_bstr(H(b's')[:15]), e_tstr('capture'), npr_values['capture']])] + full7[1:]))
+reg('N-disclosure-root-mismatch', 'bytes', REJ('presentation', 'semantic',
+    'a flipped withheld digest — the recomputed root no longer equals body field 8'),
+    _pres([e_bstr(bytes([npr_slots['capture'][1][0] ^ 1]) + npr_slots['capture'][1][1:])] + full7[1:]))
+reg('N-disclosure-value-mutated', 'bytes', REJ('presentation', 'semantic',
+    'a revealed value mutated — its digest, and so the root, no longer match'),
+    _pres([e_arr([e_bstr(H(f'rhtn-test-vectors:salt:normal:capture'.encode())[:16]),
+                  e_tstr('capture'),
+                  e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(4)),
+                         (e_uint(3), e_uint(0)), (e_uint(4), e_uint(2))])])] + full7[1:]))
+
+# ---- bar 13: optionals not otherwise exercised
+reg('P-archive-request-bounded', 'bytes', ACC('ArchiveRequest', 'head and stop-timestamp both present'),
+    e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(depart_txid)),
+           (e_uint(3), e_uint(16)), (e_uint(4), e_uint(TS_ADOPT)), (e_uint(5), e_bstr(NONCE(b'ab')))]))
+reg('P-archive-reply-continued', 'bytes', ACC('ArchiveReply', 'more remaining, continuation txid present'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'ab'))), (e_uint(2), e_arr([adopt_env])),
+           (e_uint(3), b'\xf5'), (e_uint(4), e_bstr(adopt_txid))]))
+reg('P-catalog-scoped', 'bytes', ACC('CatalogEntry', 'connect_scope present: dunbar'),
+    sign1_slot(sorted(cat_pairs + [(e_uint(6), e_uint(5))], key=lambda p: p[0]), 8, AAD_CATALOG, bob))
+reg('P-catalog-reply-truncated', 'bytes', ACC('CatalogReply', 'truncation continuation present'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))), (e_uint(2), e_arr([catalog])),
+           (e_uint(3), e_tstr('rhtn-wiki'))]))
+reg('P-channel-bound', 'bytes', ACC('Channel', 'claimed resolution and session-key binding both present'),
+    e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(0)), (e_uint(3), e_uint(1)),
+           (e_uint(4), e_bstr(H(b'rhtn-test-vectors:uwb-session-key')[:32]))]))
+reg('P-integrity-evidence', 'bytes', ACC('ClientIntegrity', 'evidence bstr present'),
+    e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(2)), (e_uint(3), e_bstr(H(b'attest-quote')))]))
+
+# ---- traces and contexts (structured, no bytes)
+for trid, seq, actions, cite in [
+    ('TR1', 'control frame with unknown frame_type 99 arrives mid-session', ['skip_frame', 'session_survives'], '§8.0'),
+    ('TR2', 'Attach arrives in TLS 1.3 0-RTT early data', ['defer_until_handshake'], '§8.2, §9.2'),
+    ('TR3', 'bidirectional stream opens with unknown request_type 99', ['close_stream', 'session_survives'], '§9.2'),
+    ('TR4', 'malformed SiblingUpdate arrives', ['ignore_whole', 'previous_list_stands', 'session_survives'], '§8.2'),
+    ('TR5', 'second Attach on an attached session', ['fail_attach'], '§8.2'),
+    ('TR6', 'stream-0 frame with length prefix over 65,536', ['protocol_error'], '§8.0'),
+    ('TR7', 'heartbeat counter gap observed', ['liveness_by_intervals_only'], '§8.2'),
+    ('TR8', 'Attach carries an attestation failing validation', ['treat_attestation_absent', 'session_attaches'], '§8.2'),
+]:
+    reg(trid, 'trace', {'actions': actions, 'cite': cite}, note=seq)
+for cid, inputs, expect in [
+    ('V9', {'adoption': 'P-adopt-optionals', 'dereference': 'P-normal-record'},
+     {'structural': 'valid', 'checks': {'proof_of_presence': 'pass'}}),
+    ('V9a', {'adoption': 'P-adopt-divergent', 'dereference': 'P-formation'},
+     {'structural': 'valid', 'checks': {'proof_of_presence': 'fail'}}),
+    ('V9b', {'adoption': 'P-adopt-optionals', 'dereference': 'unfetchable'},
+     {'structural': 'valid', 'checks': {'proof_of_presence': 'unverifiable(unfetchable)'}}),
+    ('CTX-bundle', {'bundle': ['P-formation', 'P-ac1', 'P-ac2', 'P-ac1', 'P-normal-record', 'mutated P-formation'],
+                    'evaluated_at': 'TS_EVAL', 'subject': 'alice', 'counterparty': 'bob'},
+     {'n': 4, 'candidates': 1, 'required': 1}),
+]:
+    reg(cid, 'context', expect, inputs=inputs)
+
 # ---------------------------------------------------------------- write files
 
 import os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+with open('corpus.json', 'w', encoding='utf-8', newline='\n') as f:
+    _json.dump({'format': 'rhtn-test-corpus/1',
+                'pins': {'wire-format.md': WIRE_SHA, 'network-design.md': DESIGN_SHA,
+                         'light-client-requirements.md': LIGHT_SHA},
+                'classes': {'bytes': 'hex is the complete input',
+                            'unit': 'no bytes: note carries a deterministic recipe',
+                            'trace': 'a session event sequence with required actions',
+                            'context': 'named fixture inputs with an expected evaluation'},
+                'entries': REG}, f, indent=1, sort_keys=False)
+    f.write('\n')
 # ---- hash-language disjointness (wire §1.1's invariant, asserted) ----
 # The four untagged hash preimage languages must stay pairwise disjoint. A
 # schema change that broke this would otherwise pass generation silently.

@@ -4,8 +4,8 @@
   "network-design.md": "7a0e2b40b05e384699101ffa3ce781475f80341bfd030e93718f3f45c6fb121e",
   "light-client-requirements.md": "bc0ebf1d1794b602a87895076166e6139177eaf12fa975853d8142acd95e9711"
  },
- "generator": "6e3fa1ad39c19a78fbdbbdd746dbd6e61bcf77c201c9a0fb70738ad966f9badc",
- "verifier": "b25a3d0545680a04a26c2e141756de284bd7bb12b48f85ecfcafc0a69dbb255b",
+ "generator": "d6e459fe90b28fbb435487f649b19e2ab2bbb955f6b01f05f75d95ab05bf6eac",
+ "verifier": "6502634abeae629e4be50dd374496cadfd816972d0c32d3aad2665d9e4154947",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "50.0.1"
@@ -17,7 +17,7 @@
   "records.md": "30094c869611bd79fbe701af423cbb531f74a3e00ca6d28ef9fd7c4422e65b59",
   "verifier-selection.md": "fc579168429d4c19880a582008224e55aec3ecdf0529b9e3411de32ba27a5418",
   "messages.md": "fb4c3005c7c15d8644376617acb3aff87a6f89a1a3b7a906db31b5f49a7c6070",
-  "README.md": "5db3970c0b29fe1107027ce8e319e799c8fec3c992182ce262ff750ecc15e13e",
-  "negative-vectors.md": "97bfcdbb3f26b2071a297546200784ad10bc2d814e58a888d9883e36c10816ca"
+  "README.md": "fa9dcc85c7c34e40ea2df63edb834fd756ab65a2dd962bc07e2126cb1110b940",
+  "negative-vectors.md": "992a9180f25513866acb0b82dd4ac7e661ce4e83172658e6e646bbdf89824780"
  }
 }

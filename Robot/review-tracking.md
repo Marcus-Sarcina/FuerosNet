@@ -2680,3 +2680,46 @@ normal record.
 counterparty-is-its-own-querier stands as ruled. **New standing practice, same
 date**: close all open work before proceeding with further review passes — the
 author hopes to make cycle 2 the final cycle. Open work therefore precedes 0.6.2+.
+
+## All open work closed (2026-09-02): the canonical bar is met
+
+Per the author's ruling ("close all open work before proceeding with the
+reviews"), the remaining canonical-bar items were built in sequence:
+
+- **Bar 2** — the normal presence record: alice–bob, sixteen witnesses (the
+  ceiling), 36-entry envelope, three orders deliberately different, three
+  classical responses covering the selection_basis matrix, real disclosure set,
+  its own presentations. The optionals adoption's field 8 swapped to it (V9
+  pass; mismatch moved to the divergence adoption, V9a).
+- **Bar 3** — the curated-bundle fixture over real records (two new
+  alice–carol records), harness-recomputed arithmetic.
+- **Bar 4** — both authentication forms complete with the recovery adoption
+  (prior) and the normal record.
+- **Bar 5** — presentation sets for both records plus the six-member negative
+  disclosure family in the corpus.
+- **Bar 6** — `corpus.json`, format `rhtn-test-corpus/1`: 167 entries, four
+  classes (bytes / unit / trace / context), structured expects with rejection
+  layers; the harness executes the encoding layer of every byte entry.
+- **Bar 7** — the boundary sweep: every declared bound at and past it as
+  bytes; two over-identity-set counts and two 100 KB frame bounds as unit
+  recipes.
+- **Bar 8** — every domain-separation context signed, with the cross-context
+  substitution family (S24).
+- **Bar 9** — `messages.md`: 17 frames, 14 replies/payloads, traces TR1–TR8.
+- **Bar 10** — wrong-signer analogues for every standalone object plus the
+  wrong-signer envelope.
+- **Bar 11** — finalization must-accepts (lone no-match; key 5 absent).
+- **Bar 12** — the enum/extension matrix: ten closed-enum rejects, the open
+  namespaces' must-accepts.
+- **Bar 13** — six unexercised optionals found and covered.
+- **Bar 14** — the schema-shape matrix: missing-required and wrong-type
+  across the core schemas, plus keyhash width edges.
+
+**The harness stands at 64 checks, all passing**, every signature in the suite
+real and verified. Identities grew to 21 (alice2, w4–w16). One §1 scope point
+clarified along the way: the empty-array prohibition is §1's OPTIONAL-field
+rule — a required `[ * … ]` field may legitimately encode empty (the
+formation's corroborations), while `[ + … ]` and `1*8` minima make emptiness a
+schema violation. "Open for the author" remains **nothing**. What canonical
+status still awaits is unchanged in kind: an independent implementation
+reproducing the whole suite — and 0.6.1's phase 2 has begun exactly that.

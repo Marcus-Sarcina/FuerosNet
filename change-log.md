@@ -7908,3 +7908,17 @@ complete positive recovery adoption now sits in the vectors: query, consent
 over the raw query_id, hybrid verifier response, successor proof, and the
 adoption presenting the old chain head — every signature real and verified by
 the harness, which grows to 28 checks, all passing.
+
+### 2026-09-02 (all open work closed; the canonical bar is met)
+Under the new practice — close all open work before further review passes —
+the vector suite's remaining thirteen bar items were built: the normal
+presence record with sixteen witnesses and its 36-entry envelope, the
+curated-bundle fixture, both verification authentication forms, the
+disclosure negative family, the machine-readable corpus (167 entries under
+stable ids in four classes with layered expects), the full boundary sweep,
+every signed context with wrong-signer analogues and cross-context
+substitution, the unsigned message families with session traces, the
+finalization must-accepts, the enumeration matrix, six newly-covered
+optionals, and the schema-shape matrix. The harness runs 64 checks, all
+passing, every signature real. Nothing is open for the author; promotion
+awaits only an independent implementation reproducing the suite.
