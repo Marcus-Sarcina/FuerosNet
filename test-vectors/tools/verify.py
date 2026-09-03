@@ -482,7 +482,7 @@ srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
-check(len(re.findall(r'\| TR\d+ ', ms)) == 21, 'messages: twenty-one session traces')
+check(len(re.findall(r'\| TR\d+ ', ms)) == 23, 'messages: twenty-three session traces')
 qc = frame_objs[12][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes')
@@ -550,9 +550,9 @@ _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presen
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
-check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 21
+check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 23
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
-      'corpus: twenty-one traces and five contexts')
+      'corpus: twenty-three traces and five contexts')
 _tr = canonical(bytes.fromhex(byid['P-catalog-reply-truncated']['hex']))
 _res_ids = [e[1] for e in _tr[2]]
 check(len(_tr[2]) == 111 and 3 in _tr and _res_ids == sorted(_res_ids),

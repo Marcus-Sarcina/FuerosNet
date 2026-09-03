@@ -8188,3 +8188,15 @@ receiver's path prefixes every legitimate memo — joins the over-strictness
 family. Design §5.2 notes aws-lc-rs as the production-oriented native
 route that still leaves the browser gap standing. Twenty-one traces; both
 harnesses green.
+
+### 2026-09-02 (cycle 2, 0.6 rootward-memo target, phase 2 — the family closes)
+
+The final phase 2 traced five memo vectors to zero divergences and
+self-caught the oversize-frame bug the previous ingest had ruled on —
+classifying it with the same layering argument the ruling used, from the
+pre-ruling text alone. The confirmed-cycle complement of the hint-rejection
+trace and the wrong-subnet drop join the trace set, closing the named
+coverage gap. The implementation-attempt family ends at ten targets and
+twenty rounds: spec ambiguities at zero for the last six targets, two
+planted fixtures each catching their quarry one round after planting, and
+the integration suite grown to twenty-three traces.

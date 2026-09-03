@@ -1975,6 +1975,32 @@
    "note": "an ordinary memo from below arrives; the receiver position is a prefix of the field-2 path"
   },
   {
+   "id": "TR22",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "disavow_ingress_subordinate",
+     "reason_5_without_prejudice",
+     "memo_terminates"
+    ],
+    "cite": "\u00a710.2, \u00a74.3"
+   },
+   "note": "a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available"
+  },
+  {
+   "id": "TR23",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "drop",
+     "no_table_write",
+     "no_forward"
+    ],
+    "cite": "\u00a710.2"
+   },
+   "note": "a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in"
+  },
+  {
    "id": "V9",
    "class": "context",
    "expect": {

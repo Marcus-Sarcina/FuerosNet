@@ -3443,3 +3443,38 @@ libsignal PQXDH note is ecosystem context; the design cites PQXDH as
 protocol, claims no crate path, nothing stale.
 
 Python 79/79; Rust 146/0, 46 structured skips.
+
+## Cycle 2, pass 0.6 — rootward-memo phase 2 (2026-09-02); the family closes
+
+Zero divergences on the five direct memo vectors (P-frame-07/08,
+N-enum-memo-slot, TR20, TR21) — TR20 and TR21, written from this target's
+own phase-1 findings, satisfied on first contact, TR21's containment trap
+included. The reviewer's P-frame-07→08 sequence reading (later timestamp
+writes the empty ROW) is the specified semantics, correctly composed
+unprompted.
+
+**They self-caught the TR6 divergence phase 1 planted.** Their snapshot
+predates the §8.0 ruling, yet they classified their own oversize handling
+as an implementation bug with exactly the ruling's layering argument: at
+length-rejection time no frame type is readable, so the known-frame discard
+rule cannot apply. The pre-ruling text plus TR6 sufficed — the ruling and
+the clean-room read agree independently, which is the best evidence the
+ruling carved at a real joint.
+
+**Coverage response**: the confirmed-cycle complement of TR20 was the
+named gap — spec-determined and untested. TR22 added (records confirm, no
+live disambiguation → disavow the ingress subordinate, reason 5, without
+prejudice, memo terminates) and TR23 with it (wrong-subnet memo → drop, no
+table write, no forward — the privacy boundary §10.2 says holds only if
+every receiver enforces it). The table temporal behaviours (at-or-after
+suppression, equal-timestamp arrival order) are deliberately NOT traced:
+the table is optional, a no-table node forwards everything conformingly,
+so no universal expectation exists to pin — the optionality is the reason,
+recorded here so the gap is not re-flagged as an oversight.
+
+**The 0.6 family closes**: ten targets, twenty rounds. Divergence trend
+across the family: spec ambiguities zero for the last six targets;
+implementation bugs caught twice by fixtures planted one round earlier
+(B-port-7431-explicit, TR6 via the §8.0 ruling); the stress family grew
+from nothing to thirteen README rows and TR11-TR23. Twenty-three traces,
+188 corpus entries; Python 79/79, Rust 146/0.

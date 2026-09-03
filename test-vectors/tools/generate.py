@@ -2383,6 +2383,8 @@ a sequence of events with the required actions.
 | TR19 | a stored topology transaction arrives again through a peering cycle | drop the duplicate, forward nothing, session survives (§10.1) — the store is the seen-set; no dedicated suppression cache exists and none may be added |
 | TR20 | a memo arrives naming the receiver in field 1, but its own records do not confirm the change | reject the hint: no disavowal, nothing severed (§10.2) — a memo is unsigned and never evidence; acting on it alone manufactures the false positive design §6.2.5 ranks as the worse failure |
 | TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
+| TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | disavow the direct subordinate on the ingress branch, reason 5, without prejudice; the memo terminates here (§10.2, §4.3) — the confirmed complement of TR20: the detector cuts the one edge it has authority over, and the disavowal is an ordinary transaction, not a memo field |
+| TR23 | a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in | drop it — no table write, no forwarding (§10.2) — a memo never leaves its subnet, and the privacy property only holds if every receiver enforces it: forwarding would carry the memo across the boundary the argument rests on |
 """)
 
 # ================================================================ corpus.json
@@ -2864,6 +2866,8 @@ for trid, seq, actions, cite in [
     ('TR19', 'a stored topology transaction arrives again through a peering cycle', ['drop_duplicate', 'no_forward', 'session_survives'], '§10.1'),
     ('TR20', 'a memo arrives naming the receiver in field 1, but its own records do not confirm the change', ['reject_hint', 'no_disavowal', 'nothing_severed'], '§10.2'),
     ('TR21', 'an ordinary memo from below arrives; the receiver position is a prefix of the field-2 path', ['forward_rootward', 'no_cycle'], '§10.2'),
+    ('TR22', 'a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available', ['disavow_ingress_subordinate', 'reason_5_without_prejudice', 'memo_terminates'], '§10.2, §4.3'),
+    ('TR23', 'a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in', ['drop', 'no_table_write', 'no_forward'], '§10.2'),
 ]:
     exp = {'actions': actions, 'cite': cite}
     if trid in TRACE_ONE_OF:
