@@ -3622,3 +3622,24 @@ Defences the reviewer confirmed surviving: no record forgery without
 participants, no verifier-response rewriting, no capture access by
 witnessing, and cross-nomination improving representativeness rather than
 honesty.
+
+## Pass 0.9.3 blocked; the adversarial prompt rewritten (2026-09-03)
+
+Run 0.9.3 (third adversary role) tripped the reviewing provider's
+cybersecurity classifier. The provider-side feedback located the cause in
+the review's operational shape — the run had moved from auditing the design
+into optimising an adversary (cheapest paths, paid participants, scaling)
+— and supplied a narrower defensive-deliverable format. The plan's 0.8
+prompt is rewritten accordingly: authorized-defensive-review framing, a
+prove-or-falsify-the-claims method, a seven-point per-finding deliverable
+(sections, property, minimal preconditions, conceptual impact,
+register-class, mitigation, validation check), an explicit stop-at-category
+rule, and no attacker cost/scaling optimisation. Role 3 lost its budget
+figure — the one role with attacker economics in its definition, and most
+likely the blocked run. The four-class classification, one-role-per-session,
+and registers-supplied conventions are unchanged, so ingest stays the same
+— with one addition: deliverable items 6 and 7 (proposed mitigations and
+validation checks) arrive as reviewer suggestions and are candidates for
+author ruling, never decisions. Author is also replacing the external
+safety disclaimer with the provider-suggested wording; output shape may
+drift accordingly.

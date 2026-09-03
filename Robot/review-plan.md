@@ -712,54 +712,73 @@ One per session. The prompt below takes exactly one of these.
 
 1. A participant's own patron
 2. A witness at a presence ceremony
-3. A well-funded commercial operator wanting fake standing at scale (budget:
-   $100k/month)
+3. A commercial operator seeking unearned standing at scale
 4. A state actor with legal compulsion over one cloud provider
 5. A malicious counterparty at a single in-person meeting
 6. Someone who has stolen a device, including its keys and archive
 
 ### Prompt
 
-```
-You are a security researcher asked to break the system described in the
-attached specification. You have no stake in it succeeding.
+*(Rewritten 2026-09-03 after run 0.9.3 tripped the reviewing provider's
+cybersecurity classifier. The earlier form asked the reviewer to construct
+and optimise attacks — steps, costs, quantities, a budgeted role — which the
+provider's own feedback identified as adversary-optimisation rather than
+audit. This form requests the same findings as a defensive review: property
+violated, preconditions, impact, repair — never an operating plan. Role 3
+lost its budget figure for the same reason. Ingest note: items 6 and 7 of
+the deliverable are reviewer SUGGESTIONS and enter the process as
+candidates for the author's ruling, never as decisions.)*
 
-Your adversary role for this session, and the only one to consider:
+```
+Treat the attached specifications as an authorized defensive architecture
+review of a system I own and am designing. Your deliverable is findings and
+repairs, not attack development.
+
+The threat-model perspective for this session, and the only one to consider:
 
     [ONE ROLE FROM THE TABLE]
 
 You have been given everything, deliberately — including the designers' own
 register of known weaknesses (design §18 accepted risks, §19.4 findings
 requiring action, §19.7 accepted costs, §19.8 correlations, §20.1 unsourced
-assumptions, §20.2 load-bearing assumptions) and their change log. A real
-attacker would have all of this, so you do too.
+assumptions, §20.2 load-bearing assumptions) and their change log. The
+review must reach past what those registers already record.
 
-Describe the best attacks you can construct in that role. For each: the
-preconditions, the steps, what you gain, what defence the design states, and
-whether that defence actually holds.
+Work by proving or falsifying the specification's own security claims as
+they face this adversary: each stated defence, bound, and accepted-risk
+justification either holds under your best scrutiny or fails for a reason
+you can state. For each finding, provide only:
 
-Classify every finding into exactly one of:
+  1. The affected document sections.
+  2. The security property violated or endangered.
+  3. The minimal preconditions under which the weakness matters.
+  4. The resulting impact, at a conceptual level.
+  5. Whether the specification already acknowledges it, via the classes:
+       RESTATES   — already in their registers, in substance
+       EXTENDS    — a known weakness, but a worse consequence or a path
+                    they did not describe
+       NOVEL      — not in the registers at all
+       REASONING  — an accepted risk whose stated JUSTIFICATION is wrong;
+                    every entry in design §18 and §19.7 carries a reason,
+                    and if a reason does not hold, show why
+  6. A defensive design change or invariant that would mitigate it.
+  7. A test, simulation, or property-check that could validate the
+     mitigation.
 
-  RESTATES   — already in their registers, in substance
-  EXTENDS    — a known weakness, but a worse consequence or an attack path
-               they did not describe
-  NOVEL      — not in the registers at all
-  REASONING  — an accepted risk whose stated JUSTIFICATION is wrong. Every
-               entry in design §18 and §19.7 carries a reason: a Potemkin
-               region "harms nobody who is not engaging with it"; locator
-               topology leakage is "intrinsic, because graph position IS the
-               evidence". If a reason does not hold, show why.
+Do not develop step-by-step exploitation procedures, optimise attacker cost
+or scaling, design operational campaigns, or provide anything resembling an
+operating plan. If a finding would ordinarily need operational detail to
+explain, stop at the vulnerability category and affected sections and state
+that the omitted details are unnecessary to remediation.
 
 RESTATES findings are worthless — give the count and move on. REASONING
 findings are the most valuable, being the only ones the designers cannot
 reach by looking harder at their own list.
 
-Rank your findings by expected damage. Be specific about costs and
-quantities. If a stated defence holds under your best effort, say so — a
-confirmed defence is a useful result.
-
-If a maximum-effort attempt yields nothing beyond RESTATES, say so plainly.
-That is a real result, not a failure.
+Rank findings by the severity of the endangered property. If a stated
+defence holds under your best scrutiny, say so — a confirmed defence is a
+useful result. If a maximum-effort review yields nothing beyond RESTATES,
+say so plainly. That is a real result, not a failure.
 ```
 
 ## 0.9 Organisation and style
