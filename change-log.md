@@ -8200,3 +8200,18 @@ coverage gap. The implementation-attempt family ends at ten targets and
 twenty rounds: spec ambiguities at zero for the last six targets, two
 planted fixtures each catching their quarry one round after planting, and
 the integration suite grown to twenty-three traces.
+
+### 2026-09-02 (cycle 2, pass 0.7: LINDDUN privacy analysis)
+
+An external LINDDUN pass audited thirty-nine data flows and twenty-nine
+stored artifacts against the privacy registers and confirmed the registers'
+posture: every accepted cost matched §19.7, every severity matched the
+register's own, and the reviewer's closing judgment was that the C-register
+already catches most of the dangerous joins. Four compositional gaps
+survived verification and are now registered: a patron clustering a
+fanout's tightly timed pairwise deliveries into latent group membership
+(C20); the capability set as an implementation fingerprint that greasing
+does not conceal (C21); the materialised role table as a pre-joined
+classification matrix awaiting compromise or compulsion (C22); and a
+filtered catalog query as a dated statement of service-class interest,
+already blunted by the reference client's sweep-and-cache rule (P38).

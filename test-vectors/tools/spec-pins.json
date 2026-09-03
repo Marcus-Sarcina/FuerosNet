@@ -1,7 +1,7 @@
 {
  "specs": {
   "wire-format.md": "2d2a62f8737452b4faacb90e7a704bd1e1c00c871a7f096ef6c5c8498b39f464",
-  "network-design.md": "49bc2f7a79bcf1ec1b88adc5547f2734ef3189acf024a046a970b5af6c1337ac",
+  "network-design.md": "655e5e57522055cb1f3bb898c7215250b2616b037baceb17a1a5d218019dc654",
   "light-client-requirements.md": "8cc2ee2788f4f81dedd696b2566d3add0d0c58f9a8f813f95be166498067e954"
  },
  "generator": "421c08ee9ef3f7879ee8c011ba245181e5b6da5f6d5e1eb361c1614e19350e30",
@@ -11,13 +11,13 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "16ebdac02856744b5feabd7b902c422c98c013051180f4b84caf034b62682c5f",
-  "primitives.md": "ba65600f2ee514a4c74d9fc7d07ea606c0a34b6eb7204fa4b8ffb08a388322ad",
-  "transactions.md": "4e442e7e21d1b2cfe5d2b981ccaa268a3b7bd9032d565022b04881c7b2e81a33",
-  "records.md": "f40a92da39bc7217677a4b69182b282b8fa1e90d8b95064fe2c4a0bfbeb4d672",
-  "verifier-selection.md": "7d0b7784370c8843dfb8b06ce7b5891d4a4d5bdc2bf629a6878c5c660c95a88a",
-  "messages.md": "7639e19045ed426731cd4b16497cb5bc98ad6344d1d6ff0f74122d2c972e81aa",
-  "README.md": "b166f2b990e5b94ab7dafc0cc2ebef585545a86b3e2ead91f57f7d1f30ea005f",
-  "negative-vectors.md": "8bcbc94416e52052406b96ab1cc444dbde5df5e5b2c20398b9e0c3c48d56837e"
+  "keys.md": "c1606d27d820fbc5afaeeb1de9f09737cadebf64dbb27396f627b6935ad575ee",
+  "primitives.md": "48d3443af816143dd1de438a6901d60b86f4401e120a5d0e66da1cf72bb4d220",
+  "transactions.md": "46660f28e533c45c7f072921b3d7753e91798d1c3668bd73e71a29e4e3c020b5",
+  "records.md": "3d8b9b9fae3c9818ddc969da0368aff1d7a3f374a4270e33af865795b1fb90ce",
+  "verifier-selection.md": "64352ff9e9d8142bed394fbb47cbde10c2ab13a19c7521334bc10a4b3ba7134e",
+  "messages.md": "2f772832f791b28a3dcaf0a4444fb39e8f00fd32a67d83e002bad7920cac85b7",
+  "README.md": "2dc71058670d5103ec06ef0ff357dda359fb1039b868a563b18b3d6eea0ca4ac",
+  "negative-vectors.md": "dfde4c2b70be48636547ec1abc73de91a50f20e7395443b190430d5334897f4d"
  }
 }

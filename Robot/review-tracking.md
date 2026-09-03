@@ -3485,3 +3485,37 @@ Confirmed: a declared stream-0 length above 65,536 is a protocol error that
 ends the session — below the malformed-frame discard rule, not under it.
 The §8.0 text stands as written. Flag closed; no open work remains ahead of
 pass 0.7.
+
+## Cycle 2, pass 0.7 — LINDDUN privacy analysis (2026-09-02)
+
+The register survived an external LINDDUN audit. The reviewer's own closing:
+the design "does not generally make the classic mistake of arguing that each
+artifact is safe in isolation. Its own C-register already catches most of
+the dangerous joins." Thirty-nine data flows and twenty-nine stored
+artifacts audited; every ACCEPTED marking matched §19.7; every severity
+they assigned to an existing finding matched the register's own (P12
+Critical-until-built, P5/C9 Critical-on-compromise, P2/C2, P19/C4, P3/C10,
+P20/C7, P4/C5, P23, C6 all High). Their non-elevation of resolution nonce
+reuse (an amplifier of P26, not a new capability) matches the earlier
+disposition. Their warning that process-and-discard must never be described
+as protection from a malicious operator is the register's own residual
+language.
+
+Four proposed additions, all verified as genuinely unregistered, all
+applied:
+
+| New | Content | Verification |
+|---|---|---|
+| C20 (Medium) | Pairwise fanout deliveries + patron queue metadata → latent group membership and cadence | §14.3 analyses fanout only from the endpoint ("recipients cannot reply to the group"); no text prices the patron seeing the burst. Both ingredients priced (§14.3, P4); the join was not. Registered with "no traffic-shaping mitigation is specified, and none is promised" stated plainly |
+| C21 (Low–Medium) | Capability set + attachment continuity → implementation/device fingerprint at the serving node | §8.1.1's greasing rationale is anti-ossification and its own text confirms a greased parameter hides nothing about the real set; P32 prices retaining the history, not what the history identifies |
+| C22 (Low–Medium) | Materialised role table + catalog store at one host → operator-readable person/role/service matrix | Aggregation-accessibility, exactly as the reviewer framed it: no new disclosure crosses any interface, the cost of extraction drops. C7's yield pre-joined at one party |
+| P38 (Low–Medium) | A filtered catalog query reveals the asker's service-class interest to the answering node | P26's shape at the catalog; unregistered. The reference client's sweep-and-cache (light §8) already blunts it — registered with that as the standing mitigation and targeted queries as the residual |
+
+Register extents now P38 / C22; numbering append-only as required. The
+reviewer's category-level conclusions (Linking dominant; Non-repudiation a
+product, not an accident; the data plane's deniability separation "a strong
+design choice") align with the design's stated posture and need no text.
+Their four NC-category items are all already registered (immutable
+evidence/erasure = accepted cost 9 with the compliance-posture note;
+biometric custody = P13/P29; unenforceable declarations = P20/P24 and
+§1.1; multi-device = P33 undetermined). Reference check clean at 1,860.
