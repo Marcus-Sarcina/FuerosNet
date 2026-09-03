@@ -3478,3 +3478,10 @@ implementation bugs caught twice by fixtures planted one round earlier
 (B-port-7431-explicit, TR6 via the §8.0 ruling); the stress family grew
 from nothing to thirteen README rows and TR11-TR23. Twenty-three traces,
 188 corpus entries; Python 79/79, Rust 146/0.
+
+## Author ruling on 0.6.10 §8.0 (2026-09-02)
+
+Confirmed: a declared stream-0 length above 65,536 is a protocol error that
+ends the session — below the malformed-frame discard rule, not under it.
+The §8.0 text stands as written. Flag closed; no open work remains ahead of
+pass 0.7.
