@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `344fac947fb81805…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `308aae9275b83d68…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -65,7 +65,10 @@ Each record is individually well-formed; **holding both is the malformed
 condition** — an equal `seqno` carrying different contents is a disagreement,
 never a tie to break, and a reader MUST NOT prefer either (negative suite,
 V6). A subject advances its own counter, so the pair can only mean equivocation
-or a key in two hands.
+or a key in two hands. **The aftermath is ruled** (wire §10.1, 2026-09-02):
+malformed names the pair — on discovery the holder retains neither as current,
+forwards nothing further for that `(subject, seqno)`, and repairs by
+re-resolution. First-wins would let arrival order split the network's view.
 
 ## An `EndpointRecord` carrying an unknown extension — MUST ACCEPT (D8)
 

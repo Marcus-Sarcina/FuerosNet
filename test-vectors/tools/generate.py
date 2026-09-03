@@ -1864,7 +1864,10 @@ Each record is individually well-formed; **holding both is the malformed
 condition** — an equal `seqno` carrying different contents is a disagreement,
 never a tie to break, and a reader MUST NOT prefer either (negative suite,
 V6). A subject advances its own counter, so the pair can only mean equivocation
-or a key in two hands.
+or a key in two hands. **The aftermath is ruled** (wire §10.1, 2026-09-02):
+malformed names the pair — on discovery the holder retains neither as current,
+forwards nothing further for that `(subject, seqno)`, and repairs by
+re-resolution. First-wins would let arrival order split the network's view.
 
 ## An `EndpointRecord` carrying an unknown extension — MUST ACCEPT (D8)
 

@@ -8154,3 +8154,18 @@ at 146.
 The author confirmed the per-relationship-line ruling and supplied its
 intent: record and locator partitioning between different subtrees is the
 anticipated use. §7.6 now says so.
+
+### 2026-09-02 (cycle 2, 0.6 topology-flood target, phase 2)
+
+Phase 2 caught its first planted quarry: the explicit-default-port fixture,
+added one round earlier from reading the phase-1 type sketch, hand-traced to
+exactly the implementation miss it anticipated. It also exposed the one gap
+the equal-seqno rule had left: what happens to the record installed first.
+Ruled — malformed names the pair, not the later arrival. A holder that kept
+the earlier record would let arrival order split the network's view, and a
+thief whose forgery lands first would pin every reader it reached; on
+discovering the conflict a holder retains neither as current and re-resolves,
+and the line is repaired only by its subject. Stated at §10.1, echoed for
+the locator route at §7.7.3, and aligned across the V6, V11 and V12 vector
+rows — V11 also gaining its legitimate other half, where chains proving both
+series make holding both the correct end state under per-line records.

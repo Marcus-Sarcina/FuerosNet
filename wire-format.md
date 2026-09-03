@@ -2755,7 +2755,9 @@ prevent, and removing forwarding removed the thing that needed the guard.
 **`seqno` comparison still governs locator freshness** wherever two locators for one
 subject are compared, **within a series**: strictly greater `counter` to replace, and
 equal `seqno` with different contents malformed rather than a tie to break, since a
-subject advances its own counter (§2.3). **Two locators in different series do not
+subject advances its own counter (§2.3). The aftermath is §10.1's [2026-09-02]:
+malformed names the pair, the holder retains neither as current and
+re-resolves — kept-because-it-arrived-first is not a freshness rule. **Two locators in different series do not
 rank**, and a reader holding both has learned nothing about which is current — it
 either holds a §4.6 chain that says, or it re-resolves (design §12.3). **A series
 reissue does not disturb routing**: the path is unchanged, so a cached locator still
@@ -3515,7 +3517,17 @@ once peering exists (design §6.3); the second arrival is a duplicate and dies t
 current-address record should do, and §2.3's strictly-greater rule already governs it.
 **Equal `seqno` with different signed contents is malformed**, per §7.7.3 —
 endpoints and extensions alike, since §2.3's rationale is that a subject
-advances its own counter for *any* new signed content [2026-09-02]. **Records in
+advances its own counter for *any* new signed content [2026-09-02].
+**Malformed names the pair, not the later arrival** [2026-09-02]: two signed
+contents at one number can only mean equivocation or a key in two hands, and
+which arrived first is an accident of the path — a holder that kept the
+earlier one would let arrival order split the network's view, the thing this
+section's own repetition rule refuses on bytes. On discovering the conflict
+a holder retains **neither** as current and forwards nothing further for that
+`(subject, seqno)`; it repairs by re-resolving (§7.7), which descends the
+authenticated path and lands on whatever the subject's line actually says.
+The line itself is repaired only by its subject: a greater counter, or §4.6's
+reissue. Whether the holder keeps the pair as evidence is local. **Records in
 different series are not comparable** and neither supersedes the other (§2.3); a
 holder keeps the one whose series it has been shown a chain for (§4.6) and re-resolves
 if it holds none. **A record in a series the receiver cannot prove current is

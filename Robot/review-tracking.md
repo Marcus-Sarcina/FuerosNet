@@ -3335,3 +3335,44 @@ Confirmed: one EndpointRecord per relationship line, each with that line's
 own seqno. Author rationale, now in §7.6: **record and locator partitioning
 between different subtrees is the anticipated use** — the lists differing
 per line is the point, not tolerated slack. Flag closed.
+
+## Cycle 2, pass 0.6 — topology-flood phase 2 (2026-09-02)
+
+One implementation bug, two spec ambiguities claimed; verified as one bug,
+one already-ruled item, one genuinely new gap now ruled.
+
+**The bug is the stress mechanism working end-to-end.** B-port-7431-explicit
+was added during the phase-1 ingest, from noticing that the reviewer's
+`Option<NonZeroU16>` could represent an explicit default port; phase 2 hand-
+traced exactly that miss. The fixture existed for one round before catching
+the divergence it was built for — the author's compatibility-breaking-
+misunderstandings directive doing precisely its job.
+
+**V11 (#9): already ruled between their snapshots.** Their phase 2 correctly
+reports the pre-ruling text as silent on storage posture; §10.1 has since
+said an unproved-series record is neither stored nor forwarded. Their
+quarantine implementation conforms (hold-versus-drop is local). The V11 row
+now cites the ruling and adds the legitimate other half: with chains proving
+BOTH series — two patron relationships, one record per line — holding both
+is the correct end state, not a conflict.
+
+**V6 (#13): new gap, ruled (FLAG FOR AUTHOR).** The spec said equal seqno
+with different contents is malformed but never said what happens to the
+record installed FIRST. Their implementation chose first-wins; the vector
+suite (ninth review) had already asserted "a reader MUST NOT prefer either."
+Ruled at wire §10.1, echoed at §7.7.3 for the locator route: **malformed
+names the pair, not the later arrival** — which arrived first is an accident
+of the path, and first-wins lets arrival order split the network's view
+(§10.1's own repetition-rule refusal, and §2.3's pinning attack: a thief
+whose record lands first would pin every reader it reached). On discovery
+the holder retains neither as current, forwards nothing further for that
+(subject, seqno), and repairs by re-resolution, which descends the
+authenticated path; the line is repaired only by its subject (greater
+counter, or §4.6 reissue). Keeping the pair as evidence is local. V6/V12
+rows updated; records.md conflict-pair prose extended.
+
+Also verified: their P-reply-02 non-divergence claim is right (advances=1
+floor conforms; multi-index referrals are optional depth), TR19 and D12
+matched exactly, and the frame-level not-covered notes are honest scope.
+
+Python 79/79, Rust 146/0.
