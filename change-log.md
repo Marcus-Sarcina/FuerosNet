@@ -8124,3 +8124,27 @@ The vectors and the implementation agree everywhere they meet, including
 the two traces written from this target's own phase-1 rulings — satisfied
 on first contact rather than after correction. No changes anywhere; the
 target closes at zero divergences across both phases.
+
+### 2026-09-02 (cycle 2, 0.6 topology-flood target, phase 1)
+
+The ninth implementation attempt surfaced the most substantive gap of the
+family: an EndpointRecord carries one seqno, but a sequence series is per
+patron relationship, so a node bound under two patrons had no specified
+carrier. The record is now one per relationship line, each with that line's
+own seqno — forced three ways: a single record's series is unprovable in the
+other relationship's subnet, a shared counter across subnets would disclose
+exactly the cross-subnet activity P36 conceals, and each patron must be able
+to refer. No relationship field was added; the reviewer rightly declined to
+invent one. Alongside it: a malformed control frame of a known type is
+discarded whole and the session survives, generalising the heartbeat and
+SiblingUpdate instances; the series-reissue subject joins §10.1's
+enumeration from that section's own principle; an unproved-series endpoint
+record is neither stored nor forwarded until its series proves current, the
+same posture as a transaction with a missing signer key; equal seqno with
+different signed contents — extensions included — is malformed, aligning the
+one statement that said "endpoints" to the three that said "contents"; and
+the changed-endpoint rule now says "list", with reordering explicitly a
+change. A fixture pins the port whose default spelling is omission
+(B-port-7431-explicit), and TR19 pins the peering-cycle duplicate dying
+against the store. Nineteen traces; both harnesses green, the Rust runner
+at 146.

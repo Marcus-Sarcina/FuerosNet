@@ -2562,12 +2562,26 @@ flooded object passes through parties the recipient did not choose, where a
 This is why §7.7.3's replies are unsigned and this record is not.
 
 **Freshness by `seqno`, strictly greater `counter` to replace within a series**, under §2.3's rule; across series they do not rank.
-**Publishing a changed endpoint set advances the counter** — that is what makes the
-new record replace the old rather than collide with it as an equal-`seqno`
-disagreement. **Republishing an unchanged set replays the record already held**
+**Publishing a changed endpoint list advances the counter** — and the list is
+ordered, so reordering alone is a change [2026-09-02]: field 2 carries
+preference, and any field-2 difference at an equal `seqno` would be exactly the
+equal-`seqno` disagreement the advance exists to prevent. That is what makes the
+new record replace the old rather than collide with it. **Republishing an unchanged list replays the record already held**
 rather than consuming a number: reconciliation is a replay of the same frames
 (§10.1), and a fresh number over identical contents is freshness churn with nothing
 behind it.
+
+**One record per patron relationship** [2026-09-02]. The `seqno` is the
+relationship line's (§2.3: one series per patron relationship, two patrons two
+series — design §19.4, P36), so a node bound under two patrons publishes one
+record per line, each carrying that line's own current `seqno`. A single
+record could not serve: its series is unprovable in the other relationship's
+subnet, so it would never enter storage there — and a shared counter across
+subnets would disclose exactly the cross-subnet activity P36 exists to
+conceal. The lists usually agree; nothing requires it, and each record is that
+line's own address claim. A holder proves each record against its own series
+chain, and holding one per proved series is the correct end state, not a
+conflict.
 
 **The list is in the publisher's preference order, and its entries are distinct.**
 A repeated `NetworkPoint` is malformed. The record is signed, so a decoder
@@ -2907,6 +2921,17 @@ having asked.
 a receiver can skip one it does not understand; tearing down the connection instead
 would make every future frame type a flag day. This is the same extension posture
 as unknown capability parameters (§8.1).
+
+**A malformed control frame of a known type is discarded whole, and the session
+survives** [2026-09-02]. A control frame is unsolicited information with no
+reply channel, so there is nothing to answer and nothing to abort; a single
+corrupted frame is indistinguishable from loss, and closing an authenticated
+session over what loss would have cost nothing is a self-inflicted outage.
+§8.2 states the two instances this generalises — a malformed heartbeat counts
+as absence, a malformed `SiblingUpdate` is ignored whole with the previous
+list standing — and the rule holds for every control frame, `TopologyPush`
+included: discard, hold what you held, let reconciliation or the next frame
+repair it.
 
 ### 8.1 Capabilities
 
@@ -3437,7 +3462,9 @@ objects and deliver them to different neighbourhoods, which shows up as a perman
 gap rather than as an error.
 
 **The subject is the node whose position the transaction changes**: the adopted or
-departing node, the disavowed subordinate, and — for a peering, which has two —
+departing node, the disavowed subordinate, the node whose series a reissue
+starts (§4.6, field 1 — the patron countersigns but it is the node's line that
+changes) [2026-09-02], and — for a peering, which has two —
 either endpoint, so the transaction is in range if either is. Reading the
 *issuer* as the subject would put a patron's adoption of a distant node in range of
 everyone near the patron, which is not whose neighbourhood changed.
@@ -3484,10 +3511,18 @@ once peering exists (design §6.3); the second arrival is a duplicate and dies t
 
 **An `EndpointRecord` therefore supersedes rather than accumulating**, which is what a
 current-address record should do, and §2.3's strictly-greater rule already governs it.
-**Equal `seqno` with different endpoints is malformed**, per §7.7.3. **Records in
+**Equal `seqno` with different signed contents is malformed**, per §7.7.3 —
+endpoints and extensions alike, since §2.3's rationale is that a subject
+advances its own counter for *any* new signed content [2026-09-02]. **Records in
 different series are not comparable** and neither supersedes the other (§2.3); a
 holder keeps the one whose series it has been shown a chain for (§4.6) and re-resolves
-if it holds none.
+if it holds none. **A record in a series the receiver cannot prove current is
+neither stored nor forwarded** [2026-09-02] — the same posture as the
+transaction whose signer key is missing: it enters storage and propagation when
+its prerequisite does. Whether the receiver holds it meanwhile or drops it and
+lets reconciliation replay it is local; the wire-visible rule is only that an
+unproved series never floods onward, since a forwarding node vouches with its
+storage decision and this one it could not make.
 
 **No dedicated suppression cache exists**, and none should be added. It would be a
 second copy of a fact the store already holds, with its own expiry parameter to leave

@@ -1,7 +1,7 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "9d7a11a8a173dc3502495b9d2b34011c31df088d4f23113640e55f6d8debb637",
+  "wire-format.md": "10ce28d1be99b76978a9f0062083ef388eaf9fff95aa4f8612b78d041cd484aa",
   "network-design.md": "cff13d0301ad51215c8e6cad2039277ad681dbf51261272b3e90467b27478b81",
   "light-client-requirements.md": "8cc2ee2788f4f81dedd696b2566d3add0d0c58f9a8f813f95be166498067e954"
  },
@@ -1182,6 +1182,17 @@
    "hex": "a201440a0000010300"
   },
   {
+   "id": "B-port-7431-explicit",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "NetworkPoint",
+    "layer": "schema",
+    "reason": "writing the default port out is malformed; omission is the one spelling (s1, s4.4)"
+   },
+   "hex": "a201440a00000103191d07"
+  },
+  {
    "id": "B-prekey-4096",
    "class": "bytes",
    "expect": {
@@ -1924,6 +1935,19 @@
     "cite": "\u00a79.2, \u00a711"
    },
    "note": "a frame parses as [6, body] but the body is not a well-formed ResourceRequest"
+  },
+  {
+   "id": "TR19",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "drop_duplicate",
+     "no_forward",
+     "session_survives"
+    ],
+    "cite": "\u00a710.1"
+   },
+   "note": "a stored topology transaction arrives again through a peering cycle"
   },
   {
    "id": "V9",

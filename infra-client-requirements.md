@@ -157,13 +157,15 @@ address costs it a failed dial rather than misdirecting it silently (design §12
 child unreachable through you** for as long as you had not happened to contact it,
 which is the failure this record exists to prevent.
 
-**Publishing your own: a changed address advances your counter** (`wire-format.md`
-§2.3), the same counter a position change advances. That is what lets the new record
+**Publishing your own: a changed endpoint list advances your counter** (`wire-format.md`
+§2.3) — reordering included, since the list is preference-ordered — the same counter a position change advances. That is what lets the new record
 replace the old instead of colliding with it, and a node that reuses its current
 number is publishing an equal-`seqno` disagreement with itself, which is malformed.
-**Republish an unchanged set by replaying the record you hold**, not by taking a new
+**Republish an unchanged list by replaying the record you hold**, not by taking a new
 number — reconciliation is a replay of the same frames, and a number spent on
-identical contents buys nothing.
+identical contents buys nothing. **Bound under two patrons, publish one record
+per relationship line** (`wire-format.md` §7.6), each carrying that line's own
+`seqno` [2026-09-02].
 
 
 ### 4.5 What a query discloses

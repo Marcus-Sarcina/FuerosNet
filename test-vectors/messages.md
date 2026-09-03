@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `9d7a11a8a173dc35…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `10ce28d1be99b769…`, `network-design.md` `cff13d0301ad5121…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -927,4 +927,5 @@ a sequence of events with the required actions.
 | TR16 | one transport session carries hosted sessions to resources A and B; the caller's role row for A changes | retire A's resource-facing session identifier; the transport session and B's hosted session survive, and an in-flight A request completes under its starting snapshot (`infra-client-requirements.md` §10.1, §10.5) — an implementation closing the transport punishes B and the control plane for an authorisation change at A |
 | TR17 | a non-member's request names a resource whose snapshot still holds a stale role row for them | status 1 `refused`, never 4 or 5 (§11) — membership is evaluated before acknowledgement and roles, and the specific statuses are answers only members receive; an implementation reaching the role row first hands a stranger member-only information |
 | TR18 | a frame parses as `[6, body]` but the body is not a well-formed `ResourceRequest` | answer status 3, no stream reset (§9.2, §11) — once the type is known, a body defect is that type's business, answered in its own terms. The boundary does not generalise across types: a malformed type-4 body closes the stream, because that is *that* type's term |
+| TR19 | a stored topology transaction arrives again through a peering cycle | drop the duplicate, forward nothing, session survives (§10.1) — the store is the seen-set; no dedicated suppression cache exists and none may be added |
 

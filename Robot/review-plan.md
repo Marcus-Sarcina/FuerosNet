@@ -488,7 +488,7 @@ below.)*
    one — the materialised table holds a row per member of the owner's Dunbar Org
    (design §11.4), so most askers have no row at all and the lookup misses.
 9. **Flood a topology transaction and publish an endpoint record**
-   (`wire-format.md` §10.1, §5.6): receive a `TopologyPush`, decide whether to
+   (`wire-format.md` §10.1, §7.6): receive a `TopologyPush`, decide whether to
    store and forward it, suppress the duplicate that arrives back through a peering
    cycle, and build the child table a patron refers from. Exercises the body-kind
    tag, forward-if-stored, `txid` versus `(keyhash, seqno)` identity, and a record

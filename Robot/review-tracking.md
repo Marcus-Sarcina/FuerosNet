@@ -3288,3 +3288,43 @@ outside a refusal-path implementation). Both are honest phase-boundary
 reports, not gaps in the vectors or the spec.
 
 Target 8 closes with both phases at zero divergences in all three classes.
+
+## Cycle 2, pass 0.6 — topology flood + endpoint record (phase 1, 2026-09-02)
+
+Target 9. The reviewer's two structural decisions both verified as specified:
+the store IS the seen-set (§10.1: "no dedicated suppression cache exists, and
+none should be added") and no wrapper field beyond the body-kind tag ("that is
+the only wrapper field permitted"). Their field classification added nothing
+to the wire. Twelve unspecified items — the most substantive haul since the
+family started, and the reviewer's own priority (#6) is the one that mattered.
+
+| # | Item | Disposition |
+|---|---|---|
+| 1 | Task prompt cites wire §5.6 for endpoint records | STALE PROMPT REFERENCE — review-plan.md target 9 corrected to §7.6; the documents were never wrong |
+| 2 | Session consequence of a malformed known control frame | APPLIED — §8.0: discarded whole, session survives, generalising the two stated instances (heartbeat counts as absence, SiblingUpdate ignored whole); a corrupted frame is indistinguishable from loss and there is no reply channel to answer on |
+| 3 | Pending-verification quarantine bounds | LOCAL — deliberately unset, same posture as every other resource ceiling; reconciliation repairs an eviction |
+| 4 | Which sender is "the arrival edge" for a multi-supplied pending object | LOCAL — any supplier already holds the object and suppresses the echo by txid; traffic pattern only |
+| 5 | Subject of a type-7 SeriesReissue | APPLIED — §10.1's enumeration now names it: field 1, the node whose line changes, from the section's own general principle ("the node whose position the transaction changes"); the patron countersigns but it is not the patron's neighbourhood that changed |
+| 6 | EndpointRecord has one seqno; series are per patron relationship | APPLIED (derived, FLAG FOR AUTHOR — the reviewer's "most consequential") — §7.6: one record per relationship line, each carrying that line's own seqno; infra §4.4 echoes it. Three independent forcings: a single record's series is unprovable in the other subnet so it never enters storage there; a shared counter across subnets discloses exactly what P36 (design §19.4) conceals; and the patron in each subnet must be able to refer. Contents usually agree; nothing requires it. No patron field added — the reviewer was right not to invent one |
+| 7 | First-publication counter; unchanged list after a position change | LOCAL — the record carries the current seqno; the counter advanced when the position or the list changed, so publication itself never spends. Receivers do not require contiguity, so the alternative is not even observable |
+| 8 | Is reorder-only a change? | APPLIED — §7.6 and infra §4.4 now say "list", with reordering explicitly a change: field 2 is preference-ordered, and any field-2 difference at equal seqno is the collision the advance exists to prevent. Forced by the malformed-on-equal rule, as the reviewer argued |
+| 9 | Unproved-series EndpointRecord: store/flood? | APPLIED (derived) — §10.1: neither stored nor forwarded until the series proves current, the same posture as the transaction with a missing signer key; hold-versus-drop meanwhile is local, and the wire-visible rule is only that an unproved series never floods onward |
+| 10 | Equal seqno, equal endpoints, different extensions | APPLIED — §10.1 aligned to §2.3's own wording: equal seqno with different SIGNED CONTENTS is malformed, endpoints and extensions alike; §2.3's rationale (a subject advances for any new signed content) already decided it, and three of four statements already said "contents" |
+| 11 | State repair after retroactive verification fails | LOCAL — remove and rebuild; no negative record exists on the wire and absence is the encoding. Their no-synthesis instinct is the design's |
+| 12 | Receiver-verifiable infra status for the child table | LOCAL, CONFIRMED CORRECT — possession of an EndpointRecord is the discriminator (only infra nodes publish); a false one costs a failed dial (infra §4.4's refer-from-gossip requirement). No is_infra bit exists and none may be added |
+
+Their NetworkPoint claims all verified (4-byte IPv4, optional u32 ASN, port
+u16 with zero malformed and 7431 never written). One latent trap noticed in
+their type sketch: `Option<NonZeroU16>` can represent an explicit 7431, which
+is malformed to WRITE (§1's default-omission) — the corpus had fixtures for
+ports 0 and 65536 but not this one. **B-port-7431-explicit added** (the Rust
+runner's schema check already rejected it — the fixture now proves that).
+**TR19 added**: the peering-cycle duplicate dies against the store, no
+forward, session survives.
+
+Crate table consistent with design §5.2 again; their "authoritative thing
+signed is a byte-preserving representation, not the serde struct" closing is
+§1's rule restated — the profile's design intent surviving a clean-room read.
+
+Nineteen traces, 187 entries; Python 79/79, Rust 146/0. Reference check
+clean at 1851 references (six known false-negatives).
