@@ -2381,6 +2381,8 @@ a sequence of events with the required actions.
 | TR17 | a non-member's request names a resource whose snapshot still holds a stale role row for them | status 1 `refused`, never 4 or 5 (§11) — membership is evaluated before acknowledgement and roles, and the specific statuses are answers only members receive; an implementation reaching the role row first hands a stranger member-only information |
 | TR18 | a frame parses as `[6, body]` but the body is not a well-formed `ResourceRequest` | answer status 3, no stream reset (§9.2, §11) — once the type is known, a body defect is that type's business, answered in its own terms. The boundary does not generalise across types: a malformed type-4 body closes the stream, because that is *that* type's term |
 | TR19 | a stored topology transaction arrives again through a peering cycle | drop the duplicate, forward nothing, session survives (§10.1) — the store is the seen-set; no dedicated suppression cache exists and none may be added |
+| TR20 | a memo arrives naming the receiver in field 1, but its own records do not confirm the change | reject the hint: no disavowal, nothing severed (§10.2) — a memo is unsigned and never evidence; acting on it alone manufactures the false positive design §6.2.5 ranks as the worse failure |
+| TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
 """)
 
 # ================================================================ corpus.json
@@ -2860,6 +2862,8 @@ for trid, seq, actions, cite in [
     ('TR17', 'a non-member request names a resource whose snapshot still holds a stale role row for the requester', ['status_refused', 'never_a_member_specific_status'], '§11'),
     ('TR18', 'a frame parses as [6, body] but the body is not a well-formed ResourceRequest', ['answer_status_3', 'no_stream_reset'], '§9.2, §11'),
     ('TR19', 'a stored topology transaction arrives again through a peering cycle', ['drop_duplicate', 'no_forward', 'session_survives'], '§10.1'),
+    ('TR20', 'a memo arrives naming the receiver in field 1, but its own records do not confirm the change', ['reject_hint', 'no_disavowal', 'nothing_severed'], '§10.2'),
+    ('TR21', 'an ordinary memo from below arrives; the receiver position is a prefix of the field-2 path', ['forward_rootward', 'no_cycle'], '§10.2'),
 ]:
     exp = {'actions': actions, 'cite': cite}
     if trid in TRACE_ONE_OF:

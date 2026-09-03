@@ -2904,6 +2904,13 @@ frame = u32-be length || deterministic CBOR of [ uint frame_type, body ]
 65,536 bytes**, stated because "64 KB" reads as 64,000 to a
 decimal implementer and the boundary frames would divide the two.
 
+**A declared length above the bound is a protocol error, and it ends the
+session** [2026-09-02] — this sits *below* the malformed-frame rule, not under
+it. A malformed body inside a bounded frame is cheap to discard and the
+session survives; a length out of contract is a violation of the framing layer
+itself, and skipping it would mean streaming an attacker-declared volume
+through the very ceiling that exists to bound the receiver's buffer.
+
 | `frame_type` | Body |
 |---|---|
 | 1 | `Attach` |

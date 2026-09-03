@@ -494,11 +494,15 @@ below.)*
    tag, forward-if-stored, `txid` versus `(keyhash, seqno)` identity, and a record
    that supersedes rather than accumulates.
 10. **Forward a rootward memo and detect a cycle** (`wire-format.md` §10.2): apply
-    a memo to a table keyed on the subject's own `seqno`, forward it to your patron,
-    and fire the in-path check when one arrives naming your own position. Exercises
-    ordering under out-of-order arrival, the malformed equal-`seqno` case, and the
-    rule that a memo is a hint requiring the underlying transaction to be fetched
-    before acting.
+    a memo to the optional `(patron, slot)` table ordered by field-4 timestamp,
+    forward it rootward unchanged, and fire the identity check when one arrives
+    naming you in field 1. Exercises ordering under out-of-order arrival, the
+    at-or-after suppression rule, and the rule that a memo is a hint confirmed
+    against the detector's own records — never fetched, never acted on alone.
+    *(Rewritten 2026-09-02: the original wording predated the memo privacy
+    correction — subject-seqno keying, a position-equality check, and a
+    fetch-before-acting rule are all superseded; 0.6.10 correctly implemented
+    the current text and recorded the staleness rather than following it.)*
 
 **Coverage matters as much as novelty.** Targets 1–4 exercise identity and presence,
 5 the capture path, 6–8 the resource layer, 9 and 10 propagation. **A layer nobody has built against

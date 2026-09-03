@@ -3381,3 +3381,65 @@ Python 79/79, Rust 146/0.
 
 Confirmed: malformed names the pair, not the later arrival. The §10.1/§7.7.3
 text stands as written. Flag closed.
+
+## Cycle 2, pass 0.6 — rootward memo + cycle detection (phase 1, 2026-09-02)
+
+Target 10, the last of the plan. The reviewer implemented the CURRENT text
+against a task prompt that had gone stale, and did exactly the right thing:
+recorded the staleness, followed the documents. Verified: the prompt's
+"keyed on the subject's own seqno" predates the memo privacy correction
+(C19: the memo no longer carries the subject's counter; the table is
+(patron, slot) ordered by field-4 timestamp), its "naming your own position"
+predates the identity-comparison rule (§10.2 states position equality would
+work and is deliberately not the test), and — a third staleness they acted
+on correctly without flagging — its "underlying transaction fetched before
+acting" contradicts §10.2's "Not a fetch" paragraph. The plan's target-10
+wording is rewritten with a note crediting the round.
+
+Every implementation claim verified against the text: schema fields 1-5
+with absent-occupant-means-empty, (patron, slot) keying, within-one-slot
+timestamp ordering, equal-timestamps-by-arrival-order, at-or-after
+forwarding suppression, empty-slot-is-a-row, wrong-subnet memos dropped
+unapplied, serving-node checks for attached clients with the hit handed
+over at contact, hint-never-evidence with the two-question confirmation,
+reason 5 without prejudice, the banded reason exception to the closed-enum
+rule, body key 0 back-pointers, and the full path validation (24 nibbles,
+0-9, exact packed length, zero-filled odd nibble — all four rules already
+in the text; their validate() matches).
+
+Seven unspecified items, all verified local; #2 is answered by the text:
+
+| # | Item | Disposition |
+|---|---|---|
+| 1 | Table write on a cycle-hit arrival | LOCAL — the table is optional in its entirety, so any mutation discipline is local by construction; the detector's own slot state is authoritative regardless |
+| 2 | Confirmation predicate depth for field 2 | ANSWERED BY TEXT — §10.2 states the two questions (did I make that change; is my row still what the memo asserts) and the cycle paragraph already notes identity comparison is unaffected by "a counter that moved for an endpoint change"; field 2 is context, not part of the predicate. Their no-byte-equality choice is the specified reading |
+| 3 | Ingress-branch API under collapsed hops | LOCAL — the wire adds nothing; how the session layer surfaces the logical branch is host architecture |
+| 4 | Table durability across restart | LOCAL — a RIB, optional, rebuilt by traffic; no tier is load-bearing |
+| 5 | Machine test for "both parties present" | LOCAL/UI — no both_present field, correctly |
+| 6 | Clock source for the auto-disavowal timestamp | LOCAL — §4.3 has no notice period and the timestamp is the signing act's; any local clock with the stated semantics conforms |
+| 7 | Pending-client-cycle queue representation | LOCAL — no new message exists; delivery-at-contact is the specified behaviour |
+
+**One gap found by reading their decode path, ruled**: §8.0 stated the
+65,536 bound but not its consequence, and their code discarded an oversized
+frame with the session surviving — while TR6 has always expected
+protocol_error. Ruled at §8.0: a declared length above the bound ends the
+session; it sits BELOW the malformed-frame rule, not under it — a malformed
+body inside a bounded frame is cheap to discard, but an out-of-contract
+length would have the receiver stream an attacker-declared volume through
+the very ceiling that bounds its buffer. Their handling is now a
+specified-answer divergence for phase 2 to catch.
+
+**Two traces added**: TR20 (unconfirmed cycle hint → reject, no disavowal,
+nothing severed — the false-positive rule §6.2.5 ranks worst) and TR21
+(ordinary memo whose field-2 path has the receiver as prefix → forward, no
+cycle; the containment trap §10.2 documents joins the README over-strictness
+family). Twenty-one traces.
+
+Crate assessment: their ciborium-is-not-the-validator conclusion is wire
+§1's rule rediscovered clean-room; design §5.2 gains one sentence —
+aws-lc-rs now exposes ML-KEM and ML-DSA as a production-oriented native
+route with no browser-wasm target, sharpening the stated split. Their
+libsignal PQXDH note is ecosystem context; the design cites PQXDH as
+protocol, claims no crate path, nothing stale.
+
+Python 79/79; Rust 146/0, 46 structured skips.

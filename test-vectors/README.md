@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `308aae9275b83d683e1704eb661198d5610ecb620447b4985bf6f3685691c307` · network-design.md `cff13d0301ad51215c8e6cad2039277ad681dbf51261272b3e90467b27478b81`
+**Pinned**: wire-format.md `2d2a62f8737452b4faacb90e7a704bd1e1c00c871a7f096ef6c5c8498b39f464` · network-design.md `49bc2f7a79bcf1ec1b88adc5547f2734ef3189acf024a046a970b5af6c1337ac`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -167,6 +167,7 @@ loudly.
 | general (finalization) | enforce a response minimum | V7's fixtures — a lone no-match and no responses at all both finalize |
 | catalog U3 (0.6.6) | require a locally installed backend for every registration | `P-frame-16` + `P-catalog` — a brokered entry whose endpoint belongs to the external service registers validly |
 | authorization U9 (0.6.7) | terminate the caller's whole transport session on a role-row change | TR16 — retire the resource-facing identifier; the transport and other resources' hosted sessions survive |
+| memo cycle check (documented trap, 0.6.10) | test cycle by path containment | TR21 — your path is a prefix on every legitimate hop; the test is field-1 identity |
 
 The family grows with every implementation round: when a divergence recurs
 despite the spec deciding it, the deciding fixture lands here.

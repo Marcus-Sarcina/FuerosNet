@@ -825,7 +825,10 @@ presence records, key rotations, identity changes, or any archived transaction.
 RustCrypto provides `ml-dsa` (FIPS 204) and `ml-kem` (FIPS 203), both pure-Rust
 and `no_std`, so a wasm32 target is viable **for the primitives**. **Both carry
 explicit notices that they have not been independently audited**, and alternatives
-(`fips203`/`fips204`) carry the same caveat.
+(`fips203`/`fips204`) carry the same caveat. `aws-lc-rs` now exposes both
+ML-KEM and ML-DSA on AWS-LC's FIPS lineage — a production-oriented native
+route — but offers no browser-wasm target, which sharpens the split below
+rather than closing it [2026-09-02].
 
 **The browser gap is the transport, not the primitives.** Native Rust
 plausibly covers the full profile — rustls/quinn expose `X25519MLKEM768`, RFC 7250

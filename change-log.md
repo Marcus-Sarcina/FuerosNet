@@ -8169,3 +8169,22 @@ and the line is repaired only by its subject. Stated at §10.1, echoed for
 the locator route at §7.7.3, and aligned across the V6, V11 and V12 vector
 rows — V11 also gaining its legitimate other half, where chains proving both
 series make holding both the correct end state under per-line records.
+
+### 2026-09-02 (cycle 2, 0.6 rootward-memo target, phase 1)
+
+The last implementation attempt of the plan met a task prompt that had gone
+stale around it and followed the documents instead — the memo table keyed
+by (patron, slot) with the patron's timestamp, the cycle test as field-1
+identity, and confirmation against the detector's own records with no
+fetch. Every claim verified; all seven unspecified items are local, one of
+them answered by the text outright. Reading the attempt's decode path
+exposed the one rule §8.0 stated without a consequence: a declared frame
+length above 65,536 now ends the session — it is a violation of the
+framing layer itself, beneath the discard-whole rule for malformed bodies,
+because skipping it would stream an attacker-declared volume through the
+ceiling that exists to bound the buffer. Two traces land: an unconfirmed
+cycle hint severs nothing, and the documented containment trap — the
+receiver's path prefixes every legitimate memo — joins the over-strictness
+family. Design §5.2 notes aws-lc-rs as the production-oriented native
+route that still leaves the browser gap standing. Twenty-one traces; both
+harnesses green.

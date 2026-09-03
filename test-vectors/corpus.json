@@ -1,8 +1,8 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "308aae9275b83d683e1704eb661198d5610ecb620447b4985bf6f3685691c307",
-  "network-design.md": "cff13d0301ad51215c8e6cad2039277ad681dbf51261272b3e90467b27478b81",
+  "wire-format.md": "2d2a62f8737452b4faacb90e7a704bd1e1c00c871a7f096ef6c5c8498b39f464",
+  "network-design.md": "49bc2f7a79bcf1ec1b88adc5547f2734ef3189acf024a046a970b5af6c1337ac",
   "light-client-requirements.md": "8cc2ee2788f4f81dedd696b2566d3add0d0c58f9a8f813f95be166498067e954"
  },
  "classes": {
@@ -1948,6 +1948,31 @@
     "cite": "\u00a710.1"
    },
    "note": "a stored topology transaction arrives again through a peering cycle"
+  },
+  {
+   "id": "TR20",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "reject_hint",
+     "no_disavowal",
+     "nothing_severed"
+    ],
+    "cite": "\u00a710.2"
+   },
+   "note": "a memo arrives naming the receiver in field 1, but its own records do not confirm the change"
+  },
+  {
+   "id": "TR21",
+   "class": "trace",
+   "expect": {
+    "actions": [
+     "forward_rootward",
+     "no_cycle"
+    ],
+    "cite": "\u00a710.2"
+   },
+   "note": "an ordinary memo from below arrives; the receiver position is a prefix of the field-2 path"
   },
   {
    "id": "V9",
