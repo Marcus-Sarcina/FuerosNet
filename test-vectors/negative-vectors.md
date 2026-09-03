@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `6934929e5457333cd7887ed9b276c884350047b835fbee0501fe2f23f7dfd7e1` · network-design.md `912fed0e18e674e7c275b0926e5cf324d18507a04ba5edf771974cde29e3c28f`
+**Pinned**: wire-format.md `4fb827cbdcaa99cd1507c90809b3b64b052c090b307ced33438eb168181b9f58` · network-design.md `305398e616d1574a8d31174a88a3b2f0df9fd99189d4a149ea89bf6d5cfd39a3`
 
 ## The result model is structured, not a single status
 
@@ -167,7 +167,7 @@ photo comparison without its template version is unverifiable as evidence:
 | T21 | `basis` 0 or 2 with `template_version` absent | REQUIRED for photo bases |
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
 | T23 | ~~response from an unselected verifier~~ | **Retired 2026-09-01**: no selected set exists apart from the selector's judgment (§5.5); any consenting-queried verifier's response is structurally fine. The id is not reused |
-| T27 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–2 | §5.5: required, closed enumeration — the selector's claim of known / reachable / discretionary |
+| T27 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–3 | §5.5: required, closed enumeration — the selector's claim of met / in-horizon / reachable / discretionary. Tier-aligned renumbering 2026-09-03: met and merely-in-horizon are different security facts (A23) and the record retains the difference |
 | T29 | A presence body carrying retired key 7, or a `Witness` carrying retired key 4 or 5 | §4.5 [2026-09-02]: retired numbers are tombstones, not extension space — a decoder meeting one rejects, the §4 type-6 rule. An unknown key is one the schema never assigned; a retired key is one it remembers |
 | T30 | A normal presence record whose key 5 is an **empty array** | §4.5 [2026-09-02]: zero responses omit the key — the empty-array spelling gives one logical record two encodings. The over-strictness complement: an implementation reading field 5 as required-with-empty emits this and rejects the valid absent spelling |
 | T31 | A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive` | §3.2 [author, 2026-09-03]: the witness floor counts only entries with bits 0 and 1 both set — a witness attesting nothing (or latency alone) is partial evidence, present but not corroborating, and a normal record with no affirmative witness fails. The uncorroborated meeting remains expressible as a formation record, visible as what it is. `latency_bound` (bit 2) stays genuinely optional: the existing bits-3 fixtures are positives |

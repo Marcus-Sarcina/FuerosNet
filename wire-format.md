@@ -940,7 +940,7 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   pre-commitment in that query is the recovery meeting's own: the meeting opens
   as a ceremony (design §7.5.2) and yields this block instead of a presence
   record.
-- **`selection_basis` MUST be 0 (known) in every response here** [2026-09-02]: a
+- **`selection_basis` MUST be 0 (met) in every response here** [2026-09-02]: a
   recovery verifier is by definition a prior counterparty who recognises the
   subject (design §9.1). Values 1 and 2 are malformed inside a `Recovery`
   block.
@@ -1384,10 +1384,17 @@ VerifierResponse = {
                        ; under the same ceremony pre-commitment
   10: uint,            ; selection basis, the SELECTOR's claim (§5.5),
                        ;   carried to the verifier as the third element of the
-                       ;   type-4 request body (§5.6) [2026-09-02]:
-                       ;   0 known (met, or in a trust horizon of the selector)
-                       ;   1 reachable (one further edge, §5.1 tiers 3-4)
-                       ;   2 discretionary fill
+                       ;   type-4 request body (§5.6) [2026-09-02].
+                       ;   TIER-ALIGNED (§5.1) [author, 2026-09-03]:
+                       ;   0 met (a PoP of the selector's own - tier 1)
+                       ;   1 in a trust horizon of the selector (tier 2)
+                       ;   2 reachable (one further edge, tiers 3-4)
+                       ;   3 discretionary fill
+                       ;   Renumbered from the three-value vocabulary that
+                       ;   folded tiers 1-2 into one value: met and
+                       ;   merely-in-horizon are different security facts
+                       ;   (design §20.2, A23) and the record retains the
+                       ;   difference
   8: ? keyhash,        ; PRIOR identity being matched against. REQUIRED when this
                        ; response appears inside a Recovery block (§4.1), absent
                        ; otherwise. **MUST equal that Recovery's `prior_key`** —
@@ -1801,7 +1808,11 @@ the window. Precisely:
   They are the party being established; asking them is not evidence.
 - **Duplicates count once, by `txid`; candidates are distinct prior
   counterparties, deduplicated by keyhash.** The count counts transactions,
-  the pool counts people, and the two must not be conflated.
+  the pool counts **identities**, and the two must not be conflated — and
+  identities are the most the protocol can count [author, 2026-09-03]: one
+  person may hold several (design §13.7), so slot uniqueness is keyhash
+  uniqueness, and the record claims no human independence the protocol
+  cannot prove.
 
 ### 5.4 The candidate pool is the curated bundle
 
@@ -1844,9 +1855,14 @@ queries**:
 - **Duplicate responses from one verifier for one subject are malformed**, so a
   single verifier cannot occupy multiple slots. One identity answering once
   for each participant is two slots and valid.
-- **Each response carries the selector's claim of its basis** — field 10:
-  `0 known` (tier 1 or 2), `1 reachable` (tier 3 or 4), `2 discretionary
-  fill`. The claim is the selector's, recorded because an evaluator reading
+- **Each response carries the selector's claim of its basis** — field 10,
+  tier-aligned [author, 2026-09-03]: `0 met` (tier 1), `1 in-horizon`
+  (tier 2), `2 reachable` (tier 3 or 4), `3 discretionary fill`. Met and
+  merely-in-horizon are separately encoded because they are different
+  security facts — an unattested adoption places an identity in a horizon
+  cheaply (design §20.2, A23), and a record folding the two would launder
+  structural proximity into the look of acquaintance. The claim is the
+  selector's, recorded because an evaluator reading
   the record cannot reconstruct the selector's acquaintance graph; like
   `nominated_by`, the schema records the claim and evaluation is the
   reader's.

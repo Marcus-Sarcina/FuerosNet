@@ -881,11 +881,11 @@ npr_q1, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-1'
 npr_q2, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-2', 3)
 npr_responses = [
     classical_response(npr_verifiers[0], alice, npr_q0, consent_over(npr_q0, alice),
-                       0, basis=0, tplv=3, sb=0),   # match, photo, known
+                       0, basis=0, tplv=3, sb=0),   # match, photo, met
     classical_response(npr_verifiers[1], alice, npr_q1, consent_over(npr_q1, alice),
-                       0, basis=1, sb=1),           # match, personal, reachable
+                       0, basis=1, sb=2),           # match, personal, reachable
     classical_response(npr_verifiers[2], alice, npr_q2, consent_over(npr_q2, alice),
-                       3, sb=2),                    # unavailable, discretionary
+                       3, sb=3),                    # unavailable, discretionary
 ]
 
 npr_values = {
@@ -1573,9 +1573,11 @@ is eighteen logical signers and **36 envelope entries**. `nominated_by`
 alternates between the participants; attestation bits vary within the
 interpreted 0–2 range. Field 5 carries three classical responses **sorted
 ascending by verifier keyhash**, covering the `selection_basis` matrix — 0
-(known) with a photo match, 1 (reachable) with personal knowledge (no
-template version, per the field-6 presence rule), 2 (discretionary) with
-`unavailable` (no basis, no template). Disclosure salts derive from nickname
+(met) with a photo match, 2 (reachable) with personal knowledge (no
+template version, per the field-6 presence rule), 3 (discretionary) with
+`unavailable` (no basis, no template). Value 1 (in-horizon) is uncovered
+here: three responses, four values, and the three retained carry the same
+semantics they had before the tier-aligned renumbering (2026-09-03). Disclosure salts derive from nickname
 `normal` (the formation's recipe); the location value carries a witness
 corroboration. Back-pointers: alice continues her merge, bob his adoption,
 every witness its genesis.
@@ -1751,7 +1753,7 @@ in person and recognises them (design §9.1). **The verifier is its own
 querier**: the query's field 2 names carol, its pre-commitment is the recovery
 meeting's own, and the subject's **new** key countersigns. Basis is
 `personal_knowledge` (the ordinary case, design §9.1), so response field 6 is
-absent; `selection_basis` is **0 (known)**, the only value a `Recovery` block
+absent; `selection_basis` is **0 (met)**, the only value a `Recovery` block
 admits (§4.1). The old key signs the successor statement, never the Recovery
 map. Field 7 presents alice's old chain head (the departure); the locator opens
 series 11 at counter 0.
@@ -2512,7 +2514,7 @@ reg('N-enum-result', 'bytes', REJ('VerifierResponse', 'schema', 'result 9 outsid
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 9, basis=0, tplv=3, sb=0))
 reg('N-enum-basis', 'bytes', REJ('VerifierResponse', 'schema', 'basis 9 outside 0-2'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=9, tplv=3, sb=0))
-reg('N-enum-selection-basis', 'bytes', REJ('VerifierResponse', 'schema', 'selection_basis 9 outside 0-2 (T27)'),
+reg('N-enum-selection-basis', 'bytes', REJ('VerifierResponse', 'schema', 'selection_basis 9 outside 0-3 (T27)'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=0, tplv=3, sb=9))
 reg('N-enum-disavowal-64', 'bytes', REJ('body', 'schema', 'code 64 outside the 0-63 space (T8) — contrast P-disavowal-code40'),
     e_map([(e_uint(0), backptrs([adopt_txid])), (e_uint(1), e_bstr(bob.keyhash)),

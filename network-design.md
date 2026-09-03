@@ -2318,9 +2318,11 @@ PresenceRecord {
     result          : enum{match, no_match, inconclusive, unavailable}
                                        # no pending value: an unreachable
                                        # verifier simply does not appear
-    selection_basis : enum{known, reachable, discretionary}
+    selection_basis : enum{met, in_horizon, reachable, discretionary}
                                        # the SELECTOR's claim of why this
-                                       # verifier was picked (§8.1.2)
+                                       # verifier was picked (§8.1.2) —
+                                       # tier-aligned; met and in-horizon
+                                       # are distinct facts (A23)
     basis           : enum{photo_match, personal_knowledge, both}
                                        # absent when result is unavailable —
                                        # no evaluation, no basis
@@ -2808,7 +2810,7 @@ pre-commitment binds the query; the subject's new key countersigns for the
 anti-oracle rule (§7.4.2), and continuity rests on the response's prior-key
 binding and the old key's proof, never on the consent. And because a recovery
 verifier is by definition a prior counterparty recognising the subject, its
-`selection_basis` is *known* — the encoding fixes it (`wire-format.md` §4.1).
+`selection_basis` is *met* — the encoding fixes it (`wire-format.md` §4.1).
 
 **Retention does not gate rotation.** The presence *record* is permanent; only the
 photograph expires. A counterparty who personally knows the subject still holds
@@ -5605,6 +5607,20 @@ trust metrics.** It maps onto this structure closely. It is
 also **independent of f**, which frees fanout to be chosen on social and
 plumbing grounds.
 
+**Setwise conservation is normative for the reference metric** [author,
+2026-09-03]: for an observer and **any set** of identities separated from it
+by a cut, the identities' *simultaneously usable* standing totals at most the
+cut's capacity — one computation, shared capacity, which is the Advogato shape
+above. This is not a restatement of the per-identity bound: independent
+per-target evaluations each bounded by the cut would let the same capacity
+count once per identity, and an operator minting identities behind a fixed
+boundary would grow aggregate entitlement with population — exactly what "the
+entire subtree inherits at most what flows through that one vertex" is
+claiming cannot happen. §18.4's Potemkin acceptance rests on the aggregate
+reading, so the aggregate reading is the specified one; a policy materialising
+per-principal decisions (§11.4) draws them from one conserved computation, not
+from one computation per principal.
+
 ### 16.3 Peering edges and trust capacity
 
 **There is no trust ceiling to raise.** Standing is per-observer, not global.
@@ -5655,10 +5671,17 @@ Consequences:
 - **Distant observers see less and therefore bound harder.** Invisibility is
   conservative: unseen edges cannot inflate a claim, only fail to support one.
   This is the safe direction for the error to run.
-- **An attacker must therefore work per-target**, acquiring visible edges inside
-  each intended victim's horizon rather than accumulating edges globally. That is
-  more expensive than the global reading suggests, and it is another
-  instance of §1.1: what an observer cannot see cannot bind them.
+- **The acquisition economics are coverage, not per-target counts** [author,
+  2026-09-03]. An attacker needs edges *visible to* each intended victim, but
+  horizons overlap, so one acquired edge sits inside every horizon that
+  contains it and helps each of those observers at once — the cost of
+  influencing a population scales with the **coverage of acquired edges over
+  that population**, not with the number of observers. What survives, and is
+  the conservative direction, is the per-observer half: an edge an observer
+  cannot see cannot help with that observer, which is §1.1 as ever. An earlier
+  draft said "work per-target, more expensive than the global reading
+  suggests"; the per-target framing overstated the cost by ignoring the
+  amortisation.
 
 ### 16.4 The pluggability tension
 

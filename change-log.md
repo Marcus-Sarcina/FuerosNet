@@ -8250,3 +8250,21 @@ responsive; witnesses attesting nothing remain representable but do not
 corroborate, and the uncorroborated meeting stays where it is visible —
 the formation subtype. T31 and a unit fixture pin the floor; both
 harnesses enforce it.
+
+### 2026-09-03 (cycle 2, adversarial pass 0.8.3: the commercial operator)
+
+Four findings ruled under the rewritten defensive prompt. The deep one:
+the min-cut argument proved a per-identity bound while the design's
+at-scale claims rest on the aggregate — setwise conservation is now a
+normative property of the reference metric, one shared-capacity
+computation for any set of identities behind a cut, which is the Advogato
+shape the text already cited. The per-target economics of §16.3.1 are
+restated as coverage: one acquired edge helps every observer whose
+horizon contains it. The selection basis is renumbered tier-aligned —
+met, in-horizon, reachable, discretionary — because met and
+merely-in-horizon are different security facts (A23) and the old
+vocabulary folded them into one value, laundering cheap structural
+placement into the look of acquaintance in the permanent record. And the
+candidate pool now counts identities, never people: one person may hold
+several, and the record claims no human independence the protocol cannot
+prove. Fixtures and both harnesses follow the renumbering.

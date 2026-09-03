@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `6934929e5457333c…`, `network-design.md` `912fed0e18e674e7…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `4fb827cbdcaa99cd…`, `network-design.md` `305398e616d1574a…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -889,8 +889,8 @@ c89d2b1fe2fea7b2985c
 **LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
 
 ```
-a30158207992ab78fe0b413eb9c00eb4cded6c9b3571c07a1723bda78bf15792
-a2e340790258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
+a30158206de2f5fd17003cce2d4ea0be0fa6557332031d6aad61e6fc7533e3db
+02b5c7330258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
 0c8dcfc852aa6a03a80158204384a2cc10f2d505660a16118457e9aeddee9438
 9abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8e
 ccfda9ad57d4ea8a0c8dcfc852aa6a03582056a295563ed967b8679c9458ad1f

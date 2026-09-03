@@ -3643,3 +3643,63 @@ validation checks) arrive as reviewer suggestions and are candidates for
 author ruling, never decisions. Author is also replacing the external
 safety disclaimer with the provider-suggested wording; output shape may
 drift accordingly.
+
+## Cycle 2, pass 0.8.3 — adversarial: the commercial operator (2026-09-03)
+
+The re-run of the blocked 0.9.3, first round under the rewritten defensive
+prompt — which worked: findings arrived as property/preconditions/impact/
+repair with no operating plan, and the classifier passed it. One REASONING,
+one NOVEL, two EXTENDS; fifteen RESTATES self-discarded. All four verified
+and ruled by the author.
+
+**1. Setwise conservation (REASONING, Critical → ruled normative).** The
+strongest catch of the cycle. §16.2's "entire subtree inherits at most what
+flows through that one vertex" is an aggregate claim; Advogato's cited
+semantics deliver it via one shared-capacity computation, but the text
+never required joint computation, §16.1 reads naturally as per-node scores,
+and rr §7.2.1 materialises per-member rows — independent per-identity
+max-flows would reuse the same cut capacity once per identity, growing
+aggregate entitlement with population while every per-identity bound holds.
+§18.4's Potemkin acceptance rests on the aggregate reading. Ruled: setwise
+conservation is normative for the reference metric — for any set of
+identities behind a cut, simultaneously usable standing totals at most the
+cut's capacity; one computation, shared capacity; per-principal decisions
+(§11.4) draw from one conserved computation. Stated at §16.2. Validation
+is a property of the eventual implementation (the metric remains an
+implementation item), recorded here rather than vectored.
+
+**2. Coverage economics (NOVEL, High → bullet restated).** §16.3.1's
+"work per-target, more expensive than the global reading suggests"
+ignored horizon overlap: one acquired edge sits inside every horizon that
+contains it. Restated as coverage of acquired edges over the victim
+population; the conservative per-observer half (an invisible edge cannot
+help that observer) survives and is kept. The superseded phrasing is
+quoted in place per the register style.
+
+**3. selection_basis tier alignment (EXTENDS, High → renumbered, author
+chose option A).** The wire's own comment said basis 0 = "met, or in a
+trust horizon" — §5.1's tiers 1 and 2 folded, the laundering path A23
+depends on keeping visible (cheap structural placement acquiring the look
+of acquaintance in the permanent record). Renumbered tier-aligned:
+0 met, 1 in-horizon, 2 reachable (tiers 3-4), 3 discretionary. Every
+"MUST be 0" recovery rule survives unchanged (recovery verifiers are met
+by definition; "known" reworded to "met" at wire §4.1, design §9.x prose,
+and the vector docs). Fixtures renumbered semantics-preserving (old
+0/1/2 = new 0/2/3; value 1 uncovered by the three-response record and
+said so); T27 updated to 0-3; verify.py matrix check now {0,2,3}; the
+Rust runner's field-10 range widened to 3 — with a caught near-miss: the
+first edit widened field 5 (result basis, still 0-2) instead of field 10,
+the two checks being adjacent. Corrected before any run.
+
+**4. "Counts identities" (EXTENDS, Medium → applied).** Wire §5.3 said
+the pool "counts people" where dedup is by keyhash and design §13.7
+permits one person several identities. Now: counts identities, one person
+may hold several, and the record claims no human independence the
+protocol cannot prove.
+
+Confirmed defences recorded: the single-observer cut bound, recognition
+against fabricated volume, uptime-not-social-trust, agents borrowing
+standing, and §19.7 item 2's reconnaissance rationale — all matching the
+registers. Python 80/80, Rust 146/0; references clean at 1,883 (eight
+list-continuation false-negatives, two of them from today's own edits,
+each inspected).

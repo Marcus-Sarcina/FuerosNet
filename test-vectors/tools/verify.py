@@ -645,7 +645,8 @@ check(any(w[3] & 3 == 3 for w in wit),
 resps = n_body[5]
 check(resps == sorted(resps, key=lambda r: (r[1], r[2])) and len(resps) == 3,
       'normal record: responses sorted by (verifier, subject) keyhash')
-check({r[10] for r in resps} == {0, 1, 2}, 'normal record: selection_basis matrix covered')
+check({r[10] for r in resps} == {0, 2, 3},
+      'normal record: selection_basis matrix covered (tier-aligned: met, reachable, discretionary)')
 legal = [(0, 0, True), (0, 1, False), (3, None, False)]
 seen = sorted(((r[4], r.get(5), 6 in r) for r in resps))
 check(seen == sorted(legal), 'normal record: result/basis/template combinations are the legal set')

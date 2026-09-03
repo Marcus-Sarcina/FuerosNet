@@ -740,7 +740,7 @@ fn schema_check(ctx: &Ctx, kind: &str, item: &Item) -> Result<(), String> {
                 }
             }
             if let Some(sb) = map_get(m, 10).and_then(as_uint) {
-                if sb > 2 {
+                if sb > 3 {
                     return Err("selection_basis out of range".into());
                 }
             } else {
