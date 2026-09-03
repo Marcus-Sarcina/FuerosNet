@@ -4064,12 +4064,18 @@ can refer further, or return the serving node directly. **That is an optimisatio
 above the floor**, not a requirement: the constant-state guarantee below is a
 minimum a node must be able to operate on, not a ceiling on what it may keep.
 
-**A referral cannot be usefully falsified, which is why no machinery polices it.**
+**A referral cannot be falsified for impersonation, which is why no machinery
+polices its content.**
 The requester knows the keyhash it intends to reach and authenticates the endpoint
 against it (§14.1.3). A node that returns a wrong address produces a handshake
-failure, not a silent misdirection — **the lie is self-detecting at contact**, so
-an intermediary gains nothing by lying and the protocol needs no traversal state to
-prevent it.
+failure, not a silent misdirection — **the lie is self-detecting at contact**, and
+the protocol needs no traversal state to prevent it. **What lying retains is
+denial** [2026-09-03]: a serving node that answers chosen resolutions falsely
+makes chosen targets unreachable while everything else stays healthy — a
+censorship primitive, not an impersonation one, and the quiet selective form of
+the eclipse §18.4 already prices. Traversal state would not change that either;
+the answer is the same one — plurality of paths, established before it is
+needed.
 
 **A serving node holds its whole light-client subtree, not just its children.**
 §14.1.2 has a light client attach to the **nearest infrastructure node on its
@@ -4270,6 +4276,20 @@ durable record of who asked about whom accumulates at a compliant responder.
 **And a caller with a stale staple should ask its introducer first**: that party
 already knows the caller is talking to the subject, so a fresher staple from them
 discloses nothing new, where the patron learns something it did not know.
+
+**Rarity is the patron's own conduct, and a patron can invert it**
+[2026-09-03]: the staple is the patron's signature, so a patron that withholds
+refresh while staying reachable pushes every fresh evaluator onto the fallback
+and reads the stream — the channel stapling exists to close, reopened by its
+own issuer. **The counterweight is that an attestation names its subject,
+never its querier**, so any fresh attestation is a reusable staple whoever
+fetched it — and the subject can request one about itself directly
+(`wire-format.md` §7.1; the requester is the authenticated peer, and nothing
+requires the peer and the subject to differ), a query that tells its patron
+nothing. A patron running the inversion must therefore refuse its own
+subordinate while answering strangers about that same subordinate, and the
+subordinate watches its own refresh fail: **the channel cannot be made routine
+without becoming visible to exactly the party holding §18.5's exit.**
 
 **Prefer short lifetime over revocation machinery.** The industry direction is
 away from long-lived credentials plus revocation infrastructure and toward
@@ -6026,6 +6046,17 @@ globally.
   therefore treat "every contact you have came through one patron" as a
   condition worth surfacing, and encourage a second independent adoption early.
 
+  **The cheap form is selective, and it needs no occupation** [2026-09-03]. A
+  serving node need not eclipse a whole view: answering chosen resolutions
+  falsely — a failure, or an address that will not answer — makes chosen
+  targets unreachable at one false reply per retry, while every other
+  destination works and the failure reads as a bad route. Endpoint
+  authentication holds throughout (§12.6.1): nothing is impersonated, the
+  requester is simply denied, and P26 means the censor also learns exactly
+  whom the victim keeps trying to reach. Same position, same mitigation:
+  a cached endpoint outlives its resolver, and a second independent path is
+  the answer here as everywhere in this section.
+
   Residual risk after that: a user who has only ever had one patron is eclipsable
   and the protocol cannot prevent it. Accepted, but for this reason rather than
   the old one.
@@ -6072,6 +6103,22 @@ globally.
   evidence about the relationship rather than about the departing node. Nothing
   compels any evaluator to read it that way, and the record remains durable
   regardless.
+
+  **The pair's audience is the neighbourhood, and a nonconforming serving patron
+  can distort exactly that audience's copy** [author, 2026-09-03]: both objects
+  name the same subject, so both flood the same ball — the neighbourhood the
+  departing node is leaving — and a patron that is also the victim's sole
+  serving ingress can drop the departure while propagating its own disavowal.
+  What that buys is bounded to spite: a falsified account of *why* the node
+  left, told to the people it left. Nothing carries the disavowal further. The
+  network builds no cross-tree reputation, and the one cross-tree evaluation
+  that exists — the adoption history scan (§16.7) — reads the subject's own
+  archive, which carries the departure and never the patron's disavowal, a
+  single-signer transaction on the patron's chain. Any evaluator who matters
+  to the departed node's future sees the exculpating half; a neighbourhood
+  evaluator holding the adverse half meets the departure the moment they
+  evaluate the subject at all. The pair assembles wherever something is
+  decided, and fails to assemble only where nothing is.
 
 ---
 
@@ -6489,6 +6536,14 @@ ceremony.
    introducer-first genuinely reduce. *"Nothing is retained on either side"* is a
    commitment under §1.1's test rather than a checkable rule, and it does not reach
    a compelled provider's logging at all (§18.1, §1.2.3).
+
+   **The frequency limiter is the patron's own signature, and a patron can
+   invert it by withholding refresh while answering fallbacks** [2026-09-03] —
+   the adversarial reading of this acceptance. What holds it: an attestation
+   never names its querier, so any fresh one is a reusable staple, and the
+   subject can obtain its own directly (§12.6.5) — a patron sustaining the
+   inversion must refuse its own subordinate while answering strangers, which
+   the subordinate sees. Covert only until used; answered by exit (§18.5).
 
 ### 19.8 Correlation register
 

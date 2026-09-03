@@ -3519,3 +3519,50 @@ Their four NC-category items are all already registered (immutable
 evidence/erasure = accepted cost 9 with the compliance-posture note;
 biometric custody = P13/P29; unenforceable declarations = P20/P24 and
 §1.1; multi-device = P33 undetermined). Reference check clean at 1,860.
+
+## Cycle 2, pass 0.9.1 — adversarial: the patron (2026-09-02/03)
+
+Three non-restating findings under the patron adversary; zero novel, three
+verified, all ruled by the author and applied. Fourteen candidate lines
+correctly self-discarded as restatements.
+
+**1. Exit laundering (REASONING → accepted at true size, §18.5 extended).**
+Verified: §18.5's limiter is "an observer holding both objects" verbatim,
+and wire §10.1 makes the serving node a light client's sole flood ingress
+with no ack, no retry, receiver-side-only gap detection. Two corrections
+found during verification, one to the assistant's own analysis: both
+objects name the same subject and therefore flood the same ball — "the old
+subnet's propagated view" (reviewer) and "floods in the new subnet"
+(assistant) were both wrong scope; transactions are in-horizon, only the
+memo travels rootward. Author's ruling reduced the finding: the network
+builds no cross-tree reputation except the adoption history scan, which
+reads the subject's own archive — carrying the departure and never the
+patron's single-signer disavowal. Suppression therefore buys a falsified
+exit story told only to the neighbourhood the victim left; every evaluator
+who matters to the victim's future sees the exculpating half. §18.5 now
+says so [author, 2026-09-03]. The reviewer's High was scoped to a
+reputation surface the design does not have.
+
+**2. Manufactured currency fallbacks (REASONING → repaired, §12.6.5 +
+§19.7 item 12).** Verified fully: stapling's stated purpose, the fallback
+undoing it, frequency as the stated limiter, and the inversion — the
+limiter is the patron's own signature. Repair applied (author: "seems
+fine"): an attestation never names its querier, so any fresh one is a
+reusable staple, and the subject may request its own directly (the wire
+already permits it: the requester is the authenticated peer, nothing
+requires peer and subject to differ). A patron sustaining the inversion
+must refuse its own subordinate while answering strangers about them, which
+the subordinate sees — covert only until used, answered by §18.5's exit.
+
+**3. Selective resolution censorship (EXTENDS → claim softened, §18.4
+extended).** Verified: design §12.6.1 said "an intermediary gains nothing
+by lying" — true for impersonation, false for a censor whose goal is the
+failed handshake. Author: the phrasing was not his; soften or remove.
+§12.6.1 now claims impersonation-impossibility only and names denial as
+what lying retains; §18.4 gains the cheap selective form (chosen targets
+unreachable inside a healthy view, one false reply per retry, P26 telling
+the censor whom the victim keeps trying to reach); wire §7.7.3's two echoes
+aligned ("nothing polices referral content, because impersonation is
+self-detecting").
+
+Both harnesses green after repin; no wire semantics touched.

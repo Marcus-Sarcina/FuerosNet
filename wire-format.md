@@ -2348,10 +2348,10 @@ next hop and `ServingInfra.key_material` the serving node, never the responder
 itself, so an anchor that refers you onward is never pinned at all.
 
 **It does not need to be, because a referrer's identity is not what protects you.**
-design §12.6.1: a referral cannot be usefully falsified, since the requester
+design §12.6.1: a referral cannot be falsified for impersonation, since the requester
 authenticates the *subject* it intended to reach and a wrong address produces a
 handshake failure rather than a silent misdirection. A hostile chain costs a failed
-dial. **Disclose nothing beyond the query itself** to a party you cannot
+dial — denial, not misdirection, and design §18.4 prices the selective form. **Disclose nothing beyond the query itself** to a party you cannot
 authenticate.
 
 > **Why this differs from the sibling rule, which an implementer will notice.** §8.2
@@ -2719,10 +2719,11 @@ own place in the tree removes the question.
 continues from there. A node may refer past several indices at once where it knows
 its own subtree.
 
-**Nothing polices referral honesty, because nothing needs to.** The requester
+**Nothing polices referral content, because impersonation is self-detecting.** The requester
 authenticates each endpoint against the keyhash it expects (§9.1), so a wrong
-address produces a handshake failure rather than a silent misdirection — which is
-also why an intermediary misreporting progress gains nothing.
+address produces a handshake failure rather than a silent misdirection — and an
+intermediary misreporting progress buys only the same failed dial. What a false
+answer retains is denial (design §12.6.1, §18.4).
 
 **The reply is not signed.** It conveys where to try next, and the requester
 authenticates the endpoint it reaches by ordinary means at contact time (design

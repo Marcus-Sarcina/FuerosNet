@@ -8215,3 +8215,20 @@ does not conceal (C21); the materialised role table as a pre-joined
 classification matrix awaiting compromise or compulsion (C22); and a
 filtered catalog query as a dated statement of service-class interest,
 already blunted by the reference client's sweep-and-cache rule (P38).
+
+### 2026-09-03 (cycle 2, adversarial pass 0.9.1: the patron)
+
+Three patron findings ruled. Exit laundering: a nonconforming serving
+patron can drop a subordinate's departure while propagating its own
+disavowal — accepted at its true size, which verification shrank twice:
+both objects flood the same neighbourhood (in-horizon, not per-subnet),
+and no cross-tree channel carries a disavowal, so the adoption scan reads
+an archive holding the departure and never the adverse half. The falsified
+story reaches only the audience the victim left. Manufactured currency
+fallbacks: the stapling rarity that justifies the accepted fallback leak is
+the patron's own signature to withhold — repaired by what the schema
+already permitted: attestations name no querier, so any fresh one is a
+reusable staple and the subject may fetch its own, making the inversion
+visible to its victim. Selective resolution censorship: "gains nothing by
+lying" softened to the impersonation claim it always was; denial is what
+lying retains, and the eclipse section now prices its cheap selective form.

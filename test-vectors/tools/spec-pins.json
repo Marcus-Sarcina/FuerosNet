@@ -1,7 +1,7 @@
 {
  "specs": {
-  "wire-format.md": "2d2a62f8737452b4faacb90e7a704bd1e1c00c871a7f096ef6c5c8498b39f464",
-  "network-design.md": "655e5e57522055cb1f3bb898c7215250b2616b037baceb17a1a5d218019dc654",
+  "wire-format.md": "bd7bb0b6899ca80373e65055c0b2456412833625ac6079dbd6b0417d0c1569ce",
+  "network-design.md": "cc13d3c4f681676670c746f686a3f0656916ec3b6d3c8e7032303a79f704776f",
   "light-client-requirements.md": "8cc2ee2788f4f81dedd696b2566d3add0d0c58f9a8f813f95be166498067e954"
  },
  "generator": "421c08ee9ef3f7879ee8c011ba245181e5b6da5f6d5e1eb361c1614e19350e30",
@@ -11,13 +11,13 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "c1606d27d820fbc5afaeeb1de9f09737cadebf64dbb27396f627b6935ad575ee",
-  "primitives.md": "48d3443af816143dd1de438a6901d60b86f4401e120a5d0e66da1cf72bb4d220",
-  "transactions.md": "46660f28e533c45c7f072921b3d7753e91798d1c3668bd73e71a29e4e3c020b5",
-  "records.md": "3d8b9b9fae3c9818ddc969da0368aff1d7a3f374a4270e33af865795b1fb90ce",
-  "verifier-selection.md": "64352ff9e9d8142bed394fbb47cbde10c2ab13a19c7521334bc10a4b3ba7134e",
-  "messages.md": "2f772832f791b28a3dcaf0a4444fb39e8f00fd32a67d83e002bad7920cac85b7",
-  "README.md": "2dc71058670d5103ec06ef0ff357dda359fb1039b868a563b18b3d6eea0ca4ac",
-  "negative-vectors.md": "dfde4c2b70be48636547ec1abc73de91a50f20e7395443b190430d5334897f4d"
+  "keys.md": "16f7d9c605b1a3cce26f718e78e504201681806902da8d1d39c571f94e59488d",
+  "primitives.md": "8ed27987eedce1d8a43d7afbdf0c38d8d1c4f5c49e7f003d4fb35ee626fabdf2",
+  "transactions.md": "688155fc45de8c43d324589754702c0524acee7208dc412a936b2f6808371e84",
+  "records.md": "00b2e46e2bc0ef4c36072bd0c0b2ff87b659acc1d2dd62e84f6b3116d7387030",
+  "verifier-selection.md": "e0566e0cf30e6906fd5d61ff517c90911119f0ba9d0aa883d462515a9f16eb09",
+  "messages.md": "9190db252a4f79104636c8107dd8e261f3111fa2286067e694b96ebd0b2d45a5",
+  "README.md": "f1834c5593f29f4971387b32eacdecc3f59429b55b35440934575b1d4ebe9498",
+  "negative-vectors.md": "89aa9a4ec6ef9720019585085af1cc62a8453adfee9d1322c1680cc2f02a3f38"
  }
 }
