@@ -4289,7 +4289,11 @@ requires the peer and the subject to differ), a query that tells its patron
 nothing. A patron running the inversion must therefore refuse its own
 subordinate while answering strangers about that same subordinate, and the
 subordinate watches its own refresh fail: **the channel cannot be made routine
-without becoming visible to exactly the party holding §18.5's exit.**
+without becoming visible to exactly the party holding §18.5's exit.** And no
+one patron's path is load-bearing for identification [author, 2026-09-03]: an
+attestation vouches for the *key*, and a user under multiple subnets (§3.1.1)
+has an issuer per line — the inversion surveils one line's introductions, and
+a multi-subnet user staples from another.
 
 **Prefer short lifetime over revocation machinery.** The industry direction is
 away from long-lived credentials plus revocation infrastructure and toward
@@ -6543,7 +6547,9 @@ ceremony.
    never names its querier, so any fresh one is a reusable staple, and the
    subject can obtain its own directly (§12.6.5) — a patron sustaining the
    inversion must refuse its own subordinate while answering strangers, which
-   the subordinate sees. Covert only until used; answered by exit (§18.5).
+   the subordinate sees. Covert only until used; answered by exit (§18.5) —
+   or sidestepped entirely by a multi-subnet user, who staples from another
+   line (§12.6.5).
 
 ### 19.8 Correlation register
 

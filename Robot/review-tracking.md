@@ -3566,3 +3566,8 @@ aligned ("nothing polices referral content, because impersonation is
 self-detecting").
 
 Both harnesses green after repin; no wire semantics touched.
+
+**0.9.1 finding 2, author addendum (2026-09-03)**: no single patron's path
+is load-bearing for identification — an attestation vouches for the key,
+and a multi-subnet user has an issuer per line, so the inversion surveils
+only the line its issuer controls. Added to §12.6.5 and §19.7 item 12.
