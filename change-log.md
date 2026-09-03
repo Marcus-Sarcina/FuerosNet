@@ -8117,3 +8117,10 @@ ago. One trace was added to pin the boundary that almost invites
 generalisation: a malformed type-6 body is answered with status 3 while a
 malformed type-4 body closes the stream, because each type answers defects
 in its own terms. Eighteen traces; both harnesses green.
+
+### 2026-09-02 (cycle 2, 0.6 refused-request target, phase 2)
+
+The vectors and the implementation agree everywhere they meet, including
+the two traces written from this target's own phase-1 rulings — satisfied
+on first contact rather than after correction. No changes anywhere; the
+target closes at zero divergences across both phases.

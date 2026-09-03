@@ -3266,3 +3266,25 @@ since a malformed type-4 body closes the stream (§5.6: "no error schema
 exists"). Each type answers in its own terms; an implementer generalising
 either rule to the other type diverges visibly. Trace count 17 → 18, both
 count checks updated. Python 79/79; Rust 145/0.
+
+## Cycle 2, pass 0.6 — refused-request phase 2 (2026-09-02)
+
+**Zero divergences, zero changes.** Five fixtures hand-traced to agreement
+(P-frame-15, P-reply-09, N-enum-resource-status, TR17, TR18) — TR17 and
+TR18, written one round earlier from this target's own rulings, were
+satisfied on first contact. The apparent prefix discrepancy the reviewer
+raised and resolved themselves is the documented convention: every reply
+fixture in messages.md states "replies carry no type tag and no length
+prefix here; on the wire the same u32-be prefix applies" — their reading
+verified verbatim. The TR9/TR10 distinction (attach-time `refused` close
+code versus ResourceResponse status 1) was correctly kept apart — the
+role-not-identifier discipline holding up in a reader.
+
+Scope reports, accurate and requiring nothing: TR15 not covered (phase 1
+has no transport-state input to test early-data handling against) and
+TR16 partially covered (the snapshot half — in-flight completes under its
+starting state — is implemented and matches; the session-manager half is
+outside a refusal-path implementation). Both are honest phase-boundary
+reports, not gaps in the vectors or the spec.
+
+Target 8 closes with both phases at zero divergences in all three classes.
