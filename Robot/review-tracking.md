@@ -3376,3 +3376,8 @@ floor conforms; multi-index referrals are optional depth), TR19 and D12
 matched exactly, and the frame-level not-covered notes are honest scope.
 
 Python 79/79, Rust 146/0.
+
+## Author ruling on 0.6.9 phase-2 #13 (2026-09-02)
+
+Confirmed: malformed names the pair, not the later arrival. The §10.1/§7.7.3
+text stands as written. Flag closed.
