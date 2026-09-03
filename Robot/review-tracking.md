@@ -3328,3 +3328,10 @@ signed is a byte-preserving representation, not the serde struct" closing is
 
 Nineteen traces, 187 entries; Python 79/79, Rust 146/0. Reference check
 clean at 1851 references (six known false-negatives).
+
+## Author ruling on 0.6.9 #6 (2026-09-02)
+
+Confirmed: one EndpointRecord per relationship line, each with that line's
+own seqno. Author rationale, now in §7.6: **record and locator partitioning
+between different subtrees is the anticipated use** — the lists differing
+per line is the point, not tolerated slack. Flag closed.

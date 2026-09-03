@@ -8148,3 +8148,9 @@ change. A fixture pins the port whose default spelling is omission
 (B-port-7431-explicit), and TR19 pins the peering-cycle duplicate dying
 against the store. Nineteen traces; both harnesses green, the Rust runner
 at 146.
+
+### 2026-09-02 (per-line endpoint records confirmed)
+
+The author confirmed the per-relationship-line ruling and supplied its
+intent: record and locator partitioning between different subtrees is the
+anticipated use. §7.6 now says so.

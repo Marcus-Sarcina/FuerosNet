@@ -2578,8 +2578,10 @@ record per line, each carrying that line's own current `seqno`. A single
 record could not serve: its series is unprovable in the other relationship's
 subnet, so it would never enter storage there — and a shared counter across
 subnets would disclose exactly the cross-subnet activity P36 exists to
-conceal. The lists usually agree; nothing requires it, and each record is that
-line's own address claim. A holder proves each record against its own series
+conceal. The lists may agree; nothing requires it, and each record is that
+line's own address claim — **partitioning records and locators between
+subtrees is the anticipated use** [author, 2026-09-02], not tolerated slack.
+A holder proves each record against its own series
 chain, and holding one per proved series is the correct end state, not a
 conflict.
 
