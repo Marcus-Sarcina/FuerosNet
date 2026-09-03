@@ -1019,12 +1019,19 @@ fn schema_check(ctx: &Ctx, kind: &str, item: &Item) -> Result<(), String> {
                     if ws.len() > 16 {
                         return Err("witnesses over 16".into());
                     }
+                    let mut affirmative = false;
                     for w in ws {
                         if let Item::Map(wm) = w {
                             if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
                                 return Err("retired witness key".into());
                             }
+                            if map_get(wm, 3).and_then(as_uint).map_or(false, |b| b & 3 == 3) {
+                                affirmative = true;
+                            }
                         }
+                    }
+                    if sub == 0 && !affirmative {
+                        return Err("witness floor: no affirmative attestation".into());
                     }
                 }
                 if let Some(Item::Array(resp)) = map_get(m, 5) {

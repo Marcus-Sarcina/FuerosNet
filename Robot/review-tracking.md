@@ -3571,3 +3571,54 @@ Both harnesses green after repin; no wire semantics touched.
 is load-bearing for identification — an attestation vouches for the key,
 and a multi-subnet user has an issuer per line, so the inversion surveils
 only the line its issuer controls. Added to §12.6.5 and §19.7 item 12.
+
+## Cycle 2, pass 0.9.2 — adversarial: the witness (2026-09-03)
+
+Two NOVEL, one EXTENDS, zero REASONING; eight lines self-discarded as
+restatements, and the reviewer correctly declined to revive the retired
+nonce/grinding findings and the already-repaired Potemkin rationale. All
+three findings verified against the text and ruled by the author.
+
+**1. Radius without centre (NOVEL → ruled: witness-relative, social
+interpretation).** Verified in full: §7.6's disks are witness-centred, a
+record may carry zero assertions, and Corroboration = {witness, method,
+radius_km} names no reference point — §7.6.2's evaluator claim had no
+defined computation behind it. Author ruling: the radius is
+witness-relative ("W bounds the participant within R km of W"), no
+coordinate is carried, and interpretation is by recognition of the witness
+— §16.1's evidentiary model applied to geometry. A falsely tight radius is
+ordinary attested-evidence lying, weighed like a false protocol_ran bit.
+Applied to §7.6.2 prose and the wire schema comment. No new fields, no
+privacy cost — the centre-field repair was rejected for exactly the C1/P2
+cost the reviewer flagged.
+
+**2. Uptime weighting (EXTENDS → accepted and stated).** Verified: the
+probe-after-draw rationale removes advertisement, not availability, and
+the inactive-fraction figure the effect size depends on is already
+registered unsourced (§20.2). Applied: §7.1.1 now states the filter is not
+uptime-neutral and cannot be (a witness that is not there cannot be
+nominated); §18.4's Potemkin item prices the cheaper path in — a
+continuously online placement survives every draw it enters — with the
+bounds unchanged: branch spread, and no control over which ceremonies draw
+it.
+
+**3. The attests=0 witness (NOVEL → floor strengthened, author: "zero
+witnesses is still available, so force it to be visible").** Verified: the
+bitfield carried no floor semantics and the ≥1-witness rule's own rationale
+was defeated by a witness attesting nothing. Applied: wire §3.2 — a normal
+record MUST carry at least one witness with protocol_ran AND
+both_responsive set; latency_bound stays optional; zero-bit and
+latency-only entries remain representable as partial evidence that does
+not satisfy the floor; the uncorroborated meeting stays expressible as a
+formation record, visible as what it is. Bitfield comment and design
+§7.1.1's balance passage aligned. T31 row + U-witness-no-affirmative unit
+entry added; both harnesses taught the floor (Python 80 checks — the
+normal record's own witnesses now checked; Rust runner enforces it on
+subtype-0 bodies, 146/0). All existing positives satisfy it: single-witness
+fixtures carry bits 7 or 3, and bits-3 fixtures pin latency_bound as
+optional.
+
+Defences the reviewer confirmed surviving: no record forgery without
+participants, no verifier-response rewriting, no capture access by
+witnessing, and cross-nomination improving representativeness rather than
+honesty.

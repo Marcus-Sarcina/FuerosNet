@@ -2492,6 +2492,11 @@ reg('N-retired-witness-key-4', 'bytes',
            (e_uint(2), e_bstr(alice.keyhash)),
            (e_uint(3), e_uint(7)),
            (e_uint(4), e_bstr(H(b'rhtn-test-vectors:dead-nonce-commitment')))]))
+reg('U-witness-no-affirmative', 'unit',
+    REJ('body', 'schema',
+        'a normal record none of whose witnesses set both protocol_ran and both_responsive fails the witness floor'),
+    note='recipe: any normal record where no field-4 entry has attestation bits 0 and 1 both set; such entries are partial evidence, not corroboration (s3.2, T31, 2026-09-03)')
+
 reg('U-corroboration-non-witness', 'unit',
     REJ('presentation', 'semantic',
         'a revealed location naming a corroborator absent from body field 4 attests nothing'),

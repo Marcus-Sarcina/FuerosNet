@@ -640,6 +640,8 @@ check(len(wit) == 16 and wit == sorted(wit, key=lambda w: w[1])
       'normal record: sixteen witnesses, ascending, distinct')
 pset = {n_body[3][0][1], n_body[3][1][1]}
 check(all(w[2] in pset for w in wit), 'normal record: every nominated_by names a participant')
+check(any(w[3] & 3 == 3 for w in wit),
+      'normal record: witness floor - at least one entry attests protocol_ran and both_responsive (T31)')
 resps = n_body[5]
 check(resps == sorted(resps, key=lambda r: (r[1], r[2])) and len(resps) == 3,
       'normal record: responses sorted by (verifier, subject) keyhash')

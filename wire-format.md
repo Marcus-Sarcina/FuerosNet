@@ -603,10 +603,18 @@ Rules a validator checks from the record alone. All were previously unstated.
   between equal keys; a
   participant witnessing their own ceremony is not an independent witness, which is
   the entire role.
-- **A normal record MUST carry at least one witness.** Zero witnesses is the
+- **A normal record MUST carry at least one witness whose attestation sets both
+  `protocol_ran` and `both_responsive`** (bits 0 and 1) [author, 2026-09-03].
+  Zero witnesses is the
   formation case and nothing else, a normal record with none is malformed rather
   than merely weak, since the subtype is what separates an uncorroborated bootstrap
-  from an uncorroborated ordinary meeting (design §13.2).
+  from an uncorroborated ordinary meeting (design §13.2) — **and a witness
+  attesting nothing is not corroboration**: an entry with neither bit set is
+  representable as partial or negative evidence, but it does not satisfy this
+  floor, or the count rule would let a formally normal record carry no
+  affirmative witness statement at all. `latency_bound` remains genuinely
+  optional. The uncorroborated meeting stays expressible — as a formation
+  record, where it is visible as exactly what it is.
 - **One identity is one logical signer regardless of how many roles it holds.** A
   party that is both a witness and a verifier signs once **in each capacity it
   signs in** — as a witness it is an envelope signer, as a verifier it signs an
@@ -1287,7 +1295,11 @@ Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km.
                      ; a corroboration's authority is its maker's envelope
                      ; signature over the disclosure root, so one naming a
                      ; non-witness attests nothing. Checkable only where the
-                     ; location disclosure is revealed
+                     ; location disclosure is revealed.
+                     ; radius_km is WITNESS-RELATIVE [author, 2026-09-03]:
+                     ; the witness bounds the participant within radius_km of
+                     ; ITSELF, and no coordinate is carried — interpretation
+                     ; is by recognition of the witness (design §7.6.2, §16.1)
 
 ; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2:
 ;   0 GNSS · 1 serving-cell · 2 network egress · 3 latency bound.
@@ -1312,7 +1324,11 @@ Witness = {
                        ;   bit 1 both_responsive
                        ;   bit 2 latency_bound
                        ;   bits 3+ reserved; a decoder retains them and
-                       ;   interprets only 0-2
+                       ;   interprets only 0-2.
+                       ;   A NORMAL record's witness floor counts only entries
+                       ;   with bits 0 AND 1 set (§3.2) [author, 2026-09-03];
+                       ;   entries without them are partial evidence, present
+                       ;   but not corroborating
   ; fields 4-5 (nonce commitment and reveal) were RETIRED 2026-09-01 with
   ; deterministic selection; the numbers are not reused — and a decoder
   ; meeting either REJECTS [2026-09-02]: tombstones, not extension space

@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` `bd7bb0b6899ca803…`, `network-design.md` `acc7b950195bc294…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `6934929e5457333c…`, `network-design.md` `912fed0e18e674e7…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).

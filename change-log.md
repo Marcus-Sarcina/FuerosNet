@@ -8232,3 +8232,21 @@ reusable staple and the subject may fetch its own, making the inversion
 visible to its victim. Selective resolution censorship: "gains nothing by
 lying" softened to the impersonation claim it always was; denial is what
 lying retains, and the eclipse section now prices its cheap selective form.
+
+### 2026-09-03 (cycle 2, adversarial pass 0.9.2: the witness)
+
+Three witness findings ruled. The location corroboration's radius is now
+witness-relative by statement — the witness bounds the participant within
+R km of itself, no coordinate is carried, and interpretation is by
+recognition of the witness, which turns a falsely tight radius into
+ordinary attested-evidence lying weighed like any other witness bit. The
+availability filter in witness nomination is acknowledged as not
+uptime-neutral — it cannot be, since an absent witness cannot serve — with
+the Potemkin item pricing the cheaper path a continuously online placement
+buys, bounded as before by branch spread. And the witness floor now means
+what its rationale always said: a normal record needs at least one witness
+affirmatively attesting that the protocol ran and both parties were
+responsive; witnesses attesting nothing remain representable but do not
+corroborate, and the uncorroborated meeting stays where it is visible —
+the formation subtype. T31 and a unit fixture pin the floor; both
+harnesses enforce it.

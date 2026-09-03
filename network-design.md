@@ -1318,9 +1318,21 @@ is a property the nominator finds; a node making itself conspicuously available 
 be nominated would be self-selecting, which is the thing cross-nomination exists to
 prevent.
 
+**The filter is not uptime-neutral, and cannot be** [author, 2026-09-03]: a
+witness that is not there cannot be nominated, so any selection of live
+witnesses weights by availability intrinsically — what probing-after-draw
+removes is *advertisement*, not the weight. A high-uptime attacker inside a
+branch therefore raises its conditional share of the final set above its share
+of the draw, and the fraction of honest candidates asleep at ceremony time —
+an unsourced figure (§20.2) — sets how much. The standing defences are the two
+that never depended on uptime: branch spread, and the attacker's inability to
+choose which ceremonies draw it.
+
 **Balance is what the property depends on, and nothing enforces it.**
-`wire-format.md` §3.2 requires at least one witness on a normal record — zero
-witnesses is the formation case and nothing else — and requires each
+`wire-format.md` §3.2 requires at least one witness attesting that the protocol
+ran and both parties were responsive on a normal record [author, 2026-09-03] —
+zero witnesses is the formation case and nothing else, and a witness attesting
+nothing does not satisfy the floor — and requires each
 `nominated_by` to name one of the participants; it does not require both
 participants to be represented. Where one party nominated every witness — a
 one-witness record being the smallest case — the other party has none of its own
@@ -2168,6 +2180,15 @@ succeeded and at what resolution (§7.6.2) rather than a single pre-digested
 figure. **There is no single "imputed location" field**, deliberately: one number
 would hide which corroborations succeeded and at what resolution, which is what an
 evaluator actually needs.
+
+**The radius is witness-relative, and its interpretation is social** [author,
+2026-09-03]: witness W's corroboration means *W bounds the participant within R
+km of W*, and the record deliberately carries no coordinate for W — an
+evaluator who recognises the witness knows where that witness is, and a
+stranger correctly gets nothing, which is §16.1's evidentiary model applied to
+geometry. A witness signing a falsely tight radius is therefore ordinary
+attested-evidence lying, no different in kind from a false `protocol_ran` bit,
+and weighed the same way: by the evaluator's recognition of the signer.
 
 **Do not attempt proximity by network timing.** A 0.00001 light-second budget is
 3 km, i.e. 10 µs of light travel, against 20–80 ms of mobile radio latency with
@@ -6079,6 +6100,15 @@ globally.
   signature (§8.1.2). What bounds this is the nomination heuristic of §7.1.1
   and not the flow metric — the operator must occupy enough independent branches
   to catch a spread selection, which is a far larger region than one adoption.
+
+  **Uptime cheapens the path in** [author, 2026-09-03]: the availability probe
+  after the draw weights the final witness set toward whoever is reachable
+  (§7.1.1's filter is not uptime-neutral), so a continuously online placement
+  inside one branch appears in final sets above its share of the draw — the
+  attacker cannot enter a draw it is not in, but it survives every draw it is.
+  This lowers the operating cost of the powers this item already prices; it
+  does not change what bounds them, which remains branch spread and the
+  attacker's inability to choose which ceremonies draw it.
 - **Collusion rings between real distant nodes** mutually transacting to
   manufacture the cross-distance history a distance metric rewards. **No
   structural signature.** Which is the substantive problem; the cost of
