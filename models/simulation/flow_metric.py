@@ -33,9 +33,12 @@ region in §15.1 is built from adoption and sibling edges only"):
   * SCOPE topology -- adoption edges and SIBLING edges (co-children of one
     patron).  The trust horizon is the two-edge walk over THIS graph
     (design §15.1, Vocabulary).  It decides who can SEE what.
-  * TRUST-CAPACITY topology -- adoption edges (hierarchical capacity) and
-    PEERING edges (a lower default capacity, §16.3).  It decides how much
-    trust can FLOW.
+  * TRUST-CAPACITY topology -- adoption edges AND peering edges, carrying
+    the same capacity: design §16.2.1 [author, 2026-09-04] says the metric
+    distinguishes INSIDE the horizon from BEYOND it, never edge kind from
+    edge kind, and beyond the horizon trust flows equally over the
+    hierarchical and the PoP/peering graphs.  It decides how much trust can
+    FLOW.
   * VISIBILITY -- a peering edge "is visible inside the two peers' horizons
     and nowhere else" (§16.3.1).  A peering edge confers NO scope and does
     NOT extend the horizon (§6.3), but an observer who can see it may use
@@ -169,8 +172,13 @@ class FlowGraph:
 # under ONE fixed schedule.
 # ---------------------------------------------------------------------------
 
+# Edge capacity is NOT differentiated by edge kind (design §16.2.1): beyond
+# the horizon trust flows equally over hierarchical and PoP/peering edges,
+# and inside the horizon hierarchical edges are unthrottled (which the node
+# capacities express, not these).  An earlier version gave peering a lower
+# capacity, following a §16.3 default the landscape ruling retired.
 HIER_CAP = 10   # capacity of an adoption (hierarchical) edge
-PEER_CAP = 2    # capacity of a peering edge -- lower, per design §16.3
+PEER_CAP = 10   # a peering edge is worth what any edge at its distance is
 
 def build_tree(rng, depth, fanout, prefix="n"):
     """Build a random adoption tree.
@@ -291,18 +299,82 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
 # ---------------------------------------------------------------------------
 
 def node_capacity(dist):
-    """Per-node throughput by scope/flow distance from the observer.
+    """Per-node throughput by TRUST-LANDSCAPE distance (see landscape_distance).
 
-    MODELLER'S CHOICE, NOT FROM THE DESIGN.  Advogato decreases capacity with
-    distance from the seed and this file uses a halving schedule
-    (32, 16, 8, 4, ...).  The design fixes no vertex-capacity schedule --
-    trust policy is local and pluggable (§16.2, §16.4) -- so every absolute
-    number below is conditional on this choice.  What the experiments test is
-    RELATIVE behaviour under ONE schedule held fixed: growing a population,
-    adding an edge, changing evaluation mode.  A different schedule moves the
-    numbers and not the conclusions.
+    MODELLER'S CHOICE OF SCHEDULE, NOT FROM THE DESIGN.  Advogato decreases
+    capacity with distance from the seed and this file uses a halving
+    schedule.  The design fixes no vertex-capacity schedule -- trust policy
+    is local and pluggable (§16.2, §16.4) -- so every absolute number is
+    conditional on this choice.  What the experiments test is RELATIVE
+    behaviour under ONE schedule held fixed.
+
+    WHAT IS *NOT* A MODELLER'S CHOICE is distance 0 being unthrottled.
+    design §16.2.1: hierarchical edges are unthrottled out to the two-edge
+    horizon and the metric throttles only beyond it, so the whole horizon
+    sits at the origin together and nothing inside it is rationed by flow.
     """
-    return max(32 >> dist, 1)          # 32, 16, 8, 4, 2, 1, 1, ...
+    if dist == 0:
+        return UNTHROTTLED             # the horizon: the metric is not the
+                                       # binding constraint inside it
+    return max(32 >> dist, 1)          # beyond: 16, 8, 4, 2, 1, 1, ...
+
+
+UNTHROTTLED = 10 ** 9    # stands in for "the flow metric does not ration here"
+
+
+def landscape_distance(scope_adj, flow, observer, peer_edges):
+    """Distance in the TRUST LANDSCAPE, per design §16.2.1 [author].
+
+    NOT hops in the graph.  The rule:
+
+      * everyone in the observer's two-edge patron/sibling HORIZON sits at
+        the ORIGIN, distance 0, together -- hierarchical edges are
+        unthrottled out to the horizon;
+      * beyond it, distance counts edges outward from the origin, and
+        **trust flows equally over the hierarchical and the
+        proof-of-presence/peering graphs** [author, 2026-09-04] -- the
+        metric distinguishes inside from beyond, never edge kind from edge
+        kind.  So the outward walk below deliberately treats adoption and
+        peering edges alike.
+
+    So the observer's own PoP counterparty and the observer's patron's
+    sibling's PoP counterparty are both at distance 1: the first because the
+    observer met them, the second because the patron's sibling is at the
+    origin and met them.
+
+    An earlier version of this file measured plain BFS hops in the flow
+    graph, which graded the INSIDE of the horizon -- a different landscape
+    from the one the design describes, where the horizon is a single point.
+
+    `peer_edges` is the (u, v, cap) list; `flow` supplies PoP/adoption
+    adjacency for the outward walk.
+    """
+    origin = horizon(scope_adj, observer)
+    dist = {n: 0 for n in origin}
+    # Adjacency for the outward walk: EVERY edge counts the same beyond the
+    # origin -- adoption, sibling, peering, and (in a richer model) explicit
+    # PoP edges alike.
+    acq = {u: set() for u in flow.cap}
+    for u, nbrs in flow.cap.items():
+        for v, c in nbrs.items():
+            if c > 0:
+                acq[u].add(v)
+                acq.setdefault(v, set()).add(u)
+    for (u, v, _c) in peer_edges:
+        acq.setdefault(u, set()).add(v)
+        acq.setdefault(v, set()).add(u)
+    frontier = set(origin)
+    d = 0
+    while frontier:
+        d += 1
+        nxt = set()
+        for u in frontier:
+            for v in acq.get(u, ()):
+                if v not in dist:
+                    dist[v] = d
+                    nxt.add(v)
+        frontier = nxt
+    return dist
 
 
 def distances_from(g, source):
@@ -318,16 +390,29 @@ def distances_from(g, source):
     return dist
 
 
-def split_graph(g, observer):
+def split_graph(g, observer, scope_adj=None, peer_edges=()):
     """Node splitting with distance-based node capacities.  Nodes become
     ("in", u) and ("out", u); the observer's own throughput is unbounded
-    (capping the evaluator would be self-limiting)."""
-    dist = distances_from(g, observer)
+    (capping the evaluator would be self-limiting).
+
+    DISTANCE IS THE TRUST-LANDSCAPE DISTANCE when `scope_adj` is supplied
+    (design §16.2.1): the observer's whole two-edge horizon is the origin and
+    unthrottled, and only beyond it does the metric ration.  Without
+    `scope_adj` -- the small synthetic graphs in the allocation tests, which
+    have no subnet structure -- it falls back to plain graph hops, where the
+    observer alone is the origin.  Passing scope is what the RHTN-shaped
+    experiments do; the fallback exists so the allocation unit tests can use
+    bare graphs.
+    """
+    if scope_adj is not None:
+        dist = landscape_distance(scope_adj, g, observer, peer_edges)
+    else:
+        dist = distances_from(g, observer)
     s = FlowGraph()
     for u in g.cap:
         if u not in dist:
             continue
-        ncap = 10**9 if u == observer else node_capacity(dist[u])
+        ncap = UNTHROTTLED if u == observer else node_capacity(dist[u])
         s.add_edge(("in", u), ("out", u), ncap)
         for v, c in g.cap[u].items():
             if c > 0 and v in dist:
@@ -335,17 +420,18 @@ def split_graph(g, observer):
     return s
 
 
-def score_independent(g, observer, target):
+def score_independent(g, observer, target, scope_adj=None, peer_edges=()):
     """MODE A: the target's individual score = max flow observer->target =
     the min-cut between them.  E2 shows this per-identity bound holds even
     with full visibility."""
-    s = split_graph(g, observer)
+    s = split_graph(g, observer, scope_adj, peer_edges)
     if ("in", target) not in s.cap:
         return 0
     return s.copy().max_flow(("out", observer), ("in", target))
 
 
-def admit_reference_order(g, observer, candidates, demand=1):
+def admit_reference_order(g, observer, candidates, demand=1,
+                          scope_adj=None, peer_edges=()):
     """MODE B: admit candidates against ONE shared residual, in REFERENCE order.
 
     Returns (admitted, total) -- the candidates that received flow, in the
@@ -408,7 +494,7 @@ def admit_reference_order(g, observer, candidates, demand=1):
     trust (§16.1) means no party consumes another's computation, so a policy
     resolving the allocation differently still conforms.
     """
-    s = split_graph(g, observer)
+    s = split_graph(g, observer, scope_adj, peer_edges)
     SINK = ("sink", None)
     source = ("out", observer)
     # The three ranking keys, measured on the PRE-ALLOCATION graph, because
@@ -420,7 +506,8 @@ def admit_reference_order(g, observer, candidates, demand=1):
     dist = distances_from(s, source)
     ranked = sorted(
         [(i, c) for i, c in enumerate(candidates) if ("in", c) in s.cap],
-        key=lambda ic: (-score_independent(g, observer, ic[1]),
+        key=lambda ic: (-score_independent(g, observer, ic[1],
+                                          scope_adj, peer_edges),
                         dist.get(("in", ic[1]), float("inf")),
                         ic[0]))
     admitted, total = [], 0
@@ -455,7 +542,7 @@ def accepted_count(g, observer, targets):
     return admit_reference_order(g, observer, targets, demand=1)[1]
 
 
-def deliverable_flow(g, observer, demands):
+def deliverable_flow(g, observer, demands, scope_adj=None, peer_edges=()):
     """Total flow deliverable to a SET of candidates under ARBITRARY demands.
 
     `demands` maps target -> the capacity that target may draw.  This is the
@@ -465,7 +552,7 @@ def deliverable_flow(g, observer, demands):
     its demand is the strongest reading -- every identity asking for
     everything it could get alone -- and is what experiment_setwise checks.
     """
-    s = split_graph(g, observer)
+    s = split_graph(g, observer, scope_adj, peer_edges)
     SINK = ("sink", None)
     for t, d in demands.items():
         # ("in", t), not ("out", t) -- see admit_reference_order: a candidate
@@ -476,12 +563,12 @@ def deliverable_flow(g, observer, demands):
     return s.max_flow(("out", observer), SINK)
 
 
-def region_ceiling(g, observer, entry):
+def region_ceiling(g, observer, entry, scope_adj=None, peer_edges=()):
     """design §16.2's sentence made a number: "the entire subtree inherits
     at most what flows through that one vertex".  Every identity behind
     `entry` drains through entry's out-node, so no set of them can
     simultaneously use more than the max flow observer -> out(entry)."""
-    s = split_graph(g, observer)
+    s = split_graph(g, observer, scope_adj, peer_edges)
     if ("out", entry) not in s.cap:
         return 0
     return s.max_flow(("out", observer), ("out", entry))
@@ -578,13 +665,17 @@ def attach_fake_region(g, boundary_node, width, depth):
 
 def experiment_cut_bound(rng, report):
     report.append("E2: the individual cut bound (design 16.2, 17.3)")
-    base, nodes, _ = build_tree(rng, depth=3, fanout=3)
+    base, nodes, children = build_tree(rng, depth=3, fanout=3)
     observer = nodes[0]
     boundary = nodes[1]
     for width, depth in [(2, 2), (3, 3), (4, 4)]:
         g = base.copy()
         fakes = attach_fake_region(g, boundary, width, depth)
-        best = max(score_independent(g, observer, t) for t in fakes)
+        # Scope from the HONEST tree only: the fake region's internal
+        # adoptions are not edges this observer holds topology for, so they
+        # confer no scope and the fakes sit beyond the origin.
+        scope = scope_adjacency(list(g.cap.keys()), children)
+        best = max(score_independent(g, observer, t, scope) for t in fakes)
         ok = best <= HIER_CAP
         report.append(
             f"  fake region of {len(fakes):>4} identities: best individual "
@@ -651,10 +742,11 @@ def experiment_setwise(rng, report):
         # Only fakes actually inside the observer's visible graph count --
         # the observer cannot evaluate identities it does not hold.
         visible_fakes = [f for f in fakes if f in vis.cap]
-        indep_sum = sum(score_independent(vis, observer, t)
+        indep_sum = sum(score_independent(vis, observer, t, scope)
                         for t in visible_fakes)
-        joint = accepted_count(vis, observer, visible_fakes)
-        ceiling = region_ceiling(vis, observer, boundary)
+        joint = admit_reference_order(vis, observer, visible_fakes,
+                                      demand=1, scope_adj=scope)[1]
+        ceiling = region_ceiling(vis, observer, boundary, scope)
         report.append(
             f"  {len(visible_fakes):>2} visible fakes:  independent-sum = "
             f"{indep_sum:>4}   conserving joint = {joint}   "
@@ -682,10 +774,11 @@ def experiment_setwise(rng, report):
     scope = scope_adjacency(list(g.cap.keys()), kids)
     vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
     visible_fakes = [f for f in fakes if f in vis.cap]
-    individual = {t: score_independent(vis, observer, t) for t in visible_fakes}
+    individual = {t: score_independent(vis, observer, t, scope)
+                  for t in visible_fakes}
     total_individual = sum(individual.values())
-    delivered = deliverable_flow(vis, observer, individual)
-    ceiling = region_ceiling(vis, observer, boundary)
+    delivered = deliverable_flow(vis, observer, individual, scope)
+    ceiling = region_ceiling(vis, observer, boundary, scope)
     report.append(
         f"  general demands (each asks its own standing): individual sum = "
         f"{total_individual}, simultaneously deliverable = {delivered}, "
@@ -875,9 +968,10 @@ def experiment_fanout(rng, report):
                     see += 1
                 before = visible_flow_subgraph(flow, scope, obs, peer_edges=[])
                 after = visible_flow_subgraph(flow, scope, obs, peer_edges)
-                b = (score_independent(before, obs, beneficiary)
+                b = (score_independent(before, obs, beneficiary, scope)
                      if beneficiary in before.cap else 0)
-                a = (score_independent(after, obs, beneficiary)
+                a = (score_independent(after, obs, beneficiary, scope,
+                                       peer_edges)
                      if beneficiary in after.cap else 0)
                 if a != b:
                     influenced += 1

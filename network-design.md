@@ -62,7 +62,7 @@ operations. Encoding for all of it is in
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
-decisions open. Multi-device beyond archive merge (§23.3). **Twelve parameters
+decisions open. Multi-device beyond archive merge (§23.3). **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until the encoding stops moving.
@@ -1066,8 +1066,12 @@ consequence of subnet plurality, not a gap in this mechanism.
   available the ASN, so **concentration** is observable rather than asserted
   (§3.4, §17.3). Independence is not: ASN is routing, not legal control.
 - Two signatures, between infra nodes in different subtrees.
-- Attests investment in the network and therefore contributes to trust, but at
-  **lower flow capacity than hierarchical edges by default** (see §16.3).
+- Attests investment in the network and therefore contributes to trust. **At
+  what capacity is §16.2.1's landscape question, not an edge-kind one**
+  [author, 2026-09-04]: inside the two-edge horizon hierarchical edges are
+  unthrottled, and beyond it trust flows equally over the hierarchical and
+  the proof-of-presence/peering graphs, so a peering edge is worth what any
+  other edge at its distance is worth (see §16.3).
 - Carries a real cost: persisting the peer's data — **as an encrypted
   backup** [author, 2026-09-04]. What a peer holds is ciphertext, so the
   entrustment is of durability and not of readable content, and it is the
@@ -5726,6 +5730,33 @@ presenting history; because the evaluator admits only what it already
 recognises, and prices even that by its own flow, the cut stays a property
 of the evaluator's graph rather than of the presenter's claims.
 
+**The trust landscape: your horizon is the origin** [author, 2026-09-04].
+Distance in this metric is not hops in the graph. **Hierarchical edges are
+unthrottled out to the two-edge patron/sibling horizon** — inside it you
+hold the topology and the direct evidence (§15.1), so the flow metric is
+not what is doing the work — **and beyond that horizon is where trust
+becomes throttled by the metric.** So **everyone in your trust horizon sits
+at the origin together**, and distance counts edges outward from it: your
+own proof-of-presence counterparty and your patron's sibling's
+proof-of-presence counterparty are **both at distance 1** — the first
+because you met them, the second because your patron's sibling is at the
+origin with you and met them.
+
+**Beyond the horizon, trust flows equally over the hierarchical and the
+proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are
+not weighted against each other out there; **the only distinction the metric
+draws is inside the horizon versus beyond it**. An adoption edge three hops
+away and a proof-of-presence edge three hops away carry the same, and a
+peering edge among them carries the same again. This is what makes §16.2.1's
+first two bullets a description of where scope comes from rather than of
+where trust flows: scope is built from adoption and sibling edges alone,
+and beyond the origin trust is indifferent to which kind of edge it crosses.
+
+**This is what makes the metric a mechanism for reaching past the horizon
+rather than for grading inside it.** Within the origin there is nothing for
+a flow bound to ration; the question the metric answers is how much to
+extend to someone you have *not* met, reached only through people you have.
+
 ### 16.3 Peering edges and trust capacity
 
 **There is no trust ceiling to raise.** Standing is per-observer, not global.
@@ -5752,11 +5783,32 @@ unattested adoption (§6.1.1) needs no meeting and no storage commitment. And th
 is no *ceiling* to raise: that framing mistakes per-observer standing for a global
 quantity.
 
-**Mitigation, unchanged and still justified:** peering edges carry a distinct, low
+**Mitigation:** peering edges carry a distinct, low
 default flow capacity, separate from hierarchical edges. The reason is the
 endorsement-misreading above, which survives the correction. Raising the capacity
 is a policy decision, upgraded by face-to-face attestation (§7) between the
 peers.
+
+**Superseded by §16.2.1's landscape** [author, 2026-09-04]. The comparison
+"lower than hierarchical" does not survive it, in either region.
+**Inside the two-edge horizon** hierarchical edges are unthrottled, and a
+peering edge is by construction an edge *out* of the horizon, so there is
+nothing there to be lower than. **Beyond the horizon** trust flows equally
+over the hierarchical and the proof-of-presence/peering graphs — the metric
+distinguishes inside from outside, never edge kind from edge kind. To any
+party other than the two peers, a peer is a `PoP` counterparty at the same
+distance as any other. What remains peculiar to peering is what the *peers*
+exchange: an encrypted backup and the cost of holding it (§6.3), a
+relationship between them and not a claim on anyone else's evaluation.
+
+> **Open, and stated rather than smoothed over** [2026-09-04]. If a peering
+> edge and a proof-of-presence edge sit at the same distance for third
+> parties, then the endorsement-misreading concern above no longer has the
+> low default capacity as its answer, and the face-to-face upgrade path has
+> nothing left to upgrade. The asymmetry the concern rests on is real — a
+> peering costs a technical favour and a signature, a `PoP` costs a physical
+> meeting — so **what should price that difference, if not capacity, is
+> open**. Recorded here rather than resolved by inference.
 
 #### 16.3.1 The min-cut bound is observer-relative
 
@@ -6942,7 +6994,7 @@ targets for simulation.
 | **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (Appendix B.1) | Also §20.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
 | **A18** | Ageing is modest for adults, severe for minors, **substantial in 24 months** | The two-year capture retention tier (§7.5.1) | Also §20.1 |
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §16.6's operator pricing and §17.3's static-addressing leg | Also §20.1 |
-| **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | §16.3's low default flow capacity for peering edges | Both the superlative ("the cheapest route") and the "trust ceiling" framing are withdrawn. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
+| **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | **Open since 2026-09-04**: §16.3's low default flow capacity was this assumption's stated mitigation, and §16.2.1's landscape retires it — beyond the horizon trust flows equally over hierarchical and `PoP`/peering edges, so no edge-kind discount remains to carry the concern. §16.3 records what is now unpriced | Both the superlative ("the cheapest route") and the "trust ceiling" framing are withdrawn. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
 | **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every resource application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it |
 | **A23** | An adoption without a meeting is **near-worthless** rather than merely weaker | Keeping proof of presence optional (§6.1.1) instead of mandatory where it could be enforced | If unattested edges carry meaningful standing under plausible policies, optionality becomes a gap rather than a graceful degradation |
@@ -7028,7 +7080,7 @@ than by the chooser:
 
 | Parameter | Section |
 |---|---|
-| Peering flow capacity relative to a hierarchical edge | §16.3 |
+| ~~Peering flow capacity relative to a hierarchical edge~~ — **dissolved 2026-09-04** (§16.2.1): the metric distinguishes inside the horizon from beyond it, never edge kind from edge kind, so there is no ratio to set | §16.3 |
 
 **Needs measurement under load.** Performance parameters, safe to tune:
 
@@ -7122,7 +7174,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 
 ### 22.2 Decide during implementation
 
-- **Twelve unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
+- **Eleven unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
 - **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid

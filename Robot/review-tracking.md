@@ -4303,3 +4303,57 @@ edges also carry the same default CAPACITY, §16.3's mitigation paragraph
 needs revising and I have not touched it.
 
 References clean at 1945; harnesses and all eight models green.
+
+## Author ruling: the trust landscape (2026-09-04)
+
+The peering-capacity question I flagged is answered by a geometry that
+resolves it from an unexpected direction, and the answer reaches further
+than the question.
+
+**The ruling.** Hierarchical edges are UNTHROTTLED out to the two-edge
+patron/sibling horizon; beyond it is where the flow metric throttles. So
+**everyone in a node's trust horizon sits at the ORIGIN together** -- the
+horizon is a point, not a graded region -- and distance counts edges outward
+from it: a node's own PoP counterparty and its patron's sibling's PoP
+counterparty are BOTH at distance 1. **Beyond the horizon, trust flows
+equally over the hierarchical and the PoP/peering graphs**: the metric
+distinguishes inside from beyond, never edge kind from edge kind. A peer has
+special status only to the node it peers with (the encrypted backup and its
+cost); to everyone else it is a PoPmate.
+
+**Applied**: new landscape paragraphs in §16.2.1; §6.3's "lower flow
+capacity than hierarchical edges" bullet rewritten (the comparison is a
+landscape question, not an edge-kind one); §16.3's mitigation marked
+SUPERSEDED with the reasoning in both regions.
+
+**Three consequences swept, each of which would otherwise have rotted:**
+1. **A20's stated mitigation is retired.** The assumption "a peer may read a
+   technical request as an endorsement" was answered by §16.3's low default
+   peering capacity, which no longer exists. Row updated to say so and
+   point at §16.3's open note.
+2. **§21.1's "peering flow capacity relative to a hierarchical edge" is
+   DISSOLVED** -- there is no ratio to set when the metric does not
+   distinguish edge kinds. Row struck with the reason.
+3. **The parameter count therefore drops twelve -> eleven**, corrected in
+   BOTH places that state it (the Preface and §22.2). This is the
+   counts-drift trap the conventions warn about; caught only because the
+   dissolution was applied deliberately rather than by leaving the row.
+
+**Open and recorded, not inferred** (§16.3's block quote): if peering and
+PoP edges sit at the same distance for third parties, the
+endorsement-misreading concern has lost its answer and the face-to-face
+upgrade path has nothing to upgrade. The asymmetry is real -- a peering
+costs a technical favour, a PoP costs a physical meeting -- so what should
+price that difference, if not capacity, is OPEN.
+
+**Simulation rebuilt to the landscape.** node_capacity(0) is now
+UNTHROTTLED; a new landscape_distance() computes horizon-as-origin with an
+outward walk that treats adoption and peering edges alike; split_graph and
+its four consumers take scope and peer edges so the RHTN-shaped experiments
+use the landscape (the bare allocation unit-tests keep graph hops, noted in
+place). PEER_CAP raised from 2 to equal HIER_CAP, since capacity no longer
+varies by kind. Conclusions are unchanged -- edge capacities were the
+binding constraint, not node capacities -- which is reassuring rather than
+convenient: the earlier distance error was not load-bearing for E1-E4.
+
+Six seeds pass; all eight models green; references clean at 1953.

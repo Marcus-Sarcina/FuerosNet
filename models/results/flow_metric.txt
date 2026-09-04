@@ -28,7 +28,7 @@ E4: edge-influence fanout, two-ended peering (design 16.3.1)
   48 cross-tree placements enumerated over 14 observers (worst-case aware)
   observers who can SEE the edge:      min 9, median 12, max 14
   observers whose standing CHANGED:    min 6, median 8, max 9
-  best placement 'A'<->'B': 9 of 14 observers influenced by ONE edge (max gain 2)
+  best placement 'A'<->'B': 9 of 14 observers influenced by ONE edge (max gain 10)
   seeing the edge does NOT imply being influenced -- an observer already holding standing
   to the far peer through its own tree is unaffected; the equality an earlier version
   asserted was an artifact of a one-ended attacker.

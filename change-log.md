@@ -8461,3 +8461,21 @@ participant it already recognises and weights each by the flow its own graph
 can push to that participant. Recognition decides legibility and the metric
 decides worth, so a presented history can never enlarge the cut it is
 presented across.
+
+### 2026-09-04 (the trust landscape: the horizon is the origin)
+
+The peering-capacity question is answered by a geometry rather than a
+number. Hierarchical edges are unthrottled out to the two-edge horizon and
+the metric throttles only beyond it, so a node's whole horizon sits at the
+origin together and distance counts edges outward from there — a node's own
+proof-of-presence counterparty and its patron's sibling's counterparty are
+both at distance one. Beyond the horizon trust flows equally over the
+hierarchical and the proof-of-presence/peering graphs: the metric
+distinguishes inside from beyond, never edge kind from edge kind, and a
+peer's special status exists only toward the node it peers with. Three
+things followed: the assumption register's peering row lost the mitigation
+it cited, the peering-capacity ratio dissolved as a parameter with no
+ratio left to set, and the unset-parameter count fell to eleven in both
+places that state it. What remains open is recorded in §16.3 rather than
+inferred — with capacity no longer pricing the difference between a
+technical favour and a physical meeting, nothing currently does.
