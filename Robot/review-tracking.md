@@ -4206,3 +4206,55 @@ key was then restored and the full run passes. (The deliberate failure was
 mid-turn verification, not a regression.)
 
 Six seeds pass; all eight models green; references clean at 1936.
+
+## Third cross-family review of the trust-metric simulation (2026-09-04)
+
+Three findings, all verified by execution, all correct. max_flow again
+cross-checked clean (600 graphs incl. antiparallel capacities) -- three
+independent reviews now, zero discrepancies; every defect found has been in
+the modelling.
+
+**F1 (Medium, MODEL GAP -- the real one).** Joint drains attached to
+("out", candidate) while score_independent terminates at ("in", target), so
+the joint computation charged every candidate its OWN node (relay)
+capacity. Reproduced exactly: obs-10-x-10-y-10-A gives individual standing
+8 but deliverable_flow({A:8}) = 4, with no contention at all. Node capacity
+models what a node may RELAY; a candidate here is the DESTINATION. Fixed:
+both admit_reference_order and deliverable_flow now drain from
+("in", candidate); individual and joint now agree (8 = 8). This mattered
+specifically for the general-demand E3 claim -- unit demands were mostly
+insulated because node capacity bottoms out at 1.
+
+**F2 (Medium, VACUOUS PROPERTY + placement restriction).** E4's assertions
+(max(sees)>1, max(infl)>1) establish that amortisation EXISTS, not the
+population-coverage economics s16.3.1 argues; the terminal "CONFIRMED"
+overstated them. Also E4 restricted peer endpoints to nodes with children,
+but infra status is independent of downline -- wire s10.1: "a node becomes
+infra by launching and signing an infra instance, without moving" -- so
+low-degree placements were silently excluded. Fixed: every node is a valid
+endpoint (48 placements over 14 observers, all enumerated), and the label
+is now "DEMONSTRATED IN THIS TOPOLOGY (not confirmed as economics)" with an
+explicit list of what is NOT measured (edges per target fraction, cover-set
+overlap, variation across topology families).
+
+**F3 (Low, stale summary).** The final report block still described two
+limbs and omitted the available-flow pass added hours earlier -- precisely
+the consolidating-section decay the project's own conventions warn about.
+Fixed; the implementer note now distinguishes all three passes (a plain
+multi-sink max-flow gets the PATH-LENGTH pass free, misses the TIE pass
+silently, and cannot deliver the FLOW pass at all).
+
+**U1 flagged for the author, NOT decided**: what constitutes an EDGE in the
+reference flow graph? The simulation uses current adoption topology plus
+visible peering. s16.1 computes trust from observed transactions and s16.7
+makes an archive portable, so an implementer could reasonably treat
+verified historical adoptions as trust-graph edges -- which would change
+which cut binds. The reviewer's working assumption was that archive
+evidence seeds or weights trust without creating live capacity edges
+unless the reference metric materialises one. **This is a specification
+question about the reference flow-graph construction rule (which live
+topology, historical adoptions, portable archive evidence, departures and
+peering records become or cease to be capacity edges), not a demonstrated
+flaw.** E2/E3 remain valid arithmetic over the graph they are given.
+
+Six seeds pass; all eight models green.

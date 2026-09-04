@@ -193,7 +193,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
 
-  processing time: 0.56s
+  processing time: 0.48s
   
   attach_is_executable (exists-trace): verified (6 steps)
   server_authentication (all-traces): verified (7 steps)

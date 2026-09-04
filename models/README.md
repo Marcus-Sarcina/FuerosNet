@@ -31,7 +31,7 @@ min-cut trust metric. Runs the four claims §16.2 argues on paper:
 | E1 | distance-decay diverges unless λ < 1/f | the 0.5/0.05 figures reproduce (~19,500× vs ~2×), and the exact boundary fλ=1 is classified as divergent (it grows linearly) |
 | E2 | a region is bounded by its cut regardless of population | best individual score stays ≤ the boundary capacity as the fake region grows to 341 identities |
 | E3 | **setwise conservation** (normative, 2026-09-03), observer-visible | over the observer's own visible graph, the independent-per-target sum grows with population while the one-conserving-computation joint saturates at the visible region ceiling; deeper fakes fall outside the horizon and cannot inflate it (§16.3.1's conservative direction) |
-| E4 | edge-influence is coverage, not per-target (§16.3.1) | with horizons computed over adoption+sibling scope (not the peering edge), one acquired peering edge influences *exactly* the observers whose horizon contains a peer — every interior placement enumerated, worst-case coverage reported |
+| E4 | edge-influence amortises (§16.3.1) | with horizons over adoption+sibling scope only, one visible peering edge influences several observers and no observer that cannot see it — every cross-tree placement enumerated. **Demonstrated in one toy topology, not measured as economics**: it shows amortisation exists, not how many edges reach a target fraction of a population |
 
 **Three concepts kept separate.** The design is emphatic (§6.3:
 "Contributing to trust and conferring scope are different things") that

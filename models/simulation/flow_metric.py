@@ -64,10 +64,11 @@ WHAT THIS SIMULATION IS NOT
 It is not a network simulator: no messages, sessions, or signatures.  It is
 a GRAPH calculation checking the ARITHMETIC of §16.2/§16.3.1's claims.
 Human-behaviour questions (whether fake regions are cheap to build socially)
-are outside its reach, per the plan's "what this plan cannot do".  E4 is a
-worst-case-aware coverage measurement, not a statistical sample: it
-enumerates every interior placement in a toy topology rather than sampling a
-few.
+are outside its reach, per the plan's "what this plan cannot do".  E4
+enumerates EVERY cross-tree peering placement in one toy topology rather
+than sampling -- but one toy topology is not a population model, so E4
+demonstrates that amortisation exists and does not measure the coverage
+economics 16.3.1 argues.  Its own report says so.
 """
 
 import argparse
@@ -85,11 +86,12 @@ from collections import deque
 # flow later.  Standard construction (Cormen et al., "Introduction to
 # Algorithms", ch. 24, 4th ed.).
 #
-# NOTE ON VALIDATION: the external review of this file cross-checked
-# max_flow() against exhaustive brute-force minimum cuts on 700 random
-# directed graphs (2-7 vertices) with zero discrepancies.  The algorithm
-# below is therefore not where a defect would hide; the modelling around it
-# is what the rest of this file gets right or wrong.
+# NOTE ON VALIDATION: three independent cross-family reviews have checked
+# max_flow() against exhaustive brute-force minimum cuts on freshly generated
+# random directed graphs (700, 600 and 600 graphs of 2-7 vertices, the last
+# including antiparallel capacities) -- zero discrepancies in all three.  The
+# algorithm below is therefore not where a defect would hide; every defect
+# those reviews DID find was in the modelling around it.
 # ---------------------------------------------------------------------------
 
 class FlowGraph:
@@ -417,13 +419,22 @@ def admit_reference_order(g, observer, candidates, demand=1):
     #   pass 2  consideration index -- ascending (true ties only)
     dist = distances_from(s, source)
     ranked = sorted(
-        [(i, c) for i, c in enumerate(candidates) if ("out", c) in s.cap],
+        [(i, c) for i, c in enumerate(candidates) if ("in", c) in s.cap],
         key=lambda ic: (-score_independent(g, observer, ic[1]),
                         dist.get(("in", ic[1]), float("inf")),
                         ic[0]))
     admitted, total = [], 0
     for _, c in ranked:
-        s.add_edge(("out", c), SINK, demand)
+        # DRAIN FROM ("in", c), NOT ("out", c).  Node capacity models what a
+        # node may RELAY (§ the node-splitting note above); a candidate is
+        # the DESTINATION here, not a relay, so its own throughput limit must
+        # not gate what it receives.  score_independent likewise terminates
+        # at ("in", target), and an earlier version of this file drained
+        # from ("out", c) -- which silently charged every candidate its own
+        # relay capacity and made the joint computation disagree with the
+        # individual one even with a single candidate and no contention
+        # (measured: individual 8, joint 4).  A cross-family review found it.
+        s.add_edge(("in", c), SINK, demand)
         gained = s.max_flow(source, SINK)   # augments the SHARED residual
         if gained > 0:
             admitted.append(c)          # the only new capacity is c's drain
@@ -457,8 +468,11 @@ def deliverable_flow(g, observer, demands):
     s = split_graph(g, observer)
     SINK = ("sink", None)
     for t, d in demands.items():
-        if ("out", t) in s.cap and d > 0:
-            s.add_edge(("out", t), SINK, d)
+        # ("in", t), not ("out", t) -- see admit_reference_order: a candidate
+        # receives as a destination and must not be charged its own relay
+        # capacity, or this disagrees with score_independent.
+        if ("in", t) in s.cap and d > 0:
+            s.add_edge(("in", t), SINK, d)
     return s.max_flow(("out", observer), SINK)
 
 
@@ -819,8 +833,8 @@ def experiment_fanout(rng, report):
     because it is not true.
     """
     report.append("E4: edge-influence fanout, two-ended peering (design 16.3.1)")
-    fA, nA, cA = build_tree(rng, depth=3, fanout=3, prefix="A")
-    fB, nB, cB = build_tree(rng, depth=3, fanout=3, prefix="B")
+    fA, nA, cA = build_tree(rng, depth=2, fanout=3, prefix="A")
+    fB, nB, cB = build_tree(rng, depth=2, fanout=3, prefix="B")
     flow = FlowGraph()
     for g in (fA, fB):
         for u, nbrs in g.cap.items():
@@ -831,15 +845,17 @@ def experiment_fanout(rng, report):
     children = {**cA, **cB}
     scope = scope_adjacency(nodes, children)
 
-    # Enumerate every cross-tree placement of ONE peering edge between an
-    # interior node of tree A and an interior node of tree B -- worst-case
-    # aware rather than sampled, since placement is what an adversary
-    # optimises.
-    interiorA = [n for n in nA if children.get(n)]
-    interiorB = [n for n in nB if children.get(n)]
+    # Enumerate EVERY cross-tree placement of one peering edge.  Endpoints
+    # are not restricted to nodes with subordinates: infra status is not a
+    # function of position or downline -- "a node becomes infra by launching
+    # and signing an infra instance, without moving" (wire §10.1) -- so a
+    # leaf may peer exactly as an interior node may.  An earlier version
+    # restricted endpoints to nodes with children, which silently excluded
+    # valid low-degree placements; a cross-family review caught it.
+    endpointsA, endpointsB = nA, nB
     rows = []
-    for pa in interiorA:
-        for pb in interiorB:
+    for pa in endpointsA:
+        for pb in endpointsB:
             peer_edges = [(pa, pb, PEER_CAP)]
             # THE BENEFICIARY is fixed: pb is the party whose standing the
             # acquired edge is meant to raise (an attacker buying a peering
@@ -901,11 +917,25 @@ def experiment_fanout(rng, report):
         "  to the far peer through its own tree is unaffected; the equality "
         "an earlier version")
     report.append(
-        "  asserted was an artifact of a one-ended attacker.  What holds: "
-        "no invisible edge ever")
+        "  asserted was an artifact of a one-ended attacker.")
     report.append(
-        "  influences anyone, and one edge influences many -- the coverage "
-        "economics: CONFIRMED")
+        "  DEMONSTRATED IN THIS TOPOLOGY (not confirmed as economics): one "
+        "visible peering edge")
+    report.append(
+        "  influences several observers, and no observer that cannot see an "
+        "edge is influenced by")
+    report.append(
+        "  it.  That establishes amortisation EXISTS and the conservative "
+        "direction HOLDS.  It does")
+    report.append(
+        "  NOT measure the population-coverage economics 16.3.1 argues: how "
+        "many edges are needed")
+    report.append(
+        "  to reach a target fraction, how successive cover sets overlap, or "
+        "how any of it varies")
+    report.append(
+        "  across topology families.  Those need a topology model this file "
+        "does not have.")
     report.append("")
 
 
@@ -934,13 +964,16 @@ def main():
         "aggregate bound are")
     report.append(
         "well-defined) but the ALLOCATION is not.  The reference metric "
-        "decides in two limbs:")
+        "ranks in three passes:")
     report.append(
-        "the SHORTER PATH DOMINATES -- a longer path is less trustworthy by "
-        "nature -- and")
+        "AVAILABLE FLOW FIRST -- it is what the metric measures -- then the "
+        "SHORTER PATH among")
     report.append(
-        "consideration order breaks TRUE TIES only.  Both are REFERENCE "
-        "POLICY, not a network")
+        "candidates the flow ranks equally, because a longer path is less "
+        "trustworthy by nature,")
+    report.append(
+        "then consideration order for TRUE TIES only.  All three are "
+        "REFERENCE POLICY, not a network")
     report.append(
         "invariant: per-observer trust (16.1) means no party consumes "
         "another's computation, so a")
@@ -948,11 +981,13 @@ def main():
         "policy allocating differently still conforms.  Note for implementers "
         "(tested above): one")
     report.append(
-        "multi-sink max-flow delivers the first limb for free and misses the "
-        "second silently --")
+        "multi-sink max-flow delivers the PATH-LENGTH pass for free, misses "
+        "the TIE pass silently")
     report.append(
-        "at equal path length it follows the graph's construction order, not "
-        "the candidate order.")
+        "(at equal path length it follows the graph's construction order, not "
+        "the candidate order),")
+    report.append(
+        "and cannot deliver the FLOW pass at all.  Rank explicitly.")
     text = "\n".join(report)
     print(text)
     return text

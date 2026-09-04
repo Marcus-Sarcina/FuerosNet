@@ -8428,3 +8428,19 @@ ranks equally. §16.4 notes why the ordering is easy to miss: behind a
 single saturated cut every candidate carries the same flow, so the first
 pass decides nothing there, and the section is about pluggable policy in
 general rather than the chokepoint case alone.
+
+### 2026-09-04 (third simulation review: destination vs relay capacity)
+
+A third cross-family review found the simulation charging every candidate
+its own relay capacity when receiving: joint drains hung off the far side
+of each candidate's node-capacity edge while individual standing stopped at
+the near side, so a lone candidate with no contention could be told it
+could use half its own standing. Node capacity models what a node may
+relay, and a candidate under evaluation is the destination, so both joint
+routines now drain from the near side and the two definitions agree. The
+edge-coverage experiment lost its unjustified restriction to nodes with
+subordinates — infra status does not depend on downline — and its
+conclusion is downgraded from confirming the coverage economics to
+demonstrating, in one toy topology, that amortisation exists. The report's
+allocation summary, which still described two passes after the third was
+added, now matches the rule.

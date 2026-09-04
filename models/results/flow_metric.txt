@@ -25,23 +25,30 @@ E3: setwise conservation, observer-visible (design 16.2)
   the conserving joint saturates at the visible ceiling; invisible identities cannot inflate it: CONFIRMED
 
 E4: edge-influence fanout, two-ended peering (design 16.3.1)
-  80 cross-tree placements enumerated over 37 observers (worst-case aware)
-  observers who can SEE the edge:      min 14, median 21, max 28
-  observers whose standing CHANGED:    min 8, median 10, max 12
-  best placement 'A.0'<->'B': 12 of 37 observers influenced by ONE edge (max gain 2)
+  48 cross-tree placements enumerated over 14 observers (worst-case aware)
+  observers who can SEE the edge:      min 9, median 12, max 14
+  observers whose standing CHANGED:    min 6, median 8, max 9
+  best placement 'A'<->'B': 9 of 14 observers influenced by ONE edge (max gain 2)
   seeing the edge does NOT imply being influenced -- an observer already holding standing
   to the far peer through its own tree is unaffected; the equality an earlier version
-  asserted was an artifact of a one-ended attacker.  What holds: no invisible edge ever
-  influences anyone, and one edge influences many -- the coverage economics: CONFIRMED
+  asserted was an artifact of a one-ended attacker.
+  DEMONSTRATED IN THIS TOPOLOGY (not confirmed as economics): one visible peering edge
+  influences several observers, and no observer that cannot see an edge is influenced by
+  it.  That establishes amortisation EXISTS and the conservative direction HOLDS.  It does
+  NOT measure the population-coverage economics 16.3.1 argues: how many edges are needed
+  to reach a target fraction, how successive cover sets overlap, or how any of it varies
+  across topology families.  Those need a topology model this file does not have.
 
 all assertions passed
 
 RESOLVED (design 16.4, 2026-09-04): when shared capacity cannot satisfy every eligible
 principal, the max-flow VALUE is unique (individual standing and the aggregate bound are
-well-defined) but the ALLOCATION is not.  The reference metric decides in two limbs:
-the SHORTER PATH DOMINATES -- a longer path is less trustworthy by nature -- and
-consideration order breaks TRUE TIES only.  Both are REFERENCE POLICY, not a network
+well-defined) but the ALLOCATION is not.  The reference metric ranks in three passes:
+AVAILABLE FLOW FIRST -- it is what the metric measures -- then the SHORTER PATH among
+candidates the flow ranks equally, because a longer path is less trustworthy by nature,
+then consideration order for TRUE TIES only.  All three are REFERENCE POLICY, not a network
 invariant: per-observer trust (16.1) means no party consumes another's computation, so a
 policy allocating differently still conforms.  Note for implementers (tested above): one
-multi-sink max-flow delivers the first limb for free and misses the second silently --
-at equal path length it follows the graph's construction order, not the candidate order.
+multi-sink max-flow delivers the PATH-LENGTH pass for free, misses the TIE pass silently
+(at equal path length it follows the graph's construction order, not the candidate order),
+and cannot deliver the FLOW pass at all.  Rank explicitly.
