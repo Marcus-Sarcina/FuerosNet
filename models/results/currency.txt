@@ -1,0 +1,221 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RHTNCurrency] Theory loaded
+[Theory RHTNCurrency] Theory translated
+[Theory RHTNCurrency] Derivation checks started
+[Theory RHTNCurrency] Derivation checks ended
+[Theory RHTNCurrency] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RHTNCurrency
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+rule (modulo E) Register_Patron:
+   [ Fr( ~psk ) ]
+  --[ PatronReg( $P ) ]->
+   [ !PatronKey( $P, ~psk ), !Pk( $P, pk(~psk) ), Out( pk(~psk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Subject_Key:
+   [ Fr( ~sk ) ]
+  --[ SubjectKey( $S, ~sk ) ]->
+   [ !SubjKey( $S, ~sk ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) New_Epoch:
+   [ Fr( ~e ) ] --[ EpochStart( ~e ) ]-> [ !Epoch( ~e ), Out( ~e ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Expire_Epoch:
+   [ !Epoch( ~e ) ] --[ Expired( ~e ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Issue_Currency:
+   [ !PatronKey( $P, ~psk ), !SubjKey( $S, sk ), !Epoch( e ) ]
+  --[ Issued( $P, $S, sk, e ) ]->
+   [ Out( sign(<'currency', $S, sk, e>, ~psk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Accept_Currency:
+   [ In( att ), !Pk( $P, pkP ), !Epoch( e ) ]
+  --[
+  Eq( verify(att, <'currency', $S, sk, e>, pkP), true ), NotExpiredAt( e ),
+  Accepted( $P, $S, sk, e )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Accept_Currency:
+     [ In( att ), !Pk( $P, pkP ), !Epoch( e ) ]
+    --[ Eq( z, true ), NotExpiredAt( e ), Accepted( $P, $S, sk, e ) ]->
+     [ ]
+    variants (modulo AC)
+    1. $S    = $S.8
+       att   = att.8
+       e     = e.8
+       pkP   = pkP.8
+       sk    = sk.8
+       z     = verify(att.8, <'currency', $S.8, sk.8, e.8>, pkP.8)
+    
+    2. $S    = $x.8
+       att   = sign(<'currency', $x.8, x.9, x.10>, x.11)
+       e     = x.10
+       pkP   = pk(x.11)
+       sk    = x.9
+       z     = true
+  */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction NotExpiredBeforeAccept:
+  "∀ e #a.
+    (NotExpiredAt( e ) @ #a) ⇒ (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #a)))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ e #a.
+    (NotExpiredAt( e ) @ #a) ⇒ (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #a)))"
+  */
+
+lemma currency_is_usable:
+  exists-trace "∃ P S sk e #i. Accepted( P, S, sk, e ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P S sk e #i. (Accepted( P, S, sk, e ) @ #i)"
+*/
+simplify
+solve( !Pk( $P, pk(x) ) ▶₁ #i )
+  case Register_Patron
+  solve( !Epoch( e ) ▶₂ #i )
+    case New_Epoch
+    solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk )
+      case Issue_Currency
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma expiry_is_reachable:
+  exists-trace "∃ e #x. Expired( e ) @ #x"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ e #x. (Expired( e ) @ #x)"
+*/
+simplify
+solve( !Epoch( ~e ) ▶₀ #x )
+  case New_Epoch
+  SOLVED // trace found
+qed
+
+lemma currency_requires_unexpired_issuance:
+  all-traces
+  "∀ P S sk e #i.
+    (Accepted( P, S, sk, e ) @ #i) ⇒
+    (((∃ #j. (Issued( P, S, sk, e ) @ #j) ∧ (#j < #i)) ∧
+      (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #i)))) ∨
+     (∃ #k. Compromised( P ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P S sk e #i.
+  (Accepted( P, S, sk, e ) @ #i)
+ ∧
+  (((∀ #j. (Issued( P, S, sk, e ) @ #j) ⇒ ¬(#j < #i)) ∨
+    (∃ #x. (Expired( e ) @ #x) ∧ #x < #i))) ∧
+  (∀ #k. (Compromised( P ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( (∀ #j. (Issued( $P, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∃ #x. (Expired( e ) @ #x) ∧ #x < #i) )
+  case case_1
+  solve( !Pk( $P, pk(x) ) ▶₁ #i )
+    case Register_Patron
+    solve( !Epoch( e ) ▶₂ #i )
+      case New_Epoch
+      solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk )
+        case Issue_Currency
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~psk ) @ #vk.2 )
+          case Compromise_Patron
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  by contradiction /* from formulas */
+qed
+
+rule (modulo E) Compromise_Patron:
+   [ !PatronKey( $P, ~psk ) ] --[ Compromised( $P ) ]-> [ Out( ~psk ) ]
+
+  /* has exactly the trivial AC variant */
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Unbound variables
+=================
+
+  rule `Accept_Currency' has unbound variables: 
+    sk
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Accept_Currency: 
+Failed to derive Variable(s): sk
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
+
+  processing time: 0.39s
+  
+  WARNING: 2 wellformedness check failed!
+           The analysis results might be wrong!
+  
+  currency_is_usable (exists-trace): verified (5 steps)
+  expiry_is_reachable (exists-trace): verified (3 steps)
+  currency_requires_unexpired_issuance (all-traces): verified (9 steps)
+
+==============================================================================

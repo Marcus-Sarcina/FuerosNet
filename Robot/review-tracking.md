@@ -4015,3 +4015,51 @@ prose-consolidation sweep is deferred with the splits.
 
 Checker at 0 flags of 1,931; depth invariant clean; harness green after
 repin.
+
+## Stage 1 formal models built (2026-09-04)
+
+Author directive: build all Stage-1 models, install all dependencies,
+textbook-commented for line-by-line review. Delivered under `models/`,
+outside the design set (the reference checker is unaffected: 0 flags of
+1931). All eight artifacts pass; `models/run-all.sh` is the regression gate.
+
+**Tooling, user-local, no root** (~/tools): Temurin JRE 21 + tla2tools for
+TLC; Tamarin 1.12.0 + Maude 3.5.1; Python 3 stdlib. python3-venv was
+unavailable and unneeded — the simulator imports nothing outside stdlib.
+
+**1. Trust-metric simulation** (`simulation/flow_metric.py`, own max-flow
+implementation, no deps): E1 reproduces §16.2's divergence figures
+(~19,500x / ~2x), E2 the individual cut bound to 341 identities, E3 the
+setwise-conservation saturation the 0.8.3 review made normative (independent
+sum grows, conserving joint flat at the ceiling), E4 the §16.3.1 coverage
+bound (changed observers == horizon-holders, exactly).
+
+**2. TLA+ / TLC** (3 models): PartitionMerge (convergence restated for
+no-shared-state: heal-then-agree; 15,080 states, SelfTruth/NoInvention/
+Convergence all hold), CurrencyEscalation (ladder no-deadlock + issue-fresh;
+no error), CycleDetection (concurrent-adoption cycles always resolve; no
+error). All run -deadlock (they terminate; quiescence is not a bug), noted
+in each cfg and run-all.sh.
+
+**3. Tamarin** (4 theories, 13 lemmas, all verified): attach (server auth,
+no sibling impersonation, no replay), currency (expired key can't appear
+current, expiry as event order), recovery (neither factor alone — the two
+mirror impossibilities), ceremony (record implies co-presence; roster
+binding; the co-presence and face-recognition AXIOMS stated explicitly per
+the plan's honesty instruction).
+
+**What the models found** (the point of the exercise): the recovery model
+falsified twice before converging. (a) First version let the verifier sign
+the NEW KEY and omitted subject!=verifier; Tamarin found a self-recognition
+trace where a stolen key signs both factors -- fixed by matching the design
+(verifier recognises the PERSON; new key only from the old-key proof; wire
+s5.3 distinctness enforced), which CONFIRMED wire s5.3 is load-bearing for
+recovery. (b) A combined both-factors lemma was falsified by a thief
+producing factor a via adversary signing (honest rule never fires),
+surfacing the model boundary -- stolen key + identity recognition succeeds
+because symbolic models have no face check (design s18.3's residual). The
+provable form is the two mirror "neither alone suffices" lemmas, exactly
+s9.1's phrasing. Recorded in models/README.md, not silently patched.
+
+Author will cross-review the models against the other artifacts and read
+line by line.

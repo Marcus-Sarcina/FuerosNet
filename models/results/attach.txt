@@ -1,0 +1,202 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RHTNAttach] Theory loaded
+[Theory RHTNAttach] Theory translated
+[Theory RHTNAttach] Derivation checks started
+[Theory RHTNAttach] Derivation checks ended
+[Theory RHTNAttach] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RHTNAttach
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+rule (modulo E) Register_Node:
+   [ Fr( ~sk ) ]
+  --[ Registered( $A ) ]->
+   [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Compromise_Key:
+   [ !Ltk( $A, ~sk ) ] --[ Compromised( $A ) ]-> [ Out( ~sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Hello:
+   [ Fr( ~nc ) ]
+  --[ ClientStart( $C, $S, ~nc ) ]->
+   [ Out( <$C, $S, ~nc> ), St_Client_1( $C, $S, ~nc ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Server_Respond:
+   [ In( <$C, $S, nc> ), !Ltk( $S, ~sks ) ]
+  --[ ServerAccept( $S, $C, nc ) ]->
+   [ Out( <$S, sign(<'attach', $C, $S, nc>, ~sks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Finish:
+   [ St_Client_1( $C, $S, ~nc ), In( <$S, sig> ), !Pk( $S, pkS ) ]
+  --[
+  Eq( verify(sig, <'attach', $C, $S, ~nc>, pkS), true ),
+  ClientFinish( $C, $S, ~nc )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Client_Finish:
+     [ St_Client_1( $C, $S, ~nc ), In( <$S, sig> ), !Pk( $S, pkS ) ]
+    --[ Eq( z, true ), ClientFinish( $C, $S, ~nc ) ]->
+     [ ]
+    variants (modulo AC)
+    1. $C    = $C.7
+       $S    = $S.7
+       ~nc   = ~nc.7
+       pkS   = pkS.7
+       sig   = sig.7
+       z     = verify(sig.7, <'attach', $C.7, $S.7, ~nc.7>, pkS.7)
+    
+    2. $C    = $x.7
+       $S    = $x.8
+       ~nc   = ~x.9
+       pkS   = pk(x.10)
+       sig   = sign(<'attach', $x.7, $x.8, ~x.9>, x.10)
+       z     = true
+  */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+lemma attach_is_executable:
+  exists-trace "∃ C S nc #i. ClientFinish( C, S, nc ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S nc #i. (ClientFinish( C, S, nc ) @ #i)"
+*/
+simplify
+solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+  case Client_Hello
+  solve( !Pk( $S, pk(x) ) ▶₂ #i )
+    case Register_Node
+    solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sk) ) @ #vk.2 )
+      case Server_Respond
+      solve( !KU( ~nc ) @ #vk.6 )
+        case Client_Hello
+        SOLVED // trace found
+      qed
+    qed
+  qed
+qed
+
+lemma server_authentication:
+  all-traces
+  "∀ C S nc #i.
+    (ClientFinish( C, S, nc ) @ #i) ⇒
+    ((∃ #j. (ServerAccept( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
+     (∃ #k. Compromised( S ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S nc #i.
+  (ClientFinish( C, S, nc ) @ #i)
+ ∧
+  (∀ #j. (ServerAccept( S, C, nc ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #k. (Compromised( S ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+  case Client_Hello
+  solve( !Pk( $S, pk(x) ) ▶₂ #i )
+    case Register_Node
+    solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sk) ) @ #vk.2 )
+      case Server_Respond
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      solve( !KU( ~sk ) @ #vk.5 )
+        case Compromise_Key
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma no_replay:
+  all-traces
+  "∀ C S nc #i1 #i2.
+    ((ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)) ⇒
+    ((#i1 = #i2) ∨ (∃ #k. Compromised( S ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S nc #i1 #i2.
+  (ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)
+ ∧
+  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
+  case case_1
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+    case Client_Hello
+    solve( !Pk( $S, pk(x) ) ▶₂ #i1 )
+      case Register_Node
+      solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+        case Client_Hello
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+    case Client_Hello
+    solve( !Pk( $S, pk(x) ) ▶₂ #i1 )
+      case Register_Node
+      solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+        case Client_Hello
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
+
+  processing time: 0.32s
+  
+  attach_is_executable (exists-trace): verified (6 steps)
+  server_authentication (all-traces): verified (7 steps)
+  no_replay (all-traces): verified (10 steps)
+
+==============================================================================

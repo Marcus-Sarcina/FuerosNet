@@ -8352,3 +8352,21 @@ memo, and the role chapters name their lifecycle halves. A second
 migration was declined for v1; the standing rulings from the first —
 three-way ceremony split, §22 as the open-item index — were reported to
 the reviewer's satisfaction rather than reopened.
+
+### 2026-09-04 (Stage 1 formal models)
+
+Built the review plan's Stage-1 formal models under `models/`, with all
+dependencies installed user-locally. Eight artifacts, all passing: a
+stdlib-only trust-metric simulation reproducing §16.2's four analytical
+claims including the setwise-conservation saturation the adversarial cycle
+made normative; three TLA+/TLC models (partition-and-merge convergence
+restated for a no-shared-state system, the currency escalation ladder's
+freedom from deadlock, and concurrent-adoption cycle resolution); and four
+Tamarin theories (session attach, currency expiry, recovery, and the
+presence ceremony), thirteen lemmas verified, with the physical co-presence
+and face-recognition axioms stated explicitly rather than hidden. The
+recovery model falsified twice before converging, each counterexample
+confirming a real design rule — wire §5.3's distinctness requirement is
+load-bearing for recovery, and §9.1's "neither factor alone" is the honest
+provable form. Everything is textbook-commented and re-runnable via
+`models/run-all.sh`.

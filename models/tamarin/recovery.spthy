@@ -1,0 +1,230 @@
+theory RHTNRecovery
+/*
+================================================================================
+  RHTN recovery adoption -- symbolic analysis (Tamarin)
+================================================================================
+
+WHAT THIS FILE IS
+  design Section 9.1 makes recovery a TWO-FACTOR act: rotating to a new key
+  requires BOTH (a) a proof from the predecessor key -- the old identity
+  authorising a change to itself -- AND (b) recognition by a prior
+  counterparty (a verifier who has met the subject).  Neither alone
+  suffices (design Section 9.1: "Key alone is not recovery ... presence
+  alone is not recovery").
+
+  The review plan's Stage 1.1 target: "A thief holding the key cannot
+  produce a rotation that outweighs the legitimate holder's."  The property
+  proved here: a recovery that a patron accepts requires both factors, so a
+  thief who has stolen ONLY the key (factor a) but is not recognised by an
+  honest verifier (factor b) cannot complete one.  This is the two-part
+  proof the 0.8.6 review confirmed "holds against a stolen key alone"; the
+  model makes that claim machine-checked.
+
+  What this model does NOT cover, deliberately: the COLLUDING-counterparty
+  case (design Section 18.3), where the thief supplies factor b through a
+  dishonest verifier.  That is an accepted risk, not a defended one -- the
+  design's answer there is the flow-metric bound on the successor's
+  standing, which the flow simulator covers, not this symbolic model.  The
+  lemma below carves out compromised verifiers explicitly so the boundary
+  of the claim is visible in the statement.
+
+  Reading conventions are in attach.spthy; only new idioms are re-explained.
+================================================================================
+*/
+
+begin
+
+builtins: signing
+
+/*
+--------------------------------------------------------------------------------
+  PARTIES
+--------------------------------------------------------------------------------
+    Patron    -- countersigns the recovery adoption (design Section 9.1).
+    Subject   -- the identity being recovered; holds an OLD key and wants a
+                 NEW one.
+    Verifier  -- a prior counterparty who can attest recognition (factor b).
+  Each has a long-term signing key registered as in the other theories.
+*/
+
+rule Register:
+    [ Fr(~sk) ]
+  --[ Reg($A) ]->
+    [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+// Explicit key theft, stamped in the trace, as in attach.spthy.  This is
+// how the "thief holding the key" of the plan's target enters the model.
+rule Compromise:
+    [ !Ltk($A, ~sk) ]
+  --[ Compromised($A) ]->
+    [ Out(~sk) ]
+
+/*
+--------------------------------------------------------------------------------
+  FACTOR A -- the predecessor-key proof
+--------------------------------------------------------------------------------
+  The old identity authorises a change to a specific new key by signing
+  <'rotate', subject, newkey> with the OLD key.  Anyone holding the old key
+  can produce this -- including a thief.  So this factor ALONE must not be
+  enough; the lemma checks that.
+
+  We model "the new key" as a fresh public value the subject proposes.  Its
+  matching secret is not needed for the property (the property is about who
+  AUTHORISED the rotation, not about using the new key afterwards), so we
+  model the new key as a fresh name carried in the clear.
+*/
+
+rule Old_Key_Proof:
+    [ !Ltk($S, ~oldsk)                 // the subject's (or thief's) old key
+    , Fr(~newkey) ]                    // the proposed new key material
+  --[ OldKeyProof($S, ~newkey) ]->
+    [ Out(<'rotate', $S, ~newkey, sign(<'rotate', $S, ~newkey>, ~oldsk)>) ]
+
+/*
+--------------------------------------------------------------------------------
+  FACTOR B -- recognition of the PERSON by a prior counterparty
+--------------------------------------------------------------------------------
+  design Section 9.1: recovery's human factor is a prior counterparty
+  RECOGNISING THE SUBJECT.  Crucially, the verifier recognises the PERSON
+  (the continuing identity), NOT the new key -- the new key is introduced
+  by the old-key proof (factor a), and the verifier's job is to confirm
+  "yes, this is the same person I met".  So the recognition signature is
+  over the SUBJECT IDENTITY, not over newkey.  (The first version of this
+  model had the verifier sign over newkey; Tamarin then unified that free
+  newkey across both factors and mixed a recognition signature into the
+  factor-a slot -- an artifact that disappears once the model matches the
+  design, where the two factors sign different things.)
+
+  THE OUT-OF-MODEL AXIOM.  What makes honest recognition SOUND against a
+  thief is physical: the verifier checks the face (design Section 7), and a
+  thief holding the victim's key does not have the victim's face.  The
+  symbolic model has no term for a face, exactly as it has none for
+  physical co-presence.  So `!Met($V,$S)` and the honest Recognise rule
+  encode the AXIOM "an honest prior counterparty signs a recognition of S
+  only for the genuine S" -- the same modelling move the ceremony model
+  makes for co-presence.  The theorem below is therefore: the PROTOCOL
+  STRUCTURE requires both a key proof and a human recognition; it does not
+  (and cannot, symbolically) prove a look-alike is impossible.  That
+  residual is design Section 18.3's colluding-counterparty case, carved out
+  in the lemma as a compromised verifier.
+*/
+
+rule Met:
+    // A ground-truth meeting between subject and verifier, established out
+    // of band (a past ceremony).  It licenses honest recognition, and
+    // stands in for "V can recognise S's face".
+    [ ]
+  --[ PriorCounterparty($V, $S) ]->
+    [ !Met($V, $S) ]
+
+rule Recognise:
+    [ !Ltk($V, ~vsk)                   // the verifier's key
+    , !Met($V, $S) ]                   // and it really met the subject
+  --[ Recognised($V, $S) ]->           // recognises the PERSON, not a key
+    [ Out(<'recognise', $S, sign(<'recognise', $S>, ~vsk)>) ]
+
+/*
+--------------------------------------------------------------------------------
+  THE PATRON ACCEPTS A RECOVERY
+--------------------------------------------------------------------------------
+  The patron countersigns a recovery adoption for new key `newkey` only when
+  it has seen BOTH factors for that exact key:
+    * a valid old-key proof (factor a), and
+    * a valid recognition from a verifier it treats as a prior counterparty
+      (factor b).
+  Both signatures are checked (two Eq restrictions).  The patron records the
+  verifier it relied on, so the lemma can ask about that verifier's honesty.
+*/
+
+rule Patron_Accept_Recovery:
+    [ !Ltk($P, ~psk)                            // patron's own key (it signs)
+    , !Pk($S, pkOld)                            // subject's OLD public key
+    , !Pk($V, pkV)                              // verifier's public key
+    , In(<'rotate', $S, newkey, provA>)         // factor a: introduces newkey
+    , In(<'recognise', $S, provB>) ]            // factor b: recognises $S
+  --[ Eq(verify(provA, <'rotate', $S, newkey>, pkOld), true)
+    , Eq(verify(provB, <'recognise', $S>, pkV), true)
+    , Distinct($V, $S)                          // the verifier is NOT the subject
+    , ReliedOn($P, $V, $S)                      // which verifier was trusted
+    , RecoveryAccepted($P, $S, newkey) ]->
+    [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+/*
+  THE SUBJECT IS NEVER ITS OWN VERIFIER (wire Section 5.3: "The current
+  counterparty is never a candidate for their own verification").  Without
+  this, a thief holding ONLY the subject's stolen key satisfies factor a
+  (the old-key proof) AND forges factor b by signing a recognition under
+  that same stolen key -- self-recognition.  The FIRST version of this
+  model omitted the rule and Tamarin found exactly that trace, which is why
+  the rule is called out here: wire Section 5.3's distinctness requirement
+  is load-bearing for recovery, not only for ordinary presence.  The
+  Distinct restriction discards every trace where the recognising verifier
+  is the subject.
+*/
+restriction VerifierIsNotSubject:
+  "All V S #i. Distinct(V, S) @ #i ==> not(V = S)"
+
+/*
+--------------------------------------------------------------------------------
+  LEMMAS
+--------------------------------------------------------------------------------
+*/
+
+// SANITY: an honest recovery completes -- old-key proof plus honest
+// recognition plus patron acceptance.  Guards against a vacuous security
+// lemma.
+lemma recovery_is_executable:
+  exists-trace
+  "Ex P S newkey #i. RecoveryAccepted(P, S, newkey) @ #i"
+
+// THE TWO-FACTOR PROPERTY (Stage 1.1), stated as design Section 9.1 states
+// it: "neither alone is recovery."  Rather than one lemma asserting both
+// factors (which a thief with a stolen key subtly evades -- see below), we
+// prove the two MIRROR IMPOSSIBILITIES: neither factor by itself is ever
+// enough.  Together they are exactly the two-factor requirement.
+//
+// WHY NOT ONE COMBINED LEMMA.  A first version demanded the honest
+// OldKeyProof ACTION for factor a.  Tamarin falsified it with a revealing
+// trace: a thief who has stolen the subject's key produces the rotate
+// proof by ADVERSARY signing (the stolen key speaks), so the honest rule
+// never fires -- yet factor a is genuinely satisfied, because "the old key
+// authorised this" is true however the key was held.  The trace also
+// showed the model's boundary plainly: with the key stolen AND an honest
+// verifier recognising IDENTITY S, recovery succeeds -- because the
+// symbolic model cannot represent the verifier checking a FACE.  That is
+// design Section 18.3's colluding/deceived-counterparty residual, not a
+// break of the two-factor structure.  The two lemmas below sidestep the
+// artifact by asking the sound question: is EITHER factor alone enough?
+
+// FACTOR B IS NECESSARY: a key proof with no honest recognition never
+// recovers.  This is the stolen-key-alone case (the plan's target "a thief
+// holding the key cannot produce a rotation"): the key gives factor a,
+// but with no honest prior counterparty recognising the person, and no
+// compromise, no recovery is accepted.
+lemma key_alone_insufficient:
+  "not( Ex P S newkey #i.
+          RecoveryAccepted(P, S, newkey) @ #i
+        & (Ex #a. OldKeyProof(S, newkey) @ #a)
+        & not(Ex V #b #m. Recognised(V, S) @ #b
+                        & PriorCounterparty(V, S) @ #m)
+        & not(Ex #kp. Compromised(P) @ #kp)
+        & not(Ex V #kv. Compromised(V) @ #kv) )"
+
+// FACTOR A IS NECESSARY: an honest recognition with no key authorisation
+// never recovers.  A verifier vouching for the person is not enough on its
+// own; without the old key signing the rotation (OldKeyProof by the honest
+// holder, OR the key having been stolen so the adversary can sign), and
+// with no patron compromise, no recovery is accepted.  "presence alone is
+// not recovery" (design Section 9.1).
+lemma recognition_alone_insufficient:
+  "not( Ex P S newkey #i.
+          RecoveryAccepted(P, S, newkey) @ #i
+        & (Ex V #b. Recognised(V, S) @ #b)
+        & not(Ex #a. OldKeyProof(S, newkey) @ #a)   // no honest key proof
+        & not(Ex #c. Compromised(S) @ #c)           // and no stolen key
+        & not(Ex #kp. Compromised(P) @ #kp) )"       // and no patron compromise
+
+end

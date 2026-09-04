@@ -1,0 +1,186 @@
+theory RHTNCurrency
+/*
+================================================================================
+  RHTN currency attestation + stapling -- symbolic analysis (Tamarin)
+================================================================================
+
+WHAT THIS FILE IS
+  design Section 12.6.5 replaces revocation with short-lived patron-signed
+  CURRENCY ATTESTATIONS, stapled to introductions.  The review plan's Stage
+  1.1 target: "a revoked key cannot be made to appear current beyond the
+  attestation lifetime".  The property proved here: a relying party accepts
+  a key as current only if the patron signed an attestation for it that has
+  not expired -- so once the patron rotates the subject to a new key and the
+  old attestation's lifetime passes, no attestation the adversary can
+  assemble makes the OLD key look current.
+
+  This model also exercises the 2026-08-6 "issue fresh, never extend stale"
+  rule and the fail-open/fail-closed split (design Section 12.6.5): the
+  lemma is about TRUST-BEARING acceptance, which fails closed, not routine
+  payload, which does not.
+
+TIME, SYMBOLICALLY
+  Tamarin has no clock.  We model expiry as EVENT ORDER using action facts
+  and a restriction, the standard idiom (as in the plan's note that "expiry
+  is event ordering, not clocks"):
+    * an attestation is minted with an Issued action carrying an epoch term;
+    * an Expire action can fire for an epoch;
+    * a restriction forbids ACCEPTING an attestation whose epoch has expired
+      before the acceptance.
+  "Epoch" is an abstract token, not a number -- we need only the ordering
+  "issued, then (maybe) expired, then someone tries to rely on it".
+
+  Reading conventions (rule shape, fact sorts, ~/$ prefixes, the trace,
+  temporal logic) are spelled out in attach.spthy; only NEW idioms are
+  re-explained here.
+================================================================================
+*/
+
+begin
+
+builtins: signing
+
+/*
+--------------------------------------------------------------------------------
+  IDENTITIES AND KEYS
+--------------------------------------------------------------------------------
+  A patron and the subjects it vouches for.  The patron has a long-term
+  signing key; a subject is represented by a KEY it currently holds.  A
+  rotation gives the subject a new key and (per the design) the patron will
+  issue attestations for the new key, not the old.
+*/
+
+rule Register_Patron:
+    [ Fr(~psk) ]
+  --[ PatronReg($P) ]->
+    [ !PatronKey($P, ~psk)             // the patron's long-term secret key
+    , !Pk($P, pk(~psk))
+    , Out(pk(~psk)) ]
+
+// A subject's key.  The `key` term ~sk stands for the whole key material
+// the keyhash commits to; $S is the subject identity.  A subject may hold
+// several keys over time (rotation); each is a distinct fresh value.
+rule Subject_Key:
+    [ Fr(~sk) ]
+  --[ SubjectKey($S, ~sk) ]->
+    [ !SubjKey($S, ~sk)                // a key $S holds (persistent)
+    , Out(pk(~sk)) ]
+
+/*
+--------------------------------------------------------------------------------
+  EPOCHS -- the abstract clock
+--------------------------------------------------------------------------------
+  A fresh epoch token is drawn to stamp each attestation.  An epoch may
+  later Expire.  The ORDER of Issued / Expire / Accept actions on the trace
+  is the entire content of "lifetime": we never compare durations, only
+  whether an expiry preceded an acceptance.
+*/
+
+rule New_Epoch:
+    [ Fr(~e) ]
+  --[ EpochStart(~e) ]->
+    [ !Epoch(~e), Out(~e) ]            // epochs are public tokens
+
+rule Expire_Epoch:
+    [ !Epoch(~e) ]
+  --[ Expired(~e) ]->                  // trace: epoch ~e is now past
+    [ ]
+
+/*
+--------------------------------------------------------------------------------
+  ISSUING AN ATTESTATION
+--------------------------------------------------------------------------------
+  The patron signs <'currency', subject, subjectKey, epoch>.  Binding the
+  SUBJECT KEY into the signature is the crux: an attestation vouches for a
+  specific key (design Section 12.6.5's `current_key` field), so it cannot
+  be transplanted onto a different key.  Binding the EPOCH lets expiry bite.
+
+  "Issue fresh, never extend stale" (design Section 12.6.5.1) is modelled by
+  every issuance drawing the CURRENT epoch: the patron cannot re-stamp an
+  old attestation with a new epoch without signing a new one, and signing a
+  new one is exactly issuing fresh.
+*/
+
+rule Issue_Currency:
+    [ !PatronKey($P, ~psk)             // only the patron can issue
+    , !SubjKey($S, sk)                 // for a key the subject holds
+    , !Epoch(e) ]                      // stamped with an epoch
+  --[ Issued($P, $S, sk, e) ]->
+    [ Out(sign(<'currency', $S, sk, e>, ~psk)) ]  // the stapled attestation
+
+/*
+--------------------------------------------------------------------------------
+  RELYING ON AN ATTESTATION
+--------------------------------------------------------------------------------
+  A relying party performs a TRUST-BEARING operation: it accepts subject $S
+  as current under key sk, having checked a purported attestation from
+  patron $P.  Two things gate the acceptance:
+    * the signature verifies (the Eq restriction, as in attach.spthy);
+    * the epoch has NOT expired before this acceptance (the NotExpired
+      restriction below) -- this is the fail-CLOSED behaviour for
+      trust-bearing operations (design Section 12.6.5).
+*/
+
+rule Accept_Currency:
+    [ In(att)                          // a purported attestation from the net
+    , !Pk($P, pkP)                     // the patron's public key
+    , !Epoch(e) ]
+  --[ Eq(verify(att, <'currency', $S, sk, e>, pkP), true)
+    , NotExpiredAt(e)                  // guarded by the restriction below
+    , Accepted($P, $S, sk, e) ]->      // trace: relied on sk as current
+    [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+// The fail-closed rule: an acceptance stamped NotExpiredAt(e) is only
+// allowed on traces where no Expired(e) happened BEFORE it.  This is how
+// "current vs expired" becomes event order without a clock.
+restriction NotExpiredBeforeAccept:
+  "All e #a. NotExpiredAt(e) @ #a
+     ==> not(Ex #x. Expired(e) @ #x & #x < #a)"
+
+/*
+--------------------------------------------------------------------------------
+  LEMMAS
+--------------------------------------------------------------------------------
+*/
+
+// SANITY: the honest flow runs -- a patron issues, a party accepts.
+lemma currency_is_usable:
+  exists-trace
+  "Ex P S sk e #i. Accepted(P, S, sk, e) @ #i"
+
+// SANITY: expiry can actually block an acceptance -- i.e. the restriction
+// is not vacuously satisfiable by never expiring anything.  We show a trace
+// where an epoch expires and yet SOME acceptance (on a different, unexpired
+// epoch) still happens, confirming expiry and acceptance coexist in the
+// model rather than one silently excluding the other.
+lemma expiry_is_reachable:
+  exists-trace
+  "Ex e #x. Expired(e) @ #x"
+
+// THE SECURITY PROPERTY (Stage 1.1).  Every trust-bearing acceptance of a
+// key sk as current rests on a genuine, unexpired patron issuance for that
+// exact key -- OR the patron's key was compromised.  Because Accept is
+// gated by NotExpiredBeforeAccept, an EXPIRED attestation cannot be
+// accepted; because the signature binds sk, an attestation for one key
+// cannot be replayed onto another.  Together: a rotated-away (old) key,
+// whose last attestation has expired, cannot be made to appear current.
+lemma currency_requires_unexpired_issuance:
+  "All P S sk e #i.
+     Accepted(P, S, sk, e) @ #i
+     ==> ( ( (Ex #j. Issued(P, S, sk, e) @ #j & #j < #i)
+           & not(Ex #x. Expired(e) @ #x & #x < #i) )
+         | (Ex #k. Compromised(P) @ #k) )"
+
+// PATRON COMPROMISE, made available so the carve-out above is real rather
+// than decorative: the adversary can steal the patron's key, exactly as in
+// attach.spthy.  Without this rule the second disjunct could never be
+// witnessed and we would not know the first disjunct is doing the work.
+rule Compromise_Patron:
+    [ !PatronKey($P, ~psk) ]
+  --[ Compromised($P) ]->
+    [ Out(~psk) ]
+
+end

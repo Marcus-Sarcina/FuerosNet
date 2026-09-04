@@ -1,0 +1,725 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RHTNCeremony] Theory loaded
+[Theory RHTNCeremony] Theory translated
+[Theory RHTNCeremony] Derivation checks started
+[Theory RHTNCeremony] Derivation checks ended
+[Theory RHTNCeremony] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RHTNCeremony
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+rule (modulo E) Register:
+   [ Fr( ~sk ) ]
+  --[ Reg( $A ) ]->
+   [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Compromise:
+   [ !Ltk( $A, ~sk ) ] --[ Compromised( $A ) ]-> [ Out( ~sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Meet:
+   [ Fr( ~cid ) ]
+  --[ MeetHappened( $P1, $P2, $W, ~cid ), DistinctParties( $P1, $P2, $W )
+  ]->
+   [
+   CoPresent( $P1, ~cid ), CoPresent( $P2, ~cid ), CoPresent( $W, ~cid ),
+   !Ceremony( $P1, $P2, $W, ~cid )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction DistinctParties:
+  "∀ a b w #i.
+    (DistinctParties( a, b, w ) @ #i) ⇒
+    (((¬(a = b)) ∧ (¬(a = w))) ∧ (¬(b = w)))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ a b w #i.
+    (DistinctParties( a, b, w ) @ #i) ⇒
+    (((¬(a = b)) ∧ (¬(a = w))) ∧ (¬(b = w)))"
+  */
+
+rule (modulo E) Participant_Sign:
+   [ !Ltk( $P, ~sk ), CoPresent( $P, cid ), !Ceremony( $P1, $P2, $W, cid ) ]
+  --[ ParticipantSigned( $P, $P1, $P2, $W, cid ) ]->
+   [ Out( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Witness_Sign:
+   [ !Ltk( $W, ~sk ), CoPresent( $W, cid ), !Ceremony( $P1, $P2, $W, cid ) ]
+  --[ WitnessSigned( $W, $P1, $P2, $W, cid ) ]->
+   [ Out( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Accept_Record:
+   [
+   !Pk( $P1, pk1 ), !Pk( $P2, pk2 ), !Pk( $W, pkw ), In( sig1 ), In( sig2 ),
+   In( sigw )
+   ]
+  --[
+  Eq( verify(sig1, <'presence', $P1, $P2, $W, cid>, pk1), true ),
+  Eq( verify(sig2, <'presence', $P1, $P2, $W, cid>, pk2), true ),
+  Eq( verify(sigw, <'presence', $P1, $P2, $W, cid>, pkw), true ),
+  RecordAccepted( $P1, $P2, $W, cid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Accept_Record:
+     [
+     !Pk( $P1, pk1 ), !Pk( $P2, pk2 ), !Pk( $W, pkw ), In( sig1 ), In( sig2 ),
+     In( sigw )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ),
+    RecordAccepted( $P1, $P2, $W, cid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. $P1   = $P1.14
+       $P2   = $P2.14
+       $W    = $W.14
+       cid   = cid.14
+       pk1   = pk1.14
+       pk2   = pk2.14
+       pkw   = pkw.14
+       sig1  = sig1.14
+       sig2  = sig2.14
+       sigw  = sigw.14
+       z     = verify(sig1.14, <'presence', $P1.14, $P2.14, $W.14, cid.14>,
+                      pk1.14)
+       z.1   = verify(sig2.14, <'presence', $P1.14, $P2.14, $W.14, cid.14>,
+                      pk2.14)
+       z.2   = verify(sigw.14, <'presence', $P1.14, $P2.14, $W.14, cid.14>,
+                      pkw.14)
+    
+    2. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk1.20
+       pk2   = pk(x.19)
+       pkw   = pkw.20
+       sig1  = sig1.20
+       sig2  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.19)
+       sigw  = sigw.20
+       z     = verify(sig1.20, <'presence', $x.14, $x.15, $x.16, x.17>, pk1.20)
+       z.1   = true
+       z.2   = verify(sigw.20, <'presence', $x.14, $x.15, $x.16, x.17>, pkw.20)
+    
+    3. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk1.21
+       pk2   = pk2.21
+       pkw   = pk(x.20)
+       sig1  = sig1.21
+       sig2  = sig2.21
+       sigw  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.20)
+       z     = verify(sig1.21, <'presence', $x.14, $x.15, $x.16, x.17>, pk1.21)
+       z.1   = verify(sig2.21, <'presence', $x.14, $x.15, $x.16, x.17>, pk2.21)
+       z.2   = true
+    
+    4. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk1.21
+       pk2   = pk(x.19)
+       pkw   = pk(x.20)
+       sig1  = sig1.21
+       sig2  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.19)
+       sigw  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.20)
+       z     = verify(sig1.21, <'presence', $x.14, $x.15, $x.16, x.17>, pk1.21)
+       z.1   = true
+       z.2   = true
+    
+    5. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk(x.18)
+       pk2   = pk2.19
+       pkw   = pkw.19
+       sig1  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.18)
+       sig2  = sig2.19
+       sigw  = sigw.19
+       z     = true
+       z.1   = verify(sig2.19, <'presence', $x.14, $x.15, $x.16, x.17>, pk2.19)
+       z.2   = verify(sigw.19, <'presence', $x.14, $x.15, $x.16, x.17>, pkw.19)
+    
+    6. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk(x.18)
+       pk2   = pk2.21
+       pkw   = pk(x.20)
+       sig1  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.18)
+       sig2  = sig2.21
+       sigw  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.20)
+       z     = true
+       z.1   = verify(sig2.21, <'presence', $x.14, $x.15, $x.16, x.17>, pk2.21)
+       z.2   = true
+    
+    7. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk(x.18)
+       pk2   = pk(x.19)
+       pkw   = pkw.20
+       sig1  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.18)
+       sig2  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.19)
+       sigw  = sigw.20
+       z     = true
+       z.1   = true
+       z.2   = verify(sigw.20, <'presence', $x.14, $x.15, $x.16, x.17>, pkw.20)
+    
+    8. $P1   = $x.14
+       $P2   = $x.15
+       $W    = $x.16
+       cid   = x.17
+       pk1   = pk(x.18)
+       pk2   = pk(x.19)
+       pkw   = pk(x.20)
+       sig1  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.18)
+       sig2  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.19)
+       sigw  = sign(<'presence', $x.14, $x.15, $x.16, x.17>, x.20)
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+lemma ceremony_is_executable:
+  exists-trace "∃ P1 P2 W cid #i. RecordAccepted( P1, P2, W, cid ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P1 P2 W cid #i. (RecordAccepted( P1, P2, W, cid ) @ #i)"
+*/
+simplify
+solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+  case Register
+  solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+    case Register
+    solve( !Pk( $W, pk(x) ) ▶₂ #i )
+      case Register
+      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+        case Participant_Sign_case_1
+        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.1) ) @ #vk.1 )
+          case Participant_Sign_case_2
+          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.2) ) @ #vk.2 )
+            case Participant_Sign_case_3
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma presence_requires_copresence:
+  all-traces
+  "∀ P1 P2 W cid #i.
+    (RecordAccepted( P1, P2, W, cid ) @ #i) ⇒
+    ((((∃ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ∧ (#m < #i)) ∨
+       (∃ #k. Compromised( P1 ) @ #k)) ∨
+      (∃ #k. Compromised( P2 ) @ #k)) ∨
+     (∃ #k. Compromised( W ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 W cid #i.
+  (RecordAccepted( P1, P2, W, cid ) @ #i)
+ ∧
+  (∀ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ⇒ ¬(#m < #i)) ∧
+  (∀ #k. (Compromised( P1 ) @ #k) ⇒ ⊥) ∧
+  (∀ #k. (Compromised( P2 ) @ #k) ⇒ ⊥) ∧
+  (∀ #k. (Compromised( W ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+  case Register
+  solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+    case Register
+    solve( !Pk( $W, pk(x) ) ▶₂ #i )
+      case Register
+      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+        case Participant_Sign_case_1
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_2
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_3
+        by contradiction /* from formulas */
+      next
+        case Witness_Sign
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~sk ) @ #vk.4 )
+          case Compromise
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma no_remote_forgery:
+  all-traces
+  "∀ P1 P2 W cid #i.
+    ((RecordAccepted( P1, P2, W, cid ) @ #i) ∧
+     (¬(∃ A #k. Compromised( A ) @ #k))) ⇒
+    (∃ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ∧ (#m < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 W cid #i.
+  (RecordAccepted( P1, P2, W, cid ) @ #i)
+ ∧
+  (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥) ∧
+  (∀ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ⇒ ¬(#m < #i))"
+*/
+simplify
+solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+  case Register
+  solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+    case Register
+    solve( !Pk( $W, pk(x) ) ▶₂ #i )
+      case Register
+      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+        case Participant_Sign_case_1
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_2
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_3
+        by contradiction /* from formulas */
+      next
+        case Witness_Sign
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~sk ) @ #vk.4 )
+          case Compromise
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma copresence_binds_one_roster:
+  all-traces
+  "∀ P1 P2 W cid Q1 Q2 X #i #j.
+    (((RecordAccepted( P1, P2, W, cid ) @ #i) ∧
+      (RecordAccepted( Q1, Q2, X, cid ) @ #j)) ∧
+     (¬(∃ A #k. Compromised( A ) @ #k))) ⇒
+    (((P1 = Q1) ∧ (P2 = Q2)) ∧ (W = X))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 W cid Q1 Q2 X #i #j.
+  (RecordAccepted( P1, P2, W, cid ) @ #i) ∧
+  (RecordAccepted( Q1, Q2, X, cid ) @ #j)
+ ∧
+  (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥) ∧
+  (((¬(P1 = Q1)) ∨ (¬(P2 = Q2)) ∨ (¬(W = X))))"
+*/
+simplify
+solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1))  ∥ (¬($W = $W.1)) )
+  case case_1
+  solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+    case Register
+    solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( $W, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Pk( $P1.1, pk(x) ) ▶₀ #j )
+          case Register
+          solve( !Pk( $P2.1, pk(x) ) ▶₁ #j )
+            case Register
+            solve( !Pk( $W.1, pk(x) ) ▶₂ #j )
+              case Register
+              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+                case Participant_Sign_case_1
+                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.1) ) @ #vk.1 )
+                  case Participant_Sign_case_1
+                  by contradiction /* from formulas */
+                next
+                  case Participant_Sign_case_2
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.2) ) @ #vk.2 )
+                    case Participant_Sign_case_1
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_2
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_3
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_3
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case c_sign
+                    solve( !KU( ~sk.2 ) @ #vk.7 )
+                      case Compromise
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_3
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~sk.1 ) @ #vk.7 )
+                    case Compromise
+                    by contradiction /* from formulas */
+                  qed
+                qed
+              next
+                case Participant_Sign_case_2
+                by contradiction /* from formulas */
+              next
+                case Participant_Sign_case_3
+                by contradiction /* from formulas */
+              next
+                case Witness_Sign
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~sk ) @ #vk.7 )
+                  case Compromise
+                  by contradiction /* from formulas */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+    case Register
+    solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( $W, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Pk( $P1.1, pk(x) ) ▶₀ #j )
+          case Register
+          solve( !Pk( $P2.1, pk(x) ) ▶₁ #j )
+            case Register
+            solve( !Pk( $W.1, pk(x) ) ▶₂ #j )
+              case Register
+              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+                case Participant_Sign_case_1
+                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.1) ) @ #vk.1 )
+                  case Participant_Sign_case_1
+                  by contradiction /* from formulas */
+                next
+                  case Participant_Sign_case_2
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.2) ) @ #vk.2 )
+                    case Participant_Sign_case_1
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_2
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_3
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_3
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case c_sign
+                    solve( !KU( ~sk.2 ) @ #vk.7 )
+                      case Compromise
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_3
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~sk.1 ) @ #vk.7 )
+                    case Compromise
+                    by contradiction /* from formulas */
+                  qed
+                qed
+              next
+                case Participant_Sign_case_2
+                by contradiction /* from formulas */
+              next
+                case Participant_Sign_case_3
+                by contradiction /* from formulas */
+              next
+                case Witness_Sign
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~sk ) @ #vk.7 )
+                  case Compromise
+                  by contradiction /* from formulas */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_3
+  solve( !Pk( $P1, pk(x) ) ▶₀ #i )
+    case Register
+    solve( !Pk( $P2, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( $W, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Pk( $P1.1, pk(x) ) ▶₀ #j )
+          case Register
+          solve( !Pk( $P2.1, pk(x) ) ▶₁ #j )
+            case Register
+            solve( !Pk( $W.1, pk(x) ) ▶₂ #j )
+              case Register
+              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) @ #vk )
+                case Participant_Sign_case_1
+                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.1) ) @ #vk.1 )
+                  case Participant_Sign_case_1
+                  by contradiction /* from formulas */
+                next
+                  case Participant_Sign_case_2
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.2) ) @ #vk.2 )
+                    case Participant_Sign_case_1
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_2
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_3
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_3
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
+                           ) @ #vk.3 )
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~sk.3 ) @ #vk.7 )
+                        case Compromise
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case c_sign
+                    solve( !KU( ~sk.2 ) @ #vk.7 )
+                      case Compromise
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_3
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~sk.1 ) @ #vk.7 )
+                    case Compromise
+                    by contradiction /* from formulas */
+                  qed
+                qed
+              next
+                case Participant_Sign_case_2
+                by contradiction /* from formulas */
+              next
+                case Participant_Sign_case_3
+                by contradiction /* from formulas */
+              next
+                case Witness_Sign
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~sk ) @ #vk.7 )
+                  case Compromise
+                  by contradiction /* from formulas */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Unbound variables
+=================
+
+  rule `Accept_Record' has unbound variables: 
+    cid
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Accept_Record: 
+Failed to derive Variable(s): cid
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
+
+  processing time: 1.91s
+  
+  WARNING: 2 wellformedness check failed!
+           The analysis results might be wrong!
+  
+  ceremony_is_executable (exists-trace): verified (8 steps)
+  presence_requires_copresence (all-traces): verified (11 steps)
+  no_remote_forgery (all-traces): verified (11 steps)
+  copresence_binds_one_roster (all-traces): verified (107 steps)
+
+==============================================================================
