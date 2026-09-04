@@ -5772,23 +5772,38 @@ default, publish the λ < 1/f criterion prominently, and provide a conformance
 test that reports a policy's resistance bound so anyone tuning their own can see
 what they have given up.
 
-**A scarce-capacity tie is reference-policy, not a network invariant**
+**Scarce-capacity allocation is reference-policy, not a network invariant**
 [author, 2026-09-04]. Each principal's *individual* standing is its own
 max-flow, and the *aggregate* a set can draw is bounded by the cut (§16.2) —
 both are unique values every conforming flow policy agrees on. What is not
-unique is *which* of several equal-standing principals a saturated cut
-admits when it cannot admit them all: the answer depends on the order the
-computation considers candidates, and no single answer is more correct.
-**The reference metric fixes one deterministically — the earlier-considered
-candidate wins** — so that a node's own decisions are stable and
-reproducible for that node. **It is not promoted to a protocol rule**,
-because it does not need to be: per-observer trust means no party consumes
-another's computation (§16.1), so two nodes resolving the same tie
-differently never disagree about anything either one relies on. A resource's
-role table is its operator's own computation and is deterministic *for that
-operator*; nothing compares it against another operator's. This is the same
-line §16.2 draws for λ — the reference implementation is where the choice
-lives, and conformance does not carry it.
+unique is *which* principals a saturated cut admits when it cannot admit
+them all. **The reference metric decides in two limbs:**
+
+- **The shorter path dominates.** Where capacity cannot serve both, the
+  candidate reachable by fewer hops wins, because **a longer path is less
+  trustworthy by nature** — the same reasoning §16.2 applies to distance
+  decay, applied to allocation rather than to weight.
+- **Consideration order breaks true ties only** — that is, ties in path
+  length. It is the residual rule, not the governing one.
+
+**Neither limb is promoted to a protocol rule**, because neither needs to
+be: per-observer trust means no party consumes another's computation
+(§16.1), so two nodes allocating differently never disagree about anything
+either one relies on. A resource's role table is its operator's own
+computation and is deterministic *for that operator*; nothing compares it
+against another operator's. This is the same line §16.2 draws for λ — the
+reference implementation is where the choice lives, and conformance does not
+carry it.
+
+**An implementation note, because the obvious construction gets it half
+right.** Running one max-flow over a super-sink fed by every candidate
+delivers the first limb for free — Edmonds-Karp augments along the shortest
+path first — and silently misses the second: at equal path length the
+winner is then decided by the order edges happen to occupy in the
+implementation's own adjacency structure, an artifact of how the topology
+was built rather than of how candidates were considered. An implementation
+wanting the stated rule ranks candidates by (path length, consideration
+order) explicitly.
 
 ### 16.5 Decay on inactivity
 

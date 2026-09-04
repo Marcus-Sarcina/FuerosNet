@@ -8399,3 +8399,20 @@ protocol invariant: per-observer trust means no node consumes another's
 computation, so differing resolutions both conform and a node need only be
 stable to itself. Stated at s16.4, mirroring the line already drawn there
 for lambda, and tested in the simulation.
+
+### 2026-09-04 (scarce-capacity allocation re-ruled; simulation corrected)
+
+A second cross-family review of the trust-metric simulation found the
+allocation rule unimplemented, and the finding prompted a better rule. The
+reference metric now allocates scarce capacity in two limbs: the shorter
+path dominates, because a longer path is less trustworthy by nature, and
+consideration order breaks true ties only. §16.4 carries both, still as
+reference policy rather than protocol invariant, with an implementation
+note the review earned: a single multi-sink max-flow satisfies the first
+limb for free and misses the second silently, deciding equal-length ties by
+the order edges sit in the implementation's own adjacency rather than by
+candidate order. The simulation ranks candidates explicitly and tests both
+limbs. The same review rebuilt the edge-coverage experiment around genuine
+two-ended peering — an earlier one-ended attacker had made "visible implies
+influenced" true by construction — and separated the unit-demand admission
+count from the general-demand conservation statement the design makes.

@@ -289,8 +289,17 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
 # ---------------------------------------------------------------------------
 
 def node_capacity(dist):
-    """Per-node throughput by scope/flow distance from the observer.  A
-    simple halving schedule; absolute numbers are unimportant (§16.1)."""
+    """Per-node throughput by scope/flow distance from the observer.
+
+    MODELLER'S CHOICE, NOT FROM THE DESIGN.  Advogato decreases capacity with
+    distance from the seed and this file uses a halving schedule
+    (32, 16, 8, 4, ...).  The design fixes no vertex-capacity schedule --
+    trust policy is local and pluggable (§16.2, §16.4) -- so every absolute
+    number below is conditional on this choice.  What the experiments test is
+    RELATIVE behaviour under ONE schedule held fixed: growing a population,
+    adding an edge, changing evaluation mode.  A different schedule moves the
+    numbers and not the conclusions.
+    """
     return max(32 >> dist, 1)          # 32, 16, 8, 4, 2, 1, 1, ...
 
 
@@ -334,37 +343,109 @@ def score_independent(g, observer, target):
     return s.copy().max_flow(("out", observer), ("in", target))
 
 
-def accepted_count(g, observer, targets):
-    """MODE B: how many of `targets` are accepted SIMULTANEOUSLY -- one split
-    graph, one super-sink, one max-flow.
+def admit_reference_order(g, observer, candidates, demand=1):
+    """MODE B: admit candidates against ONE shared residual, in REFERENCE order.
 
-    The RETURNED TOTAL is a well-defined, deterministic quantity -- the
-    max-flow value is unique.  It verifies the setwise-conservation BOUND
-    (the aggregate cannot exceed the cut).  It does NOT by itself determine
-    WHICH identities receive the units when demand exceeds capacity: among
-    symmetric sinks, different candidate orders accept different principals,
-    all valid maximum flows.
+    Returns (admitted, total) -- the candidates that received flow, in the
+    order they were admitted, and the total flow delivered.
 
-    THE REFERENCE-POLICY TIE-BREAK (design §16.4, ruled 2026-09-04): the
-    reference metric resolves such a tie deterministically -- the
-    EARLIER-CONSIDERED candidate wins.  This function realises that rule by
-    processing `targets` in the given order: BFS in max_flow() iterates
-    edges in insertion order, so the earlier drain edge is saturated first.
-    A caller that wants the reference behaviour therefore passes `targets`
-    in the reference order (see the demonstration in experiment_setwise).
-    This is REFERENCE POLICY, NOT a protocol invariant: per-observer trust
-    (§16.1) means no party consumes another's computation, so a different
-    policy resolving the tie differently still conforms.
+    THE REFERENCE-POLICY ALLOCATION RULE (design §16.4, ruled 2026-09-04),
+    in two limbs:
+
+      1. THE SHORTER PATH DOMINATES.  When a saturated cut cannot admit
+         every candidate, the one reachable by the shorter path wins --
+         *a longer path is less trustworthy by nature* [author].  This is
+         the same reasoning §16.2 applies to distance decay, applied to
+         allocation instead of weight.
+      2. CONSIDERATION ORDER BREAKS TRUE TIES ONLY.  Among candidates at
+         EQUAL path length, the earlier-considered one wins.
+
+    WHY THIS NEEDS EXPLICIT CODE.  A plain multi-sink max-flow -- add every
+    candidate's drain edge, run one max-flow -- looks like it implements
+    both limbs and implements only the first, by accident:
+
+      * Limb 1 falls out of Edmonds-Karp, which augments along the SHORTEST
+        path first.  Two successive cross-family reviews exercised this;
+        the counterexample below returns B under either candidate order,
+        which limb 1 says is correct.
+
+            observer -1-> bottleneck -1-> x -1-> A     (A: longer path)
+                          bottleneck -1-> B            (B: shorter path)
+
+      * Limb 2 does NOT.  In a plain max-flow the tie is decided by the
+        order edges happen to sit in the graph's own adjacency -- an
+        artifact of how the topology was BUILT -- not by the order the
+        caller considers candidates.  Measured directly: with two
+        equal-length candidates whose graph edges were created A-then-B,
+        passing candidates in the order [B, A] still admits A.  That is a
+        silent dependence on construction order, and it is why the rule is
+        implemented here rather than left to the algorithm.
+
+    THE CONSTRUCTION USED HERE.  Rank candidates by (shortest-path distance
+    in the observer's own graph, consideration index), then admit greedily
+    in that ranking against a shared residual: add the candidate's drain,
+    run max-flow to exhaustion, record whether the total rose.  Distances
+    are taken ONCE from the pre-allocation graph, because trustworthiness is
+    a property of the candidate's position, not of who was served first.
+    Earlier-ranked candidates cannot be displaced later: an augmenting path
+    ends AT the sink and so never traverses an admitted drain in reverse.
+    The final total is still the true maximum -- after the last drain is
+    added and exhausted no augmenting path remains, which is max-flow's own
+    optimality condition -- so the rule costs nothing in aggregate and fixes
+    only WHO is admitted.
+
+    This remains REFERENCE POLICY, NOT a protocol invariant: per-observer
+    trust (§16.1) means no party consumes another's computation, so a policy
+    resolving the allocation differently still conforms.
     """
     s = split_graph(g, observer)
     SINK = ("sink", None)
-    reachable = 0
-    for t in targets:
-        if ("out", t) in s.cap:
-            s.add_edge(("out", t), SINK, 1)
-            reachable += 1
-    if reachable == 0:
-        return 0
+    source = ("out", observer)
+    # Limb 1 + limb 2: rank by (distance, consideration index).  Distances
+    # are measured in the split graph from the observer's out-node, so they
+    # count real hops through the topology the observer can see.
+    dist = distances_from(s, source)
+    ranked = sorted(
+        [(i, c) for i, c in enumerate(candidates) if ("out", c) in s.cap],
+        key=lambda ic: (dist.get(("in", ic[1]), float("inf")), ic[0]))
+    admitted, total = [], 0
+    for _, c in ranked:
+        s.add_edge(("out", c), SINK, demand)
+        gained = s.max_flow(source, SINK)   # augments the SHARED residual
+        if gained > 0:
+            admitted.append(c)          # the only new capacity is c's drain
+        total += gained
+    return admitted, total
+
+
+def accepted_count(g, observer, targets):
+    """The number of candidates admitted simultaneously (unit demands).
+
+    A thin wrapper over admit_reference_order.  NOTE the abstraction, which
+    a cross-family review rightly flagged: with one-unit drains this counts
+    ADMITTED IDENTITIES, not the sum of their individual standing.  The
+    design's setwise-conservation wording is about "simultaneously usable
+    standing", which is the general-demand case -- tested separately by
+    deliverable_flow() below.  Both are true; they are different statements.
+    """
+    return admit_reference_order(g, observer, targets, demand=1)[1]
+
+
+def deliverable_flow(g, observer, demands):
+    """Total flow deliverable to a SET of candidates under ARBITRARY demands.
+
+    `demands` maps target -> the capacity that target may draw.  This is the
+    general form of design §16.2's setwise-conservation sentence: whatever
+    each identity behind a cut wants to use, what the set can use AT ONCE is
+    bounded by the cut.  Passing each candidate's own individual standing as
+    its demand is the strongest reading -- every identity asking for
+    everything it could get alone -- and is what experiment_setwise checks.
+    """
+    s = split_graph(g, observer)
+    SINK = ("sink", None)
+    for t, d in demands.items():
+        if ("out", t) in s.cap and d > 0:
+            s.add_edge(("out", t), SINK, d)
     return s.max_flow(("out", observer), SINK)
 
 
@@ -556,31 +637,79 @@ def experiment_setwise(rng, report):
     for n, joint, ceiling in joints:
         if n >= ceiling:
             assert joint == ceiling, "saturated region below its ceiling"
-    # The reference-policy tie-break (design §16.4, 2026-09-04): when a cut of
-    # capacity 1 must choose between two equal-standing principals, the
-    # earlier-considered one wins.  Demonstrated on the minimal symmetric
-    # case, and asserted, so the reference behaviour is a tested property
-    # rather than an accident of construction order.
-    def scarce_winner(order):
-        g2 = FlowGraph()
-        g2.add_edge("obs", "bot", 1)               # the scarce shared unit
-        for x in order:
-            g2.add_edge("bot", x, 1)
-        s = FlowGraph()
-        s.add_edge(("out", "obs"), ("in", "bot"), 1)
-        s.add_edge(("in", "bot"), ("out", "bot"), 1)
-        SINK = ("sink", None)
-        for x in order:                            # candidate order = argument
-            s.add_edge(("out", "bot"), ("in", x), 1)
-            s.add_edge(("in", x), ("out", x), 1)
-            s.add_edge(("out", x), SINK, 1)
-        s.max_flow(("out", "obs"), SINK)
-        return [x for x in order if s.cap[("out", x)][SINK] == 0][0]
-    assert scarce_winner(["A", "B"]) == "A", "reference tie-break: earlier wins"
-    assert scarce_winner(["B", "A"]) == "B", "reference tie-break: earlier wins"
+
+    # --- The GENERAL setwise-conservation statement (design §16.2) ---------
+    # The unit-demand count above is a narrower property than the design's
+    # wording ("simultaneously usable standing").  Here every candidate
+    # demands its OWN INDIVIDUAL STANDING -- each asking for everything it
+    # could get alone -- and the total deliverable is checked against the
+    # cut.  This is the strongest reading of the sentence and the one a
+    # cross-family review asked for.
+    g = base.copy()
+    fakes = attach_fake_fan(g, boundary, 16)
+    kids = {u: list(children.get(u, [])) for u in children}
+    kids.setdefault(boundary, [])
+    kids[boundary] = list(kids[boundary]) + fakes
+    for fkid in fakes:
+        kids.setdefault(fkid, [])
+    scope = scope_adjacency(list(g.cap.keys()), kids)
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
+    visible_fakes = [f for f in fakes if f in vis.cap]
+    individual = {t: score_independent(vis, observer, t) for t in visible_fakes}
+    total_individual = sum(individual.values())
+    delivered = deliverable_flow(vis, observer, individual)
+    ceiling = region_ceiling(vis, observer, boundary)
     report.append(
-        "  scarce-capacity tie: the earlier-considered candidate wins "
-        "(reference policy, §16.4)")
+        f"  general demands (each asks its own standing): individual sum = "
+        f"{total_individual}, simultaneously deliverable = {delivered}, "
+        f"cut = {ceiling}")
+    assert delivered <= ceiling, \
+        "setwise conservation violated under general demands"
+    assert total_individual > ceiling, \
+        "test is vacuous unless demand exceeds the cut"
+
+    # --- The reference allocation rule, BOTH limbs (design §16.4) ----------
+    # Limb 1: the shorter path dominates -- a longer path is less
+    # trustworthy by nature.  Limb 2: consideration order breaks TRUE TIES
+    # only, i.e. equal path lengths.  Each limb needs its own case, because
+    # a plain multi-sink max-flow satisfies limb 1 by accident and fails
+    # limb 2 silently (see admit_reference_order).
+    def winner_unequal(order):
+        """A sits one hop further from the observer than B."""
+        g2 = FlowGraph()
+        g2.add_edge("obs", "bot", 1)     # the scarce shared unit
+        g2.add_edge("bot", "x", 1)
+        g2.add_edge("x", "A", 1)         # A: two hops past the bottleneck
+        g2.add_edge("bot", "B", 1)       # B: one hop past it
+        admitted, _ = admit_reference_order(g2, "obs", order, demand=1)
+        return admitted[0] if admitted else None
+
+    def winner_equal(order, build):
+        """A and B are equidistant; `build` fixes the order the GRAPH was
+        constructed in, which must NOT decide the outcome."""
+        g2 = FlowGraph()
+        g2.add_edge("obs", "bot", 1)
+        for t in build:                  # construction order, deliberately
+            g2.add_edge("bot", t, 1)     #   varied to prove it is ignored
+        admitted, _ = admit_reference_order(g2, "obs", order, demand=1)
+        return admitted[0] if admitted else None
+
+    # Limb 1: the shorter path wins whichever order the candidates come in.
+    assert winner_unequal(["A", "B"]) == "B", "limb 1: shorter path must win"
+    assert winner_unequal(["B", "A"]) == "B", "limb 1: shorter path must win"
+    # Limb 2: at equal length the earlier-considered wins -- and the graph's
+    # own construction order does not leak in.
+    for build in (["A", "B"], ["B", "A"]):
+        assert winner_equal(["A", "B"], build) == "A", \
+            "limb 2: earlier-considered must win a true tie"
+        assert winner_equal(["B", "A"], build) == "B", \
+            "limb 2: earlier-considered must win a true tie"
+    report.append(
+        "  scarce-capacity allocation: the shorter path dominates; "
+        "consideration order breaks")
+    report.append(
+        "  true ties only, independent of graph construction order "
+        "(reference policy §16.4)")
     # Demonstrate the conservative direction: attaching a DEEP (invisible)
     # fake subtree beyond the horizon does not raise the observer's joint.
     g = base.copy()
@@ -633,60 +762,115 @@ def experiment_setwise(rng, report):
 # ---------------------------------------------------------------------------
 
 def experiment_fanout(rng, report):
-    report.append("E4: edge-influence fanout, corrected horizons (design 16.3.1)")
-    flow, nodes, children = build_tree(rng, depth=3, fanout=4)
+    """E4, rebuilt with TWO-ENDED cross-tree peering.
+
+    design §6.3 makes peering a relation between two infra nodes in
+    different subtrees, and §16.3.1 makes the record visible inside BOTH
+    peers' horizons.  An earlier version attached a synthetic ATTACKER with
+    no position in the scope graph and counted visibility from the victim
+    end only.  That construction made the strong claim self-fulfilling: a
+    node with no prior path gains one for every observer that can see its
+    single edge, so "influenced" and "can see" coincided by construction.
+    A cross-family review supplied the disproof -- with both endpoints real,
+    an observer already holding standing to the far peer through its own
+    tree sees the new edge and is NOT influenced by it.
+
+    So this version builds two disjoint adoption trees, peers one node in
+    each, and reports THREE quantities separately: who can see the edge, who
+    is influenced by it, and by how much.  The claim actually asserted is
+    the design's own economic one -- one edge reaches MANY observers, so
+    acquisition amortises -- plus the conservative direction, that nobody
+    who cannot see the edge is influenced.  The equality is not asserted,
+    because it is not true.
+    """
+    report.append("E4: edge-influence fanout, two-ended peering (design 16.3.1)")
+    fA, nA, cA = build_tree(rng, depth=3, fanout=3, prefix="A")
+    fB, nB, cB = build_tree(rng, depth=3, fanout=3, prefix="B")
+    flow = FlowGraph()
+    for g in (fA, fB):
+        for u, nbrs in g.cap.items():
+            for v, c in nbrs.items():
+                if c > 0:
+                    flow.add_edge(u, v, c)
+    nodes = nA + nB
+    children = {**cA, **cB}
     scope = scope_adjacency(nodes, children)
-    attacker = "ATTACKER"
-    interior = [n for n in nodes if children.get(n)]
 
-    coverages = []
-    for victim in interior:
-        # The acquired edge is a PEERING edge (flow only, no scope).
-        peer_edges = [(victim, attacker, PEER_CAP)]
-        changed = 0
-        holds_edge = 0
-        for obs in nodes:
-            # BEFORE: no peering edge.  AFTER: the peering edge exists but
-            # confers no scope, so horizons are computed WITHOUT it.
-            before = visible_flow_subgraph(flow, scope, obs, peer_edges=[])
-            after = visible_flow_subgraph(flow, scope, obs, peer_edges)
-            b = (score_independent(before, obs, attacker)
-                 if attacker in before.cap else 0)
-            a = (score_independent(after, obs, attacker)
-                 if attacker in after.cap else 0)
-            if a != b:
-                changed += 1
-            # The edge is visible to obs iff obs's SCOPE horizon contains a
-            # peer -- here the victim (the attacker has no scope position).
-            if victim in horizon(scope, obs):
-                holds_edge += 1
-        # STRONG property, per placement: exactly the observers who can see
-        # the edge are influenced.
-        assert changed == holds_edge, \
-            f"changed ({changed}) != can-see ({holds_edge}) at {victim!r}"
-        assert holds_edge >= 1, "an acquired edge no observer can see"
-        coverages.append((victim, holds_edge))
+    # Enumerate every cross-tree placement of ONE peering edge between an
+    # interior node of tree A and an interior node of tree B -- worst-case
+    # aware rather than sampled, since placement is what an adversary
+    # optimises.
+    interiorA = [n for n in nA if children.get(n)]
+    interiorB = [n for n in nB if children.get(n)]
+    rows = []
+    for pa in interiorA:
+        for pb in interiorB:
+            peer_edges = [(pa, pb, PEER_CAP)]
+            # THE BENEFICIARY is fixed: pb is the party whose standing the
+            # acquired edge is meant to raise (an attacker buying a peering
+            # favour from pa, in §16.3.1's framing).  Every observer is asked
+            # the SAME question -- "did my evaluation of pb move?" -- which
+            # is what makes the see/influenced distinction visible: an
+            # observer inside pb's own tree already has standing to pb and
+            # gains nothing, even though it can see the new edge.
+            beneficiary = pb
+            see = influenced = 0
+            gains = []
+            for obs in nodes:
+                hz = horizon(scope, obs)
+                # §16.3.1: the record is visible inside BOTH peers' horizons.
+                visible = (pa in hz) or (pb in hz)
+                if visible:
+                    see += 1
+                before = visible_flow_subgraph(flow, scope, obs, peer_edges=[])
+                after = visible_flow_subgraph(flow, scope, obs, peer_edges)
+                b = (score_independent(before, obs, beneficiary)
+                     if beneficiary in before.cap else 0)
+                a = (score_independent(after, obs, beneficiary)
+                     if beneficiary in after.cap else 0)
+                if a != b:
+                    influenced += 1
+                    gains.append(a - b)
+                    # THE CONSERVATIVE DIRECTION (§16.3.1): an edge an
+                    # observer cannot see must never move its evaluation.
+                    assert visible, \
+                        f"observer {obs!r} influenced by an invisible edge"
+            rows.append((pa, pb, see, influenced,
+                         max(gains) if gains else 0))
 
-    counts = [c for _, c in coverages]
-    lo, med, hi = min(counts), int(statistics.median(counts)), max(counts)
-    # Show the worst case (max coverage) and a couple of sample placements.
-    worst = max(coverages, key=lambda t: t[1])
+    sees = [r[2] for r in rows]
+    infl = [r[3] for r in rows]
+    best = max(rows, key=lambda r: r[3])
+    # The design's economic claim: ONE edge reaches MANY observers -- the
+    # cost of influencing a population amortises rather than scaling
+    # one-for-one with targets.
+    assert max(sees) > 1, "coverage claim needs more than one observer"
+    assert max(infl) > 1, "amortisation claim needs more than one influenced"
     report.append(
-        f"  {len(interior)} interior placements enumerated (worst-case "
-        f"aware, not sampled)")
+        f"  {len(rows)} cross-tree placements enumerated over {len(nodes)} "
+        f"observers (worst-case aware)")
     report.append(
-        f"  coverage per acquired edge -- observers who can see it: "
-        f"min {lo}, median {med}, max {hi}")
+        f"  observers who can SEE the edge:      min {min(sees)}, "
+        f"median {int(statistics.median(sees))}, max {max(sees)}")
     report.append(
-        f"  worst-case placement {worst[0]!r} covers {worst[1]} of "
-        f"{len(nodes)} observers with ONE edge")
+        f"  observers whose standing CHANGED:    min {min(infl)}, "
+        f"median {int(statistics.median(infl))}, max {max(infl)}")
     report.append(
-        "  every influenced observer can see the edge and every observer "
-        "that can see it is")
+        f"  best placement {best[0]!r}<->{best[1]!r}: {best[3]} of "
+        f"{len(nodes)} observers influenced by ONE edge (max gain "
+        f"{best[4]})")
     report.append(
-        "  influenced (changed == coverage, per placement); coverage is many "
-        "per edge, not one:")
-    report.append("  CONFIRMED")
+        "  seeing the edge does NOT imply being influenced -- an observer "
+        "already holding standing")
+    report.append(
+        "  to the far peer through its own tree is unaffected; the equality "
+        "an earlier version")
+    report.append(
+        "  asserted was an artifact of a one-ended attacker.  What holds: "
+        "no invisible edge ever")
+    report.append(
+        "  influences anyone, and one edge influences many -- the coverage "
+        "economics: CONFIRMED")
     report.append("")
 
 
@@ -709,26 +893,31 @@ def main():
     report.append("")
     report.append(
         "RESOLVED (design 16.4, 2026-09-04): when shared capacity cannot "
-        "satisfy all eligible")
+        "satisfy every eligible")
     report.append(
-        "principals, the max-flow VALUE is unique (individual standing and "
-        "the aggregate bound")
+        "principal, the max-flow VALUE is unique (individual standing and the "
+        "aggregate bound are")
     report.append(
-        "are well-defined) but the ALLOCATION among symmetric principals is "
-        "order-dependent.  The")
+        "well-defined) but the ALLOCATION is not.  The reference metric "
+        "decides in two limbs:")
     report.append(
-        "reference metric fixes it deterministically -- the earlier-considered "
-        "candidate wins --")
+        "the SHORTER PATH DOMINATES -- a longer path is less trustworthy by "
+        "nature -- and")
     report.append(
-        "as REFERENCE POLICY, not a network invariant: per-observer trust "
-        "(16.1) means no party")
+        "consideration order breaks TRUE TIES only.  Both are REFERENCE "
+        "POLICY, not a network")
     report.append(
-        "consumes another's computation, so a different policy may resolve the "
-        "tie differently and")
+        "invariant: per-observer trust (16.1) means no party consumes "
+        "another's computation, so a")
     report.append(
-        "still conform.  A node's own decisions are stable; cross-node "
-        "agreement is neither needed")
-    report.append("nor claimed.")
+        "policy allocating differently still conforms.  Note for implementers "
+        "(tested above): one")
+    report.append(
+        "multi-sink max-flow delivers the first limb for free and misses the "
+        "second silently --")
+    report.append(
+        "at equal path length it follows the graph's construction order, not "
+        "the candidate order.")
     text = "\n".join(report)
     print(text)
     return text

@@ -173,13 +173,29 @@ then-diagnose loop *is* the value of the exercise.
   saturation run over identities the observer could not see. The rewrite
   separates the three relations the design keeps in three different sections,
   and E4 now enumerates every interior placement rather than sampling. It also
-  surfaced a design question the author has since **ruled** on (§16.4,
-  2026-09-04): the max-flow *value* is unique, but when scarce capacity must
-  be *allocated* among symmetric principals, candidate order decides which are
-  accepted. The reference metric fixes this deterministically — the
-  earlier-considered candidate wins — as *reference policy, not a network
-  invariant*, since per-observer trust (§16.1) means no party consumes
-  another's computation. The simulation now tests that tie-break explicitly.
+  surfaced a design question the author has since **ruled** on (§16.4): the
+  max-flow *value* is unique, but the *allocation* under scarce capacity is
+  not. The reference metric decides in two limbs — **the shorter path
+  dominates** (a longer path is less trustworthy by nature), and
+  consideration order breaks **true ties only** — as *reference policy, not a
+  network invariant*, since per-observer trust (§16.1) means no party
+  consumes another's computation.
+
+- **`flow_metric` (a second review caught the allocation rule unimplemented).**
+  A follow-up cross-family review showed the first limb was satisfied only by
+  accident and the second not at all: a plain multi-sink max-flow gets
+  shortest-path-first free from Edmonds-Karp, but decides equal-length ties by
+  the order edges sit in the *graph's own adjacency* — an artifact of how the
+  topology was built, not of candidate order. Measured directly: two
+  equidistant candidates passed in the order [B, A] still admitted A. The
+  simulation now ranks candidates by (path length, consideration order)
+  explicitly and tests both limbs, including that construction order does not
+  leak in; §16.4 carries the implementation note. The same review also
+  rebuilt E4 around genuine two-ended cross-tree peering (an earlier
+  one-ended attacker made "visible ⇒ influenced" true by construction; with
+  both endpoints real, 14–28 observers see an edge while only 8–12 are
+  influenced), and separated the unit-demand admission count from the
+  general-demand conservation statement the design actually makes.
 
 ---
 

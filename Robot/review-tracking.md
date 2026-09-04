@@ -4127,3 +4127,57 @@ line it mirrors), and to the simulation (accepted_count documents the rule;
 experiment_setwise tests earlier-wins on the minimal symmetric case).
 Reference check clean at 1934; both vector harnesses and all eight models
 green. No open items remain.
+
+## Second cross-family review of the trust-metric simulation (2026-09-04)
+
+Three findings, all verified by execution before applying, all correct.
+The reviewer independently cross-checked max_flow against exhaustive
+min-cuts on 500 random graphs (clean), so again the defects were in the
+modelling, not the algorithm.
+
+**F1 (Medium, MODEL GAP -> author re-ruled the design rule).** The
+2026-09-04 tie-break was NOT implemented: I had claimed passing candidates
+in order to a single multi-sink max-flow realises "earlier-considered
+wins". It does not -- BFS augments the SHORTEST path first, so a nearer
+later candidate takes the scarce unit. Reviewer's counterexample
+reproduced exactly (obs-1->bot-1->x-1->A, bot-1->B, order [A,B] admits B).
+**The author then re-ruled the design rule itself**: the shorter path
+SHOULD dominate -- "a longer path is less trustworthy by nature" -- with
+first insertion breaking TRUE TIES only. s16.4 rewritten into two limbs
+with that justification (the author's, not invented), plus an implementer
+note: one multi-sink max-flow delivers limb 1 free and misses limb 2
+SILENTLY, because at equal path length it follows the GRAPH CONSTRUCTION
+order rather than candidate order -- measured here: two equidistant
+candidates passed as [B,A] still admitted A. The simulation now ranks by
+(path length, consideration index) explicitly and tests both limbs
+including construction-order independence.
+
+**F2 (Medium, MODEL GAP).** E4's `changed == holds_edge` was an artifact of
+a one-ended synthetic attacker with no scope position: a node with no prior
+path gains one from every observer that can see its only edge, so the
+equality held by construction. Verified the reviewer's disproof (two
+disjoint trees, real two-ended peering: 9 see, 6 change, 3 unchanged
+because they already held standing to the peer through their own tree).
+E4 rebuilt: two disjoint trees, peering between interior nodes, a FIXED
+beneficiary so every observer answers the same question, all 80 cross-tree
+placements enumerated, three quantities reported separately. Now 14-28 see
+vs 8-12 influenced. The equality is NOT asserted; what is asserted is the
+design's actual economic claim (one edge influences many) plus the
+conservative direction (no invisible edge influences anyone). Also fixed
+the noted `>= 1` vs `> 1` weakness.
+
+**F3 (Medium, UNSOUND ABSTRACTION).** accepted_count's unit drains count
+ADMITTED IDENTITIES, not "simultaneously usable standing" as s16.2 words
+it. Verified (obs-10->t: individual standing 10, accepted_count 1). Added
+deliverable_flow() for arbitrary per-target demands and a general test
+where every candidate demands its own individual standing (sum 160,
+deliverable 10, cut 10) -- the strongest reading of the sentence. Both
+properties now tested and distinguished in the prose.
+
+**UNSPECIFIED 2/3 (node-capacity schedule 32/16/8/4; peering:hierarchical
+10:2).** Both verified as MODELLER CHOICES not in the design -- s21.1 lists
+peering flow capacity as an unset parameter. node_capacity() now says so
+explicitly and notes the experiments test relative behaviour under one
+fixed schedule.
+
+All six seeds pass; all eight models green; references clean at 1935.
