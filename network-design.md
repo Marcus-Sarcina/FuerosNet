@@ -5778,6 +5778,19 @@ flow. Past the horizon the generic question is the only one left, and the
 metric is what answers it — which is why *that* is exactly where throttling
 begins.
 
+**What the horizon's exemption actually rests on is participation, not
+proximity** [author, 2026-09-04]: *you trust the integrity of the local
+subnet you participate in; outsiders do not.* Your horizon members are
+covered by the same structure that covers you — the countersignatures you
+can check (§6.4), the topology that floods to you (§15.1), the
+acknowledgements your position lets you verify — and you rely on it
+because you are inside it. **That reliance is first-person and does not
+travel.** To an observer outside your subnet, your horizon members are
+ordinary nodes at whatever distance the metric puts them, carrying no
+exemption whatever; the exemption exists *in its own members' views and
+nobody else's*, which is §16.1's per-observer rule showing up exactly
+where it should.
+
 **Distance is not the only ordering, and equal distance is not
 interchangeability.** §16.1 weighs a connection by being *closest **and**
 best-attested*, and attestation is a separate axis this landscape does not

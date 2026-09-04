@@ -8523,3 +8523,16 @@ identities sat inside the horizon, where the metric does not ration — and
 is rebuilt around identities reached only by peering from a horizon member:
 visible, beyond the horizon, behind one cut, which is the setting the
 conservation sentence is about.
+
+### 2026-09-04 (why the horizon is exempt: participation, not proximity)
+
+The landscape gains its last piece of reasoning. The horizon's exemption
+from the metric rests on participation — you trust the integrity of the
+local subnet you participate in, and outsiders do not. Horizon members are
+covered by the same structure that covers you: countersignatures you can
+check, topology that floods to you, acknowledgements your position lets you
+verify. That reliance is first-person and does not travel; to an observer
+outside your subnet the same nodes carry no exemption whatever. The
+inside-or-beyond boundary is therefore not a claim about the world but
+about where the evaluator is standing, which is per-observer trust arriving
+exactly where it should.

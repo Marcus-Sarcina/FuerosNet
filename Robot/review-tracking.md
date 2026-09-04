@@ -4483,3 +4483,17 @@ them distinct), and no archive evidence (faithful: §16.2.1 makes archives
 review, not standing edges).
 
 Eight seeds pass; all eight models green.
+
+**Author confirmation and rationale (2026-09-04)**: the equal-distance /
+attestation reconciliation is correct, with the underlying reason -- *"you
+trust the integrity of the local subnet you participate in, outsiders do
+not."* Added to §16.2.1: the horizon's exemption rests on PARTICIPATION,
+not proximity. Horizon members are covered by the structure that covers
+you -- countersignatures you can check, topology that floods to you,
+acknowledgements your position lets you verify -- and you rely on it
+because you are inside it. **That reliance is first-person and does not
+travel**: to an observer outside your subnet your horizon members carry no
+exemption at all. Which is §16.1's per-observer rule appearing exactly
+where it should, and it closes the frame: the metric's inside/beyond
+boundary is not a statement about the world, it is a statement about where
+the evaluator is standing.
