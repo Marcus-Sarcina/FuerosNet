@@ -3792,3 +3792,73 @@ staple lifetime and the sibling ladder are the two mechanisms DESIGNED
 around continuous signing; under a split they need rederivation, not
 tolerance. The author's suspicion is confirmed: the assumption is
 load-bearing and pervasive.
+
+## Cycle 2, adversarial pass 0.6.5 (role 5: the malicious counterparty, 2026-09-03)
+
+Author's round label 0.6.5; the fifth adversary role under the defensive
+prompt. Three EXTENDS, two NOVEL, zero REASONING; eleven RESTATES
+discarded. All five verified and ruled — this round changed the ceremony
+evidence layer more than any since the family began.
+
+**1. Adverse-response suppression (High → dual delivery, author ruling).**
+Verified exactly: §7.4.2's substitution defence read "a subject seeing
+no_match returned about themselves will withhold [signature]" — but
+responses returned only to the querier, who in the substitution scenario is
+the attacker. §2360's "neither fabricate nor suppress" lost its suppress
+half when deterministic selection retired. Ruled (author: verifiers already
+hold a point-to-point association with the subject for the capture-key
+grant, so returning the verdict adds almost nothing): a verifier answering
+a query about S delivers a copy of its signed response to S; S's client
+withholds the envelope signature from a body omitting a response S holds
+(light §1.2). Suppression now requires both participants, and a colluding
+pair buys a visibly thin record §5.2 discounts. §2360 rewritten with the
+superseded claims quoted; wire §5.6 carries the delivery rule.
+
+**2. Consent was bearer paper (Med-High → field 7, author ruling).**
+query_id hashed fields 1-5 — identical for every verifier in a ceremony —
+so one consent authenticated the query to any prior counterparty. Ruled:
+VerificationQuery field 7 names the addressed verifier, sits inside the
+hash (the field-6-absent rule needed only its parenthetical updated), and
+a verifier rejects before processing any query not naming it. One consent
+per verifier follows. Recovery: field 7 MUST equal field 2. Author
+rationale recorded: witnesses must observe all participants; verifiers are
+drawn from a wider pool and need not. P18 updated — curation now backed by
+cryptographic confinement. Fixture layer rebuilt: vquery takes the
+addressee; the three npr queries now share ONE profile (as the
+one-profile-per-ceremony rule always intended — the old fixtures varied
+profiles to get distinct qids) and differ by field 7; recovery echoes
+field 2; KeyGrant/worked-query bindings recompute; both harnesses updated
+(the runner's generic map-without-field-6 hash absorbed field 7
+automatically; verify.py's three explicit field tuples now include 7, and
+its request-4 basis bound was found still reading 0-2 from the
+renumbering — fixed to 0-3). TR24 added: wrong-addressee type-4 → close
+stream. Twenty-four traces.
+
+**3. nominated_by self-check (Medium → light §1.0 rule; author: "weird
+this wasn't stated as a rule previously").** The split check counted
+halves; nothing compared entries claiming your nomination against your
+local nomination set. Rule added: refuse to sign a record attributing to
+you a witness you did not nominate — the wire records the claim, you are
+the one party who can check it.
+
+**4. Fishing is bundle augmentation (Medium → §8.1.2, wire §5.1, light
+§1.2, P37; author-designed rule).** The fishing path disclosed
+outside-bundle history "recorded nowhere". Author's design applied: each
+proposal is a bundle augmentation through the same curation; clients stop
+revealing at a locally adjustable count of responsive candidates; after
+the bundle, every mutually reachable candidate is accepted if available —
+quality filtering ends with the initial bundle, so declining available
+candidates to extract more names is visible to the party being fished.
+
+**5. Field 10 carriage semantics (Low-Med → wire §5.6; author: "false met
+is the same as not available").** The verifier's signature binds the
+selector's claim against alteration — the nominated_by pattern — and
+policy MUST NOT weight it as verifier-attested. A claimed `met` the
+verifier's own records refute is answered `unavailable`: the false claim
+voids the selection premise.
+
+Confirmed defences recorded: no fabrication of positive responses, the
+capture-key gate, recognition as the selector's local defence, and
+cross-nomination as representativeness. Python 80/80 (three query_id
+sites now hash fields 1-5+7), Rust 146/0 with field-7 required in its
+query schema. References: nine known list-continuation flags of 1,903.

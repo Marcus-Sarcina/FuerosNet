@@ -387,8 +387,9 @@ blocks = re.findall(r'```\n([0-9a-f\n]+?)```', sect)
 r_query = canonical(bytes.fromhex(blocks[0].replace('\n', '')))
 r_body_hex = re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', sect).group(1)
 r_body = canonical(bytes.fromhex(r_body_hex.replace('\n', '')))
-rq15 = enc({k: r_query[k] for k in (1, 2, 3, 4, 5)})
-check(H(rq15).hex() == r_query[6], 'recovery query_id = SHA-256 of fields 1-5')
+rq157 = enc({k: r_query[k] for k in (1, 2, 3, 4, 5, 7)})
+check(H(rq157).hex() == r_query[6], 'recovery query_id = SHA-256 of fields 1-5 and 7')
+check(r_query[7] == r_query[2], 'recovery query field 7 equals field 2: the querier is the verifier')
 rec = r_body[6]; resp = rec[2][0]
 check(len(rec[2]) >= 1 and resp[4] == 0, 'recovery carries at least one match')
 check(resp[3] == r_query[6] and resp[2] == r_body[1] and resp[8] == rec[1]
@@ -482,11 +483,11 @@ srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
-check(len(re.findall(r'\| TR\d+ ', ms)) == 23, 'messages: twenty-three session traces')
+check(len(re.findall(r'\| TR\d+ ', ms)) == 24, 'messages: twenty-four session traces')
 qc = frame_objs[12][1]
-check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5)})).hex() == qc[0][6],
-      'request-4 query frame: embedded query_id recomputes')
-check(len(qc) == 3 and qc[2] in (0, 1, 2),
+check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5, 7)})).hex() == qc[0][6],
+      'request-4 query frame: embedded query_id recomputes (fields 1-5 and 7)')
+check(len(qc) == 3 and qc[2] in (0, 1, 2, 3),
       'request-4 body carries the selection_basis claim as its third element')
 
 # ---------------------------------------------------------------- HKDF (s7.5.2)
@@ -550,9 +551,9 @@ _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presen
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
-check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 23
+check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 24
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
-      'corpus: twenty-three traces and five contexts')
+      'corpus: twenty-four traces and five contexts')
 _tr = canonical(bytes.fromhex(byid['P-catalog-reply-truncated']['hex']))
 _res_ids = [e[1] for e in _tr[2]]
 check(len(_tr[2]) == 111 and 3 in _tr and _res_ids == sorted(_res_ids),
@@ -628,8 +629,10 @@ n_body = canonical(bytes.fromhex(re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', n
                                  .group(1).replace('\n', '')))
 n_query = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```', nsect)[0]
                                   .replace('\n', '')))
-check(H(enc({k: n_query[k] for k in (1, 2, 3, 4, 5)})).hex() == n_query[6],
-      'normal record: worked query_id recomputes from fields 1-5')
+check(H(enc({k: n_query[k] for k in (1, 2, 3, 4, 5, 7)})).hex() == n_query[6],
+      'normal record: worked query_id recomputes from fields 1-5 and 7')
+check(BY.get(n_query[7]) == 'c1',
+      'normal record: worked query field 7 addresses c1, the capture-holding verifier')
 check(n_query[2] != n_query[1]
       and n_query[2] in (n_body[3][0][1], n_body[3][1][1])
       and n_query[1] in (n_body[3][0][1], n_body[3][1][1]),

@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `4fb827cbdcaa99cd…`, `network-design.md` `887f505e8b433c1d…` and `light-client-requirements.md` `8cc2ee2788f4f81d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `c99b83a890251678…`, `network-design.md` `f26a457bafe8996e…` and `light-client-requirements.md` `b8f954d79adda457…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -450,18 +450,19 @@ d4ea8a0c8dcfc852aa6a02010350f217bc86de45dab740e765e1608109db
 d82f611b0794ac9c32c37558208410def778a5de3a25991aba399716bc8eccfd
 a9ad57d4ea8a0c8dcfc852aa6a0250af83c0b777b81bf35d69ddc64c1b1917
 ```
-**Query, consent, and the selector's selection_basis claim (request 4) — the normal record's worked query** (259 bytes, length prefix included):
+**Query, consent, and the selector's selection_basis claim (request 4) — the normal record's worked query** (294 bytes, length prefix included):
 
 ```
-000000ff820483a60158208410def778a5de3a25991aba399716bc8eccfda9ad
+00000122820483a70158208410def778a5de3a25991aba399716bc8eccfda9ad
 57d4ea8a0c8dcfc852aa6a0258206bcf8a3e8899fc206bc603744414d58b01db
 857986d82f611b0794ac9c32c375035820e583bc9b190ee9eff334cb1d21a75e
-128105cbcaf366e955766750a09bcb0ba5045820ecf4f5edfe42c7cbfdacd64b
-5d0a91b03854278e824881c71d7abff5e82b389b050306582056a295563ed967
-b8679c9458ad1f140f6462b6d46a7e77a00683a4fbe9435b868443a10127a0f6
-58400541785e5022ed97927c9bba0e403b5a3443e505c426e5b3b555061b0e49
-f9f5ecf597f82baf3ddcc798179c0387f3e03abf3a51bdefee9f905f540da200
-ae0700
+128105cbcaf366e955766750a09bcb0ba5045820340a209da752873ace712dc9
+d18c1241828d7fb62cea7088f8a382df212be7e605030658206e8929881f4fef
+5cac9185fdc78abf443ddd8cc21e5186fd008a8614b0742edb07582096664cae
+c817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a8443a101
+27a0f65840bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b
+17a211c5a76aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f1
+71214b580600
 ```
 **CatalogQuery (request 5) — filtered to `rhtn-forum`** (37 bytes, length prefix included):
 
@@ -882,24 +883,24 @@ open demultiplexing decision; the bytes below are the objects alone.
 
 ```
 a3015820f37f5cf39c99688361915a219a05f5a2c1b70ab773e9adab41492983
-5fd3f82502582056a295563ed967b8679c9458ad1f140f6462b6d46a7e77a006
-83a4fbe9435b860358206157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22
+5fd3f8250258206e8929881f4fef5cac9185fdc78abf443ddd8cc21e5186fd00
+8a8614b0742edb0358206157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22
 c89d2b1fe2fea7b2985c
 ```
 **LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
 
 ```
-a30158206de2f5fd17003cce2d4ea0be0fa6557332031d6aad61e6fc7533e3db
-02b5c7330258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
+a30158203bbeba7f8b67b07cd016a8baf15e5fac4e56102d27afe1176033011d
+72d5fa330258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
 0c8dcfc852aa6a03a80158204384a2cc10f2d505660a16118457e9aeddee9438
 9abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8e
-ccfda9ad57d4ea8a0c8dcfc852aa6a03582056a295563ed967b8679c9458ad1f
-140f6462b6d46a7e77a00683a4fbe9435b8604020501078443a10127a0f65840
-0541785e5022ed97927c9bba0e403b5a3443e505c426e5b3b555061b0e49f9f5
-ecf597f82baf3ddcc798179c0387f3e03abf3a51bdefee9f905f540da200ae07
-098443a10127a0f6584029d4bc0f828201cd323742f594ad6ec3fc2ce4a6a47e
-d463150a53a68424031a2c178ce595ab8807dd32ac9fea024778317a6c76f0a9
-87ad0ad27dc326e47f090a00
+ccfda9ad57d4ea8a0c8dcfc852aa6a0358206e8929881f4fef5cac9185fdc78a
+bf443ddd8cc21e5186fd008a8614b0742edb04020501078443a10127a0f65840
+bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b17a211c5a7
+6aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f171214b5806
+098443a10127a0f658407cfad931463df064a2152cbdadbc5b72e734cb47f726
+f57dbae8cfa98f39521bdb4e2b756e7e37d6e4195e502f57073f30ce6039e34a
+321e4353f7025c53270d0a00
 ```
 
 ## Session traces (canonical bar 9's trace class)
@@ -932,4 +933,5 @@ a sequence of events with the required actions.
 | TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
 | TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | disavow the direct subordinate on the ingress branch, reason 5, without prejudice; the memo terminates here (§10.2, §4.3) — the confirmed complement of TR20: the detector cuts the one edge it has authority over, and the disavowal is an ordinary transaction, not a memo field |
 | TR23 | a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in | drop it — no table write, no forwarding (§10.2) — a memo never leaves its subnet, and the privacy property only holds if every receiver enforces it: forwarding would carry the memo across the boundary the argument rests on |
+| TR24 | a type-4 request arrives whose query field 7 names a different verifier | close the stream: no response, no processing (§5.6) — the subject's consent confines the query to the one verifier field 7 names, and a verifier processing a query not addressed to it turns the consent back into bearer paper |
 

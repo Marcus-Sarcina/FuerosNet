@@ -934,9 +934,13 @@ fn schema_check(ctx: &Ctx, kind: &str, item: &Item) -> Result<(), String> {
                 Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
                 _ => return Err("no qid".into()),
             };
-            let f15 = map_without_key(b, 6).ok_or("fields 1-5")?;
+            let f15 = map_without_key(b, 6).ok_or("fields 1-5 and 7")?;
             if sha(&f15).to_vec() != qid {
                 return Err("query_id does not recompute".into());
+            }
+            match map_get(m, 7) {
+                Some(Item::Bytes(v)) if v.len() == 32 => {}
+                _ => return Err("field 7 (addressed verifier) required".into()),
             }
             if let Some(v) = map_get(m, 5).and_then(as_uint) {
                 if v > 65535 {

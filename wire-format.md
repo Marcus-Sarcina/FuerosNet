@@ -1348,9 +1348,21 @@ VerificationQuery = {
                        ;   basis — it has not evaluated. Without it a mismatched
                        ;   engine compares anyway and signs a `no-match`
                        ;   indistinguishable from an identity mismatch
-  6: bstr .size 32     ; query_id — SHA-256 of the canonical CBOR of THIS MAP
-                       ;   WITH FIELD 6 ABSENT (fields 1-5 only), then stored
+  6: bstr .size 32,    ; query_id — SHA-256 of the canonical CBOR of THIS MAP
+                       ;   WITH FIELD 6 ABSENT (fields 1-5 and 7), then stored
                        ;   here: a map cannot contain its own hash
+  7: keyhash           ; the verifier this query is addressed to
+                       ;   [author, 2026-09-03]. REQUIRED. A verifier MUST
+                       ;   reject, before any processing, a query whose field
+                       ;   7 is not its own keyhash: the subject's consent
+                       ;   signs query_id, field 7 is inside it, and the
+                       ;   consent therefore confines the profile and the
+                       ;   ceremony metadata to the one verifier the selector
+                       ;   named — without it the consent is bearer paper,
+                       ;   authenticating the same query to any prior
+                       ;   counterparty the selector cares to reach.
+                       ;   Inside a Recovery block, field 7 MUST equal field 2:
+                       ;   the querier is the verifier (design §9.1)
 }
 
 VerifierResponse = {
@@ -1759,7 +1771,15 @@ own knowledge** — computed locally, provable to nobody, owed to nobody
 **Where the initial bundles surface no common acquaintance, the parties go
 fishing**: either may propose further candidates from their own history so the
 other can test them against tiers 1–4 — an exchange over the ceremony's direct
-channel, carried by no wire object and recorded nowhere. **After common
+channel, carried by no wire object and recorded nowhere. **A fishing proposal
+is a bundle augmentation** [author, 2026-09-03]: proposing a candidate from
+your own history is the same disclosure decision the bundle was, made
+explicitly, and a client stops revealing once a locally adjustable number of
+responsive candidates is found. **After the bundle, quality filtering stops**:
+every mutually reachable candidate is accepted if available, so a party
+declining available candidates to draw more names out is visible as exactly
+that — the proposing side can see whether its offers are unavailable or
+refused. **After common
 acquaintances are exhausted, the selector fills the remaining slots at its own
 discretion** from the counterparty's pool; responses from strangers are weak
 evidence and are marked as such (§5.5).
@@ -1892,8 +1912,17 @@ assertion that comparison ran [2026-09-02].
 ### 5.6 Consent is signed over the query id
 
 `query_id = SHA-256(canonical CBOR of the VerificationQuery with field 6 absent)` —
-the map of fields 1–5, hashed, then stored as field 6. Hashing a map that contains
+the map of fields 1–5 and 7, hashed, then stored as field 6. Hashing a map that contains
 the hash is unconstructible.
+
+**The addressed verifier is inside the hash, deliberately** [author,
+2026-09-03]: field 7 names the one verifier this query may reach, the consent
+signs the id that names it, and a receiving verifier rejects a query not
+addressed to it before any processing. One consent per verifier follows —
+`query_id` differs per addressee — which is what makes the consent an
+authorization instead of bearer paper. Witnesses must observe all
+participants; verifiers are drawn from a wider pool and need not, which is
+why the confinement sits here and not on the witness path.
 
 **The template version is inside the hash, deliberately**. The
 subject consents to a comparison, and *under which scheme* is part of what they are
@@ -1912,7 +1941,7 @@ for no verification benefit.
 array `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's
 consent beside it, never inside it, and the selector's `selection_basis` claim.
 Consent cannot be a query field: it signs
-`query_id`, which hashes fields 1–5, so placing it in the map it authorises would be
+`query_id`, which hashes fields 1–5 and 7, so placing it in the map it authorises would be
 the §5.6 circularity again one level up. The verifier checks the consent against
 the query's own `query_id` before anything else; **a query arriving without consent
 is rejected**, which is what field 7's rule already required and the wire could not
@@ -1933,9 +1962,32 @@ rejected — otherwise field 2 chooses its own rate-limit bucket.
 
 **The successful reply body is a single `VerifierResponse`** [2026-09-02],
 framed as every reply is (§9.2). A malformed query — consent absent or
-failing, recomputed `query_id` mismatching — is answered by **closing the
+failing, recomputed `query_id` mismatching, field 7 naming a different
+verifier — is answered by **closing the
 stream**: no error schema exists, and no signed response is fabricated for
 input that is not evidence.
+
+**A response about a subject is also delivered to that subject** [author,
+2026-09-03]: the verifier sends a copy of its signed `VerifierResponse` to the
+subject over the association the capture-key grant already establishes
+(§7.3, design §7.5.2). The subject consented to the query, so the copy
+disclosed nothing new — and it is what makes the finalization veto real: a
+subject holding a response withholds its envelope signature from a proposed
+body that omits it (design §7.4.2). Suppression then requires both
+participants, and buys a visibly thin record (§5.2).
+
+**A claimed `met` the verifier's own records refute is answered `unavailable`**
+[author, 2026-09-03]: `met` names the selector's relationship to this
+verifier, which the verifier can check locally — a false claim voids the
+selection premise, and a false `met` is the same as not available. No other
+basis value is verifier-checkable, and none is endorsed by answering: see
+field 10's carriage rule below.
+
+**Field 10 in the signed payload is carriage, not endorsement** [author,
+2026-09-03]: the verifier's signature binds the selector's claim against later
+alteration — the `nominated_by` pattern — and policy MUST NOT weight the claim
+more heavily for sitting inside a verifier signature. Evaluation of the claim
+is the reader's, by their own recognition of the selector.
 
 ### 5.7 Who can verify what, the property is holder-relative
 

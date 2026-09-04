@@ -8287,3 +8287,22 @@ retention bound above the hypervisor, hygiene below it. A commissioned
 analysis records where the operator-key-on-node assumption is
 load-bearing: session authentication, the ten-hour currency cadence, and
 the sibling issuance ladder.
+
+### 2026-09-03 (cycle 2, adversarial: the malicious counterparty)
+
+Five findings ruled, and the ceremony evidence layer gained the two legs
+its defences had assumed. Verifier responses now reach the subject as well
+as the querier — over the association the capture-key grant already
+creates — so the finalization veto the substitution analysis always cited
+is real: suppression requires both participants and buys only a visibly
+thin record. The subject's consent is no longer bearer paper: the query
+names its one addressed verifier in a new field inside the query_id hash,
+so consent confines the profile to the verifier the selector actually
+named, one consent per verifier; the fixtures' three queries now share one
+profile, as the pinning rule always intended, and differ by addressee.
+Three smaller rulings: a client refuses to sign a record attributing to it
+a witness it did not nominate; a fishing proposal is a bundle augmentation
+under the same curation, stopping at an adjustable count of responsive
+candidates, with post-bundle cherry-picking visible to the party being
+fished; and the verifier-signed selection basis is carriage, not
+endorsement, with a locally refutable false "met" answered as unavailable.

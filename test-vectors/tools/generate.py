@@ -834,20 +834,24 @@ def witness_entry(w, nominated_by, bits):
 npr_witnesses = [witness_entry(w, alice if i % 2 == 0 else bob, (7, 3, 5)[i % 3])
                  for i, w in enumerate(W16)]
 
-def vquery(subject, querier, precommit, profile_seed, tplv):
+def vquery(subject, querier, precommit, profile_seed, tplv, verifier):
+    # field 7 (addressed verifier) is inside the hash: query_id covers the
+    # map with field 6 absent, i.e. fields 1-5 and 7 (wire s5.6, 2026-09-03)
     prof = H(profile_seed)
-    q15 = e_map([(e_uint(1), e_bstr(subject.keyhash)),
-                 (e_uint(2), e_bstr(querier.keyhash)),
-                 (e_uint(3), e_bstr(precommit)),
-                 (e_uint(4), e_bstr(prof)),
-                 (e_uint(5), e_uint(tplv))])
-    qid = H(q15)
+    q157 = e_map([(e_uint(1), e_bstr(subject.keyhash)),
+                  (e_uint(2), e_bstr(querier.keyhash)),
+                  (e_uint(3), e_bstr(precommit)),
+                  (e_uint(4), e_bstr(prof)),
+                  (e_uint(5), e_uint(tplv)),
+                  (e_uint(7), e_bstr(verifier.keyhash))])
+    qid = H(q157)
     full = e_map([(e_uint(1), e_bstr(subject.keyhash)),
                   (e_uint(2), e_bstr(querier.keyhash)),
                   (e_uint(3), e_bstr(precommit)),
                   (e_uint(4), e_bstr(prof)),
                   (e_uint(5), e_uint(tplv)),
-                  (e_uint(6), e_bstr(qid))])
+                  (e_uint(6), e_bstr(qid)),
+                  (e_uint(7), e_bstr(verifier.keyhash))])
     return qid, full
 
 def consent_over(qid, subject):
@@ -876,9 +880,12 @@ def classical_response(verifier, subject, qid, consent, result,
 
 npr_precommit = H(b'rhtn-test-vectors:normal-ceremony-precommitment')
 npr_verifiers = sorted([IDS['c1'], IDS['c2'], IDS['c3']], key=lambda i: i.keyhash)
-npr_q0, npr_query0 = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-0', 3)
-npr_q1, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-1', 3)
-npr_q2, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile-2', 3)
+# One profile per ceremony (the pre-commitment pins it); the three queries
+# differ by their addressed verifier - field 7 - which is what makes their
+# query_ids distinct (2026-09-03; previously three profiles stood in).
+npr_q0, npr_query0 = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile', 3, npr_verifiers[0])
+npr_q1, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile', 3, npr_verifiers[1])
+npr_q2, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile', 3, npr_verifiers[2])
 npr_responses = [
     classical_response(npr_verifiers[0], alice, npr_q0, consent_over(npr_q0, alice),
                        0, basis=0, tplv=3, sb=0),   # match, photo, met
@@ -933,7 +940,7 @@ npr_part = presented(npr_env, npr_slots, {'location', 'p1.retention'})
 # the empty array is never encoded). Both fork alice's and bob's chains, which
 # the archive-as-DAG permits.
 fin_precommit_a = H(b'rhtn-test-vectors:fin-nomatch-precommitment')
-fin_qa, _ = vquery(alice, bob, fin_precommit_a, b'rhtn-test-vectors:fin-nm-profile', 3)
+fin_qa, _ = vquery(alice, bob, fin_precommit_a, b'rhtn-test-vectors:fin-nm-profile', 3, IDS['c4'])
 fin_nm_resp = classical_response(IDS['c4'], alice, fin_qa, consent_over(fin_qa, alice),
                                  1, basis=0, tplv=3, sb=0)   # no-match
 fin_nm_slots, fin_nm_root = disclosure_set('fin-nomatch', npr_values)
@@ -1671,18 +1678,20 @@ Envelope ({len(fin_ab_env)} bytes):
 rec_precommit = H(b'rhtn-test-vectors:recovery-ceremony-precommitment')
 rec_profile = H(b'rhtn-test-vectors:recovery-fuzzed-profile')
 REC_TPL_V = 3
-rq15 = e_map([(e_uint(1), e_bstr(alice2.keyhash)),
-              (e_uint(2), e_bstr(carol.keyhash)),   # querier IS the verifier (design s9.1)
-              (e_uint(3), e_bstr(rec_precommit)),
-              (e_uint(4), e_bstr(rec_profile)),
-              (e_uint(5), e_uint(REC_TPL_V))])
-rec_qid = H(rq15)
+rq157 = e_map([(e_uint(1), e_bstr(alice2.keyhash)),
+               (e_uint(2), e_bstr(carol.keyhash)),   # querier IS the verifier (design s9.1)
+               (e_uint(3), e_bstr(rec_precommit)),
+               (e_uint(4), e_bstr(rec_profile)),
+               (e_uint(5), e_uint(REC_TPL_V)),
+               (e_uint(7), e_bstr(carol.keyhash))])  # field 7 = field 2 in Recovery
+rec_qid = H(rq157)
 rec_query = e_map([(e_uint(1), e_bstr(alice2.keyhash)),
                    (e_uint(2), e_bstr(carol.keyhash)),
                    (e_uint(3), e_bstr(rec_precommit)),
                    (e_uint(4), e_bstr(rec_profile)),
                    (e_uint(5), e_uint(REC_TPL_V)),
-                   (e_uint(6), e_bstr(rec_qid))])
+                   (e_uint(6), e_bstr(rec_qid)),
+                   (e_uint(7), e_bstr(carol.keyhash))])
 
 # Consent: COSE_Sign1, Ed25519 only, no kid; payload = RAW 32 bytes of query_id.
 con_prot = sig_protected(-8)
@@ -1758,7 +1767,7 @@ admits (§4.1). The old key signs the successor statement, never the Recovery
 map. Field 7 presents alice's old chain head (the departure); the locator opens
 series 11 at counter 0.
 
-`VerificationQuery` ({len(rec_query)} bytes; field 6 is the SHA-256 of fields 1–5):
+`VerificationQuery` ({len(rec_query)} bytes; field 6 is the SHA-256 of fields 1–5 and 7; field 7 = field 2, the querier being the verifier):
 
 ```
 {hexblock(rec_query)}
@@ -2387,6 +2396,7 @@ a sequence of events with the required actions.
 | TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
 | TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | disavow the direct subordinate on the ingress branch, reason 5, without prejudice; the memo terminates here (§10.2, §4.3) — the confirmed complement of TR20: the detector cuts the one edge it has authority over, and the disavowal is an ordinary transaction, not a memo field |
 | TR23 | a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in | drop it — no table write, no forwarding (§10.2) — a memo never leaves its subnet, and the privacy property only holds if every receiver enforces it: forwarding would carry the memo across the boundary the argument rests on |
+| TR24 | a type-4 request arrives whose query field 7 names a different verifier | close the stream: no response, no processing (§5.6) — the subject's consent confines the query to the one verifier field 7 names, and a verifier processing a query not addressed to it turns the consent back into bearer paper |
 """)
 
 # ================================================================ corpus.json
@@ -2875,6 +2885,7 @@ for trid, seq, actions, cite in [
     ('TR21', 'an ordinary memo from below arrives; the receiver position is a prefix of the field-2 path', ['forward_rootward', 'no_cycle'], '§10.2'),
     ('TR22', 'a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available', ['disavow_ingress_subordinate', 'reason_5_without_prejudice', 'memo_terminates'], '§10.2, §4.3'),
     ('TR23', 'a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in', ['drop', 'no_table_write', 'no_forward'], '§10.2'),
+    ('TR24', 'a type-4 request arrives whose query field 7 names a different verifier', ['close_stream', 'no_response', 'no_processing'], '§5.6'),
 ]:
     exp = {'actions': actions, 'cite': cite}
     if trid in TRACE_ONE_OF:

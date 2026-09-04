@@ -52,6 +52,13 @@ that is noted in place.
   the attestation rests entirely on their nominees (design §7.1.1). This
   is not a validity condition — such a record is well-formed — which is why the
   client has to surface it.
+- **Refuse to sign a record attributing to you a witness you did not nominate**
+  [author, 2026-09-03]. Your client knows exactly which witnesses it nominated;
+  an entry claiming `nominated_by = you` outside that set is the counterparty
+  dressing its own curation in your name, and it defeats the split check above
+  from inside an apparently balanced record. The wire cannot check this
+  (`nominated_by` is a recorded claim) — you can, and you are the only party
+  who can.
 
 #### 1.0.1 Acting as a witness
 
@@ -145,6 +152,22 @@ that is noted in place.
   basis honestly (`wire-format.md` §5.5). **Review who was selected for you
   before signing**: the record will carry those responders forever, and you
   cannot repair it.
+- **A fishing proposal from your own history is a bundle augmentation**
+  [author, 2026-09-03] — the same disclosure decision as the original bundle,
+  made explicitly, through the same interface that curates the bundle. **Stop
+  revealing records once a locally adjustable number of responsive candidates
+  is found**, and show the user whether the candidates they offer are
+  genuinely unavailable or are being declined: after the bundle, the working
+  assumption is that **every mutually reachable candidate is accepted if
+  available** — quality filtering stops with the initial bundle, so a
+  counterparty declining available candidates to pull more names out of you
+  is visible as exactly that.
+- **Withhold your envelope signature from a proposed body omitting a verifier
+  response you hold** [author, 2026-09-03]. Verifiers deliver a copy of each
+  response about you to you (`wire-format.md` §5.6); a proposed final record
+  missing one is the counterparty editing your evidence, and your signature is
+  the veto (design §7.4.2). A response you never received is the thin-record
+  case and signs normally.
 - **Compute *n* over the bundle handed to you, and treat it as your
   counterparty's claim** (`wire-format.md` §5.2 and `wire-format.md` §5.4). The bundle is theirs to
   curate — records from any of their series, no chaining, no completeness — so
