@@ -8506,3 +8506,20 @@ horizon is therefore unthrottled not because the metric rates it highly but
 because the metric is not what is being asked there; past the horizon the
 generic question is the only one left, which is why throttling begins
 exactly at that boundary.
+
+### 2026-09-04 (consistency sweep against the trust landscape)
+
+A directed sweep of the documents and all eight models against the
+landscape decision. One document conflict: the trust consequences of
+disavowal were explained by a peering capacity the landscape had retired,
+and the conclusion now rests on the boundary instead — losing a patron edge
+drops a node out of the horizons it held through that patron, from the
+unrationed side to the rationed one. One reconciliation: equal landscape
+distance is not interchangeability, since attestation is a separate axis,
+and a met counterparty and an unmet horizon member remain different
+security facts wherever attestation is what is asked. Among the models, the
+conservation experiment was found testing the wrong region — its fake
+identities sat inside the horizon, where the metric does not ration — and
+is rebuilt around identities reached only by peering from a horizon member:
+visible, beyond the horizon, behind one cut, which is the setting the
+conservation sentence is about.

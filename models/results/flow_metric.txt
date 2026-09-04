@@ -12,23 +12,24 @@ E2: the individual cut bound (design 16.2, 17.3)
   fake region of  341 identities: best individual score 10 <= boundary capacity 10: HOLDS
   population never moved the individual bound: CONFIRMED
 
-E3: setwise conservation, observer-visible (design 16.2)
-   4 visible fakes:  independent-sum =   40   conserving joint = 4   visible region ceiling = 10
-   8 visible fakes:  independent-sum =   80   conserving joint = 8   visible region ceiling = 10
-  16 visible fakes:  independent-sum =  160   conserving joint = 10   visible region ceiling = 10
+E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)
+   4 peered fakes beyond the horizon:  independent-sum =   40   conserving joint = 4   cut through the horizon member = 10
+   8 peered fakes beyond the horizon:  independent-sum =   80   conserving joint = 8   cut through the horizon member = 10
+  16 peered fakes beyond the horizon:  independent-sum =  160   conserving joint = 10   cut through the horizon member = 10
   general demands (each asks its own standing): individual sum = 160, simultaneously deliverable = 10, cut = 10
+  the same 16 peered to a node OUTSIDE the horizon: 0 visible -- invisibility is the conservative direction
   scarce-capacity allocation: available flow ranks first (the metric itself), then the
   shorter path, then consideration order for true ties -- independent of graph
   construction order (reference policy §16.4)
-  a deep fake subtree of 85 adds 0 visible identities -- invisibility is the conservative direction
-  independent-sum grows with visible population (the broken 0.8.3 reading);
-  the conserving joint saturates at the visible ceiling; invisible identities cannot inflate it: CONFIRMED
+  independent-sum grows with the population beyond the cut (the broken 0.8.3 reading);
+  the conserving joint saturates at the cut, and identities behind an invisible edge
+  cannot inflate it: CONFIRMED
 
 E4: edge-influence fanout, two-ended peering (design 16.3.1)
-  48 cross-tree placements enumerated over 14 observers (worst-case aware)
-  observers who can SEE the edge:      min 9, median 12, max 14
-  observers whose standing CHANGED:    min 6, median 8, max 9
-  best placement 'A'<->'B': 9 of 14 observers influenced by ONE edge (max gain 10)
+  42 cross-tree placements enumerated over 13 observers (worst-case aware)
+  observers who can SEE the edge:      min 8, median 12, max 13
+  observers whose standing CHANGED:    min 5, median 6, max 7
+  best placement 'A'<->'B': 7 of 13 observers influenced by ONE edge (max gain 10)
   seeing the edge does NOT imply being influenced -- an observer already holding standing
   to the far peer through its own tree is unaffected; the equality an earlier version
   asserted was an artifact of a one-ended attacker.

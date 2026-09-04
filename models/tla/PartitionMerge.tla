@@ -101,9 +101,9 @@ ViewPatron(u, c) ==
 
 \* Communication is possible between u and v when their link is not
 \* severed.  In the real system adjacency is the sessions a node holds
-\* anyway (wire Section 10.1); at this model's scale (four nodes) every
-\* pair that isn't partitioned can exchange frames, and the two-edge
-\* horizon contains everyone -- so the h_store storage test is always
+\* anyway (wire Section 10.1); at this model's scale (three nodes, see the
+\* .cfg) every pair that isn't partitioned can exchange frames, and the
+\* two-edge horizon contains everyone -- so the h_store storage test is always
 \* satisfied and is deliberately NOT modelled.  (Horizon SCOPING is
 \* exercised quantitatively by the flow simulator's E4; this model is
 \* about ordering, loss and partition.)

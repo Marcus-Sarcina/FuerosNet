@@ -4617,9 +4617,16 @@ exposed to.** Policy-weighted, not mandated.
 
 #### 12.7.6 Trust consequences
 No special-casing needed. A disavowed node keeps everything flowing from below,
-since those edges are untouched, and loses most external standing, since
-observers now reach it only through peering edges whose flow capacity §16.3
-deliberately sets low. Internal cohesion retained, external standing reduced.
+since those edges are untouched, and loses most external standing — **for a
+landscape reason rather than a capacity one** [2026-09-04]. Losing the patron
+edge **drops it out of the horizons it occupied through that patron**, so for
+those observers it moves from distance 1, where the metric does not ration and
+hierarchy-specific privileges apply, to distance 2 or beyond, where the metric
+is the only thing answering and does ration (§16.2.1). The cut into it shrinks
+by the removed edge at the same time. *(An earlier reading credited §16.3's
+low peering capacity; the metric no longer distinguishes edge kinds, and the
+horizon boundary is what does the work.)* Internal cohesion retained, external
+standing reduced.
 
 #### 12.7.7 Re-rooting cost
 The disavowed node's subtree had anchor-relative paths (§12.6.2). Those paths
@@ -5770,6 +5777,19 @@ the hierarchy-specific privileges are decided by position rather than by
 flow. Past the horizon the generic question is the only one left, and the
 metric is what answers it — which is why *that* is exactly where throttling
 begins.
+
+**Distance is not the only ordering, and equal distance is not
+interchangeability.** §16.1 weighs a connection by being *closest **and**
+best-attested*, and attestation is a separate axis this landscape does not
+carry: a counterparty you have **met** and a horizon member you have
+**not** sit at the same distance 1 for generic trust while remaining
+different security facts everywhere attestation is what is being asked.
+Verifier selection ranks the met candidate first for exactly that reason
+(§8.1.2), and `selection_basis` encodes the two separately rather than
+folding them (`wire-format.md` §5.5, assumption A23). **A landscape
+distance answers "how far", never "how well attested"** — reading equal
+distance as equal standing would collapse the very distinction A23 depends
+on.
 
 **Beyond the horizon, trust flows equally over the hierarchical and the
 proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are

@@ -13,12 +13,13 @@ review plan's Stage 1, have been argued but never run:
   E2. Under a flow metric, a region behind a fixed boundary is bounded by
       that boundary's capacity REGARDLESS of the region's population
       (the single-observer cut bound; design §16.2, §17.3).
-  E3. Setwise conservation (design §16.2, normative since 2026-09-03):
-      for any SET of identities behind a cut, their SIMULTANEOUSLY USABLE
-      standing totals at most the cut's capacity -- one computation, shared
-      capacity.  Evaluating each identity with its own independent max-flow
-      computation instead lets the same capacity count once per identity,
-      and the aggregate grows with population.
+  E3. Setwise conservation (design §16.2, normative since 2026-09-03),
+      tested BEYOND THE HORIZON where the metric actually rations
+      (§16.2.1): for any SET of identities behind a cut, their
+      SIMULTANEOUSLY USABLE standing totals at most the cut's capacity --
+      one computation, shared capacity.  Evaluating each identity with its
+      own independent max-flow instead lets the same capacity count once
+      per identity, and the aggregate grows with population.
   E4. Edge-influence fanout (design §16.3.1, the coverage bound): one
       acquired peering edge is visible inside both peers' horizons, so it
       helps every observer whose horizon contains a peer -- the cost of
@@ -50,6 +51,16 @@ understate an acquired edge's coverage several-fold.  The separation below
 is the correction; the three concepts now have three representations:
 `scope_children`/`scope_adjacency` (scope), `FlowGraph` capacities (flow),
 and `visible_flow_subgraph` (visibility).
+
+WHAT THIS FILE DOES NOT MODEL, stated so the omissions are visible:
+  * PROOF-OF-PRESENCE EDGES have no separate representation.  §16.2.1 puts
+    them in the same class as peering edges -- same distance rules, same
+    capacity -- so peering edges stand in for both, and nothing here turns
+    on telling them apart.  A model that priced ATTESTATION (met vs merely
+    in-horizon, §16.2.1's closing paragraph) would need them distinct.
+  * ARCHIVE EVIDENCE is absent, faithfully: §16.2.1 makes an archive
+    adoption-time REVIEW rather than a standing edge, so it creates no
+    capacity for a flow calculation to find.
 
 This file has NO dependencies outside the Python 3 standard library.  The
 max-flow algorithm is implemented here, in the open, so that reviewing this
@@ -743,63 +754,76 @@ def attach_fake_fan(g, boundary_node, width):
 
 
 def experiment_setwise(rng, report):
-    report.append("E3: setwise conservation, observer-visible (design 16.2)")
-    base, nodes, children = build_tree(rng, depth=2, fanout=3)
-    observer = nodes[0]                            # the root observes
-    boundary = children[observer][0]               # a direct child (1 hop)
+    """E3, rebuilt for the corrected trust landscape (design §16.2.1).
+
+    WHERE CONSERVATION ACTUALLY BITES.  The metric does not ration inside
+    the horizon -- there a node is unthrottled and hierarchy-specific
+    position, not flow, decides what it gets.  So a fake region placed
+    INSIDE the observer's horizon (which an earlier version of this
+    experiment did, to answer a reviewer's visibility objection) tests
+    conservation in the one region where the design says conservation is
+    not the operative constraint.
+
+    THE FAITHFUL CONSTRUCTION.  Beyond the horizon an observer can evaluate
+    only what it can SEE, and what it can see out there is a peering
+    counterparty of a horizon member (§16.3.1's visibility rule).  So the
+    attacker here obtains PEERING EDGES from one horizon member H to a fan
+    of identities that hold no position in the observer's subnet at all.
+    Those identities are:
+      * VISIBLE -- H is in the observer's horizon, so the observer sees
+        each peering record and the far endpoint with it;
+      * BEYOND the horizon -- peering confers no scope (§6.3), so they are
+        at landscape distance 2 and the metric DOES ration them;
+      * behind ONE CUT -- everything reaches them through H.
+    That is exactly the setting §16.2's sentence is about.
+    """
+    report.append("E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)")
+    # depth 3: the root's two-edge horizon reaches its grandchildren, so
+    # great-grandchildren exist OUTSIDE it -- needed for the invisibility
+    # case below, which peers to a node the observer cannot see.
+    base, nodes, children = build_tree(rng, depth=3, fanout=3)
+    observer = nodes[0]                       # the root observes
+    scope = scope_adjacency(nodes, children)
+    hz = horizon(scope, observer)
+    inside = children[observer][0]            # a horizon member: the cut vertex
+    outside = next(n for n in nodes if n not in hz)   # NOT in the horizon
+
     joints = []
     for width in [4, 8, 16]:
-        g = base.copy()
-        fakes = attach_fake_fan(g, boundary, width)
-        # Rebuild scope adjacency to include the new fan as boundary's
-        # children (siblings of each other), so the horizon reflects them.
-        kids = {u: list(children.get(u, [])) for u in children}
-        kids.setdefault(boundary, [])
-        kids[boundary] = list(kids[boundary]) + fakes
-        for fkid in fakes:
-            kids.setdefault(fkid, [])
-        scope = scope_adjacency(list(g.cap.keys()), kids)
-        vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
-        # Only fakes actually inside the observer's visible graph count --
-        # the observer cannot evaluate identities it does not hold.
+        # The attacker's identities hold no position in the subnet; they are
+        # reached only by peering edges from the horizon member `inside`.
+        fakes = [f"PEERFAKE{i}" for i in range(width)]
+        peer_edges = [(inside, f, PEER_CAP) for f in fakes]
+        vis = visible_flow_subgraph(base, scope, observer, peer_edges)
         visible_fakes = [f for f in fakes if f in vis.cap]
-        indep_sum = sum(score_independent(vis, observer, t, scope)
+        indep_sum = sum(score_independent(vis, observer, t, scope, peer_edges)
                         for t in visible_fakes)
-        joint = admit_reference_order(vis, observer, visible_fakes,
-                                      demand=1, scope_adj=scope)[1]
-        ceiling = region_ceiling(vis, observer, boundary, scope)
+        joint = admit_reference_order(vis, observer, visible_fakes, demand=1,
+                                      scope_adj=scope, peer_edges=peer_edges)[1]
+        ceiling = region_ceiling(vis, observer, inside, scope, peer_edges)
         report.append(
-            f"  {len(visible_fakes):>2} visible fakes:  independent-sum = "
-            f"{indep_sum:>4}   conserving joint = {joint}   "
-            f"visible region ceiling = {ceiling}")
-        assert joint <= ceiling, "aggregate exceeded the visible cut"
-        joints.append((len(visible_fakes), joint, ceiling))
+            f"  {len(visible_fakes):>2} peered fakes beyond the horizon:  "
+            f"independent-sum = {indep_sum:>4}   conserving joint = {joint}"
+            f"   cut through the horizon member = {ceiling}")
+        assert len(visible_fakes) == width, "peered fakes must all be visible"
+        assert joint <= ceiling, "aggregate exceeded the cut"
+        joints.append((width, joint, ceiling))
     for n, joint, ceiling in joints:
         if n >= ceiling:
             assert joint == ceiling, "saturated region below its ceiling"
 
     # --- The GENERAL setwise-conservation statement (design §16.2) ---------
-    # The unit-demand count above is a narrower property than the design's
-    # wording ("simultaneously usable standing").  Here every candidate
-    # demands its OWN INDIVIDUAL STANDING -- each asking for everything it
-    # could get alone -- and the total deliverable is checked against the
-    # cut.  This is the strongest reading of the sentence and the one a
-    # cross-family review asked for.
-    g = base.copy()
-    fakes = attach_fake_fan(g, boundary, 16)
-    kids = {u: list(children.get(u, [])) for u in children}
-    kids.setdefault(boundary, [])
-    kids[boundary] = list(kids[boundary]) + fakes
-    for fkid in fakes:
-        kids.setdefault(fkid, [])
-    scope = scope_adjacency(list(g.cap.keys()), kids)
-    vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
-    visible_fakes = [f for f in fakes if f in vis.cap]
-    individual = {t: score_independent(vis, observer, t, scope)
-                  for t in visible_fakes}
+    # Every candidate demands its OWN INDIVIDUAL STANDING -- each asking for
+    # everything it could get alone -- which is the strongest reading of
+    # "simultaneously usable standing".
+    fakes = [f"PEERFAKE{i}" for i in range(16)]
+    peer_edges = [(inside, f, PEER_CAP) for f in fakes]
+    vis = visible_flow_subgraph(base, scope, observer, peer_edges)
+    individual = {t: score_independent(vis, observer, t, scope, peer_edges)
+                  for t in fakes}
     total_individual = sum(individual.values())
-    delivered = deliverable_flow(vis, observer, individual, scope)
-    ceiling = region_ceiling(vis, observer, boundary, scope)
+    delivered = deliverable_flow(vis, observer, individual, scope, peer_edges)
+    ceiling = region_ceiling(vis, observer, inside, scope, peer_edges)
     report.append(
         f"  general demands (each asks its own standing): individual sum = "
         f"{total_individual}, simultaneously deliverable = {delivered}, "
@@ -808,6 +832,18 @@ def experiment_setwise(rng, report):
         "setwise conservation violated under general demands"
     assert total_individual > ceiling, \
         "test is vacuous unless demand exceeds the cut"
+
+    # --- INVISIBILITY is the conservative direction (design §16.3.1) -------
+    # The same fan, peered instead to a node OUTSIDE the observer's horizon:
+    # the observer cannot see those records at all, so the identities never
+    # enter its graph and cannot inflate anything.
+    far_edges = [(outside, f, PEER_CAP) for f in fakes]
+    vis_far = visible_flow_subgraph(base, scope, observer, far_edges)
+    leaked = [f for f in fakes if f in vis_far.cap]
+    report.append(
+        f"  the same {len(fakes)} peered to a node OUTSIDE the horizon: "
+        f"{len(leaked)} visible -- invisibility is the conservative direction")
+    assert leaked == [], "identities beyond an invisible edge leaked in"
 
     # --- The reference allocation rule, ALL THREE PASSES (design §16.4) ----
     # Pass 0: available flow ranks first -- it is the metric itself.
@@ -829,8 +865,6 @@ def experiment_setwise(rng, report):
         admitted, _ = admit_reference_order(g2, "obs", order, demand=2)
         return admitted
 
-    # Pass 0: the better-supported candidate wins despite being further away,
-    # under either consideration order.
     assert winner_flow_vs_distance(["A", "B"]) == ["A"], \
         "pass 0: available flow must outrank a shorter path"
     assert winner_flow_vs_distance(["B", "A"]) == ["A"], \
@@ -873,29 +907,13 @@ def experiment_setwise(rng, report):
         "  shorter path, then consideration order for true ties -- "
         "independent of graph")
     report.append("  construction order (reference policy §16.4)")
-    # Demonstrate the conservative direction: attaching a DEEP (invisible)
-    # fake subtree beyond the horizon does not raise the observer's joint.
-    g = base.copy()
-    near = attach_fake_fan(g, boundary, 16)
-    deep = attach_fake_region(g, boundary, width=4, depth=3)   # 3+ hops away
-    kids = {u: list(children.get(u, [])) for u in children}
-    kids.setdefault(boundary, [])
-    kids[boundary] = list(kids[boundary]) + near
-    for fkid in near:
-        kids.setdefault(fkid, [])
-    scope = scope_adjacency(list(g.cap.keys()), kids)
-    vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
-    deep_visible = [d for d in deep if d in vis.cap]
     report.append(
-        f"  a deep fake subtree of {len(deep)} adds {len(deep_visible)} "
-        f"visible identities -- invisibility is the conservative direction")
-    assert len(deep_visible) == 0, "deep fakes leaked into the horizon"
+        "  independent-sum grows with the population beyond the cut (the "
+        "broken 0.8.3 reading);")
     report.append(
-        "  independent-sum grows with visible population (the broken 0.8.3 "
-        "reading);")
-    report.append(
-        "  the conserving joint saturates at the visible ceiling; invisible "
-        "identities cannot inflate it: CONFIRMED")
+        "  the conserving joint saturates at the cut, and identities behind "
+        "an invisible edge")
+    report.append("  cannot inflate it: CONFIRMED")
     report.append("")
 
 

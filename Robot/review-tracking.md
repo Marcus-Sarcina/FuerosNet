@@ -4420,3 +4420,66 @@ privileges are decided by position. Past the horizon the generic question
 is the only one left, which is why throttling begins exactly there.
 
 No open items remain from the landscape exchange.
+
+## Consistency sweep of documents and models against the landscape (2026-09-04)
+
+Author-directed. Documents first, then all eight models.
+
+### Documents -- one real conflict, one reconciliation, references clean
+
+**§12.7.6 (trust consequences of disavowal) contradicted the ruling.** It
+explained a disavowed node's loss of external standing by "peering edges
+whose flow capacity §16.3 deliberately sets low" -- reasoning the landscape
+retired. The CONCLUSION survives for a better reason, now stated: losing
+the patron edge drops the node out of the horizons it occupied through that
+patron, so for those observers it moves from distance 1 (unrationed,
+hierarchy privileges) to distance 2+ (where the metric is the only thing
+answering and does ration), and the cut shrinks by the removed edge at the
+same time.
+
+**Reconciliation added at §16.2.1**: equal distance is NOT
+interchangeability. §16.1 weighs a connection by *closest AND best
+attested*, and attestation is a separate axis the landscape does not carry
+-- a counterparty you MET and a horizon member you have NOT are both at
+distance 1 for generic trust while remaining different security facts
+wherever attestation is asked. Verifier selection ranks met first (§8.1.2)
+and `selection_basis` encodes them separately (A23). Without this note a
+reader could collapse the distinction A23 depends on.
+
+**Checked and clean**: §4247 ("the horizon is a bounded set, not a trusted
+one") reinforces rather than conflicts; §17.1, §17.2, §17.3, §16.5, §16.6,
+§16.1 all consistent; the λ rows are about the REJECTED decay metric; the
+resource doc's flow-metric mention concerns external consumers outside the
+graph. No residual edge-kind capacity claims anywhere. References 0 of 1960.
+
+### Models -- one stale comment, one substantive rebuild
+
+**TLA+ / Tamarin (7 models): no landscape dependence.** Two horizon claims
+verified against the design (CurrencyEscalation's grandpatron-inside-h=2
+against §12.6.5.1; recovery.spthy's pointer to the flow simulator).
+PartitionMerge's comment said "at this model's scale (four nodes)" after
+the config was reduced to three -- fixed.
+
+**flow_metric.py E3 was testing the wrong region.** After the landscape
+correction, E3's fake fan sat INSIDE the observer's horizon -- where the
+design says the metric does not ration at all, so the experiment tested
+conservation in the one place conservation is not the operative constraint.
+(It got there honestly: an earlier reviewer objected that the fakes were
+invisible, and moving them inside the horizon fixed visibility at the cost
+of region.) **Rebuilt faithfully**: the attacker now obtains peering edges
+from ONE horizon member to a fan of identities holding no position in the
+subnet -- visible (the peer's record is visible inside the horizon
+member's horizon), beyond the horizon (peering confers no scope, so
+distance 2, throttled), and behind one cut. That is exactly §16.2's
+setting. Results: independent-sum 40/80/160 against a conserving joint of
+4/8/10 at a cut of 10; general demands 160 asked, 10 deliverable; and the
+same fan peered to a node OUTSIDE the horizon is 0-visible, the
+conservative direction.
+
+**Omissions now documented rather than silent**: the simulation has no
+separate PoP edge type (§16.2.1 puts PoP and peering in one class, so
+peering stands in for both -- but a model pricing ATTESTATION would need
+them distinct), and no archive evidence (faithful: §16.2.1 makes archives
+review, not standing edges).
+
+Eight seeds pass; all eight models green.
