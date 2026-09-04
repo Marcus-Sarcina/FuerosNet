@@ -684,7 +684,7 @@ distinct from §22's open questions about mechanisms that *are* specified.
   smallest end-site assignment RFC 6177 contemplates (it declines to fix a formal
   size and expects most sites to receive more) — and standing anti-abuse practice (Spamhaus lists IPv6 at /64; M3AAWG recommends
   it as the rate-limiting unit), with larger delegations a per-observer policy
-  choice (§16.1); the encoding is BGP NLRI form (RFC 4271 §4.3) — `[length_bits,
+  choice (§16.1); the encoding is BGP NLRI form (RFC 4271, section 4.3) — `[length_bits,
   truncated address bytes]` — with trailing bits zero as this document's
   canonical-form rule (RFC 4271 leaves trailing-bit values irrelevant), one
   logical prefix one encoding;
@@ -4351,8 +4351,9 @@ between neighbours rather than a round trip to a remote CA.
 
 **What would derive it:** the lifetime should be at most the expected time for a
 legitimate holder to notice a compromise and begin recovery, since that is
-exactly the window in which a thief holding a captured staple retains full
-capability. **That detection latency is unmeasured**, so the current value is
+exactly the window in which a thief holding a captured staple retains the
+key's full trust-bearing capability (routine use is bounded by supersession
+knowledge, not by expiry — the rule below the fail-open table). **That detection latency is unmeasured**, so the current value is
 *chosen*, not derived (§21).
 
 Concrete anchor for the choice: MIT Kerberos documents a ten-hour default ticket
@@ -5908,8 +5909,9 @@ Three independent mechanisms, none relying on topology rules:
 
 **All three bounds below are per-observer** (§16.3.1): an attacker's region is
 bounded by the edges *a given observer* can see into it, not by every edge that
-exists, so an attacker must work per-target rather than accumulate standing
-globally.
+exists — no standing accumulates globally, and the acquisition economics are
+§16.3.1's coverage bound: one visible edge helps every observer whose horizon
+contains it, never only one.
 
 1. **Face-to-face attestation** makes *identities* expensive. Proof of presence
    is the one resource an attacker cannot parallelise. This is the strongest
@@ -6007,9 +6009,9 @@ globally.
   that operator in **new** exchanges and become the endpoint legitimately. What it
   cannot do is reach a session it was never on the path for.
 
-  **And impersonation is a different class of operation from collection.** So the
-  position is not that this adversary is stopped; it is that **what the adversary
-  has to spend changes**. Passive bulk collection is
+  **And impersonation is a different class of operation from collection**, so
+  the position is not that this adversary is stopped; it is that **what the
+  adversary has to spend changes**. Passive bulk collection is
   what compelling a provider is *for* — scalable, deniable, invisible to the people it
   collects from — and the direct path denies it that for content, leaving impersonation
   instead: **per-target and prospective, never bulk and never retrospective**.

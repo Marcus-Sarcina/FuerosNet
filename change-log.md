@@ -8321,3 +8321,15 @@ durable. And the currency lifetime claim is cut to its real width: expiry
 bounds what a stolen credential can spend; the new supersession rule —
 fail-open is for ignorance, never knowledge — is what retires it from
 use, at every party that has verified the succession.
+
+### 2026-09-03 (pre-0.9 coherence and consistency pass)
+
+A directed sweep before the organisation pass. Three half-swept claims
+completed: §17.3's per-target preamble joins §16.3.1's coverage bound, the
+staple-window derivation names trust-bearing capability, and wire §13's
+vector item records the Rust runner's cross-implementation reproduction
+with its same-author limit and the unchanged independent-party bar. The
+infra Open item on gateway pre-evaluation aligned with P24's reduction.
+And the reference checker runs at zero for the first time — the nine
+standing manually-inspected flags were exemptions by another name, and
+every cross-document reference now names its document.

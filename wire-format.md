@@ -1229,8 +1229,8 @@ Field-for-field per design §8.1.
                        ;   field, so one logical record has one encoding, and a
                        ;   normal record with none is announced by key 4 and
                        ;   subtype regardless. ABSENT always on a formation
-  6: uint,             ; record subtype: 0 = normal, 1 = formation (design
-                       ;   §13.2). In the body, not disclosable: structurally
+  6: uint,             ; record subtype: 0 = normal, 1 = formation
+                       ;   (design §13.2). In the body, not disclosable: structurally
                        ;   load-bearing, and a formation record's absent keys 4
                        ;   and 5 announce it regardless
   ; key 7 (the seed-window ordinal) was RETIRED 2026-09-01 with deterministic
@@ -1299,7 +1299,7 @@ Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km.
                      ; radius_km is WITNESS-RELATIVE [author, 2026-09-03]:
                      ; the witness bounds the participant within radius_km of
                      ; ITSELF, and no coordinate is carried — interpretation
-                     ; is by recognition of the witness (design §7.6.2, §16.1)
+                     ; is by recognition of the witness (design §7.6.2, design §16.1)
 
 ; LOCATION METHOD REGISTRY, shared by Asserted.1 and Corroboration.2:
 ;   0 GNSS · 1 serving-cell · 2 network egress · 3 latency bound.
@@ -2203,7 +2203,7 @@ qualifying set and the asker makes progress within it.
 
 **The bound sits above the population, so truncation is the exception and not the
 mechanism.** A single answering node answers for at most **itself plus the ≤110
-users it serves** (design §11.5, §12.6.1), so a reply that truncates comes from a
+users it serves** (design §11.5, design §12.6.1), so a reply that truncates comes from a
 node holding more entries of one service type than it has owners to own them. The
 bound is per *answering node* and not per horizon — a Dunbar Org is larger (design
 §15.1), and no single node answers for all of it. **The continuation is a hint for an
@@ -2404,7 +2404,7 @@ address that stopped working, **with no explanation offered**.
 **So the answers are: an attestation, or nothing.** Code 1 says the responder
 cannot issue rather than inventing one, silence says the responder was not reached,
 and a caller receiving neither **fails closed** — which is design §9.0.2's
-requirement that the two be distinguishable, and §12.6.5's soft-fail argument.
+requirement that the two be distinguishable, and design §12.6.5's soft-fail argument.
 **What a caller can learn is a fork**: two patrons attesting competing claims is
 visible-but-unresolved, and that is the point (design §9.0.2).
 
@@ -2676,7 +2676,7 @@ meaning — and a repetition expresses nothing the order does not already say.
 
 **A peering record already carries this for peered nodes** (§4.4, `NetworkPoint` for
 both endpoints). The gap this record closes is the infra node that **neither peers
-nor serves as an anchor** — a supported, degraded state (design §6.3, §12.7.5), and
+nor serves as an anchor** — a supported, degraded state (design §6.3, design §12.7.5), and
 until now one with no carrier for its address at all.
 
 **Volume.** Only infra nodes publish, and design §3.3 sets the infra threshold at 110
@@ -2807,7 +2807,7 @@ its own subtree.
 authenticates each endpoint against the keyhash it expects (§9.1), so a wrong
 address produces a handshake failure rather than a silent misdirection — and an
 intermediary misreporting progress buys only the same failed dial. What a false
-answer retains is denial (design §12.6.1, §18.4).
+answer retains is denial (design §12.6.1, design §18.4).
 
 **The reply is not signed.** It conveys where to try next, and the requester
 authenticates the endpoint it reaches by ordinary means at contact time (design
@@ -3777,7 +3777,7 @@ catches the conflict, at worst the root. **No tier is load-bearing.**
 > **Pressure worth naming.** At the root of a large subnet the table *is* a map of
 > the subnet, which is exactly the state design §12.6.1 says a node must never be
 > *required* to hold. Permitted-but-incentivised is how such floors erode. An
-> implementer reading §12.6.1 alone will not see this coming, which is why it is
+> implementer reading design §12.6.1 alone will not see this coming, which is why it is
 > stated here.
 
 #### A memo is a hint, never evidence
@@ -4057,10 +4057,14 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 1. **Queue cap value.** A per-node policy value; design §21.1.1 classifies it
    *freely tunable, forever*, and nothing here fixes one.
 2. **Canonical test vectors.** A draft set exists at `test-vectors/` —
-   spec-derived, generated, and verified by no implementation. Positive and
-   negative vectors are required before two implementations can be shown to
-   interoperate, and are best confirmed alongside a first implementation, since
-   vectors written from the spec alone encode the spec's own mistakes — the
-   draft's README states every interpretation it had to take so that each is a
-   review target rather than a silent choice. Canonical status waits on an
-   implementation reproducing every computed value.
+   spec-derived and generated, with every computed value now reproduced by a
+   second harness in a different language over independent cryptographic
+   implementations (`test-vectors/runner-rs`, RustCrypto ML-DSA against the
+   generator's dilithium-py) [2026-09-03]. That is cross-language and
+   cross-crypto validation, not independence: both sides share an author, so
+   an interpretation both encode would pass both. The draft's README states
+   every interpretation taken so that each is a review target rather than a
+   silent choice; ten clean-room implementation reviews have since traced the
+   fixtures against independently written code. **Canonical status still waits
+   on an independent party's implementation reproducing every computed
+   value.**

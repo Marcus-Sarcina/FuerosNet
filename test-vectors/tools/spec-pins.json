@@ -1,7 +1,7 @@
 {
  "specs": {
-  "wire-format.md": "c99b83a890251678e45a96f8e771694b5e8e098f73eaa93b195914bfef32febc",
-  "network-design.md": "a1bb98bdea1c6df1c6694fbe61bc334c223a523db66b7937a91214bcd22be401",
+  "wire-format.md": "de87ae99d794d32d2500b95311ddf007ae495ba1b15c35d5fc72c255386898c1",
+  "network-design.md": "56696715331feb629e56903badd6801237e87fcabf6dca64b5d89d445fcb0fef",
   "light-client-requirements.md": "b8f954d79adda457591ca90d1771afa26ee98f736eb5f7295c595b52126858a9"
  },
  "generator": "eeef065916637fc0704a5f2d08d0513b1f5755b5af8ffbe6e222e6cd0687574a",
@@ -11,13 +11,13 @@
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "7e72753ff18a94196ce688f95715456e2e19c4ae00ff1492b5d40bda8c8dc175",
-  "primitives.md": "64969391b65286315c6352070c70a4fadd67c49fa61ac16d2dd6fc6061bec4d6",
-  "transactions.md": "19b5bb7d22f8a6c2370e9a60e8127d6d4986b78af0f4c63673687671c0858a67",
-  "records.md": "50f0c2bf0985816f41fc7fa59372b42fe164f08c0ee308b08ded60c243ef7ba9",
-  "verifier-selection.md": "710afa47de0fe62001dd9f44dd302d855b7b37a1ccccac38e7f5e58ebfbee962",
-  "messages.md": "f54c237c033568ef486dcd1c1387daee3ff6673abab96f08a045c54106a6cc1e",
-  "README.md": "a661d645c7389e09f2581709c9a87fffe6676f42db5d2c519a868c956048aff7",
-  "negative-vectors.md": "ccd0b31bdacd7525cebc86d1f403958642cbc3c56c76eea63c8e883a76288f6e"
+  "keys.md": "acbb4326c760ce9c857daa0e58b2ce0e322453d4110bc98d88567aceec1c147c",
+  "primitives.md": "0bc980197e7a4ab630174d0c2aec78f095ab93bf8fc55819bb1c75f4fbbe153e",
+  "transactions.md": "1def9690f223e387aa77e32963ab5145d8b5e9c8631bec4bfe46d14f499c264a",
+  "records.md": "4ff1d83818312de73887835237306bdfdfc243a68aa20cc6415b14d0b1fb64f1",
+  "verifier-selection.md": "1a3b8e9272a813c771eb8fe790f30580fd3e4beee6942c7fe7206a3504542eed",
+  "messages.md": "d2dc2358a8c5f5012c1dfef43f707a313d95983f867cdee588d1dc6092f64269",
+  "README.md": "6d9abc1ab666935fd68fefb102670f939fc0d819e3ae225ecb48ae2a9f5592a0",
+  "negative-vectors.md": "19bb1160d885aa70d7b7a30b5073ba7b2560c8c8357c60878e387cbf3f0e7279"
  }
 }

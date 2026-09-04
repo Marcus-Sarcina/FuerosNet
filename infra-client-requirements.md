@@ -64,7 +64,7 @@ that is noted in place.
   tombstone, no crash-recovery copy that outlives the delete. Durable storage for your
   own crash recovery is your backup problem and must not extend a message's life.
   **This bounds what your node retains, not what your hosting provider can**
-  (design §14.1.6, §18.1) [2026-09-03]: a provider snapshotting below your guest
+  (design §14.1.6, design §18.1) [2026-09-03]: a provider snapshotting below your guest
   keeps what you deleted, and your deletion is hygiene against that party — the
   real bound against everyone above the hypervisor.
 - **Hold the minimum while a message waits**: ciphertext, recipient keyhash, arrival
@@ -579,9 +579,12 @@ not who answers for it (design §11.5) — and that asker may see. Nothing flood
 ## Open
 
 - Whether a user can evaluate a gateway operator before routing external traffic
-  through them (`resource-requirements.md` §11, design P24). A resource owner may
-  declare a data-practice posture in its catalog entry (design §11.5), which helps a
-  user who already has access and not one deciding whether to acquire it.
+  through them (`resource-requirements.md` §11, design P24) — **largely answered**
+  [2026-09-03]: the signed catalog entry carries the owner's declared
+  `data_practice` and reaches an in-scope user at catalog lookup, which precedes
+  any connection (design §11.5). What stays open is what P24 already prices: the
+  declaration is a claim rather than a guarantee (design §1.1), and a user
+  outside the entry's `discover_scope` cannot see it at all.
 
 **Closed:** queue lifecycle (design §14.1.6 settles ceiling behaviour,
 crash copies, metadata and logging; only the cap value is yours to choose) and

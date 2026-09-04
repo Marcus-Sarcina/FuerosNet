@@ -3921,3 +3921,44 @@ in place, two new wire mechanisms (dual delivery, addressed consent), one
 schema renumbering (tier-aligned basis), and the registers extended
 throughout. Every round under the rewritten defensive prompt cleared the
 classifier.
+
+## Pre-0.9 coherence, consistency and de-linting pass (2026-09-03)
+
+Author-directed sweep before the style pass. Findings and dispositions:
+
+**Claims left half-swept by the cycle's rulings, now completed:**
+- §17.3's preamble still said "an attacker must work per-target rather than
+  accumulate standing globally" — the uncorrected sibling of §16.3.1's
+  amortisation overclaim. Now states the coverage bound. (The §1
+  benchmark-language per-target mentions are the PRICED claim — A-register
+  rows 1 and 1.2.4 — and stand.)
+- §12.6.5's lifetime-derivation sentence said a captured staple "retains
+  full capability" — pre-0.8.6 shape; now "the key's full trust-bearing
+  capability", pointing at the supersession rule.
+- Wire §13 item 2 said the vectors were "verified by no implementation" —
+  stale since the Rust runner; now states the cross-language/cross-crypto
+  reproduction, its same-author limit, the ten clean-room traces, and the
+  unchanged bar (independent-party reproduction).
+- Infra's Open item on gateway pre-evaluation contradicted P24's reduction;
+  aligned (catalog lookup precedes connection; residuals are §1.1's
+  claim-not-guarantee and out-of-scope viewers).
+
+**Reference checker at true zero for the first time**: the nine standing
+"known false negatives" were manual exemptions by another name — every
+list-continuation cross-ref now carries its doc prefix, the RFC 4271 cite
+reworded to "section 4.3", and the checker reports 0 flags of 1,917 with
+no inspection residue.
+
+**Verified clean**: no trailing whitespace, tabs, or double spaces; no
+duplicate section numbers in any document; §21.1's twelve parameters
+count against §22.2's sentence (1+8+3); §14.2.4's five integration
+decisions enumerate; §22/§23 consolidators current (build-order item 5
+already points at §16.2/§16.4 where setwise conservation now lives);
+light-doc Open items both still genuinely open; the superseded-claim
+sweep finds only the four deliberate earlier-draft quotes.
+
+**Flow repairs from the heavy-edit regions**: §18.1's orphaned "So" after
+the removed sentence; nothing else mangled on read-through of §12.6.5,
+§18.1, §18.3, §16.2-16.3.1, wire §5.5-5.6.
+
+Both harnesses green (Python 80/80, Rust 146/0). Ready for 0.9.
