@@ -4063,3 +4063,50 @@ s9.1's phrasing. Recorded in models/README.md, not silently patched.
 
 Author will cross-review the models against the other artifacts and read
 line by line.
+
+## Cross-family review: trust-metric simulation (2026-09-04)
+
+An external clean-room review of `models/simulation/flow_metric.py`
+brute-force-validated max_flow against 700 random graphs (zero
+discrepancies) and found six issues in the MODELLING around it, all
+verified against the design and all correct:
+
+- **HIGH (E4 horizon semantics)**: the sim used one adjacency for three
+  distinct design concepts. §6.3 and §15.1 separate SCOPE (adoption+sibling
+  edges → horizon) from TRUST-CAPACITY (adoption+peering → flow), and
+  §16.3.1 gives peering-edge VISIBILITY (visible inside both peers'
+  horizons). The old code made the acquired peering edge itself confer
+  scope, understating coverage ~4x (the reviewer's corrected seed-1 figures:
+  13/19/18 vs the old 3/6/5). FIXED: scope_adjacency (adoption+sibling),
+  visible_flow_subgraph (peering visible iff a peer is in the observer's
+  scope horizon, conferring no scope). Corrected coverage now min/median/max
+  7/16/23 at seed 1, matching the reviewer's independent range.
+- **MEDIUM (E4 assertion)**: old code asserted `changed <= holds_edge` while
+  printing "influences EVERY observer... CONFIRMED". FIXED: asserts
+  `changed == holds_edge` per placement (a theorem given the construction:
+  any node in the scope 2-ball is flow-reachable via adoption edges within
+  the horizon).
+- **MEDIUM (E3 visibility)**: old E3 ran the conserving computation over the
+  GLOBAL graph, using fakes 3+ hops away that the observer could not see.
+  FIXED: E3 is now observer-visible -- a wide fake fan within the horizon
+  saturates at the visible ceiling, and a deep fake subtree is shown to add
+  zero visible identities (§16.3.1's conservative direction).
+- **MEDIUM/UNSPECIFIED (allocation rule)**: max-flow VALUE is unique but the
+  ALLOCATION among symmetric principals is augmenting-path-order dependent.
+  accepted_count reframed as a conservation BOUND, not an allocation; the
+  design question flagged in the sim output AND here for author ruling ---
+  **does the reference metric need a deterministic scarce-capacity
+  tie-break, or is that left to 16.4 policy pluggability?** Not decided.
+- **LOW (E1 boundary)**: old code classified fλ=1 as convergent; the design
+  says diverges unless fλ<1, so fλ=1 diverges (linearly). FIXED: three
+  regimes, diverges when fλ>=1, boundary case asserted to grow unbounded.
+- **LOW (E4 statistics)**: old code sampled 5 placements. FIXED: enumerates
+  every interior placement, reports min/median/max and worst-case coverage.
+
+E1's underlying divergence and E2's cut bound were confirmed valid by the
+reviewer; those needed only the boundary fix. The reviewer correctly noted
+E1's weakness is the design's own §16.2 (already documented), not a new
+finding. All ten seeds pass after the rewrite; the other seven models
+(3 TLA+, 4 Tamarin) are untouched and still green.
+
+**OPEN FOR AUTHOR**: the allocation/tie-break UNSPECIFIED above.

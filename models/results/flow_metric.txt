@@ -1,9 +1,10 @@
 flow_metric.py report (seed 1)
 
 E1: distance-decay divergence (design 16.2)
-  lambda=0.5   depth-6 fake subtree carries 19,531x the weight of one honest node -- DIVERGES (f*lambda = 5.0 > 1)
-  lambda=0.05  depth-6 fake subtree carries 2x the weight of one honest node -- converges (f*lambda = 0.5 < 1)
-  matches design 16.2's quoted magnitudes: CONFIRMED
+  lambda=0.5   f*lambda=5.0  40-level mass/honest = 11,368,683,772,161,603,044,424,810,496.0   DIVERGES (f*lambda = 5.0 > 1)
+  lambda=0.1   f*lambda=1.0  40-level mass/honest =         41.0   DIVERGES at the exact boundary (f*lambda = 1)
+  lambda=0.05  f*lambda=0.5  40-level mass/honest =          2.0   converges (f*lambda = 0.50 < 1)
+  matches design 16.2's magnitudes; boundary f*lambda=1 diverges linearly: CONFIRMED
 
 E2: the individual cut bound (design 16.2, 17.3)
   fake region of    7 identities: best individual score 10 <= boundary capacity 10: HOLDS
@@ -11,20 +12,28 @@ E2: the individual cut bound (design 16.2, 17.3)
   fake region of  341 identities: best individual score 10 <= boundary capacity 10: HOLDS
   population never moved the individual bound: CONFIRMED
 
-E3: setwise conservation (design 16.2, normative)
-     7 fake identities:  independent-sum =    42   conserving joint = 7   region ceiling = 8
-    40 fake identities:  independent-sum =   124   conserving joint = 8   region ceiling = 8
-   341 fake identities:  independent-sum =   490   conserving joint = 8   region ceiling = 8
-  the independent sum grows with population (the reading 0.8.3 showed is broken);
-  the conserving joint saturates at the region ceiling and population buys nothing more: CONFIRMED
+E3: setwise conservation, observer-visible (design 16.2)
+   4 visible fakes:  independent-sum =   40   conserving joint = 4   visible region ceiling = 10
+   8 visible fakes:  independent-sum =   80   conserving joint = 8   visible region ceiling = 10
+  16 visible fakes:  independent-sum =  160   conserving joint = 10   visible region ceiling = 10
+  a deep fake subtree of 85 adds 0 visible identities -- invisibility is the conservative direction
+  independent-sum grows with visible population (the broken 0.8.3 reading);
+  the conserving joint saturates at the visible ceiling; invisible identities cannot inflate it: CONFIRMED
 
-E4: edge-influence fanout (design 16.3.1)
-  edge at 'n.2.0': 3 of 36 observers' evaluations changed (3 hold the edge in horizon)
-  edge at 'n.2': 6 of 36 observers' evaluations changed (6 hold the edge in horizon)
-  edge at 'n.1.0': 5 of 36 observers' evaluations changed (5 hold the edge in horizon)
-  edge at 'n.2.1': 3 of 36 observers' evaluations changed (3 hold the edge in horizon)
-  edge at 'n': 5 of 36 observers' evaluations changed (5 hold the edge in horizon)
-  one edge influences every observer whose horizon contains it and no observer whose
-  horizon does not -- the coverage bound, quantitatively, per placement: CONFIRMED
+E4: edge-influence fanout, corrected horizons (design 16.3.1)
+  13 interior placements enumerated (worst-case aware, not sampled)
+  coverage per acquired edge -- observers who can see it: min 7, median 16, max 23
+  worst-case placement 'n.2' covers 23 of 35 observers with ONE edge
+  every influenced observer can see the edge and every observer that can see it is
+  influenced (changed == coverage, per placement); coverage is many per edge, not one:
+  CONFIRMED
 
 all assertions passed
+
+UNSPECIFIED (flagged for the design author, not decided here): when shared
+capacity cannot satisfy all eligible principals, the max-flow VALUE is unique but
+the ALLOCATION among symmetric principals is not -- augmenting-path order decides
+it.  The reference metric (design 16.2) fixes each principal's INDIVIDUAL standing
+(its own max-flow, deterministic) and the aggregate BOUND, but not a deterministic
+tie-break when scarce capacity must be allocated to specific principals.  Whether
+that must be specified, or is left to policy (16.4 pluggability), is the author's call.

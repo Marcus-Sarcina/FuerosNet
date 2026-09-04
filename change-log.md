@@ -8370,3 +8370,22 @@ confirming a real design rule — wire §5.3's distinctness requirement is
 load-bearing for recovery, and §9.1's "neither factor alone" is the honest
 provable form. Everything is textbook-commented and re-runnable via
 `models/run-all.sh`.
+
+### 2026-09-04 (cross-family review of the trust-metric simulation)
+
+An external review of the flow-metric simulation validated its max-flow
+core (700 random graphs, zero discrepancies) and found six modelling
+defects, all verified against the design and corrected. The substantive
+one: the simulation had collapsed three relations the design keeps
+separate -- scope (adoption+sibling edges, the horizon), trust-capacity
+(adoption+peering edges, the flow), and visibility (a peering edge seen
+only inside both peers' horizons). The conflation understated an acquired
+edge's coverage several-fold and let the setwise-conservation experiment
+count identities the observer could not see. The rewrite separates the
+three, makes the conservation experiment observer-visible, enumerates
+every edge placement rather than sampling, and fixes the exact divergence
+boundary (fλ=1 diverges). It also surfaced an open design question, now
+flagged for a ruling: when scarce trust capacity must be allocated among
+symmetric principals the max-flow value is unique but the allocation is
+not, and whether the reference metric fixes a deterministic tie-break or
+leaves it to policy is undecided.

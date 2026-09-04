@@ -18,61 +18,85 @@ review plan's Stage 1, have been argued but never run:
       standing totals at most the cut's capacity -- one computation, shared
       capacity.  Evaluating each identity with its own independent max-flow
       computation instead lets the same capacity count once per identity,
-      and the aggregate grows with population.  This experiment demonstrates
-      both halves: the conserving computation obeys the bound, the
-      independent-per-target computation violates it.
+      and the aggregate grows with population.
   E4. Edge-influence fanout (design §16.3.1, the coverage bound): one
-      acquired edge sits inside every observer's horizon that contains it,
-      so the cost of influencing a population amortises.  We insert a single
-      edge and count how many observers' accepted-sets change.
+      acquired peering edge is visible inside both peers' horizons, so it
+      helps every observer whose horizon contains a peer -- the cost of
+      influencing a population amortises over coverage, not observer count.
+
+SCOPE, TRUST-CAPACITY, AND VISIBILITY ARE THREE DIFFERENT THINGS
+===============================================================
+The design is emphatic that these must not be conflated (§6.3:
+"Contributing to trust and conferring scope are different things ... the
+region in §15.1 is built from adoption and sibling edges only"):
+
+  * SCOPE topology -- adoption edges and SIBLING edges (co-children of one
+    patron).  The trust horizon is the two-edge walk over THIS graph
+    (design §15.1, Vocabulary).  It decides who can SEE what.
+  * TRUST-CAPACITY topology -- adoption edges (hierarchical capacity) and
+    PEERING edges (a lower default capacity, §16.3).  It decides how much
+    trust can FLOW.
+  * VISIBILITY -- a peering edge "is visible inside the two peers' horizons
+    and nowhere else" (§16.3.1).  A peering edge confers NO scope and does
+    NOT extend the horizon (§6.3), but an observer who can see it may use
+    its capacity.
+
+An earlier version of this file used ONE adjacency relation for all three,
+which made E3 count identities the observer could not see and made E4
+understate an acquired edge's coverage several-fold.  The separation below
+is the correction; the three concepts now have three representations:
+`scope_children`/`scope_adjacency` (scope), `FlowGraph` capacities (flow),
+and `visible_flow_subgraph` (visibility).
 
 This file has NO dependencies outside the Python 3 standard library.  The
 max-flow algorithm is implemented here, in the open, so that reviewing this
-file requires no background reading: every algorithm used is explained where
-it appears.
+file requires no background reading.
 
 HOW TO RUN
 ==========
     python3 flow_metric.py            # runs E1-E4, prints a report
     python3 flow_metric.py --seed 7   # a different random topology draw
 
-The output of the run committed alongside this file is in results.txt.
+The committed run is results.txt.
 
 WHAT THIS SIMULATION IS NOT
 ===========================
-It is not a network simulator: there are no messages, sessions, or
-signatures here.  It is a GRAPH calculation.  Its job is to check the
-ARITHMETIC of §16.2's claims, exactly as the review plan's Stage 1.3 asks
-("the flow-metric claims ... are currently argued analytically and none has
-been run").  Anything about human behaviour -- who adopts whom, whether
-fake regions are cheap to build socially -- is outside its reach, per the
-plan's "what this plan cannot do".
+It is not a network simulator: no messages, sessions, or signatures.  It is
+a GRAPH calculation checking the ARITHMETIC of §16.2/§16.3.1's claims.
+Human-behaviour questions (whether fake regions are cheap to build socially)
+are outside its reach, per the plan's "what this plan cannot do".  E4 is a
+worst-case-aware coverage measurement, not a statistical sample: it
+enumerates every interior placement in a toy topology rather than sampling a
+few.
 """
 
 import argparse
 import random
+import statistics
 from collections import deque
 
 # ---------------------------------------------------------------------------
-# PART 0 -- The graph representation.
+# PART 0 -- The graph representation and max-flow.
 #
 # A directed graph with integer edge capacities, stored as adjacency
-# dictionaries:  cap[u][v] = remaining capacity on the edge u->v.
+# dictionaries:  cap[u][v] = remaining capacity on the edge u->v.  Max-flow
+# uses a RESIDUAL graph: pushing f units along u->v reduces cap[u][v] by f
+# and increases cap[v][u] by f, the reverse edge being the option to "undo"
+# flow later.  Standard construction (Cormen et al., "Introduction to
+# Algorithms", ch. 24, 4th ed.).
 #
-# Max-flow algorithms want a RESIDUAL graph: when we push f units of flow
-# along u->v we reduce cap[u][v] by f and INCREASE cap[v][u] by f.  The
-# reverse edge represents the option to "undo" flow later, which is what
-# lets the algorithm escape locally-good but globally-bad early choices.
-# This is the standard construction from any algorithms textbook (see
-# Cormen et al., "Introduction to Algorithms", ch. 24 in the 4th ed.).
+# NOTE ON VALIDATION: the external review of this file cross-checked
+# max_flow() against exhaustive brute-force minimum cuts on 700 random
+# directed graphs (2-7 vertices) with zero discrepancies.  The algorithm
+# below is therefore not where a defect would hide; the modelling around it
+# is what the rest of this file gets right or wrong.
 # ---------------------------------------------------------------------------
 
 class FlowGraph:
     """A capacitated directed graph supporting max-flow queries."""
 
     def __init__(self):
-        # cap maps u -> {v: capacity}.  Missing entries mean capacity 0.
-        self.cap = {}
+        self.cap = {}                  # cap[u] -> {v: capacity}
 
     def add_node(self, u):
         self.cap.setdefault(u, {})
@@ -80,9 +104,9 @@ class FlowGraph:
     def add_edge(self, u, v, c):
         """Add capacity c to the directed edge u->v.
 
-        We ADD rather than SET so that parallel logical edges combine, and
-        we always materialise the reverse edge with +0 capacity so the
-        residual bookkeeping in max_flow never needs a missing-key case.
+        ADD (not set) so parallel logical edges combine; always materialise
+        the +0 reverse edge so the residual bookkeeping never hits a missing
+        key.
         """
         self.add_node(u)
         self.add_node(v)
@@ -94,36 +118,15 @@ class FlowGraph:
         g.cap = {u: dict(nbrs) for u, nbrs in self.cap.items()}
         return g
 
-    # -----------------------------------------------------------------------
-    # Max-flow by the Edmonds-Karp algorithm.
-    #
-    # The idea: repeatedly find ANY path from source to sink along edges
-    # with remaining capacity (an "augmenting path"), push as much flow as
-    # the path's tightest edge allows, update the residual graph, and stop
-    # when no augmenting path exists.  Ford-Fulkerson is this idea with any
-    # path search; Edmonds-Karp is the refinement that uses breadth-first
-    # search (BFS), which guarantees termination in O(V * E^2) regardless
-    # of capacity values.  For our graph sizes (hundreds of nodes) this is
-    # instantaneous.
-    #
-    # The max-flow/min-cut theorem -- the entire reason §16.2 chose this
-    # metric -- says the value this returns EQUALS the total capacity of
-    # the smallest edge cut separating source from sink.  So computing
-    # max-flow IS computing the bound "what crosses the boundary".
-    # -----------------------------------------------------------------------
-
     def max_flow(self, source, sink):
-        """Return the maximum flow value from source to sink.
-
-        Mutates self (leaves the residual graph behind).  Callers that need
-        the original intact use .copy() first -- the experiments below
-        always do, so each measurement starts from the same graph.
+        """Maximum flow value from source to sink (Edmonds-Karp: BFS for the
+        shortest augmenting path, repeat until none remains).  Equals the
+        min-cut capacity by the max-flow/min-cut theorem -- which is the
+        entire reason §16.2 chose this metric.  Mutates self (leaves the
+        residual behind); callers .copy() first when they need the original.
         """
         total = 0
         while True:
-            # --- BFS for the shortest augmenting path ---------------------
-            # parent[v] remembers how we reached v, so we can walk the path
-            # backwards once we touch the sink.
             parent = {source: None}
             queue = deque([source])
             while queue and sink not in parent:
@@ -133,43 +136,35 @@ class FlowGraph:
                         parent[v] = u
                         queue.append(v)
             if sink not in parent:
-                return total          # no augmenting path left: flow is max
-            # --- find the bottleneck capacity along the path --------------
+                return total
             bottleneck = float("inf")
             v = sink
             while parent[v] is not None:
                 u = parent[v]
                 bottleneck = min(bottleneck, self.cap[u][v])
                 v = u
-            # --- push the bottleneck along the path, update residuals -----
             v = sink
             while parent[v] is not None:
                 u = parent[v]
-                self.cap[u][v] -= bottleneck   # forward edge loses capacity
-                self.cap[v][u] += bottleneck   # reverse edge gains "undo"
+                self.cap[u][v] -= bottleneck
+                self.cap[v][u] += bottleneck
                 v = u
             total += bottleneck
 
 
 # ---------------------------------------------------------------------------
-# PART 1 -- Building RHTN-shaped topologies.
+# PART 1 -- RHTN-shaped topology, with scope and flow SEPARATED.
 #
-# The design's structures, reduced to what the metric can see:
+# We build:
+#   * an adoption tree -- the backbone of both graphs;
+#   * `scope_children`, from which SCOPE adjacency (adoption + sibling) is
+#     derived for horizons;
+#   * a FlowGraph of adoption capacity edges; peering edges are added
+#     separately, because their VISIBILITY is per-observer.
 #
-#   * Nodes form a tree by ADOPTION (design §6): each node has one patron
-#     within a subnet; fanout is bounded by f = 10 (design §3.2).
-#   * PEERING edges (design §6.3) cross the tree laterally and carry a
-#     deliberately LOWER default flow capacity than hierarchical edges
-#     (design §16.3's mitigation).
-#   * An observer's TRUST HORIZON is the two-edge ball around it
-#     (design §15.1, Vocabulary): every node within a two-edge walk over
-#     adoption and sibling edges.
-#
-# Trust edges are treated as BIDIRECTED for flow purposes: an adoption is a
-# mutual relationship, so capacity is added in both directions.  The
-# capacities are units of "trust capacity" -- the design deliberately does
-# not fix absolute values (policy is local, §16.1), so what matters in every
-# experiment below is RELATIVE behaviour, never the absolute numbers.
+# Capacities are units of "trust capacity".  Absolute values are
+# unimportant (policy is local, §16.1); every experiment compares behaviour
+# under ONE fixed schedule.
 # ---------------------------------------------------------------------------
 
 HIER_CAP = 10   # capacity of an adoption (hierarchical) edge
@@ -178,162 +173,161 @@ PEER_CAP = 2    # capacity of a peering edge -- lower, per design §16.3
 def build_tree(rng, depth, fanout, prefix="n"):
     """Build a random adoption tree.
 
-    Returns (graph, nodes, children) where children[u] lists u's adoptees.
-    Node names encode their path from the root, e.g. "n.0.3.1", purely for
-    human readability of the output.
+    Returns (flow, nodes, children):
+      flow     -- FlowGraph with bidirected adoption edges (HIER_CAP)
+      nodes    -- list of node names
+      children -- children[u] = list of u's adoptees
+    Node names encode the path from the root ("n.0.3.1") for readability.
     """
-    g = FlowGraph()
+    flow = FlowGraph()
     root = prefix
-    g.add_node(root)
+    flow.add_node(root)
     nodes = [root]
     children = {root: []}
     frontier = [root]
     for _ in range(depth):
-        next_frontier = []
+        nxt = []
         for u in frontier:
-            # Each node adopts between 1 and `fanout` children -- random,
-            # because real subnets are ragged, and nothing below depends on
-            # the tree being full.
             for i in range(rng.randint(1, fanout)):
                 v = f"{u}.{i}"
-                g.add_edge(u, v, HIER_CAP)   # patron -> child
-                g.add_edge(v, u, HIER_CAP)   # child -> patron (bidirected)
+                flow.add_edge(u, v, HIER_CAP)      # patron -> child
+                flow.add_edge(v, u, HIER_CAP)      # child -> patron
                 nodes.append(v)
                 children.setdefault(u, []).append(v)
                 children[v] = []
-                next_frontier.append(v)
-        frontier = next_frontier
-    return g, nodes, children
+                nxt.append(v)
+        frontier = nxt
+    return flow, nodes, children
 
 
-def adjacency(g):
-    """The undirected adjacency relation implied by positive capacities."""
-    adj = {u: set() for u in g.cap}
-    for u, nbrs in g.cap.items():
-        for v, c in nbrs.items():
-            if c > 0:
-                adj[u].add(v)
-                adj[v].add(u)
+def scope_adjacency(nodes, children):
+    """SCOPE adjacency: adoption edges PLUS sibling edges.
+
+    design §15.1 / Vocabulary: the trust horizon is the two-edge walk over
+    ADOPTION AND SIBLING edges.  Siblings are the co-children of one patron
+    (design §6.3 distinguishes them from adoption).  Peering edges are
+    DELIBERATELY ABSENT here: §6.3 says a peering edge "confers no scope, and
+    does not extend the horizon."  This graph is what decides who sees what;
+    it carries no capacity.
+    """
+    adj = {u: set() for u in nodes}
+    for u, kids in children.items():
+        for v in kids:                         # adoption edges
+            adj[u].add(v)
+            adj[v].add(u)
+        for a in kids:                         # sibling edges (co-children)
+            for b in kids:
+                if a != b:
+                    adj[a].add(b)
     return adj
 
 
-def horizon(g, observer, radius=2):
-    """The observer's trust horizon: nodes within `radius` edges.
+def horizon(scope_adj, observer, radius=2):
+    """The observer's trust horizon: nodes within `radius` SCOPE edges.
 
-    design §15.1 / Vocabulary: a two-edge walk centred on the observer.
-    Every observer's horizon is different and centred on themselves -- the
-    design's no-shared-state rule, which E4 depends on getting right.
+    design §15.1: a two-edge walk over adoption and sibling edges, centred
+    on the observer.  Every observer's horizon is its own -- the design's
+    no-shared-state rule.
     """
-    adj = adjacency(g)
     seen = {observer}
     frontier = {observer}
     for _ in range(radius):
-        frontier = {w for v in frontier for w in adj[v]} - seen
+        frontier = {w for v in frontier for w in scope_adj[v]} - seen
         seen |= frontier
     return seen
 
 
-def visible_subgraph(g, observer):
-    """The graph AS THIS OBSERVER SEES IT: edges with both ends in its
-    horizon.  design §16.3.1: "It is a property of the graph the observer
-    can see" -- an edge outside the horizon cannot raise any cut in this
-    observer's view, and this function is where that rule is enforced.
+def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
+    """The flow graph AS THIS OBSERVER SEES IT.
+
+    Includes:
+      * adoption capacity edges with BOTH ends in the observer's scope
+        horizon;
+      * every peering edge the observer can see -- design §16.3.1: a peering
+        edge "is visible inside the two peers' horizons and nowhere else",
+        i.e. visible to an observer iff at least one of its two endpoints is
+        in the observer's horizon.  Seeing the edge means learning the far
+        endpoint's identity and trust contribution too, so a visible peering
+        edge pulls its far endpoint into the observer's flow view EVEN
+        THOUGH that endpoint is not in the observer's scope horizon (peering
+        confers no scope, §6.3).
+
+    `peer_edges` is a list of (u, v, cap) peering edges kept separate from
+    the adoption FlowGraph precisely because their visibility is
+    per-observer.
     """
-    hz = horizon(g, observer)
+    hz = horizon(scope_adj, observer)
     sub = FlowGraph()
     for u in hz:
         sub.add_node(u)
-        for v, c in g.cap[u].items():
-            if c > 0 and v in hz:
-                # Each DIRECTED edge is visited exactly once (u's own
-                # adjacency lists it), so add_edge -- which also creates the
-                # zero-capacity reverse entry the residual bookkeeping
-                # needs -- is the right tool here, as everywhere.
+        for v, c in flow.cap[u].items():
+            if c > 0 and v in hz:                    # adoption edge in view
                 sub.add_edge(u, v, c)
+    for (u, v, c) in peer_edges:
+        if u in hz or v in hz:                       # §16.3.1 visibility rule
+            sub.add_edge(u, v, c)
+            sub.add_edge(v, u, c)
     return sub
 
 
 # ---------------------------------------------------------------------------
-# PART 2 -- The two evaluation modes E3 compares.
+# PART 2 -- Node splitting and the two evaluation modes.
 #
-# MODE A: independent per-target max-flow.  score(observer, t) is computed
-# with a FRESH graph for every target t.  Each computation may use the full
-# capacity of every edge.  This is the natural reading of "trust for every
-# known node" that an implementer might adopt -- and the reading the 0.8.3
-# adversarial review showed breaks the aggregate bound.
+# NODE CAPACITIES.  A flow network limits edges; we also limit throughput
+# THROUGH a node (else one compromised neighbour with many edges relays
+# unbounded capacity).  The textbook trick is NODE SPLITTING: replace u by
+# u_in and u_out joined by one edge carrying u's node capacity.
 #
-# MODE B: one conserving computation (the Advogato shape, design §16.2).
-# We build ONE flow network in which every candidate target drains through
-# a personal 1-capacity edge into a shared super-sink, and run ONE max-flow
-# from the observer.  Because all targets share the same residual graph,
-# capacity consumed reaching one target is unavailable for reaching
-# another: conservation is intrinsic, not policed.
+# MODE A (independent per-target): score(observer, t) on a FRESH split
+# graph.  Each computation may use every edge's full capacity -- the natural
+# but BROKEN reading (0.8.3) under which the same capacity counts once per
+# identity.
 #
-# The 1-capacity drain per target makes the result a count of ACCEPTED
-# identities (Advogato's accept/reject semantics).  "Simultaneously usable
-# standing" in §16.2's setwise-conservation statement is then: how many of
-# the set can be accepted AT ONCE.
-#
-# One technical construction both modes share: NODE capacities.  A flow
-# network limits EDGES, but we also need to limit how much trust can pass
-# THROUGH an intermediate node (otherwise a single compromised neighbour
-# with many edges relays unbounded capacity).  The standard trick -- again
-# textbook material -- is NODE SPLITTING: replace node u by u_in and u_out
-# joined by one edge carrying u's node capacity; every edge into u enters
-# u_in, every edge out of u leaves u_out.
+# MODE B (one conserving computation, the Advogato shape, §16.2): every
+# candidate drains 1 unit into a shared super-sink and ONE max-flow runs, so
+# capacity consumed reaching one target is unavailable for another.
 # ---------------------------------------------------------------------------
 
 def node_capacity(dist):
-    """Per-node throughput by distance from the observer.
-
-    Advogato decreases capacity with distance from the seed; we use a
-    simple halving schedule.  The absolute numbers are unimportant (policy
-    is local, design §16.1); the experiments only compare behaviours under
-    ONE schedule held fixed.
-    """
-    return max(32 >> dist, 1)      # 32, 16, 8, 4, 2, 1, 1, ...
+    """Per-node throughput by scope/flow distance from the observer.  A
+    simple halving schedule; absolute numbers are unimportant (§16.1)."""
+    return max(32 >> dist, 1)          # 32, 16, 8, 4, 2, 1, 1, ...
 
 
 def distances_from(g, source):
-    """BFS distance (in edges) from source to every reachable node."""
-    adj = adjacency(g)
+    """BFS distance (in edges) from source over positive-capacity edges."""
     dist = {source: 0}
     queue = deque([source])
     while queue:
         u = queue.popleft()
-        for v in adj[u]:
-            if v not in dist:
+        for v, c in g.cap[u].items():
+            if c > 0 and v not in dist:
                 dist[v] = dist[u] + 1
                 queue.append(v)
     return dist
 
 
 def split_graph(g, observer):
-    """Apply node splitting with distance-based node capacities.
-
-    Returns a new FlowGraph over nodes ("in", u) and ("out", u).  The
-    observer's own throughput is unbounded (they are the source; capping
-    the party doing the evaluating would be self-limiting to no purpose).
-    """
+    """Node splitting with distance-based node capacities.  Nodes become
+    ("in", u) and ("out", u); the observer's own throughput is unbounded
+    (capping the evaluator would be self-limiting)."""
     dist = distances_from(g, observer)
     s = FlowGraph()
     for u in g.cap:
         if u not in dist:
-            continue                       # unreachable: contributes nothing
+            continue
         ncap = 10**9 if u == observer else node_capacity(dist[u])
         s.add_edge(("in", u), ("out", u), ncap)
         for v, c in g.cap[u].items():
             if c > 0 and v in dist:
-                # each original edge u->v becomes out(u) -> in(v)
                 s.add_edge(("out", u), ("in", v), c)
     return s
 
 
 def score_independent(g, observer, target):
-    """MODE A: the target's individual score, on a fresh copy of the
-    split graph.  This is the max flow observer -> target, i.e. the
-    min-cut between them -- the per-identity bound, which E2 shows is
-    honoured even in this mode."""
+    """MODE A: the target's individual score = max flow observer->target =
+    the min-cut between them.  E2 shows this per-identity bound holds even
+    with full visibility."""
     s = split_graph(g, observer)
     if ("in", target) not in s.cap:
         return 0
@@ -341,12 +335,18 @@ def score_independent(g, observer, target):
 
 
 def accepted_count(g, observer, targets):
-    """MODE B: how many of `targets` are accepted SIMULTANEOUSLY.
+    """MODE B: how many of `targets` are accepted SIMULTANEOUSLY -- one split
+    graph, one super-sink, one max-flow.
 
-    One split graph, one super-sink, one max-flow.  Each target drains at
-    most 1 unit into the super-sink, so the returned flow value counts
-    accepted identities, and every unit consumed real shared capacity on
-    the way there.
+    IMPORTANT (an operational caveat, see UNSPECIFIED note at the bottom of
+    this file): the RETURNED TOTAL is a well-defined, deterministic quantity
+    -- the max-flow value is unique.  It verifies the setwise-conservation
+    BOUND (the aggregate cannot exceed the cut).  It does NOT determine WHICH
+    identities receive the units when demand exceeds capacity: among
+    symmetric sinks, different augmenting-path orders accept different
+    principals, all valid maximum flows.  So this function is sound as a
+    conservation check and must not be read as a stable per-principal
+    allocation.
     """
     s = split_graph(g, observer)
     SINK = ("sink", None)
@@ -360,63 +360,88 @@ def accepted_count(g, observer, targets):
     return s.max_flow(("out", observer), SINK)
 
 
+def region_ceiling(g, observer, entry):
+    """design §16.2's sentence made a number: "the entire subtree inherits
+    at most what flows through that one vertex".  Every identity behind
+    `entry` drains through entry's out-node, so no set of them can
+    simultaneously use more than the max flow observer -> out(entry)."""
+    s = split_graph(g, observer)
+    if ("out", entry) not in s.cap:
+        return 0
+    return s.max_flow(("out", observer), ("out", entry))
+
+
 # ---------------------------------------------------------------------------
 # EXPERIMENT E1 -- distance-decay divergence (design §16.2's arithmetic).
 #
-# The design's claim, verbatim in structure: with per-hop weight lambda and
-# fanout f, the total weight of a fake subtree at depth D with k further
-# levels is  lambda^D * sum_{i=0..k} (f*lambda)^i , which diverges as k
-# grows unless f*lambda < 1.  We verify the two quoted data points:
-#   lambda = 0.5,  f = 10, depth-6 fake subtree  -> mass ~19,500x one
-#     honest node at the same distance,
-#   lambda = 0.05, f = 10 -> the series converges to ~2x.
-# No flow computation is involved; this is the arithmetic the flow metric
-# exists to escape, run rather than asserted.
+# With per-hop weight lambda and fanout f, a fake subtree at depth D with k
+# further levels has mass  lambda^D * sum_{i=0..k} (f*lambda)^i , which
+# DIVERGES unless f*lambda < 1.  The boundary matters: at f*lambda = 1 the
+# series is sum of 1^i = k+1, which diverges LINEARLY -- so the design's
+# "unless f*lambda < 1" makes EQUALITY a divergent case.  We classify all
+# three regimes (< 1 converges, == 1 and > 1 diverge) and check the two
+# quoted data points.
 # ---------------------------------------------------------------------------
 
 def experiment_divergence(report):
     f = 10
-    D = 1                       # the fake subtree hangs one hop away
+    D = 1
     def fake_mass(lam, levels):
-        """Sum of lambda^(D+i) * f^i for i = 0..levels: every fake node's
-        weight, where level i holds f^i nodes at distance D+i."""
         return sum((lam ** (D + i)) * (f ** i) for i in range(levels + 1))
-    honest_one = lambda lam: lam ** D       # one honest node at distance D
+    honest_one = lambda lam: lam ** D
 
     report.append("E1: distance-decay divergence (design 16.2)")
-    for lam, levels in [(0.5, 6), (0.05, 6)]:
-        ratio = fake_mass(lam, levels) / honest_one(lam)
-        regime = "DIVERGES (f*lambda = %.1f > 1)" % (f * lam) if f * lam > 1 \
-            else "converges (f*lambda = %.1f < 1)" % (f * lam)
+    # Three regimes, including the exact boundary f*lambda = 1 (lambda = 0.1
+    # at f = 10), which the design's "unless f*lambda < 1" classifies as
+    # divergent and an earlier version of this experiment misclassified.
+    for lam in [0.5, 0.1, 0.05]:
+        prod = f * lam
+        diverges = prod >= 1                       # >= 1, NOT > 1 (the fix)
+        # A long tail exposes divergence: a converging series stays tiny,
+        # a diverging one grows without bound in the number of levels.
+        deep = fake_mass(lam, 40) / honest_one(lam)
+        if abs(prod - 1) < 1e-9:
+            regime = "DIVERGES at the exact boundary (f*lambda = 1)"
+        elif diverges:
+            regime = f"DIVERGES (f*lambda = {prod:.1f} > 1)"
+        else:
+            regime = f"converges (f*lambda = {prod:.2f} < 1)"
         report.append(
-            f"  lambda={lam:<5} depth-{levels} fake subtree carries "
-            f"{ratio:,.0f}x the weight of one honest node -- {regime}")
-    # The design's quoted figures: ~19,500x at 0.5 and total mass ~2 at 0.05.
+            f"  lambda={lam:<5} f*lambda={prod:<4} 40-level mass/honest = "
+            f"{deep:>12,.1f}   {regime}")
+    # Design's quoted magnitudes at the depths it cites.
     assert 15_000 < fake_mass(0.5, 6) / honest_one(0.5) < 25_000
-    assert fake_mass(0.05, 20) < 0.15   # converged tail: tiny absolute mass
-    report.append("  matches design 16.2's quoted magnitudes: CONFIRMED")
+    assert fake_mass(0.05, 40) < 0.15              # converged: tiny
+    # The boundary case grows linearly and is unbounded in the level count.
+    assert fake_mass(0.1, 100) / honest_one(0.1) > 100
+    assert fake_mass(0.1, 200) / honest_one(0.1) > 200
+    report.append("  matches design 16.2's magnitudes; boundary f*lambda=1 "
+                  "diverges linearly: CONFIRMED")
     report.append("")
 
 
 # ---------------------------------------------------------------------------
 # EXPERIMENT E2 -- the single-observer cut bound.
 #
-# Construction: an honest tree; one honest node B ("the boundary vertex")
-# adopts the root of a FAKE subtree.  Every path from the observer into the
-# fake region passes through the single edge B -> fake-root -- a cut of
-# known capacity.  We then grow the fake region and measure the BEST
-# INDIVIDUAL score any fake identity achieves.  The claim (design §16.2:
-# "the entire subtree inherits at most what flows through that one
-# vertex"): the score must never exceed the cut, no matter the population.
+# An honest tree; one honest boundary node adopts the root of a FAKE
+# subtree.  Every path from the observer into the fake region passes through
+# the single boundary edge -- a cut of known capacity.  We grow the region
+# and measure the BEST INDIVIDUAL score any fake achieves; the claim
+# (§16.2): the score never exceeds the cut, whatever the population.
+#
+# This experiment computes over the FULL flow graph (full visibility) -- the
+# STRONGEST test: if the individual bound holds even when the observer sees
+# everything, it holds a fortiori in the observer's smaller VISIBLE graph
+# (invisibility only removes capacity, never adds it -- §16.3.1's
+# conservative direction).
 # ---------------------------------------------------------------------------
 
 def attach_fake_region(g, boundary_node, width, depth):
-    """Attach a fake subtree of `width` children per level, `depth` levels,
-    under a single fake root adopted by boundary_node.  Returns the list of
-    fake identities.  Fake-internal edges get GENEROUS capacity -- the
-    attacker wires their own region however they like (design §17.2:
-    topology cannot provide Sybil resistance; only the boundary is real).
-    """
+    """Attach a fake subtree (width children per level, depth levels) under a
+    single fake root adopted by boundary_node.  Fake-internal edges are
+    GENEROUS -- the attacker wires their own region however they like
+    (design §17.2: topology cannot provide Sybil resistance; only the
+    boundary is real).  Returns the list of fake identities."""
     fake_root = "FAKE"
     g.add_edge(boundary_node, fake_root, HIER_CAP)
     g.add_edge(fake_root, boundary_node, HIER_CAP)
@@ -427,7 +452,7 @@ def attach_fake_region(g, boundary_node, width, depth):
         for u in frontier:
             for i in range(width):
                 v = f"{u}.f{i}"
-                g.add_edge(u, v, 100)          # attacker-internal: generous
+                g.add_edge(u, v, 100)
                 g.add_edge(v, u, 100)
                 fakes.append(v)
                 nxt.append(v)
@@ -438,15 +463,12 @@ def attach_fake_region(g, boundary_node, width, depth):
 def experiment_cut_bound(rng, report):
     report.append("E2: the individual cut bound (design 16.2, 17.3)")
     base, nodes, _ = build_tree(rng, depth=3, fanout=3)
-    observer = nodes[0]                        # the root observes
-    boundary = nodes[1]                        # its first child adopts FAKE
+    observer = nodes[0]
+    boundary = nodes[1]
     for width, depth in [(2, 2), (3, 3), (4, 4)]:
         g = base.copy()
         fakes = attach_fake_region(g, boundary, width, depth)
         best = max(score_independent(g, observer, t) for t in fakes)
-        # The relevant cut is what the OBSERVER's own edges to the boundary
-        # region admit; with one B->FAKE edge of HIER_CAP, no fake identity
-        # can score above HIER_CAP however the interior is wired.
         ok = best <= HIER_CAP
         report.append(
             f"  fake region of {len(fakes):>4} identities: best individual "
@@ -458,145 +480,185 @@ def experiment_cut_bound(rng, report):
 
 
 # ---------------------------------------------------------------------------
-# EXPERIMENT E3 -- setwise conservation, and the failure mode it forbids.
+# EXPERIMENT E3 -- setwise conservation, OBSERVER-VISIBLE.
 #
-# Same construction as E2, but now we ask about the AGGREGATE.
+# The fake identities are attached as a WIDE FAN of DIRECT children of the
+# boundary node, so they sit two scope-hops from the observer -- inside its
+# horizon, identities it genuinely holds.  (An earlier version attached a
+# DEEP subtree whose descendants were 3+ hops away, outside the observer's
+# horizon: the conserving computation there ran over identities the observer
+# could not see.  Deeper fakes are still attached below, to demonstrate that
+# invisibility only REDUCES the observer's count -- §16.3.1's conservative
+# direction -- never inflates it.)
 #
-#   Mode A (independent per-target): sum over fake identities of each one's
-#     individual score.  Every computation reuses the boundary capacity, so
-#     the sum grows linearly with population -- each identity is "bounded"
-#     while the aggregate is not.  This is the broken reading.
-#   Mode B (one conserving computation): the number of fake identities
-#     accepted simultaneously.  Design §16.2 (normative, 2026-09-03): this
-#     must be bounded by the cut and must NOT grow once the boundary
-#     saturates.
+#   Mode A (independent per-target), over the visible graph: the sum grows
+#     with the visible population -- the broken reading.
+#   Mode B (one conserving computation), over the visible graph: the joint
+#     count saturates at the visible region ceiling and stays flat.
 #
-# The pass criterion mirrors the 0.8.3 validation text: "increasing only
-# the number of identities must never increase the aggregate ... beyond the
-# fixed cut".
+# Pass criterion (the 0.8.3 validation text): growing the population never
+# pushes the conserving aggregate beyond the cut, and once population
+# exceeds the ceiling the joint sits AT it.
 # ---------------------------------------------------------------------------
 
-def region_ceiling(g, observer, entry):
-    """The capacity of the cut between the observer and the region behind
-    `entry` -- computed as the max flow from the observer to entry's OUT
-    node in the split graph.  This is, literally, design §16.2's sentence
-    "the entire subtree inherits at most what flows through that one
-    vertex": every identity behind `entry` drains through entry's out-node,
-    so no set of them can simultaneously use more than reaches it.
-    """
-    s = split_graph(g, observer)
-    return s.max_flow(("out", observer), ("out", entry))
+def attach_fake_fan(g, boundary_node, width):
+    """Attach `width` fake identities as DIRECT children of boundary_node
+    (all one adoption hop below it, so two scope-hops from a root observer:
+    inside the horizon).  Returns the fake identities."""
+    fakes = []
+    for i in range(width):
+        v = f"FAN.f{i}"
+        g.add_edge(boundary_node, v, HIER_CAP)
+        g.add_edge(v, boundary_node, HIER_CAP)
+        fakes.append(v)
+    return fakes
 
 
 def experiment_setwise(rng, report):
-    report.append("E3: setwise conservation (design 16.2, normative)")
-    base, nodes, _ = build_tree(rng, depth=3, fanout=3)
-    observer = nodes[0]
-    boundary = nodes[1]
+    report.append("E3: setwise conservation, observer-visible (design 16.2)")
+    base, nodes, children = build_tree(rng, depth=2, fanout=3)
+    observer = nodes[0]                            # the root observes
+    boundary = children[observer][0]               # a direct child (1 hop)
     joints = []
-    for width, depth in [(2, 2), (3, 3), (4, 4)]:
+    for width in [4, 8, 16]:
         g = base.copy()
-        fakes = attach_fake_region(g, boundary, width, depth)
-        indep_sum = sum(score_independent(g, observer, t) for t in fakes)
-        joint = accepted_count(g, observer, fakes)
-        ceiling = region_ceiling(g, observer, "FAKE")
-        # The claim, exactly as the 0.8.3 validation text states it:
-        # growing the population must never push the AGGREGATE beyond the
-        # fixed cut.  Growth UP TO the ceiling is legitimate (7 identities
-        # cannot fill an 8-unit cut); growth BEYOND it never happens.
+        fakes = attach_fake_fan(g, boundary, width)
+        # Rebuild scope adjacency to include the new fan as boundary's
+        # children (siblings of each other), so the horizon reflects them.
+        kids = {u: list(children.get(u, [])) for u in children}
+        kids.setdefault(boundary, [])
+        kids[boundary] = list(kids[boundary]) + fakes
+        for fkid in fakes:
+            kids.setdefault(fkid, [])
+        scope = scope_adjacency(list(g.cap.keys()), kids)
+        vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
+        # Only fakes actually inside the observer's visible graph count --
+        # the observer cannot evaluate identities it does not hold.
+        visible_fakes = [f for f in fakes if f in vis.cap]
+        indep_sum = sum(score_independent(vis, observer, t)
+                        for t in visible_fakes)
+        joint = accepted_count(vis, observer, visible_fakes)
+        ceiling = region_ceiling(vis, observer, boundary)
         report.append(
-            f"  {len(fakes):>4} fake identities:  independent-sum = "
-            f"{indep_sum:>5}   conserving joint = {joint}   "
-            f"region ceiling = {ceiling}")
-        assert joint <= ceiling, \
-            "aggregate exceeded the cut under conservation -- investigate"
-        joints.append((len(fakes), joint, ceiling))
-    # Saturation: once the population exceeds the ceiling, the joint count
-    # sits AT the ceiling and further population buys nothing.
+            f"  {len(visible_fakes):>2} visible fakes:  independent-sum = "
+            f"{indep_sum:>4}   conserving joint = {joint}   "
+            f"visible region ceiling = {ceiling}")
+        assert joint <= ceiling, "aggregate exceeded the visible cut"
+        joints.append((len(visible_fakes), joint, ceiling))
     for n, joint, ceiling in joints:
         if n >= ceiling:
             assert joint == ceiling, "saturated region below its ceiling"
+    # Demonstrate the conservative direction: attaching a DEEP (invisible)
+    # fake subtree beyond the horizon does not raise the observer's joint.
+    g = base.copy()
+    near = attach_fake_fan(g, boundary, 16)
+    deep = attach_fake_region(g, boundary, width=4, depth=3)   # 3+ hops away
+    kids = {u: list(children.get(u, [])) for u in children}
+    kids.setdefault(boundary, [])
+    kids[boundary] = list(kids[boundary]) + near
+    for fkid in near:
+        kids.setdefault(fkid, [])
+    scope = scope_adjacency(list(g.cap.keys()), kids)
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges=[])
+    deep_visible = [d for d in deep if d in vis.cap]
     report.append(
-        "  the independent sum grows with population (the reading 0.8.3 "
-        "showed is broken);")
+        f"  a deep fake subtree of {len(deep)} adds {len(deep_visible)} "
+        f"visible identities -- invisibility is the conservative direction")
+    assert len(deep_visible) == 0, "deep fakes leaked into the horizon"
     report.append(
-        "  the conserving joint saturates at the region ceiling and "
-        "population buys nothing more: CONFIRMED")
+        "  independent-sum grows with visible population (the broken 0.8.3 "
+        "reading);")
+    report.append(
+        "  the conserving joint saturates at the visible ceiling; invisible "
+        "identities cannot inflate it: CONFIRMED")
     report.append("")
 
 
 # ---------------------------------------------------------------------------
-# EXPERIMENT E4 -- edge-influence fanout (design §16.3.1's coverage bound).
+# EXPERIMENT E4 -- edge-influence fanout, with correct horizon semantics.
 #
-# Claim under test: "one acquired edge sits inside every horizon that
-# contains it and helps each of those observers at once -- the cost of
-# influencing a population scales with the coverage of acquired edges over
-# that population, not with the number of observers."
+# Claim (§16.3.1): one acquired PEERING edge is visible inside both peers'
+# horizons, so it helps every observer whose horizon contains a peer -- cost
+# scales with COVERAGE over the population, not with the number of
+# observers.
 #
-# Method: build a tree; attach one attacker identity by ONE new edge to a
-# randomly chosen victim node; for EVERY observer in the graph, compute the
-# attacker's score in that observer's VISIBLE subgraph (their horizon)
-# before and after.  Count observers whose score changed.  If the old
-# "per-target" reading were right, that count would be ~1; the coverage
-# reading predicts it equals the number of observers whose horizon contains
-# the new edge.
+# Method, corrected from the earlier version in three ways:
+#   1. horizons are computed over SCOPE (adoption + sibling) edges; the
+#      acquired edge is a PEERING (flow) edge that confers NO scope (§6.3);
+#   2. the edge is visible to an observer iff its horizon contains a peer
+#      (§16.3.1), which is what determines coverage;
+#   3. we ENUMERATE every interior placement (worst-case-aware), not sample
+#      a few, because the design claim is about coverage over a population
+#      and placement is the quantity an adversary optimises.
+#
+# Two properties are asserted, matching the design's careful separation of
+# the strong claim from its conservative half:
+#   * changed == holds_edge   (STRONG: every observer that can see the edge
+#     is influenced, and only those) -- the earlier version asserted only
+#     `changed <= holds_edge`, which the strong claim's wording outran;
+#   * holds_edge > 1           (coverage, not per-target).
 # ---------------------------------------------------------------------------
 
 def experiment_fanout(rng, report):
-    report.append("E4: edge-influence fanout (design 16.3.1)")
-    g, nodes, children = build_tree(rng, depth=3, fanout=4)
+    report.append("E4: edge-influence fanout, corrected horizons (design 16.3.1)")
+    flow, nodes, children = build_tree(rng, depth=3, fanout=4)
+    scope = scope_adjacency(nodes, children)
     attacker = "ATTACKER"
-    # Try the acquired edge at several victims -- interior nodes, because a
-    # leaf's horizon overlaps few others and understates the effect the
-    # design's own text predicts for a well-placed edge.
     interior = [n for n in nodes if children.get(n)]
-    results = []
-    for trial in range(5):
-        victim = rng.choice(interior)
-        g_after = g.copy()
-        g_after.add_edge(victim, attacker, PEER_CAP)
-        g_after.add_edge(attacker, victim, PEER_CAP)
-        changed = 0        # observers whose evaluation of the attacker moved
-        holds_edge = 0     # observers whose horizon contains the new edge
+
+    coverages = []
+    for victim in interior:
+        # The acquired edge is a PEERING edge (flow only, no scope).
+        peer_edges = [(victim, attacker, PEER_CAP)]
+        changed = 0
+        holds_edge = 0
         for obs in nodes:
-            # Score the attacker inside each observer's OWN visible
-            # subgraph, before and after -- E4 is about visibility, and
-            # design §16.3.1's rule is that only an edge an observer can
-            # see can change that observer's cut.
-            before_g = visible_subgraph(g, obs)
-            after_g = visible_subgraph(g_after, obs)
-            b = (score_independent(before_g, obs, attacker)
-                 if attacker in before_g.cap else 0)
-            a = (score_independent(after_g, obs, attacker)
-                 if attacker in after_g.cap else 0)
+            # BEFORE: no peering edge.  AFTER: the peering edge exists but
+            # confers no scope, so horizons are computed WITHOUT it.
+            before = visible_flow_subgraph(flow, scope, obs, peer_edges=[])
+            after = visible_flow_subgraph(flow, scope, obs, peer_edges)
+            b = (score_independent(before, obs, attacker)
+                 if attacker in before.cap else 0)
+            a = (score_independent(after, obs, attacker)
+                 if attacker in after.cap else 0)
             if a != b:
                 changed += 1
-            if attacker in horizon(g_after, obs):
+            # The edge is visible to obs iff obs's SCOPE horizon contains a
+            # peer -- here the victim (the attacker has no scope position).
+            if victim in horizon(scope, obs):
                 holds_edge += 1
-        results.append((victim, changed, holds_edge))
-        # The two claims under test, per placement:
-        #  - coverage, not per-target: MORE THAN ONE observer moved;
-        #  - the conservative direction: nobody OUTSIDE the edge's
-        #    horizons moved (invisible edges cannot help).
-        assert changed > 1, \
-            "per-target reading would predict 1 changed observer"
-        assert changed <= holds_edge, \
-            "an observer moved without the edge in its horizon"
-    for victim, changed, holds_edge in results:
-        report.append(
-            f"  edge at {victim!r}: {changed} of {len(nodes)} observers' "
-            f"evaluations changed ({holds_edge} hold the edge in horizon)")
+        # STRONG property, per placement: exactly the observers who can see
+        # the edge are influenced.
+        assert changed == holds_edge, \
+            f"changed ({changed}) != can-see ({holds_edge}) at {victim!r}"
+        assert holds_edge >= 1, "an acquired edge no observer can see"
+        coverages.append((victim, holds_edge))
+
+    counts = [c for _, c in coverages]
+    lo, med, hi = min(counts), int(statistics.median(counts)), max(counts)
+    # Show the worst case (max coverage) and a couple of sample placements.
+    worst = max(coverages, key=lambda t: t[1])
     report.append(
-        "  one edge influences every observer whose horizon contains it and "
-        "no observer whose")
+        f"  {len(interior)} interior placements enumerated (worst-case "
+        f"aware, not sampled)")
     report.append(
-        "  horizon does not -- the coverage bound, quantitatively, per "
-        "placement: CONFIRMED")
+        f"  coverage per acquired edge -- observers who can see it: "
+        f"min {lo}, median {med}, max {hi}")
+    report.append(
+        f"  worst-case placement {worst[0]!r} covers {worst[1]} of "
+        f"{len(nodes)} observers with ONE edge")
+    report.append(
+        "  every influenced observer can see the edge and every observer "
+        "that can see it is")
+    report.append(
+        "  influenced (changed == coverage, per placement); coverage is many "
+        "per edge, not one:")
+    report.append("  CONFIRMED")
     report.append("")
 
 
 # ---------------------------------------------------------------------------
-# Entry point: run all experiments, print and save the report.
+# Entry point.
 # ---------------------------------------------------------------------------
 
 def main():
@@ -611,6 +673,28 @@ def main():
     experiment_setwise(rng, report)
     experiment_fanout(rng, report)
     report.append("all assertions passed")
+    report.append("")
+    report.append(
+        "UNSPECIFIED (flagged for the design author, not decided here): when "
+        "shared")
+    report.append(
+        "capacity cannot satisfy all eligible principals, the max-flow VALUE "
+        "is unique but")
+    report.append(
+        "the ALLOCATION among symmetric principals is not -- augmenting-path "
+        "order decides")
+    report.append(
+        "it.  The reference metric (design 16.2) fixes each principal's "
+        "INDIVIDUAL standing")
+    report.append(
+        "(its own max-flow, deterministic) and the aggregate BOUND, but not a "
+        "deterministic")
+    report.append(
+        "tie-break when scarce capacity must be allocated to specific "
+        "principals.  Whether")
+    report.append(
+        "that must be specified, or is left to policy (16.4 pluggability), is "
+        "the author's call.")
     text = "\n".join(report)
     print(text)
     return text

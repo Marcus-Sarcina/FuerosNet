@@ -28,10 +28,25 @@ min-cut trust metric. Runs the four claims §16.2 argues on paper:
 
 | Experiment | Design claim | Result |
 |---|---|---|
-| E1 | distance-decay diverges unless λ < 1/f | the 0.5/0.05 figures reproduce (~19,500× vs ~2×) |
+| E1 | distance-decay diverges unless λ < 1/f | the 0.5/0.05 figures reproduce (~19,500× vs ~2×), and the exact boundary fλ=1 is classified as divergent (it grows linearly) |
 | E2 | a region is bounded by its cut regardless of population | best individual score stays ≤ the boundary capacity as the fake region grows to 341 identities |
-| E3 | **setwise conservation** (normative, 2026-09-03) | the independent-per-target sum grows with population; the one-conserving-computation joint saturates at the region ceiling and stays flat — the exact property the 0.8.3 review made normative |
-| E4 | edge-influence is coverage, not per-target (§16.3.1) | one acquired edge changes exactly the observers whose horizon contains it, and no others |
+| E3 | **setwise conservation** (normative, 2026-09-03), observer-visible | over the observer's own visible graph, the independent-per-target sum grows with population while the one-conserving-computation joint saturates at the visible region ceiling; deeper fakes fall outside the horizon and cannot inflate it (§16.3.1's conservative direction) |
+| E4 | edge-influence is coverage, not per-target (§16.3.1) | with horizons computed over adoption+sibling scope (not the peering edge), one acquired peering edge influences *exactly* the observers whose horizon contains a peer — every interior placement enumerated, worst-case coverage reported |
+
+**Three concepts kept separate.** The design is emphatic (§6.3:
+"Contributing to trust and conferring scope are different things") that
+*scope* topology (adoption + sibling edges → the horizon, §15.1), *trust-
+capacity* topology (adoption + peering edges → the flow), and *visibility*
+(a peering edge "is visible inside the two peers' horizons and nowhere
+else", §16.3.1) are three different relations. The simulation represents
+them separately — `scope_adjacency` / `horizon`, `FlowGraph` capacities, and
+`visible_flow_subgraph`. An external cross-family review caught an earlier
+version collapsing all three into one adjacency, which understated an
+acquired edge's coverage several-fold and let E3 count identities the
+observer could not see; the current version is the correction. That review
+also brute-force-validated the `max_flow` implementation against exhaustive
+minimum cuts on 700 random graphs with zero discrepancies, so the core
+arithmetic is not where a defect would hide.
 
 `simulation/results.txt` is the committed run.
 
@@ -150,6 +165,20 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **`flow_metric` (a cross-family review found three conflated concepts).**
+  The first version used one adjacency relation for scope, trust-capacity and
+  visibility. An external review showed this made E4 understate an acquired
+  edge's coverage several-fold (the design's §16.3.1 economics) and let E3's
+  saturation run over identities the observer could not see. The rewrite
+  separates the three relations the design keeps in three different sections,
+  and E4 now enumerates every interior placement rather than sampling. It also
+  surfaced a design **UNSPECIFIED**, flagged in the simulation's own output
+  and to the author: the max-flow *value* is unique, but when scarce capacity
+  must be *allocated* among symmetric principals, augmenting-path order — not
+  the spec — decides which are accepted. Whether the reference metric must fix
+  a deterministic tie-break, or leaves it to §16.4 policy pluggability, is an
+  open author question, not something the simulation decides.
 
 ---
 
