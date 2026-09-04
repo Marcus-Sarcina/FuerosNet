@@ -5730,17 +5730,28 @@ presenting history; because the evaluator admits only what it already
 recognises, and prices even that by its own flow, the cut stays a property
 of the evaluator's graph rather than of the presenter's claims.
 
-**The trust landscape: your horizon is the origin** [author, 2026-09-04].
-Distance in this metric is not hops in the graph. **Hierarchical edges are
-unthrottled out to the two-edge patron/sibling horizon** — inside it you
-hold the topology and the direct evidence (§15.1), so the flow metric is
-not what is doing the work — **and beyond that horizon is where trust
-becomes throttled by the metric.** So **everyone in your trust horizon sits
-at the origin together**, and distance counts edges outward from it: your
-own proof-of-presence counterparty and your patron's sibling's
-proof-of-presence counterparty are **both at distance 1** — the first
-because you met them, the second because your patron's sibling is at the
-origin with you and met them.
+**The trust landscape: you are the origin, and your horizon is one step
+out** [author, 2026-09-04]. Distance in this metric is not hops in the
+graph. **Hierarchical edges are unthrottled out to the two-edge
+patron/sibling horizon** — inside it you hold the topology and the direct
+evidence (§15.1), so the flow metric is not what is doing the work — **and
+beyond that horizon is where trust becomes throttled by the metric.** The
+distance function that follows:
+
+- **Distance 0 is you alone.**
+- **Distance 1 is your whole trust horizon, collapsed into one step** —
+  every node in the two-edge patron/sibling ball is the same distance from
+  you, near or far within it — **together with anyone you have met
+  yourself**: a proof-of-presence counterparty or a peer, whether or not
+  they are in the horizon.
+- **Distance 2 is one step further**: a node outside your horizon that is
+  one edge from a horizon member, or from one of your own counterparties.
+  **And so on outward.**
+
+So your patron's sibling is at distance 1 (they are in your horizon) while
+*their* proof-of-presence counterparty is at distance 2 (outside your
+horizon, one edge from someone at 1). **The horizon flattens; the world
+past it does not.**
 
 **Beyond the horizon, trust flows equally over the hierarchical and the
 proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are

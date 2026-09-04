@@ -4357,3 +4357,40 @@ binding constraint, not node capacities -- which is reassuring rather than
 convenient: the earlier distance error was not load-bearing for E1-E4.
 
 Six seeds pass; all eight models green; references clean at 1953.
+
+## Author correction: the horizon is distance 1, not the origin (2026-09-04)
+
+Corrected within the hour, before the earlier version could propagate.
+**Only the user sits at the origin.** Distance 1 is the WHOLE trust horizon
+collapsed into one step, TOGETHER WITH anyone the user met themselves (PoP
+counterparty or peer), in or out of the horizon. Distance 2 is a node
+outside the horizon one edge from a horizon member or from one of the
+user's own counterparties, and so on outward.
+
+**This supersedes the author's own earlier example**, which had "my PoPmate
+and my Patron's Sibling's PoPmate both at distance 1": under the correction
+the patron's sibling is at 1 (a horizon member) and THEIR PoPmate is at 2
+(outside the horizon, one edge from someone at 1). §16.2.1 now carries the
+corrected example and the phrase "the horizon flattens; the world past it
+does not."
+
+**A distinction the correction forces, and which the simulation now keeps**:
+DISTANCE and THROTTLING are different functions. The design says
+hierarchical edges are unthrottled out to the horizon and the metric
+throttles beyond it -- so INSIDE-OR-BEYOND decides *whether* a node is
+rationed while DISTANCE decides *how much*. Distance 1 contains both kinds:
+horizon members (inside, unthrottled) and the observer's own counterparties
+who are not horizon members (outside, throttled at distance 1).
+node_capacity() now takes both arguments.
+
+**FLAGGED FOR THE AUTHOR, not decided**: is that split right? A
+counterparty you met *yourself* sits at distance 1 but outside the horizon,
+so on this reading it is throttled while a horizon member you have never
+met is not. The alternative reading -- everything at distance 1 is
+unthrottled, since the metric's job is reaching past your own acquaintance
+-- is equally consistent with the sentences given, and changes what a
+direct PoP is worth. I implemented the first because "beyond that horizon
+is where trust becomes throttled" is the more literal reading of the text.
+
+Six seeds pass; all eight models green; the E1-E4 conclusions are again
+unchanged, edge capacities still being the binding constraint.

@@ -8479,3 +8479,15 @@ ratio left to set, and the unset-parameter count fell to eleven in both
 places that state it. What remains open is recorded in §16.3 rather than
 inferred — with capacity no longer pricing the difference between a
 technical favour and a physical meeting, nothing currently does.
+
+### 2026-09-04 (landscape corrected: the horizon is distance 1)
+
+The trust landscape is corrected before it could propagate: only the user
+sits at the origin, the whole horizon is one step out, and anyone the user
+met themselves is at that same step whether or not the horizon contains
+them. A node outside the horizon and one edge from a horizon member or from
+one of the user's own counterparties is at distance 2, and so on. The
+correction supersedes its own first example — a patron's sibling's
+counterparty is at distance 2, not 1 — and forces a distinction the
+simulation now keeps explicitly: inside-or-beyond the horizon decides
+whether a node is throttled, while distance decides how much.

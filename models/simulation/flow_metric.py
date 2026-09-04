@@ -298,8 +298,17 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
 # capacity consumed reaching one target is unavailable for another.
 # ---------------------------------------------------------------------------
 
-def node_capacity(dist):
+def node_capacity(dist, in_horizon=False):
     """Per-node throughput by TRUST-LANDSCAPE distance (see landscape_distance).
+
+    THROTTLING AND DISTANCE ARE TWO DIFFERENT FUNCTIONS, and this file keeps
+    them apart because the design does.  design §16.2.1: hierarchical edges
+    are "unthrottled out to the two-edge horizon ... beyond that horizon is
+    where trust becomes throttled" -- so what decides whether a node is
+    rationed is INSIDE-OR-BEYOND, while its DISTANCE decides how much.
+    Distance 1 contains both kinds: every horizon member (unthrottled, being
+    inside) and any counterparty the observer met itself who is NOT in the
+    horizon (throttled, being outside).  See the note in the report.
 
     MODELLER'S CHOICE OF SCHEDULE, NOT FROM THE DESIGN.  Advogato decreases
     capacity with distance from the seed and this file uses a halving
@@ -313,10 +322,10 @@ def node_capacity(dist):
     horizon and the metric throttles only beyond it, so the whole horizon
     sits at the origin together and nothing inside it is rationed by flow.
     """
-    if dist == 0:
-        return UNTHROTTLED             # the horizon: the metric is not the
-                                       # binding constraint inside it
-    return max(32 >> dist, 1)          # beyond: 16, 8, 4, 2, 1, 1, ...
+    if dist == 0 or in_horizon:
+        return UNTHROTTLED             # self, or inside the horizon: the
+                                       # metric is not the binding constraint
+    return max(32 >> dist, 1)          # beyond it: 16, 8, 4, 2, 1, 1, ...
 
 
 UNTHROTTLED = 10 ** 9    # stands in for "the flow metric does not ration here"
@@ -327,20 +336,25 @@ def landscape_distance(scope_adj, flow, observer, peer_edges):
 
     NOT hops in the graph.  The rule:
 
-      * everyone in the observer's two-edge patron/sibling HORIZON sits at
-        the ORIGIN, distance 0, together -- hierarchical edges are
-        unthrottled out to the horizon;
-      * beyond it, distance counts edges outward from the origin, and
+      * the OBSERVER ALONE is the origin, distance 0;
+      * DISTANCE 1 is the observer's whole two-edge patron/sibling HORIZON,
+        collapsed into one step -- every horizon member is equidistant --
+        TOGETHER WITH anyone the observer has met itself (a PoP
+        counterparty or a peer), in or out of the horizon;
+      * DISTANCE 2 is one step further: a node outside the horizon that is
+        one edge from a horizon member or from one of the observer's own
+        counterparties.  And so on outward.  Beyond the horizon,
         **trust flows equally over the hierarchical and the
         proof-of-presence/peering graphs** [author, 2026-09-04] -- the
         metric distinguishes inside from beyond, never edge kind from edge
         kind.  So the outward walk below deliberately treats adoption and
         peering edges alike.
 
-    So the observer's own PoP counterparty and the observer's patron's
-    sibling's PoP counterparty are both at distance 1: the first because the
-    observer met them, the second because the patron's sibling is at the
-    origin and met them.
+    So the observer's patron's sibling is at distance 1 (a horizon member)
+    while THEIR PoP counterparty is at distance 2 -- outside the horizon,
+    one edge from someone at 1.  The horizon flattens; the world past it
+    does not.  (An earlier version of this file put the whole horizon at
+    distance 0; the author corrected it -- only the observer is the origin.)
 
     An earlier version of this file measured plain BFS hops in the flow
     graph, which graded the INSIDE of the horizon -- a different landscape
@@ -349,8 +363,13 @@ def landscape_distance(scope_adj, flow, observer, peer_edges):
     `peer_edges` is the (u, v, cap) list; `flow` supplies PoP/adoption
     adjacency for the outward walk.
     """
-    origin = horizon(scope_adj, observer)
-    dist = {n: 0 for n in origin}
+    dist = {n: 1 for n in horizon(scope_adj, observer)}   # the horizon shell
+    for (u, v, _c) in peer_edges:                          # own counterparties
+        if u == observer:
+            dist.setdefault(v, 1)
+        if v == observer:
+            dist.setdefault(u, 1)
+    dist[observer] = 0                                     # the origin, alone
     # Adjacency for the outward walk: EVERY edge counts the same beyond the
     # origin -- adoption, sibling, peering, and (in a richer model) explicit
     # PoP edges alike.
@@ -363,8 +382,8 @@ def landscape_distance(scope_adj, flow, observer, peer_edges):
     for (u, v, _c) in peer_edges:
         acq.setdefault(u, set()).add(v)
         acq.setdefault(v, set()).add(u)
-    frontier = set(origin)
-    d = 0
+    frontier = {n for n, d0 in dist.items() if d0 == 1}
+    d = 1
     while frontier:
         d += 1
         nxt = set()
@@ -406,13 +425,15 @@ def split_graph(g, observer, scope_adj=None, peer_edges=()):
     """
     if scope_adj is not None:
         dist = landscape_distance(scope_adj, g, observer, peer_edges)
+        hz = horizon(scope_adj, observer)
     else:
         dist = distances_from(g, observer)
+        hz = {observer}                # bare graphs: only self is "inside"
     s = FlowGraph()
     for u in g.cap:
         if u not in dist:
             continue
-        ncap = UNTHROTTLED if u == observer else node_capacity(dist[u])
+        ncap = node_capacity(dist[u], u in hz)
         s.add_edge(("in", u), ("out", u), ncap)
         for v, c in g.cap[u].items():
             if c > 0 and v in dist:
