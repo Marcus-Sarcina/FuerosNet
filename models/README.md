@@ -175,8 +175,9 @@ then-diagnose loop *is* the value of the exercise.
   and E4 now enumerates every interior placement rather than sampling. It also
   surfaced a design question the author has since **ruled** on (§16.4): the
   max-flow *value* is unique, but the *allocation* under scarce capacity is
-  not. The reference metric decides in two limbs — **the shorter path
-  dominates** (a longer path is less trustworthy by nature), and
+  not. The reference metric decides in three passes — **available
+  flow ranks first**, it being the metric itself; then **the shorter path
+  dominates** (a longer path is less trustworthy by nature); then
   consideration order breaks **true ties only** — as *reference policy, not a
   network invariant*, since per-observer trust (§16.1) means no party
   consumes another's computation.
@@ -188,9 +189,14 @@ then-diagnose loop *is* the value of the exercise.
   the order edges sit in the *graph's own adjacency* — an artifact of how the
   topology was built, not of candidate order. Measured directly: two
   equidistant candidates passed in the order [B, A] still admitted A. The
-  simulation now ranks candidates by (path length, consideration order)
-  explicitly and tests both limbs, including that construction order does not
-  leak in; §16.4 carries the implementation note. The same review also
+  simulation now ranks candidates explicitly and tests all three passes,
+  including that construction order does not leak in; §16.4 carries the
+  implementation note. The author's follow-up correction added the first
+  pass: available flow must rank before path length, since the flow *is* the
+  measurement and a chokepoint example cannot reveal the omission (every
+  candidate behind one saturated cut carries the same flow). That pass is
+  mutation-tested — removing the key makes the new case fail — because a test
+  that passes with and without the thing it tests proves nothing. The same review also
   rebuilt E4 around genuine two-ended cross-tree peering (an earlier
   one-ended attacker made "visible ⇒ influenced" true by construction; with
   both endpoints real, 14–28 observers see an edge while only 8–12 are

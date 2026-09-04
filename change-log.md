@@ -8416,3 +8416,15 @@ limbs. The same review rebuilt the edge-coverage experiment around genuine
 two-ended peering — an earlier one-ended attacker had made "visible implies
 influenced" true by construction — and separated the unit-demand admission
 count from the general-demand conservation statement the design makes.
+
+### 2026-09-04 (allocation: available flow ranks first)
+
+The scarce-capacity allocation rule gains its primary pass. Available flow
+ranks before path length, because the flow is what the metric measures and
+preferring a nearer candidate over a better-supported one would substitute
+the tie-break for the measurement; path length separates candidates the
+flow ranks equally, and consideration order separates what path length also
+ranks equally. §16.4 notes why the ordering is easy to miss: behind a
+single saturated cut every candidate carries the same flow, so the first
+pass decides nothing there, and the section is about pluggable policy in
+general rather than the chokepoint case alone.

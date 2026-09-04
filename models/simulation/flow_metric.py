@@ -350,15 +350,23 @@ def admit_reference_order(g, observer, candidates, demand=1):
     order they were admitted, and the total flow delivered.
 
     THE REFERENCE-POLICY ALLOCATION RULE (design §16.4, ruled 2026-09-04),
-    in two limbs:
+    in three passes -- and the FIRST is the metric itself:
 
-      1. THE SHORTER PATH DOMINATES.  When a saturated cut cannot admit
-         every candidate, the one reachable by the shorter path wins --
-         *a longer path is less trustworthy by nature* [author].  This is
-         the same reasoning §16.2 applies to distance decay, applied to
-         allocation instead of weight.
-      2. CONSIDERATION ORDER BREAKS TRUE TIES ONLY.  Among candidates at
-         EQUAL path length, the earlier-considered one wins.
+      0. AVAILABLE FLOW RANKS FIRST.  The total capacity reaching a
+         candidate is what the metric measures (§16.2), so a candidate
+         carrying more flow outranks one carrying less whatever their
+         distances.  Preferring a nearer candidate over a better-supported
+         one would substitute the tie-break for the measurement.  This pass
+         is invisible in the single-chokepoint examples below -- every
+         candidate behind one saturated cut carries the same flow, so it
+         decides nothing there -- which is exactly why it is easy to omit,
+         and why an earlier version of this file did.
+      1. THE SHORTER PATH DOMINATES among candidates the flow ranks
+         equally -- *a longer path is less trustworthy by nature*
+         [author], the reasoning §16.2 applies to distance decay, applied
+         to allocation instead of weight.
+      2. CONSIDERATION ORDER BREAKS TRUE TIES ONLY: candidates equal on
+         both flow and path length.
 
     WHY THIS NEEDS EXPLICIT CODE.  A plain multi-sink max-flow -- add every
     candidate's drain edge, run one max-flow -- looks like it implements
@@ -401,13 +409,18 @@ def admit_reference_order(g, observer, candidates, demand=1):
     s = split_graph(g, observer)
     SINK = ("sink", None)
     source = ("out", observer)
-    # Limb 1 + limb 2: rank by (distance, consideration index).  Distances
-    # are measured in the split graph from the observer's out-node, so they
-    # count real hops through the topology the observer can see.
+    # The three ranking keys, measured on the PRE-ALLOCATION graph, because
+    # a candidate's standing and position are properties of the topology,
+    # not of who happened to be served first:
+    #   pass 0  available flow  -- DESCENDING (more flow ranks earlier)
+    #   pass 1  path length     -- ascending (shorter is more trustworthy)
+    #   pass 2  consideration index -- ascending (true ties only)
     dist = distances_from(s, source)
     ranked = sorted(
         [(i, c) for i, c in enumerate(candidates) if ("out", c) in s.cap],
-        key=lambda ic: (dist.get(("in", ic[1]), float("inf")), ic[0]))
+        key=lambda ic: (-score_independent(g, observer, ic[1]),
+                        dist.get(("in", ic[1]), float("inf")),
+                        ic[0]))
     admitted, total = [], 0
     for _, c in ranked:
         s.add_edge(("out", c), SINK, demand)
@@ -668,12 +681,33 @@ def experiment_setwise(rng, report):
     assert total_individual > ceiling, \
         "test is vacuous unless demand exceeds the cut"
 
-    # --- The reference allocation rule, BOTH limbs (design §16.4) ----------
-    # Limb 1: the shorter path dominates -- a longer path is less
-    # trustworthy by nature.  Limb 2: consideration order breaks TRUE TIES
-    # only, i.e. equal path lengths.  Each limb needs its own case, because
-    # a plain multi-sink max-flow satisfies limb 1 by accident and fails
-    # limb 2 silently (see admit_reference_order).
+    # --- The reference allocation rule, ALL THREE PASSES (design §16.4) ----
+    # Pass 0: available flow ranks first -- it is the metric itself.
+    # Pass 1: shorter path dominates among equal flow.
+    # Pass 2: consideration order breaks true ties only.
+    # Each pass needs its own case: a plain multi-sink max-flow satisfies
+    # pass 1 by accident and fails pass 2 silently, and NEITHER of those
+    # cases can detect a missing pass 0, because candidates behind one
+    # saturated chokepoint all carry the same flow (see admit_reference_order).
+    def winner_flow_vs_distance(order):
+        """B is NEARER but thinner; A is FURTHER but better supported.
+        Available flow must decide, so A is admitted and B is not -- a
+        distance-first ranking would serve B its unit first instead."""
+        g2 = FlowGraph()
+        g2.add_edge("obs", "hub", 2); g2.add_edge("hub", "obs", 2)  # scarce
+        g2.add_edge("hub", "B", 1);   g2.add_edge("B", "hub", 1)    # near/thin
+        g2.add_edge("hub", "m", 2);   g2.add_edge("m", "hub", 2)
+        g2.add_edge("m", "A", 2);     g2.add_edge("A", "m", 2)      # far/wide
+        admitted, _ = admit_reference_order(g2, "obs", order, demand=2)
+        return admitted
+
+    # Pass 0: the better-supported candidate wins despite being further away,
+    # under either consideration order.
+    assert winner_flow_vs_distance(["A", "B"]) == ["A"], \
+        "pass 0: available flow must outrank a shorter path"
+    assert winner_flow_vs_distance(["B", "A"]) == ["A"], \
+        "pass 0: available flow must outrank a shorter path"
+
     def winner_unequal(order):
         """A sits one hop further from the observer than B."""
         g2 = FlowGraph()
@@ -705,11 +739,12 @@ def experiment_setwise(rng, report):
         assert winner_equal(["B", "A"], build) == "B", \
             "limb 2: earlier-considered must win a true tie"
     report.append(
-        "  scarce-capacity allocation: the shorter path dominates; "
-        "consideration order breaks")
+        "  scarce-capacity allocation: available flow ranks first (the "
+        "metric itself), then the")
     report.append(
-        "  true ties only, independent of graph construction order "
-        "(reference policy §16.4)")
+        "  shorter path, then consideration order for true ties -- "
+        "independent of graph")
+    report.append("  construction order (reference policy §16.4)")
     # Demonstrate the conservative direction: attaching a DEEP (invisible)
     # fake subtree beyond the horizon does not raise the observer's joint.
     g = base.copy()

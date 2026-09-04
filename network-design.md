@@ -5795,15 +5795,28 @@ against another operator's. This is the same line §16.2 draws for λ — the
 reference implementation is where the choice lives, and conformance does not
 carry it.
 
-**An implementation note, because the obvious construction gets it half
+**Both limbs are subordinate to the metric itself** [author, 2026-09-04].
+**The first pass is always available flow** — the total capacity that
+reaches a candidate, which is what the metric *is* (§16.2). A candidate
+carrying more flow outranks one carrying less, whatever their distances:
+preferring a nearer candidate over a better-supported one would substitute
+the tie-break for the measurement. Path length separates candidates the
+flow ranks equally, and consideration order separates what path length also
+ranks equally. **This ordering is easy to miss from the chokepoint case
+alone**, where every candidate behind one saturated cut necessarily carries
+the same flow and the first pass therefore decides nothing — but this
+section is about pluggable policy in general, not only about candidates
+sharing a bottleneck.
+
+**An implementation note, because the obvious construction gets it partly
 right.** Running one max-flow over a super-sink fed by every candidate
-delivers the first limb for free — Edmonds-Karp augments along the shortest
-path first — and silently misses the second: at equal path length the
-winner is then decided by the order edges happen to occupy in the
-implementation's own adjacency structure, an artifact of how the topology
-was built rather than of how candidates were considered. An implementation
-wanting the stated rule ranks candidates by (path length, consideration
-order) explicitly.
+delivers the path-length limb for free — Edmonds-Karp augments along the
+shortest path first — and silently misses the tie limb: at equal path
+length the winner is then decided by the order edges happen to occupy in
+the implementation's own adjacency structure, an artifact of how the
+topology was built rather than of how candidates were considered. An
+implementation wanting the stated rule ranks candidates explicitly, by
+available flow first, then path length, then consideration order.
 
 ### 16.5 Decay on inactivity
 

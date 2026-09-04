@@ -4181,3 +4181,28 @@ explicitly and notes the experiments test relative behaviour under one
 fixed schedule.
 
 All six seeds pass; all eight models green; references clean at 1935.
+
+## Author correction: available flow ranks before path length (2026-09-04)
+
+Ruling refined during the second simulation review. The scarce-capacity
+allocation rule has THREE passes, not two: **available flow first** -- the
+total capacity reaching a candidate, which is what the metric measures --
+then shorter path, then consideration order for true ties. Author's
+reasoning: number of edges / total available flow is always the first pass;
+preferring a nearer candidate over a better-supported one would substitute
+the tie-break for the measurement. Applied to s16.4 with the note that this
+pass is invisible in the single-chokepoint case (every candidate behind one
+saturated cut carries identical flow), which is why the section states it
+explicitly -- s16.4 is about pluggable policy generally, not only about
+candidates sharing a bottleneck.
+
+Simulation updated: admit_reference_order ranks by
+(-available_flow, path_length, consideration_index), all three measured on
+the pre-allocation graph. New discriminating case added -- a nearer/thinner
+candidate B against a further/wider A, where flow-first admits A and a
+distance-first ranking would admit B. **Mutation-tested**: deleting the flow
+key makes the new assertion fail, confirming the test is not vacuous; the
+key was then restored and the full run passes. (The deliberate failure was
+mid-turn verification, not a regression.)
+
+Six seeds pass; all eight models green; references clean at 1936.

@@ -17,8 +17,9 @@ E3: setwise conservation, observer-visible (design 16.2)
    8 visible fakes:  independent-sum =   80   conserving joint = 8   visible region ceiling = 10
   16 visible fakes:  independent-sum =  160   conserving joint = 10   visible region ceiling = 10
   general demands (each asks its own standing): individual sum = 160, simultaneously deliverable = 10, cut = 10
-  scarce-capacity allocation: the shorter path dominates; consideration order breaks
-  true ties only, independent of graph construction order (reference policy §16.4)
+  scarce-capacity allocation: available flow ranks first (the metric itself), then the
+  shorter path, then consideration order for true ties -- independent of graph
+  construction order (reference policy §16.4)
   a deep fake subtree of 85 adds 0 visible identities -- invisibility is the conservative direction
   independent-sum grows with visible population (the broken 0.8.3 reading);
   the conserving joint saturates at the visible ceiling; invisible identities cannot inflate it: CONFIRMED
