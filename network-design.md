@@ -1068,7 +1068,10 @@ consequence of subnet plurality, not a gap in this mechanism.
 - Two signatures, between infra nodes in different subtrees.
 - Attests investment in the network and therefore contributes to trust, but at
   **lower flow capacity than hierarchical edges by default** (see §16.3).
-- Carries a real cost: persisting the peer's data.
+- Carries a real cost: persisting the peer's data — **as an encrypted
+  backup** [author, 2026-09-04]. What a peer holds is ciphertext, so the
+  entrustment is of durability and not of readable content, and it is the
+  one thing a peer gets that an ordinary acquaintance does not.
 - **It confers no scope, and does not extend the horizon.** A peering edge is
   **ungoverned**: permissionless, outside the tree, requiring nobody's authority and
   therefore carrying none of the subnet's. A peer is not in your Dunbar Org by virtue
@@ -1076,6 +1079,14 @@ consequence of subnet plurality, not a gap in this mechanism.
   adoption and sibling edges only. **Contributing to trust and conferring scope are
   different things** — this is the edge where they separate, and it is the reason the
   two are described in different sections.
+- **A peer is a persistent trusted acquaintance from outside the subnet, and
+  gains nothing beyond the node it peers with** [author, 2026-09-04]. Its
+  trust status toward subnet state and resource access is a proof-of-presence
+  counterparty's: none by virtue of the relationship. **The peering graph is
+  orthogonal to the routing and authority hierarchy, exactly as the
+  proof-of-presence graph is**, and to any third party the two kinds of edge
+  carry trust by the same rules (§16.2.1). The relationship is special only
+  between the two peers, and what makes it special is the backup above.
 
 ### 6.4 Countersigning
 First-level patrons countersign their subordinates' **subnet-scoped**
@@ -5679,6 +5690,42 @@ reading, so the aggregate reading is the specified one; a policy materialising
 per-principal decisions (§11.4) draws them from one conserved computation, not
 from one computation per principal.
 
+#### 16.2.1 What counts as an edge in the reference graph
+
+**Stated because a metric is only as good as the graph it runs on**
+[author, 2026-09-04]. The min-cut bound is a fact about whatever graph the
+evaluator builds, so two implementations building different graphs from the
+same evidence get different answers while both computing max-flow
+correctly. Three sources of standing exist and they enter differently.
+
+- **Adoption and sibling edges — the routing and authority hierarchy.**
+  These carry trust and are also what scope is built from (§15.1).
+- **Proof-of-presence and peering edges — an acquaintance graph orthogonal
+  to that hierarchy.** Neither confers subnet scope or resource access
+  (§6.3, §11.2), and **to any party other than the two the edge joins, both
+  carry trust by the same rules**: a peering edge is an acquaintance edge
+  from outside the subnet, not a lesser kind of one. Their default
+  capacities remain policy (§16.3, §21.1's unset ratio); what this paragraph
+  fixes is that they are the same *kind* of edge, evaluated in the same
+  graph.
+- **Archive transactions are not standing edges.** An archive is for the
+  node's own reference and for **adoption-time review** (§16.7): a
+  prospective patron walks what it is shown, **counts only transactions
+  whose other participant it already recognises**, and **weights each by the
+  flow its own graph can push to that recognised participant** — veracity
+  implied by the metric rather than asserted by the presenter. Unrecognised
+  transactions contribute nothing, which is §16.1's rule applied to
+  portable history: fabricated volume is worthless unless it intersects
+  identities the evaluator already holds. **A reviewed archive informs the
+  initial trust state; it does not install permanent capacity edges an
+  evaluator must carry afterwards.**
+
+**Why this ordering matters to the bound.** If archive evidence created
+edges on presentation, an attacker's region could enlarge its own cut by
+presenting history; because the evaluator admits only what it already
+recognises, and prices even that by its own flow, the cut stays a property
+of the evaluator's graph rather than of the presenter's claims.
+
 ### 16.3 Peering edges and trust capacity
 
 **There is no trust ceiling to raise.** Standing is per-observer, not global.
@@ -5908,6 +5955,16 @@ the only available edit (§10.1); the patron verifies signatures on what it is
 shown and compares it against the identities that patron already knows of.
 Transactions with unknown counterparties can be ignored; those where the
 counterparty is known can contribute to the user's initial trust state (§16.1).
+
+**And what a recognised transaction is worth is set by the metric, not by the
+presenter** [author, 2026-09-04]: the reference implementation weights each
+reachable transaction **by the flow its own graph can push to the recognised
+participant**. A transaction with someone the patron barely reaches counts
+for little; one with someone it reaches strongly counts for more. So an
+archive's value is bounded by the reviewer's existing graph in two ways at
+once — which transactions are legible at all, and how much each legible one
+weighs. **This is review, not edge creation**: the archive informs the
+initial trust state and installs no standing capacity (§16.2.1).
 
 Open tension: an archive presented *lacking* previously-seen transactions may
 itself be read as evidence of deviousness. This probably pushes users wanting to

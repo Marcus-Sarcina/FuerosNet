@@ -4258,3 +4258,48 @@ peering records become or cease to be capacity edges), not a demonstrated
 flaw.** E2/E3 remain valid arithmetic over the graph they are given.
 
 Six seeds pass; all eight models green.
+
+## Author ruling: what constitutes an edge in the reference flow graph (2026-09-04)
+
+U1 from the third simulation review is closed. Two parts, both applied.
+
+**Peering.** Not a first-order trust edge: it does not expand the horizon
+in which transaction records flood and resources are shared (already §6.3).
+NEW: what a peer persists is an **encrypted** backup, so the entrustment is
+durability, not readable content -- the one thing a peer gets that an
+ordinary acquaintance does not. A peer is a persistent trusted acquaintance
+from OUTSIDE the subnet and gains no status beyond the node it peers with;
+toward subnet state and resource access its position is a PoP counterparty's
+(none by virtue of the relationship). **The peering graph is orthogonal to
+the routing/authority hierarchy exactly as the PoP graph is, and to any
+third party both kinds of edge carry trust by the same rules.** Applied at
+§6.3 and §16.2.1.
+
+**Archives.** Portable, but used only for the node's internal reference and
+for **adoption-time review**. The reference implementation reviews the
+adoptee's archive counting ONLY transactions whose other participant the
+adopting patron already recognises (§16.7 already said this) -- NEW: and
+**weights each by the flow-implied veracity**, i.e. by the flow the
+patron's own graph can push to that recognised participant. So an archive's
+value is bounded twice by the reviewer's own graph: which transactions are
+legible, and how much each weighs. **Review, not edge creation**: an
+archive informs the initial trust state and installs no standing capacity.
+Applied at §16.7 and §16.2.1.
+
+**New subsection §16.2.1, "What counts as an edge in the reference graph"**,
+states all three sources (hierarchy edges; PoP+peering acquaintance edges;
+archive-as-review) in one place, with the reason the ordering matters: if
+presented history created edges, a region could enlarge its own cut by
+presenting history, and the cut would stop being a property of the
+evaluator's graph.
+
+**FLAGGED FOR THE AUTHOR, not resolved by me**: §16.3 still says peering
+carries "lower flow capacity than hierarchical edges by default", while the
+ruling says trust flows over PoP and peering edges "equally" for third
+parties. I read these as compatible -- same KIND of edge (this ruling),
+default VALUE still a policy parameter (§21.1 lists the peering ratio as
+unset) -- and wrote §16.2.1 that way. If the intent was that peering and PoP
+edges also carry the same default CAPACITY, §16.3's mitigation paragraph
+needs revising and I have not touched it.
+
+References clean at 1945; harnesses and all eight models green.

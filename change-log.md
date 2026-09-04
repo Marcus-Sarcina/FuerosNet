@@ -8444,3 +8444,20 @@ conclusion is downgraded from confirming the coverage economics to
 demonstrating, in one toy topology, that amortisation exists. The report's
 allocation summary, which still described two passes after the third was
 added, now matches the rule.
+
+### 2026-09-04 (the reference flow-graph construction rule)
+
+The open question of what becomes an edge in the reference trust graph is
+answered, in a new §16.2.1. Adoption and sibling edges are the routing and
+authority hierarchy. Proof-of-presence and peering edges form an
+acquaintance graph orthogonal to it: neither confers subnet scope or
+resource access, and to any party other than the two an edge joins, both
+carry trust by the same rules — a peering edge is an acquaintance edge from
+outside the subnet, not a lesser kind of one, and what a peer uniquely holds
+is an encrypted backup, durability rather than readable content. Archives
+are neither: they are for the node's own reference and for adoption-time
+review, where a prospective patron counts only transactions whose other
+participant it already recognises and weights each by the flow its own graph
+can push to that participant. Recognition decides legibility and the metric
+decides worth, so a presented history can never enlarge the cut it is
+presented across.
