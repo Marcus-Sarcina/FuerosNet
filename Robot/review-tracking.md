@@ -4404,9 +4404,19 @@ parties, because an abstract rule can be read as what you meant while an
 instance either matches or does not. This one caught the author's own first
 example contradicting his own rule.
 
-**Still open from that exchange**: whether a counterparty the observer met
-ITSELF -- distance 1, outside the horizon -- is throttled. The literal
-reading of "beyond that horizon is where trust becomes throttled" says yes,
-which is what the simulation implements; the alternative says everything at
-distance 1 is unthrottled. It changes what a direct proof-of-presence is
-worth. Not decided.
+**CLOSED (2026-09-04)**: whether a counterparty the observer met ITSELF --
+distance 1, outside the horizon -- is throttled. **Author: yes**, the
+literal reading the simulation implements. The ruling came with the reason,
+now in §16.2.1: **two mechanisms answer two questions.** The hierarchy
+governs resources, routing and some countersigning, and the horizon is the
+REACH of that effect -- membership is a privileged position for
+hierarchy-specific operations. The flow metric answers GENERIC trust: does
+this user exist, are they a real person, are they who they say they are.
+For that question every horizon member is at distance 1, no nearer than
+someone you met yourself. **A node inside the horizon is unthrottled not
+because the metric rates it highly but because the metric is not what is
+being asked there** -- you hold topology and direct evidence, and the
+privileges are decided by position. Past the horizon the generic question
+is the only one left, which is why throttling begins exactly there.
+
+No open items remain from the landscape exchange.

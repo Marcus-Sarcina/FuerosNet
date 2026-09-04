@@ -5753,6 +5753,24 @@ So your patron's sibling is at distance 1 (they are in your horizon) while
 horizon, one edge from someone at 1). **The horizon flattens; the world
 past it does not.**
 
+**Two mechanisms answering two questions, which is why the horizon is both
+a boundary and a distance** [author, 2026-09-04]. The hierarchy governs
+what it governs — resources, routing, some countersigning — and **the trust
+horizon is the reach of that effect**: membership is a *privileged position
+for hierarchy-specific operations*, and it is that privilege §11.2's scope
+and §6.4's countersigning consume. **The flow metric answers a different
+question entirely — generic trust**: does this user exist, are they a real
+person, are they who they say they are. For *that* question every horizon
+member is simply at distance 1, no nearer than someone you met yourself.
+
+**So a node inside the horizon is unthrottled not because the metric rates
+it highly, but because the metric is not what is being asked there.** You
+hold the topology and the direct evidence inside your horizon (§15.1), and
+the hierarchy-specific privileges are decided by position rather than by
+flow. Past the horizon the generic question is the only one left, and the
+metric is what answers it — which is why *that* is exactly where throttling
+begins.
+
 **Beyond the horizon, trust flows equally over the hierarchical and the
 proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are
 not weighted against each other out there; **the only distinction the metric

@@ -8491,3 +8491,18 @@ correction supersedes its own first example — a patron's sibling's
 counterparty is at distance 2, not 1 — and forces a distinction the
 simulation now keeps explicitly: inside-or-beyond the horizon decides
 whether a node is throttled, while distance decides how much.
+
+### 2026-09-04 (why the horizon is both a boundary and a distance)
+
+The last open question from the landscape exchange is answered, and the
+answer explains the shape rather than merely settling it. Two mechanisms
+answer two questions: the hierarchy governs resources, routing and some
+countersigning, and the trust horizon is the reach of that effect, so
+membership is a privileged position for hierarchy-specific operations. The
+flow metric answers generic trust — whether a user exists, is a real
+person, is who they claim — and for that question every horizon member sits
+at distance one, no nearer than someone met in person. A node inside the
+horizon is therefore unthrottled not because the metric rates it highly but
+because the metric is not what is being asked there; past the horizon the
+generic question is the only one left, which is why throttling begins
+exactly at that boundary.
