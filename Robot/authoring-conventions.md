@@ -34,6 +34,25 @@ vignette's own voice, then append its limits separately. Vignettes belong only
 where behaviour is being assumed, never beside pure encoding. Any change to a
 section obliges a check of its vignette.
 
+### Worked instances for structural rules
+
+**A rule about structure gets a worked instance naming specific parties**
+[author, 2026-09-04]. Not a vignette — no informal voice, no human
+judgment — just the rule applied to named positions: *your patron's sibling
+is at distance 1, their counterparty at distance 2.*
+
+**The reason is evidential, not pedagogical.** The trust-landscape rule was
+stated abstractly, agreed, written up, and only when the assistant spelled
+the instance out did the author see it was not what he intended — the
+author's own first example contradicted his own rule. An abstract rule can
+be read as what you meant; an instance either matches or does not, and the
+mismatch is visible to both parties at once. *"Spelling it out like that is
+how I realized it wasn't what I intended."*
+
+**So the instance is a check on intent**, which is why it belongs in the
+document rather than in review correspondence: the next reader gets the
+same check the author got.
+
 ## Where invariants live
 
 *(The design document keeps its own statement of this rule, because it governs how

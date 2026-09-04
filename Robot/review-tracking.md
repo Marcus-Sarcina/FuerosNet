@@ -4394,3 +4394,19 @@ is where trust becomes throttled" is the more literal reading of the text.
 
 Six seeds pass; all eight models green; the E1-E4 conclusions are again
 unchanged, edge capacities still being the binding constraint.
+
+**Author confirmation (2026-09-04)**: the corrected landscape example is
+right, and the author noted *why* it mattered -- "spelling it out like that
+is how I realized it wasn't what I intended." Recorded as an authoring
+convention (`authoring-conventions.md`, *Worked instances for structural
+rules*): a structural rule carries a worked instance naming specific
+parties, because an abstract rule can be read as what you meant while an
+instance either matches or does not. This one caught the author's own first
+example contradicting his own rule.
+
+**Still open from that exchange**: whether a counterparty the observer met
+ITSELF -- distance 1, outside the horizon -- is throttled. The literal
+reading of "beyond that horizon is where trust becomes throttled" says yes,
+which is what the simulation implements; the alternative says everything at
+distance 1 is unthrottled. It changes what a direct proof-of-presence is
+worth. Not decided.
