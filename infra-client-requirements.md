@@ -69,6 +69,11 @@ that is noted in place.
   real bound against everyone above the hypervisor.
 - **Hold the minimum while a message waits**: ciphertext, recipient keyhash, arrival
   time. Nothing further.
+- **Stop serving a binding you have verified superseded** (design §12.6.5)
+  [2026-09-03]: authenticated supersession evidence — a verified reissue chain,
+  a validated recovery — ends the old credential's service. Terminate its
+  sessions and deliver nothing further to it, its queue included. Fail-open is
+  for staleness you cannot resolve, never for knowledge you hold.
 - **Do not log queue events**, and **state what your deployment actually does** —
   §1's process-and-discard obligation extends here, the protocol cannot reach it, and
   a deployment cannot state its data practices otherwise.

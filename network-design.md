@@ -4275,7 +4275,7 @@ Cache TTLs are mostly performance knobs to be tuned under load. **One is not.**
 | TTL | Kind | Guidance |
 |---|---|---|
 | Locator / resolution cache | Performance | **Not generous.** A stale locator costs delivery failure and a re-resolve from a higher anchor (§12.6.2), so the TTL trades staleness against re-resolution load |
-| **Currency attestation** | **Security** | **Derive from the maximum acceptable exposure window after credential compromise, never from performance or cache-efficiency considerations.** This is how long a compromised key keeps working for parties who cached before rotation — hours, not days. See §12.6.5. |
+| **Currency attestation** | **Security** | **Derive from the maximum acceptable exposure window after credential compromise, never from performance or cache-efficiency considerations.** This is how long a compromised key keeps its **trust-bearing authority** for parties who cached before rotation — hours, not days [2026-09-03]. It does not retire the credential from routine use: receiving and routine payload fail open, and knowledge, not expiry, is what stops service (§12.6.5's supersession rule). See §12.6.5. |
 
 #### 12.6.5 Key currency: adopt the PKI revocation playbook
 
@@ -4377,6 +4377,18 @@ illustrate it and are not the rule.
 This also handles the intermittently-connected light client: a user offline for
 a day arrives with a stale staple, can still receive messages, and cannot spend
 accumulated standing until they refresh.
+
+**Fail-open is for ignorance, never for knowledge** [author, 2026-09-03]. The
+table above governs a party that cannot establish currentness. A party holding
+**authenticated supersession evidence** for a binding — a verified reissue
+chain onto a new series (`wire-format.md` §4.6), a recovery it has validated
+(§9.1) — MUST NOT continue
+serving it: sessions under the superseded credential terminate, and nothing
+further is delivered to it, queued material and capture-key grants included.
+Expiry bounds what a stolen credential can *spend*; supersession, once known,
+is what retires it from *use* — and conflating the two would leave the
+fail-open row reading as licence to keep serving a binding the server knows is
+dead.
 
 ##### 12.6.5.1 Long-duration patron outage
 
@@ -6086,11 +6098,38 @@ globally.
   back**, since the record finalises with whatever responses arrived and absence
   blocks nothing (`wire-format.md` §5.5) — and the subject-side refusal §7.4.1 relies on is the
   thief's to make. The colluder is then a prior counterparty, positioned to supply the
-  recognition half of §9.1's recovery. **Two bounds hold**: honest verifiers'
-  signatures are unforgeable, so adverse results are visible to anyone who weighs
-  them, and §16.2's flow metric caps the successor's standing at what the colluding
-  parties can carry rather than inheriting the victim's. Accepted — the answer to a
+  recognition half of §9.1's recovery. **Two bounds hold, stated at their true
+  width** [author, 2026-09-03]. Honest verifiers' signatures are unforgeable, so
+  **nothing positive can be manufactured** — but unforgeability is not
+  completeness, and this pair suppresses freely: both custody legs of the dual
+  delivery (`wire-format.md` §5.6) are theirs, so an adverse response becomes
+  absence and the record finalises thin. What an evaluator holds against that is
+  weight, not proof — a thin response set against the subject's own claimed *n*
+  (`wire-format.md` §5.2), responders weighed by recognition (§16.1), the
+  colluder's genuine match theirs to answer for. An earlier draft said adverse
+  results "are visible to anyone who weighs them", which this paragraph's own
+  premise contradicts. And **the standing cap is the reference metric's
+  property, not the protocol's**: §16.2's setwise conservation caps the
+  successor at what the colluding cut carries under the reference policy, while
+  §16.4's pluggability deliberately permits an evaluator that tallies archive
+  history directly and hands the successor full credit — the bound reaches
+  exactly the evaluators who run a conserving policy. Accepted — the answer to a
   stolen key is rotation, and what this describes is the cost of the window before it.
+  Reintroducing a committed verifier roster would repair the suppression at the
+  price of the selected-set machinery deliberately retired on 2026-09-01;
+  declined.
+- **A stolen infra operator's device is stolen infrastructure authority**
+  [author, 2026-09-03]. §23.3 makes the instance and the phone one seed, and
+  §18.1 read that in the instance direction; this is the other: the phone
+  satisfies every unattended signing context the instance does —
+  countersignatures, `SubtreeAck`, currency issuance, disavowal, peering,
+  topology origination — with no compromise of the host at all. The answer is
+  the same rotation, via the patron-countersigned reissue the thief cannot
+  make, and the asymmetry inside the window is worth stating: thief-issued
+  currency dies with the staple lifetime (§12.6.5, hours), while a thief-signed
+  disavowal is durable evidence (§6.2.2). Dividing the key's roles would divide
+  the two thefts; the multi-device model (§23.3, Appendix B.1) currently makes
+  them one, and this entry prices that.
 - **A stolen device becomes a biometric collector when a counterparty next meets
   someone.** Its sealed captures of past counterparties stay ciphertext, and §7.5.2's
   seed release is per query and direct to each selected verifier — there is no standing

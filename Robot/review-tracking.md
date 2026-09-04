@@ -3862,3 +3862,62 @@ capture-key gate, recognition as the selector's local defence, and
 cross-nomination as representativeness. Python 80/80 (three query_id
 sites now hash fields 1-5+7), Rust 146/0 with field-7 required in its
 query schema. References: nine known list-continuation flags of 1,903.
+
+## Cycle 2, adversarial pass 0.8.6 (role 6: the stolen device, 2026-09-03) — the pass completes
+
+Two REASONING, two EXTENDS, zero NOVEL; five RESTATES discarded. All four
+ruled "yes to all" by the author. This closes the sixth and final adversary
+role.
+
+**1. Stolen operator phone = stolen infra authority (Critical, EXTENDS →
+§18.3 bullet added).** The reverse of 0.8.4's finding: §23.3's one seed
+means the phone satisfies every unattended signing context the instance
+does, with no host compromise. Same answer (rotation via the
+patron-countersigned reissue), with the window's asymmetry stated:
+thief-issued currency dies with the staple lifetime; a thief-signed
+disavowal is durable. The role-separation mechanism stays parked with the
+commissioned usability analysis; the entry prices the shared-seed model.
+
+**2. "Adverse results remain visible" (REASONING → §18.3 bound 1
+rewritten).** The paragraph refuted itself — "the thief signs the record
+whatever comes back" two sentences before claiming visibility.
+Unforgeability is not completeness; in the both-adversarial case both
+custody legs of §5.6's dual delivery are the colluders', so adverse
+becomes absent and the record finalises thin. The bound now stated:
+nothing positive can be manufactured; the evaluator's instrument is
+weight — thin set against claimed n, responders by recognition, the
+colluder's genuine match theirs to answer for. The reviewer's
+roster-commitment repair declined in the text itself: it would
+reintroduce the selected-set machinery retired 2026-09-01.
+
+**3. Flow cap narrowed to the reference metric (REASONING → §18.3 bound 2
+rewritten).** §16.2's setwise conservation is the reference policy's
+property and §16.4's pluggability deliberately permits archive-tallying
+evaluators the bound does not reach — the text now says exactly that.
+The reviewer's conformance-profile alternative noted, not adopted:
+soundness-as-fact is the §16.2 pattern.
+
+**4. TTL bounds spend, supersession bounds use (EXTENDS → §21 parameter
+row, §12.6.5 rule, infra §2).** "How long a compromised key keeps working"
+overclaimed: routine payload fails open by design and rotation is not
+global. Reworded to trust-bearing authority, and the new rule lands:
+fail-open is for ignorance, never for knowledge — a party holding
+authenticated supersession evidence (verified reissue chain, validated
+recovery) terminates the superseded binding's sessions and delivers
+nothing further to it, queues and capture-key grants included. One
+self-caught reference error en route: the rule first cited bare §4.6
+inside the design (a wire section); fixed before commit.
+
+Confirmed defences recorded: the reissue/seal construction in scope, the
+two-part recovery proof against key-alone theft, and sealed captures
+staying ciphertext at seizure with the per-query residual correctly
+scoped.
+
+**The adversarial pass closes at six roles**: patron (3 findings), witness
+(3), commercial operator (4), compelled provider (4), malicious
+counterparty (5), stolen device (4) — twenty-three findings ruled, zero
+left open, four superseded-claim corrections quoting their earlier drafts
+in place, two new wire mechanisms (dual delivery, addressed consent), one
+schema renumbering (tier-aligned basis), and the registers extended
+throughout. Every round under the rewritten defensive prompt cleared the
+classifier.

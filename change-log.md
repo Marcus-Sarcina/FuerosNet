@@ -8306,3 +8306,18 @@ under the same curation, stopping at an adjustable count of responsive
 candidates, with post-bundle cherry-picking visible to the party being
 fished; and the verifier-signed selection basis is carriage, not
 endorsement, with a locally refutable false "met" answered as unavailable.
+
+### 2026-09-03 (cycle 2, adversarial: the stolen device — the pass completes)
+
+Four findings ruled, closing the sixth and final adversary role. §18.3's
+two surviving bounds are restated at their true width: unforgeability
+prevents manufacture, not suppression — a colluding pair finalises thin,
+and thinness is the evaluator's signal — and the standing cap belongs to
+the reference metric, which §16.4's pluggability does not impose on every
+evaluator. The stolen-device entry now carries the operator case: one
+seed means a stolen phone is stolen infrastructure authority, priced with
+its asymmetry — thief currency dies in hours, a thief disavowal is
+durable. And the currency lifetime claim is cut to its real width: expiry
+bounds what a stolen credential can spend; the new supersession rule —
+fail-open is for ignorance, never knowledge — is what retires it from
+use, at every party that has verified the succession.

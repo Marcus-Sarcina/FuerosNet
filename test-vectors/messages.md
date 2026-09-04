@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `c99b83a890251678…`, `network-design.md` `f26a457bafe8996e…` and `light-client-requirements.md` `b8f954d79adda457…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `c99b83a890251678…`, `network-design.md` `a1bb98bdea1c6df1…` and `light-client-requirements.md` `b8f954d79adda457…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
