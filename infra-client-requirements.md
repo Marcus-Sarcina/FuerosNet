@@ -63,6 +63,10 @@ that is noted in place.
 - **Delete on delivery, immediately, leaving nothing recoverable.** No journal, no
   tombstone, no crash-recovery copy that outlives the delete. Durable storage for your
   own crash recovery is your backup problem and must not extend a message's life.
+  **This bounds what your node retains, not what your hosting provider can**
+  (design §14.1.6, §18.1) [2026-09-03]: a provider snapshotting below your guest
+  keeps what you deleted, and your deletion is hygiene against that party — the
+  real bound against everyone above the hypervisor.
 - **Hold the minimum while a message waits**: ciphertext, recipient keyhash, arrival
   time. Nothing further.
 - **Do not log queue events**, and **state what your deployment actually does** —

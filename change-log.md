@@ -8268,3 +8268,22 @@ placement into the look of acquaintance in the permanent record. And the
 candidate pool now counts identities, never people: one person may hold
 several, and the record claims no human independence the protocol cannot
 prove. Fixtures and both harnesses follow the renumbering.
+
+### 2026-09-03 (cycle 2, adversarial pass 0.8.4: the compelled provider)
+
+Four findings ruled, all corrections of credited protections rather than
+new attack surface. The impersonation residual is no longer called
+self-burning: one shared key spans the operator's devices, concurrent
+presence is the ordinary multi-device condition, and the direct-path
+horizon includes strangers, so detection is contingent on acquaintance the
+architecture does not guarantee — what stands is per-target, prospective,
+and no bulk collection. The deniability acceptance now claims relief only
+on the transfer ledger: fabrication capability discounts what a collected
+record can prove onward, never what the collector knows. The sibling
+fallback's honesty-axis independence is scoped to adversaries who can only
+attack availability; one control domain hosting both signers is
+correlated. And queue deletion is stated for what it is: the real
+retention bound above the hypervisor, hygiene below it. A commissioned
+analysis records where the operator-key-on-node assumption is
+load-bearing: session authentication, the ten-hour currency cadence, and
+the sibling issuance ladder.

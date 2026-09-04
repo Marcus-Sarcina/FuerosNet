@@ -4380,7 +4380,15 @@ validity for the stolen key's staple: OCSP soft-fail in a different hat, with
 the attacker controlling the trigger. Sibling issuance has no such property —
 siblings are independent **on the honesty axis** — DoSing the patron does not
 make them lie — even though §3.4 warns they are *not* independent on the
-availability axis, sharing a patron and often a provider. Issuance survives what
+availability axis, sharing a patron and often a provider. **The honesty axis is
+scoped to adversaries who can only attack availability** [author, 2026-09-03]:
+no outage-maker can make a sibling sign falsely, which is the case this
+escalation ladder was built for. Against a compelled provider hosting both
+(§18.1), primary and fallback sit in one legal-control domain and are
+**correlated, not independent** — the fallback then adds redundancy against
+outage and nothing against compulsion, and §3.4's rule that provider
+independence is adversarial and unprovable from ASN or region carries the
+load. Issuance survives what
 replication does not. A
 sibling issues a **fresh** attestation reflecting whatever rotation reached the
 replicated state. Stale extension preserves a thief's claim; fresh issuance can
@@ -5004,6 +5012,14 @@ copy buys durability against a strictly smaller failure than the one already acc
 and pays for it with the retention window C5 joins against heartbeat state. **Durable
 storage for crash recovery is the operator's own backup problem** and duplicating it
 in the protocol adds complexity for a guarantee the design does not make.
+
+**This bounds the node's retention, not the provider's** [author, 2026-09-03].
+§18.1's observation boundary is the provider, and a provider snapshotting
+below the guest keeps the queue tuple — recipient, arrival time, duration —
+after the VM forgets it. Against that adversary, deletion on delivery is
+hygiene; against every party above the hypervisor — the operator, a thief, a
+later compromise of the node — it is the real bound C5 relies on, and both
+statements are true at once.
 
 **Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time.**
 Anything richer is C5's ingredient list.
@@ -5955,30 +5971,40 @@ globally.
   that operator in **new** exchanges and become the endpoint legitimately. What it
   cannot do is reach a session it was never on the path for.
 
-  **And impersonation is a different class of operation from collection.** Reading
-  direct-path content means *acting as* the operator toward people who know that
-  operator — directly, or through someone who does. That is social engineering against
-  a graph built out of face-to-face acquaintance, and it **risks the subverted node
-  the moment anyone notices**. So the position is not that this adversary is stopped;
-  it is that **what the adversary has to spend changes**. Passive bulk collection is
+  **And impersonation is a different class of operation from collection.** So the
+  position is not that this adversary is stopped; it is that **what the adversary
+  has to spend changes**. Passive bulk collection is
   what compelling a provider is *for* — scalable, deniable, invisible to the people it
   collects from — and the direct path denies it that for content, leaving impersonation
-  instead: per-target, high-commitment, and self-burning when detected. **This is
-  §1.1's principle reaching the case the design does not claim to cover** (§1.2.3):
-  the attack is made visible and expensive rather than impossible, which is the same
-  answer the design gives everywhere else.
+  instead: **per-target and prospective, never bulk and never retrospective**.
+  What it is *not* is self-burning [author, 2026-09-03]. Nothing cryptographically
+  distinguishes the operator's phone from their hosted instance under one shared
+  key (§23.3); concurrent activity under that key is the ordinary multi-device
+  condition, not an anomaly; and the horizon a direct exchange draws from
+  includes parties who have never met the operator (P17), so an impersonation
+  need not encounter anyone equipped to notice. **Detection is contingent on the
+  counterparty's actual acquaintance with the operator, which the architecture
+  does not guarantee** — the attack is made expensive and per-target; visible
+  only where acquaintance happens to look. An earlier draft called it
+  "self-burning when detected", which credited a detection invariant the design
+  does not have.
 
-  **The capability also devalues what it collects.** §1.2.1 already treats cheap
+  **Fabrication capability limits what collected records can prove, never what
+  the collector knows** [author, 2026-09-03]. §1.2.1 treats cheap
   fabrication as a privacy property — *"Sybil attackers inadvertently contribute to
   the deniability of every record"* — and an actor able to act as any hosted operator
-  **enlarges that discount rather than escaping it**. A surveilled record naming an
-  operator becomes deniable in the way a synthesised subnet is, because the actor's own
-  capability is the standing alternative explanation. The asymmetry then runs as
-  §1.2.1's second property says: someone who has met you infers your identity cheaply
-  from personal knowledge, while a remote examiner must pay for either an impersonation
-  operation or an evidence chain that survives due process. **This is the Potemkin
-  acceptance below in a different costume** — an expensive fake that makes the
-  surveilled record less useful to whoever built it.
+  **enlarges that discount rather than escaping it**. But the discount applies to
+  **onward transfer**: a record this actor presents to a court, a partner, or any
+  later evaluator arrives with the actor's own capability as the standing
+  alternative explanation, and an evidence chain that must survive due process
+  pays for that (§1.2.1's asymmetry). What deniability cannot do is reduce the
+  collector's own knowledge — the actor knows which records it fabricated and
+  which it observed, so the intelligence, targeting and association value of a
+  genuine observation is untouched. An earlier draft said the capability "makes
+  the surveilled record less useful to whoever built it"; that conflated the two
+  properties, and only the transferability half is true. Collector knowledge and
+  third-party proof are separate ledgers, and this acceptance now claims relief
+  only on the second.
 
   **§1.2.1's boundary still holds**, which is what keeps this short of a claim that
   nothing can be proved. Forging evidence about a *specific real person* needs their
@@ -6426,7 +6452,7 @@ and a citation to a missing number resolves there.
 | P1 | Presence-record composition — durable correlatable tuple of identity, time, social graph and geography | **Medium, reduced** | **Graph position is gone**: the participant locator is removed (§8.1), so records no longer trace a trajectory. **Geography is withholdable** from ten of eleven exchanges (§8.1.1). **Identity, time and the social graph remain by construction** — `kid` is on the envelope and signer role is inferred from body fields, so no field-level measure reaches them. See P2 and C2 |
 | P2 | Verifier/witness graph leakage | High | §19.2 — open, genuine tension |
 | P3 | **A single-identity client** correlates across subnets: anyone present in two of a user's subnets links them | High for such a client, **absent for a multi-identity one** | **Not a protocol limitation.** The protocol permits multiple identities already (§13.7); v1 clients omit the key management and interface work, so this ships as a **client** scope decision rather than a design defect. No wire change separates the two cases |
-| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, and operator logging, which §1.1 cannot reach |
+| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§13.7, §13.7.1). The device is the global correlation point the network architecture otherwise avoids |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
 | **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §14.2.4 adopts PQXDH and the Triple Ratchet; five integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |
@@ -6620,7 +6646,7 @@ acknowledged and whose join is not.
 | **C1** | Witness set + presence timestamp + coarse location | *Who, where, when, and with which organisation* — where a subtree maps to a recognisable employer or group. §19.1's worked example. **Reduced**: the participant locator is removed (§8.1), so the affiliation half now comes from the witness set — a sample rather than a statement of position — and coarse location is withholdable from ten of eleven exchanges (§8.1.1) | **Medium–High** |
 | **C2** | Witness set + verifier set, in **one** record | A miniature **temporal social graph**: the subject's present neighbourhood (witnesses) *and* a sample of their past counterparties (verifiers). Repeated records turn samples into a map | High |
 | **C4** | Archive prefix + the **new** patron's local topology | **The same archive means different things to different observers.** A counterparty opaque in the old subnet may be a known person in the new one, so *moving* an archive changes which entries are legible and can disclose relationships that were effectively private at origin. **Archive portability therefore has a privacy cost that depends on the destination.** Which nothing in the design said | High |
-| **C5** | Queue metadata + heartbeat state | *When someone came online to retrieve a particular message.* Distinguishes daily routine from exceptional activity, and both ingredients sit with the same party | High for a patron keeping logs |
+| **C5** | Queue metadata + heartbeat state | *When someone came online to retrieve a particular message.* Distinguishes daily routine from exceptional activity, and both ingredients sit with the same party — or below it: a compelled provider retains the joined view after the guest's deletion, so the C5 window is bounded by guest deletion only above the hypervisor (§18.1, §14.1.6) [2026-09-03] | High for a patron keeping logs, or a provider retaining below the guest |
 | **C6** | Push timestamps + patron queue state | The patron knows what is queued and sends the push; the platform vendor sees the push event. A party obtaining both **aligns network identity with a platform device account** more confidently than either dataset allows alone | High under legal process or platform compromise |
 | **C7** | Catalog entry + resource access log + topology | *Role and occupation inference.* A clinical service, code-review tool, family datastore or specialist tracker makes an otherwise pseudonymous subtree **semantically identifiable** | High |
 | **C8** | Peering ASN + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §3.3's rule that each server corresponds to a user. The placement disclosure is accepted (§19.7); this identification consequence was not worked through | Medium–High |

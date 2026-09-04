@@ -3703,3 +3703,92 @@ standing, and §19.7 item 2's reconnaissance rationale — all matching the
 registers. Python 80/80, Rust 146/0; references clean at 1,883 (eight
 list-continuation false-negatives, two of them from today's own edits,
 each inspected).
+
+## Cycle 2, pass 0.8.4 — adversarial: the compelled provider (2026-09-03)
+
+Two REASONING, two EXTENDS, zero NOVEL; eighteen RESTATES discarded — the
+reviewer's own summary: the residual issues are places where the text
+credits protections that do not follow, not missing attack paths. All four
+verified and ruled.
+
+**1. "Self-burning" (CRITICAL, REASONING → acceptance corrected, option
+B).** §18.1 credited impersonation detection as architectural; verified
+false three ways: one shared key across devices (§23.3's "seed shared
+across wallets"), concurrent multi-device presence is normal not
+anomalous, and the direct-path horizon includes never-met parties (P17).
+Rewritten: per-target/prospective/no-bulk-collection stand as the
+architectural residual; detection is contingent on actual acquaintance,
+which the architecture does not guarantee; the superseded phrasing is
+quoted. Role-separated credentials (the reviewer's repair) noted as
+adjacent to Appendix B.1's superseded shapes; author deferred the
+mechanism and commissioned a usability-impact analysis instead (below).
+
+**2. Collector vs court (HIGH, REASONING → paragraph rewritten).** "Makes
+the surveilled record less useful to whoever built it" conflated
+transferability with collector knowledge. Now split: fabrication
+capability discounts onward transfer and proof; it cannot reduce what the
+collector knows about genuine observations — the actor knows which records
+it fabricated. The acceptance claims relief only on the transfer ledger.
+
+**3. Honesty axis scoped (HIGH, EXTENDS → §12.6.5.1).** "Independent on
+the honesty axis" now scoped to adversaries who can only attack
+availability; against a compelled provider hosting both, primary and
+fallback are one control domain — correlated, not independent — with
+§3.4's adversarial-independence rule carrying the load.
+
+**4. Deletion bounds the node (HIGH, EXTENDS → §14.1.6, infra §2, P4, C5).**
+"Nothing recoverable" is the guest's truth; a provider snapshotting below
+the guest keeps the queue tuple after the VM forgets it — §18.1's
+observation boundary applied to the one place that hadn't carried it.
+Stated at all four sites: hygiene against the provider, the real bound
+against everyone above the hypervisor.
+
+Confirmed defences recorded: direct-path content outside the instance
+(contingent on P12's E2E), no participant-key reach from infrastructure
+alone, sealed captures off-infrastructure, and the corrected ASN asymmetry.
+
+### Commissioned analysis: usability impact of the operator key leaving the infra node
+
+Author directive: analyse impacts only, no redesign planning. The
+always-up-signer assumption is structural in three places and incidental
+in several more.
+
+**Tier 0 — session authentication.** Wire §9.1's mutual transport
+authentication runs under the node identity. Without the key (or a
+delegated transport credential — B.1 territory), the instance cannot
+accept an attach, answer a resolution, receive a flood, or be dialed.
+Everything below sits on this.
+
+**Tier 1 — continuous-cadence signing the design is built around.**
+(a) Currency staples: ~10-hour lifetime, refreshed per subordinate,
+issued to fallback callers (§12.6.5). The lifetime was derived against
+compromise-detection latency on the implicit premise that refresh is free
+because the signer never sleeps. Key on the operator's device makes staple
+freshness a function of human device availability; one night offline
+approaches the lifetime, and §12.6.5.1's degradation cascade becomes a
+consequence of sleep schedules rather than outages. (b) Sibling fallback
+issuance: the ladder exists precisely for when the patron is DOWN — with
+off-node keys it would need other operators' devices present during
+someone else's outage, converting an infrastructure property into a
+social-availability property. (c) §6.4 countersignatures and SubtreeAck:
+unattended per Appendix A; latency becomes device-cadence-bounded and
+flows into subordinates' transaction weight.
+
+**Tier 2 — event-driven signing that tolerates latency worse than it
+looks.** EndpointRecord signing on address change — the record exists to
+END unreachability, and an address change during operator absence extends
+the outage until the operator signs. The §10.2 automatic cycle-repair
+disavowal would defer to the device. Heartbeats, acks, queue service and
+forwarding are unsigned but live inside Tier-0 sessions.
+
+**Tier 3 — genuinely human acts, unaffected.** Attested adoptions,
+recovery, deliberate disavowals, peering: operator-present or
+latency-tolerant by nature.
+
+**Summary**: a key split forces either a delegated credential covering
+Tiers 0-1 (reopening B.1), or accepting that currency freshness and
+fallback issuance become functions of human availability. The 10-hour
+staple lifetime and the sibling ladder are the two mechanisms DESIGNED
+around continuous signing; under a split they need rederivation, not
+tolerance. The author's suspicion is confirmed: the assumption is
+load-bearing and pervasive.
