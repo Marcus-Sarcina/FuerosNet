@@ -8389,3 +8389,13 @@ flagged for a ruling: when scarce trust capacity must be allocated among
 symmetric principals the max-flow value is unique but the allocation is
 not, and whether the reference metric fixes a deterministic tie-break or
 leaves it to policy is undecided.
+
+### 2026-09-04 (scarce-capacity tie-break ruled)
+
+The open allocation question from the trust-metric review is resolved. The
+reference metric breaks a scarce-capacity tie deterministically -- the
+earlier-considered candidate wins -- as reference policy rather than a
+protocol invariant: per-observer trust means no node consumes another's
+computation, so differing resolutions both conform and a node need only be
+stable to itself. Stated at s16.4, mirroring the line already drawn there
+for lambda, and tested in the simulation.

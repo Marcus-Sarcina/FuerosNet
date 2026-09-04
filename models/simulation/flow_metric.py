@@ -338,15 +338,23 @@ def accepted_count(g, observer, targets):
     """MODE B: how many of `targets` are accepted SIMULTANEOUSLY -- one split
     graph, one super-sink, one max-flow.
 
-    IMPORTANT (an operational caveat, see UNSPECIFIED note at the bottom of
-    this file): the RETURNED TOTAL is a well-defined, deterministic quantity
-    -- the max-flow value is unique.  It verifies the setwise-conservation
-    BOUND (the aggregate cannot exceed the cut).  It does NOT determine WHICH
-    identities receive the units when demand exceeds capacity: among
-    symmetric sinks, different augmenting-path orders accept different
-    principals, all valid maximum flows.  So this function is sound as a
-    conservation check and must not be read as a stable per-principal
-    allocation.
+    The RETURNED TOTAL is a well-defined, deterministic quantity -- the
+    max-flow value is unique.  It verifies the setwise-conservation BOUND
+    (the aggregate cannot exceed the cut).  It does NOT by itself determine
+    WHICH identities receive the units when demand exceeds capacity: among
+    symmetric sinks, different candidate orders accept different principals,
+    all valid maximum flows.
+
+    THE REFERENCE-POLICY TIE-BREAK (design §16.4, ruled 2026-09-04): the
+    reference metric resolves such a tie deterministically -- the
+    EARLIER-CONSIDERED candidate wins.  This function realises that rule by
+    processing `targets` in the given order: BFS in max_flow() iterates
+    edges in insertion order, so the earlier drain edge is saturated first.
+    A caller that wants the reference behaviour therefore passes `targets`
+    in the reference order (see the demonstration in experiment_setwise).
+    This is REFERENCE POLICY, NOT a protocol invariant: per-observer trust
+    (§16.1) means no party consumes another's computation, so a different
+    policy resolving the tie differently still conforms.
     """
     s = split_graph(g, observer)
     SINK = ("sink", None)
@@ -548,6 +556,31 @@ def experiment_setwise(rng, report):
     for n, joint, ceiling in joints:
         if n >= ceiling:
             assert joint == ceiling, "saturated region below its ceiling"
+    # The reference-policy tie-break (design §16.4, 2026-09-04): when a cut of
+    # capacity 1 must choose between two equal-standing principals, the
+    # earlier-considered one wins.  Demonstrated on the minimal symmetric
+    # case, and asserted, so the reference behaviour is a tested property
+    # rather than an accident of construction order.
+    def scarce_winner(order):
+        g2 = FlowGraph()
+        g2.add_edge("obs", "bot", 1)               # the scarce shared unit
+        for x in order:
+            g2.add_edge("bot", x, 1)
+        s = FlowGraph()
+        s.add_edge(("out", "obs"), ("in", "bot"), 1)
+        s.add_edge(("in", "bot"), ("out", "bot"), 1)
+        SINK = ("sink", None)
+        for x in order:                            # candidate order = argument
+            s.add_edge(("out", "bot"), ("in", x), 1)
+            s.add_edge(("in", x), ("out", x), 1)
+            s.add_edge(("out", x), SINK, 1)
+        s.max_flow(("out", "obs"), SINK)
+        return [x for x in order if s.cap[("out", x)][SINK] == 0][0]
+    assert scarce_winner(["A", "B"]) == "A", "reference tie-break: earlier wins"
+    assert scarce_winner(["B", "A"]) == "B", "reference tie-break: earlier wins"
+    report.append(
+        "  scarce-capacity tie: the earlier-considered candidate wins "
+        "(reference policy, §16.4)")
     # Demonstrate the conservative direction: attaching a DEEP (invisible)
     # fake subtree beyond the horizon does not raise the observer's joint.
     g = base.copy()
@@ -675,26 +708,27 @@ def main():
     report.append("all assertions passed")
     report.append("")
     report.append(
-        "UNSPECIFIED (flagged for the design author, not decided here): when "
-        "shared")
+        "RESOLVED (design 16.4, 2026-09-04): when shared capacity cannot "
+        "satisfy all eligible")
     report.append(
-        "capacity cannot satisfy all eligible principals, the max-flow VALUE "
-        "is unique but")
+        "principals, the max-flow VALUE is unique (individual standing and "
+        "the aggregate bound")
     report.append(
-        "the ALLOCATION among symmetric principals is not -- augmenting-path "
-        "order decides")
+        "are well-defined) but the ALLOCATION among symmetric principals is "
+        "order-dependent.  The")
     report.append(
-        "it.  The reference metric (design 16.2) fixes each principal's "
-        "INDIVIDUAL standing")
+        "reference metric fixes it deterministically -- the earlier-considered "
+        "candidate wins --")
     report.append(
-        "(its own max-flow, deterministic) and the aggregate BOUND, but not a "
-        "deterministic")
+        "as REFERENCE POLICY, not a network invariant: per-observer trust "
+        "(16.1) means no party")
     report.append(
-        "tie-break when scarce capacity must be allocated to specific "
-        "principals.  Whether")
+        "consumes another's computation, so a different policy may resolve the "
+        "tie differently and")
     report.append(
-        "that must be specified, or is left to policy (16.4 pluggability), is "
-        "the author's call.")
+        "still conform.  A node's own decisions are stable; cross-node "
+        "agreement is neither needed")
+    report.append("nor claimed.")
     text = "\n".join(report)
     print(text)
     return text

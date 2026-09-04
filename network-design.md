@@ -5772,6 +5772,24 @@ default, publish the λ < 1/f criterion prominently, and provide a conformance
 test that reports a policy's resistance bound so anyone tuning their own can see
 what they have given up.
 
+**A scarce-capacity tie is reference-policy, not a network invariant**
+[author, 2026-09-04]. Each principal's *individual* standing is its own
+max-flow, and the *aggregate* a set can draw is bounded by the cut (§16.2) —
+both are unique values every conforming flow policy agrees on. What is not
+unique is *which* of several equal-standing principals a saturated cut
+admits when it cannot admit them all: the answer depends on the order the
+computation considers candidates, and no single answer is more correct.
+**The reference metric fixes one deterministically — the earlier-considered
+candidate wins** — so that a node's own decisions are stable and
+reproducible for that node. **It is not promoted to a protocol rule**,
+because it does not need to be: per-observer trust means no party consumes
+another's computation (§16.1), so two nodes resolving the same tie
+differently never disagree about anything either one relies on. A resource's
+role table is its operator's own computation and is deterministic *for that
+operator*; nothing compares it against another operator's. This is the same
+line §16.2 draws for λ — the reference implementation is where the choice
+lives, and conformance does not carry it.
+
 ### 16.5 Decay on inactivity
 
 Expiry of old standing is a **deliberate decay function**, not an unfortunate

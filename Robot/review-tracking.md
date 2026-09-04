@@ -4110,3 +4110,20 @@ finding. All ten seeds pass after the rewrite; the other seven models
 (3 TLA+, 4 Tamarin) are untouched and still green.
 
 **OPEN FOR AUTHOR**: the allocation/tie-break UNSPECIFIED above.
+
+## Author ruling: scarce-capacity tie-break (2026-09-04)
+
+The allocation UNSPECIFIED from the trust-metric review is closed. Ruling:
+the reference metric resolves a scarce-capacity tie deterministically --
+the earlier-considered candidate wins -- but this is REFERENCE POLICY, not
+a network-wide invariant. Per-observer trust (s16.1) means no party
+consumes another's trust computation, so two nodes may resolve the same tie
+differently and both conform; a node's own decisions are stable, which is
+all that is needed. Individual standing (each principal's own max-flow) and
+the aggregate bound remain unique values every flow policy agrees on; only
+the allocation among equal-standing principals is policy. Applied to design
+s16.4 (alongside the lambda "reference implementation, not protocol rule"
+line it mirrors), and to the simulation (accepted_count documents the rule;
+experiment_setwise tests earlier-wins on the minimal symmetric case).
+Reference check clean at 1934; both vector harnesses and all eight models
+green. No open items remain.
