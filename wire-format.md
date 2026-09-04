@@ -8,6 +8,16 @@ stale.
 
 ---
 
+**Notation, and where each name is defined.** Global rules in §1 refer to
+structures defined later; this table is the bridge, not a schema.
+
+| Name | Defined | Name | Defined |
+|---|---|---|---|
+| `keyhash`, `KeyMaterial` | §2.2 | `txid` | §1.4 |
+| `path` | §2.1 | `Locator`, `seqno` | §2.3 |
+| envelope, `Sig_structure` | §3 | timestamps | §3.3 |
+| control frames (`Attach`, `Heartbeat`, …) | §8 | request types | §9.2 |
+
 ## 1. Encoding
 
 **CBOR (RFC 8949) with deterministic encoding, RFC 8949 §4.2.**
@@ -36,7 +46,7 @@ Three things this buys beyond interoperability:
   string is `"Signature"` or `"Signature1"`, distinguishing *COSE structure types*,
   not application roles. **COSE does not give role
   separation for free**, and this protocol has **twelve** signing roles, and will acquire more. See
-  §1.1 for the required profile rule.
+  §1.1-§1.4 for the required profile rules.
 - **A place to put the algorithm identifier.** RFC 9052 requires `alg` to be
   authenticated but permits it either in the protected header **or as externally
   supplied data**, so "self-describing" is a profile choice rather than a COSE
@@ -122,6 +132,8 @@ replace, and the number of roles grew from three to seven while the protocol
 believed it had separation it did not have. A verifier that derives the tag from
 context rather than content also makes the check free.
 
+### 1.2 Deterministic encoding — REQUIRED PROFILE RULE
+
 **Deterministic rules, normative:**
 - Map keys in **protocol-defined** maps are unsigned integers, sorted ascending.
   **Standardised structures are exempt**: a `COSE_Key` carries negative labels by
@@ -173,9 +185,11 @@ context rather than content also makes the check free.
   from unknown map *keys*, which are preserved. A decoder that cannot interpret a
   result code cannot evaluate the object, and silently ignoring it would mean
   treating an unevaluated field as absent.
-- **Every array is bounded.** Arrays arriving from strangers are a resource
-  attack surface, so each is given an explicit maximum below; exceeding it is
-  malformed, not merely unusual.
+### 1.3 Global structural bounds
+
+**Every array is bounded.** Arrays arriving from strangers are a resource
+attack surface, so each is given an explicit maximum below; exceeding it is
+malformed, not merely unusual.
 
 | Array | Maximum |
 |---|---|
@@ -229,6 +243,8 @@ logical signers — two participants and ~8 witnesses, at 10 × (64 + 3,309) ≈
 KB**, or ~35 KB with the body. The bound accommodates 18 envelope signers plus 32
 embedded verifier responses, ≈ **65 KB**. Bounds exist to
 stop a stranger exhausting memory, not to describe normal operation.
+
+### 1.4 Content addressing
 
 **Content addressing.** `txid = SHA-256(deterministic CBOR of the body map)`,
 excluding the signature array. SHA-256 is adequate post-quantum: Grover
@@ -564,7 +580,7 @@ Rules a validator checks from the record alone. All were previously unstated.
   mechanisms. A body claiming `started_at` in 2100 with `finalized_at` an hour later
   satisfies this rule and poisons chains just as effectively; what stands against
   *that* is a witness declining to sign a ceremony whose claimed day its own
-  clock contradicts (`light-client-requirements.md` §1.0.1), which no validator
+  clock contradicts (`light-client-requirements.md` §1.2), which no validator
   can check. **Structural here,
   client-side there** — the difference is that this rule compares two values the
   record already carries, and the other needs a clock the reader does not have.
@@ -1455,7 +1471,7 @@ See design §8.1.1 for what it does not reach and why. *`started_at` and `subtyp
 are body fields, not disclosable — the structural rules consume them, and
 withholding them concealed nothing the body does not already show (§4.5).*
 
-##### The construction is a digest list, not a tree
+##### 4.5.1.1 The construction is a digest list, not a tree
 
 **Each disclosable field becomes a salted digest; the body commits to the sorted
 list of digests.**
@@ -1490,7 +1506,7 @@ duplicated-node second-preimage class**. SD-JWT's own construction is a digest a
 for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
 digest can never be reinterpreted as a root or the reverse.
 
-##### Salts are mandatory
+##### 4.5.1.2 Salts are mandatory
 
 **Every disclosure carries a fresh 16-byte salt.** Without one, an undisclosed
 field is recovered by brute force from its digest: `subtype` has two values,
@@ -1502,7 +1518,7 @@ mean anything here.**
 must therefore compute one root. They are ordinary record state afterwards, held by
 both participants and by anyone given a full record.
 
-##### What travels: the presentation
+##### 4.5.1.3 What travels: the presentation
 
 **A presented record is the envelope plus exactly seven disclosure slots, in
 ascending label order.** Stated as a schema because prose alone left
@@ -1532,7 +1548,7 @@ present, so a recipient always knows a field exists and was withheld. This is th
 same posture as §5.5's unanswered queries and `unavailable` responses: absence is
 legible rather than silent, and a policy may weight it.
 
-##### Cost
+##### 4.5.1.4 Cost
 
 **+16 bytes per disclosable field at rest** — about 112 bytes on a ~35 KB record,
 **0.3%**. A minimised presentation carries 32 bytes per withheld field, at most 224
@@ -1540,7 +1556,7 @@ bytes. **Presentation size does not otherwise fall**: a presence record is ~96%
 signatures and the envelope requires exactly the required signer set, so a minimised
 record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 
-##### What a decoder MUST do
+##### 4.5.1.5 What a decoder MUST do
 
 - **Reject a record whose recomputed root does not equal body field 8.**
 - **Reject a slot count other than seven**, a revealed label differing from its
@@ -1598,7 +1614,7 @@ non-conforming at the wire, which is checkable.
 
 **This is a statement about the schema, not an instruction to recipients.** A
 recipient may refuse for any reason, and nothing here compels it to proceed — that
-would be a rule aimed at a party whose acceptance policy is private, which §1.1 calls
+would be a rule aimed at a party whose acceptance policy is private, which design §1.1 calls
 a wish. What the fixed interface buys is that a refusal is **the recipient's policy
 rather than the protocol's**, and that every disclosure subset stays structurally
 valid.
@@ -2343,7 +2359,7 @@ evaluator can see.
 
 ---
 
-## 7. Attestations and records
+## 7. Attestations and records: currency, anchors, key grants, acknowledgements, endpoints, resolution, prekeys, archive fetch
 
 ### 7.1 Currency attestation
 
@@ -3533,7 +3549,7 @@ relay. The distinction costs nothing, because **a relay changes nothing**: it
 forwards the object byte-for-byte, and the signature that made it worth trusting at
 the origin is the one the next receiver checks.
 
-#### The forwarding rule: forward if and only if you stored it
+#### 10.1.1 The forwarding rule: forward if and only if you stored it
 
 **A node stores a topology-class transaction when its subject falls within that
 node's own `h_store`; a node forwards a stored transaction to every adjacent node
@@ -3592,7 +3608,7 @@ reach is not.
 a TTL-derived one would let a sender push traffic into nodes that had decided not to
 hold it.
 
-#### Duplicate and loop suppression: by `txid`, against the store
+#### 10.1.2 Duplicate and loop suppression: by `txid`, against the store
 
 **A node that already holds an object does not store it again and does not forward
 it.** The store the node keeps anyway is the seen-set. A horizon contains cycles
@@ -3634,7 +3650,7 @@ storage decision and this one it could not make.
 second copy of a fact the store already holds, with its own expiry parameter to leave
 unset.
 
-#### No acknowledgement, no retry
+#### 10.1.3 No acknowledgement, no retry
 
 **Deliberately.** Neither is defined, and their absence is a decision rather
 than an omission.
@@ -3706,7 +3722,7 @@ your patron, and a memo that does not arrive is repaired by the next one or by
 reconciliation. A table mutation already made is kept — the memo was true when it
 passed.
 
-#### Two checks, with different requirements
+#### 10.2.1 Two checks, with different requirements
 
 | Check | Needs | Reach |
 |---|---|---|
@@ -3729,7 +3745,7 @@ moved for an endpoint change (§2.3).
 
 **The re-parenting check needs a table**, described below.
 
-#### The memo table
+#### 10.2.2 The memo table
 
 **A node MAY maintain a table of `(patron, slot) → occupant` built from the memos
 that pass through it.** Every memo from below traverses it, so the table's
@@ -3780,7 +3796,7 @@ catches the conflict, at worst the root. **No tier is load-bearing.**
 > implementer reading design §12.6.1 alone will not see this coming, which is why it is
 > stated here.
 
-#### A memo is a hint, never evidence
+#### 10.2.3 A memo is a hint, never evidence
 
 **No node acts on a memo alone.** A memo is a derived summary and is not signed;
 an intermediary can fabricate one. Acting directly would manufacture the **false
@@ -3805,7 +3821,7 @@ matches the detector's row and is therefore indistinguishable from a genuine loo
 the detector's own subordinates, the edge severed is on the injector's route, and
 the disavowal carries no prejudice.
 
-#### What a detecting node does
+#### 10.2.4 What a detecting node does
 
 **It disavows the direct subordinate that forwarded the memo to it**, once the
 memo is confirmed against its own records (above). Any edge breaks a cycle, and that is the

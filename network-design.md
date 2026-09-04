@@ -102,6 +102,11 @@ not needed to understand the design as it stands.
 
 ## 1. Thesis
 
+*Four terms appear in this chapter before §2 defines them: a **patron** adopts
+**subordinates** into a tree-shaped **subnet**, and a **trust horizon** (the
+introductory chapters say **Dunbar Org**) is the two-edge neighbourhood around
+a node. §2 is the vocabulary everything else assumes.*
+
 **Anchor trust and attention in the resource that is actually scarce: human
 attention and human social relations.**
 
@@ -1368,7 +1373,7 @@ their own role.**
 invariant: privacy properties must be assessed under composition of everything an
 observer can obtain, never artifact by artifact.)*
 
-##### Keystream encryption changes this position
+#### 7.2.1 Keystream encryption changes this position
 
 **A compliant client holds no decryptable biometric data at rest** (§7.5.2).
 Captures are sealed under keys derived from a seed the *depicted person* supplied, and cannot
@@ -1802,7 +1807,7 @@ nobody can verify.
 other mitigation here protects a holder's data from third parties; this is the only
 one protecting the depicted person's data from the holder.
 
-##### What it does not do
+##### 7.5.2.1 What it does not do
 
 **A non-compliant client defeats it entirely**, and nothing detects the difference.
 Such a client can decline to seal its captures, retain the capture key it was
@@ -1821,7 +1826,7 @@ a **structural** consequence rather than a continuing intention. A compliant hol
 the seed. The commitment moves from *"I will delete this"* to *"I run a client that
 never gave me the ability"*, which is easier both to keep and to mean.
 
-##### Why this matters for who can participate
+##### 7.5.2.2 Why this matters for who can participate
 
 §7.2 makes biometric custody a real cost of hosting: an operator holding
 identifiable face data acquires custody obligations they may have no way to
@@ -1833,7 +1838,7 @@ attempt to assess (§7.2).
 Data in memory during a ceremony authorised to display
 it is not storage, and retention provisions do not reach it.
 
-##### Retention becomes enforceable by the subject
+##### 7.5.2.3 Retention becomes enforceable by the subject
 
 **A enforces their own retention horizon by declining to release a capture key.**
 No detection, no cooperation, nothing to audit: B's copy simply stays inert.
@@ -1870,7 +1875,7 @@ never encrypted is unaffected by A's refusal, and nothing detects the difference
 What sealing changes is that a **compliant** holder has no way to defeat the
 subject's decision, rather than merely an obligation not to.
 
-##### Interaction with verifier queries
+##### 7.5.2.4 Interaction with verifier queries
 
 **None, because the subject is always present.** §7.4.2 requires the subject's
 countersignature on every verification query, so there is no case where B is asked
@@ -1887,7 +1892,7 @@ Verifier privacy is currently one-sided — P18 records that a verifier learns a
 ceremony is under way while the subject learns nothing about who was asked. The
 key-release channel makes it symmetric without a new message type.
 
-##### Interaction with recovery
+##### 7.5.2.5 Interaction with recovery
 
 **Absent a restored backup, seeds die with the device — consistent rather than a new fragility.**
 A rotated or recovered key inherits only local standing (§9); rotation never
@@ -1901,7 +1906,7 @@ The practical consequence is that a post-loss recovery ceremony rests on
 weaker basis. **The scheme adds no dependency here; it makes an existing one
 visible.**
 
-##### Construction: one sealed capture, one derived key
+##### 7.5.2.6 Construction: one sealed capture, one derived key
 
 **The store is a sealed capture under a key derived from the subject's seed, not a
 keystream the subject hands over in pieces.** Describing it as *N bytes of
@@ -1956,7 +1961,7 @@ NFC and BLE throughput was chasing a problem that only existed because the
 mechanism was described in terms of the expanded stream rather than what generates
 it. **Any channel carries 32 bytes.**
 
-##### Layout: the template comes first and has a fixed length
+##### 7.5.2.7 Layout: the template comes first and has a fixed length
 
 **B derives the template at capture time and stores it ahead of the source images**,
 under the same seal. The template has a fixed length per modality version so a holder
@@ -1977,7 +1982,7 @@ counterparty's access remotely without the counterparty acting or knowing.
   no-match: a verifier reports an identity judgment only where it ran the
   comparison that supports one.
 
-##### One sealed capture per presence record
+##### 7.5.2.8 One sealed capture per presence record
 
 **A ceremony seals a new capture; it does not replace an earlier one.** Each
 presence record has its own sealed store, its own seed and its own retention
@@ -1990,7 +1995,7 @@ matches worse and says less. Nothing forbids a subject granting against an older
 one — that is theirs to choose, and choosing an older capture discloses less recent
 appearance.
 
-##### Seeds are backed up with everything else
+##### 7.5.2.9 Seeds are backed up with everything else
 
 **A participant's seeds are ordinary device state and belong in the backup**
 (§10.2). Losing a backup costs the seeds along with the keys and the archive, which
@@ -2000,7 +2005,7 @@ breaks the ability to unlock one's likeness on every counterparty's device.
 same loss, for the same reason, as losing portable standing: rotation and recovery
 never carry state forward from beyond the local trust horizon (§9).
 
-##### Open
+##### 7.5.2.10 Open
 
 - **Fixed template length per modality version**, so a holder knows what it is
   reading, and the AEAD parameters (cipher, nonce derivation, framing).
@@ -2441,7 +2446,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 **Ten of eleven have no use for it.** The mechanism exists because a record currently
 reaches all of them whole.
 
-##### What it does not reach, and why
+##### 8.1.1.1 What it does not reach, and why
 
 **Not the signer set.** `kid` sits in the COSE protected header, on the envelope,
 outside the body — so **every participant and witness keyhash is on the record however
@@ -2460,7 +2465,7 @@ witness keyhashes, `finalized_at` and the verifier responses all stay in the
 body: they are what an evaluator weighs by recognition (§16.1), and who took
 part is the one thing a presence record exists to say.
 
-##### The use and the harm are the same computation
+##### 8.1.1.2 The use and the harm are the same computation
 
 **Location's one legitimate consumer needs a series, and so does the leak.** §7.7
 gives the checks as impossible travel by rigorous induction and statistical divergence
@@ -2475,7 +2480,7 @@ history and C4 flags for reading it against local knowledge. **That is the trade
 mechanism offers and the whole of it**: the one recipient with a use for location is
 also the most dangerous holder of it, and everyone else stops receiving it.
 
-##### Withholding is visible
+##### 8.1.1.3 Withholding is visible
 
 The digest count and labels always travel, so a recipient knows a field exists and was
 withheld. Same posture as an unanswered query and an `unavailable` response: absence is
@@ -3390,7 +3395,7 @@ and nothing else. So a grandpatron whose node is offline, or whose standing poli
 does not reach this position, delays a convenience rather than blocking a
 membership.
 
-##### One signature, several acceptors
+##### 11.2.1.1 One signature, several acceptors
 
 **Nodes that already trust the grandpatron may accept that `SubtreeAck` instead of
 evaluating the new node themselves.** In practice the grandpatron's siblings
@@ -3417,7 +3422,7 @@ which is cheaper than each forming an independent view of a stranger and is the
 same substitution the trust model rests on throughout. An operator wanting a
 stricter rule sets one.
 
-##### What it attests, and what it does not
+##### 11.2.1.2 What it attests, and what it does not
 
 The grandpatron is **not** vouching for identity, the patron's signature on the
 adoption does that, backed by whatever presence evidence it carries. The
@@ -3448,7 +3453,7 @@ here can.
 An operator needing prompt revocation should therefore prefer hosted packages. The
 infra client shows which a resource is, since that follows from where it runs.
 
-#### When an owner moves
+#### 11.2.1 When an owner moves
 
 **The general rule: there is no grant object for a move to invalidate.** Access
 is **a row the node re-derives**, never a durable grant recorded at the moment of
@@ -3776,7 +3781,7 @@ hosting delegates that filtering too, and should be told so. The owner **request
 scope when it registers and cannot check that the request was honoured, which is the
 ordinary shape here: the party that acts is the party that knows.
 
-##### When a hosting node goes down
+#### 11.5.1 When a hosting node goes down
 
 **Loss of a host is not a silent failure.** There is no registry outside the host
 and the asker's cache, so a client that cannot reach a node **knows that node's
@@ -3941,7 +3946,7 @@ relationship it is not party to (§1.1).
 
 ---
 
-## 12. Addressing and resolution
+## 12. Addressing, resolution, and reachability under change
 
 ### 12.1 Locator format
 A locator is four fields, **signed by the node itself**:
@@ -5148,7 +5153,7 @@ This is a gap in §5, not merely in this section.
 **There is directly applicable prior art, specified and formally verified.** The
 requirement below is to adopt it, not to design a replacement.
 
-##### Only leaf-to-leaf needs the asynchronous machinery
+##### 14.2.4.1 Only leaf-to-leaf needs the asynchronous machinery
 
 | Case | What it needs |
 |---|---|
@@ -5159,7 +5164,7 @@ requirement below is to adopt it, not to design a replacement.
 That narrows the import considerably: two of the three endpoint cases are already
 covered by transport.
 
-##### Key agreement: PQXDH
+##### 14.2.4.2 Key agreement: PQXDH
 
 **Signal's PQXDH** is designed for exactly this situation, one party offline
 having published prekeys, the other wanting to send immediately and establish a
@@ -5184,7 +5189,7 @@ post-quantum *confidentiality*. §5.1's identity keys are hybrid, so authenticat
 here can bind to the post-quantum component as well. That is a place where this
 design should exceed the deployed profile rather than inherit its limit.
 
-##### Session: the Triple Ratchet
+##### 14.2.4.3 Session: the Triple Ratchet
 
 **Signal's Triple Ratchet.** The Double Ratchet running alongside the **Sparse
 Post-Quantum Ratchet (SPQR)**, with their outputs mixed — provides forward secrecy
@@ -5197,7 +5202,7 @@ chunks across successive headers. This design is unusually sensitive to object
 size (§5), so a construction that already addresses key-size inflation is worth
 more here than elsewhere.
 
-##### A property that falls out, and is wanted
+##### 14.2.4.4 A property that falls out, and is wanted
 
 PQXDH provides **a form of cryptographic deniability** for the session, subject to
 the limitations Signal's specification states about what each party holds and
@@ -5209,7 +5214,7 @@ met someone and not be able to prove what you said to them.**
 The split is not a compromise between the two goals. It is the correct arrangement
 of them, and it arrives free with the imported construction.
 
-##### Blanket prefetch defeats the intent signal
+##### 14.2.4.5 Blanket prefetch defeats the intent signal
 
 **A prekey fetch discloses intent to message, before any message exists** (C11).
 Fetching on demand therefore announces each intended conversation to whoever serves
@@ -5261,7 +5266,7 @@ conversation, that is still the better trade.
 intent signal returns, since blanket prefetch does not scale past a bounded set —
 but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.3).
 
-##### Still to settle
+##### 14.2.4.6 Still to settle
 
 - **Prekey rotation and last-resort policy.** Cadence, and the accepted reduction
   in forward secrecy when the last-resort key is used.
@@ -5318,7 +5323,7 @@ a coordinated one, which is why it works here and a coordinated one would not.
 
 ---
 
-## 15. Control plane / data plane
+## 15. Propagation, horizons, and the rootward memo
 
 Six message classes with different reach and different persistence — point-to-point
 attestation is separated from ordinary attestation because its audience is one party,
@@ -7082,8 +7087,8 @@ order and refusal behaviour, with the role row consulted as a lookup.
 This chapter names them; the obligations stay where the party bound by them will look.
 
 - **`wire-format.md` §13** — encoding items, chiefly the canonical test vectors deferred at §23.4.
-- **`light-client-requirements.md` §Open** — participant-client behaviour still to settle.
-- **`infra-client-requirements.md` §Open** — operator-side behaviour still to settle.
+- **`light-client-requirements.md` §9** — participant-client behaviour still to settle.
+- **`infra-client-requirements.md` §12** — operator-side behaviour still to settle.
 - **§7.6's local block** — the co-presence questions that belong beside the mechanism they qualify.
 
 ---
@@ -7255,7 +7260,7 @@ routing on purely local policy, including its failure modes).
 
 ## Appendix A. Document conventions
 
-### Where invariants live
+### A.1 Where invariants live
 
 **A security or fairness invariant is stated in role terms in this document; the
 wire format states its encoding.** Both are needed, and they are not
@@ -7271,7 +7276,7 @@ conventions in order: state the property, then **ask who would enforce the resta
 version against whom** (§1.1). If the answer has changed, split the rule — keep the
 enforceable part as a MUST and represent the rest as a visible distinction.
 
-### The force of client requirements
+### A.2 The force of client requirements
 
 The three requirements documents state obligations that **no party can check**
 (§1.1's diagnostic returns *no enforcement available* almost everywhere in them).
@@ -7290,7 +7295,7 @@ else's, so a complete operator deployment satisfies `light-client-requirements.m
 your own client is a user-interface matter and not a protocol one — the network sees
 one node.
 
-### What a client does without asking
+### A.3 What a client does without asking
 
 **Infra operation is automatic.** Routing, queuing, countersigning
 adoptions, acknowledging subtree membership (§11.2.1), replication and issuing
@@ -7318,7 +7323,7 @@ anywhere. **A design that meters trust against human attention cannot spend that
 attention on bookkeeping** (§1) — and a user prompted routinely stops reading the
 prompts.
 
-### Normative vocabulary
+### A.4 Normative vocabulary
 
 §1.1 says the protocol can only compel where shared state exists, so:
 

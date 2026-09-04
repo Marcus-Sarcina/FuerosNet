@@ -15,11 +15,9 @@ Design rationale is in design §11.
 **This document states no protocol rules of its own.** Where it repeats one for context it cites the section that owns it, and the cited document governs on any disagreement. It cites design sections rather than
 restating them, because a restated fact is one that will drift.
 
-**On the force of these requirements.** Most of what follows cannot be checked by
-anyone (see `network-design.md` Appendix A, *The force of client requirements*). These are
-**commitments, not enforceable rules**: a conforming label means the author asserts
-them, not that anyone verified them. Where a requirement leaves a visible artifact,
-that is noted in place.
+**On the force of these requirements**: commitments, not enforceable rules —
+`network-design.md` Appendix A.2 states why, once, for all three requirements
+documents. Where a requirement leaves a visible artifact, that is noted in place.
 
 ---
 
@@ -407,7 +405,7 @@ carries it to an asker, because receiving an entry is what qualifying looks like
 
 ---
 
-## 7. Roles
+## 7. Roles, and what the accessing user sees
 
 **The infra node determines which connected nodes hold which roles**, from its
 pluggable local trust algorithm plus per-resource configuration.

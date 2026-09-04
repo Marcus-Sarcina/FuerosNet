@@ -3962,3 +3962,56 @@ the removed sentence; nothing else mangled on read-through of §12.6.5,
 §18.1, §18.3, §16.2-16.3.1, wire §5.5-5.6.
 
 Both harnesses green (Python 80/80, Rust 146/0). Ready for 0.9.
+
+## Cycle 2, pass 0.9 — organisation (2026-09-04)
+
+The reviewer assessed the post-migration structure clean-room; findings
+sorted three ways and the author ruled on each class.
+
+**Already adjudicated (reported, not reopened):** further splitting design
+§7 (author's standing ruling: three ways, not four — the ceremony is not
+divisible without cutting one argument); a master open-item index (§22 IS
+the index by ruling; the four local lists are referenced, not absorbed);
+vocabulary order (moved to §2 in the migration; residual handled below).
+
+**New, cheap, applied (author: "do all of these"):**
+- Wire §1.1 split into §1.1 domain separation / §1.2 deterministic
+  encoding / §1.3 global structural bounds / §1.4 content addressing —
+  165 lines were under one heading. No cross-document citations existed;
+  the front-matter pointer now reads §1.1-§1.4. One live misresolution
+  found and fixed en route: a bare "§1.1" in wire §5 meant DESIGN §1.1
+  and resolved silently against wire's own — the class of error the
+  checker cannot catch.
+- Light §1 renumbered: 1.0→1.1, 1.0.1 promoted to 1.2 (Acting as a
+  witness is a sibling activity, not a child of Nomination), 1.1-1.3 →
+  1.3-1.5. Two citations updated (one internal, wire §3.2's).
+- Thirty-six unnumbered H4/H5 headings numbered mechanically across wire
+  and design (4.5.1.1-.5, 10.1.1-.3, 10.2.1-.4, the §7.5.2 family, and
+  the rest); two mis-leveled H5s found sitting directly under H3s and
+  corrected to numbered H4s (7.2.1, 11.5.1). Depth invariant verified:
+  components+1 everywhere.
+- Appendix A subsections lettered A.1-A.4 to match B.1/B.2; the three
+  name-form citations now cite A.2/A.3.
+- The Open chapters numbered (light §9, infra §12); design §22.4's
+  §Open citations updated.
+- Force-of-requirements boilerplate deduplicated: one sentence + Appendix
+  A.2 citation in each requirements document.
+- A notation bridge added at the wire front (name → defining section) and
+  a four-term italic pointer at design §1's head.
+
+**Structural splits (author: "rename chapters in place"):** the
+rename-in-place middle path adopted over a second migration — design §12
+is now "Addressing, resolution, and reachability under change", §15
+"Propagation, horizons, and the rootward memo", wire §7 enumerates its
+families in the title, infra §10 is "Role assignment and hosted-session
+lifecycle", resource §7 "Roles, and what the accessing user sees". No
+numbers moved; the discoverability half of the size complaints is
+answered, and the splits themselves are declined for v1.
+
+Not adopted: cross-layer rationale dedup (the reviewer's item 7) beyond
+the boilerplate — the "repeat the contract sentence; cross-reference the
+explanation" rule is already the authoring convention, and a
+prose-consolidation sweep is deferred with the splits.
+
+Checker at 0 flags of 1,931; depth invariant clean; harness green after
+repin.

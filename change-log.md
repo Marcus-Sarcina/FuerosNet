@@ -8333,3 +8333,22 @@ infra Open item on gateway pre-evaluation aligned with P24's reduction.
 And the reference checker runs at zero for the first time — the nine
 standing manually-inspected flags were exemptions by another name, and
 every cross-document reference now names its document.
+
+### 2026-09-04 (cycle 2, pass 0.9: organisation)
+
+The organisation pass assessed the post-migration structure. Everything
+cheap was applied: wire §1's four topics each have their own section
+(domain separation had annexed deterministic encoding, the global bounds
+and content addressing for 165 lines), the light client's ceremony
+chapter is conventionally numbered with witnessing as a sibling of
+nomination, thirty-eight headings that carried decisions without numbers
+now carry both, Appendix A's subsections are citable as A.1-A.4, the Open
+chapters are numbered, the force-of-requirements paragraph lives once in
+Appendix A.2, and both documents gained front-matter bridges — a notation
+index at the wire's head, a four-term pointer at the thesis. The large
+chapters were renamed in place rather than split: addressing carries its
+reachability freight in its title, propagation surfaces the rootward
+memo, and the role chapters name their lifecycle halves. A second
+migration was declined for v1; the standing rulings from the first —
+three-way ceremony split, §22 as the open-item index — were reported to
+the reviewer's satisfaction rather than reopened.

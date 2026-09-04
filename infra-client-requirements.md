@@ -11,7 +11,7 @@ browsing and resource requests happen in a participant client and are governed b
 `light-client-requirements.md` (design Appendix A). This document covers the server side
 only.
 
-**Your node runs unattended.** Design Appendix A's *What a client does without asking* is
+**Your node runs unattended.** Design Appendix A.3 (*What a client does without asking*) is
 the rule: serve, queue, countersign, acknowledge, replicate and issue credentials
 from standing policy, and interrupt your operator only for a live two-person act or
 for configuring their own node.
@@ -24,11 +24,9 @@ and to nothing else.
 **This document states no protocol rules of its own.** It cites design sections rather
 than restating them.
 
-**On the force of these requirements.** Most of what follows cannot be checked by
-anyone (see `network-design.md` Appendix A, *The force of client requirements*). These are
-**commitments, not enforceable rules**: a conforming label means the author asserts
-them, not that anyone verified them. Where a requirement leaves a visible artifact,
-that is noted in place.
+**On the force of these requirements**: commitments, not enforceable rules —
+`network-design.md` Appendix A.2 states why, once, for all three requirements
+documents. Where a requirement leaves a visible artifact, that is noted in place.
 
 ---
 
@@ -312,7 +310,7 @@ should treat it as an open engineering question rather than a settled one.
 
 ---
 
-## 10. Role assignment
+## 10. Role assignment and hosted-session lifecycle
 
 **The node evaluates access and presents the result as a credential**
 (`resource-requirements.md` §1). The resource never reads network state.
@@ -576,7 +574,7 @@ not who answers for it (design §11.5) — and that asker may see. Nothing flood
 
 ---
 
-## Open
+## 12. Open
 
 - Whether a user can evaluate a gateway operator before routing external traffic
   through them (`resource-requirements.md` §11, design P24) — **largely answered**

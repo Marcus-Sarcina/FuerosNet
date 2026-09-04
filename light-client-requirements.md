@@ -23,17 +23,15 @@ document, where an implementer had to find them by search.
 something works, it cites the design section rather than restating it, a restated
 fact is one that will drift.
 
-**On the force of these requirements.** Most of what follows cannot be checked by
-anyone (see `network-design.md` Appendix A, *The force of client requirements*). These are
-**commitments, not enforceable rules**: a conforming label means the author asserts
-them, not that anyone verified them. Where a requirement leaves a visible artifact,
-that is noted in place.
+**On the force of these requirements**: commitments, not enforceable rules —
+`network-design.md` Appendix A.2 states why, once, for all three requirements
+documents. Where a requirement leaves a visible artifact, that is noted in place.
 
 ---
 
 ## 1. Ceremony
 
-### 1.0 Nomination
+### 1.1 Nomination
 
 - **Nominate witnesses only from the counterparty's neighbourhood, never from your
   own** (design §7.1). Nominating your own is the failure mode the rule exists to
@@ -60,7 +58,7 @@ that is noted in place.
   (`nominated_by` is a recorded claim) — you can, and you are the only party
   who can.
 
-#### 1.0.1 Acting as a witness
+### 1.2 Acting as a witness
 
 - **Decline to witness a ceremony whose claimed `started_at` is far from the
   time you observe.** Your clock is the only independent one at the ceremony,
@@ -68,7 +66,7 @@ that is noted in place.
   witnesses apply it. No later validator can check that you did — set the
   tolerance you can defend and refuse outside it.
 
-### 1.1 Capture
+### 1.3 Capture
 
 - **Obtain the strongest proximity channel the hardware supports**, and record
   which was achieved. Never present a weaker channel as a stronger one (design
@@ -135,7 +133,7 @@ that is noted in place.
   tight crop reduces recognisable background; where it cannot, the residual is
   real and belongs in what the user is told at capture time.
 
-### 1.2 Verification
+### 1.4 Verification
 
 - **Hold the anti-oracle aggregate as a lock, not a log.** A counter per requester
   and per ceremony window, discarded when the window closes (design §7.4.1). It
@@ -183,10 +181,10 @@ that is noted in place.
   nobody you know defeats the shared-identity check outright rather than merely
   weakening it (design §7.3).
 
-  With the `nominated_by` check in §1.0, **these are the three checks that protect
+  With the `nominated_by` check in §1.1, **these are the three checks that protect
   you against the person in front of you** rather than against an outsider.
 
-### 1.3 Disclosure at capture time
+### 1.5 Disclosure at capture time
 
 **The schema cannot fix comprehension** (design §19.6). These are the client's
 job.
@@ -472,7 +470,7 @@ session secrecy. The client implements them; it does not reinvent them.
 
 ---
 
-## Open
+## 9. Open
 
 - Whether recovery should restore archive history, and how, without handing an
   attacker the same path (design §22).
