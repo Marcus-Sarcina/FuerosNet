@@ -51,7 +51,14 @@ for t in attach currency recovery ceremony; do
   PATH="$MAUDE_DIR:$PATH" "$TAMARIN" --prove "$HERE/tamarin/$t.spthy" \
       > "$out" 2>&1
   # Every lemma line must read "verified"; any "falsified" is a failure.
-  if grep -qE 'falsified' "$out"; then
+  # A WELLFORMEDNESS failure is also a failure, and this is why: Tamarin
+  # reports one as a WARNING, exits 0, and still prints "verified" for the
+  # malformed lemma.  A free timepoint variable introduced by a careless
+  # edit passed this gate once already (2026-09-05); grepping only for
+  # verified/falsified cannot see it.
+  if grep -qE 'wellformedness check(s)? failed' "$out"; then
+    echo "  $t: WELLFORMEDNESS check failed (see results/$t.txt)"; fail=1
+  elif grep -qE 'falsified' "$out"; then
     echo "  $t: FALSIFIED lemma present (see results/$t.txt)"; fail=1
   elif grep -qE 'verified' "$out"; then
     n=$(grep -cE 'verified \(' "$out")

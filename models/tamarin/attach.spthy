@@ -94,7 +94,7 @@ builtins: signing
 
 rule Register_Node:
     [ Fr(~sk) ]                        // draw a fresh secret key
-  --[ Registered($A) ]->               // trace: $A now has an identity
+  --[ Registered($A), OnlyOnce($A) ]->               // trace: $A now has an identity
     [ !Ltk($A, ~sk)                    // persistent: $A's long-term key
     , !Pk($A, pk(~sk))                 // persistent: $A's public key
     , Out(pk(~sk)) ]                   // the adversary learns the public key
@@ -175,6 +175,19 @@ rule Client_Finish:
   the standard Tamarin idiom for "this rule only fires when this equation
   holds".
 */
+/*
+  ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
+  and design Section 5.1 makes a keyhash a commitment to the key material --
+  change the material and you have a different identity.  Without the
+  restriction below, Register could fire twice for one label and give a
+  single symbolic name two unrelated keys, so "the party I meant to reach"
+  would not pin a key.  (currency.spthy's Subject_Key is deliberately NOT
+  restricted this way: a subject holding several keys over time is rotation,
+  which is that theory's subject matter.)
+*/
+restriction OneKeyPerName:
+  "All a #i #j. OnlyOnce(a) @ #i & OnlyOnce(a) @ #j ==> #i = #j"
+
 restriction Equality:
   "All x y #i. Eq(x, y) @ #i ==> x = y"
 
@@ -238,6 +251,6 @@ lemma client_commit_is_injective:
      ( ClientFinish(C, S, nc) @ #i1
      & ClientFinish(C, S, nc) @ #i2 )
      ==> ( #i1 = #i2
-         | (Ex #k. Compromised(S) @ #k & #k < #i) )"
+         | (Ex #k. Compromised(S) @ #k & #k < #i1) )"
 
 end

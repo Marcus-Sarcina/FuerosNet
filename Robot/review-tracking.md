@@ -4982,3 +4982,83 @@ rootward the inheritance is not carried and no message says "rotation" --
 structurally, not by convention. Restored to §9.0.2 scoped to rootward travel,
 with the mechanism given: past the horizon there is no object capable of
 carrying the link, which is stronger than saying none is sent.
+
+---
+
+## Cross-family Tamarin review 2 (2026-09-05)
+
+Nine findings, again filed statically without a prover; all checked here with
+one. Seven hold, two restate limitations the files already declare. **Two of
+the seven were introduced by this assistant in the previous round**, and the
+process finding behind them matters more than either.
+
+**A-2 free timepoint variable -- MINE, and the gate passed it.** Last round's
+time-bounding of the compromise carve-outs was applied by regex; it put
+`#k < #i` into `client_commit_is_injective`, which quantifies `#i1` and `#i2`.
+`#i` is free. Tamarin reports this as a WELLFORMEDNESS WARNING, **exits 0, and
+still prints "verified"** -- so `run-all.sh`, grepping only verified/falsified,
+called it a pass. Fixed to `#i1`; five other carve-out sites checked
+individually and correctly bound.
+
+**`run-all.sh` now fails on wellformedness failures**, and the fix needed two
+attempts, both instructive. The first pattern (`'wellformedness check'`) also
+matched the SUCCESS line "All wellformedness checks were successful", failing
+all four theories -- caught only by running it. Narrowed to
+`'wellformedness check(s)? failed'` and tested BOTH ways: reintroduce the free
+variable, exit 1; clean files, pass. The gate then immediately surfaced two
+**pre-existing** unbound variables no review had reported: `cid` in
+`Accept_Record` and `sk` in `Accept_Currency`. Both now bound from the
+received record, which is also more faithful -- a relying party evaluates what
+it was handed.
+
+**R-1 old-key proof does not bind the patron. HOLDS, High,
+machine-confirmed.** wire §4.1's `SuccessorStatement` is `[prior_key,
+new_key, patron_key]` and a verifier MUST check the last two against the
+adoption. The model signed `<'rotate', S, newkey>`. Probe verified in 13
+steps: two different patrons accepting one proof, no compromise. Fixed;
+`successor_statement_binds_the_patron` added and mutation-tested (removing the
+third element falsifies only that lemma).
+**How the fix went is worth recording.** The first attempt updated the `In`
+pattern to carry `$P` but the `.replace` for the `Eq(verify(...))` line
+matched nothing and I did not assert the count -- so the rule CARRIED the
+patron and never CHECKED it, which is precisely wire §4.1's "an unchecked
+binding is the same as no binding", reproduced by accident. Two lemmas
+falsified; three rounds of speculation got nowhere and reading the actual
+counterexample found it in one look. **Third instance this session of
+mechanical substitution without verifying the applied count.**
+
+**C-2 formation ceremonies absent. HOLDS, Medium.** `wire-format.md` §4.5
+field 6: a formation record "has empty witness and verifier arrays
+permanently". `Accept_Record` required a witness signature, so the co-presence
+theorems said nothing about a structurally legal record. Added `Meet_Formation`,
+`Formation_Sign`, `Accept_Formation`, plus `formation_is_executable` and
+`formation_requires_copresence`. What a formation record is WORTH is left out
+deliberately -- §13.2 makes it evidence only to its two participants, a weight
+rule (§16.1), not a structural one.
+
+**R-2 `key_alone_insufficient` did not exercise the thief. HOLDS, Medium.**
+The antecedent required the honest `OldKeyProof` action, which a thief signing
+with a stolen key never fires -- excluding the case the lemma is named for.
+Dropping the conjunct makes it strictly stronger; still verifies.
+
+**X-1 one name, several keys. HOLDS, Medium.** `Register` could fire twice for
+one public label. A `OneKeyPerName` restriction is added to all four theories;
+all lemmas still verify. `currency`'s `Subject_Key` is deliberately exempt --
+a subject holding several keys over time is rotation, that theory's subject.
+
+**K-2 expiry is imposed by a restriction. HOLDS, Medium, documented rather
+than repaired.** A restriction discards traces; it does not show the protocol
+prevents them. The currency theorem holds *relative to* a relying party that
+enforces expiry, which is an environment axiom of the same kind as ceremony's
+co-presence. Listed in the README's axioms section, where it belongs.
+
+**C-1 and K-1 restate declared limitations.** The co-presence axiom and
+currency's missing current-key state are both already stated in the files;
+K-1 is the open work recorded last round.
+
+**A-1** was narrowed last round already (attach proves endpoint
+authentication, not authorisation); the reviewer's reading of the header
+predates that edit.
+
+17 lemmas, all verifying, all wellformedness clean. All eight models pass.
+Model references 132, 0 flags.

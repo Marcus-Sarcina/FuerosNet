@@ -51,7 +51,7 @@ builtins: signing
 
 rule Register:
     [ Fr(~sk) ]
-  --[ Reg($A) ]->
+  --[ Reg($A), OnlyOnce($A) ]->
     [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
 
 rule Compromise:
@@ -150,12 +150,77 @@ rule Witness_Sign:
 
 rule Accept_Record:
     [ !Pk($P1, pk1), !Pk($P2, pk2), !Pk($W, pkw)
+    , In(<'presence', $P1, $P2, $W, cid>)   // the record body, as received
     , In(sig1), In(sig2), In(sigw) ]
   --[ Eq(verify(sig1, <'presence', $P1, $P2, $W, cid>, pk1), true)
     , Eq(verify(sig2, <'presence', $P1, $P2, $W, cid>, pk2), true)
     , Eq(verify(sigw, <'presence', $P1, $P2, $W, cid>, pkw), true)
     , RecordAccepted($P1, $P2, $W, cid) ]->
     [ ]
+
+
+/*
+--------------------------------------------------------------------------------
+  FORMATION CEREMONIES -- the witnessless subtype
+--------------------------------------------------------------------------------
+  design Section 13.2 and `wire-format.md` Section 4.5 field 6: a FORMATION
+  record "has empty witness and verifier arrays permanently, and must never
+  age into looking like a normal record".  Two people meet and start a subnet
+  with nobody else present, because there is nobody else yet.
+
+  Modelling only the witnessed subtype -- which an earlier version of this
+  theory did -- leaves the co-presence theorems silent about a structurally
+  legal record.  The rules below add the branch: a formation meeting mints
+  co-presence for the two participants and no witness, and a formation record
+  is accepted on their two signatures alone.
+
+  WHAT A FORMATION RECORD IS WORTH IS A SEPARATE QUESTION and not this
+  theory's: design Section 13.2 makes it "evidence only to its two
+  participants", which is a WEIGHT rule (design Section 16.1), not a
+  structural one.  What is proved here is the same physical claim as for a
+  normal record -- an accepted formation record implies its two participants
+  met -- which is the most a signature check can say either way.
+*/
+
+rule Meet_Formation:
+    [ Fr(~cid) ]
+  --[ FormationMeetHappened($P1, $P2, ~cid)
+    , DistinctPair($P1, $P2) ]->
+    [ CoPresent($P1, ~cid)
+    , CoPresent($P2, ~cid)
+    , !Formation($P1, $P2, ~cid) ]
+
+restriction DistinctPair:
+  "All a b #i. DistinctPair(a, b) @ #i ==> not(a = b)"
+
+rule Formation_Sign:
+    [ !Ltk($P, ~sk)
+    , CoPresent($P, cid)
+    , !Formation($P1, $P2, cid) ]
+  --[ FormationSigned($P, $P1, $P2, cid) ]->
+    [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
+
+rule Accept_Formation:
+    [ !Pk($P1, pk1), !Pk($P2, pk2)
+    , In(<'formation', $P1, $P2, cid>)      // the record body, as received
+    , In(sig1), In(sig2) ]
+  --[ Eq(verify(sig1, <'formation', $P1, $P2, cid>, pk1), true)
+    , Eq(verify(sig2, <'formation', $P1, $P2, cid>, pk2), true)
+    , FormationAccepted($P1, $P2, cid) ]->
+    [ ]
+
+/*
+  ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
+  and design Section 5.1 makes a keyhash a commitment to the key material --
+  change the material and you have a different identity.  Without the
+  restriction below, Register could fire twice for one label and give a
+  single symbolic name two unrelated keys, so "the party I meant to reach"
+  would not pin a key.  (currency.spthy's Subject_Key is deliberately NOT
+  restricted this way: a subject holding several keys over time is rotation,
+  which is that theory's subject matter.)
+*/
+restriction OneKeyPerName:
+  "All a #i #j. OnlyOnce(a) @ #i & OnlyOnce(a) @ #j ==> #i = #j"
 
 restriction Equality:
   "All x y #i. Eq(x, y) @ #i ==> x = y"
@@ -216,5 +281,22 @@ lemma copresence_binds_one_roster:
      & RecordAccepted(Q1, Q2, X, cid) @ #j
      & not(Ex A #k. Compromised(A) @ #k) )
      ==> ( P1 = Q1 & P2 = Q2 & W = X )"
+
+// SANITY: a formation ceremony produces an acceptable record.
+lemma formation_is_executable:
+  exists-trace
+  "Ex P1 P2 cid #i. FormationAccepted(P1, P2, cid) @ #i"
+
+// THE SAME PHYSICAL CLAIM FOR THE WITNESSLESS SUBTYPE.  An accepted
+// formation record implies its two participants met -- unless someone held
+// a participant's key.  Without this the theory's co-presence result was
+// silent about a structurally legal record (`wire-format.md` Section 4.5
+// field 6).
+lemma formation_requires_copresence:
+  "All P1 P2 cid #i.
+     FormationAccepted(P1, P2, cid) @ #i
+     ==> ( (Ex #m. FormationMeetHappened(P1, P2, cid) @ #m & #m < #i)
+         | (Ex #k. Compromised(P1) @ #k & #k < #i)
+         | (Ex #k. Compromised(P2) @ #k & #k < #i) )"
 
 end

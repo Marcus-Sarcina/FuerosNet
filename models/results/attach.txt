@@ -22,7 +22,7 @@ equations:
 
 rule (modulo E) Register_Node:
    [ Fr( ~sk ) ]
-  --[ Registered( $A ) ]->
+  --[ Registered( $A ), OnlyOnce( $A ) ]->
    [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
 
   /* has exactly the trivial AC variant */
@@ -73,6 +73,15 @@ rule (modulo E) Client_Finish:
        pkS   = pk(x.10)
        sig   = sign(<'attach', $x.7, $x.8, ~x.9>, x.10)
        z     = true
+  */
+
+restriction OneKeyPerName:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
   */
 
 restriction Equality:
@@ -141,13 +150,13 @@ lemma client_commit_is_injective:
   all-traces
   "∀ C S nc #i1 #i2.
     ((ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)) ⇒
-    ((#i1 = #i2) ∨ (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i)))"
+    ((#i1 = #i2) ∨ (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i1)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i1 #i2.
   (ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)
  ∧
-  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i))"
+  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i1))"
 */
 simplify
 solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
@@ -176,21 +185,7 @@ next
   qed
 qed
 
-/*
-WARNING: the following wellformedness checks failed!
-
-Formula terms
-=============
-
-  Lemma `client_commit_is_injective' uses terms of the wrong form:
-    `Free #i'
-  
-  The only allowed terms are public constants and bound node and
-  message variables. If you encounter free message variables, then
-  you might have forgotten a #-prefix. Sort prefixes can only be
-  dropped where this is unambiguous. Moreover, reducible function
-  symbols are disallowed.
-*/
+/* All wellformedness checks were successful. */
 
 /*
 Generated from:
@@ -207,10 +202,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
 
-  processing time: 0.51s
-  
-  WARNING: 1 wellformedness check failed!
-           The analysis results might be wrong!
+  processing time: 0.52s
   
   attach_is_executable (exists-trace): verified (6 steps)
   server_authentication (all-traces): verified (7 steps)

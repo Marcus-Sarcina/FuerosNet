@@ -22,7 +22,7 @@ equations:
 
 rule (modulo E) Register_Patron:
    [ Fr( ~psk ) ]
-  --[ PatronReg( $P ) ]->
+  --[ PatronReg( $P ), OnlyOnce( $P ) ]->
    [ !PatronKey( $P, ~psk ), !Pk( $P, pk(~psk) ), Out( pk(~psk) ) ]
 
   /* has exactly the trivial AC variant */
@@ -52,7 +52,7 @@ rule (modulo E) Issue_Currency:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Accept_Currency:
-   [ In( att ), !Pk( $P, pkP ), !Epoch( e ) ]
+   [ In( <'currency', $S, sk, e, att> ), !Pk( $P, pkP ), !Epoch( e ) ]
   --[
   Eq( verify(att, <'currency', $S, sk, e>, pkP), true ), NotExpiredAt( e ),
   Accepted( $P, $S, sk, e )
@@ -61,23 +61,32 @@ rule (modulo E) Accept_Currency:
 
   /*
   rule (modulo AC) Accept_Currency:
-     [ In( att ), !Pk( $P, pkP ), !Epoch( e ) ]
+     [ In( <'currency', $S, sk, e, att> ), !Pk( $P, pkP ), !Epoch( e ) ]
     --[ Eq( z, true ), NotExpiredAt( e ), Accepted( $P, $S, sk, e ) ]->
      [ ]
     variants (modulo AC)
-    1. $S    = $S.8
-       att   = att.8
-       e     = e.8
-       pkP   = pkP.8
-       sk    = sk.8
-       z     = verify(att.8, <'currency', $S.8, sk.8, e.8>, pkP.8)
+    1. $S    = $S.10
+       att   = att.11
+       e     = e.12
+       pkP   = pkP.13
+       sk    = sk.14
+       z     = verify(att.11, <'currency', $S.10, sk.14, e.12>, pkP.13)
     
-    2. $S    = $x.8
-       att   = sign(<'currency', $x.8, x.9, x.10>, x.11)
-       e     = x.10
-       pkP   = pk(x.11)
-       sk    = x.9
+    2. $S    = $S.13
+       att   = sign(<'currency', $S.13, sk.17, e.15>, x.23)
+       e     = e.15
+       pkP   = pk(x.23)
+       sk    = sk.17
        z     = true
+  */
+
+restriction OneKeyPerName:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
   */
 
 restriction Equality:
@@ -111,9 +120,15 @@ solve( !Pk( $P, pk(x) ) ▶₁ #i )
   case Register_Patron
   solve( !Epoch( e ) ▶₂ #i )
     case New_Epoch
-    solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk )
-      case Issue_Currency
-      SOLVED // trace found
+    solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk.8 )
+      case c_sign
+      solve( !KU( ~psk ) @ #vk.12 )
+        case Compromise_Patron
+        solve( !KU( ~e ) @ #vk.12 )
+          case New_Epoch
+          SOLVED // trace found
+        qed
+      qed
     qed
   qed
 qed
@@ -154,12 +169,12 @@ solve( (∀ #j. (Issued( $P, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
     case Register_Patron
     solve( !Epoch( e ) ▶₂ #i )
       case New_Epoch
-      solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk )
+      solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk.8 )
         case Issue_Currency
         by contradiction /* from formulas */
       next
         case c_sign
-        solve( !KU( ~psk ) @ #vk.2 )
+        solve( !KU( ~psk ) @ #vk.12 )
           case Compromise_Patron
           by contradiction /* from formulas */
         qed
@@ -176,23 +191,7 @@ rule (modulo E) Compromise_Patron:
 
   /* has exactly the trivial AC variant */
 
-/*
-WARNING: the following wellformedness checks failed!
-
-Unbound variables
-=================
-
-  rule `Accept_Currency' has unbound variables: 
-    sk
-
-Message Derivation Checks
-=========================
-
-  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
-
-Rule Accept_Currency: 
-Failed to derive Variable(s): sk
-*/
+/* All wellformedness checks were successful. */
 
 /*
 Generated from:
@@ -209,12 +208,9 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.63s
+  processing time: 0.68s
   
-  WARNING: 2 wellformedness check failed!
-           The analysis results might be wrong!
-  
-  currency_is_usable (exists-trace): verified (5 steps)
+  currency_is_usable (exists-trace): verified (7 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)
   currency_requires_unexpired_issuance (all-traces): verified (9 steps)
 

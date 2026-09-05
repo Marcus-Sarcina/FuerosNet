@@ -52,7 +52,7 @@ builtins: signing
 
 rule Register_Patron:
     [ Fr(~psk) ]
-  --[ PatronReg($P) ]->
+  --[ PatronReg($P), OnlyOnce($P) ]->
     [ !PatronKey($P, ~psk)             // the patron's long-term secret key
     , !Pk($P, pk(~psk))
     , Out(pk(~psk)) ]
@@ -122,7 +122,13 @@ rule Issue_Currency:
 */
 
 rule Accept_Currency:
-    [ In(att)                          // a purported attestation from the net
+    // The staple arrives carrying its fields AND the signature over them
+    // (design Section 12.6.5: the introducing node "staples a recent
+    // patron-signed currency attestation to its introduction").  Taking the
+    // fields from the message is also what BINDS them: an earlier version
+    // read `sk` from nowhere, which Tamarin reports as an unbound variable
+    // and unintended pattern matching.
+    [ In(<'currency', $S, sk, e, att>) // the stapled attestation, as received
     , !Pk($P, pkP)                     // the patron's public key
     , !Epoch(e) ]
   --[ Eq(verify(att, <'currency', $S, sk, e>, pkP), true)
@@ -130,12 +136,36 @@ rule Accept_Currency:
     , Accepted($P, $S, sk, e) ]->      // trace: relied on sk as current
     [ ]
 
+/*
+  ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
+  and design Section 5.1 makes a keyhash a commitment to the key material --
+  change the material and you have a different identity.  Without the
+  restriction below, Register could fire twice for one label and give a
+  single symbolic name two unrelated keys, so "the party I meant to reach"
+  would not pin a key.  (currency.spthy's Subject_Key is deliberately NOT
+  restricted this way: a subject holding several keys over time is rotation,
+  which is that theory's subject matter.)
+*/
+restriction OneKeyPerName:
+  "All a #i #j. OnlyOnce(a) @ #i & OnlyOnce(a) @ #j ==> #i = #j"
+
 restriction Equality:
   "All x y #i. Eq(x, y) @ #i ==> x = y"
 
 // The fail-closed rule: an acceptance stamped NotExpiredAt(e) is only
 // allowed on traces where no Expired(e) happened BEFORE it.  This is how
 // "current vs expired" becomes event order without a clock.
+//
+// THIS IS AN AXIOM, NOT A RESULT, and the difference matters when reading
+// the lemma below.  A restriction DISCARDS traces; it does not show the
+// protocol prevents them.  What is modelled here is a relying party with a
+// trustworthy clock that refuses an expired staple -- an environment
+// assumption, exactly like the co-presence axiom in ceremony.spthy.  So
+// currency_requires_unexpired_issuance holds *relative to* clock
+// enforcement; it is not evidence that clock enforcement happens.  Nor does
+// expiry_is_reachable establish that every issued attestation eventually
+// expires -- only that an expiry can occur, so the restriction is not
+// vacuously satisfied by nothing ever expiring.
 restriction NotExpiredBeforeAccept:
   "All e #a. NotExpiredAt(e) @ #a
      ==> not(Ex #x. Expired(e) @ #x & #x < #a)"

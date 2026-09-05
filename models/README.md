@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (14 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (17 lemmas).
 
 ---
 
@@ -176,6 +176,13 @@ which is honest."
   cannot prove a look-alike is impossible — that residual is design §18.3's
   colluding/deceived-counterparty case, carved out as a compromised verifier.
 
+- **A trustworthy clock** (`currency`): the `NotExpiredBeforeAccept`
+  restriction discards traces where an acceptance follows its epoch's expiry.
+  A restriction *removes* traces; it does not show the protocol prevents
+  them. So the currency theorem holds **relative to a relying party that
+  enforces expiry**, and `expiry_is_reachable` shows only that an expiry can
+  occur — not that every attestation eventually expires.
+
 Key theft is modelled explicitly (a `Compromise` rule) and appears as a named
 carve-out in every security lemma, so the boundary of each guarantee is
 visible in its statement — a stolen key defeats it, which is the design's own
@@ -207,6 +214,56 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **A second Tamarin review, and the gate that let a malformed lemma pass.**
+  Nine findings, again filed without a prover. Two were mine from the round
+  above, and one of those is the important one.
+
+  **A free timepoint variable, introduced by my own regex and passed by the
+  regression gate.** Time-bounding the compromise carve-outs put `#k < #i`
+  into a lemma quantifying `#i1` and `#i2`. Tamarin reports this as a
+  *wellformedness warning*, **exits 0, and still prints "verified"** — so
+  `run-all.sh`, which grepped only for verified/falsified, called it a pass.
+  The gate now fails on wellformedness failures and is tested both ways
+  (reintroduce the free variable → exit 1; clean files → pass). It
+  immediately found two **pre-existing** unbound variables nobody had
+  reported: `cid` in `Accept_Record` and `sk` in `Accept_Currency`, both now
+  bound from the received record, which is what a relying party actually has.
+
+  **The old-key proof did not bind the patron.** wire §4.1 fixes the payload
+  as `SuccessorStatement = [prior_key, new_key, patron_key]` and requires a
+  verifier to check the last two against the adoption, *"an unchecked binding
+  being the same as no binding"*. The model signed `<'rotate', S, newkey>`,
+  so one proof assembled a recovery under **any** patron — machine-confirmed,
+  two patrons accepting one proof with no compromise. Fixed, with
+  `successor_statement_binds_the_patron` to check it. Worth recording how the
+  fix went: my first attempt updated the message pattern but **silently failed
+  to update the signature check**, so the rule carried the patron and never
+  verified it — the exact defect wire §4.1 warns about, reproduced by
+  accident. Two lemmas falsified, and reading the counterexample rather than
+  guessing was what found it.
+
+  **Formation ceremonies were outside the model.** wire §4.5 field 6: a
+  formation record *"has empty witness and verifier arrays permanently"*, so
+  requiring a witness signature left the co-presence theorems silent about a
+  structurally legal record. Added as its own branch with
+  `formation_requires_copresence`.
+
+  **`key_alone_insufficient` never exercised the thief.** Its antecedent
+  demanded the *honest* `OldKeyProof` action, which a thief signing with a
+  stolen key never fires — excluding the case the lemma is named for.
+  Dropping the conjunct makes it strictly stronger and it still verifies.
+
+  **One symbolic name could hold several keys.** `Register` could fire twice
+  for one label, so "the party I meant to reach" pinned nothing. A
+  one-registration-per-name restriction is added to all four theories;
+  `currency`'s `Subject_Key` is deliberately exempt, a subject holding several
+  keys over time being that theory's subject.
+
+  Two findings restate limitations the files already declare (the co-presence
+  axiom, and currency's missing current-key state); a third, expiry-by-
+  restriction, is now listed with the other axioms rather than read as a
+  result.
 
 - **A Tamarin review found four models claiming more than they proved.** The
   reviewer could not run the prover and worked statically; every finding

@@ -50,7 +50,7 @@ builtins: signing
 
 rule Register:
     [ Fr(~sk) ]
-  --[ Reg($A) ]->
+  --[ Reg($A), OnlyOnce($A) ]->
     [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
 
 // Explicit key theft, stamped in the trace, as in attach.spthy.  This is
@@ -75,11 +75,30 @@ rule Compromise:
   model the new key as a fresh name carried in the clear.
 */
 
+/*
+  THE OLD KEY SIGNS A THREE-WAY SUCCESSOR STATEMENT, NOT A BARE ROTATION.
+  wire Section 4.1 fixes the payload as
+
+      SuccessorStatement = [ prior_key, new_key, patron_key ]
+
+  and requires a verifier to check new_key and patron_key against adoption
+  fields 1 and 2, "an unchecked binding being the same as no binding".  The
+  patron is in there for a reason: without it one old-key proof authorises a
+  successor under ANY patron, so the same evidence assembles a recovery at
+  P1 and again at P2.  An earlier version of this model signed
+  <'rotate', S, newkey> and Tamarin found exactly that -- two patrons
+  accepting one proof, no compromise anywhere.  See
+  successor_statement_binds_the_patron below, which falsifies without the
+  third element.
+*/
 rule Old_Key_Proof:
     [ !Ltk($S, ~oldsk)                 // the subject's (or thief's) old key
-    , Fr(~newkey) ]                    // the proposed new key material
-  --[ OldKeyProof($S, ~newkey) ]->
-    [ Out(<'rotate', $S, ~newkey, sign(<'rotate', $S, ~newkey>, ~oldsk)>) ]
+    , Fr(~newkey)                      // the proposed new key material
+    , !Pk($P, pkP) ]                   // a REGISTERED patron, not any label
+  --[ OldKeyProof($S, ~newkey)
+    , OldKeyProofFor($S, ~newkey, $P) ]->
+    [ Out(<'rotate', $S, ~newkey, $P,
+           sign(<'rotate', $S, ~newkey, $P>, ~oldsk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -155,14 +174,30 @@ rule Patron_Accept_Recovery:
     [ !Ltk($P, ~psk)                            // patron's own key (it signs)
     , !Pk($S, pkOld)                            // subject's OLD public key
     , !Pk($V, pkV)                              // verifier's public key
-    , In(<'rotate', $S, newkey, provA>)         // factor a: introduces newkey
+    , In(<'rotate', $S, newkey, $P, provA>)     // factor a, bound to THIS patron
     , In(<'recognise', $S, newkey, provB>) ]    // factor b, bound to newkey
-  --[ Eq(verify(provA, <'rotate', $S, newkey>, pkOld), true)
+  --[ Eq(verify(provA, <'rotate', $S, newkey, $P>, pkOld), true)
     , Eq(verify(provB, <'recognise', $S, newkey>, pkV), true)
     , Distinct($V, $S)                          // the verifier is NOT the subject
+    , Distinct($P, $S)                          // nor is the patron: adoption
+                                                //   is bilateral between two
+                                                //   distinct parties (§6.1)
     , ReliedOn($P, $V, $S)                      // which verifier was trusted
     , RecoveryAccepted($P, $S, newkey) ]->
     [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
+
+/*
+  ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
+  and design Section 5.1 makes a keyhash a commitment to the key material --
+  change the material and you have a different identity.  Without the
+  restriction below, Register could fire twice for one label and give a
+  single symbolic name two unrelated keys, so "the party I meant to reach"
+  would not pin a key.  (currency.spthy's Subject_Key is deliberately NOT
+  restricted this way: a subject holding several keys over time is rotation,
+  which is that theory's subject matter.)
+*/
+restriction OneKeyPerName:
+  "All a #i #j. OnlyOnce(a) @ #i & OnlyOnce(a) @ #j ==> #i = #j"
 
 restriction Equality:
   "All x y #i. Eq(x, y) @ #i ==> x = y"
@@ -214,15 +249,18 @@ lemma recovery_is_executable:
 // break of the two-factor structure.  The two lemmas below sidestep the
 // artifact by asking the sound question: is EITHER factor alone enough?
 
-// FACTOR B IS NECESSARY: a key proof with no honest recognition never
-// recovers.  This is the stolen-key-alone case (the plan's target "a thief
-// holding the key cannot produce a rotation"): the key gives factor a,
-// but with no honest prior counterparty recognising the person, and no
-// compromise, no recovery is accepted.
+// FACTOR B IS NECESSARY: NO recovery at all without an honest recognition,
+// however factor a was produced.  The antecedent deliberately does NOT
+// require the honest OldKeyProof action: a thief who has stolen the key
+// signs the successor statement directly, so demanding that action would
+// exclude the very case the lemma is named for -- "a thief holding the key
+// cannot produce a rotation".  Dropping it makes the statement strictly
+// stronger and it still verifies: with no honest prior counterparty
+// recognising the person, and no compromise of patron or verifier, nothing
+// is accepted whether the old key was held honestly or stolen.
 lemma key_alone_insufficient:
   "not( Ex P S newkey #i.
           RecoveryAccepted(P, S, newkey) @ #i
-        & (Ex #a. OldKeyProof(S, newkey) @ #a)
         & not(Ex V #b #m. Recognised(V, S) @ #b
                         & PriorCounterparty(V, S) @ #m)
         & not(Ex #kp. Compromised(P) @ #kp)
@@ -253,5 +291,16 @@ lemma recognition_binds_the_successor:
      ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
          | (Ex V #kv. Compromised(V) @ #kv)
          | (Ex #kp. Compromised(P) @ #kp) )"
+
+// THE PATRON BINDING IS LOAD-BEARING TOO.  Every accepted recovery rests on
+// an old-key proof naming THE ACCEPTING PATRON.  Drop the third element of
+// the successor statement and this falsifies with one proof accepted by two
+// patrons -- wire Section 4.1's reason for putting patron_key in it.
+lemma successor_statement_binds_the_patron:
+  "All P S newkey #i.
+     RecoveryAccepted(P, S, newkey) @ #i
+     ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
+         | (Ex #c. Compromised(S) @ #c & #c < #i)
+         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
 
 end

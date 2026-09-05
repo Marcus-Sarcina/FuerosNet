@@ -8865,3 +8865,46 @@ while both successors remain valid nodes network-wide. And the warning against
 assuming an identity has one current key is narrowed to what it means: within
 one horizon there is exactly one, across horizons there is no such thing, and
 no party holds a view reconciling them.
+
+### 2026-09-05 (the gate that passed a malformed lemma)
+
+A second review of the symbolic models, and the most useful thing it found
+was a defect in how the models are checked rather than in any of them.
+
+Time-bounding the compromise carve-outs the round before had put a free
+timepoint variable into one lemma. Tamarin reports that as a wellformedness
+warning, exits successfully, and still prints the lemma as verified — so the
+regression script, which looked only for the words verified and falsified,
+recorded a pass. The script now fails on wellformedness failures, and it is
+tested in both directions, because the first attempt at the pattern also
+matched the line announcing that all checks succeeded and failed everything.
+With the gate working it immediately found two unbound variables that had
+been sitting in the ceremony and currency models unreported, both now bound
+from the record a relying party actually receives.
+
+The substantive finding is that the old-key proof did not bind the patron.
+The encoding fixes that payload as prior key, new key and patron key together,
+and requires a verifier to check the last two against the adoption, an
+unchecked binding being the same as no binding. The model signed only the
+rotation, so one proof assembled a recovery under any patron at all — two
+patrons accepting one proof, with nothing compromised. Now bound and checked,
+with a lemma that fails if the binding is removed. The repair is worth
+recording for how it went: the first attempt added the patron to the message
+and left the signature check alone, so the rule carried a binding it never
+verified, which is the exact defect the encoding warns about, arrived at by
+accident.
+
+Formation ceremonies were outside the ceremony model, which required a witness
+signature while a formation record has empty witness and verifier arrays
+permanently. The witnessless branch is added and carries the same physical
+claim: an accepted formation record implies its two participants met. What
+such a record is worth is left where it belongs, in the weight rules rather
+than the structural ones.
+
+Two smaller repairs. The lemma asserting a key alone cannot recover required
+the honest proof action in its antecedent, which a thief signing with a stolen
+key never performs — excluding the case it was named for; dropping that
+condition makes it stronger and it still holds. And one public name could
+register several keys, so the name pinned nothing; a single-registration rule
+now applies everywhere except where a subject holding several keys over time
+is the point.

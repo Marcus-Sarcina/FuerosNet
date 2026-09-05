@@ -22,7 +22,7 @@ equations:
 
 rule (modulo E) Register:
    [ Fr( ~sk ) ]
-  --[ Reg( $A ) ]->
+  --[ Reg( $A ), OnlyOnce( $A ) ]->
    [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
 
   /* has exactly the trivial AC variant */
@@ -33,9 +33,13 @@ rule (modulo E) Compromise:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Old_Key_Proof:
-   [ !Ltk( $S, ~oldsk ), Fr( ~newkey ) ]
-  --[ OldKeyProof( $S, ~newkey ) ]->
-   [ Out( <'rotate', $S, ~newkey, sign(<'rotate', $S, ~newkey>, ~oldsk)> ) ]
+   [ !Ltk( $S, ~oldsk ), Fr( ~newkey ), !Pk( $P, pkP ) ]
+  --[ OldKeyProof( $S, ~newkey ), OldKeyProofFor( $S, ~newkey, $P ) ]->
+   [
+   Out( <'rotate', $S, ~newkey, $P, 
+         sign(<'rotate', $S, ~newkey, $P>, ~oldsk)>
+   )
+   ]
 
   /* has exactly the trivial AC variant */
 
@@ -55,13 +59,13 @@ rule (modulo E) Recognise:
 rule (modulo E) Patron_Accept_Recovery:
    [
    !Ltk( $P, ~psk ), !Pk( $S, pkOld ), !Pk( $V, pkV ),
-   In( <'rotate', $S, newkey, provA> ),
+   In( <'rotate', $S, newkey, $P, provA> ),
    In( <'recognise', $S, newkey, provB> )
    ]
   --[
-  Eq( verify(provA, <'rotate', $S, newkey>, pkOld), true ),
+  Eq( verify(provA, <'rotate', $S, newkey, $P>, pkOld), true ),
   Eq( verify(provB, <'recognise', $S, newkey>, pkV), true ),
-  Distinct( $V, $S ), ReliedOn( $P, $V, $S ),
+  Distinct( $V, $S ), Distinct( $P, $S ), ReliedOn( $P, $V, $S ),
   RecoveryAccepted( $P, $S, newkey )
   ]->
    [ Out( sign(<'recovered', $S, newkey>, ~psk) ) ]
@@ -70,54 +74,67 @@ rule (modulo E) Patron_Accept_Recovery:
   rule (modulo AC) Patron_Accept_Recovery:
      [
      !Ltk( $P, ~psk ), !Pk( $S, pkOld ), !Pk( $V, pkV ),
-     In( <'rotate', $S, newkey, provA> ),
+     In( <'rotate', $S, newkey, $P, provA> ),
      In( <'recognise', $S, newkey, provB> )
      ]
     --[
-    Eq( z, true ), Eq( z.1, true ), Distinct( $V, $S ),
+    Eq( z, true ), Eq( z.1, true ), Distinct( $V, $S ), Distinct( $P, $S ),
     ReliedOn( $P, $V, $S ), RecoveryAccepted( $P, $S, newkey )
     ]->
      [ Out( sign(<'recovered', $S, newkey>, ~psk) ) ]
     variants (modulo AC)
-    1. $S    = $S.23
+    1. $P    = $P.24
+       $S    = $S.25
        newkey
-             = newkey.26
-       pkOld = pkOld.27
-       pkV   = pkV.28
-       provA = provA.29
-       provB = provB.30
-       z     = verify(provA.29, <'rotate', $S.23, newkey.26>, pkOld.27)
-       z.1   = verify(provB.30, <'recognise', $S.23, newkey.26>, pkV.28)
+             = newkey.28
+       pkOld = pkOld.29
+       pkV   = pkV.30
+       provA = provA.31
+       provB = provB.32
+       z     = verify(provA.31, <'rotate', $S.25, newkey.28, $P.24>, pkOld.29)
+       z.1   = verify(provB.32, <'recognise', $S.25, newkey.28>, pkV.30)
     
-    2. $S    = $S.46
+    2. $P    = $P.49
+       $S    = $S.50
        newkey
-             = newkey.49
-       pkOld = pk(x.89)
-       pkV   = pkV.51
-       provA = sign(<'rotate', $S.46, newkey.49>, x.89)
-       provB = provB.53
-       z     = true
-       z.1   = verify(provB.53, <'recognise', $S.46, newkey.49>, pkV.51)
-    
-    3. $S    = $S.47
-       newkey
-             = newkey.50
-       pkOld = pkOld.51
-       pkV   = pk(x.91)
-       provA = provA.53
-       provB = sign(<'recognise', $S.47, newkey.50>, x.91)
-       z     = verify(provA.53, <'rotate', $S.47, newkey.50>, pkOld.51)
+             = newkey.53
+       pkOld = pkOld.54
+       pkV   = pk(x.96)
+       provA = provA.56
+       provB = sign(<'recognise', $S.50, newkey.53>, x.96)
+       z     = verify(provA.56, <'rotate', $S.50, newkey.53, $P.49>, pkOld.54)
        z.1   = true
     
-    4. $S    = $S.47
+    3. $P    = $P.49
+       $S    = $S.50
        newkey
-             = newkey.50
-       pkOld = pk(x.90)
-       pkV   = pk(x.91)
-       provA = sign(<'rotate', $S.47, newkey.50>, x.90)
-       provB = sign(<'recognise', $S.47, newkey.50>, x.91)
+             = newkey.53
+       pkOld = pk(x.96)
+       pkV   = pkV.55
+       provA = sign(<'rotate', $S.50, newkey.53, $P.49>, x.96)
+       provB = provB.57
+       z     = true
+       z.1   = verify(provB.57, <'recognise', $S.50, newkey.53>, pkV.55)
+    
+    4. $P    = $P.50
+       $S    = $S.51
+       newkey
+             = newkey.54
+       pkOld = pk(x.97)
+       pkV   = pk(x.98)
+       provA = sign(<'rotate', $S.51, newkey.54, $P.50>, x.97)
+       provB = sign(<'recognise', $S.51, newkey.54>, x.98)
        z     = true
        z.1   = true
+  */
+
+restriction OneKeyPerName:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
   */
 
 restriction Equality:
@@ -151,11 +168,11 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
     case Register
     solve( !Pk( $V, pk(x) ) ▶₂ #i )
       case Register
-      solve( !KU( sign(<'rotate', $S, newkey>, ~sk) ) @ #vk.9 )
+      solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.11 )
+        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
-          solve( !KU( ~newkey ) @ #vk.9 )
+          solve( !KU( ~newkey ) @ #vk.10 )
             case Old_Key_Proof
             SOLVED // trace found
           qed
@@ -168,8 +185,7 @@ qed
 lemma key_alone_insufficient:
   all-traces
   "¬(∃ P S newkey #i.
-      ((((RecoveryAccepted( P, S, newkey ) @ #i) ∧
-         (∃ #a. OldKeyProof( S, newkey ) @ #a)) ∧
+      (((RecoveryAccepted( P, S, newkey ) @ #i) ∧
         (¬(∃ V #b #m.
             (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m)))) ∧
        (¬(∃ #kp. Compromised( P ) @ #kp))) ∧
@@ -179,7 +195,6 @@ guarded formula characterizing all counter-examples:
 "∃ P S newkey #i.
   (RecoveryAccepted( P, S, newkey ) @ #i)
  ∧
-  (∃ #a. (OldKeyProof( S, newkey ) @ #a)) ∧
   (∀ V #b #m.
     (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m) ⇒ ⊥) ∧
   (∀ #kp. (Compromised( P ) @ #kp) ⇒ ⊥) ∧
@@ -192,26 +207,23 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
     case Register
     solve( !Pk( $V, pk(x) ) ▶₂ #i )
       case Register
-      solve( !Ltk( $S, ~oldsk ) ▶₀ #a )
-        case Register
-        solve( !KU( sign(<'rotate', $S, ~newkey>, ~sk) ) @ #vk.9 )
-          case Old_Key_Proof
-          solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk) ) @ #vk.11 )
-            case Recognise
-            by contradiction /* from formulas */
-          next
-            case c_sign
-            solve( !KU( ~sk ) @ #vk.14 )
-              case Compromise
-              by contradiction /* from formulas */
-            qed
-          qed
+      solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
+        case Old_Key_Proof
+        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+          case Recognise
+          by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~sk ) @ #vk.14 )
+          solve( !KU( ~sk.1 ) @ #vk.16 )
             case Compromise
             by contradiction /* from formulas */
           qed
+        qed
+      next
+        case c_sign
+        solve( !KU( ~sk ) @ #vk.17 )
+          case Compromise
+          by contradiction /* from formulas */
         qed
       qed
     qed
@@ -247,12 +259,12 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
         case Register
         solve( !Met( $V, $S ) ▶₁ #b )
           case Met
-          solve( !KU( sign(<'rotate', $S, newkey.1>, ~sk) ) @ #vk.9 )
+          solve( !KU( sign(<'rotate', $S, newkey.1, $P>, ~sk) ) @ #vk.11 )
             case Old_Key_Proof
             by contradiction /* from formulas */
           next
             case c_sign
-            solve( !KU( ~sk ) @ #vk.15 )
+            solve( !KU( ~sk ) @ #vk.18 )
               case Compromise
               by contradiction /* from formulas */
             qed
@@ -286,21 +298,58 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
     case Register
     solve( !Pk( $V, pk(x) ) ▶₂ #i )
       case Register
-      solve( !KU( sign(<'rotate', $S, newkey>, ~sk) ) @ #vk.9 )
+      solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.11 )
+        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~sk.1 ) @ #vk.14 )
+          solve( !KU( ~sk.1 ) @ #vk.16 )
             case Compromise
             by contradiction /* from formulas */
           qed
         qed
       next
         case c_sign
-        solve( !KU( ~sk ) @ #vk.14 )
+        solve( !KU( ~sk ) @ #vk.17 )
+          case Compromise
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma successor_statement_binds_the_patron:
+  all-traces
+  "∀ P S newkey #i.
+    (RecoveryAccepted( P, S, newkey ) @ #i) ⇒
+    (((∃ #a. (OldKeyProofFor( S, newkey, P ) @ #a) ∧ (#a < #i)) ∨
+      (∃ #c. (Compromised( S ) @ #c) ∧ (#c < #i))) ∨
+     (∃ #kp. (Compromised( P ) @ #kp) ∧ (#kp < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P S newkey #i.
+  (RecoveryAccepted( P, S, newkey ) @ #i)
+ ∧
+  (∀ #a. (OldKeyProofFor( S, newkey, P ) @ #a) ⇒ ¬(#a < #i)) ∧
+  (∀ #c. (Compromised( S ) @ #c) ⇒ ¬(#c < #i)) ∧
+  (∀ #kp. (Compromised( P ) @ #kp) ⇒ ¬(#kp < #i))"
+*/
+simplify
+solve( !Ltk( $P, ~psk ) ▶₀ #i )
+  case Register
+  solve( !Pk( $S, pk(x) ) ▶₁ #i )
+    case Register
+    solve( !Pk( $V, pk(x) ) ▶₂ #i )
+      case Register
+      solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
+        case Old_Key_Proof
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~sk ) @ #vk.17 )
           case Compromise
           by contradiction /* from formulas */
         qed
@@ -326,11 +375,12 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.01s
+  processing time: 1.19s
   
   recovery_is_executable (exists-trace): verified (8 steps)
-  key_alone_insufficient (all-traces): verified (12 steps)
+  key_alone_insufficient (all-traces): verified (11 steps)
   recognition_alone_insufficient (all-traces): verified (10 steps)
   recognition_binds_the_successor (all-traces): verified (11 steps)
+  successor_statement_binds_the_patron (all-traces): verified (8 steps)
 
 ==============================================================================
