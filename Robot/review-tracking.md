@@ -4970,3 +4970,15 @@ adoption must not accept the old key thereafter, expiry notwithstanding. The
 patron-side no-fresh-issuance property falls out of the same overwrite, the
 patron being a horizon member itself. Awaiting the author's go, the earlier
 "say the word" not having been answered with one.
+
+**Follow-up, same day.** The author's note on the corrected sentence: *"Sometimes
+I make these pronouncements contextually, I think we're talking about the
+rootward memo process at the time."* Checked, and he was right in that context
+-- so the correction above had over-reached by removing the claim entirely
+rather than re-scoping it. `TopologyMemo` (`wire-format.md` §10.2) has exactly
+five fields: patron, patron's position, slot, timestamp, and the key now
+occupying that slot. **No prior-key field and no recovery discriminator**, so
+rootward the inheritance is not carried and no message says "rotation" --
+structurally, not by convention. Restored to §9.0.2 scoped to rootward travel,
+with the mechanism given: past the horizon there is no object capable of
+carrying the link, which is stronger than saying none is sent.

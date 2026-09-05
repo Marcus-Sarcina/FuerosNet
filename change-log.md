@@ -8848,6 +8848,16 @@ running. Outside, there is no supersession to know, and expiry is the only
 bound those parties have. The two halves never overlap: a party either
 received the adoption or did not.
 
+The original pronouncement was right in its own context and wrong only where
+it had been generalised. Rootward, no message does say rotation and the
+inheritance is not carried — and structurally so: the memo that travels past
+the horizon has five fields, the patron, its position, the slot, the
+timestamp, and the key now in that slot. There is no field for a prior key
+and none marking a recovery, so an ancestor sees a slot emptied and a slot
+filled with nothing to join them. Past the horizon it is not that the link
+stops being sent; there is no object able to carry one. That is now stated
+where it is true, rather than as a claim about every message.
+
 Two consequences follow. A fork does not give one observer two current keys,
 it gives it a choice — the overwrite is per identity per observer, so a member
 receiving two competing claims resolves to one by which patron it trusts,

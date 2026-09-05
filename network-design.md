@@ -2735,7 +2735,17 @@ those parties never receive the adoption, go on holding the old and new keys
 as **separate entities**, and are handled by a **currency-attestation query**
 addressed using the anchor and path the introduction already carries
 (§12.6.5). What they learn on contact is whether that identity is **currently
-attested**, never what became of one that is not. So the gap
+attested**, never what became of one that is not.
+
+**Rootward, no message says "rotation" and the inheritance is not carried —
+and this is structural, not a convention.** What travels past the horizon is
+the memo (§15.2), and its five fields are the patron, the patron's position,
+the slot, the transaction's timestamp, and the key now occupying that slot
+(`wire-format.md` §10.2). **There is no field for a prior key and none
+discriminating a recovery from any other adoption**, so an ancestor sees a
+slot emptied and a slot filled and has nothing with which to join them. The
+horizon is therefore not merely where the link stops being *sent*; past it
+there is no object capable of carrying one. So the gap
 §15 appeared to have is **not a further message class**; it is a propagation
 *pattern*, "push near, redirect far", available to topology-class messages.
 
