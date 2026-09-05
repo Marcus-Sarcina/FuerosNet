@@ -120,16 +120,31 @@ Init ==
   /\ severed = {}
 
 (***************************************************************************)
-(* ACTION: Adopt(c, p).  c, currently patronless BY ITS OWN state, is      *)
-(* adopted by p.  Both parties sign the real transaction, so both hold it  *)
-(* immediately (wire Section 10.1: "a node pushes topology it is a party   *)
-(* to"); everyone else learns by flood or reconciliation.  The two must be *)
-(* able to talk (an adoption is a live bilateral act).                     *)
+(* ACTION: Adopt(c, p).  c is adopted by p.  Both parties sign the real    *)
+(* transaction, so both hold it immediately (wire Section 10.1: "a node    *)
+(* pushes topology it is a party to"); everyone else learns by flood or    *)
+(* reconciliation.  The two must be able to talk (an adoption is a live    *)
+(* bilateral act).                                                         *)
+(*                                                                         *)
+(* c NEED NOT BE PATRONLESS.  design Section 6.2 is explicit that there is *)
+(* no transfer transaction and that moving between patrons is "adopt at    *)
+(* the destination, depart the origin, IN EITHER ORDER, with no            *)
+(* requirement to do both".  An earlier version of this model required     *)
+(* patron[c] = None, which silently excluded the adopt-first order -- and  *)
+(* that is precisely the order worth checking here, since it puts two      *)
+(* adoption transactions for one subject in flight across a partition at   *)
+(* once.  Relaxing it grew the reachable state space from 15,080 to 21,032 *)
+(* distinct states; all three properties still hold, so the restriction    *)
+(* was hiding coverage rather than a defect.                               *)
+(*                                                                         *)
+(* Supersession then does the work: LatestAbout picks the highest ordinal, *)
+(* so the later adoption wins in every store that holds both, which is how *)
+(* the design orders one subject's own chain (wire Section 3.1).           *)
 (***************************************************************************)
 
 Adopt(c, p) ==
   /\ events < MaxEvents
-  /\ patron[c] = None
+  /\ patron[c] # p
   /\ c # p
   /\ CanTalk(c, p)
   /\ LET t == [kind |-> "adopt", subj |-> c, pat |-> p, n |-> events + 1]
@@ -162,8 +177,8 @@ Depart(c) ==
 (* the flood, reduced to its essential property: best-effort, unordered,   *)
 (* unacknowledged (wire Section 10.1: "no acknowledgement and no retry").  *)
 (* Loss needs no separate action -- a message that is never gossiped IS    *)
-(* the lost message.  Reconciliation (design Section 15: "a replay of the  *)
-(* same frames") is also this action: replaying a frame later is           *)
+(* the lost message.  Reconciliation (wire Section 10.1.3: "a replay of    *)
+(* the same frames") is also this action: replaying a frame later is       *)
 (* indistinguishable from delivering it late, which is why the design      *)
 (* needs no distinct repair mechanism and this model none either.          *)
 (***************************************************************************)

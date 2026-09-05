@@ -6,8 +6,8 @@ theory RHTNAttach
 
 WHAT THIS FILE IS
   wire Section 9.1 binds a session to a node's keyhash by mutual authentication;
-  design Section 18.1's stolen-device analysis and 0.8.6 both turn on the
-  question this model asks: can a SIBLING (or any party that is not the
+  design Section 18.1's stolen-device analysis turns on the question this
+  model asks: can a SIBLING (or any party that is not the
   patron) be accepted as the patron for a trust-bearing operation on a
   session?  The property: a client that completes an attach believing it is
   talking to a particular node identity really is -- no other party can
@@ -93,7 +93,7 @@ rule Register_Node:
 /*
   KEY COMPROMISE.  The Dolev-Yao adversary controls the network but not, by
   default, anyone's secret key.  To reason about stolen devices (design
-  Section 18.1 / 0.8.6) we give the adversary an EXPLICIT way to steal a
+  Section 18.1) we give the adversary an EXPLICIT way to steal a
   key, and STAMP that theft in the trace with a Compromised action.  The
   security lemma can then exclude exactly the identities that were stolen,
   which is how we state "authentication holds for parties whose key is

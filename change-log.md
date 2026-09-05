@@ -8732,3 +8732,41 @@ observer's own graph could still shorten a landscape distance — and because
 throughput falls with distance, a shortened distance raises a relay's
 capacity without any edge being added. Distance is now taken from the same
 graph the flow is, which is what observer-relative has to mean.
+
+### 2026-09-05 (the symbolic and distributed-systems models audited against the text)
+
+An audit of the seven TLA+ and Tamarin models, read in full against the
+sections each cites. The earlier sweep had established that references
+resolve; this one asks the harder question of whether each model says what
+the cited text says.
+
+Five quotations were attributed to the design and belong to the encoding
+document — the two-factor recovery rule, the memo's identity check and its
+confirm-against-records rule, and reconciliation as replay. In every case the
+substance was right and only the citation was wrong, but a model that cites
+the wrong document sends its reader to a section that does not contain the
+sentence. A sixth citation named the section on subnet plurality for the rule
+that a subnet's authority relation is a tree, which is close to the opposite
+concern.
+
+One real gap. The partition model would only adopt a node that had no patron,
+so it never explored the adopt-before-depart order — and moving between
+patrons is adopt at the destination and depart the origin, in either order,
+with no requirement to do both. That order is exactly the one that puts two
+adoptions for a single subject in flight across a partition at once.
+Admitting it grows the explored state space by two fifths and every property
+still holds, so the restriction was costing coverage rather than concealing a
+defect.
+
+The currency ladder's model carries three of the table's four rungs and none
+of the light-client pre-delegation path, which it now says: both are escapes
+from the frozen state rather than rungs of the ladder, so what is proved is
+strictly weaker than what the design claims. Two definitions that read as
+properties while being equal to TRUE are gone; neither was ever checked, but
+a later hand could have added one to a configuration and watched it pass.
+
+The audit found one defect in the design rather than in a model. The honest
+limit on that ladder named the patron and its siblings as the exhaustion
+condition and omitted the grandpatron — a rung of the table immediately above
+it — while its own parenthetical said the escalation was exhausted. The model
+had it right.

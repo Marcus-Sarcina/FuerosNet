@@ -13,6 +13,16 @@
 (*      CURRENT attestations for the same node that a relying party        *)
 (*      cannot tell apart?                                                 *)
 (*                                                                         *)
+(* WHAT THIS MODEL DOES NOT CARRY, stated so the scope is visible.  The    *)
+(* design's escalation table has a FOURTH rung -- "adopt at a new patron"   *)
+(* for extended or permanent outage -- and a fifth path for light-client    *)
+(* patrons, who "pre-delegate issuance to their own patron at adoption      *)
+(* time" because they carry no uptime commitment.  Neither is modelled.     *)
+(* Both are escapes from the frozen state rather than rungs of the issuing  *)
+(* ladder, so their absence makes the liveness claim here STRICTLY WEAKER   *)
+(* than the design's: this model proves the ladder does not deadlock while  *)
+(* an ISSUER can serve, and says nothing about the re-adoption remedy.      *)
+(*                                                                         *)
 (* This model shares the TLA+ reading conventions spelled out at the top   *)
 (* of PartitionMerge.tla; only NEW idioms are re-explained here.           *)
 (*                                                                         *)
@@ -112,8 +122,9 @@ IssuePatron ==
 
 \* Rung 2: a sibling issues from replicated state, but ONLY when the patron
 \* is down (design Section 12.6.5.1: siblings stand in during outage).
-\* Marked secondhand.  The honesty-axis independence the 0.8.6 review
-\* scoped: a sibling cannot be MADE to lie by the patron being down -- which
+\* Marked secondhand.  Siblings are independent ON THE HONESTY AXIS, which
+\* design Section 12.6.5.1 scopes to adversaries that can only attack
+\* availability: a sibling cannot be MADE to lie by the patron being down --
 \* is exactly why this rung is safe and a grace-period extension would not
 \* be.
 IssueSibling(s) ==
@@ -177,7 +188,9 @@ TypeOK ==
 \* relying party; the design's answer, design Section 9.0.2, is that a
 \* relying party detecting two would treat it as a fork -- outside this
 \* ladder's scope, and the reason the single slot is the faithful model.)
-SingleLiveAnswer == TRUE  \* structural: one slot, checked by construction
+\* No operator is defined for this: it is a property of the MODEL's shape,
+\* not a predicate over states, and a definition equal to TRUE would look
+\* like a checkable property while checking nothing.
 
 \* SAFETY (Q2, part b): "issue fresh, never extend stale."  Every
 \* attestation Subject holds was issued at a clock value no later than now,

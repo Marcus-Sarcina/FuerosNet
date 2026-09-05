@@ -9,16 +9,17 @@ WHAT THIS FILE IS
   requires BOTH (a) a proof from the predecessor key -- the old identity
   authorising a change to itself -- AND (b) recognition by a prior
   counterparty (a verifier who has met the subject).  Neither alone
-  suffices (design Section 9.1: "Key alone is not recovery ... presence
-  alone is not recovery").
+  suffices -- wire Section 4.1 states it: "Key alone is not recovery",
+  because a thief holds the key too, and "presence alone is not recovery".
 
   The review plan's Stage 1.1 target: "A thief holding the key cannot
   produce a rotation that outweighs the legitimate holder's."  The property
   proved here: a recovery that a patron accepts requires both factors, so a
   thief who has stolen ONLY the key (factor a) but is not recognised by an
   honest verifier (factor b) cannot complete one.  This is the two-part
-  proof the 0.8.6 review confirmed "holds against a stolen key alone"; the
-  model makes that claim machine-checked.
+  proof design Section 18.3 rests on -- recovery holds against a stolen key
+  alone, and fails only to a colluding or deceived verifier.  The model makes
+  that claim machine-checked.
 
   What this model does NOT cover, deliberately: the COLLUDING-counterparty
   case (design Section 18.3), where the thief supplies factor b through a

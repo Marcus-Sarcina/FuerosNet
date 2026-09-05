@@ -4465,11 +4465,12 @@ issuance to its own patron at adoption time**. Preferred over restricting
 patronage to infra nodes, which would break the property that anyone can be a
 patron.
 
-**Honest limit.** If the patron *and* its siblings are all unreachable — a
-whole-neighbourhood outage — **meaning the §12.6.5.1 escalation is exhausted, not
-merely that the patron is down** — no issuance path exists, and affected nodes are
-frozen for trust-bearing operations until recovery or re-adoption elsewhere. Not fixable
-without weakening what makes fail-closed worth having.
+**Honest limit.** If the patron, its siblings *and* the grandpatron are all
+unreachable — a whole-neighbourhood outage — **meaning the escalation above is
+exhausted, not merely that the patron is down** — no issuance path exists, and
+affected nodes are frozen for trust-bearing operations until recovery or
+re-adoption elsewhere. Not fixable without weakening what makes fail-closed
+worth having.
 
 ---
 

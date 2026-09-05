@@ -74,10 +74,21 @@ constants and lists the invariants and temporal properties.
   (`SelfTruth`), views never invent transactions (`NoInvention`), and — the
   headline — **convergence restated for a no-shared-state system**: once the
   network heals and stays healed, every pair of nodes eventually agrees about
-  every subject (`Convergence`). 15,080 states, no error.
+  every subject (`Convergence`). 21,032 distinct states, no error. Adoption
+  does **not** require the subject to be patronless: design §6.2 says moving
+  between patrons is *"adopt at the destination, depart the origin, in either
+  order"*, and the adopt-first order is the one that puts two adoptions for a
+  single subject in flight across a partition at once. An earlier version
+  required patronlessness and so never explored it — 15,080 states rather than
+  21,032; the properties hold either way, so the restriction was costing
+  coverage rather than hiding a defect.
 
 - **`CurrencyEscalation`** — the patron→sibling→grandpatron ladder (design
-  §12.6.5.1) under outage. Checks the plan's two questions: the ladder never
+  §12.6.5.1) under outage. The table's **fourth** rung (re-adopt at a new
+  patron) and the light-client pre-delegation path are *not* modelled, which
+  the file now states: both are escapes from the frozen state rather than
+  rungs of the issuing ladder, so the liveness claim proved here is strictly
+  weaker than the design's. Checks the plan's two questions: the ladder never
   deadlocks while a rung can serve (`SomeIssuerCanAct`, `LadderMakesProgress`)
   and never extends a stale attestation (`FreshOnly`, the "issue fresh, never
   extend stale" rule). Time is modelled as event order, not a clock.

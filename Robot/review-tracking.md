@@ -4781,3 +4781,69 @@ it. The inside case is what carries that finding.
 
 Seeds 1-30 pass. All eight models green. References 1,965 across the five
 specification documents, 0 flags; 112 across 13 model files, 0 flags.
+
+**Audit of the TLA+ and Tamarin models against the current specification
+(2026-09-05)**, author-directed. The earlier pass had checked that section
+references RESOLVE; this one checks that each model says what the cited text
+says. Seven models read in full against their sections.
+
+**Five misattributed quotations**, all the same shape -- `wire-format.md`
+text cited as the design. Caught by a checker that pairs each `<doc> Section
+N ... "quote"` against the document the citation names, rather than against
+the set: `recovery.spthy` quoted *"Key alone is not recovery"* and *"presence
+alone is not recovery"* as design §9.1 (both are `wire-format.md` §4.1);
+`CycleDetection.tla` quoted *"If field 1 is you..."* and *"No node acts on a
+memo alone"* as design §15.2 (both `wire-format.md` §10.2);
+`PartitionMerge.tla` quoted *"a replay of the same frames"* as design §15
+(`wire-format.md` §10.1.3). The substance was right in every case -- §9.1
+does require the counterparty's co-signature alongside the old key's -- so
+these are citation errors, not invented claims. All corrected; 5 of 5
+attributed quotations now resolve to the cited document.
+
+**One misattributed claim** the quote-checker could not see:
+`CycleDetection.tla` cited §3.1.1 for "a node may not hold two patrons in one
+subnet". §3.1.1 is *subnet plurality across* subnets -- close to the opposite
+concern. The rule is §3's "within a subnet the authority relation is a tree".
+Corrected.
+
+**One real coverage gap.** `PartitionMerge`'s `Adopt` required
+`patron[c] = None`, so a node could only be adopted while patronless. §6.2 is
+explicit that there is no transfer transaction and that moving between
+patrons is *"adopt at the destination, depart the origin, IN EITHER ORDER"* --
+so the model excluded the adopt-first order, which is precisely the one that
+puts two adoptions for a single subject in flight across a partition.
+Relaxed to `patron[c] # p` and re-run: 15,080 -> 21,032 distinct states,
+`SelfTruth`, `NoInvention` and `Convergence` all still hold. **The
+restriction was costing coverage, not hiding a defect**, and supersession by
+ordinal does the work the design gives to chain order. README's state count
+corrected.
+
+**One undocumented scope limit.** `CurrencyEscalation` models three rungs of
+a four-rung table and omits the light-client pre-delegation path, without
+saying so. Both omissions are defensible -- they are escapes from the frozen
+state rather than rungs of the issuing ladder -- but they make the liveness
+claim strictly weaker than the design's, which the file now states.
+
+**Two vacuous definitions removed.** `SingleLiveAnswer == TRUE` and
+`RepairOnlyCuts == TRUE` were honestly commented and absent from both `.cfg`
+files, so nothing false was being claimed -- but a definition equal to TRUE
+reads as a property and would pass silently if a later hand added it to a
+config. Replaced by comments saying why no operator exists.
+
+**Design finding**: §12.6.5.1's *Honest limit* said "if the patron *and* its
+siblings are all unreachable", omitting the grandpatron -- rung 3 of the
+table directly above it -- while its own parenthetical says the escalation is
+exhausted. The model had it right. Corrected, and its self-citation to
+§12.6.5.1 from inside §12.6.5.1 replaced with "the escalation above".
+
+**Cleanup**: four bare `0.8.6` review-round identifiers in model files
+replaced with the substance they stood for. These files are meant to be read
+line by line without background, and a round number is unreadable outside
+this directory.
+
+Verified against everything checkable: reason code 5 = cycle repair; the
+memo's identity check; wire §5.3's distinctness rule; the
+patron/sibling/grandpatron ladder and its "issue fresh, never extend stale"
+rule; `current_key`; wire §3.2's witness distinctness; f=10 and h=2. All
+eight models pass. References 1,964 across the five specification documents,
+0 flags; 118 across 13 model files, 0 flags.

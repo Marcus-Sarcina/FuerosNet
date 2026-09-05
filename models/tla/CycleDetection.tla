@@ -18,8 +18,9 @@
 (* forest.  A cycle needs concurrency: two adoptions, each individually    *)
 (* legal against the adopter's LOCAL view, that together close a loop --   *)
 (* A adopts B while, concurrently and out of A's view, a chain from B back *)
-(* to A is being built.  design Section 3.1.1 forbids a node holding two   *)
-(* patrons in one subnet, but a stale local view lets the second adoption  *)
+(* to A is being built.  design Section 3 makes the authority relation a   *)
+(* tree within a subnet -- exactly one patron per non-root node, acyclic  *)
+(* within a subtree -- but a stale local view lets the second adoption     *)
 (* happen before the first has propagated.  This model builds exactly such *)
 (* races and checks the memo catches them.                                 *)
 (*                                                                         *)
@@ -141,7 +142,7 @@ Forward(m) ==
 (***************************************************************************)
 (* ACTION: DetectAndRepair(m).  The cycle check: a memo has arrived at the *)
 (* very node it is about (m.at = m.about), meaning that node is its own    *)
-(* ancestor -- field 1 identity match (design Section 15.2: "If field 1 is *)
+(* ancestor -- field 1 identity match (wire Section 10.2: "If field 1 is   *)
 (* you, a memo you originated has come back to you from below").  The       *)
 (* detector confirms against its OWN records (here: the cycle genuinely     *)
 (* exists, which the detector can verify because it is a party to its own   *)
@@ -218,11 +219,13 @@ CyclesResolve == [](HasCycle => <>(~HasCycle))
 
 \* SAFETY: repair only cuts genuine cycles.  An edge is disavowed for
 \* reason 5 only in a step where the cut node was on a cycle -- the memo is
-\* a hint confirmed against records (design Section 15.2: "No node acts on
+\* a hint confirmed against records (wire Section 10.2: "No node acts on
 \* a memo alone").  We assert the contrapositive as an invariant on the
 \* action's guard: disavowed edges only grow via DetectAndRepair, whose
 \* guard requires OnCycle.  (Checked structurally by the guard; stated here
 \* for the reader, and TypeOK plus the guard enforce it.)
-RepairOnlyCuts == TRUE  \* structural: DetectAndRepair's guard is OnCycle
+\* No operator is defined for this either: it is enforced by the action's
+\* guard rather than by a state predicate, and a definition equal to TRUE
+\* would read as a checked property while checking nothing.
 
 =============================================================================
