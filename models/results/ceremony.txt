@@ -37,7 +37,7 @@ rule (modulo E) Meet:
   --[ MeetHappened( $P1, $P2, $W, ~cid ), DistinctParties( $P1, $P2, $W )
   ]->
    [
-   CoPresent( $P1, ~cid ), CoPresent( $P2, ~cid ), CoPresent( $W, ~cid ),
+   CoPresent( $P1, ~cid ), CoPresent( $P2, ~cid ),
    !Ceremony( $P1, $P2, $W, ~cid )
    ]
 
@@ -64,7 +64,7 @@ rule (modulo E) Participant_Sign:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Witness_Sign:
-   [ !Ltk( $W, ~sk ), CoPresent( $W, cid ), !Ceremony( $P1, $P2, $W, cid ) ]
+   [ !Ltk( $W, ~sk ), !Ceremony( $P1, $P2, $W, cid ) ]
   --[ WitnessSigned( $W, $P1, $P2, $W, cid ) ]->
    [ Out( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) ]
 
@@ -238,7 +238,7 @@ solve( !Pk( $P1, pk(x) ) ▶₀ #i )
         solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.1) ) @ #vk.1 )
           case Participant_Sign_case_2
           solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~sk.2) ) @ #vk.2 )
-            case Participant_Sign_case_3
+            case Witness_Sign
             SOLVED // trace found
           qed
         qed
@@ -252,18 +252,18 @@ lemma presence_requires_copresence:
   "∀ P1 P2 W cid #i.
     (RecordAccepted( P1, P2, W, cid ) @ #i) ⇒
     ((((∃ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ∧ (#m < #i)) ∨
-       (∃ #k. Compromised( P1 ) @ #k)) ∨
-      (∃ #k. Compromised( P2 ) @ #k)) ∨
-     (∃ #k. Compromised( W ) @ #k))"
+       (∃ #k. (Compromised( P1 ) @ #k) ∧ (#k < #i))) ∨
+      (∃ #k. (Compromised( P2 ) @ #k) ∧ (#k < #i))) ∨
+     (∃ #k. (Compromised( W ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P1 P2 W cid #i.
   (RecordAccepted( P1, P2, W, cid ) @ #i)
  ∧
   (∀ #m. (MeetHappened( P1, P2, W, cid ) @ #m) ⇒ ¬(#m < #i)) ∧
-  (∀ #k. (Compromised( P1 ) @ #k) ⇒ ⊥) ∧
-  (∀ #k. (Compromised( P2 ) @ #k) ⇒ ⊥) ∧
-  (∀ #k. (Compromised( W ) @ #k) ⇒ ⊥)"
+  (∀ #k. (Compromised( P1 ) @ #k) ⇒ ¬(#k < #i)) ∧
+  (∀ #k. (Compromised( P2 ) @ #k) ⇒ ¬(#k < #i)) ∧
+  (∀ #k. (Compromised( W ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
 solve( !Pk( $P1, pk(x) ) ▶₀ #i )
@@ -277,9 +277,6 @@ solve( !Pk( $P1, pk(x) ) ▶₀ #i )
         by contradiction /* from formulas */
       next
         case Participant_Sign_case_2
-        by contradiction /* from formulas */
-      next
-        case Participant_Sign_case_3
         by contradiction /* from formulas */
       next
         case Witness_Sign
@@ -321,9 +318,6 @@ solve( !Pk( $P1, pk(x) ) ▶₀ #i )
         by contradiction /* from formulas */
       next
         case Participant_Sign_case_2
-        by contradiction /* from formulas */
-      next
-        case Participant_Sign_case_3
         by contradiction /* from formulas */
       next
         case Witness_Sign
@@ -384,25 +378,6 @@ solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1))  ∥ (¬($W = $W.1)) )
                     case Participant_Sign_case_2
                     by contradiction /* from formulas */
                   next
-                    case Participant_Sign_case_3
-                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
-                           ) @ #vk.3 )
-                      case Participant_Sign_case_1
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_2
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_3
-                      by contradiction /* from formulas */
-                    next
-                      case c_sign
-                      solve( !KU( ~sk.3 ) @ #vk.7 )
-                        case Compromise
-                        by contradiction /* from formulas */
-                      qed
-                    qed
-                  next
                     case Witness_Sign
                     solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
                            ) @ #vk.3 )
@@ -429,9 +404,6 @@ solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1))  ∥ (¬($W = $W.1)) )
                     qed
                   qed
                 next
-                  case Participant_Sign_case_3
-                  by contradiction /* from formulas */
-                next
                   case Witness_Sign
                   by contradiction /* from formulas */
                 next
@@ -443,9 +415,6 @@ solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1))  ∥ (¬($W = $W.1)) )
                 qed
               next
                 case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Participant_Sign_case_3
                 by contradiction /* from formulas */
               next
                 case Witness_Sign
@@ -491,25 +460,6 @@ next
                     case Participant_Sign_case_2
                     by contradiction /* from formulas */
                   next
-                    case Participant_Sign_case_3
-                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
-                           ) @ #vk.3 )
-                      case Participant_Sign_case_1
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_2
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_3
-                      by contradiction /* from formulas */
-                    next
-                      case c_sign
-                      solve( !KU( ~sk.3 ) @ #vk.7 )
-                        case Compromise
-                        by contradiction /* from formulas */
-                      qed
-                    qed
-                  next
                     case Witness_Sign
                     solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
                            ) @ #vk.3 )
@@ -536,9 +486,6 @@ next
                     qed
                   qed
                 next
-                  case Participant_Sign_case_3
-                  by contradiction /* from formulas */
-                next
                   case Witness_Sign
                   by contradiction /* from formulas */
                 next
@@ -550,9 +497,6 @@ next
                 qed
               next
                 case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Participant_Sign_case_3
                 by contradiction /* from formulas */
               next
                 case Witness_Sign
@@ -598,25 +542,6 @@ next
                     case Participant_Sign_case_2
                     by contradiction /* from formulas */
                   next
-                    case Participant_Sign_case_3
-                    solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
-                           ) @ #vk.3 )
-                      case Participant_Sign_case_1
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_2
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_case_3
-                      by contradiction /* from formulas */
-                    next
-                      case c_sign
-                      solve( !KU( ~sk.3 ) @ #vk.7 )
-                        case Compromise
-                        by contradiction /* from formulas */
-                      qed
-                    qed
-                  next
                     case Witness_Sign
                     solve( !KU( sign(<'presence', $P1.1, $P2.1, $W.1, ~cid>, ~sk.3)
                            ) @ #vk.3 )
@@ -643,9 +568,6 @@ next
                     qed
                   qed
                 next
-                  case Participant_Sign_case_3
-                  by contradiction /* from formulas */
-                next
                   case Witness_Sign
                   by contradiction /* from formulas */
                 next
@@ -657,9 +579,6 @@ next
                 qed
               next
                 case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Participant_Sign_case_3
                 by contradiction /* from formulas */
               next
                 case Witness_Sign
@@ -712,14 +631,14 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
 
-  processing time: 3.19s
+  processing time: 2.62s
   
   WARNING: 2 wellformedness check failed!
            The analysis results might be wrong!
   
   ceremony_is_executable (exists-trace): verified (8 steps)
-  presence_requires_copresence (all-traces): verified (11 steps)
-  no_remote_forgery (all-traces): verified (11 steps)
-  copresence_binds_one_roster (all-traces): verified (107 steps)
+  presence_requires_copresence (all-traces): verified (10 steps)
+  no_remote_forgery (all-traces): verified (10 steps)
+  copresence_binds_one_roster (all-traces): verified (83 steps)
 
 ==============================================================================

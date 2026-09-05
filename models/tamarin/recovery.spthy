@@ -118,11 +118,25 @@ rule Met:
   --[ PriorCounterparty($V, $S) ]->
     [ !Met($V, $S) ]
 
+/*
+  THE RECOGNITION NAMES THE SUCCESSOR IT ATTESTS CONTINUITY TO.  The verifier
+  still recognises the PERSON -- that is the human act -- but what it signs
+  binds that recognition to the specific new key, which the subject presents
+  at the meeting.  wire Section 4.1 is explicit that omitting the binding is
+  a replay primitive: a proof naming no successor means "one observed proof
+  would authorise an unlimited number of competing successors".  An earlier
+  version signed <'recognise', S> alone, and Tamarin duly found the trace --
+  one honest recognition beside two accepted recoveries for different keys.
+  See recognition_binds_the_successor below, which falsifies without this.
+*/
 rule Recognise:
     [ !Ltk($V, ~vsk)                   // the verifier's key
-    , !Met($V, $S) ]                   // and it really met the subject
-  --[ Recognised($V, $S) ]->           // recognises the PERSON, not a key
-    [ Out(<'recognise', $S, sign(<'recognise', $S>, ~vsk)>) ]
+    , !Met($V, $S)                     // and it really met the subject
+    , In(newkey) ]                     // the successor presented at the meeting
+  --[ Recognised($V, $S)
+    , RecognisedFor($V, $S, newkey) ]->
+    [ Out(<'recognise', $S, newkey,
+           sign(<'recognise', $S, newkey>, ~vsk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -142,9 +156,9 @@ rule Patron_Accept_Recovery:
     , !Pk($S, pkOld)                            // subject's OLD public key
     , !Pk($V, pkV)                              // verifier's public key
     , In(<'rotate', $S, newkey, provA>)         // factor a: introduces newkey
-    , In(<'recognise', $S, provB>) ]            // factor b: recognises $S
+    , In(<'recognise', $S, newkey, provB>) ]    // factor b, bound to newkey
   --[ Eq(verify(provA, <'rotate', $S, newkey>, pkOld), true)
-    , Eq(verify(provB, <'recognise', $S>, pkV), true)
+    , Eq(verify(provB, <'recognise', $S, newkey>, pkV), true)
     , Distinct($V, $S)                          // the verifier is NOT the subject
     , ReliedOn($P, $V, $S)                      // which verifier was trusted
     , RecoveryAccepted($P, $S, newkey) ]->
@@ -181,8 +195,8 @@ lemma recovery_is_executable:
   exists-trace
   "Ex P S newkey #i. RecoveryAccepted(P, S, newkey) @ #i"
 
-// THE TWO-FACTOR PROPERTY (Stage 1.1), stated as design Section 9.1 states
-// it: "neither alone is recovery."  Rather than one lemma asserting both
+// THE TWO-FACTOR PROPERTY (Stage 1.1).  wire Section 4.1 states it: "Key
+// alone is not recovery" and "presence alone is not recovery".  Rather than one lemma asserting both
 // factors (which a thief with a stolen key subtly evades -- see below), we
 // prove the two MIRROR IMPOSSIBILITIES: neither factor by itself is ever
 // enough.  Together they are exactly the two-factor requirement.
@@ -227,5 +241,17 @@ lemma recognition_alone_insufficient:
         & not(Ex #a. OldKeyProof(S, newkey) @ #a)   // no honest key proof
         & not(Ex #c. Compromised(S) @ #c)           // and no stolen key
         & not(Ex #kp. Compromised(P) @ #kp) )"       // and no patron compromise
+
+// THE SUCCESSOR BINDING IS LOAD-BEARING.  Every accepted recovery rests on a
+// recognition NAMING THAT successor key.  This is the model's check on wire
+// Section 4.1's rule that a verifier response must name the newly adopted
+// node and the prior key; drop the binding from Recognise above and this
+// lemma is falsified, which is how we know it is doing work.
+lemma recognition_binds_the_successor:
+  "All P S newkey #i.
+     RecoveryAccepted(P, S, newkey) @ #i
+     ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
+         | (Ex V #kv. Compromised(V) @ #kv)
+         | (Ex #kp. Compromised(P) @ #kp) )"
 
 end

@@ -7,11 +7,20 @@ theory RHTNAttach
 WHAT THIS FILE IS
   wire Section 9.1 binds a session to a node's keyhash by mutual authentication;
   design Section 18.1's stolen-device analysis turns on the question this
-  model asks: can a SIBLING (or any party that is not the
-  patron) be accepted as the patron for a trust-bearing operation on a
-  session?  The property: a client that completes an attach believing it is
+  model asks: can any party that is not S be accepted AS S when a client
+  attaches?  The property: a client that completes an attach believing it is
   talking to a particular node identity really is -- no other party can
   produce an accepted attach under that identity's name without its key.
+
+  WHAT THIS MODEL DOES NOT REACH.  It proves ENDPOINT AUTHENTICATION, not
+  AUTHORISATION.  There is no patron/sibling role here, no session mode, no
+  countersignature and no trust-bearing operation -- so it cannot express
+  the failover case design Section 12.6.5.1 actually turns on, where a
+  client knowingly attaches to a SIBLING, the sibling authenticates
+  correctly AS ITSELF, and trust-bearing operations must still stop because
+  a sibling is not the patron.  A sibling proving it really is the sibling
+  is expected behaviour; that it may not then act as patron is a separate
+  property, and modelling it needs role facts this theory does not have.
 
   This is the review plan's Stage 1.1 target "Session attach: a sibling
   cannot impersonate the patron for trust-bearing operations", and it is
@@ -210,17 +219,25 @@ lemma server_authentication:
   "All C S nc #i.
      ClientFinish(C, S, nc) @ #i
      ==> ( (Ex #j. ServerAccept(S, C, nc) @ #j & #j < #i)
-         | (Ex #k. Compromised(S) @ #k) )"
+         | (Ex #k. Compromised(S) @ #k & #k < #i) )"
 
-// INJECTIVE AGREEMENT (no replay).  A stronger statement: each client
-// commit corresponds to a DISTINCT server acceptance -- one honest
-// acceptance cannot be made to satisfy two different client commits, which
-// is what a replay attack would need.  Again with the compromise carve-out.
-lemma no_replay:
+// CLIENT-SIDE COMMIT INJECTIVITY.  A client cannot commit twice on one
+// challenge.  NAMED FOR WHAT IT PROVES: this follows from St_Client_1 being
+// a LINEAR fact that Client_Finish consumes, plus nc being fresh -- NOT from
+// the signature binding.  Measured: delete the Eq check from Client_Finish
+// and server_authentication falsifies while this still verifies.  It is
+// therefore a well-formedness check on the client state machine, not an
+// anti-replay result.
+//
+// THE PROJECT'S REPLAY CONCERN IS SERVER-SIDE and is not modelled: wire
+// Section 11 forbids carrying Attach in TLS 1.3 0-RTT because replayed
+// early data could re-bind session state.  There is no early-data path or
+// server session state here to test that against.
+lemma client_commit_is_injective:
   "All C S nc #i1 #i2.
      ( ClientFinish(C, S, nc) @ #i1
      & ClientFinish(C, S, nc) @ #i2 )
      ==> ( #i1 = #i2
-         | (Ex #k. Compromised(S) @ #k) )"
+         | (Ex #k. Compromised(S) @ #k & #k < #i) )"
 
 end

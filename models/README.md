@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (13 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (14 lemmas).
 
 ---
 
@@ -113,20 +113,34 @@ the honest protocol and so proves every security lemma vacuously.
 
 - **`attach`** (design §14, wire §9.1) — session attach. A client that
   completes an attach authenticated the server it intended; **a sibling (or
-  any party without the server's key) cannot impersonate the server**, and
-  no replay. Three lemmas.
+  any party without the server's key) cannot impersonate the server**. Three
+  lemmas. **This is endpoint authentication, not authorisation**: the theory
+  has no patron/sibling role, session mode or trust-bearing operation, so it
+  cannot express the failover case where a client knowingly attaches to a
+  sibling and trust-bearing operations must stop anyway. The third lemma is
+  named `client_commit_is_injective` rather than `no_replay`, because it
+  follows from linear-fact consumption rather than from the signature —
+  measured by deleting the signature check, which falsifies
+  `server_authentication` and leaves this one verifying.
 
 - **`currency`** (design §12.6.5) — currency attestation + stapling. A
   trust-bearing acceptance of a key as current requires an unexpired patron
-  issuance for that exact key; **a rotated-away key whose attestation has
-  expired cannot be made to look current**, expiry modelled as event order.
-  Three lemmas.
+  issuance for that exact key, expiry modelled as event order. Three lemmas.
+  **Known limitation, now stated in the file:** there is no notion of a
+  *current* key, so a patron can mint a fresh attestation for a key the
+  subject rotated away from — Tamarin confirms the trace. §12.6.5 keeps
+  expiry and supersession apart and warns against conflating them; this
+  model has the first and not the second. See "What the models found".
 
 - **`recovery`** (design §9.1) — recovery adoption. **Neither factor alone is
   recovery**: a key proof with no honest recognition never recovers
   (`key_alone_insufficient` — the stolen-key case), and a recognition with no
-  key authorisation never recovers (`recognition_alone_insufficient`). Three
-  lemmas. *See "What the models found," below — this one earned its keep.*
+  key authorisation never recovers (`recognition_alone_insufficient`). A
+  fourth lemma, `recognition_binds_the_successor`, checks wire §4.1's rule
+  that a verifier response names the key it attests continuity to — without
+  which "one observed proof would authorise an unlimited number of competing
+  successors". *See "What the models found," below — this one earned its
+  keep twice.*
 
 - **`ceremony`** (design §7–8) — the presence ceremony, the plan's
   highest-value target. **A record a third party accepts implies the named
@@ -145,10 +159,16 @@ the co-presence channel "as one the adversary can only use when a co-location
 fact holds ... the target property becomes provable relative to that axiom,
 which is honest."
 
-- **Co-presence** (`ceremony`): the `Meet` rule mints the co-presence tokens a
-  ceremony's binding signatures require. The theorem proves the protocol
-  admits a record *only when a meeting occurred or a key was stolen*; it does
-  not prove physical co-presence is unforgeable, which is a real-world matter.
+- **Co-presence** (`ceremony`): the `Meet` rule mints co-presence tokens **for
+  the two participants only**. The witness signs as a remote notary and
+  consumes none — design §7.6: *"Witnesses notarise; they do not verify
+  proximity … the record format must not imply otherwise."* The theorem
+  proves the protocol admits a record *only when a meeting occurred or
+  someone held a party's key*; it does not prove physical co-presence is
+  unforgeable, which is a real-world matter. **And "held a party's key"
+  covers a willing owner as well as a thief** — in the symbolic model there
+  is no other way to sign, so the carve-out is where §7.6's bilateral
+  collusion lives, not merely §18.3's theft.
 
 - **Face recognition** (`recovery`): an honest verifier recognises the true
   person, encoded as `!Met(V,S)` gating honest recognition. The theorem proves
@@ -187,6 +207,60 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **A Tamarin review found four models claiming more than they proved.** The
+  reviewer could not run the prover and worked statically; every finding
+  below was then reproduced or refuted *with* Tamarin here.
+
+  **`currency` has no notion of a current key** — `!SubjKey` and `!Epoch` are
+  both persistent, so a patron can mint a brand-new attestation for a key the
+  subject rotated away from. Machine-confirmed: a trace exists where an epoch
+  begun *after* the successor appeared carries an acceptance of the older key,
+  with no compromise. §12.6.5 keeps expiry and supersession apart in an
+  author ruling — *"Expiry bounds what a stolen credential can spend;
+  supersession, once known, is what retires it from use"* — and warns that
+  conflating them reads as licence to keep serving a binding the server knows
+  is dead. The model had exactly that conflation. Closing it needs a linear
+  current-key binding that rotation consumes plus a relying party that can
+  hold supersession evidence; a first attempt showed it also needs
+  rotate-back forbidden (wire §4.1: *"prior_key MUST differ"*) before the
+  property is tractable. **Open work, stated in the file rather than
+  silently carried.**
+
+  **`ceremony` made the witness physically present.** `Meet` minted a
+  co-presence token for the witness and `Witness_Sign` consumed it, so the
+  notary had to attend — against §7.6's *"Witnesses notarise; they do not
+  verify proximity"*, a section that goes on to say *"the record format must
+  not imply otherwise."* Corrected; all four lemmas verify without it, so the
+  theorem is now about the participants' co-presence, which is what the
+  design claims. The reviewer also read the compromise carve-out as unable to
+  express a malicious-but-uncompromised owner; that half does not hold — a
+  probe confirms a record accepted with **no meeting at all** via that rule,
+  which is how Dolev-Yao expresses a willing colluder. The defect there was
+  the commentary calling the rule theft only, and it is reworded.
+
+  **`recovery` omitted the successor binding.** `Recognise` signed
+  `<'recognise', S>` — the person, not the key — so one honest recognition
+  could be assembled beside competing successors. Machine-confirmed: two
+  accepted recoveries for different new keys off one recognition, no
+  compromise. wire §4.1 forbids exactly this (*"one observed proof would
+  authorise an unlimited number of competing successors"*) and requires the
+  response to name the new subject and the prior key. The binding is added
+  and `recognition_binds_the_successor` now checks it — falsified when the
+  binding is removed, which is how we know it is load-bearing.
+
+  **`attach`'s `no_replay` proved linear-fact consumption**, not replay
+  resistance: deleting the signature check falsifies `server_authentication`
+  and leaves `no_replay` verifying. Renamed to `client_commit_is_injective`,
+  with the project's real replay concern — wire §11's ban on Attach in 0-RTT
+  — recorded as out of scope. The theory's header also claimed to answer
+  whether a sibling may act with patron authority, which needs role facts it
+  does not have; the claim is narrowed to endpoint authentication.
+
+  **All six compromise carve-outs were unbounded in time**, so a compromise
+  *after* an authentication could discharge it. Every one is now
+  `& #k < #i`, and all fourteen lemmas still verify — the properties were
+  strengthened at no cost.
 
 - **`flow_metric` (a cross-family review found three conflated concepts).**
   The first version used one adjacency relation for scope, trust-capacity and

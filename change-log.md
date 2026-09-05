@@ -8770,3 +8770,50 @@ limit on that ladder named the patron and its siblings as the exhaustion
 condition and omitted the grandpatron — a rung of the table immediately above
 it — while its own parenthetical said the escalation was exhausted. The model
 had it right.
+
+### 2026-09-05 (the symbolic models were claiming more than they proved)
+
+A cross-family review of the four Tamarin theories, conducted without the
+prover, and checked here with it. Five of six findings hold, one half.
+
+The ceremony model made the witness physically present: the meeting minted a
+co-presence token for the notary and the notary's signature consumed it. The
+design says the opposite in terms — witnesses notarise and do not verify
+proximity, the evidence that matters passes between the two participant
+devices and is merely reported — and warns that the record format must not
+imply otherwise. Corrected, and every lemma survives, so what is proved is
+now the participants' co-presence, which is what the design claims. The same
+finding's second half does not hold: the model can express two willing
+colluders perfectly well, because in a symbolic model an adversary holding
+your key is how a malicious owner is written. The commentary calling that
+rule theft was what needed fixing.
+
+The recovery model let a verifier sign a recognition of the person without
+naming the successor key, so one honest recognition could be assembled beside
+competing successors — the encoding document describes that exact primitive
+and forbids it. The binding is restored and a fourth lemma now checks it;
+remove the binding and only the new lemma fails, which is why the original
+three never caught it.
+
+The attach model's anti-replay lemma proved that a linear fact cannot be
+consumed twice. Deleting the signature check falsifies the authentication
+lemma and leaves the replay one standing, which settles what it was
+measuring; it is renamed for what it proves, and the real replay concern —
+the ban on carrying an attach in zero round-trip data — recorded as beyond
+its reach. That model also claimed to answer whether a sibling may exercise
+patron authority, a question it has no vocabulary for: it has two roles and
+no notion of authority at all.
+
+Six compromise carve-outs allowed a compromise after the fact to discharge an
+authentication before it. All six are now ordered, and every lemma still
+verifies, so the properties were strengthened for nothing.
+
+One finding is left open rather than half-repaired. The currency model has no
+notion of a current key, so a patron can mint a fresh attestation for a key
+its subject rotated away from. That is not merely a missing state: this
+design separates expiry from supersession deliberately and warns that
+conflating them reads as licence to keep serving a binding the server knows
+is dead — and the model conflated them. A first rebuild closes the trace but
+needs rotation-back forbidden and proof hints before the property is
+tractable, so the limitation is written into the file instead of a half-built
+model being landed.

@@ -136,7 +136,7 @@ lemma currency_requires_unexpired_issuance:
     (Accepted( P, S, sk, e ) @ #i) ⇒
     (((∃ #j. (Issued( P, S, sk, e ) @ #j) ∧ (#j < #i)) ∧
       (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #i)))) ∨
-     (∃ #k. Compromised( P ) @ #k))"
+     (∃ #k. (Compromised( P ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S sk e #i.
@@ -144,7 +144,7 @@ guarded formula characterizing all counter-examples:
  ∧
   (((∀ #j. (Issued( P, S, sk, e ) @ #j) ⇒ ¬(#j < #i)) ∨
     (∃ #x. (Expired( e ) @ #x) ∧ #x < #i))) ∧
-  (∀ #k. (Compromised( P ) @ #k) ⇒ ⊥)"
+  (∀ #k. (Compromised( P ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
 solve( (∀ #j. (Issued( $P, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
@@ -209,7 +209,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.54s
+  processing time: 0.60s
   
   WARNING: 2 wellformedness check failed!
            The analysis results might be wrong!

@@ -84,10 +84,22 @@ rule Meet:
     [ Fr(~cid) ]                       // a fresh ceremony identifier
   --[ MeetHappened($P1, $P2, $W, ~cid) // trace: who was physically present
     , DistinctParties($P1, $P2, $W) ]->
-    [ CoPresent($P1, ~cid)             // each attendee gets a co-presence token
+    [ CoPresent($P1, ~cid)             // the two PARTICIPANTS were present
     , CoPresent($P2, ~cid)
-    , CoPresent($W, ~cid)
     , !Ceremony($P1, $P2, $W, ~cid) ]  // persistent record of the roster
+
+/*
+  THE WITNESS GETS NO CO-PRESENCE TOKEN, and this is the design's rule, not
+  a simplification.  design Section 7.6: "Witnesses notarise; they do not
+  verify proximity ... the co-presence evidence that matters is generated
+  between the two devices and merely reported to witnesses" -- and that
+  section goes on to say "the record format must not imply otherwise".  An
+  earlier version of this model gave the witness a CoPresent token and made
+  Witness_Sign consume it, which required the notary to attend the meeting
+  and so excluded ordinary specified executions.  All four lemmas below
+  verify without it; what the theorem is about is the PARTICIPANTS'
+  co-presence, which is what the design claims.
+*/
 
 restriction DistinctParties:
   "All a b w #i. DistinctParties(a, b, w) @ #i
@@ -101,10 +113,10 @@ restriction DistinctParties:
   the ceremony (design Section 8.1, wire Section 4.5 -- the envelope carries
   participant and witness signatures over the record body).  We model the
   record body as <'presence', P1, P2, W, cid>: the roster plus the ceremony
-  id.  Each signer's rule CONSUMES its CoPresent token for that cid, so a
-  signature can only be produced by a party that was actually present (or,
-  via Compromise, by a thief holding that party's key -- the modelled
-  exception).
+  id.  Each PARTICIPANT's rule CONSUMES its CoPresent token for that cid, so a
+  participant signature can only be produced by a party that was actually
+  present -- or by anyone holding that party's key, via Compromise.  The
+  witness signs as a remote notary and consumes no token (see Meet).
 
   Each signer emits its signature to the network; the verifier (below)
   collects all three and checks them.
@@ -121,8 +133,7 @@ rule Participant_Sign:
 // A witness signs the ceremony it observed.
 rule Witness_Sign:
     [ !Ltk($W, ~sk)
-    , CoPresent($W, cid)               // consumed: the witness was present
-    , !Ceremony($P1, $P2, $W, cid) ]
+    , !Ceremony($P1, $P2, $W, cid) ]   // notarises the roster; not present
   --[ WitnessSigned($W, $P1, $P2, $W, cid) ]->
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
@@ -179,9 +190,9 @@ lemma presence_requires_copresence:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
      ==> ( (Ex #m. MeetHappened(P1, P2, W, cid) @ #m & #m < #i)
-         | (Ex #k. Compromised(P1) @ #k)
-         | (Ex #k. Compromised(P2) @ #k)
-         | (Ex #k. Compromised(W) @ #k) )"
+         | (Ex #k. Compromised(P1) @ #k & #k < #i)
+         | (Ex #k. Compromised(P2) @ #k & #k < #i)
+         | (Ex #k. Compromised(W) @ #k & #k < #i) )"
 
 // STRONGER: no record without co-presence, isolating the no-theft case.
 // With NO key compromise anywhere, an accepted record requires the

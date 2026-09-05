@@ -4847,3 +4847,84 @@ patron/sibling/grandpatron ladder and its "issue fresh, never extend stale"
 rule; `current_key`; wire §3.2's witness distinctness; f=10 and h=2. All
 eight models pass. References 1,964 across the five specification documents,
 0 flags; 118 across 13 model files, 0 flags.
+
+---
+
+## Cross-family Tamarin review (2026-09-05)
+
+Six findings, four High and two Medium. The reviewer had no Tamarin
+installed and worked statically, so nothing was proved or falsified on their
+side; every finding was reproduced or refuted with the prover here. Five hold
+as filed, one is half right.
+
+**TAM-01 currency has no current key. HOLDS, machine-confirmed.**
+`!SubjKey` and `!Epoch` are persistent, so `Issue_Currency` can mint a fresh
+attestation for any key ever held, at any epoch. Probe verified in 5 steps: a
+subject holds k_old then k_new, an epoch starts after k_new exists, and
+k_old is accepted as current on it with no compromise. The model's comment
+claimed "a rotated-away key ... cannot be made to appear current", which is
+not established. Worse than a gap: §12.6.5's author ruling separates expiry
+from supersession and warns that conflating them reads as licence to serve a
+binding known dead -- and the model has exactly that conflation.
+**Not fixed; stated in the file as open work.** A first rebuild attempt
+(linear `CurrentKey` consumed by `Rotate_Key`) closes the reviewer's probe --
+it no longer finds a trace -- but the supersession lemma needs rotate-back
+forbidden (wire §4.1: `prior_key` MUST differ) and proof hints before it is
+tractable; a 4-minute run did not terminate. Landing half a rebuild is worse
+than stating the limit.
+
+**TAM-02 ceremony. Two halves; the first HOLDS and is serious, the second
+does not.** `Meet` minted a `CoPresent` token for the WITNESS and
+`Witness_Sign` consumed it, making the notary physically present -- against
+§7.6's *"Witnesses notarise; they do not verify proximity ... the co-presence
+evidence that matters is generated between the two devices and merely
+reported to witnesses"*, which adds *"the record format must not imply
+otherwise."* Fixed; all four lemmas verify without the token, so the theorem
+is now about the PARTICIPANTS' co-presence.
+The second half -- that the model cannot express a malicious-but-
+uncompromised owner, and so overclaims against bilateral collusion -- **does
+not hold**. Probe verified in 11 steps: a record accepted with NO meeting at
+all, via `Compromise_Key`. In the symbolic model "the adversary holds A's
+key" IS how a willing colluder is expressed; there is no other way to sign.
+The real defect was the commentary, which framed that rule as theft only.
+Reworded to say the carve-out covers §7.6's bilateral collusion as well as
+§18.3's theft.
+
+**TAM-03 attach cannot express sibling-vs-patron authority. HOLDS.** The
+theory has `$C` and `$S` and nothing else -- no patron/sibling role, session
+mode, countersignature or trust-bearing operation -- so it cannot reach the
+failover case §12.6.5.1 turns on, where a client knowingly attaches to a
+sibling that authenticates correctly as itself and must still be denied
+patron authority. What it proves (endpoint authentication) is correct and
+useful. The header claimed the broader property; narrowed, with the missing
+vocabulary named.
+
+**TAM-04 recovery omits the successor binding. HOLDS, machine-confirmed.**
+`Recognise` signed `<'recognise', S>` -- the person, not the key -- so one
+recognition could be assembled beside competing successors. Probe verified in
+16 steps: two accepted recoveries for different new keys off one honest
+recognition, no compromise. wire §4.1 describes this exact primitive and
+forbids it. Fixed: the recognition now names the successor, and a new lemma
+`recognition_binds_the_successor` checks it. Mutation-tested -- remove the
+binding and the new lemma falsifies while the two original ones still verify,
+which is why they never caught it.
+
+**TAM-05 `no_replay` is weaker than its name. HOLDS, demonstrated.** Deleting
+the `Eq` signature check from `Client_Finish`: `server_authentication`
+falsifies (so it does real work), `no_replay` still verifies. It follows from
+`St_Client_1` being linear plus `nc` fresh. Renamed
+`client_commit_is_injective`; the project's real replay concern (wire §11's
+0-RTT ban on Attach) recorded as out of scope.
+
+**TAM-06 compromise carve-outs unbounded in time. HOLDS, fix was free.** Six
+carve-outs of the form `Ex #k. Compromised(A) @ #k` with no ordering, so a
+later compromise could discharge an earlier authentication. All six now carry
+`& #k < #i`; all fourteen lemmas still verify.
+
+Also fixed: `"neither alone is recovery."` was attributed in quotation marks
+to design §9.1 and appears nowhere in the documents -- a paraphrase presented
+as a quote, missed by yesterday's attribution sweep because that checker only
+reported quotes found in the OTHER document. Replaced with wire §4.1's actual
+words.
+
+Lemma count 13 -> 14. All eight models pass. Model references 128, 0 flags.

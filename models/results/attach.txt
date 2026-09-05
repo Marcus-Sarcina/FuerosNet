@@ -110,14 +110,14 @@ lemma server_authentication:
   "∀ C S nc #i.
     (ClientFinish( C, S, nc ) @ #i) ⇒
     ((∃ #j. (ServerAccept( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
-     (∃ #k. Compromised( S ) @ #k))"
+     (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i.
   (ClientFinish( C, S, nc ) @ #i)
  ∧
   (∀ #j. (ServerAccept( S, C, nc ) @ #j) ⇒ ¬(#j < #i)) ∧
-  (∀ #k. (Compromised( S ) @ #k) ⇒ ⊥)"
+  (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
 solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
@@ -137,17 +137,17 @@ solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
   qed
 qed
 
-lemma no_replay:
+lemma client_commit_is_injective:
   all-traces
   "∀ C S nc #i1 #i2.
     ((ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)) ⇒
-    ((#i1 = #i2) ∨ (∃ #k. Compromised( S ) @ #k))"
+    ((#i1 = #i2) ∨ (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i1 #i2.
   (ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)
  ∧
-  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ⊥)"
+  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
 solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
@@ -176,7 +176,21 @@ next
   qed
 qed
 
-/* All wellformedness checks were successful. */
+/*
+WARNING: the following wellformedness checks failed!
+
+Formula terms
+=============
+
+  Lemma `client_commit_is_injective' uses terms of the wrong form:
+    `Free #i'
+  
+  The only allowed terms are public constants and bound node and
+  message variables. If you encounter free message variables, then
+  you might have forgotten a #-prefix. Sort prefixes can only be
+  dropped where this is unambiguous. Moreover, reducible function
+  symbols are disallowed.
+*/
 
 /*
 Generated from:
@@ -193,10 +207,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
 
-  processing time: 0.51s
+  processing time: 0.57s
+  
+  WARNING: 1 wellformedness check failed!
+           The analysis results might be wrong!
   
   attach_is_executable (exists-trace): verified (6 steps)
   server_authentication (all-traces): verified (7 steps)
-  no_replay (all-traces): verified (10 steps)
+  client_commit_is_injective (all-traces): verified (10 steps)
 
 ==============================================================================

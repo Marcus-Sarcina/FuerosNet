@@ -151,11 +151,11 @@ lemma currency_is_usable:
   exists-trace
   "Ex P S sk e #i. Accepted(P, S, sk, e) @ #i"
 
-// SANITY: expiry can actually block an acceptance -- i.e. the restriction
-// is not vacuously satisfiable by never expiring anything.  We show a trace
-// where an epoch expires and yet SOME acceptance (on a different, unexpired
-// epoch) still happens, confirming expiry and acceptance coexist in the
-// model rather than one silently excluding the other.
+// SANITY: an epoch can actually expire, so the NotExpiredBeforeAccept
+// restriction is not vacuously satisfiable by nothing ever expiring.
+// NOTE WHAT THIS DOES NOT SAY: it asserts only that Expired(e) occurs.  It
+// does not exhibit an acceptance alongside it, and an earlier comment here
+// claimed it did.
 lemma expiry_is_reachable:
   exists-trace
   "Ex e #x. Expired(e) @ #x"
@@ -165,14 +165,29 @@ lemma expiry_is_reachable:
 // exact key -- OR the patron's key was compromised.  Because Accept is
 // gated by NotExpiredBeforeAccept, an EXPIRED attestation cannot be
 // accepted; because the signature binds sk, an attestation for one key
-// cannot be replayed onto another.  Together: a rotated-away (old) key,
-// whose last attestation has expired, cannot be made to appear current.
+// cannot be replayed onto another.
+//
+// WHAT THIS DOES NOT PROVE, AND THE MODEL CANNOT CURRENTLY EXPRESS.  There
+// is no notion of a CURRENT key here: !SubjKey and !Epoch are both
+// persistent, so a patron can mint a BRAND-NEW attestation for a key the
+// subject rotated away from, stamped with an epoch that began after the
+// successor existed.  Tamarin confirms the trace exists with no compromise.
+// So this lemma establishes only that an accepted (S,sk,e) was signed for
+// that same (S,sk,e) and had not expired -- NOT that sk is current.
+//
+// design Section 12.6.5 keeps two rules apart and warns against conflating
+// them: "Expiry bounds what a stolen credential can spend; supersession,
+// once known, is what retires it from use." This model has the first and
+// not the second, which is exactly the conflation that section forbids.
+// Closing it needs a linear current-key binding that rotation consumes,
+// plus a relying party that can hold supersession evidence -- a rebuild
+// rather than a patch, and open work rather than a silent limitation.
 lemma currency_requires_unexpired_issuance:
   "All P S sk e #i.
      Accepted(P, S, sk, e) @ #i
      ==> ( ( (Ex #j. Issued(P, S, sk, e) @ #j & #j < #i)
            & not(Ex #x. Expired(e) @ #x & #x < #i) )
-         | (Ex #k. Compromised(P) @ #k) )"
+         | (Ex #k. Compromised(P) @ #k & #k < #i) )"
 
 // PATRON COMPROMISE, made available so the carve-out above is real rather
 // than decorative: the adversary can steal the patron's key, exactly as in
