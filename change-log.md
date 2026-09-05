@@ -8908,3 +8908,36 @@ condition makes it stronger and it still holds. And one public name could
 register several keys, so the name pinned nothing; a single-registration rule
 now applies everywhere except where a subject holding several keys over time
 is the point.
+
+### 2026-09-05 (a rebuild attempted, and reverted rather than trimmed)
+
+The currency model's missing notion of a current key was authorised for
+repair. The repair is structurally right and does not converge, so it is
+reverted and the gap stands.
+
+What was built matches the ruling: each party holds its own record of a
+subject's current key, never a global one, and a recovery adoption replaces
+that record for whichever parties receive it — delivery being the adversary's
+choice, which is also what being outside the horizon looks like without
+inventing a predicate for it. Issuance reads the patron's own record, the
+patron being a horizon member like any other, so the two properties the ruling
+collapsed into one mechanism stay collapsed. Successors are freshly drawn, per
+the rule that a rotation is to a new keypair and that a prior key must differ,
+which also leaves the successor relation acyclic.
+
+What would not prove is the lemma. Induction, helper invariants, a bounded
+instance and a reformulation were each tried, and the whole-file proof ran
+past twenty-five minutes. The cause is understood: issuance consumes and
+restores the patron's record without stamping it, so a backward search chains
+through unboundedly many restorations, and stamping each one proves that lemma
+while breaking another. The lemma was not weakened to make it pass. A property
+trimmed until it verifies is worth less than a stated gap, and the attempt is
+kept beside the working files so the next one begins where this stopped.
+
+Two things were kept. The regression gate now bounds every proof call and
+fails on a timeout, a non-converging theory having otherwise hung it
+indefinitely. And the other half of the rule turns out never to have been this
+model's to prove: that a party holding supersession evidence must stop serving
+is a client obligation, self-enforced, and already sits in the operator
+requirements. A rule aimed at a party you share no state with is a wish, and a
+symbolic model can assume such a rule or ignore it, never prove it.

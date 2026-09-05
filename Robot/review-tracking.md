@@ -5062,3 +5062,60 @@ predates that edit.
 
 17 lemmas, all verifying, all wellformedness clean. All eight models pass.
 Model references 132, 0 flags.
+
+---
+
+## Currency current-key rebuild -- ATTEMPTED, NOT LANDED (2026-09-05)
+
+Authorised by the author after a plan was agreed. **The rebuild is
+structurally complete and does not converge; it is reverted.** The suite is
+back to three currency lemmas with the gap stated, exactly as before, and the
+attempt is preserved as `Robot/currency-rebuild-attempt.spthy` so the next go
+does not start from scratch.
+
+**What was built, and it is right.** Per-party `View(A, S, k)` -- A's own
+record, never a global current key, which §16.1's per-observer rule and the
+no-shared-state rule both forbid. `Receive_Adoption` consumes and replaces a
+party's view; whether it fires for a given party is the adversary's choice,
+which is simultaneously the right Dolev-Yao shape and the right RHTN one --
+a party that never receives it keeps its old view, and that is what being
+outside the horizon looks like without inventing a horizon predicate.
+`Issue_Currency` reads the patron's own view, the patron being a horizon
+member itself, which is how the author's ruling collapsed two properties
+into one mechanism. Successors are drawn `Fr()`, per §9.1's "new keypair"
+and `wire-format.md` §4.1's "prior_key MUST differ", which also makes the
+successor relation acyclic.
+
+**What would not prove.** `no_issuance_after_overwrite` and
+`superseded_acceptance_predates_the_rotation`. Tried, in order: `use_induction`;
+`[reuse]` helper invariants; a bounded instance (one rotation per subject,
+which is how every model here works -- TLC runs three nodes); and a
+reformulation splitting view-CHANGE from view-RESTORATION events. Whole-file
+proof ran past 25 minutes; even a negative probe timed out at 300s.
+
+**The cause is identified.** `Issue_Currency` consumes and restores the
+patron's View without stamping it, so a backward search chains through
+unboundedly many restorations to find where the view was set. Stamping each
+restoration proves that lemma and breaks `view_never_returns` instead: the
+two want different event vocabularies. Reconciling them is the open work.
+
+**Two traps caught, worth recording because both would have shipped a false
+result.** `--prove=<name>` ASSUMES prior `[reuse]` lemmas rather than proving
+them, so `no_issuance_after_overwrite` "verified in 3 steps" while the helper
+it rests on timed out, and `view_never_returns` "verified in 26 steps" resting
+on a helper that never proved either. Neither was a result. **Always run the
+whole file.**
+
+**The other half was never this model's to prove.** "A party holding
+authenticated supersession evidence MUST NOT continue serving" is a client
+obligation, self-enforced, and already lives at
+`infra-client-requirements.md`: *"Stop serving a binding you have verified
+superseded"*. §1.1's test applies -- a rule aimed at a party you share no
+state with is a wish -- and a symbolic model can assume such a rule or ignore
+it, never prove it. That is not a gap in the model; it is the correct
+division.
+
+**Kept from the attempt**: `run-all.sh` now bounds every Tamarin call
+(`TAMARIN_TIMEOUT`, default 600s) and fails on a timeout. A non-converging
+theory would otherwise hang the gate forever, which is exactly what happened
+here.

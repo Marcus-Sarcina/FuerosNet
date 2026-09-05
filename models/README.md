@@ -436,6 +436,48 @@ then-diagnose loop *is* the value of the exercise.
 
 ---
 
+## Open: the currency current-key rebuild
+
+`currency.spthy` still has no notion of a *current* key, so it cannot prove
+that a patron will not mint a fresh attestation for a key its subject rotated
+away from. A rebuild was attempted on 2026-09-05 and **reverted**, because it
+does not converge.
+
+The construction is right and is preserved at
+`Robot/currency-rebuild-attempt.spthy`: a per-party `View(A, S, k)` — never a
+global current key, which per-observer trust forbids — replaced by a recovery
+adoption for whichever parties receive it, with delivery under the adversary's
+control so that "outside the horizon" needs no predicate of its own. What will
+not prove is the lemma. Induction, `[reuse]` helpers, a bounded instance and a
+reformulation splitting view-change from view-restoration were each tried; the
+whole-file proof ran past 25 minutes.
+
+**The cause is known**, which is the useful part for whoever picks it up:
+`Issue_Currency` consumes and restores the patron's view without stamping it,
+so a backward search chains through unboundedly many restorations. Stamping
+each restoration proves that lemma and breaks the other; the two want
+different event vocabularies.
+
+**The lemma was not weakened to make it pass.** A property trimmed until it
+verifies is worth less than a stated gap.
+
+Two traps from that attempt are worth knowing before repeating it:
+`--prove=<name>` **assumes** prior `[reuse]` lemmas rather than proving them,
+so two lemmas "verified" in 3 and 26 steps while the helpers they rested on
+timed out. Always run the whole file. And `run-all.sh` now bounds every
+Tamarin call (`TAMARIN_TIMEOUT`, default 600s), because a non-converging
+theory otherwise hangs the gate indefinitely.
+
+The **other half** of §12.6.5's rule was never this model's to prove: *"a
+party holding authenticated supersession evidence MUST NOT continue serving"*
+is a client obligation, self-enforced, and lives at
+`infra-client-requirements.md` — *"Stop serving a binding you have verified
+superseded"*. §1.1's test applies: a rule aimed at a party you share no state
+with is a wish, and a symbolic model can assume such a rule or ignore it,
+never prove it.
+
+---
+
 ## Environment
 
 Built and checked 2026-09-04 with user-local installs (no root required):

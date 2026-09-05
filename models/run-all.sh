@@ -48,8 +48,16 @@ done
 echo "=== 3. Tamarin symbolic protocol models ==="
 for t in attach currency recovery ceremony; do
   out="$RESULTS/$t.txt"
-  PATH="$MAUDE_DIR:$PATH" "$TAMARIN" --prove "$HERE/tamarin/$t.spthy" \
-      > "$out" 2>&1
+  # A TIMEOUT, because a theory whose search does not converge would
+  # otherwise hang this gate forever -- which happened while rebuilding the
+  # currency model on 2026-09-05.  A proof needing longer than this needs a
+  # hint, not a longer wall clock.
+  PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
+      "$TAMARIN" --prove "$HERE/tamarin/$t.spthy" > "$out" 2>&1
+  if [ $? -eq 124 ]; then
+    echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"
+    fail=1; continue
+  fi
   # Every lemma line must read "verified"; any "falsified" is a failure.
   # A WELLFORMEDNESS failure is also a failure, and this is why: Tamarin
   # reports one as a WARNING, exits 0, and still prints "verified" for the
