@@ -29,7 +29,7 @@ min-cut trust metric. Runs the four claims §16.2 argues on paper:
 | Experiment | Design claim | Result |
 |---|---|---|
 | E1 | distance-decay diverges unless λ < 1/f | the 0.5/0.05 figures reproduce (~19,500× vs ~2×), and the exact boundary fλ=1 is classified as divergent (it grows linearly) |
-| E2 | a region is bounded by its cut regardless of population | best individual score stays ≤ the boundary capacity as the fake region grows to 341 identities |
+| E2 | a region is bounded by its cut regardless of population, **where its entry lies beyond the horizon** | best individual score stays ≤ the boundary capacity as the fake region grows to 341 identities. The same region entered from *inside* the horizon is unthrottled instead — measured, and reported, because that is the bound's edge rather than a violation of it (§16.2.1) |
 | E3 | **setwise conservation** (normative, 2026-09-03), **beyond the horizon** | a region of 4→32 identities behind **one acquired peering edge** from a horizon member — visible, outside the horizon, sharing one cut the attacker bought once. The independent-per-target sum grows with population (32→256) while the conserving joint saturates at the cut (4→8→8→8) and general demands deliver 8 of 256 asked; the same region gated behind a node *outside* the observer's horizon is invisible and cannot inflate anything |
 | E4 | edge-influence amortises (§16.3.1) | with horizons over adoption+sibling scope only, one visible peering edge influences several observers and no observer that cannot see it — every cross-tree placement enumerated. **Demonstrated in one toy topology, not measured as economics**: it shows amortisation exists, not how many edges reach a target fraction of a population |
 
@@ -192,6 +192,52 @@ then-diagnose loop *is* the value of the exercise.
   consideration order breaks **true ties only** — as *reference policy, not a
   network invariant*, since per-observer trust (§16.1) means no party
   consumes another's computation.
+
+- **`flow_metric` (a fourth review found E2 passing on a deleted edge, and
+  `reach` leaking invisible edges).** Two High findings, both confirmed by
+  execution before anything was changed.
+
+  **E2 had been confirming its bound by omitting an adoption it said had
+  happened.** The experiment has an honest boundary node adopt the fake root
+  and puts that edge in the *capacity* graph, then builds the *scope* graph
+  from the honest tree alone — so flow knew about the adoption and scope
+  pretended it had not occurred. Restore the edge and the fake root sits two
+  scope edges from the observer, inside its horizon, where §16.2.1 says the
+  metric does not ration: the score goes from 10 to unthrottled at every
+  population. The bound was produced by the omission. E2 now places the
+  boundary at the horizon's edge, carries the entry adoption in scope, and
+  asserts the fake root is outside the horizon before measuring — **and runs
+  the inside-horizon placement as a second case**, because "the metric does
+  not bound here" is the claim's shape rather than a failure of it. §17.3's
+  third leg is qualified to match; legs 1 and 2 carry no such condition.
+
+  **`reach` made peering visibility transitive, which is the one thing it
+  must not be.** §16.3 confines a peering record to "the two peers' horizons
+  and nowhere else", and §16.3.1 turns that into the security property: an
+  edge an observer cannot see cannot raise that observer's cut. The outward
+  expansion added every peering edge incident to a newly discovered node
+  without re-applying the visibility rule. Minimal counterexample, four
+  nodes: `O—H` adoption, `H—G` peering visible, `G—X` peering invisible;
+  at reach=0 X's standing is 0, at reach=1 it is 8. The fix follows the
+  author's own words for what `reach` models — *"you can discern some of a
+  foreign subtree's structure from **locator data** ... in that foreign
+  **patronage** graph"* — so expansion walks hierarchical edges only, and a
+  peering edge enters by the endpoint-in-horizon rule or not at all.
+
+  **The same leak existed one layer down**, in `landscape_distance`, which
+  folded the caller's raw `peer_edges` into its outward adjacency. An edge
+  absent from the observer's capacity graph could still shorten a landscape
+  distance, and since node capacity falls with distance, that raised a
+  relay's throughput: measured at 2 → 4 on a chain whose deepest relay moved
+  from distance 4 to distance 2. Distance is now computed from the same
+  graph the flow is.
+
+  Both leaks are regression-tested and **all four fixes are mutation-tested**
+  — restoring each defect makes a named assertion fail — except one, stated
+  because it does not: E2's entry adoption is unobservable at the corrected
+  boundary placement, since the fake root is outside the horizon with or
+  without it. It is the inside-horizon case that discriminates, and that one
+  does.
 
 - **`flow_metric` (a third review found the horizon was not collapsed, and
   E3 had been passing for the wrong reason).** A cross-family review reported

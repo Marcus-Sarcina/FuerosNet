@@ -320,9 +320,28 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges, reach=0):
         if u in hz or v in hz:                       # §16.3.1 visibility rule
             sub.add_edge(u, v, c)
             sub.add_edge(v, u, c)
-    # Outward shells: every edge kind counts the same past the origin
-    # (§16.2.1), so this walks adoption and peering alike.  `expanded` is
-    # what stops a node's edges being added twice -- add_edge ACCUMULATES
+    # Outward shells: HIERARCHICAL EDGES ONLY.  The author's ruling names the
+    # mechanism precisely -- *"you can discern some of a foreign subtree's
+    # structure from LOCATOR DATA, so it is entirely plausible that you could
+    # know that some newly encountered node is two or three edges from a
+    # PoPmate in that foreign PATRONAGE graph"* -- and locators expose
+    # patronage structure, not peering records.
+    #
+    # PEERING VISIBILITY DOES NOT COMPOSE, and this is the security property,
+    # not a modelling nicety.  §16.3: a peering record is visible "inside the
+    # two peers' horizons and NOWHERE ELSE"; §16.3.1: an edge an observer
+    # cannot see cannot raise that observer's cut.  So a peering edge enters
+    # this graph by ONE route only -- the endpoint-in-horizon rule applied
+    # above -- and learning a node through some other relationship never
+    # confers sight of the peering records around it.
+    #
+    # A cross-family review found the earlier version expanding over peering
+    # too, and gave the minimal counterexample: with O--H adoption, peering
+    # H--G visible and peering G--X invisible, reach=1 pulled G--X in and
+    # moved X's standing from 0 to 8 -- an edge the design says O never
+    # learns about, changing O's own computation.
+    #
+    # `expanded` stops a node's edges being added twice: add_edge ACCUMULATES
     # capacity, so re-expanding a node would silently double its edges.
     expanded = set(hz)
     for _ in range(reach):
@@ -332,10 +351,6 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges, reach=0):
             for v, c in flow.cap.get(u, {}).items():
                 if c > 0 and sub.cap.get(u, {}).get(v, 0) == 0:
                     sub.add_edge(u, v, c)
-            for (a, b, c) in peer_edges:
-                if (a == u or b == u) and sub.cap.get(a, {}).get(b, 0) == 0:
-                    sub.add_edge(a, b, c)
-                    sub.add_edge(b, a, c)
     return sub
 
 
@@ -428,24 +443,36 @@ def landscape_distance(scope_adj, flow, observer, peer_edges):
     adjacency for the outward walk.
     """
     dist = {n: 1 for n in horizon(scope_adj, observer)}   # the horizon shell
+    # The observer's OWN counterparties are at distance 1 whether or not they
+    # are in the horizon.  Reading them off `peer_edges` is sound where the
+    # outward walk below is not: an edge incident to the observer is one the
+    # observer is a party to, so it cannot be invisible to them.
     for (u, v, _c) in peer_edges:                          # own counterparties
         if u == observer:
             dist.setdefault(v, 1)
         if v == observer:
             dist.setdefault(u, 1)
     dist[observer] = 0                                     # the origin, alone
-    # Adjacency for the outward walk: EVERY edge counts the same beyond the
-    # origin -- adoption, sibling, peering, and (in a richer model) explicit
-    # PoP edges alike.
+    # Beyond the horizon EVERY edge counts the same -- adoption, sibling,
+    # peering, and (in a richer model) explicit PoP edges alike (§16.2.1).
+    # But counting the same is not being VISIBLE the same:
+    # THE ADJACENCY IS THE OBSERVER'S OWN GRAPH, NOTHING WIDER.  `flow` is
+    # what this observer can see (visible_flow_subgraph in the RHTN-shaped
+    # experiments), and the outward walk uses only that.  An earlier version
+    # also folded in the raw `peer_edges` list here -- the caller's omniscient
+    # view -- which let an edge the observer cannot see SHORTEN a landscape
+    # distance and so raise a relay's node capacity, without that edge ever
+    # entering the capacity graph.  Measured by a cross-family review: a chain
+    # whose deepest relay sat at distance 4 (capacity 2) had it moved to
+    # distance 2 (capacity 8) by one invisible edge, lifting the target's
+    # standing from 2 to 4.  Distance is computed from the same graph the flow
+    # is, or §16.3.1's observer-relative bound is not observer-relative.
     acq = {u: set() for u in flow.cap}
     for u, nbrs in flow.cap.items():
         for v, c in nbrs.items():
             if c > 0:
                 acq[u].add(v)
                 acq.setdefault(v, set()).add(u)
-    for (u, v, _c) in peer_edges:
-        acq.setdefault(u, set()).add(v)
-        acq.setdefault(v, set()).add(u)
     frontier = {n for n, d0 in dist.items() if d0 == 1}
     d = 1
     while frontier:
@@ -779,17 +806,56 @@ def attach_fake_region(g, boundary_node, width, depth):
 
 
 def experiment_cut_bound(rng, report):
+    """E2, with the entry adoption in SCOPE as well as in the flow graph.
+
+    THE BOUND IS A BEYOND-THE-HORIZON CLAIM, and the experiment has to be
+    built where the claim applies.  §16.2.1: the metric does not ration
+    inside the horizon, so a region whose entry point the observer can reach
+    in two scope edges is unthrottled and no cut bounds it -- correctly, and
+    by design: inside your own subnet you are relying on participation
+    (§16.2.1) and on hierarchy-specific remedies like disavowal (§12.7),
+    not on the flow metric.
+
+    An earlier version placed the boundary on a DIRECT CHILD of the observer
+    and then built the scope graph from the honest `children` table only,
+    which silently dropped the very adoption `attach_fake_region` says
+    occurred.  A cross-family review caught it: restore that one edge and
+    the fake root sits two scope edges from the observer -- inside the
+    horizon -- so its score is UNTHROTTLED and E2's "CONFIRMED" evaporates.
+    The bound was being produced by the omission, not by the metric.
+
+    So the boundary here sits at scope distance 2 (the horizon's edge) and
+    its adoption of the fake root IS in scope, putting the fake root at
+    distance 3: outside, where the cut is what answers.  The fake region's
+    OWN internal adoptions stay out of scope, which is faithful -- the
+    observer holds topology for its horizon (§15.1), not for a stranger's
+    subtree.
+    """
     report.append("E2: the individual cut bound (design 16.2, 17.3)")
     base, nodes, children = build_tree(rng, depth=3, fanout=3)
     observer = nodes[0]
-    boundary = nodes[1]
+    honest_scope = scope_adjacency(nodes, children)
+    # The boundary sits at scope distance exactly 2 -- the horizon's edge --
+    # so the node it adopts lands at 3, just outside.
+    ring = {observer}
+    shell = {observer}
+    for _ in range(2):
+        shell = {w for v in shell for w in honest_scope[v]} - ring
+        ring |= shell
+    boundary = min(shell)                 # deterministic pick from the ring
     for width, depth in [(2, 2), (3, 3), (4, 4)]:
         g = base.copy()
         fakes = attach_fake_region(g, boundary, width, depth)
-        # Scope from the HONEST tree only: the fake region's internal
-        # adoptions are not edges this observer holds topology for, so they
-        # confer no scope and the fakes sit beyond the horizon.
-        scope = scope_adjacency(list(g.cap.keys()), children)
+        # Scope INCLUDES the entry adoption -- flow and scope must agree about
+        # an edge the experiment says exists -- and excludes the fake region's
+        # internal adoptions, which this observer holds no topology for.
+        kids = {k: list(v) for k, v in children.items()}
+        kids.setdefault(boundary, []).append("FAKE")
+        kids["FAKE"] = []
+        scope = scope_adjacency(list(g.cap.keys()), kids)
+        assert "FAKE" not in horizon(scope, observer), \
+            "the fake root must sit OUTSIDE the horizon or the metric does " \
+            "not ration it and there is no bound to test"
         best = max(score_independent(g, observer, t, scope) for t in fakes)
         ok = best <= HIER_CAP
         report.append(
@@ -798,6 +864,40 @@ def experiment_cut_bound(rng, report):
             f"{'HOLDS' if ok else 'VIOLATED'}")
         assert ok, "individual cut bound violated -- investigate"
     report.append("  population never moved the individual bound: CONFIRMED")
+
+    # --- WHERE THE BOUND STOPS APPLYING, stated as a measurement -----------
+    # The same construction with the boundary on a DIRECT CHILD of the
+    # observer.  With the entry adoption faithfully in scope, the fake root
+    # is then two scope edges away -- INSIDE the horizon -- and is
+    # unthrottled.  That is not a violation of §16.2's bound; it is the
+    # bound's edge: §16.2.1 says the metric does not ration inside the
+    # horizon, so there is nothing there for a cut to bound.  What protects
+    # an observer there is participation in its own subnet (§16.2.1) and
+    # hierarchy-specific remedy (§12.7), not flow.
+    #
+    # This case is what makes the placement above load-bearing rather than
+    # incidental: run E2 at a boundary inside the horizon and it "fails",
+    # and the failure is the design speaking correctly.
+    inside_boundary = children[observer][0]
+    g = base.copy()
+    fakes = attach_fake_region(g, inside_boundary, 2, 2)
+    kids = {k: list(v) for k, v in children.items()}
+    kids.setdefault(inside_boundary, []).append("FAKE")
+    kids["FAKE"] = []
+    scope_inside = scope_adjacency(list(g.cap.keys()), kids)
+    assert "FAKE" in horizon(scope_inside, observer), \
+        "a direct child's adoptee must be inside the observer's horizon"
+    inside_best = max(score_independent(g, observer, t, scope_inside)
+                      for t in fakes)
+    assert inside_best == UNTHROTTLED, \
+        "inside the horizon the metric must not ration -- if this bounds, " \
+        "the horizon is being throttled somewhere it should not be"
+    report.append(
+        "  the same region entered from INSIDE the horizon is unthrottled, "
+        "not bounded --")
+    report.append(
+        "  the bound is a BEYOND-the-horizon claim, and this is its edge "
+        "(design 16.2.1)")
     report.append("")
 
 
@@ -949,6 +1049,59 @@ def experiment_setwise(rng, report):
         f"  the same {len(fakes)} gated behind a node OUTSIDE the horizon: "
         f"{len(leaked)} visible -- invisibility is the conservative direction")
     assert leaked == [], "identities beyond an invisible edge leaked in"
+
+    # --- INVISIBILITY DOES NOT COMPOSE (design §16.3, §16.3.1) -------------
+    # The case above uses ONE isolated invisible edge, and cannot catch a
+    # leak that needs a VISIBLE edge to trigger it: no legitimate edge pulls
+    # an endpoint into the frontier, so a faulty outward expansion never
+    # fires.  A cross-family review supplied the case that does, and it is
+    # kept here because it is the security property, not a nicety --
+    # §16.3.1: an edge an observer cannot see cannot raise that observer's
+    # cut, at any reach.
+    #
+    #     O --adoption-- H          H is in O's horizon
+    #     H --peering--  G          VISIBLE to O (an endpoint is in-horizon)
+    #     G --peering--  X          INVISIBLE (neither endpoint is)
+    #
+    # Learning G through the first edge must not confer sight of the second.
+    n2, c2 = ["O", "H"], {"O": ["H"], "H": []}
+    g2 = FlowGraph()
+    g2.add_edge("O", "H", HIER_CAP); g2.add_edge("H", "O", HIER_CAP)
+    s2 = scope_adjacency(n2, c2)
+    chain = [("H", "G", PEER_CAP), ("G", "X", PEER_CAP)]
+    for r in (0, 1, 2, 3):
+        v2 = visible_flow_subgraph(g2, s2, "O", chain, reach=r)
+        assert "X" not in v2.cap, \
+            f"a peering edge with no in-horizon endpoint became visible at reach={r}"
+        assert score_independent(v2, "O", "X", s2, chain) == 0, \
+            f"an invisible peering edge carried standing at reach={r}"
+    report.append(
+        "  a peering edge one hop past a VISIBLE one stays invisible at every "
+        "reach tested (0-3):")
+    report.append(
+        "  visibility does not compose -- learning a node confers no sight of "
+        "the records around it")
+
+    # --- DISTANCE IS COMPUTED FROM THE OBSERVER'S OWN GRAPH ----------------
+    # The same property one layer down.  An edge absent from the observer's
+    # capacity graph must not shorten a landscape distance either: node
+    # capacity falls with distance, so a shortened distance raises a relay's
+    # throughput and lifts standing without any capacity edge being added.
+    g3 = FlowGraph()
+    g3.add_edge("O", "H", HIER_CAP); g3.add_edge("H", "O", HIER_CAP)
+    s3 = scope_adjacency(["O", "H"], {"O": ["H"], "H": []})
+    seen = [("H", "A", PEER_CAP)]
+    v3 = visible_flow_subgraph(g3, s3, "O", seen, reach=0)
+    for u, v in (("A", "B"), ("B", "C"), ("C", "T")):
+        v3.add_edge(u, v, PEER_CAP); v3.add_edge(v, u, PEER_CAP)
+    ghost = seen + [("H", "C", PEER_CAP)]      # never enters the capacity graph
+    honest = score_independent(v3, "O", "T", s3, seen)
+    haunted = score_independent(v3, "O", "T", s3, ghost)
+    assert honest == haunted, \
+        "an edge absent from the observer's graph changed its computed standing"
+    report.append(
+        f"  an edge absent from the observer's graph moves nothing: standing "
+        f"{honest} either way")
 
     # --- The reference allocation rule, ALL THREE PASSES (design §16.4) ----
     # Pass 0: available flow ranks first -- it is the metric itself.

@@ -8686,3 +8686,49 @@ the current text. Two stale claims found in the simulation's own commentary —
 one describing the horizon as sitting at the origin, one asserting that
 nothing turned on telling presence edges from peering edges, which the
 visibility difference had since disproved.
+
+### 2026-09-05 (the cut bound has a shape, and it is the horizon boundary)
+
+A fifth cross-family review of the trust-metric simulation filed two
+findings. Both held, and both were confirmed by execution before anything
+moved.
+
+**The individual cut-bound experiment had been confirming its result by
+deleting an edge it said existed.** An honest boundary node adopts the fake
+root; that adoption went into the capacity graph and not into the scope
+graph, so flow knew the adoption had happened while scope pretended it had
+not. Restore it and the fake root sits two scope edges from the observer —
+inside its horizon, where the metric does not ration — and the bound goes
+from ten to unthrottled at every population tested. The experiment was
+measuring the omission.
+
+**The bound is intact; what was wrong was where it was being tested.** The
+boundary now sits at the horizon's edge with its adoption carried in scope,
+so the fake root lands just outside, and the experiment asserts that before
+it measures anything. The inside-horizon placement is kept as a second case
+rather than avoided: a region entered from inside an observer's horizon is
+unthrottled, and that is the claim's edge rather than a violation of it.
+Inside your own subnet you are relying on participation, and the remedy for
+a subordinate who adopts badly is disavowal, not a flow bound. The security
+analysis is qualified to match — flow-limited trust bounds a single-entry
+region where the entry lies beyond the observer's horizon. The other two
+Sybil-resistance legs carry no such condition and apply everywhere.
+
+**Peering visibility had been made transitive by the reach parameter, which
+is the one property it must not have.** A peering record is visible inside
+the two peers' horizons and nowhere else, and the observer-relative bound
+rests on it: an edge an observer cannot see cannot raise that observer's
+cut. The outward walk had been admitting every peering edge around each
+newly discovered node. Four nodes suffice to show the cost — an adoption, a
+visible peering edge, and an invisible one beyond it — and the invisible
+edge moved a stranger's standing from nothing to eight. What reach models is
+structure discernible from locator data in a foreign patronage graph, so the
+walk now follows hierarchical edges only, and a peering edge enters by the
+endpoint rule or not at all.
+
+**The same leak ran one layer deeper.** The distance calculation had been
+folding in the caller's whole peering list, so an edge absent from the
+observer's own graph could still shorten a landscape distance — and because
+throughput falls with distance, a shortened distance raises a relay's
+capacity without any edge being added. Distance is now taken from the same
+graph the flow is, which is what observer-relative has to mean.

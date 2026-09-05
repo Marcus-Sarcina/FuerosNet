@@ -4706,3 +4706,78 @@ counts that are escaped pipes inside formulas.
 Final: references 1,963 across the five specification documents and Robot/
 citations across all six, 0 flags. All eight models pass. Test vectors: ALL
 CHECKS PASS. Seeds 1-25 pass on the simulation.
+
+---
+
+## Cross-family review 5 of the trust-metric simulation (2026-09-05)
+
+Reviewed at SHA-256 `44dcaba7...e6b506`; hash matched the committed file.
+Reviewer ran seeds 1, 2, 7, 42 and cross-validated `max_flow` against
+exhaustive minimum cuts on 1,800 random directed graphs -- zero
+discrepancies. That is the fourth independent validation of the max-flow core
+(700/600/600/1,800 graphs, four reviewers, no discrepancies). Both findings
+verified by execution before any change.
+
+**F1 -- E2 omits the entry adoption from scope. Verified, High, holds.**
+`attach_fake_region` has `boundary` adopt `FAKE` and puts the edge in the
+capacity graph; `experiment_cut_bound` then built scope from the honest
+`children` table, dropping it. With `boundary = nodes[1]` (a direct child),
+restoring that one edge puts `FAKE` two scope edges from the observer --
+inside the horizon -- and `score_independent` returns UNTHROTTLED instead of
+10, at all three populations (reproduced exactly: 10/10/10 -> 1e9/1e9/1e9).
+The comment defending the omission covers the fake region's INTERNAL
+adoptions, which is fair, but not the entry edge, which this observer is
+precisely one of the parties that holds.
+
+Fixed as the reviewer proposed and then some: boundary moved to scope
+distance 2 so `FAKE` lands at 3, entry adoption carried in scope, and an
+assertion that `FAKE` is outside the horizon *before* measuring. Added the
+inside-horizon placement as a positive second case asserting UNTHROTTLED --
+the claim's edge stated as a measurement rather than avoided.
+
+**Design consequence, applied**: §17.3's third leg said flow-limited trust
+bounds "any single-entry region ... regardless of its size", which is
+broader than §16.2.1 permits. Qualified to *where the entry lies beyond the
+observer's horizon*, with the reason (participation, and disavowal as the
+in-subnet remedy) and an explicit note that legs 1 and 2 carry no such
+condition. This applies the author's existing landscape ruling to a sentence
+that predates it rather than deciding anything new, but it NARROWS A
+SECURITY CLAIM and is flagged as such.
+
+**F2 -- `reach` and `landscape_distance` admit invisible peering edges.
+Verified, High, holds. Introduced by this assistant earlier the same day.**
+Two independent manifestations, both reproduced:
+
+  (a) `visible_flow_subgraph`'s outward walk added every peering edge
+      incident to a discovered node without re-applying §16.3.1's
+      endpoint-in-horizon rule. Counterexample (4 nodes): O--H adoption,
+      H--G peering visible, G--X peering invisible. reach=0 -> X standing 0;
+      reach=1 -> X standing 8.
+  (b) `landscape_distance` folded the caller's raw `peer_edges` into its
+      outward adjacency, so an edge absent from the capacity graph could
+      shorten a distance and raise a relay's node capacity. Reproduced at
+      2 -> 4 (deepest relay moved from distance 4/cap 2 to distance 2/cap 8).
+
+Fixed from the author's own words for what `reach` models -- *"discern some
+of a foreign subtree's structure from LOCATOR DATA ... in that foreign
+PATRONAGE graph"* -- so the walk follows hierarchical edges only and peering
+enters by the endpoint rule alone; and `landscape_distance` now takes its
+adjacency from the observer's graph, using `peer_edges` only for
+observer-incident edges, which cannot be invisible to a party to them.
+
+**Why the existing tests missed it**, which the reviewer diagnosed correctly:
+E3's invisibility case uses one ISOLATED invisible edge, so no visible edge
+ever pulls an endpoint into the frontier and the faulty expansion never
+fires. Both leaks now have regression tests -- reach 0..3 on the composing
+case, and the ghost-edge distance case.
+
+**Mutation-tested**, four of five discriminating: restoring the peering
+expansion fails; restoring the raw-`peer_edges` leak fails; dropping the
+entry adoption from the inside-horizon case fails; moving that boundary back
+outside fails. The one that does NOT discriminate is stated rather than
+papered over -- dropping the entry adoption from the corrected OUTSIDE
+placement changes nothing, since `FAKE` is beyond the horizon with or without
+it. The inside case is what carries that finding.
+
+Seeds 1-30 pass. All eight models green. References 1,965 across the five
+specification documents, 0 flags; 112 across 13 model files, 0 flags.

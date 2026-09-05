@@ -6200,7 +6200,15 @@ contains it, never only one.
    - Decision: demand IPv4 for now and take the security as a bonus, while
      making no engineering decision that precludes IPv6 later.
 3. **Flow-limited trust** bounds what any single-entry region can claim
-   regardless of its size (§16.2).
+   regardless of its size (§16.2) — **where the entry lies beyond the
+   observer's horizon**, which is where the metric rations at all
+   (§16.2.1). A region entered from *inside* an observer's horizon is not
+   bounded by this leg and is not meant to be: there the observer is
+   relying on participation in its own subnet rather than on flow, and the
+   remedy for a subordinate who adopts badly is hierarchy-specific
+   (§12.7's disavowal), not metric. **The bound has a shape, and its shape
+   is the horizon boundary** — legs 1 and 2 above carry no such
+   qualification and apply everywhere.
 
 ## 18. Accepted risks
 
