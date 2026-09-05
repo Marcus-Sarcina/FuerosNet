@@ -36,8 +36,6 @@ nothing happened. Ordering was always correct; the dates were not.
 | Review passes 0.1–0.5 | **14 Aug** | Transcript, ends 05:59 |
 | Everything since | **17 Aug** | After the 16 Aug compaction; **this session spans 16–17 August and its entries are not separately dated** |
 
-
-
 **Structure.** Each day is a `##` heading and each entry a `###` beneath it, so a Markdown outline gives days that collapse to entries. Entry headings keep the full `date (topic)` label they have always carried, so citations of the form *"the 2026-08-24 entry"* still resolve.
 
 ## 2026-08-12
@@ -4061,11 +4059,11 @@ for every value type and is what bounds parser work.
 recovery adoption is ~42 KB — the second-largest object in the protocol — and the
 size table had no row for it.
 
-### 2026-08-26 (root reserved for the design; process files moved to `Robot/`)
+### 2026-08-26 (root reserved for the design; process files moved to `Robot`)
 
 The root now holds exactly the six documents that constitute the design —
 `network-design.md`, `wire-format.md`, the three requirements documents and this
-log — plus `CLAUDE.md`. Moved to `Robot/`: `authoring-conventions.md`,
+log — plus `CLAUDE.md`. Moved to `Robot`: `authoring-conventions.md`,
 `review-plan.md`, `review-tracking.md`, `resource-interaction-requirements.md` and
 `network-design-checkpoint-2026-08-12.md`.
 
@@ -4076,13 +4074,13 @@ search, do not invent justifications, ask whether the component is required — 
 those are worth nothing arriving late.
 
 **The invariant this encodes:** a root document may cite another root document;
-**no root document may cite anything in `Robot/`.** The design must not depend on a
+**no root document may cite anything in `Robot`.** The design must not depend on a
 working file for its own integrity — the failure the 2026-08-25 register move
 produced and this layout now makes structurally visible. Verified: zero citations
-from the five root design documents into `Robot/`.
+from the five root design documents into `Robot`.
 
-Live cross-references updated in `CLAUDE.md`, `Robot/authoring-conventions.md` and
-`Robot/review-plan.md`. **The change log's eighteen mentions are left as written**,
+Live cross-references updated in `CLAUDE.md`, `authoring-conventions` and
+`review-plan`. **The change log's eighteen mentions are left as written**,
 being a historical record of what those files were called when the entries were
 made. Moves were made with `git mv`, so history follows the files.
 
@@ -4418,7 +4416,7 @@ object", "withdrawn 2026-08-26…" — deleted or converted to forward statement
 where the why-not is load-bearing (no activity summaries, no veto, no notice
 period, witness countersignatures deliberately not carried). §19's
 register-method paragraphs, which taught discipline by citing withdrawn findings,
-moved to `Robot/authoring-conventions.md`; the design keeps one functional line —
+moved to `authoring-conventions`; the design keeps one functional line —
 numbers are not reused, missing ones resolve here.
 
 **Wire numbering compacted, feasible precisely because nothing is published**:
@@ -5533,7 +5531,7 @@ invisible to a single-line grep.
 documents** (author). The de-linting pass of 2026-08-28 stripped the dates and kept
 the markers; this removes the markers on the same reasoning, stated by the author as
 the rule the earlier pass should have followed: *if something is undecided it belongs
-in the `Robot/` set, and if it is decided it is just part of the current design.
+in the `Robot` set, and if it is decided it is just part of the current design.
 Everything was decided at some point, so there is nothing to flag.* Removed: 220 from
 `wire-format.md`, 65 from `network-design.md`, 3 from `resource-requirements.md`, 1
 from `infra-client-requirements.md`. `wire-format.md`'s front-matter **provenance
@@ -5779,10 +5777,10 @@ root documents returned **112 raw hits**, judged individually rather than swept.
 **Sixteen were real**; the rest were the detectors being over-broad, which is worth
 recording so the next pass does not re-litigate them.
 
-**Two root documents cited `Robot/`, which the working rules forbid outright.** §20.2
+**Two root documents cited `Robot`, which the working rules forbid outright.** §20.2
 called its assumptions *"the natural targets for the Stage 1 simulations in the
 review plan"*, and §23.3 opened *"the implementation passes (review plan 0.6) ask can
-this be written?"* Both name `Robot/review-plan.md` — a design document depending on
+this be written?"* Both name `review-plan` — a design document depending on
 a working file for its own argument. Rewritten to say the same thing without the
 citation: assumptions are targets for simulation, and implementing a mechanism asks
 whether it can be written.
@@ -5827,7 +5825,7 @@ line; `wire-format.md`'s status line keeps **Status: Draft** and drops *"Last re
 The other three root documents never had either, so the set is now consistent.
 
 **The root set carries no date tokens at all.** The 2026-08-28 pass took them from 86
-to 2 and kept those two as document metadata; this removes the category. `Robot/`'s
+to 2 and kept those two as document metadata; this removes the category. `Robot`'s
 review plan had already caught the failure mode — *"front matter goes stale silently…
 nobody looks at the top of a document they already know"* — and prescribed adding the
 header to the grep list. **Removing the surface beats checking it**, which is the
@@ -6417,7 +6415,7 @@ item ever since, which is how it reached this session's open list.
 six adversary roles are attacks on the mechanism, and **0.2 already covers it** —
 that pass looks for *"a rule stated one way in one section and differently in
 another"*, and a vignette contradicting the section it illustrates is exactly that.
-`Robot/authoring-conventions.md` supplies the rule 0.2 would apply: *"a mismatch
+`authoring-conventions` supplies the rule 0.2 would apply: *"a mismatch
 between vignette and specification is a defect in the vignette."*
 
 **It never had a section body**, in any version of the plan at either path — checked
@@ -6456,7 +6454,7 @@ history — recorded as something an evaluator may weigh, not as a rule.
 ### 2026-08-31 (de-lint over 0.8.3–0.8.6 and the consistency work)
 
 Six detectors
-over the five root documents. **Dates, `Robot/` citations, markers and drafting
+over the five root documents. **Dates, `Robot` citations, markers and drafting
 narration all returned zero** — the categories that dominated the 2026-08-28 and
 08-29 passes did not recur, so the rounds since were drafted clean of them. **Six
 sites needed work**, all in the two categories a spec is likeliest to grow late:
@@ -6542,7 +6540,7 @@ privacy analysis had grown to be most of the chapter. No document cited the old 
 The migration existed as one table cell reading *"the rest in current order"*. 0.9-before
 returned reorderings that belong inside it rather than before it — every one renumbers
 sections, and a renumber is what the two-phase placeholder method exists to make safe —
-so they are folded into an executable spec in `Robot/review-plan.md` rather than applied
+so they are folded into an executable spec in `review-plan` rather than applied
 piecemeal. **Four decisions, all the author's.**
 
 **Vocabulary moves to §4.** It was §2 while Appendix A and §1 already used its terms, and Appendix A is
@@ -6595,7 +6593,7 @@ two-phase placeholder scheme**: the collision the placeholders guard against is 
 artifact of sequential string replacement, and a single left-to-right pass that never
 re-examines what it has written cannot produce it.
 
-**`Robot/review-tracking.md` was deliberately excluded.** Its references are
+**`review-tracking` was deliberately excluded.** Its references are
 as-of-filing by the working rules and are not remapped; every other file was.
 
 **Verified**: zero unresolved references across the five root documents, no depth
@@ -6746,7 +6744,7 @@ differencing shows the only removed tokens are the rewritten genesis sentence an
 old headings.
 
 **Noted, not fixed here**: extending the reference checker to `change-log.md` for the
-first time reports **160 unresolved references** there, and 2 in `Robot/review-plan.md`.
+first time reports **160 unresolved references** there, and 2 in `review-plan`.
 **Ruled on the same day** — historical numbering is of no interest and the log should
 point at the current design. The remapping is the last entry in this file.
 
@@ -7097,7 +7095,7 @@ arithmetic rather than derived by traversal. These, with the disclosure-root
 construction and the boundary sweep, are now the README's **canonical bar** — the
 review's own priority order.
 
-**Dispositions in `Robot/review-tracking.md`. Five under-determinations stand as
+**Dispositions in `review-tracking`. Five under-determinations stand as
 numbered interpretations awaiting the author**: the `SignedLocator` payload form, the
 genesis hash input, §5's raw-concatenation framing, §5.2.1's ordinal encoding, and
 merge-list order — each a one-sentence specification fix if confirmed.
@@ -7136,7 +7134,7 @@ a stated rule.
 **Two of the reviewer's proposed Recovery negatives were declined**: self-adoption
 and `prior_key` equal to the new key are stated nowhere, so they went to the author
 as questions rather than into vectors asserting rules the text does not carry. The
-author queue now holds five items; dispositions in `Robot/review-tracking.md`.
+author queue now holds five items; dispositions in `review-tracking`.
 
 ### 2026-08-31 (self-adoption is structurally malformed)
 **Author's ruling.** An adoption whose node and patron are the same identity is
@@ -7468,7 +7466,7 @@ cryptographically valid signature under alice's name, the binding the only defec
 mutations breaking all four signatures; and three optionals-exercised bodies, so
 no schema field exists that no positive vector decodes. Fixture rows P15–P18,
 T24, V8, C3 and bar items 12–13 complete the round. Dispositions in
-`Robot/review-tracking.md`.
+`review-tracking`.
 
 ### 2026-09-01 (seventh vector review: semantic coherence, and the harness schema decided)
 The round re-hashed every pin independently — exact match — and found **no new
@@ -7737,7 +7735,7 @@ words, or task markers anywhere in the set.
 the wire format, 31 / 37 / 44 in the three requirements documents — 1,095 across
 the five-document set. References resolve at zero across the five documents and
 seven vector files; the 25-check harness passes against the regenerated vectors.
-`Robot/review-plan.md` opens the second cycle.
+`review-plan` opens the second cycle.
 
 ### 2026-09-02 (cycle 2, pass 0.1: external-claims audit applied)
 The first pass of the second review cycle checked externally-checkable claims
@@ -8536,3 +8534,155 @@ outside your subnet the same nodes carry no exemption whatever. The
 inside-or-beyond boundary is therefore not a claim about the world but
 about where the evaluator is standing, which is per-observer trust arriving
 exactly where it should.
+
+### 2026-09-04 (the horizon collapses to a single edge)
+
+A fourth cross-family review of the trust-metric simulation reported that
+sibling edges were missing from the capacity graph, citing the first bullet
+of the reference-graph section. The reading was right and the document was
+wrong: a sibling edge abstracts graph-distance in the patronage hierarchy
+and is not an edge in the trust graph at all, being authorised implicitly
+by the patron's adoption transaction rather than by one of its own. The
+bullet is corrected; treating siblings as capacity would mint f(f−1) edges
+out of f adoptions.
+
+Chasing that finding exposed a larger one nobody had filed. The
+conservation experiment's binding chokepoint was not an acquired edge but
+the observer's own edge to a member of its horizon — a relation the design
+says is not throttled — and the experiment had been passing on the strength
+of it. The correction is structural rather than a discount: **in-horizon
+edges collapse to a single edge**, distance zero to distance one, because
+nodes within each other's horizons are directly aware of each other and can
+speak point to point, and this holds even for a two-edge patronage
+relation. The distance from a node to the edge of its trust horizon is one,
+so the horizon's internal topology is not part of the flow graph at all.
+
+The collapse settles a second reported finding without changing a line of
+the allocation rule. Ranking candidates by hops in an uncollapsed graph
+re-grades the inside of the horizon, which the landscape flattens; hops in
+the collapsed graph simply are the landscape distance, so the path-length
+pass now names the graph it measures rather than acquiring a special case.
+
+How far outward an evaluator's graph reaches is settled as available
+evidence rather than a protocol quantity. A node can discern some of a
+foreign subtree's structure from locator data, and may well place a
+stranger two or three edges from one of its own counterparties; calculating
+that is not required, and the rule is stated generally so that a
+better-informed implementation runs the same metric over more graph while a
+poorer one bounds harder. The conservation experiment is rebuilt around the
+only shape the claim speaks to — a region behind one edge bought once —
+where the independent sum grows with population while what the set can draw
+at once stays pinned to the gate's capacity.
+
+### 2026-09-04 (the documents carry the design, not its history)
+
+Eight passages explained a claim by reference to the claim it replaced — *an
+earlier draft said this, which conflated that* — and all eight are rewritten
+to state what is true and stop. Nothing is published, so there is no
+backward compatibility for a retracted wording to preserve, and a sentence
+that pins a live claim to a dead one makes the reader hold both to extract
+the one that counts. Four of the eight were restating a ruling made a few
+lines above them and are simply gone.
+
+Register tombstones, protocol supersession and rejected-alternative rows are
+untouched and stay: a retired type number must resolve to *retired* rather
+than silently to something else, a superseded credential is a mechanism, and
+an appendix row recording why an alternative lost answers the implementer
+about to propose it again. What is removed is the document talking about
+itself. The convention is recorded for future passes.
+
+### 2026-09-04 (peering and proof-of-presence are one kind of edge)
+
+The peering section stated a mitigation — peering edges carry a distinct,
+low default flow capacity — and then retracted it, and an open note asked
+what should price the peering/presence asymmetry now that capacity does not.
+All three go. A peering edge and a proof-of-presence edge are equivalent:
+there is no edge-kind discount and none to reintroduce, the only distinction
+the metric draws being inside the horizon against beyond it.
+
+What is peculiar to peering is off-protocol and stays between the two peers.
+The encrypted backup and the cost of holding it imply a premium the peers
+extend to each other, and that premium is no part of any other node's view —
+nothing carries it, nothing prices it, no evaluator computes with it. A peer
+who reads the request as more than a technical favour is extending something
+of their own inside a relationship they are party to, which is per-observer
+trust rather than a route to standing with anyone else.
+
+**A20 is withdrawn**, the assumption that a peer may read the request as
+endorsement and extend credit they did not intend. The register drops to 31
+entries and the count that names it is corrected. The number is not reused;
+a citation to A20 resolves here. The reference-graph bullet's pointer to an
+unset peering ratio goes with it: there is no ratio between the two kinds,
+set or unset, and what an acquaintance edge is worth at a given distance
+remains policy exactly as every other capacity does.
+
+### 2026-09-05 (the log stops pointing into the working directory)
+
+The 2026-08-26 layout entry above scoped its invariant to the five root
+design documents and carved this log out, on the grounds that its mentions
+recorded what those files were called when the entries were made. The
+carve-out is reversed. Twenty mentions now name each file without a path —
+`review-tracking`, `review-plan`, `authoring-conventions` — so the record of
+which working file held a round's dispositions survives while no root
+document forms a path into the working directory. Naming a thing is not
+depending on it; citing a path is.
+
+The reference checker enforces both halves and is kept with the working
+files. Section references resolve against headings in the five specification
+documents; the no-path rule runs over all six, this log included. It carries
+no exemptions, and the no-path half is mutation-tested — seeding one citation
+raises exactly one flag and a non-zero exit — because a check that passes
+with and without the thing it checks establishes nothing.
+
+Python bytecode was tracked in git and churned on every model run. It is
+untracked and a `.gitignore` now covers bytecode and the model checker's
+scratch state.
+
+### 2026-09-05 (consistency and coherence pass over the six root documents)
+
+Six defects, found by sweeping rather than by reading the sections that had
+just changed.
+
+**The allocation rule still announced two limbs and grew a third in a later
+paragraph.** A reader following the bullets got the wrong rule: available
+flow was added as the governing pass after the list that omitted it. The
+three passes are now one list in order — available flow, then path length,
+then consideration order — with the reasoning that had been stranded in the
+amending paragraph folded into the pass it belongs to and the observation
+that the chokepoint case hides the first pass kept as its own note.
+
+**The selective-disclosure sweep said the trust metric reads graph edges
+"which come from adoptions."** Since the reference-graph section, edges also
+come from the acquaintance graph a presence record or peering establishes.
+The row now says so, and keeps the answer that matters for disclosure: what
+the metric reads is *that* an edge exists, never a record's disclosable
+contents. The encoding document's companion note inherited the same error
+and is corrected with it.
+
+**Two sections were numbered 11.2.1.** All seven citations meant the first;
+"When an owner moves" becomes 11.2.2, which nothing cited.
+
+**Two passages still placed the horizon at the origin**, wording left from
+before the landscape put the observer alone at distance 0. Trust is
+indifferent to edge kind *beyond the horizon*, not beyond the origin, and it
+is *inside the horizon* that a flow bound has nothing to ration.
+
+**A sentence claiming the first two bullets of the reference-graph section
+describe where scope comes from** contradicted the first bullet, which says
+adoption edges carry trust. They are a statement about scope and about what
+an edge is, never a ranking of edges by trust.
+
+**The open-items chapter opened with the same sentence twice**, one of them a
+stub restating the other.
+
+De-linting: three runs of surplus blank lines collapsed. Counted claims
+re-verified against what they count — eleven unset parameters, eight horizon
+jobs, thirty-one assumptions. Every withdrawn register number resolves in
+this log. The models were checked the same way: ninety-eight section
+references, all resolving; the reason code the cycle model cuts on, the
+distinctness rule the recovery model rests on, the ladder the currency model
+walks, and the two parameter values any of them cite, each confirmed against
+the current text. Two stale claims found in the simulation's own commentary —
+one describing the horizon as sitting at the origin, one asserting that
+nothing turned on telling presence edges from peering edges, which the
+visibility difference had since disproved.

@@ -4497,3 +4497,212 @@ exemption at all. Which is §16.1's per-observer rule appearing exactly
 where it should, and it closes the frame: the metric's inside/beyond
 boundary is not a statement about the world, it is a statement about where
 the evaluator is standing.
+
+---
+
+## Cross-family review 4 of the trust-metric simulation (2026-09-04)
+
+Reviewed `flow_metric.py` at SHA-256 `e9f2fb96...5ce24b` (the committed
+file; hash matched). Reviewer ran seeds 1-20 and independently
+brute-force-validated `max_flow` against exhaustive minimum cuts on 600
+random directed graphs, 2-7 vertices, antiparallel edges included: zero
+discrepancies. That is the third independent cross-validation of the
+max-flow core (700/600/600 graphs, three reviewers, no discrepancies).
+
+Three findings, all verified as stated. None was a defect in the flow idea;
+all three were defects in the graph fed to it, or in the wording that
+describes that graph.
+
+**F1 -- sibling edges absent from the capacity graph. Verified as a
+reading, and the DOCUMENT was wrong, not the model.** §16.2.1's first
+bullet said *"adoption and sibling edges ... These carry trust"*, and the
+model puts siblings only in `scope_adjacency` ("carries no capacity").
+Reproduced the reviewer's differential exactly -- seed 5, cut 10 -> 30 on
+materialising sibling edges at `HIER_CAP`, conservation holding on both
+graphs. **Author ruling**: *"Sibling edges are an abstraction of
+graph-distance in the patronage hierarchy, not in the trust graph."* So the
+model was right and §16.2.1's wording generated the finding. Bullet
+rewritten: adoption edges carry trust; siblings are a distance abstraction
+authorised implicitly by the patron's adoption transaction and add no
+capacity -- which would otherwise mint f(f-1) capacity edges out of f
+adoptions.
+
+**F2 -- allocation tie-break used raw split-graph hops. Verified, and
+dissolved by the F4 ruling without touching the allocation code.**
+Reproduced exactly: two candidates at landscape distance 2 with equal flow
+measured 3 and 5 in the node-split graph, and the shallower won under both
+consideration orders. The reviewer read this as `admit_reference_order`
+using the wrong key. It was the wrong *graph*: hops in a COLLAPSED graph
+are the landscape distance, and the model had not collapsed. After the
+collapse both measure 3, tie, and consideration order decides -- verified
+under both orders. §16.4's "fewer hops" now names the graph; the two
+readings coincide once §16.2.1 is built as written, so this names rather
+than adds.
+
+**F3 -- PoP substituted by peering, and the graph stopped one shell out.
+Verified, and sharper than filed.** The two are alike in distance and
+capacity and differ in VISIBILITY, which is what the model needed: §5358's
+propagation class makes attestation records *pull, not push* -- *"fetched
+on demand by evaluators"*, no horizon bound -- while §16.3 confines a
+peering record to *"the two peers' horizons and nowhere else"*. Collapsing
+them imported the narrower regime, so `visible_flow_subgraph` could not
+express a region behind an acquired edge at all (measured: `visible=0` at
+every width). **Author ruling**: how far outward a graph reaches *"depends
+what relationships you are aware of ... you can discern some of a foreign
+subtree's structure from locator data"*; calculating it is not a
+requirement, and the rule should be general so later implementations can
+use what they have *"while keeping the same proven flow metric"*. Added to
+§16.2.1 and implemented as `reach`, a modelling parameter the metric is
+identical at every value of.
+
+**F4 (not filed by the reviewer; found while verifying F1) -- E3 had been
+passing for the wrong reason.** F1's differential put the cut under a
+microscope, and E3's chokepoint turned out not to be an acquired edge but
+**the observer's own in-horizon hierarchical edge**, throttled at
+`HIER_CAP` by an uncollapsed graph. §16.2.1 says hierarchical edges are
+unthrottled out to the horizon. Unthrottling them and rerunning: E2 and E4
+pass bit-identically, and **E3 trips its own "test is vacuous unless demand
+exceeds the cut" guard** -- deliverable rises to equal the independent sum,
+so no conservation claim remained. An attacker who buys N edges should get
+N edges' worth; there was never anything to demonstrate in that shape.
+F1's 10 -> 30 also vanishes under the collapse, being a symptom of the same
+defect.
+
+**Author ruling on the collapse**: *"In-horizon edges are collapsed to a
+single edge (distance 0 -> distance 1) ... nodes within each other's
+horizons are always aware of each other, capable of point-to-point
+communications. Even for a secondary patronage relation (two edges on the
+hierarchy graph), there is a direct relationship that justifies collapsing
+this distance. In short, the distance from a node to the edge of its trust
+horizon is 1."* Recorded in §16.2.1 as graph construction rather than as
+capacity, with both measured consequences of getting it wrong.
+
+**E3 rebuilt** around the only shape setwise conservation speaks to: a
+region of 4/8/16/32 identities behind ONE acquired peering edge, bought
+once. Independent-sum 32/64/128/256 against a conserving joint of 4/8/8/8
+at a cut of 8; general demands 256 asked, 8 deliverable; the same region
+gated behind a node outside the horizon is 0-visible. The cut is the gate's
+relay capacity at distance 2 (`node_capacity(2) = 8`), not the peering
+edge's nominal 10 -- what a region inherits is what its gate can pass, and
+the gate is throttled by how far away it is.
+
+Seeds 1-40 pass. All eight models green. References: 1,967 checked across
+the five specification documents, 0 flags (checker saved as
+`Robot/refcheck.py`, no exemptions). Test vectors: ALL CHECKS PASS.
+
+**Noted, not acted on**: `change-log.md` cites `Robot/` at 20 lines, which
+the root-document rule forbids. Pre-existing and in a historical record;
+flagged for the author rather than swept.
+
+**Drafting-history sweep (2026-09-04)**, from the author's note on the
+§16.2.1 provenance style: *"I don't love this style. We don't need to refer
+to earlier drafts or review rounds. The spec has not been published yet, so
+there is no backward compatibility to maintain."* Swept by search across the
+five specification documents, not by section. Eight instances, all in
+`network-design.md`: §8.1.2's carriage claim (rewritten to state that a
+verifier response's absence is not visible, and why), §12.7.6's parenthetical
+(rewritten to name the horizon boundary as what does the work), §16.2.1's
+sibling bullet and §16.3.1's coverage paragraph (both mine, rewritten),
+§18.1's self-burning note and §18.1's deniability-ledger note (deleted --
+each restated an author ruling three lines above), §18.3's adverse-result
+note (rewritten), and §21's level-composition paragraph (rewritten to state
+the rule without the two rejected variants). Zero remaining. Register
+tombstones, protocol supersession and rejected-alternative rows left alone;
+recorded as a convention in `authoring-conventions.md`.
+
+**Raised, not acted on**: §16.3 still states a mitigation it then retracts
+in the next paragraph ("peering edges carry a distinct, low default flow
+capacity" / "Superseded by §16.2.1's landscape"). Under the new convention
+the section would state the current position -- no edge-kind discount, and
+what should price the peering/`PoP` asymmetry is open -- and drop the
+retracted mitigation. Not done unilaterally because A20 cites §16.3 as the
+record of what is now unpriced, so the edit moves a risk-register
+dependency. Author's call.
+
+**§16.3 restructured and A20 withdrawn (2026-09-04)**, on the author's
+ruling: *"Peering edges are equivalent to PoP edges. There is an off-protocol
+premium implied for the peer nodes themselves, but this is not part of the
+view of other nodes. The claim, the statement that it is superceded, and A20
+should all just go."* Removed: the low-default-capacity mitigation, the
+supersession paragraph, and the open block quote asking what should price the
+peering/`PoP` asymmetry -- the question dissolves, since the asymmetry is not
+in any third party's view to be priced. Replaced with the two positive
+statements the ruling makes. The dangling *"what remains is that a peer may
+extend credit they did not intend"* sentence went with A20, being A20's own
+text. Register 32 -> 31 entries, §20's count sentence corrected, withdrawal
+recorded in `change-log.md` per §19.4's numbers-are-not-reused rule.
+
+Also caught in the same pass: §16.2.1's bullet 2 cited *"§21.1's unset
+ratio"*, which §21.1 no longer contains -- the peering ratio was dissolved
+earlier the same day. The reference checker passes it because §21.1 is a
+valid heading; only reading the target catches it. Rewritten to state that
+there is no ratio between the two kinds, set or unset. `flow_metric.py`'s
+capacity comment pointed at the same removed default and is corrected.
+
+References 1,962 across the five specification documents, 0 flags.
+Simulation passes.
+
+**Change-log path citations and bytecode tracking (2026-09-05)**. Both were
+flagged by the assistant during the §16.3 round; the first flag was wrong as
+filed. The 2026-08-26 entry scoped the no-citation invariant to the five
+design documents and deliberately exempted the log — *"being a historical
+record of what those files were called when the entries were made"* — so
+there was no breach, and CLAUDE.md's six-document framing is what produced
+the misreading. Put to the author with the prior ruling quoted; he elected to
+reverse the carve-out and take the rephrasing rather than the exemption.
+
+Applied: twenty mentions rephrased to name the file without the path, the
+directory itself named as `Robot` rather than as a path fragment. Every
+changed line was read individually rather than trusted to the substitution.
+The 2026-08-26 entry's own sentence — *"the change log's eighteen mentions
+are left as written"* — is left standing as the record of what was decided
+then, with today's entry recording the reversal.
+
+`refcheck.py` extended: the no-path rule now runs over all six root
+documents rather than the five, and is mutation-tested (one seeded citation
+=> 1 flag, exit 1; restored => 0 flags, exit 0). Bytecode untracked and
+`.gitignore` added.
+
+Final state: 1,962 references across the five specification documents, 0
+flags; Robot/ citations across all six, 0 flags.
+
+**Consistency, coherence and de-linting pass (2026-09-05)**, author-directed,
+over the six root documents and then the models.
+
+Six defects, all found by sweeping rather than by re-reading what had just
+changed — which is the point of the instruction. §16.4 announced "two limbs"
+and added the governing pass in a later paragraph, so the bullets stated the
+wrong rule; restructured into three passes in one list. §8.1.1's
+selective-disclosure sweep said the metric reads edges "which come from
+adoptions", stale since §16.2.1 put acquaintance edges in the same graph;
+`wire-format.md` §4.5.2 inherited it. Two sections numbered §11.2.1 (all
+seven citations meant the first; the second renumbered to §11.2.2). Two
+"origin" usages left from before the landscape correction. A sentence
+describing §16.2.1's first two bullets as being about scope, contradicting
+bullet 1's "these carry trust". §22 opening with a duplicated sentence.
+
+Counts re-verified against what they count: eleven unset parameters (11 live
+rows plus 1 dissolved tombstone), eight horizon jobs (8 data rows),
+thirty-one assumptions after A20's withdrawal. Register gaps P{6,7,8,9,10,22,
+34}, C{3,12,13,14,16,18}, A{20} — every one resolves in `change-log.md`, so
+the numbers-are-not-reused rule holds.
+
+Models checked as a set, not assumed: 98 section references across 13 files,
+all resolving; reason code 5 confirmed as cycle repair (`wire-format.md`
+§4.3), the "current counterparty is never a candidate" rule confirmed at
+`wire-format.md` §5.3, the patron/sibling/grandpatron ladder confirmed, f=10
+and h=2 confirmed. Two stale claims in `flow_metric.py`'s commentary: the
+horizon described as sitting at the origin (corrected -- unthrottled and
+equidistant-from-origin are different statements, and only the first holds),
+and the module docstring asserting nothing turned on telling PoP from
+peering, which the visibility difference disproved -- now states the limit
+and points at `reach`. Terminology aligned to the design's "pass".
+
+De-lint: 3 blank-line runs collapsed. Remaining lint hits are 10, all
+verified false positives -- 6 doubled words and 1 unbalanced bold that are
+`change-log.md` quoting the artefacts it recorded fixing, and 3 table-column
+counts that are escaped pipes inside formulas.
+
+Final: references 1,963 across the five specification documents and Robot/
+citations across all six, 0 flags. All eight models pass. Test vectors: ALL
+CHECKS PASS. Seeds 1-25 pass on the simulation.

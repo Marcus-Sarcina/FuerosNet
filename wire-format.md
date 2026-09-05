@@ -1018,8 +1018,6 @@ and reject on mismatch.** An unchecked binding is the same as no binding.
 statement names the fields it needs directly, which avoids the circularity without
 leaving the payload empty.
 
-
-
 **Field 8 — proof of presence.** Expected on a *fresh*
 adoption, meaning the patron holds no prior PoP with this node. **Optional in the
 protocol, not enforced**: there is no global enforcement point (design §3.1.1),
@@ -1586,8 +1584,9 @@ able to read.** design §8.1.1 sweeps the same exchanges to establish *why* each
 is withholdable — what each one **reads**, and whether it has any use for location.
 This table answers the holder's question instead: what a given recipient **sees**.
 **The row sets are close but not identical**: the design counts the trust metric,
-which reads adoptions and no presence record at all, and combines the two
-`txid`-only exchanges that appear separately here.
+which reads only *that* an edge exists and none of a record's disclosable fields
+(design §16.2.1), and combines the two `txid`-only exchanges that appear
+separately here.
 
 | Exchange | Disclosable fields |
 |---|---|
@@ -2948,7 +2947,6 @@ key — without requiring anyone to prove why they asked.
 disclosable fields may be revealed or withheld, withholding is visible in the digest
 list, and the record verifies either way. **This is the only fetch path with a use for
 location**, so it is the only one where the choice carries information (§4.5.2).
-
 
 **A patron given an archive head (§4.1 field 7) walks the chain backward.** Doing
 that one record per round trip would be prohibitive, so fetching is batched.

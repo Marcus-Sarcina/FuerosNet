@@ -195,8 +195,6 @@ before the principle was stated:
 | Client integrity, since attestation would mean trusting a manufacturer | Carried as a record attribute for policies to weight, not a requirement (§7.8) |
 | Proof of presence at adoption, since no global point can require it | An optional field, so an attested adoption is visibly a different object from an unattested one (§6.1.1) |
 
-
-
 The network is intended to **formalize real-world relationships**, not replace
 them. It assumes and depends on a significant face-to-face human component.
 
@@ -1152,7 +1150,6 @@ protocol-enforced.
 The face-to-face ceremony, the record it produces, how that record moves, and what
 happens when a key is lost. This is the design's scarcity mechanism (§1) and its
 largest subsystem.
-
 
 Deliberately costly transactions attesting that two users met in person.
 
@@ -2392,11 +2389,10 @@ dual delivery of §7.4.2 means C cannot suppress it either while B is honest**
 envelope signature from a proposed body omitting a response B holds. What a
 *colluding* C and B can still do is finalize thin — omission by agreement —
 and a thin record is visible evidence weight (`wire-format.md` §5.2): the pair
-buys a record that says little, not a clean one. An earlier draft said
-"neither fabricate nor suppress" on carriage alone, and "the absence of an
-expected verifier response is itself visible" — the second claim did not
-survive the retirement of deterministic selection, since no selected-set
-remains to make absence expected. This
+buys a record that says little, not a clean one. **The absence of a
+verifier response is not itself visible**, and no argument here may lean on
+it: selection is not deterministic, so there is no selected set against
+which an absence could be expected. This
 beats routing through witnesses on integrity, since the attestation persists
 rather than living in witness memory.
 
@@ -2454,7 +2450,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
-| Trust metric (§16.2) | graph edges, which come from adoptions | no |
+| Trust metric (§16.2) | graph edges — adoptions, and the acquaintance edges a presence record or peering establishes (§16.2.1). **That an edge exists, never the record's disclosable contents** | no |
 | Presence-based recovery (§9.1) | verifier responses | no |
 | Late response, capture key grant (`wire-format.md` §7.3–b) | `txid` | no |
 
@@ -3468,7 +3464,7 @@ here can.
 An operator needing prompt revocation should therefore prefer hosted packages. The
 infra client shows which a resource is, since that follows from where it runs.
 
-#### 11.2.1 When an owner moves
+#### 11.2.2 When an owner moves
 
 **The general rule: there is no grant object for a move to invalidate.** Access
 is **a row the node re-derives**, never a durable grant recorded at the moment of
@@ -4623,9 +4619,9 @@ edge **drops it out of the horizons it occupied through that patron**, so for
 those observers it moves from distance 1, where the metric does not ration and
 hierarchy-specific privileges apply, to distance 2 or beyond, where the metric
 is the only thing answering and does ration (§16.2.1). The cut into it shrinks
-by the removed edge at the same time. *(An earlier reading credited §16.3's
-low peering capacity; the metric no longer distinguishes edge kinds, and the
-horizon boundary is what does the work.)* Internal cohesion retained, external
+by the removed edge at the same time. *(What does the work is the horizon
+boundary, not any capacity difference between edge kinds — the metric draws
+no such distinction, §16.2.1.)* Internal cohesion retained, external
 standing reduced.
 
 #### 12.7.7 Re-rooting cost
@@ -5483,7 +5479,6 @@ natural one usually is. **But it also means *h* is now the most over-loaded
 parameter in the design**, and a change to it for one reason silently moves seven
 other things. Anyone proposing to tune *h* should be shown this table.
 
-
 ### 15.2 The rootward memo
 
 **Full transactions flood within the horizon; a minified memo of every membership
@@ -5709,16 +5704,22 @@ evaluator builds, so two implementations building different graphs from the
 same evidence get different answers while both computing max-flow
 correctly. Three sources of standing exist and they enter differently.
 
-- **Adoption and sibling edges — the routing and authority hierarchy.**
-  These carry trust and are also what scope is built from (§15.1).
+- **Adoption edges — the routing and authority hierarchy.** These carry
+  trust, and together with sibling edges are what scope is built from
+  (§15.1). **A sibling edge is an abstraction of graph-distance in the
+  patronage hierarchy, not an edge in the trust graph** [author,
+  2026-09-04]. Siblings are authorised implicitly by the patron's adoption
+  transaction rather than by one of their own (§15.1), and they add no
+  capacity. Reading them as capacity edges would mint f(f−1) of them out of
+  f adoptions.
 - **Proof-of-presence and peering edges — an acquaintance graph orthogonal
   to that hierarchy.** Neither confers subnet scope or resource access
   (§6.3, §11.2), and **to any party other than the two the edge joins, both
   carry trust by the same rules**: a peering edge is an acquaintance edge
-  from outside the subnet, not a lesser kind of one. Their default
-  capacities remain policy (§16.3, §21.1's unset ratio); what this paragraph
-  fixes is that they are the same *kind* of edge, evaluated in the same
-  graph.
+  from outside the subnet, not a lesser kind of one. **There is no ratio
+  between the two kinds, set or unset** — they are the same kind, evaluated
+  in the same graph (§16.3). What an acquaintance edge is worth at a given
+  distance remains policy, as every capacity here does.
 - **Archive transactions are not standing edges.** An archive is for the
   node's own reference and for **adoption-time review** (§16.7): a
   prospective patron walks what it is shown, **counts only transactions
@@ -5759,6 +5760,29 @@ So your patron's sibling is at distance 1 (they are in your horizon) while
 *their* proof-of-presence counterparty is at distance 2 (outside your
 horizon, one edge from someone at 1). **The horizon flattens; the world
 past it does not.**
+
+**The horizon is collapsed to a single edge, and this is structural rather
+than a discount** [author, 2026-09-04]. **In-horizon edges are collapsed to
+one edge** — distance 0 to distance 1 — because *"nodes within each other's
+horizons are always aware of each other, capable of point-to-point
+communications. Even for a secondary patronage relation (two edges on the
+hierarchy graph), there is a direct relationship that justifies collapsing
+this distance."* **The distance from a node to the edge of its trust
+horizon is 1.** So an evaluator's graph holds one edge to each horizon
+member and **the horizon's internal topology is not part of the flow graph
+at all** — there is no chain of in-horizon edges for flow to squeeze
+through, which is the same fact as throttling beginning only beyond the
+horizon, stated as graph construction instead of as capacity.
+
+**Building it any other way changes the answers, not merely the
+presentation**, in two ways worth naming because both look like working
+implementations. An uncollapsed graph lets an *in-horizon* edge decide the
+flow bound for a region beyond the horizon, so the bound measures a
+throttle this section says does not exist. And ranking candidates by hops
+in that graph re-grades the inside of the horizon, so two candidates at
+distance 2 are separated by how deep in the horizon their route happened to
+enter. **Hops in the collapsed graph are the landscape distance**, which is
+why the collapse is the whole of the fix rather than the first half of it.
 
 **Two mechanisms answering two questions, which is why the horizon is both
 a boundary and a distance** [author, 2026-09-04]. The hierarchy governs
@@ -5809,13 +5833,32 @@ proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are
 not weighted against each other out there; **the only distinction the metric
 draws is inside the horizon versus beyond it**. An adoption edge three hops
 away and a proof-of-presence edge three hops away carry the same, and a
-peering edge among them carries the same again. This is what makes §16.2.1's
-first two bullets a description of where scope comes from rather than of
-where trust flows: scope is built from adoption and sibling edges alone,
-and beyond the origin trust is indifferent to which kind of edge it crosses.
+peering edge among them carries the same again. This is what keeps the first
+two bullets above a statement about **scope** and about what an edge *is*,
+never a ranking of edges by trust: scope is built from adoption and sibling
+edges alone, and beyond the horizon trust is indifferent to which kind of
+edge it crosses.
+
+**How far outward an evaluator's graph reaches is available evidence, not a
+protocol quantity** [author, 2026-09-04]. The distance function above runs
+outward without limit, and what an implementation can populate depends on
+*"what relationships you are aware of. You can discern some of a foreign
+subtree's structure from locator data, so it is entirely plausible that you
+could know that some newly encountered node is two or three edges from a
+PoPmate in that foreign patronage graph."* **Calculating that is not a
+requirement.** The floor is what §15.1 stores and §16.3 makes visible — the
+horizon, plus the far endpoints of peering records it can see — and an
+implementation that stops there conforms.
+
+**The rule is stated generally so that better-informed implementations need
+no different metric.** An evaluator that can place a stranger three edges
+out runs the same computation over more graph; one that cannot, runs it
+over less and bounds harder, which is §16.3.1's conservative direction. **A
+richer graph is a better-populated input, never a different rule** — and a
+poorer one costs its holder reach, never soundness.
 
 **This is what makes the metric a mechanism for reaching past the horizon
-rather than for grading inside it.** Within the origin there is nothing for
+rather than for grading inside it.** Inside the horizon there is nothing for
 a flow bound to ration; the question the metric answers is how much to
 extend to someone you have *not* met, reached only through people you have.
 
@@ -5836,41 +5879,31 @@ never learns the edge exists, and it conveys nothing to them.
 appears.** It is not *"raise my standing"*. It is *"gain standing with a
 particular victim by obtaining a technical favour from someone in that victim's
 neighbourhood"* — which requires the attacker to already be near their target, at
-which point the target can evaluate them by other means. What remains is that
-*"want to back each other up?"* **reads as a routine technical request rather than
-an endorsement**, so a peer may extend credit they did not intend to extend.
+which point the target can evaluate them by other means.
 
 **Two framings to avoid.** Peering is not *the cheapest* route to standing — an
 unattested adoption (§6.1.1) needs no meeting and no storage commitment. And there
 is no *ceiling* to raise: that framing mistakes per-observer standing for a global
 quantity.
 
-**Mitigation:** peering edges carry a distinct, low
-default flow capacity, separate from hierarchical edges. The reason is the
-endorsement-misreading above, which survives the correction. Raising the capacity
-is a policy decision, upgraded by face-to-face attestation (§7) between the
-peers.
+**A peering edge and a proof-of-presence edge are equivalent** [author,
+2026-09-04]. There is no edge-kind discount, and none to reintroduce: to
+any party other than the two the edge joins, a peer is a `PoP` counterparty
+at the same distance as any other, and the only distinction the metric
+draws is inside the horizon versus beyond it (§16.2.1). Inside, hierarchical
+edges are unthrottled and a peering edge is by construction an edge *out*
+of the horizon, so there is nothing there for it to be lower than; beyond,
+trust flows equally over the hierarchical and the proof-of-presence/peering
+graphs.
 
-**Superseded by §16.2.1's landscape** [author, 2026-09-04]. The comparison
-"lower than hierarchical" does not survive it, in either region.
-**Inside the two-edge horizon** hierarchical edges are unthrottled, and a
-peering edge is by construction an edge *out* of the horizon, so there is
-nothing there to be lower than. **Beyond the horizon** trust flows equally
-over the hierarchical and the proof-of-presence/peering graphs — the metric
-distinguishes inside from outside, never edge kind from edge kind. To any
-party other than the two peers, a peer is a `PoP` counterparty at the same
-distance as any other. What remains peculiar to peering is what the *peers*
-exchange: an encrypted backup and the cost of holding it (§6.3), a
-relationship between them and not a claim on anyone else's evaluation.
-
-> **Open, and stated rather than smoothed over** [2026-09-04]. If a peering
-> edge and a proof-of-presence edge sit at the same distance for third
-> parties, then the endorsement-misreading concern above no longer has the
-> low default capacity as its answer, and the face-to-face upgrade path has
-> nothing left to upgrade. The asymmetry the concern rests on is real — a
-> peering costs a technical favour and a signature, a `PoP` costs a physical
-> meeting — so **what should price that difference, if not capacity, is
-> open**. Recorded here rather than resolved by inference.
+**What is peculiar to peering is off-protocol and stays between the two
+peers** [author, 2026-09-04]. The encrypted backup and the cost of holding
+it (§6.3) imply a premium the peers extend to each other, and **that
+premium is not part of any other node's view**: nothing carries it, nothing
+prices it, and no evaluator computes with it. A peer who reads *"want to
+back each other up?"* as more than a technical favour is extending
+something of their own inside a relationship they are party to — which is
+§16.1's per-observer rule, not a route to standing with anyone else.
 
 #### 16.3.1 The min-cut bound is observer-relative
 
@@ -5897,10 +5930,9 @@ Consequences:
   influencing a population scales with the **coverage of acquired edges over
   that population**, not with the number of observers. What survives, and is
   the conservative direction, is the per-observer half: an edge an observer
-  cannot see cannot help with that observer, which is §1.1 as ever. An earlier
-  draft said "work per-target, more expensive than the global reading
-  suggests"; the per-target framing overstated the cost by ignoring the
-  amortisation.
+  cannot see cannot help with that observer, which is §1.1 as ever. **A
+  per-target framing overstates the cost**, treating as fresh work for each
+  victim what one edge does for every horizon containing it.
 
 ### 16.4 The pluggability tension
 
@@ -5938,16 +5970,33 @@ what they have given up.
 max-flow, and the *aggregate* a set can draw is bounded by the cut (§16.2) —
 both are unique values every conforming flow policy agrees on. What is not
 unique is *which* principals a saturated cut admits when it cannot admit
-them all. **The reference metric decides in two limbs:**
+them all. **The reference metric decides in three passes, and the first is
+the measurement itself:**
 
-- **The shorter path dominates.** Where capacity cannot serve both, the
-  candidate reachable by fewer hops wins, because **a longer path is less
-  trustworthy by nature** — the same reasoning §16.2 applies to distance
-  decay, applied to allocation rather than to weight.
-- **Consideration order breaks true ties only** — that is, ties in path
-  length. It is the residual rule, not the governing one.
+- **Available flow ranks first** [author, 2026-09-04] — the total capacity
+  that reaches a candidate, which is what the metric *is* (§16.2). A
+  candidate carrying more flow outranks one carrying less, whatever their
+  distances: preferring a nearer candidate over a better-supported one
+  would substitute the tie-break for the measurement.
+- **The shorter path dominates** among candidates the flow ranks equally.
+  Where capacity cannot serve both, the candidate reachable by fewer hops
+  wins, because **a longer path is less trustworthy by nature** — the same
+  reasoning §16.2 applies to distance decay, applied to allocation rather
+  than to weight. **Hops in the landscape** (§16.2.1), which is to say hops
+  in the graph the evaluator builds once the horizon is collapsed to a
+  single edge — *not* hops in an uncollapsed hierarchy, which would
+  re-grade the inside of the horizon this design flattens. The two coincide
+  when the graph is built as §16.2.1 says, so this names the graph rather
+  than adding a rule.
+- **Consideration order breaks true ties only** — candidates equal on both
+  flow and path length. It is the residual rule, not the governing one.
 
-**Neither limb is promoted to a protocol rule**, because neither needs to
+**The first pass is easy to miss from the chokepoint case alone**, where
+every candidate behind one saturated cut necessarily carries the same flow
+and it therefore decides nothing — but this section is about pluggable
+policy in general, not only about candidates sharing a bottleneck.
+
+**No pass is promoted to a protocol rule**, because none needs to
 be: per-observer trust means no party consumes another's computation
 (§16.1), so two nodes allocating differently never disagree about anything
 either one relies on. A resource's role table is its operator's own
@@ -5956,23 +6005,10 @@ against another operator's. This is the same line §16.2 draws for λ — the
 reference implementation is where the choice lives, and conformance does not
 carry it.
 
-**Both limbs are subordinate to the metric itself** [author, 2026-09-04].
-**The first pass is always available flow** — the total capacity that
-reaches a candidate, which is what the metric *is* (§16.2). A candidate
-carrying more flow outranks one carrying less, whatever their distances:
-preferring a nearer candidate over a better-supported one would substitute
-the tie-break for the measurement. Path length separates candidates the
-flow ranks equally, and consideration order separates what path length also
-ranks equally. **This ordering is easy to miss from the chokepoint case
-alone**, where every candidate behind one saturated cut necessarily carries
-the same flow and the first pass therefore decides nothing — but this
-section is about pluggable policy in general, not only about candidates
-sharing a bottleneck.
-
 **An implementation note, because the obvious construction gets it partly
 right.** Running one max-flow over a super-sink fed by every candidate
-delivers the path-length limb for free — Edmonds-Karp augments along the
-shortest path first — and silently misses the tie limb: at equal path
+delivers the path-length pass for free — Edmonds-Karp augments along the
+shortest path first — and silently misses the tie pass: at equal path
 length the winner is then decided by the order edges happen to occupy in
 the implementation's own adjacency structure, an artifact of how the
 topology was built rather than of how candidates were considered. An
@@ -6245,9 +6281,7 @@ contains it, never only one.
   need not encounter anyone equipped to notice. **Detection is contingent on the
   counterparty's actual acquaintance with the operator, which the architecture
   does not guarantee** — the attack is made expensive and per-target; visible
-  only where acquaintance happens to look. An earlier draft called it
-  "self-burning when detected", which credited a detection invariant the design
-  does not have.
+  only where acquaintance happens to look.
 
   **Fabrication capability limits what collected records can prove, never what
   the collector knows** [author, 2026-09-03]. §1.2.1 treats cheap
@@ -6260,11 +6294,10 @@ contains it, never only one.
   pays for that (§1.2.1's asymmetry). What deniability cannot do is reduce the
   collector's own knowledge — the actor knows which records it fabricated and
   which it observed, so the intelligence, targeting and association value of a
-  genuine observation is untouched. An earlier draft said the capability "makes
-  the surveilled record less useful to whoever built it"; that conflated the two
-  properties, and only the transferability half is true. Collector knowledge and
-  third-party proof are separate ledgers, and this acceptance now claims relief
-  only on the second.
+  genuine observation is untouched. Collector knowledge and third-party proof
+  are separate ledgers, and this acceptance claims relief only on the second:
+  **what fabrication reaches is transferability, never the collector's own
+  knowledge of what it collected.**
 
   **§1.2.1's boundary still holds**, which is what keeps this short of a claim that
   nothing can be proved. Forging evidence about a *specific real person* needs their
@@ -6330,9 +6363,9 @@ contains it, never only one.
   absence and the record finalises thin. What an evaluator holds against that is
   weight, not proof — a thin response set against the subject's own claimed *n*
   (`wire-format.md` §5.2), responders weighed by recognition (§16.1), the
-  colluder's genuine match theirs to answer for. An earlier draft said adverse
-  results "are visible to anyone who weighs them", which this paragraph's own
-  premise contradicts. And **the standing cap is the reference metric's
+  colluder's genuine match theirs to answer for — **an adverse result is not
+  visible to anyone who weighs it**, having become an absence. And **the
+  standing cap is the reference metric's
   property, not the protocol's**: §16.2's setwise conservation caps the
   successor at what the colluding cut carries under the reference policy, while
   §16.4's pluggability deliberately permits an evaluator that tallies archive
@@ -6963,7 +6996,7 @@ does all three at once.
 **This register is curated, not exhaustive, and the difference should be stated.**
 A strict reading, one that counts every claim lacking a derivation, mechanism or
 source — finds **79 load-bearing unsupported claims** across the document set and 123
-in total, against the 32 listed in §20.2. The gap is not concealment: most of it
+in total, against the 31 listed in §20.2. The gap is not concealment: most of it
 is §21's parameters and `wire-format.md` §1's array bounds, which both documents
 declare as chosen operating points and conservative ceilings rather than derived
 values.
@@ -7056,7 +7089,6 @@ targets for simulation.
 | **A17** | **Face entropy is low enough** that fuzzy commitments have weak margins | Used to *reject* a mechanism that would retain verification capability without retaining biometrics (Appendix B.1) | Also §20.1. If false, the whole retention design could change. This is the only assumption used to close off an alternative rather than support a choice |
 | **A18** | Ageing is modest for adults, severe for minors, **substantial in 24 months** | The two-year capture retention tier (§7.5.1) | Also §20.1 |
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §16.6's operator pricing and §17.3's static-addressing leg | Also §20.1 |
-| **A20** | A peer may read *"want to back each other up?"* as a **routine technical request rather than an endorsement**, and extend credit they did not intend | **Open since 2026-09-04**: §16.3's low default flow capacity was this assumption's stated mitigation, and §16.2.1's landscape retires it — beyond the horizon trust flows equally over hierarchical and `PoP`/peering edges, so no edge-kind discount remains to carry the concern. §16.3 records what is now unpriced | Both the superlative ("the cheapest route") and the "trust ceiling" framing are withdrawn. Standing is per-observer and peering is visible only within the two peers' horizons, so the concern is a local misreading rather than a route to global standing |
 | **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every resource application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it |
 | **A23** | An adoption without a meeting is **near-worthless** rather than merely weaker | Keeping proof of presence optional (§6.1.1) instead of mandatory where it could be enforced | If unattested edges carry meaningful standing under plausible policies, optionality becomes a gap rather than a graceful degradation |
@@ -7212,9 +7244,6 @@ indefinitely.
 not be reassembled from six registers.** What is wanted in a *later* release is §23;
 nothing in that chapter blocks anything in this one.
 
-
-**Consolidated so it need not be reassembled from six registers.**
-
 **The identity, presence, routing and messaging layers are specified. The resource
 layer is partly specified.** Every transaction, record, signature rule and encoding is
 specified. What remains is parameter values, policy tuning, product behaviour, and one
@@ -7366,7 +7395,6 @@ line here says *this is not being built yet*.
    unit. **The hazard:** it rewards agents for spending their principal's time,
    which is adversarial to the principal's interest. Any such metric needs a
    counterweight, or agents optimise for pushing humans into meetings.
-
 
 ### 23.3 Multi-device
 
@@ -7608,9 +7636,7 @@ Which is **f^L − 1** exactly, and is why it lands one short of a round power.
 Convergence is fast and from above: **110 → 100 at D=1 → 99 by D=2.** Small networks
 are therefore slightly *more* infrastructure-efficient per user than large ones.
 
-**The levels do not compose**. An earlier reading gave each of an
-infra node's children its own two levels, making three tiers available as of right
-and 1,110 the ordinary span; a later variant kept a third level as an operator
-option. **Both are gone**: the levels are counted from the infra node, there is no
-third, and a node two levels down that wants subordinates runs infrastructure
-(§3.3).
+**The levels do not compose**, and neither as of right nor as an operator
+option is there a third. They are counted from the infra node; an infra node's
+children do not each get their own two; and a node two levels down that wants
+subordinates runs infrastructure (§3.3).

@@ -54,10 +54,18 @@ and `visible_flow_subgraph` (visibility).
 
 WHAT THIS FILE DOES NOT MODEL, stated so the omissions are visible:
   * PROOF-OF-PRESENCE EDGES have no separate representation.  §16.2.1 puts
-    them in the same class as peering edges -- same distance rules, same
-    capacity -- so peering edges stand in for both, and nothing here turns
-    on telling them apart.  A model that priced ATTESTATION (met vs merely
-    in-horizon, §16.2.1's closing paragraph) would need them distinct.
+    them in the same class as peering edges for DISTANCE and CAPACITY, so
+    peering edges stand in for both wherever those two are what matter.
+    **They are not alike in VISIBILITY**, and that is a real limit of this
+    file: a peering record is "visible inside the two peers' horizons and
+    nowhere else" (§16.3), while presence records are pull, not push --
+    "fetched on demand by evaluators" (§15's propagation classes), with no
+    horizon bound.  Modelling PoP as peering therefore imports the narrower
+    rule, which is why how far an observer's graph reaches is a PARAMETER
+    here (`reach`) rather than a constant: §16.2.1 makes that reach
+    available evidence, not a protocol quantity.  A model that priced
+    ATTESTATION (met vs merely in-horizon, §16.2.1) would need them
+    distinct on a third axis again.
   * ARCHIVE EVIDENCE is absent, faithfully: §16.2.1 makes an archive
     adoption-time REVIEW rather than a standing edge, so it creates no
     capacity for a flow calculation to find.
@@ -187,7 +195,9 @@ class FlowGraph:
 # the horizon trust flows equally over hierarchical and PoP/peering edges,
 # and inside the horizon hierarchical edges are unthrottled (which the node
 # capacities express, not these).  An earlier version gave peering a lower
-# capacity, following a §16.3 default the landscape ruling retired.
+# capacity; §16.3 now states there is no ratio between the two kinds, set or
+# unset, a peering edge and a PoP edge being the same kind of edge.  What is
+# peculiar to peering is off-protocol and stays between the two peers.
 HIER_CAP = 10   # capacity of an adoption (hierarchical) edge
 PEER_CAP = 10   # a peering edge is worth what any edge at its distance is
 
@@ -258,7 +268,7 @@ def horizon(scope_adj, observer, radius=2):
     return seen
 
 
-def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
+def visible_flow_subgraph(flow, scope_adj, observer, peer_edges, reach=0):
     """The flow graph AS THIS OBSERVER SEES IT.
 
     Includes:
@@ -276,6 +286,28 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
     `peer_edges` is a list of (u, v, cap) peering edges kept separate from
     the adoption FlowGraph precisely because their visibility is
     per-observer.
+
+    `reach` -- HOW MANY FURTHER SHELLS THE OBSERVER'S EVIDENCE COVERS.
+    reach=0 is the floor above: the stored horizon plus the far endpoints of
+    peering edges it can see, and nothing more.  Each additional shell adds
+    the edges around those endpoints.
+
+    THE FLOOR IS NOT THE RULE [author, 2026-09-04]: *"It depends what
+    relationships you are aware of.  You can discern some of a foreign
+    subtree's structure from locator data, so it is entirely plausible that
+    you could know that some newly encountered node is two or three edges
+    from a PoPmate in that foreign patronage graph ... calculating this is
+    not a requirement, but it seems better to make a generalizable rule and
+    let later developers use the data available to them if they care to
+    while keeping the same proven flow metric."*
+
+    So `reach` is a MODELLING PARAMETER STANDING FOR AVAILABLE EVIDENCE, not
+    a protocol quantity: the metric is identical at every value, and what
+    changes is how much graph an implementation managed to populate.  A
+    cross-family review found the earlier fixed one-shell view could not
+    express the case setwise conservation is actually about -- a whole
+    region behind ONE acquired edge -- because the region's interior was
+    always invisible.  E3 needs reach>=1 for exactly that reason.
     """
     hz = horizon(scope_adj, observer)
     sub = FlowGraph()
@@ -288,6 +320,22 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges):
         if u in hz or v in hz:                       # §16.3.1 visibility rule
             sub.add_edge(u, v, c)
             sub.add_edge(v, u, c)
+    # Outward shells: every edge kind counts the same past the origin
+    # (§16.2.1), so this walks adoption and peering alike.  `expanded` is
+    # what stops a node's edges being added twice -- add_edge ACCUMULATES
+    # capacity, so re-expanding a node would silently double its edges.
+    expanded = set(hz)
+    for _ in range(reach):
+        frontier = [u for u in list(sub.cap) if u not in expanded]
+        for u in frontier:
+            expanded.add(u)
+            for v, c in flow.cap.get(u, {}).items():
+                if c > 0 and sub.cap.get(u, {}).get(v, 0) == 0:
+                    sub.add_edge(u, v, c)
+            for (a, b, c) in peer_edges:
+                if (a == u or b == u) and sub.cap.get(a, {}).get(b, 0) == 0:
+                    sub.add_edge(a, b, c)
+                    sub.add_edge(b, a, c)
     return sub
 
 
@@ -328,10 +376,15 @@ def node_capacity(dist, in_horizon=False):
     conditional on this choice.  What the experiments test is RELATIVE
     behaviour under ONE schedule held fixed.
 
-    WHAT IS *NOT* A MODELLER'S CHOICE is distance 0 being unthrottled.
+    WHAT IS *NOT* A MODELLER'S CHOICE is the horizon being unthrottled.
     design §16.2.1: hierarchical edges are unthrottled out to the two-edge
-    horizon and the metric throttles only beyond it, so the whole horizon
-    sits at the origin together and nothing inside it is rationed by flow.
+    horizon and the metric throttles only beyond it, so nothing inside the
+    horizon is rationed by flow.  NOTE this is not the same as the horizon
+    sitting at the ORIGIN, which an earlier version of this file assumed:
+    the observer alone is distance 0 and the horizon is distance 1, one
+    collapsed step out (see landscape_distance).  Unthrottled and
+    equidistant-from-the-origin are two different statements, and only the
+    first is true of the horizon.
     """
     if dist == 0 or in_horizon:
         return UNTHROTTLED             # self, or inside the horizon: the
@@ -426,13 +479,38 @@ def split_graph(g, observer, scope_adj=None, peer_edges=()):
     (capping the evaluator would be self-limiting).
 
     DISTANCE IS THE TRUST-LANDSCAPE DISTANCE when `scope_adj` is supplied
-    (design §16.2.1): the observer's whole two-edge horizon is the origin and
-    unthrottled, and only beyond it does the metric ration.  Without
-    `scope_adj` -- the small synthetic graphs in the allocation tests, which
-    have no subnet structure -- it falls back to plain graph hops, where the
-    observer alone is the origin.  Passing scope is what the RHTN-shaped
-    experiments do; the fallback exists so the allocation unit tests can use
-    bare graphs.
+    (design §16.2.1): the observer alone is the origin, its whole two-edge
+    horizon is distance 1, and only beyond the horizon does the metric
+    ration.  Without `scope_adj` -- the small synthetic graphs in the
+    allocation tests, which have no subnet structure -- it falls back to
+    plain graph hops, where the observer alone is the origin.  Passing scope
+    is what the RHTN-shaped experiments do; the fallback exists so the
+    allocation unit tests can use bare graphs.
+
+    THE HORIZON IS COLLAPSED TO A SINGLE EDGE [author, 2026-09-04]:
+    *"In-horizon edges are collapsed to a single edge (distance 0 -> distance
+    1) ... nodes within each other's horizons are always aware of each other,
+    capable of point-to-point communications.  Even for a secondary patronage
+    relation (two edges on the hierarchy graph), there is a direct
+    relationship that justifies collapsing this distance.  In short, the
+    distance from a node to the edge of its trust horizon is 1."*
+
+    So the observer holds ONE edge to each horizon member and the horizon's
+    internal topology is NOT a chain of throttling edges -- it is not
+    represented in the flow graph at all.  Edges LEAVING the horizon are
+    kept at their own capacity, which is where the metric starts working.
+
+    WHY THIS MATTERS BEYOND TIDINESS.  An earlier version built the
+    uncollapsed graph -- observer -> child -> grandchild as two capacity
+    edges -- and a cross-family review found two consequences.  (1) The
+    in-horizon hierarchical edge became the binding chokepoint in E3, so the
+    headline conservation number was produced by throttling a relation the
+    design says is not throttled.  (2) Ranking candidates by hops in that
+    graph re-graded the inside of the horizon, which §16.2.1 flattens: two
+    candidates at landscape distance 2 measured 3 and 5 and the deeper one
+    lost every time, whatever order the caller passed.  Collapsing fixes
+    both at the source, because hops in the COLLAPSED graph ARE the
+    landscape distance -- §16.4's ranking key needs no special case.
     """
     if scope_adj is not None:
         dist = landscape_distance(scope_adj, g, observer, peer_edges)
@@ -448,8 +526,13 @@ def split_graph(g, observer, scope_adj=None, peer_edges=()):
         s.add_edge(("in", u), ("out", u), ncap)
         for v, c in g.cap[u].items():
             if c > 0 and v in dist:
+                if u in hz and v in hz:
+                    continue          # collapsed away: the horizon is 1 step
                 s.add_edge(("out", u), ("in", v), c)
-    return s
+    for m in hz:                      # ... and this is that one step.  The
+        if m != observer:             # observer's own edges INTO the horizon
+            s.add_edge(("out", observer), ("in", m), UNTHROTTLED)
+    return s                          # are replaced by it, not added to it.
 
 
 def score_independent(g, observer, target, scope_adj=None, peer_edges=()):
@@ -490,17 +573,17 @@ def admit_reference_order(g, observer, candidates, demand=1,
 
     WHY THIS NEEDS EXPLICIT CODE.  A plain multi-sink max-flow -- add every
     candidate's drain edge, run one max-flow -- looks like it implements
-    both limbs and implements only the first, by accident:
+    all three passes and implements only one, by accident:
 
-      * Limb 1 falls out of Edmonds-Karp, which augments along the SHORTEST
+      * PASS 1 falls out of Edmonds-Karp, which augments along the SHORTEST
         path first.  Two successive cross-family reviews exercised this;
         the counterexample below returns B under either candidate order,
-        which limb 1 says is correct.
+        which the path-length pass says is correct.
 
             observer -1-> bottleneck -1-> x -1-> A     (A: longer path)
                           bottleneck -1-> B            (B: shorter path)
 
-      * Limb 2 does NOT.  In a plain max-flow the tie is decided by the
+      * PASS 2 does NOT.  In a plain max-flow the tie is decided by the
         order edges happen to sit in the graph's own adjacency -- an
         artifact of how the topology was BUILT -- not by the order the
         caller considers candidates.  Measured directly: with two
@@ -705,7 +788,7 @@ def experiment_cut_bound(rng, report):
         fakes = attach_fake_region(g, boundary, width, depth)
         # Scope from the HONEST tree only: the fake region's internal
         # adoptions are not edges this observer holds topology for, so they
-        # confer no scope and the fakes sit beyond the origin.
+        # confer no scope and the fakes sit beyond the horizon.
         scope = scope_adjacency(list(g.cap.keys()), children)
         best = max(score_independent(g, observer, t, scope) for t in fakes)
         ok = best <= HIER_CAP
@@ -721,61 +804,78 @@ def experiment_cut_bound(rng, report):
 # ---------------------------------------------------------------------------
 # EXPERIMENT E3 -- setwise conservation, OBSERVER-VISIBLE.
 #
-# The fake identities are attached as a WIDE FAN of DIRECT children of the
-# boundary node, so they sit two scope-hops from the observer -- inside its
-# horizon, identities it genuinely holds.  (An earlier version attached a
-# DEEP subtree whose descendants were 3+ hops away, outside the observer's
-# horizon: the conserving computation there ran over identities the observer
-# could not see.  Deeper fakes are still attached below, to demonstrate that
-# invisibility only REDUCES the observer's count -- §16.3.1's conservative
-# direction -- never inflates it.)
+# THE CONSTRUCTION IS A REGION BEHIND ONE ACQUIRED EDGE.  That is the only
+# shape in which conservation says anything: a set of identities sharing a
+# chokepoint the attacker had to buy once.
 #
 #   Mode A (independent per-target), over the visible graph: the sum grows
 #     with the visible population -- the broken reading.
 #   Mode B (one conserving computation), over the visible graph: the joint
-#     count saturates at the visible region ceiling and stays flat.
+#     saturates at the region's cut and stays flat.
 #
-# Pass criterion (the 0.8.3 validation text): growing the population never
-# pushes the conserving aggregate beyond the cut, and once population
-# exceeds the ceiling the joint sits AT it.
+# TWO EARLIER CONSTRUCTIONS FAILED, AND BOTH FAILURES ARE INSTRUCTIVE.
+#
+#   (a) A fan INSIDE the observer's horizon.  The metric does not ration
+#       inside the horizon at all (§16.2.1), so this tested conservation in
+#       the one region where conservation is not the operative constraint.
+#
+#   (b) A fan beyond the horizon, but reached by ONE PEERING EDGE EACH.
+#       This looked right and passed, and a cross-family review showed the
+#       pass was an artifact: the binding chokepoint was not the acquired
+#       edges but the observer's own in-horizon hierarchical edge, throttled
+#       at HIER_CAP by a graph that had not yet collapsed the horizon.
+#       Collapse it -- as the design says to -- and the cut goes unbounded,
+#       the joint tracks the population exactly, and the experiment trips
+#       its own "test is vacuous unless demand exceeds the cut" guard.
+#       An attacker who buys N edges SHOULD get N edges' worth; there was
+#       never a conservation claim there to demonstrate.
+#
+# What (b) got right is that the region must be BEYOND the horizon and
+# VISIBLE.  What it got wrong is that a shared cut needs identities that
+# SHARE something -- hence one gate, bought once, with the region behind it.
 # ---------------------------------------------------------------------------
 
-def attach_fake_fan(g, boundary_node, width):
-    """Attach `width` fake identities as DIRECT children of boundary_node
-    (all one adoption hop below it, so two scope-hops from a root observer:
-    inside the horizon).  Returns the fake identities."""
+def attach_region_behind(g, gate, width):
+    """A fake region of `width` identities behind a single `gate` node.
+
+    Fake-internal edges are GENEROUS (a clique at capacity 100): the attacker
+    wires their own region however they like, and design §17.2 is explicit
+    that topology cannot provide Sybil resistance -- only the boundary is
+    real.  Returns the fake identities.
+    """
     fakes = []
     for i in range(width):
-        v = f"FAN.f{i}"
-        g.add_edge(boundary_node, v, HIER_CAP)
-        g.add_edge(v, boundary_node, HIER_CAP)
+        v = f"REGION.f{i}"
+        g.add_edge(gate, v, 100)
+        g.add_edge(v, gate, 100)
         fakes.append(v)
+    for a in fakes:                    # ... and richly interconnected
+        for b in fakes:
+            if a != b:
+                g.add_edge(a, b, 100)
     return fakes
 
 
 def experiment_setwise(rng, report):
-    """E3, rebuilt for the corrected trust landscape (design §16.2.1).
+    """E3, rebuilt for the collapsed horizon (design §16.2.1) [author].
 
-    WHERE CONSERVATION ACTUALLY BITES.  The metric does not ration inside
-    the horizon -- there a node is unthrottled and hierarchy-specific
-    position, not flow, decides what it gets.  So a fake region placed
-    INSIDE the observer's horizon (which an earlier version of this
-    experiment did, to answer a reviewer's visibility objection) tests
-    conservation in the one region where the design says conservation is
-    not the operative constraint.
+    THE FAITHFUL CONSTRUCTION.  The attacker obtains ONE peering edge, from
+    a horizon member H to a gate node G that holds no position in the
+    observer's subnet, and hangs an arbitrarily large region behind G.  The
+    region is then:
 
-    THE FAITHFUL CONSTRUCTION.  Beyond the horizon an observer can evaluate
-    only what it can SEE, and what it can see out there is a peering
-    counterparty of a horizon member (§16.3.1's visibility rule).  So the
-    attacker here obtains PEERING EDGES from one horizon member H to a fan
-    of identities that hold no position in the observer's subnet at all.
-    Those identities are:
-      * VISIBLE -- H is in the observer's horizon, so the observer sees
-        each peering record and the far endpoint with it;
-      * BEYOND the horizon -- peering confers no scope (§6.3), so they are
-        at landscape distance 2 and the metric DOES ration them;
-      * behind ONE CUT -- everything reaches them through H.
-    That is exactly the setting §16.2's sentence is about.
+      * VISIBLE -- H is in the observer's horizon, so the observer sees the
+        peering record and G with it, and (given evidence reaching one shell
+        further, `reach`) the region behind G;
+      * BEYOND the horizon -- peering confers no scope (§6.3), so G is at
+        landscape distance 2 and the metric DOES ration it;
+      * behind ONE CUT the attacker bought ONCE.
+
+    The cut here is G's relay capacity at its distance, not the peering
+    edge's nominal capacity -- node_capacity(2) = 8 binds below PEER_CAP =
+    10 -- which is the node-splitting note doing its job: what a region
+    inherits is what its gate can pass, and the gate is throttled by how far
+    away it is.
     """
     report.append("E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)")
     # depth 3: the root's two-edge horizon reaches its grandchildren, so
@@ -785,45 +885,48 @@ def experiment_setwise(rng, report):
     observer = nodes[0]                       # the root observes
     scope = scope_adjacency(nodes, children)
     hz = horizon(scope, observer)
-    inside = children[observer][0]            # a horizon member: the cut vertex
+    inside = children[observer][0]            # a horizon member: the peer
     outside = next(n for n in nodes if n not in hz)   # NOT in the horizon
+    GATE = "GATE"
 
     joints = []
-    for width in [4, 8, 16]:
-        # The attacker's identities hold no position in the subnet; they are
-        # reached only by peering edges from the horizon member `inside`.
-        fakes = [f"PEERFAKE{i}" for i in range(width)]
-        peer_edges = [(inside, f, PEER_CAP) for f in fakes]
-        vis = visible_flow_subgraph(base, scope, observer, peer_edges)
+    for width in [4, 8, 16, 32]:
+        g = base.copy()
+        fakes = attach_region_behind(g, GATE, width)
+        peer_edges = [(inside, GATE, PEER_CAP)]      # ONE acquired edge
+        # reach=1: the observer's evidence covers the shell past the gate.
+        # See visible_flow_subgraph -- how much graph an evaluator can
+        # populate is available evidence, not a protocol quantity [author].
+        vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
         visible_fakes = [f for f in fakes if f in vis.cap]
         indep_sum = sum(score_independent(vis, observer, t, scope, peer_edges)
                         for t in visible_fakes)
         joint = admit_reference_order(vis, observer, visible_fakes, demand=1,
                                       scope_adj=scope, peer_edges=peer_edges)[1]
-        ceiling = region_ceiling(vis, observer, inside, scope, peer_edges)
+        ceiling = region_ceiling(vis, observer, GATE, scope, peer_edges)
         report.append(
-            f"  {len(visible_fakes):>2} peered fakes beyond the horizon:  "
+            f"  {len(visible_fakes):>2} identities behind ONE acquired edge:  "
             f"independent-sum = {indep_sum:>4}   conserving joint = {joint}"
-            f"   cut through the horizon member = {ceiling}")
-        assert len(visible_fakes) == width, "peered fakes must all be visible"
+            f"   cut at the gate = {ceiling}")
+        assert len(visible_fakes) == width, "the region must all be visible"
         assert joint <= ceiling, "aggregate exceeded the cut"
         joints.append((width, joint, ceiling))
-    for n, joint, ceiling in joints:
-        if n >= ceiling:
-            assert joint == ceiling, "saturated region below its ceiling"
+    assert joints[-1][1] == joints[-2][1], \
+        "the joint must stop growing once the region exceeds its cut"
 
     # --- The GENERAL setwise-conservation statement (design §16.2) ---------
     # Every candidate demands its OWN INDIVIDUAL STANDING -- each asking for
     # everything it could get alone -- which is the strongest reading of
     # "simultaneously usable standing".
-    fakes = [f"PEERFAKE{i}" for i in range(16)]
-    peer_edges = [(inside, f, PEER_CAP) for f in fakes]
-    vis = visible_flow_subgraph(base, scope, observer, peer_edges)
+    g = base.copy()
+    fakes = attach_region_behind(g, GATE, 32)
+    peer_edges = [(inside, GATE, PEER_CAP)]
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
     individual = {t: score_independent(vis, observer, t, scope, peer_edges)
                   for t in fakes}
     total_individual = sum(individual.values())
     delivered = deliverable_flow(vis, observer, individual, scope, peer_edges)
-    ceiling = region_ceiling(vis, observer, inside, scope, peer_edges)
+    ceiling = region_ceiling(vis, observer, GATE, scope, peer_edges)
     report.append(
         f"  general demands (each asks its own standing): individual sum = "
         f"{total_individual}, simultaneously deliverable = {delivered}, "
@@ -834,14 +937,16 @@ def experiment_setwise(rng, report):
         "test is vacuous unless demand exceeds the cut"
 
     # --- INVISIBILITY is the conservative direction (design §16.3.1) -------
-    # The same fan, peered instead to a node OUTSIDE the observer's horizon:
-    # the observer cannot see those records at all, so the identities never
-    # enter its graph and cannot inflate anything.
-    far_edges = [(outside, f, PEER_CAP) for f in fakes]
-    vis_far = visible_flow_subgraph(base, scope, observer, far_edges)
+    # The same region, gated instead behind a node OUTSIDE the observer's
+    # horizon: the observer cannot see that peering record at all, so
+    # nothing behind it ever enters its graph.
+    g = base.copy()
+    fakes = attach_region_behind(g, GATE, 32)
+    far_edges = [(outside, GATE, PEER_CAP)]
+    vis_far = visible_flow_subgraph(g, scope, observer, far_edges, reach=1)
     leaked = [f for f in fakes if f in vis_far.cap]
     report.append(
-        f"  the same {len(fakes)} peered to a node OUTSIDE the horizon: "
+        f"  the same {len(fakes)} gated behind a node OUTSIDE the horizon: "
         f"{len(leaked)} visible -- invisibility is the conservative direction")
     assert leaked == [], "identities beyond an invisible edge leaked in"
 
@@ -890,16 +995,16 @@ def experiment_setwise(rng, report):
         admitted, _ = admit_reference_order(g2, "obs", order, demand=1)
         return admitted[0] if admitted else None
 
-    # Limb 1: the shorter path wins whichever order the candidates come in.
-    assert winner_unequal(["A", "B"]) == "B", "limb 1: shorter path must win"
-    assert winner_unequal(["B", "A"]) == "B", "limb 1: shorter path must win"
-    # Limb 2: at equal length the earlier-considered wins -- and the graph's
+    # Pass 1: the shorter path wins whichever order the candidates come in.
+    assert winner_unequal(["A", "B"]) == "B", "pass 1: shorter path must win"
+    assert winner_unequal(["B", "A"]) == "B", "pass 1: shorter path must win"
+    # Pass 2: at equal length the earlier-considered wins -- and the graph's
     # own construction order does not leak in.
     for build in (["A", "B"], ["B", "A"]):
         assert winner_equal(["A", "B"], build) == "A", \
-            "limb 2: earlier-considered must win a true tie"
+            "pass 2: earlier-considered must win a true tie"
         assert winner_equal(["B", "A"], build) == "B", \
-            "limb 2: earlier-considered must win a true tie"
+            "pass 2: earlier-considered must win a true tie"
     report.append(
         "  scarce-capacity allocation: available flow ranks first (the "
         "metric itself), then the")

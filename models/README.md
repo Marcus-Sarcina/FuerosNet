@@ -30,7 +30,7 @@ min-cut trust metric. Runs the four claims §16.2 argues on paper:
 |---|---|---|
 | E1 | distance-decay diverges unless λ < 1/f | the 0.5/0.05 figures reproduce (~19,500× vs ~2×), and the exact boundary fλ=1 is classified as divergent (it grows linearly) |
 | E2 | a region is bounded by its cut regardless of population | best individual score stays ≤ the boundary capacity as the fake region grows to 341 identities |
-| E3 | **setwise conservation** (normative, 2026-09-03), **beyond the horizon** | tested where the metric actually rations (§16.2.1): identities reached only by peering edges from one horizon member — visible, outside the horizon, behind one cut. The independent-per-target sum grows with population while the conserving joint saturates at the cut; the same identities peered to a node *outside* the observer's horizon are invisible and cannot inflate anything |
+| E3 | **setwise conservation** (normative, 2026-09-03), **beyond the horizon** | a region of 4→32 identities behind **one acquired peering edge** from a horizon member — visible, outside the horizon, sharing one cut the attacker bought once. The independent-per-target sum grows with population (32→256) while the conserving joint saturates at the cut (4→8→8→8) and general demands deliver 8 of 256 asked; the same region gated behind a node *outside* the observer's horizon is invisible and cannot inflate anything |
 | E4 | edge-influence amortises (§16.3.1) | with horizons over adoption+sibling scope only, one visible peering edge influences several observers and no observer that cannot see it — every cross-tree placement enumerated. **Demonstrated in one toy topology, not measured as economics**: it shows amortisation exists, not how many edges reach a target fraction of a population |
 
 **Three concepts kept separate.** The design is emphatic (§6.3:
@@ -47,6 +47,17 @@ observer could not see; the current version is the correction. That review
 also brute-force-validated the `max_flow` implementation against exhaustive
 minimum cuts on 700 random graphs with zero discrepancies, so the core
 arithmetic is not where a defect would hide.
+
+A later review read §16.2.1 as putting *sibling* edges in the trust-capacity
+graph too; the author ruled otherwise — a sibling edge abstracts
+graph-distance in the patronage hierarchy and carries no capacity — so the
+split above stands and the design's wording was corrected to match. Since
+that round **visibility is a parameter, not a constant**:
+`visible_flow_subgraph(..., reach=n)` extends the observer's evidence *n*
+shells past the peering shell, because how much graph an evaluator can
+populate is available evidence rather than a protocol quantity. The metric
+is the same computation at every value of `reach`; a poorer graph bounds
+harder, which is §16.3.1's conservative direction.
 
 `simulation/results.txt` is the committed run.
 
@@ -182,8 +193,40 @@ then-diagnose loop *is* the value of the exercise.
   network invariant*, since per-observer trust (§16.1) means no party
   consumes another's computation.
 
+- **`flow_metric` (a third review found the horizon was not collapsed, and
+  E3 had been passing for the wrong reason).** A cross-family review reported
+  that sibling relationships were missing from the capacity graph, citing
+  §16.2.1's *"adoption and sibling edges ... carry trust"*. Reproducing it
+  (seed 5: cut 10→30 on materialising them) put the cut under a microscope
+  and showed E3's chokepoint was not an acquired edge at all but **the
+  observer's own in-horizon hierarchical edge**, throttled at `HIER_CAP`
+  because the graph had not collapsed the horizon. Unthrottling it made E3
+  trip its own `"test is vacuous unless demand exceeds the cut"` guard:
+  deliverable rose to equal the independent sum, so there was no
+  conservation left to demonstrate. E2 and E4 were unaffected, bit for bit.
+
+  The author ruled on all of it. **The horizon collapses to a single edge**
+  (distance 0→1), because nodes within each other's horizons are directly
+  aware of each other — so the horizon's internal topology is not in the
+  flow graph at all. **Sibling edges are an abstraction of graph-distance in
+  the patronage hierarchy, not edges in the trust graph**, so the reported
+  finding was a defect in §16.2.1's wording rather than in the model, and
+  the design was corrected instead. **How far outward a graph reaches is
+  available evidence, not a protocol quantity** — hence `reach` on
+  `visible_flow_subgraph`, a modelling parameter the metric is identical at
+  every value of. E3 was rebuilt around the only shape conservation speaks
+  to: a region behind one edge bought once.
+
+  The collapse also **dissolved a second finding from the same review**
+  without a line of allocation code changing. Ranking candidates by hops in
+  the *uncollapsed* graph re-graded the inside of the horizon: two
+  candidates at landscape distance 2 measured 3 and 5, and the deeper one
+  lost under either consideration order. In the collapsed graph they measure
+  3 and 3, tie, and consideration order decides — because **hops in the
+  collapsed graph are the landscape distance**. §16.4 now names the graph.
+
 - **`flow_metric` (a second review caught the allocation rule unimplemented).**
-  A follow-up cross-family review showed the first limb was satisfied only by
+  A follow-up cross-family review showed the first pass was satisfied only by
   accident and the second not at all: a plain multi-sink max-flow gets
   shortest-path-first free from Edmonds-Karp, but decides equal-length ties by
   the order edges sit in the *graph's own adjacency* — an artifact of how the

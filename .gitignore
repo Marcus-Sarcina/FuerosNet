@@ -1,0 +1,7 @@
+# Python bytecode from running the models
+__pycache__/
+*.py[cod]
+
+# TLC scratch state (run-all.sh writes it to /tmp, but a manual run may not)
+states/
+*.st

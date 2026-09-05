@@ -53,6 +53,41 @@ how I realized it wasn't what I intended."*
 document rather than in review correspondence: the next reader gets the
 same check the author got.
 
+### The documents carry the design, not its history
+
+**No passage may explain itself by reference to an earlier draft or a review
+round** [author, 2026-09-04]: *"We don't need to refer to earlier drafts or
+review rounds. The spec has not been published yet, so there is no backward
+compatibility to maintain."*
+
+**The tell is a sentence whose subject is the document.** *"An earlier draft
+said X, which conflated Y"*, *"a cross-family review found Z"*, *"this
+acceptance now claims relief only on the second."* Each pins a live claim to
+a dead one, and the reader has to hold both to extract the one that counts.
+
+**Rewrite by keeping the claim and dropping the correction.** *"An earlier
+draft said adverse results are visible to anyone who weighs them, which this
+paragraph's premise contradicts"* becomes *"an adverse result is not visible
+to anyone who weighs it, having become an absence."* Where the surrounding
+text already carries the point, delete rather than rephrase — four of the
+eight instances swept on 2026-09-04 were restating a ruling made three lines
+above them.
+
+**Three things this does not touch**, all of which stay:
+
+- **Register tombstones.** Retired type numbers, withdrawn findings, closed
+  assumptions. A citation must resolve to *withdrawn* rather than silently
+  to a different entry, which is why numbers are never reused.
+- **Protocol supersession.** Superseded credentials, locators and
+  registrations are mechanisms, not drafting history.
+- **Rejected alternatives.** Appendix rows recording what was considered and
+  why it lost are forward-looking: they answer the implementer who is about
+  to propose it again.
+
+**The history lives in `change-log.md`**, which is what it is for, and in
+this directory. A root document that needs its own history to be understood
+has a drafting problem, not a documentation gap.
+
 ## Where invariants live
 
 *(The design document keeps its own statement of this rule, because it governs how

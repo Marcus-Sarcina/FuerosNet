@@ -13,11 +13,12 @@ E2: the individual cut bound (design 16.2, 17.3)
   population never moved the individual bound: CONFIRMED
 
 E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)
-   4 peered fakes beyond the horizon:  independent-sum =   40   conserving joint = 4   cut through the horizon member = 10
-   8 peered fakes beyond the horizon:  independent-sum =   80   conserving joint = 8   cut through the horizon member = 10
-  16 peered fakes beyond the horizon:  independent-sum =  160   conserving joint = 10   cut through the horizon member = 10
-  general demands (each asks its own standing): individual sum = 160, simultaneously deliverable = 10, cut = 10
-  the same 16 peered to a node OUTSIDE the horizon: 0 visible -- invisibility is the conservative direction
+   4 identities behind ONE acquired edge:  independent-sum =   32   conserving joint = 4   cut at the gate = 8
+   8 identities behind ONE acquired edge:  independent-sum =   64   conserving joint = 8   cut at the gate = 8
+  16 identities behind ONE acquired edge:  independent-sum =  128   conserving joint = 8   cut at the gate = 8
+  32 identities behind ONE acquired edge:  independent-sum =  256   conserving joint = 8   cut at the gate = 8
+  general demands (each asks its own standing): individual sum = 256, simultaneously deliverable = 8, cut = 8
+  the same 32 gated behind a node OUTSIDE the horizon: 0 visible -- invisibility is the conservative direction
   scarce-capacity allocation: available flow ranks first (the metric itself), then the
   shorter path, then consideration order for true ties -- independent of graph
   construction order (reference policy §16.4)
