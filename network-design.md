@@ -2715,12 +2715,27 @@ whole exit argument already assumes you can (§6.2.1).
 
 Rotation propagates as **the topology transactions it is made of** (§15) — a
 disavowal and an adoption — pushed within the horizon and folded into aggregate
-state beyond. **No message anywhere says "rotation"**, and the inheritance linking
-the two is not carried (§9.0). Parties outside the horizon holding a cached key
-binding are handled by a **currency-attestation query** addressed using the anchor
-and path the introduction already carries (§12.6.5); what they learn on contact is
-whether that identity is **currently attested**, never what became of one that is
-not. So the gap
+state beyond.
+
+**Whether the two can be linked is §9.0's two cases, and they behave
+differently.** After a **plain** rotation no message says "rotation" and no
+inheritance is carried anywhere: a horizon member sees a disavowal and an
+adoption in quick succession and cannot prove they are the same person, which
+is the subject's privacy choice and the reason §19.7 item 3 exists. A
+**recovery** adoption publishes the link on purpose — `prior_key` and the
+successor statement travel inside the adoption itself (`wire-format.md` §4.1
+field 6), which is topology class and forwarded byte-for-byte
+(`wire-format.md` §10.1).
+
+**So within the horizon a recovery adoption replaces the binding, and does not
+sit beside it** [author, 2026-09-05]: members holding the old key **remove it
+from their records and overwrite it with the new one**. The publication
+reaches the horizon and stops there (§9.0), so **beyond it nothing changes**:
+those parties never receive the adoption, go on holding the old and new keys
+as **separate entities**, and are handled by a **currency-attestation query**
+addressed using the anchor and path the introduction already carries
+(§12.6.5). What they learn on contact is whether that identity is **currently
+attested**, never what became of one that is not. So the gap
 §15 appeared to have is **not a further message class**; it is a propagation
 *pattern*, "push near, redirect far", available to topology-class messages.
 
@@ -2734,7 +2749,15 @@ the two keys are distinct nodes each with their own patron, both can be
 simultaneously valid. Observers route
 to and trust whichever attester they trust; there is no mechanism to declare a
 single heir to an archive, and two keys may carry lineage from the same history
-indefinitely. §6.2's monotonic sequence number cannot help even in principle,
+indefinitely.
+
+**A fork does not give one observer two current keys; it gives it a choice.**
+The overwrite above is per identity per observer, so a member receiving two
+competing recovery adoptions for the same `prior_key` does not hold both as
+current — it resolves to one, by which patron it trusts, which is what
+"choosing between X and Y" below means. Both successors remain valid *nodes*
+network-wide; what is not global is which of them any given observer treats as
+the continuation. §6.2's monotonic sequence number cannot help even in principle,
 since a thief holding the key signs a higher counter than the legitimate owner.
 
 The paradigm: **one secret authenticating to mutually non-interacting networks**.
@@ -2744,8 +2767,12 @@ using the same password on both, or changing it on one and not the other. The
 adversarial case maps too: a stolen password changed on one site loses you that
 site and leaves the other intact, recovered through that site's own process.
 
-Implementers assuming an identity has one current key will build something
-subtly wrong.
+**Implementers assuming an identity has one current key *globally* will build
+something subtly wrong.** Within one observer's horizon there is exactly one
+current key per identity, because a recovery adoption overwrites the binding.
+Across horizons there is no such thing: the same person is one identity to
+those who received the adoption and two unrelated ones to everyone else, and
+no party holds a view that reconciles them.
 
 **Boundaries are ragged, not clean.** Unlike the SSO picture, a fork can be
 *intra-org*: a thief adopted by patron X and the legitimate holder by patron Y,
@@ -4402,6 +4429,17 @@ chain onto a new series (`wire-format.md` §4.6), a recovery it has validated
 (§9.1) — MUST NOT continue
 serving it: sessions under the superseded credential terminate, and nothing
 further is delivered to it, queued material and capture-key grants included.
+
+**For the key binding, inside the horizon, this is enforced by replacement
+rather than by a check** (§9.0.2): a recovery adoption overwrites the old key
+in a member's records, so there is no superseded binding left to serve under
+and the rule bites on **sessions and queues already running** rather than on
+future lookups. **Outside the horizon there is no supersession to know**, the
+adoption having never arrived — those parties hold the old key until its
+attestation expires, which is the ignorance the table above is for and not a
+violation of this rule. The two halves therefore never overlap: a party either
+received the adoption, in which case the binding is gone, or did not, in which
+case expiry is the only bound it has.
 Expiry bounds what a stolen credential can *spend*; supersession, once known,
 is what retires it from *use* — and conflating the two would leave the
 fail-open row reading as licence to keep serving a binding the server knows is

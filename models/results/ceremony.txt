@@ -631,7 +631,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
 
-  processing time: 2.62s
+  processing time: 2.64s
   
   WARNING: 2 wellformedness check failed!
            The analysis results might be wrong!

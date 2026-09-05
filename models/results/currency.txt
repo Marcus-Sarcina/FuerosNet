@@ -209,7 +209,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.60s
+  processing time: 0.63s
   
   WARNING: 2 wellformedness check failed!
            The analysis results might be wrong!

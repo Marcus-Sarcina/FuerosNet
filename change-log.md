@@ -8817,3 +8817,41 @@ is dead — and the model conflated them. A first rebuild closes the trace but
 needs rotation-back forbidden and proof hints before the property is
 tractable, so the limitation is written into the file instead of a half-built
 model being landed.
+
+### 2026-09-05 (a recovery replaces the binding inside the horizon)
+
+Asked what a superseded key is, the answer turned out to be two answers, and
+the propagation section had flattened them into one wrong one.
+
+A **plain** rotation carries no link at all: a horizon member sees a
+disavowal and an adoption in quick succession and cannot prove they are the
+same person, which is the subject's privacy choice. A **recovery** adoption
+publishes the link deliberately — the prior key and the successor statement
+travel inside the adoption itself, which is topology class and forwarded
+byte-for-byte. The rotation section already drew that distinction and said
+the publication reaches the horizon and stops there. The propagation section
+then asserted flatly that no message anywhere says rotation and that the
+inheritance is not carried, which is false of the recovery case and would
+make the rule below impossible to implement.
+
+**Within the horizon a recovery adoption replaces the key binding rather than
+sitting beside it**: members holding the old key remove it and overwrite it
+with the new one. Beyond the horizon nothing changes — those parties never
+receive the adoption and go on holding the old and new keys as separate
+entities, answered on contact only by whether an identity is currently
+attested.
+
+That settles what the fail-open rule governs. Inside the horizon supersession
+is enforced by replacement rather than by a check, so there is no superseded
+binding left to serve under and the rule bites on sessions and queues already
+running. Outside, there is no supersession to know, and expiry is the only
+bound those parties have. The two halves never overlap: a party either
+received the adoption or did not.
+
+Two consequences follow. A fork does not give one observer two current keys,
+it gives it a choice — the overwrite is per identity per observer, so a member
+receiving two competing claims resolves to one by which patron it trusts,
+while both successors remain valid nodes network-wide. And the warning against
+assuming an identity has one current key is narrowed to what it means: within
+one horizon there is exactly one, across horizons there is no such thing, and
+no party holds a view reconciling them.

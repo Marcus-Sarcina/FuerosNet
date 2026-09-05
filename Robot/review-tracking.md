@@ -4928,3 +4928,45 @@ reported quotes found in the OTHER document. Replaced with wire §4.1's actual
 words.
 
 Lemma count 13 -> 14. All eight models pass. Model references 128, 0 flags.
+
+**Supersession semantics, author-ruled (2026-09-05).** Arising from the
+Tamarin review's TAM-01: asked which binding "superseded" names, the author
+ruled *"The rotation should cause all nodes within the horizon to remove the
+old key from their records and overwrite it with the new key. The rotation
+should not be transmitted beyond the horizon, so any node outside of the
+horizon should continue seeing old and new keys as separate entities."*
+
+Checking it against the text found the ruling **already half-written and half
+contradicted**. §9.0 distinguishes a PLAIN rotation (carries nothing; the
+subject's privacy choice, §19.7 item 3) from a RECOVERY adoption, which
+"publishes the link deliberately, `prior_key` plus verifier continuity
+attestations" and whose "publication reaches the horizon and stops there" --
+which IS the ruling. But §9.0.2 then said "**No message anywhere says
+'rotation'**, and the inheritance linking the two is not carried", which is
+false of the recovery case: `wire-format.md` §4.1 field 6 is a `Recovery`
+block "present iff this is a recovery adoption", carrying `prior_key` and the
+successor statement, inside a topology-class object forwarded byte-for-byte
+(§10.1). A horizon member therefore receives the link in one signed object.
+Had that sentence stood, the overwrite would have been unimplementable.
+
+Applied: §9.0.2's blanket sentence split into the two cases; the overwrite
+recorded with the author's words; §12.6.5's supersession paragraph given the
+consequence -- inside the horizon the rule is enforced by REPLACEMENT rather
+than by a check, so it bites on running sessions and queues, and outside there
+is no supersession to know, expiry being the only bound. The two halves never
+overlap.
+
+Two inferences, flagged as such rather than ruled: (a) the fork case is
+reconciled as one-current-key-per-observer with a CHOICE between competing
+claims, not two current keys -- the author confirmed the premise ("a horizon
+member does hold one current key per identity ... what has no single current
+key is the identity globally") and this follows; (b) the overwrite applies to
+RECOVERY adoptions, since a plain rotation carries nothing to overwrite with.
+(b) is forced by §9.0's two cases rather than chosen.
+
+**The currency model is now specified but not built.** The property to prove
+is the relying party's, not the patron's: a party that received the recovery
+adoption must not accept the old key thereafter, expiry notwithstanding. The
+patron-side no-fresh-issuance property falls out of the same overwrite, the
+patron being a horizon member itself. Awaiting the author's go, the earlier
+"say the word" not having been answered with one.

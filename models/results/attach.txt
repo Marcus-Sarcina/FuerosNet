@@ -207,7 +207,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
 
-  processing time: 0.57s
+  processing time: 0.51s
   
   WARNING: 1 wellformedness check failed!
            The analysis results might be wrong!
