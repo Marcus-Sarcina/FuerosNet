@@ -124,12 +124,14 @@ either be structurally disjoint from every language above, or carry its own
 | Prekey bundle (§7.8) | `rhtn/1:prekey` |
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
+| Former-patron transfer statement (§4.1) | `rhtn/1:transfer` |
 
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
 byte string valid in two roles, which the differing CBOR structures argue against without ruling out
 — and unproven non-confusability is precisely what domain separation exists to
-replace, and the number of roles grew from three to seven while the protocol
-believed it had separation it did not have. A verifier that derives the tag from
+replace. **Thirteen roles carry a tag**, and the risk domain separation
+answers grows with every one of them: each new signed context is another
+chance for a byte string to be valid in two places at once. A verifier that derives the tag from
 context rather than content also makes the check free.
 
 ### 1.2 Deterministic encoding — REQUIRED PROFILE RULE
@@ -875,7 +877,20 @@ Subsumes key rotation and recovery.
   6: ? Recovery,       ; present iff this is a recovery adoption
   7: ? txid,           ; archive HEAD presented (design §16.7), one hash, not
                        ; a list. The chain gives the rest
-  8: ? txid            ; proof-of-presence record between these two parties
+  8: ? txid,           ; proof-of-presence record between these two parties.
+                       ;   EXACTLY ONE of fields 8 and 9 is present (design
+                       ;   §6.1.1); neither, or both, is malformed
+  9: ? Transfer        ; present iff this adoption is a transfer — the former
+                       ;   patron vouching in place of a meeting
+}
+
+Transfer = {
+  1: keyhash,          ; the FORMER patron, whose signature stands where a
+                       ;   proof of presence otherwise would (design §6.1.1)
+  2: COSE_Sign         ; by that former patron. COSE_Sign rather than
+                       ;   COSE_Sign1 for the same reason field 3 of Recovery
+                       ;   is: the signer is hybrid and one logical signer
+                       ;   contributes two entries (§3.5)
 }
 
 Recovery = {
@@ -1018,13 +1033,70 @@ and reject on mismatch.** An unchecked binding is the same as no binding.
 statement names the fields it needs directly, which avoids the circularity without
 leaving the payload empty.
 
-**Field 8 — proof of presence.** Expected on a *fresh*
-adoption, meaning the patron holds no prior PoP with this node. **Optional in the
-protocol, not enforced**: there is no global enforcement point (design §3.1.1),
-so a mandate would be a recommendation with extra steps. An adoption without it
-is well-formed and near-worthless — policy weights it, the decoder does not
-reject it. Not expected on lateral or vertical shifts (design §6.2.3), where the
-new patron already holds the history.
+**Transfer field 2 signs a transfer statement, and for the same reason.** The
+payload is the deterministic CBOR of:
+
+```
+TransferStatement = [
+  node_key,            ; keyhash — adoption field 1, the node being transferred
+  former_patron_key,   ; keyhash — Transfer field 1, this signer
+  new_patron_key       ; keyhash — adoption field 2, the ONLY destination authorised
+]
+```
+
+with `external_aad = "rhtn/1:transfer"`.
+
+**Omitting the destination would be the same replay primitive one field over.**
+A countersignature saying only *"I vouch for this node moving"* names no
+destination, so one observed signature would authorise an unlimited number of
+moves: extract it, build a fresh adoption naming the same node with an
+attacker-controlled patron, insert the countersignature unchanged, and every
+signature still verifies while the former patron's statement contains nothing
+to contradict it. Naming all three parties is what makes the vouching specific
+to *this* move.
+
+**A transfer discloses no meeting, because it references none.** Field 8 names
+a presence record, and §4.5.2 sets out what each exchange handling one can see;
+field 9 names three keyhashes and a signature over them. So the two evidence
+routes differ in privacy as well as in what they attest — the transfer route
+reveals that a former patron vouched and nothing about any ceremony, which is
+one reason a node with a usable former patron may prefer it.
+
+**`former_patron_key` MUST differ from adoption field 2** — identical keys
+represent no transfer, the same rule and the same reason as `prior_key` MUST
+differ from field 1 in a `Recovery` — **and MUST differ from field 1**, since a
+node does not vouch for its own move.
+
+**A verifier MUST check all three against the enclosing adoption** — `node_key`
+against field 1, `former_patron_key` against the `Transfer` map's own field 1,
+`new_patron_key` against field 2 — **and reject on mismatch.** The same
+sentence as above, and for the same reason: an unchecked binding is the same as
+no binding.
+
+**Fields 8 and 9 — the evidence, and exactly one of them is required.** design
+§6.1.1: an adoption rests either on a proof of presence between the two parties
+(field 8, that record's `txid`) or on the former patron's countersignature
+(field 9, a `Transfer` block). **An adoption carrying neither is malformed**,
+and one carrying both is malformed too — they are alternatives, and an object
+offering two answers to the same question invites a validator to pick.
+
+**This is checkable without consulting anything outside the object**, which is
+what lets it be a structural rule at all. A decoder does not ask whether the
+meeting happened, whether the countersigner really was the patron, or where
+either party sits in its own topology; it asks which field is present and
+whether the signature in it verifies. §6.8's rule holds: no node rejects an
+object its neighbour accepts.
+
+**Field 8 is for a *fresh* adoption** — the patron holds no prior PoP with this
+node. **Field 9 is for a node moving from a patron it already had**, which
+covers lateral and vertical shifts (design §6.2.3): the former patron vouches
+in place of a meeting, and where it will not or cannot, the move is an ordinary
+adoption on a proof of presence like any other.
+
+**What each is worth is not a structural question** (design §16.1). An observer
+holding the topology can confirm that field 9's signer really was this node's
+patron; one that cannot, weighs the edge lower for that reason. The decoder
+takes no view.
 
 **Field 7 is a single txid: the head of the archive prefix being presented.**
 Not a list, not a range, not a proof.
@@ -1186,7 +1258,13 @@ legible without making the *particulars* so.
   4: NetworkPoint,     ; B
   5: timestamp,
   6: ? uint,           ; replication commitment, bytes
-  7: ? [ * Audit ]     ; most recent few only (design §6.3)
+  7: ? [ * Audit ],    ; most recent few only (design §6.3)
+  8: txid              ; proof-of-presence record between the two peers.
+                       ;   REQUIRED, and unconditionally so (design §6.3):
+                       ;   §4.1's field-9 alternative is for a node moving
+                       ;   between patrons it already had, and peers share no
+                       ;   prior relationship to draw on. A peering record
+                       ;   without it is MALFORMED
 }
 
 NetworkPoint = {
@@ -1419,7 +1497,7 @@ VerifierResponse = {
                        ;   Renumbered from the three-value vocabulary that
                        ;   folded tiers 1-2 into one value: met and
                        ;   merely-in-horizon are different security facts
-                       ;   (design §20.2, A23) and the record retains the
+                       ;   (design §16.2.1) and the record retains the
                        ;   difference
   8: ? keyhash,        ; PRIOR identity being matched against. REQUIRED when this
                        ; response appears inside a Recovery block (§4.1), absent
@@ -1894,9 +1972,9 @@ queries**:
   tier-aligned [author, 2026-09-03]: `0 met` (tier 1), `1 in-horizon`
   (tier 2), `2 reachable` (tier 3 or 4), `3 discretionary fill`. Met and
   merely-in-horizon are separately encoded because they are different
-  security facts — an unattested adoption places an identity in a horizon
-  cheaply (design §20.2, A23), and a record folding the two would launder
-  structural proximity into the look of acquaintance. The claim is the
+  security facts — sharing a position with somebody is not having met them
+  (design §16.2.1), and a record folding the two would launder structural
+  proximity into the look of acquaintance. The claim is the
   selector's, recorded because an evaluator reading
   the record cannot reconstruct the selector's acquaintance graph; like
   `nominated_by`, the schema records the claim and evaluation is the
@@ -4048,6 +4126,7 @@ classical column applies only to session-layer traffic.
 |---|---|---|
 | Adoption | — | **~8 KB** |
 | Adoption carrying a recovery (~10 responses) | — | **~42 KB** — ~8 KB plus ~34 KB of hybrid verifier authentications (§4.1, §4.5). The second-largest object in the protocol, and rare by construction |
+| Adoption carrying a transfer | — | **~11 KB** — ~8 KB plus one hybrid logical signer at 3,373 B for the former patron's countersignature (§4.1). The `txid` alternative in field 8 costs 32 B, so a transfer is the more expensive of the two evidence routes |
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |
 | Peering | — | **~8 KB** |
