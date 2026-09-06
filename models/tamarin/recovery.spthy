@@ -204,6 +204,39 @@ rule Recognise:
   verifier it relied on, so the lemma can ask about that verifier's honesty.
 */
 
+/*
+--------------------------------------------------------------------------------
+  THE OTHER EVIDENCE ROUTE -- A TRANSFER
+--------------------------------------------------------------------------------
+  design §6.1.1 gives an adoption two ways to carry evidence: a proof of
+  presence between the two parties, or the FORMER PATRON's countersignature.
+  This theory models adoptions that carry embedded evidence, so the second
+  route belongs here beside the first.
+
+  `wire-format.md` §4.1 binds the countersignature to a TransferStatement of
+  [node, former_patron, new_patron], for the reason the SuccessorStatement
+  binds three: a signature naming no destination would authorise an unlimited
+  number of moves.  That is the same replay primitive, one field over, and the
+  lemma below is the same lemma one field over.
+*/
+
+rule Transfer_Countersign:
+    [ !Ltk($Old, ~osk)                 // the FORMER patron's key
+    , Fr(~nodekey)                     // the node being transferred
+    , !Pk($New, pkNew) ]               // a registered destination patron
+  --[ CountersignedFor($Old, ~nodekey, $New) ]->
+    [ Out(<'transfer', ~nodekey, $Old, $New,
+           sign(<'transfer', ~nodekey, $Old, $New>, ~osk)>) ]
+
+rule Patron_Accept_Transfer:
+    [ !Ltk($New, ~nsk)                          // the new patron signs the result
+    , !Pk($Old, pkOld)                          // the former patron's key
+    , In(<'transfer', nodekey, $Old, $New, prov>) ]
+  --[ Eq(verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true)
+    , Distinct($Old, $New)                      // identical keys = no transfer
+    , TransferAccepted($New, $Old, nodekey) ]->
+    [ Out(sign(<'adopted', nodekey, $New>, ~nsk)) ]
+
 rule Patron_Accept_Recovery:
     [ !Ltk($P, ~psk)                            // patron's own key (it signs)
     , !Pk($S, pkOld)                            // subject's OLD public key
@@ -353,5 +386,16 @@ lemma recovery_requires_a_meeting:
      ==> ( (Ex V #m. RecoveryMeeting(V, S) @ #m & #m < #i)
          | (Ex V #kv. Compromised(V) @ #kv & #kv < #i)
          | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
+
+// THE TRANSFER STATEMENT BINDS ITS DESTINATION.  Every accepted transfer rests
+// on a countersignature naming THIS new patron -- so one countersignature does
+// not authorise moves its signer never approved.  Drop $New from the signed
+// payload and this falsifies, exactly as successor_statement_binds_the_patron
+// does for the recovery route.
+lemma transfer_statement_binds_the_destination:
+  "All New Old nodekey #i.
+     TransferAccepted(New, Old, nodekey) @ #i
+     ==> ( (Ex #a. CountersignedFor(Old, nodekey, New) @ #a & #a < #i)
+         | (Ex #k. Compromised(Old) @ #k & #k < #i) )"
 
 end

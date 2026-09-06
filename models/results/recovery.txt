@@ -63,6 +63,58 @@ rule (modulo E) Recognise:
 
   /* has exactly the trivial AC variant */
 
+rule (modulo E) Transfer_Countersign:
+   [ !Ltk( $Old, ~osk ), Fr( ~nodekey ), !Pk( $New, pkNew ) ]
+  --[ CountersignedFor( $Old, ~nodekey, $New ) ]->
+   [
+   Out( <'transfer', ~nodekey, $Old, $New, 
+         sign(<'transfer', ~nodekey, $Old, $New>, ~osk)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Patron_Accept_Transfer:
+   [
+   !Ltk( $New, ~nsk ), !Pk( $Old, pkOld ),
+   In( <'transfer', nodekey, $Old, $New, prov> )
+   ]
+  --[
+  Eq( verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true ),
+  Distinct( $Old, $New ), TransferAccepted( $New, $Old, nodekey )
+  ]->
+   [ Out( sign(<'adopted', nodekey, $New>, ~nsk) ) ]
+
+  /*
+  rule (modulo AC) Patron_Accept_Transfer:
+     [
+     !Ltk( $New, ~nsk ), !Pk( $Old, pkOld ),
+     In( <'transfer', nodekey, $Old, $New, prov> )
+     ]
+    --[
+    Eq( z, true ), Distinct( $Old, $New ),
+    TransferAccepted( $New, $Old, nodekey )
+    ]->
+     [ Out( sign(<'adopted', nodekey, $New>, ~nsk) ) ]
+    variants (modulo AC)
+    1. $New  = $New.16
+       $Old  = $Old.17
+       nodekey
+             = nodekey.19
+       pkOld = pkOld.20
+       prov  = prov.21
+       z     = verify(prov.21, <'transfer', nodekey.19, $Old.17, $New.16>,
+                      pkOld.20)
+    
+    2. $New  = $New.24
+       $Old  = $Old.25
+       nodekey
+             = nodekey.27
+       pkOld = pk(x.46)
+       prov  = sign(<'transfer', nodekey.27, $Old.25, $New.24>, x.46)
+       z     = true
+  */
+
 rule (modulo E) Patron_Accept_Recovery:
    [
    !Ltk( $P, ~psk ), !Pk( $S, pkOld ), !Pk( $V, pkV ),
@@ -422,6 +474,38 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
   qed
 qed
 
+lemma transfer_statement_binds_the_destination:
+  all-traces
+  "∀ New Old nodekey #i.
+    (TransferAccepted( New, Old, nodekey ) @ #i) ⇒
+    ((∃ #a. (CountersignedFor( Old, nodekey, New ) @ #a) ∧ (#a < #i)) ∨
+     (∃ #k. (Compromised( Old ) @ #k) ∧ (#k < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ New Old nodekey #i.
+  (TransferAccepted( New, Old, nodekey ) @ #i)
+ ∧
+  (∀ #a. (CountersignedFor( Old, nodekey, New ) @ #a) ⇒ ¬(#a < #i)) ∧
+  (∀ #k. (Compromised( Old ) @ #k) ⇒ ¬(#k < #i))"
+*/
+simplify
+solve( !Ltk( $New, ~nsk ) ▶₀ #i )
+  case Register
+  solve( !Pk( $Old, pk(x) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'transfer', nodekey, $Old, $New>, ~sk) ) @ #vk.8 )
+      case Transfer_Countersign
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      solve( !KU( ~sk ) @ #vk.12 )
+        case Compromise
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -439,7 +523,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.22s
+  processing time: 1.53s
   
   recovery_is_executable (exists-trace): verified (8 steps)
   key_alone_insufficient (all-traces): verified (11 steps)
@@ -447,5 +531,6 @@ analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
   recognition_binds_the_successor (all-traces): verified (14 steps)
   successor_statement_binds_the_patron (all-traces): verified (8 steps)
   recovery_requires_a_meeting (all-traces): verified (11 steps)
+  transfer_statement_binds_the_destination (all-traces): verified (7 steps)
 
 ==============================================================================

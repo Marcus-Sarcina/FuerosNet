@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (18 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (19 lemmas).
 
 ---
 
@@ -145,6 +145,13 @@ the honest protocol and so proves every security lemma vacuously.
   which "one observed proof would authorise an unlimited number of competing
   successors". *See "What the models found," below — this one earned its
   keep twice.*
+
+  It also models the **other** evidence route an adoption may carry (design
+  §6.1.1): a former patron's countersignature, with
+  `transfer_statement_binds_the_destination` checking that the signed
+  `TransferStatement` names *this* destination. Drop the destination and only
+  that lemma falsifies — the same replay primitive the successor statement
+  closes, one field over.
 
 - **`ceremony`** (design §7–8) — the presence ceremony, the plan's
   highest-value target. **A record a third party accepts implies the named

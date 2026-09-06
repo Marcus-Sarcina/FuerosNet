@@ -654,7 +654,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
 
-  processing time: 2.17s
+  processing time: 1.89s
   
   ceremony_is_executable (exists-trace): verified (10 steps)
   presence_requires_copresence (all-traces): verified (10 steps)
