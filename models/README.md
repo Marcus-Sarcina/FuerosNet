@@ -122,8 +122,8 @@ the honest protocol and so proves every security lemma vacuously.
 
 - **`attach`** (design §14, wire §9.1) — session attach. A client that
   completes an attach authenticated the server it intended; **a sibling (or
-  any party without the server's key) cannot impersonate the server**. Three
-  lemmas. **This is endpoint authentication, not authorisation**: the theory
+  any party without the server's key) cannot impersonate the server**. Four lemmas, the fourth
+  `attach_completes_honestly` — an uncompromised run that reaches a commit. **This is endpoint authentication, not authorisation**: the theory
   has no patron/sibling role, session mode or trust-bearing operation, so it
   cannot express the failover case where a client knowingly attaches to a
   sibling and trust-bearing operations must stop anyway. The third lemma is
@@ -134,7 +134,9 @@ the honest protocol and so proves every security lemma vacuously.
 
 - **`currency`** (design §12.6.5) — currency attestation + stapling. A
   trust-bearing acceptance of a key as current requires an unexpired patron
-  issuance for that exact key, expiry modelled as event order. Three lemmas.
+  issuance for that exact key, expiry modelled as event order. Four lemmas,
+  the fourth `currency_is_usable_honestly` — an acceptance with no compromise,
+  which three reviews' worth of green universal lemmas had not required.
   **Known limitation, now stated in the file:** there is no notion of a
   *current* key, so a patron can mint a fresh attestation for a key the
   subject rotated away from — Tamarin confirms the trace. §12.6.5 keeps
@@ -166,7 +168,9 @@ the honest protocol and so proves every security lemma vacuously.
   highest-value target. **A record a third party accepts implies the named
   participants were co-present** (`presence_requires_copresence`,
   `no_remote_forgery`), and one meeting's signatures cannot be transplanted
-  onto a different roster (`copresence_binds_one_roster`). Four lemmas.
+  onto a different roster (`copresence_binds_one_roster`). Eight lemmas,
+  two of them (`honest_ceremony_completes`, `honest_formation_completes`)
+  witnesses that the honest path is still reachable.
 
 ---
 

@@ -5570,3 +5570,64 @@ honest path unreachable while the universal lemmas stayed green, and the first
 time it was caught in the same minute it was introduced.
 
 25 lemmas, all verifying. All eight models pass.
+
+---
+
+## Cross-family Tamarin review 6 (2026-09-06)
+
+Static-only again: the reviewer had no prover and said so, and declined to
+count the models' own comments about past Tamarin runs as reproduced evidence.
+Seven findings. **The character of the round changed.** Five of the seven are
+the reviewer confirming a limitation the file already declares, each closing
+with some form of *"verdict on defense: holds"*; one was already retracted in
+the header it cites; one is new and small. No finding proposed a change to the
+design, and the reviewer states plainly that they *"would not reject any
+project design rule on the basis of these models."*
+
+That is the first round to find no defect in behaviour. Recording it as a
+signal about the state of the suite rather than as a list of dispositions.
+
+**F1, F2 (attach: no client authentication, no 0-RTT replay state), F3
+(ceremony co-presence is an axiom), F5 (expiry holds by restriction), F6
+(`Met` is assumed, not derived).** Confirmed as disclosed; no change. Each is
+scoped in the file and again in `models/README.md`'s assumptions section. F3 is
+worth restating because it is the one people will most want to over-read: the
+ceremony theory shows that **cryptographic assembly cannot detach an accepted
+record from an already-assumed co-presence event**. It is not evidence of relay
+resistance, and §7.5 already says the physical signals are participant
+assurance rather than remotely verifiable proof.
+
+**F4 (currency has no current-key state).** The header retraction the reviewer
+asks for is already there. What is live is their U1, put to the author below.
+
+**F7 (`RecoveryAccepted` overreads).** *Applied.* The finding is right and it is
+the naming class that has cost time three times this session. A recovery
+adoption is a two-signer transaction (§6.1); the theory models a patron's
+evidence test and nothing else -- no successor envelope signature, no Adoption
+body, no signer set. Renamed to `PatronAcceptedRecoveryEvidence` /
+`PatronAcceptedTransferEvidence` (8 + 2 uses, count asserted before replacing
+-- the first assertion failed on a miscount of 9, which is the point of it),
+with a scope note at the emission site saying what a trace reaching it does not
+mean. The patron sits in the first argument because there is no
+observer-independent "accepted" to name -- the no-shared-state rule again.
+
+**Hygiene, all three confirmed and applied.** The recovery comment was worse
+than filed: it did not merely go stale, it **asserted the opposite of the rule
+twenty lines below it**, telling a reader the recognition signs the subject and
+not the successor -- the exact binding `recognition_binds_the_successor`
+proves. It also carried drafting history, which does not belong in the corpus.
+Rewritten to hold both halves together: the judgement is about a face, the
+signature is about which key that judgement licenses. Currency's "the CURRENT
+epoch" overstated a model with several coexisting unexpired epochs; corrected.
+Attach called the exchange mutual authentication before qualifying it 17 lines
+later; the qualification moved up to the first mention.
+
+**Found while checking the reviewer's F3/F5 point about how results are
+reported: three stale lemma counts in `models/README.md`** -- attach and
+currency each said "Three lemmas" against four, ceremony "Four" against eight.
+The counts drifted when the honest-path witnesses were added and the catalogue
+was not swept. Corrected, with each guard now named at its count so the number
+and its reason travel together. The review-history entries keep their
+as-of-filing counts.
+
+25 lemmas, all verifying after the rename. All eight models pass.

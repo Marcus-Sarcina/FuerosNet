@@ -80,7 +80,8 @@ rule (modulo E) Patron_Accept_Transfer:
    ]
   --[
   Eq( verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true ),
-  Distinct( $Old, $New ), TransferAccepted( $New, $Old, nodekey )
+  Distinct( $Old, $New ),
+  PatronAcceptedTransferEvidence( $New, $Old, nodekey )
   ]->
    [ Out( sign(<'adopted', nodekey, $New>, ~nsk) ) ]
 
@@ -92,7 +93,7 @@ rule (modulo E) Patron_Accept_Transfer:
      ]
     --[
     Eq( z, true ), Distinct( $Old, $New ),
-    TransferAccepted( $New, $Old, nodekey )
+    PatronAcceptedTransferEvidence( $New, $Old, nodekey )
     ]->
      [ Out( sign(<'adopted', nodekey, $New>, ~nsk) ) ]
     variants (modulo AC)
@@ -124,7 +125,7 @@ rule (modulo E) Patron_Accept_Recovery:
   Eq( verify(provA, <'rotate', $S, newkey, $P>, pkOld), true ),
   Eq( verify(provB, <'recognise', $S, newkey>, pkV), true ),
   Distinct( $V, $S ), Distinct( $P, $S ), ReliedOn( $P, $V, $S ),
-  RecoveryAccepted( $P, $S, newkey )
+  PatronAcceptedRecoveryEvidence( $P, $S, newkey )
   ]->
    [ Out( sign(<'recovered', $S, newkey>, ~psk) ) ]
 
@@ -137,7 +138,7 @@ rule (modulo E) Patron_Accept_Recovery:
      ]
     --[
     Eq( z, true ), Eq( z.1, true ), Distinct( $V, $S ), Distinct( $P, $S ),
-    ReliedOn( $P, $V, $S ), RecoveryAccepted( $P, $S, newkey )
+    ReliedOn( $P, $V, $S ), PatronAcceptedRecoveryEvidence( $P, $S, newkey )
     ]->
      [ Out( sign(<'recovered', $S, newkey>, ~psk) ) ]
     variants (modulo AC)
@@ -217,13 +218,14 @@ lemma recovery_completes_honestly:
   exists-trace
   "∃ P S newkey V #m #i.
     (((RecoveryMeeting( V, S ) @ #m) ∧
-      (RecoveryAccepted( P, S, newkey ) @ #i)) ∧
+      (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)) ∧
      (#m < #i)) ∧
     (¬(∃ A #k. Compromised( A ) @ #k))"
 /*
 guarded formula characterizing all satisfying traces:
 "∃ P S newkey V #m #i.
-  (RecoveryMeeting( V, S ) @ #m) ∧ (RecoveryAccepted( P, S, newkey ) @ #i)
+  (RecoveryMeeting( V, S ) @ #m) ∧
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
   (#m < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
 */
@@ -252,10 +254,11 @@ solve( !Met( $V, $S ) ▶₀ #m )
 qed
 
 lemma recovery_is_executable:
-  exists-trace "∃ P S newkey #i. RecoveryAccepted( P, S, newkey ) @ #i"
+  exists-trace
+  "∃ P S newkey #i. PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ P S newkey #i. (RecoveryAccepted( P, S, newkey ) @ #i)"
+"∃ P S newkey #i. (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)"
 */
 simplify
 solve( !Ltk( $P, ~psk ) ▶₀ #i )
@@ -281,7 +284,7 @@ qed
 lemma key_alone_insufficient:
   all-traces
   "¬(∃ P S V newkey #i.
-      ((((RecoveryAccepted( P, S, newkey ) @ #i) ∧
+      ((((PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ∧
          (ReliedOn( P, V, S ) @ #i)) ∧
         (¬(∃ #b #m.
             (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m)))) ∧
@@ -290,7 +293,8 @@ lemma key_alone_insufficient:
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S V newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ∧
+  (ReliedOn( P, V, S ) @ #i)
  ∧
   (∀ #b #m.
     (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m) ⇒ ⊥) ∧
@@ -339,7 +343,7 @@ qed
 lemma recognition_alone_insufficient:
   all-traces
   "¬(∃ P S newkey #i.
-      ((((RecoveryAccepted( P, S, newkey ) @ #i) ∧
+      ((((PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ∧
          (∃ V #b. Recognised( V, S ) @ #b)) ∧
         (¬(∃ #a. OldKeyProof( S, newkey ) @ #a))) ∧
        (¬(∃ #c. Compromised( S ) @ #c))) ∧
@@ -347,7 +351,7 @@ lemma recognition_alone_insufficient:
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i)
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
   (∃ V #b. (Recognised( V, S ) @ #b)) ∧
   (∀ #a. (OldKeyProof( S, newkey ) @ #a) ⇒ ⊥) ∧
@@ -405,7 +409,7 @@ qed
 lemma recognition_binds_the_successor:
   all-traces
   "∀ P S newkey #i.
-    (RecoveryAccepted( P, S, newkey ) @ #i) ⇒
+    (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ⇒
     (((∃ V #b. (RecognisedFor( V, S, newkey ) @ #b) ∧ (#b < #i)) ∨
       (∃ V #kv.
         ((ReliedOn( P, V, S ) @ #i) ∧ (Compromised( V ) @ #kv)) ∧ (#kv < #i))) ∨
@@ -413,7 +417,7 @@ lemma recognition_binds_the_successor:
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i)
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
   (∀ V #b. (RecognisedFor( V, S, newkey ) @ #b) ⇒ ¬(#b < #i)) ∧
   (∀ V #kv.
@@ -462,14 +466,14 @@ qed
 lemma successor_statement_binds_the_patron:
   all-traces
   "∀ P S newkey #i.
-    (RecoveryAccepted( P, S, newkey ) @ #i) ⇒
+    (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ⇒
     (((∃ #a. (OldKeyProofFor( S, newkey, P ) @ #a) ∧ (#a < #i)) ∨
       (∃ #c. (Compromised( S ) @ #c) ∧ (#c < #i))) ∨
      (∃ #kp. (Compromised( P ) @ #kp) ∧ (#kp < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i)
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
   (∀ #a. (OldKeyProofFor( S, newkey, P ) @ #a) ⇒ ¬(#a < #i)) ∧
   (∀ #c. (Compromised( S ) @ #c) ⇒ ¬(#c < #i)) ∧
@@ -499,7 +503,7 @@ qed
 lemma recovery_requires_a_meeting:
   all-traces
   "∀ P S newkey #i.
-    (RecoveryAccepted( P, S, newkey ) @ #i) ⇒
+    (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i) ⇒
     (((∃ V #m. (RecoveryMeeting( V, S ) @ #m) ∧ (#m < #i)) ∨
       (∃ V #kv.
         ((ReliedOn( P, V, S ) @ #i) ∧ (Compromised( V ) @ #kv)) ∧ (#kv < #i))) ∨
@@ -507,7 +511,7 @@ lemma recovery_requires_a_meeting:
 /*
 guarded formula characterizing all counter-examples:
 "∃ P S newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i)
+  (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
   (∀ V #m. (RecoveryMeeting( V, S ) @ #m) ⇒ ¬(#m < #i)) ∧
   (∀ V #kv.
@@ -556,13 +560,13 @@ qed
 lemma transfer_statement_binds_the_destination:
   all-traces
   "∀ New Old nodekey #i.
-    (TransferAccepted( New, Old, nodekey ) @ #i) ⇒
+    (PatronAcceptedTransferEvidence( New, Old, nodekey ) @ #i) ⇒
     ((∃ #a. (CountersignedFor( Old, nodekey, New ) @ #a) ∧ (#a < #i)) ∨
      (∃ #k. (Compromised( Old ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ New Old nodekey #i.
-  (TransferAccepted( New, Old, nodekey ) @ #i)
+  (PatronAcceptedTransferEvidence( New, Old, nodekey ) @ #i)
  ∧
   (∀ #a. (CountersignedFor( Old, nodekey, New ) @ #a) ⇒ ¬(#a < #i)) ∧
   (∀ #k. (Compromised( Old ) @ #k) ⇒ ¬(#k < #i))"
@@ -602,7 +606,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.59s
+  processing time: 1.63s
   
   recovery_completes_honestly (exists-trace): verified (9 steps)
   recovery_is_executable (exists-trace): verified (8 steps)

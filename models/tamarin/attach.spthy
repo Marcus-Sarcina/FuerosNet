@@ -122,7 +122,10 @@ rule Compromise_Key:
 --------------------------------------------------------------------------------
   THE ATTACH HANDSHAKE
 --------------------------------------------------------------------------------
-  A minimal mutual-authentication exchange capturing wire Section 9.1's
+  A minimal challenge-response capturing ONE HALF of wire Section 9.1's
+  mutual authentication -- the client authenticating the server.  The other
+  half, and why it is not merely this one mirrored, is set out above.
+  Capturing its
   essential property: each side proves control of its keyhash's key over a
   fresh challenge, so the session is bound to both identities.
 

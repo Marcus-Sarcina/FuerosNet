@@ -111,9 +111,12 @@ rule Expire_Epoch:
   be transplanted onto a different key.  Binding the EPOCH lets expiry bite.
 
   "Issue fresh, never extend stale" (design Section 12.6.5.1) is modelled by
-  every issuance drawing the CURRENT epoch: the patron cannot re-stamp an
+  every issuance signing afresh: the patron cannot re-stamp an
   old attestation with a new epoch without signing a new one, and signing a
-  new one is exactly issuing fresh.
+  new one is exactly issuing fresh.  NOTE WHAT "CURRENT" DOES NOT MEAN HERE:
+  epochs are persistent and several unexpired ones can coexist, so an issuance
+  draws SOME unexpired epoch rather than a uniquely current one.  What
+  IssueFreshNotStale forbids is stamping an epoch already expired.
 */
 
 /*

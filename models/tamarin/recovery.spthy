@@ -120,15 +120,18 @@ rule Old_Key_Proof:
   FACTOR B -- recognition of the PERSON by a prior counterparty
 --------------------------------------------------------------------------------
   design Section 9.1: recovery's human factor is a prior counterparty
-  RECOGNISING THE SUBJECT.  Crucially, the verifier recognises the PERSON
-  (the continuing identity), NOT the new key -- the new key is introduced
-  by the old-key proof (factor a), and the verifier's job is to confirm
-  "yes, this is the same person I met".  So the recognition signature is
-  over the SUBJECT IDENTITY, not over newkey.  (The first version of this
-  model had the verifier sign over newkey; Tamarin then unified that free
-  newkey across both factors and mixed a recognition signature into the
-  factor-a slot -- an artifact that disappears once the model matches the
-  design, where the two factors sign different things.)
+  RECOGNISING THE SUBJECT.  What the verifier judges is the PERSON -- "yes,
+  this is the same person I met" -- and no cryptography substitutes for that.
+
+  WHAT THE VERIFIER SIGNS IS A DIFFERENT QUESTION, and it signs the successor
+  too.  `wire-format.md` Section 4.1 requires a recovery response's subject to
+  be "the newly adopted node": the verifier attests continuity TO the new key,
+  so a recognition that named only the person could be assembled beside any
+  successor.  See recognition_binds_the_successor.  The two facts sit together
+  without tension -- the JUDGEMENT is about a face, the SIGNATURE is about
+  which key that judgement licenses -- and the key it names is the one the
+  meeting exchanged over the direct channel, never one supplied over the
+  network (see Recovery_Meeting).
 
   THE OUT-OF-MODEL AXIOM.  What makes honest recognition SOUND against a
   thief is physical: the verifier checks the face (design Section 7), and a
@@ -272,7 +275,7 @@ rule Patron_Accept_Transfer:
     , In(<'transfer', nodekey, $Old, $New, prov>) ]
   --[ Eq(verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true)
     , Distinct($Old, $New)                      // identical keys = no transfer
-    , TransferAccepted($New, $Old, nodekey) ]->
+    , PatronAcceptedTransferEvidence($New, $Old, nodekey) ]->
     [ Out(sign(<'adopted', nodekey, $New>, ~nsk)) ]
 
 rule Patron_Accept_Recovery:
@@ -288,8 +291,19 @@ rule Patron_Accept_Recovery:
                                                 //   is bilateral between two
                                                 //   distinct parties (§6.1)
     , ReliedOn($P, $V, $S)                      // which verifier was trusted
-    , RecoveryAccepted($P, $S, newkey) ]->
+    , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
     [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
+
+/*  WHAT THAT ACTION DOES NOT MEAN.  It marks the moment THIS PATRON judged the
+    two recovery factors sufficient -- nothing wider.  A recovery adoption is a
+    two-signer transaction (design Section 6.1: node and patron), and the
+    successor's own envelope signature, the Adoption body, the signer set, and
+    the rest of `wire-format.md` Section 4.1's structural checks are all
+    OUTSIDE this theory.  So a trace reaching this action is NOT a trace in
+    which a valid recovery transaction was accepted by the network; it is one
+    in which a patron's evidence test passed.  The lemmas below inherit that
+    scope exactly, which is why the action carries the patron in its first
+    argument -- there is no observer-independent "accepted" here to name.  */
 
 /*
   ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
@@ -337,12 +351,12 @@ lemma recovery_completes_honestly:
   exists-trace
   "Ex P S newkey V #m #i.
        RecoveryMeeting(V, S) @ #m
-     & RecoveryAccepted(P, S, newkey) @ #i & #m < #i
+     & PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i & #m < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
 lemma recovery_is_executable:
   exists-trace
-  "Ex P S newkey #i. RecoveryAccepted(P, S, newkey) @ #i"
+  "Ex P S newkey #i. PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i"
 
 // THE TWO-FACTOR PROPERTY (Stage 1.1).  wire Section 4.1 states it: "Key
 // alone is not recovery" and "presence alone is not recovery".  Rather than one lemma asserting both
@@ -382,7 +396,7 @@ lemma recovery_is_executable:
 // the patron actually relied on.
 lemma key_alone_insufficient:
   "not( Ex P S V newkey #i.
-          RecoveryAccepted(P, S, newkey) @ #i
+          PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
         & ReliedOn(P, V, S) @ #i
         & not(Ex #b #m. Recognised(V, S) @ #b
                       & PriorCounterparty(V, S) @ #m)
@@ -397,7 +411,7 @@ lemma key_alone_insufficient:
 // not recovery" (design Section 9.1).
 lemma recognition_alone_insufficient:
   "not( Ex P S newkey #i.
-          RecoveryAccepted(P, S, newkey) @ #i
+          PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
         & (Ex V #b. Recognised(V, S) @ #b)
         & not(Ex #a. OldKeyProof(S, newkey) @ #a)   // no honest key proof
         & not(Ex #c. Compromised(S) @ #c)           // and no stolen key
@@ -421,7 +435,7 @@ lemma recognition_names_the_meeting_key:
 // lemma is falsified, which is how we know it is doing work.
 lemma recognition_binds_the_successor:
   "All P S newkey #i.
-     RecoveryAccepted(P, S, newkey) @ #i
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
          | (Ex V #kv. ReliedOn(P, V, S) @ #i
                     & Compromised(V) @ #kv & #kv < #i)
@@ -433,7 +447,7 @@ lemma recognition_binds_the_successor:
 // patrons -- wire Section 4.1's reason for putting patron_key in it.
 lemma successor_statement_binds_the_patron:
   "All P S newkey #i.
-     RecoveryAccepted(P, S, newkey) @ #i
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
          | (Ex #c. Compromised(S) @ #c & #c < #i)
          | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
@@ -449,7 +463,7 @@ lemma successor_statement_binds_the_patron:
 // deceived counterparty, which stays a residual and is not claimed closed.
 lemma recovery_requires_a_meeting:
   "All P S newkey #i.
-     RecoveryAccepted(P, S, newkey) @ #i
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex V #m. RecoveryMeeting(V, S) @ #m & #m < #i)
          | (Ex V #kv. ReliedOn(P, V, S) @ #i
                     & Compromised(V) @ #kv & #kv < #i)
@@ -462,7 +476,7 @@ lemma recovery_requires_a_meeting:
 // does for the recovery route.
 lemma transfer_statement_binds_the_destination:
   "All New Old nodekey #i.
-     TransferAccepted(New, Old, nodekey) @ #i
+     PatronAcceptedTransferEvidence(New, Old, nodekey) @ #i
      ==> ( (Ex #a. CountersignedFor(Old, nodekey, New) @ #a & #a < #i)
          | (Ex #k. Compromised(Old) @ #k & #k < #i) )"
 
