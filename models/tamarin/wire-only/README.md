@@ -11,15 +11,16 @@
 - A recognition with no key authorisation never recovers (`recognition_alone_insufficient`).
 - A transfer's signed statement names *that* destination (`transfer_statement_binds_the_destination`). Removing the destination falsifies it.
 - A currency attestation binds subject, key and epoch to the issuer's signature, and acceptance follows an unexpired issuance (`currency_requires_unexpired_issuance`).
+- An attestation binds its issuer identity and claimed role, so one issued as a sibling cannot be re-presented as a patron's (`an_attestation_binds_its_issuer_and_role`). Removing the role from the signed tuple falsifies it.
+- Acceptance names an issuer the relying party's own records authorise for that subject in that role (`acceptance_names_an_issuer_this_party_authorised`). Removing the check falsifies it.
 - Each of the above holds against a legitimate principal signing whatever it likes with its own uncompromised key.
 
 ## 2. What it cannot demonstrate
 
 - That participants named in a presence record were physically co-present. A legitimate keyholder may sign a body for a meeting that never happened.
 - That a recovery meeting occurred, or that a verifier's recognition is truthful.
-- That an issuer consulted the key it currently records, or that it was authorised for that subject by any rung of the escalation ladder. There is no patron-of relation and no issuer role.
+- That an issuer consulted the key it currently records. Authorisation is checked against the relying party's own topology, which a party outside the horizon does not hold.
 - That any stated attestation lifetime elapsed. Expiry is event order, not duration, and acceptance-before-expiry is imposed by restriction rather than derived.
-- That an `Attach` was not processed as TLS 1.3 0-RTT early data.
 - Wire §4.1's node/patron key inequality. Identity is carried here as a stable name, not as a keyhash, so the two are not comparable.
 - Anything about a node's own records: current-key state, session termination, or queue retention.
 - Availability, ordering, or delivery. The adversary controls the network entirely.

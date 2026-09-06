@@ -155,13 +155,51 @@ rule Expire_Epoch:
 
     Closing it in this theory means adding a topology relation and stating
     the lemmas conditional on it.  Not done; recorded.                     */
+/*
+--------------------------------------------------------------------------------
+  WHO MAY ISSUE -- `wire-format.md`'s CurrencyAttestation fields 5 and 6
+--------------------------------------------------------------------------------
+  The attestation names its ISSUER (field 6) and the ROLE that issuer claims
+  (field 5: 0 patron, 1 sibling/secondhand, 2 grandpatron, 3 down-line
+  threshold).  Both sit inside the signature.
+
+  NOTHING STOPS A KEYHOLDER ISSUING.  The rule below takes the role from the
+  network, because field 5 is a CLAIM: any party holding a key can sign an
+  attestation calling itself anyone's patron.  The wire cannot prevent that
+  and this theory does not pretend otherwise.
+
+  THE CHECK IS THE RELYING PARTY'S, AGAINST ITS OWN RECORDS.  `!Authorised`
+  is indexed by the RELYING party as well as the issuer, because trust is
+  per-observer (design Section 16.1) and no topology is shared.  A party
+  inside the horizon holds the adoption records that say who may issue for
+  whom; one outside does not, and has no basis to accept on this ground.
+*/
+
+rule Records_Patron:
+    [ ] --[ AuthorisedBy($R, $I, $S, 'patron') ]->
+        [ !Authorised($R, $I, $S, 'patron') ]
+
+rule Records_Sibling:
+    [ ] --[ AuthorisedBy($R, $I, $S, 'sibling') ]->
+        [ !Authorised($R, $I, $S, 'sibling') ]
+
+rule Records_Grandpatron:
+    [ ] --[ AuthorisedBy($R, $I, $S, 'grandpatron') ]->
+        [ !Authorised($R, $I, $S, 'grandpatron') ]
+
+rule Records_Downline:
+    [ ] --[ AuthorisedBy($R, $I, $S, 'downline') ]->
+        [ !Authorised($R, $I, $S, 'downline') ]
+
 rule Issue_Currency:
-    [ !PatronKey($P, ~psk)             // only the patron can issue
+    [ !PatronKey($I, ~isk)             // ANY keyholder -- see above
     , !SubjKey($S, sk)                 // for a key the subject holds
-    , !Epoch(e) ]                      // stamped with an epoch
-  --[ Issued($P, $S, pk(sk), e) ]->
-    [ Out(<'currency', $S, pk(sk), e,
-           sign(<'currency', $S, pk(sk), e>, ~psk)>) ]
+    , !Epoch(e)                        // stamped with an epoch
+    , In(role) ]                       // claiming whatever role it likes
+  --[ Issued($I, $S, pk(sk), e)
+    , IssuedAs($I, $S, role) ]->
+    [ Out(<'currency', $S, pk(sk), e, role, $I,
+           sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -183,12 +221,14 @@ rule Accept_Currency:
     // fields from the message is also what BINDS them: an earlier version
     // read `sk` from nowhere, which Tamarin reports as an unbound variable
     // and unintended pattern matching.
-    [ In(<'currency', $S, sk, e, att>) // the stapled attestation, as received
-    , !Pk($P, pkP)                     // the patron's public key
-    , !Epoch(e) ]
-  --[ Eq(verify(att, <'currency', $S, sk, e>, pkP), true)
+    [ In(<'currency', $S, sk, e, role, $I, att>)  // the staple, as received
+    , !Pk($I, pkI)                     // the ISSUER's public key
+    , !Epoch(e)
+    , !Authorised($R, $I, $S, role) ]  // ... and $R's OWN record that this
+                                       //   issuer may act in this role for $S
+  --[ Eq(verify(att, <'currency', $S, sk, e, role, $I>, pkI), true)
     , NotExpiredAt(e)                  // guarded by the restriction below
-    , Accepted($P, $S, sk, e) ]->      // trace: relied on sk as current
+    , Accepted($R, $I, $S, sk, e, role) ]->
     [ ]
 
 /*
@@ -245,7 +285,7 @@ restriction NotExpiredBeforeAccept:
 // SANITY: the honest flow runs -- a patron issues, a party accepts.
 lemma currency_is_usable:
   exists-trace
-  "Ex P S sk e #i. Accepted(P, S, sk, e) @ #i"
+  "Ex R I S sk e role #i. Accepted(R, I, S, sk, e, role) @ #i"
 
 // THE GUARD THAT ACTUALLY GUARDS.  An acceptance with NO compromise anywhere
 // on the trace, resting on a genuine issuance.  currency_is_usable above does
@@ -255,9 +295,9 @@ lemma currency_is_usable:
 // compromised trace can satisfy is not a vacuity guard.
 lemma currency_is_usable_honestly:
   exists-trace
-  "Ex P S kh e #j #i.
-       Issued(P, S, kh, e) @ #j
-     & Accepted(P, S, kh, e) @ #i
+  "Ex R I S kh e role #j #i.
+       Issued(I, S, kh, e) @ #j
+     & Accepted(R, I, S, kh, e, role) @ #i
      & #j < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
@@ -312,11 +352,33 @@ lemma expiry_is_reachable:
 // of the answer, and a rebuild attempted on 2026-09-05 was machinery for a
 // property that was never the protocol's to have.
 lemma currency_requires_unexpired_issuance:
-  "All P S sk e #i.
-     Accepted(P, S, sk, e) @ #i
-     ==> ( ( (Ex #j. Issued(P, S, sk, e) @ #j & #j < #i)
+  "All R I S sk e role #i.
+     Accepted(R, I, S, sk, e, role) @ #i
+     ==> ( ( (Ex #j. Issued(I, S, sk, e) @ #j & #j < #i)
            & not(Ex #x. Expired(e) @ #x & #x < #i) )
-         | (Ex #k. Compromised(P) @ #k & #k < #i) )"
+         | (Ex #k. Compromised(I) @ #k & #k < #i) )"
+
+/*  THE ISSUER AND ROLE ARE INSIDE THE SIGNATURE.  An attestation issued as a
+    sibling cannot be re-presented as a patron's, and one issuer's cannot be
+    attributed to another.  `wire-format.md` puts fields 5 and 6 under the
+    signature for exactly this; drop either from the signed tuple and this
+    lemma falsifies.                                                        */
+lemma an_attestation_binds_its_issuer_and_role:
+  "All R I S sk e role #i.
+     Accepted(R, I, S, sk, e, role) @ #i
+     ==> ( (Ex #j. IssuedAs(I, S, role) @ #j & #j < #i)
+         | (Ex #k. Compromised(I) @ #k & #k < #i) )"
+
+/*  AND THE RELYING PARTY CHECKED ITS OWN RECORDS.  Acceptance names an issuer
+    that THIS party records as authorised for THIS subject in THIS role.  Not
+    a claim that the issuer really was authorised -- no such global fact
+    exists -- but that the accepting party consulted its own topology rather
+    than the attestation's say-so.  Delete the `!Authorised` premise from
+    Accept_Currency and this falsifies.                                     */
+lemma acceptance_names_an_issuer_this_party_authorised:
+  "All R I S sk e role #i.
+     Accepted(R, I, S, sk, e, role) @ #i
+     ==> Ex #a. AuthorisedBy(R, I, S, role) @ #a & #a < #i"
 
 // PATRON COMPROMISE, made available so the carve-out above is real rather
 // than decorative: the adversary can steal the patron's key, exactly as in

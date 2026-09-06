@@ -5925,3 +5925,53 @@ history, no open items.
 
 13 artifacts. 49 Tamarin lemmas unbounded (23 wire-only, 26 compliant) + 13
 bounded, 4 TLA+ models, 1 mutation that must fail.
+
+---
+
+## F5 and F6 closed (2026-09-06)
+
+**F5 -- issuer identity and role.** `wire-format.md`'s CurrencyAttestation
+carries field 5 (issuer role: patron, sibling, grandpatron, down-line
+threshold) and field 6 (issuer identity), both under the signature. The theory
+had neither: any registered patron could issue for any subject.
+
+Two things added, and they answer different halves. `an_attestation_binds_its_
+issuer_and_role` is the wire property -- an attestation issued as a sibling
+cannot be re-presented as a patron's, nor attributed to another issuer.
+`acceptance_names_an_issuer_this_party_authorised` is the check that makes the
+role mean anything.
+
+**The authorisation relation is indexed by the RELYING PARTY**, not global.
+`!Authorised($R, $I, $S, role)` says *R records I as authorised for S in this
+role* -- per-observer (design 16.1), no shared topology. That placement is the
+finding, not a detail: a global relation would have asserted a fact no node
+can hold. A party inside the horizon has the adoption records; one outside
+does not and accepts nothing on this ground. The lemma therefore says the
+accepting party consulted its OWN records rather than the attestation's
+say-so, which is all a relying party can do and all the wire can support.
+
+Issuance itself is unrestricted, because field 5 is a CLAIM: any keyholder can
+sign an attestation calling itself anyone's patron, and the theory says so
+rather than modelling an authorisation the wire cannot enforce.
+
+Mutation-tested both: drop `role` from the signed tuple and the binding lemma
+falsifies; drop the `!Authorised` premise and the authorisation lemma
+falsifies. Each hits its own lemma only.
+
+**F6 -- 0-RTT, and it went in `compliant/`.** `wire-format.md` 9.1: "A server
+MUST NOT process an `Attach` received in TLS 1.3 0-RTT early data ... THE RULE
+SITS ON THE SERVER BECAUSE THAT IS WHERE IT IS CHECKABLE." That last clause
+places it: checkable by the server about its own processing, and by nobody
+else. So it is a conformance obligation, and putting it in `wire-only/` would
+have repeated the mistake review 7 found.
+
+**Replayability is modelled as persistence.** `!EarlyData` is a persistent
+fact, consumable any number of times, which is exactly what "early data is
+replayable" means and the only property of 0-RTT the rule needs. A conforming
+server consumes a LINEAR `Handshaken` token instead, so one completed
+handshake admits one binding. The harm is kept reachable: a server that acts
+on early data binds the same `Attach` twice with no second handshake.
+
+13 artifacts. 54 Tamarin lemmas unbounded (25 wire-only, 29 compliant) + 16
+bounded, 4 TLA+ models, 1 mutation that must fail. Every finding from reviews
+6 and 7 is now applied or closed.

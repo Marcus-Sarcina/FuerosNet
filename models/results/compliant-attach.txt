@@ -228,6 +228,111 @@ solve( Serving( $N, $C, k, role ) ▶₀ #a )
   qed
 qed
 
+rule (modulo E) Client_Sends_Attach_Early:
+   [ Fr( ~a ) ] --[ SentEarly( $C, ~a ) ]-> [ !EarlyData( $C, ~a ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Handshake_Completes:
+   [ ] --[ HandshakeDone( $N, $C ) ]-> [ Handshaken( $N, $C ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Bind_After_Handshake:
+   [ Handshaken( $N, $C ), !EarlyData( $C, a ) ]
+  --[ Bound( $N, $C, a ), BoundAfterHandshake( $N, $C, a ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Bind_From_Early_Data:
+   [ !EarlyData( $C, a ) ]
+  --[ Bound( $N, $C, a ), ProcessedEarlyData( $N ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma a_conforming_server_binds_only_after_the_handshake:
+  all-traces
+  "∀ N C a #i.
+    ((Bound( N, C, a ) @ #i) ∧ (¬(∃ X #s. ProcessedEarlyData( X ) @ #s))) ⇒
+    (∃ #h. (HandshakeDone( N, C ) @ #h) ∧ (#h < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C a #i.
+  (Bound( N, C, a ) @ #i)
+ ∧
+  (∀ X #s. (ProcessedEarlyData( X ) @ #s) ⇒ ⊥) ∧
+  (∀ #h. (HandshakeDone( N, C ) @ #h) ⇒ ¬(#h < #i))"
+*/
+simplify
+solve( Bound( N, C, a ) @ #i )
+  case Bind_After_Handshake
+  solve( Handshaken( $N, $C ) ▶₀ #i )
+    case Handshake_Completes
+    by contradiction /* from formulas */
+  qed
+next
+  case Bind_From_Early_Data
+  by contradiction /* from formulas */
+qed
+
+lemma a_conforming_binding_is_reachable:
+  exists-trace
+  "∃ N C a #i.
+    (BoundAfterHandshake( N, C, a ) @ #i) ∧
+    (¬(∃ X #s. ProcessedEarlyData( X ) @ #s))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C a #i.
+  (BoundAfterHandshake( N, C, a ) @ #i)
+ ∧
+  ∀ X #s. (ProcessedEarlyData( X ) @ #s) ⇒ ⊥"
+*/
+simplify
+solve( Handshaken( $N, $C ) ▶₀ #i )
+  case Handshake_Completes
+  solve( !EarlyData( $C, a ) ▶₁ #i )
+    case Client_Sends_Attach_Early
+    SOLVED // trace found
+  qed
+qed
+
+lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
+  exists-trace
+  "∃ N C a #i #j.
+    (((Bound( N, C, a ) @ #i) ∧ (Bound( N, C, a ) @ #j)) ∧ (¬(#i = #j))) ∧
+    (ProcessedEarlyData( N ) @ #i)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C a #i #j.
+  (Bound( N, C, a ) @ #i) ∧
+  (Bound( N, C, a ) @ #j) ∧
+  (ProcessedEarlyData( N ) @ #i)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( !EarlyData( $C, a ) ▶₀ #i )
+    case Client_Sends_Attach_Early
+    solve( Bound( $N, C.1, a.2 ) @ #i )
+      case Bind_From_Early_Data
+      solve( Bound( $N, $C, ~a ) @ #j )
+        case Bind_After_Handshake
+        solve( Handshaken( $N, $C ) ▶₀ #j )
+          case Handshake_Completes
+          solve( !EarlyData( $C, ~a ) ▶₁ #j )
+            case Client_Sends_Attach_Early
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -245,12 +350,15 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/attach.spthy
 
-  processing time: 0.57s
+  processing time: 0.69s
   
   service_follows_an_attach (all-traces): verified (15 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)
   delivery_is_reachable (exists-trace): verified (6 steps)
   trust_bearing_operation_is_reachable (exists-trace): verified (5 steps)
   serving_without_evidence_is_reachable (exists-trace): verified (7 steps)
+  a_conforming_server_binds_only_after_the_handshake (all-traces): verified (5 steps)
+  a_conforming_binding_is_reachable (exists-trace): verified (4 steps)
+  a_replayed_attach_rebinds_on_a_server_that_processes_early_data (exists-trace): verified (8 steps)
 
 ==============================================================================

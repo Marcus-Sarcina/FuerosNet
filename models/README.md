@@ -16,7 +16,7 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 4 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(23 lemmas) and `compliant/` (26 lemmas).
+(25 lemmas) and `compliant/` (29 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
@@ -250,16 +250,22 @@ the honest protocol and so proves every security lemma vacuously.
   measured by deleting the signature check, which falsifies
   `server_authentication` and leaves this one verifying.
 
-- **`currency`** (design §12.6.5) — currency attestation + stapling. A
-  trust-bearing acceptance of a key as current requires an unexpired patron
-  issuance for that exact key, expiry modelled as event order. Four lemmas,
-  the fourth `currency_is_usable_honestly` — an acceptance with no compromise,
-  which three reviews' worth of green universal lemmas had not required.
-  **Known limitation, now stated in the file:** there is no notion of a
-  *current* key, so a patron can mint a fresh attestation for a key the
-  subject rotated away from — Tamarin confirms the trace. §12.6.5 keeps
-  expiry and supersession apart and warns against conflating them; this
-  model has the first and not the second. See "What the models found".
+- **`wire-only/currency`** (design §12.6.5) — currency attestation + stapling.
+  A trust-bearing acceptance of a key as current requires an unexpired
+  issuance for that exact key, expiry modelled as event order. The attestation
+  **binds its issuer identity and claimed role**, so one issued as a sibling
+  cannot be re-presented as a patron's; and **acceptance names an issuer the
+  relying party's own records authorise** for that subject in that role.
+  `!Authorised` is indexed by the relying party, because trust is per-observer
+  (§16.1) and no topology is shared — a party outside the horizon holds no
+  such record and accepts nothing on this ground. Six lemmas; both new ones
+  mutation-tested.
+
+  **Known limitation, stated in the file:** there is no notion of a *current*
+  key here, so an issuer can mint a fresh attestation for a key the subject
+  rotated away from. §12.6.5 keeps expiry and supersession apart; this model
+  has the first. The second is `compliant/currency` and
+  `tla/SupersessionDiscipline`.
 
 - **`wire-only/recovery`** (design §9.1) — what a validator concludes from
   recovery evidence: **the bindings**. The old-key proof names *this* patron

@@ -8,8 +8,9 @@
 - Among verifiers who keep it, an accepted recovery implies a meeting (`recovery_between_conforming_parties_requires_a_meeting`), and a recognition names the key that meeting exchanged (`a_conforming_recognition_names_the_meeting_key`).
 - Sealing a line before taking a reissue leaves nothing for a holder of the old key to supersede (`sealing_first_leaves_nothing_to_supersede`); reissuing first leaves a window (`reissuing_first_leaves_a_window`).
 - A node serving as a failover sibling performs no trust-bearing operation (`no_trust_bearing_operation_on_a_sibling`).
+- A server that defers TLS 1.3 0-RTT early data binds session state only after a completed handshake (`a_conforming_server_binds_only_after_the_handshake`).
 - A key enters an issuer's record once, by one of two doors (`a_key_enters_a_record_once`, `a_record_key_entered_by_one_of_two_doors`).
-- The non-compliant traces remain reachable: collusion produces a record with no meeting; a lying verifier completes a recovery; misattribution succeeds when the check is skipped; a thief beats a counterparty holding no chain; a sibling that has not received a rotation still issues for the old key.
+- The non-compliant traces remain reachable: collusion produces a record with no meeting; a lying verifier completes a recovery; misattribution succeeds when the check is skipped; a thief beats a counterparty holding no chain; a sibling that has not received a rotation still issues for the old key; a server that acts on early data re-binds a replayed `Attach`.
 
 ## 2. What it cannot demonstrate
 

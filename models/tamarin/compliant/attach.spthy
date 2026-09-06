@@ -240,4 +240,82 @@ lemma serving_without_evidence_is_reachable:
     & #a < #b
     & not(N1 = N2)"
 
+
+/*
+================================================================================
+  0-RTT EARLY DATA -- what a conforming server defers
+================================================================================
+
+  `wire-format.md` Section 9.1: "A server MUST NOT process an `Attach`
+  received in TLS 1.3 0-RTT early data -- reject it or defer it until
+  handshake [completion] ... early data is replayable, and a replayed
+  `Attach` re-binds session state ... THE RULE SITS ON THE SERVER BECAUSE
+  THAT IS WHERE IT IS CHECKABLE."
+
+  WHY IT IS IN THIS TREE.  That last clause places it: checkable BY THE
+  SERVER, about its own processing.  No counterparty can tell whether a
+  server deferred early data or acted on it, so this is a conformance
+  obligation and not a wire property.
+
+  REPLAYABILITY IS MODELLED AS PERSISTENCE.  `!EarlyData` is a persistent
+  fact, so it can be consumed any number of times -- which is exactly what
+  "early data is replayable" means and is the only property of 0-RTT this
+  needs.  A conforming server consumes a LINEAR `Handshaken` token instead,
+  so one completed handshake admits one binding.
+*/
+
+rule Client_Sends_Attach_Early:
+    [ Fr(~a) ]
+  --[ SentEarly($C, ~a) ]->
+    [ !EarlyData($C, ~a) ]
+
+rule Handshake_Completes:
+    [ ]
+  --[ HandshakeDone($N, $C) ]->
+    [ Handshaken($N, $C) ]
+
+/*  THE CONFORMING SERVER.  It has the early data -- it cannot un-receive it
+    -- and binds only once the handshake has completed, consuming the token
+    that completion produced.                                               */
+rule Bind_After_Handshake:
+    [ Handshaken($N, $C), !EarlyData($C, a) ]
+  --[ Bound($N, $C, a), BoundAfterHandshake($N, $C, a) ]->
+    [ ]
+
+/*  AND THE SERVER THAT PROCESSES EARLY DATA.  No handshake token consumed,
+    so nothing limits how often it fires -- which is the re-binding the rule
+    exists to prevent.                                                      */
+rule Bind_From_Early_Data:
+    [ !EarlyData($C, a) ]
+  --[ Bound($N, $C, a), ProcessedEarlyData($N) ]->
+    [ ]
+
+/*  THE OBLIGATION.  On a server that defers early data, every binding
+    follows a completed handshake.                                          */
+lemma a_conforming_server_binds_only_after_the_handshake:
+  all-traces
+  "All N C a #i.
+      Bound(N, C, a) @ #i
+      & not(Ex X #s. ProcessedEarlyData(X) @ #s)
+        ==> Ex #h. HandshakeDone(N, C) @ #h & #h < #i"
+
+/*  ANTI-VACUITY: a conforming server does bind.                            */
+lemma a_conforming_binding_is_reachable:
+  exists-trace
+  "Ex N C a #i.
+      BoundAfterHandshake(N, C, a) @ #i
+    & not(Ex X #s. ProcessedEarlyData(X) @ #s)"
+
+/*  THE HARM, KEPT REACHABLE.  A server that acts on early data binds the
+    same `Attach` twice off one replayable message and with no second
+    handshake -- "a replayed `Attach` re-binds session state".  If this ever
+    stops being reachable the model has stopped representing replayability
+    and the obligation above would hold for the wrong reason.               */
+lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
+  exists-trace
+  "Ex N C a #i #j.
+      Bound(N, C, a) @ #i & Bound(N, C, a) @ #j & not(#i = #j)
+    & ProcessedEarlyData(N) @ #i"
+
+
 end

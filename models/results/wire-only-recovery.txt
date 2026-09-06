@@ -501,7 +501,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/recovery.spthy
 
-  processing time: 1.57s
+  processing time: 1.56s
   
   recovery_completes_honestly (exists-trace): verified (8 steps)
   recovery_is_executable (exists-trace): verified (8 steps)
