@@ -130,10 +130,13 @@ rule Old_Key_Proof:
 */
 
 /*
-  TWO DIFFERENT FACTS, AND COLLAPSING THEM IS A REAL ERROR.  design Section
-  9.1 step 1: "A user rotating a key MEETS, IN PERSON, someone they have met
-  BEFORE."  That is past acquaintance AND a present encounter, and only the
-  pair licenses a recognition.
+  TWO DIFFERENT FACTS, AND COLLAPSING THEM IS A REAL ERROR.  Both documents
+  say so, and the encoding says it most sharply.  `wire-format.md` Section
+  4.1's Recovery block, field 2: "The PRESENCE half: a prior counterparty who
+  MET THE SUBJECT AGAIN and recognised them."  design Section 9.1 step 1:
+  "A user rotating a key MEETS, IN PERSON, someone they have met BEFORE."
+  Past acquaintance AND a present encounter; only the pair licenses a
+  recognition, and "again" is the word that carries it.
 
   An earlier version had only the past half -- a persistent !Met(V,S) that
   Recognise read forever -- so a thief holding the stolen key could obtain

@@ -5296,3 +5296,21 @@ contradicting it.
 
 18 lemmas, all verifying, all wellformedness clean. All eight models pass.
 Model references 141, 0 flags.
+
+**Checked on the author's challenge (2026-09-05): "Did I decide that meeting
+was not required for recovery?"** No -- searched `review-tracking.md` and
+`change-log.md` for any ruling to that effect and the only hits are today's own
+entries. The requirement is in both documents, and the ENCODING states it more
+sharply than the design does: `wire-format.md` §4.1's Recovery field 2 --
+*"The PRESENCE half: a prior counterparty who **met the subject again** and
+recognised them."* "Again" is the fresh meeting, on the wire. §9.1 step 1 says
+the same in prose. So the model was weaker than both documents and the T-01
+fix aligns it rather than adding a requirement; `recovery.spthy` now cites
+field 2, which is the better citation.
+
+**Process note against myself.** The T-01 change was made on the reviewer's
+reading plus §9.1, without first checking the record for a contrary ruling or
+pulling the encoding's wording -- the strongest evidence, and found only
+because the author asked. The answer came out the same, which is luck rather
+than method: CLAUDE.md's rule is verify before applying, and "verify" includes
+checking whether the author has already ruled the other way.
