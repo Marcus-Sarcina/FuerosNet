@@ -193,7 +193,7 @@ before the principle was stated:
 | Peering, since a node may simply not peer | Peering transactions are public; peerless infra is observable and policy-discountable (§12.7.5) |
 | Retention promises, since local storage is beyond reach | Retention is committed in the record, and §7.5.2 converts the commitment into a structural consequence for compliant clients, so an honest client's obligation is public. **Against a hostile client this is neither enforceable nor detectable.** See P13 and §13.7.1. An honest example of the limit of visibility-in-place-of-enforcement |
 | Client integrity, since attestation would mean trusting a manufacturer | Carried as a record attribute for policies to weight, not a requirement (§7.8) |
-| Proof of presence at adoption, since no global point can require it | An optional field, so an attested adoption is visibly a different object from an unattested one (§6.1.1) |
+| **What an adoption's evidence is worth**, since no object can show that a meeting really happened or that a countersigner really was the patron | §6.1.1 requires one of two named alternatives and they are **different objects** (`wire-format.md` §4.1 fields 8 and 9), so an observer sees which was offered and weighs it (§16.1). *That some evidence is present is enforced; which, and how good, is made visible* |
 
 The network is intended to **formalize real-world relationships**, not replace
 them. It assumes and depends on a significant face-to-face human component.
@@ -872,24 +872,37 @@ among that patron's children.
 
 #### 6.1.1 Proof of presence and adoption
 
-**A fresh adoption should carry a reference to a proof-of-presence record
-between the two parties** — "fresh" meaning the patron has no prior PoP with the
-node. The adoption transaction therefore has an optional field naming that
-record's `txid`.
+**An adoption requires evidence of one of two kinds, and carrying neither makes
+it malformed** [author, 2026-09-05]:
 
-**Optional in the protocol, expected in the reference client, weighted by
-policy.** Not a hard requirement, for a reason §3.1.1 already settles: there is
-no global enforcement point. Subnet B cannot compel subnet A's adoptions to carry
-a PoP; it can only decline to trust them. A "requirement" would be a
-recommendation with extra steps. An adoption with no meeting is therefore not
-*invalid* — it is *near-worthless*, which achieves the same result without a
-hard rule breaking cases the design cannot anticipate (remote-only participants,
-accessibility constraints, unusual bootstraps).
+- **a proof of presence between the two parties** — the patron met the node —
+  named by that record's `txid`; or
+- **the former patron's countersignature**, where the node is moving from a
+  patron it already had. That signature does the job a meeting otherwise does:
+  a party who has already vouched for this node vouches again, to a named
+  successor.
 
-**Scope: fresh adoptions only.** Lateral and vertical shifts (§6.2.3) need no
-PoP, the new patron is inside the old one's replication horizon and already
-holds the history, which is the whole point of that case. Recovery adoptions have
-their own evidence requirement (§9.1).
+**The requirement is the point, not a cost the design regrets** [author,
+2026-09-05]: *the aim is to incentivise people to meet face to face widely and
+frequently*, and every mechanism that creates a trust-bearing relationship is
+priced accordingly — recovery and rotation (§9.0.1, §9.1) and peering (§6.3)
+all require a meeting outright, and adoption requires one unless somebody who
+has already met you says otherwise.
+
+**This is checkable by every validator identically**, which is why it can be a
+structural rule rather than a policy preference. Both alternatives are facts
+about the object: either field 8 names a presence record or field 9 carries the
+former patron's signature (`wire-format.md` §4.1). Neither asks a validator to
+compute anything from its own topology, so no node rejects an object its
+neighbour accepts — the rule `wire-format.md` §6.8 states for scopes and §3.3
+for timestamps.
+
+**What the former-patron route does not do is make the voucher's identity
+structural.** A validator checks that the *named* party signed; whether that
+party really was this node's patron is something an observer holding the
+topology can confirm and one without it cannot, and it weighs the edge
+accordingly (§16.1). Structural validity stays objective; the strength of the
+evidence stays per-observer, as everything else here does.
 
 §13.1 requires a ceremony before the formation adoption, and §9.1's recovery
 depends on prior ones.
@@ -900,12 +913,27 @@ depends on prior ones.
 requires both signatures. Ending requires only one, from whichever side wants
 out.
 
-**There is no transfer transaction.** One would be node plus new patron with the
-old patron not signing, and it collapses against §3.1.1: the protocol has no concept
-of a node's *set* of patrons, so dropping an old patron was never a network
-operation — and dropping is the only thing that would distinguish transfer from
-adoption. Moving between patrons is **adopt at the destination,
-depart the origin**, in either order, with no requirement to do both.
+**There is no transfer transaction *type*, and there is a transfer** [author,
+2026-09-05]. The two are not in tension, because what §6.1.1 adds is not a new
+object: a transfer is **an ordinary adoption carrying the former patron's
+countersignature** (field 9, `wire-format.md` §4.1), exactly as a recovery is an
+ordinary adoption carrying the old key's proof. The former patron's signature
+stands where a meeting otherwise would.
+
+**Dropping is still not a network operation**, which is what §3.1.1 settles and
+what the countersignature does not change: the protocol has no concept of a
+node's *set* of patrons, so the transfer says "I vouch for this node moving to
+that patron", never "and it has left me". Moving between patrons remains
+**adopt at the destination, depart the origin**, in either order, with no
+requirement to do both — the countersignature attaches to the first of those
+and says nothing about the second.
+
+**So a departure is still unilateral and still needs nobody's permission.**
+What the former patron's signature buys is not the right to leave; it is the
+right to arrive somewhere without meeting anyone. A node whose patron is
+unreachable or unwilling departs exactly as before and is adopted at its
+destination on a proof of presence, which is the ordinary path and the one
+§6.1.1 exists to encourage.
 
 There is likewise **no soft-fork transaction**. Being adopted in another subnet
 while remaining in this one is ordinary adoption in that other subnet, invisible
@@ -985,11 +1013,19 @@ date would state the issuer's intentions rather than anything a recipient can ch
 
 #### 6.2.3 Lateral and vertical shifts
 Moving to a grandpatron or a patron's sibling is an **ordinary adoption whose
-counterparty happens to be nearby.** No separate type. But when the new patron
-lies inside the old patron's replication horizon it already holds the node's
-history through sibling replication (§3.4), so **no archive presentation is needed and trust history is preserved**. A new patron
-may still run a fresh ceremony if they want one — that is their choice, not a
-requirement the move imposes — and the reference client does not prompt for it.
+counterparty happens to be nearby.** Still no separate type: it is a transfer
+in §6.2's sense, an adoption carrying the former patron's countersignature
+(§6.1.1), which is the evidence the move offers in place of a meeting. When the
+new patron lies inside the old patron's replication horizon it already holds
+the node's history through sibling replication (§3.4), so **no archive
+presentation is needed and trust history is preserved**. A new patron may still
+run a fresh ceremony if they want one — that is their choice, not a requirement
+the move imposes — and the reference client does not prompt for it.
+
+**The countersignature is what makes this case cheap, and it is not free.** The
+former patron has to be reachable and willing. Where it is neither, the move is
+an ordinary adoption on a proof of presence like any other; nothing about being
+nearby exempts a node whose old patron will not sign.
 
 Derivable, not declared: an observer holding the relevant topology computes the
 distance itself, and a self-asserted flag would only be something to lie about.
@@ -1064,6 +1100,15 @@ consequence of subnet plurality, not a gap in this mechanism.
   available the ASN, so **concentration** is observable rather than asserted
   (§3.4, §17.3). Independence is not: ASN is routing, not legal control.
 - Two signatures, between infra nodes in different subtrees.
+- **It requires a proof of presence between the two peers** [author,
+  2026-09-05], named in the record as an adoption names one (§6.1.1,
+  `wire-format.md` §4.4). **No alternative applies**: §6.1.1's former-patron
+  route exists for a node moving between patrons it already had, and peers
+  have no such prior relationship to draw on — a peering edge joins parties
+  who by construction share no position. **So peering is always priced in a
+  meeting**, which is also what closes the question §16.3 once left open: a
+  peering edge and a proof-of-presence edge now cost the same thing to
+  acquire, and there is no asymmetry left for anything to price.
 - Attests investment in the network and therefore contributes to trust. **At
   what capacity is §16.2.1's landscape question, not an edge-kind one**
   [author, 2026-09-04]: inside the two-edge horizon hierarchical edges are
@@ -1158,9 +1203,12 @@ Deliberately costly transactions attesting that two users met in person.
 - **Peering** (§6.3), turns a pragmatic infrastructure arrangement into a
   trust-bearing one.
 - **Adoption** (§6.1.1), distinguishes a patron who has met their subordinate
-  from one who has not. Since PoP is not enforced at adoption, this distinction
-  is what makes the unenforced version safe: an unattested adoption carries
-  little weight, and observers can see which kind they are looking at.
+  from one who took the former patron's countersignature instead. Both are
+  required alternatives rather than a floor and a nicety, so the distinction
+  is no longer between attested and unattested adoptions — there are none of
+  the latter — but between an edge grounded in a meeting of *these two* and
+  one grounded in somebody else's earlier meeting. Observers can see which
+  kind they are looking at and weigh them differently (§16.1).
 
 **The ceremony's first product is not the record.** Two people met. Each can now
 recognise the other, and each has grown their own graph by a party they trust on
@@ -2348,7 +2396,7 @@ PresenceRecord {
                                        # the SELECTOR's claim of why this
                                        # verifier was picked (§8.1.2) —
                                        # tier-aligned; met and in-horizon
-                                       # are distinct facts (A23)
+                                       # are distinct facts (§16.2.1)
     basis           : enum{photo_match, personal_knowledge, both}
                                        # absent when result is unavailable —
                                        # no evaluation, no basis
@@ -2693,7 +2741,15 @@ attacker": recover elsewhere and accept the transplant.
 
 **A rotation carries both the old key's signature and a prior counterparty's
 in-person recognition.** Neither alone is enough, and there is **no lost-key
-variant**.
+variant**. **The recognition requires a meeting, and requires it every time**
+[author, 2026-09-05] — for rotation and recovery alike, which are one
+procedure (§9.0). `wire-format.md` §4.1's `Recovery` block puts it in the
+field's own definition: the presence half is *"a prior counterparty who **met
+the subject again** and recognised them."* Past acquaintance is what makes
+somebody eligible to recognise you; meeting again is what they do. **§6.1.1's
+former-patron route does not reach here**: a rotation is not a node moving
+between patrons, and nobody's countersignature substitutes for the human act
+§9.1 turns on.
 
 | Half | What it proves | Why the other is still needed |
 |---|---|---|
@@ -5891,10 +5947,12 @@ carry: a counterparty you have **met** and a horizon member you have
 different security facts everywhere attestation is what is being asked.
 Verifier selection ranks the met candidate first for exactly that reason
 (§8.1.2), and `selection_basis` encodes the two separately rather than
-folding them (`wire-format.md` §5.5, assumption A23). **A landscape
-distance answers "how far", never "how well attested"** — reading equal
-distance as equal standing would collapse the very distinction A23 depends
-on.
+folding them (`wire-format.md` §5.5). **A landscape distance answers "how
+far", never "how well attested"** — reading equal distance as equal standing
+would fold two different security facts into one. **Every adoption carries
+evidence** (§6.1.1), so the question is never whether an edge is attested but
+what attests it — and having met somebody is not the same fact as sharing a
+position with them.
 
 **Beyond the horizon, trust flows equally over the hierarchical and the
 proof-of-presence/peering graphs** [author, 2026-09-04]. The edge kinds are
@@ -5970,10 +6028,11 @@ particular victim by obtaining a technical favour from someone in that victim's
 neighbourhood"* — which requires the attacker to already be near their target, at
 which point the target can evaluate them by other means.
 
-**Two framings to avoid.** Peering is not *the cheapest* route to standing — an
-unattested adoption (§6.1.1) needs no meeting and no storage commitment. And there
-is no *ceiling* to raise: that framing mistakes per-observer standing for a global
-quantity.
+**Two framings to avoid.** Peering is not *the cheapest* route to standing —
+since §6.1.1 there is no cheaper one, every route into a trust-bearing
+relationship being priced in a meeting or in somebody's countersignature, and
+peering in a meeting outright. And there is no *ceiling* to raise: that framing
+mistakes per-observer standing for a global quantity.
 
 **A peering edge and a proof-of-presence edge are equivalent** [author,
 2026-09-04]. There is no edge-kind discount, and none to reintroduce: to
@@ -6262,7 +6321,12 @@ contains it, never only one.
 
 1. **Face-to-face attestation** makes *identities* expensive. Proof of presence
    is the one resource an attacker cannot parallelise. This is the strongest
-   leg; specified in §7. Note it is a *cost*, not an unforgeable
+   leg; specified in §7. **Since 2026-09-05 it has no unattested bypass**:
+   §6.1.1 requires every adoption to carry either a meeting or a former
+   patron's countersignature, peering requires a meeting outright (§6.3), and
+   recovery and rotation require one every time (§9.0.1). What an attacker
+   can still do is acquire one attested identity and move it by transfer,
+   which is what A34 prices. Note it is a *cost*, not an unforgeable
    primitive — bilateral collusion defeats it, and the flow metric is what
    bounds the resulting damage (§7).
 2. **Static routable addressing** makes *infrastructure* expensive and visible.
@@ -7177,7 +7241,7 @@ targets for simulation.
 | **A8** | **Attackers cannot parallelise physical presence** | A1's teeth (§17.3) | Paid participants, simultaneous ceremonies and colluding witnesses would defeat it |
 | **A9** | **Cross-device face matching FRR is a few percent** | The aggregation rule and threshold design (§7.4.4); also §20.1 | A materially higher rate makes false accusation common; a much lower one makes single-negative policies safe |
 | **A10** | **Real social graphs are sparse, so honest operators never achieve theoretical packing** | The claim in §17.2 that attacker economics are *worse* than 1:1 for defenders | The cost symmetry becomes exactly 1:1, weakening §17.2's conclusion |
-| **A11** | **Ordinary users will tolerate ceremony friction rather than route around it** | The whole Sybil defence, which only works if the mechanism is used (§7.1) | Users adopt without meeting, unattested adoptions become the norm, and the face-to-face grounding is decorative. Note this is the honest-user mirror of A1: both must hold |
+| **A11** | **Ordinary users will meet face to face often enough for the network to work, and will treat it as worth doing rather than as friction to route around** | The whole Sybil defence, which only works if the mechanism is used (§7.1), and §6.1.1's requirement, which has no unattested fallback to degrade into. **Restated 2026-09-05**: encouraging frequent face-to-face meeting is a design aim [author], so this is not a friction the design hopes users absorb but the behaviour it is built to produce | Users route around the mechanism — meeting rarely, reusing old counterparties, or transferring rather than meeting wherever §6.1.1 allows it — and the face-to-face grounding thins to whatever the transfer path can carry. Note this is the honest-user mirror of A1: A1 prices the attacker's meetings, this one asks whether ordinary people take theirs |
 | **A12** | **The facts a composition attack would yield are already obtainable about the target user from existing sources** | The acceptance of composition risk in §19.1 as a *matched* rather than *new* exposure | For any user whose baseline exposure is lower — deliberate minimisers, activists, dissidents, people hiding from someone. The trade is not the one described, and the network creates exposure rather than matching it. **Known false for part of the population**; the question is whether it holds for the intended one |
 | **A13** | **Users successfully retain and back up their transaction archive** | The second-factor property (§10.2), portability of history to a new subnet (§16.7), and the value of the chain at all | If archives are routinely lost, users arrive at every new subnet as fresh identities and accumulated standing becomes non-portable in practice. The security property survives; the usability does not, and §13.7.1's backup design becomes the whole story |
 | **A14** | Reconstruction against a binary-output matcher needs **thousands to tens of thousands of queries** | §7.4.1's whole oracle-hardening argument — ceremony binding turns that count into weeks of staged meetings | Also §20.1. If the true count is orders lower, ceremony binding and rate limits do not price the attack out |
@@ -7188,7 +7252,7 @@ targets for simulation.
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §16.6's operator pricing and §17.3's static-addressing leg | Also §20.1 |
 | **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every resource application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it |
-| **A23** | An adoption without a meeting is **near-worthless** rather than merely weaker | Keeping proof of presence optional (§6.1.1) instead of mandatory where it could be enforced | If unattested edges carry meaningful standing under plausible policies, optionality becomes a gap rather than a graceful degradation |
+| **A34** | **A former patron's countersignature is adequate evidence in place of a meeting between the two new parties** | §6.1.1's second route, and with it every lateral and vertical shift (§6.2.3) — the alternative being that each such move costs a fresh ceremony | If a countersignature is materially weaker than a meeting, transfers become the cheap route into a horizon that §6.1.1 closed for unattested adoptions, and an attacker who controls one patron walks its subordinates into subnets that never met them. **Replaces A23, whose premise — that proof of presence is optional — §6.1.1 removed on 2026-09-05**; the question moved rather than closed, from *what is an unattested edge worth* to *what is a vouched-for one worth* |
 | **A24** | A user accumulates **a few hundred archive records per decade** | The claim that post-quantum archive size is operationally insignificant (§5) | An order of magnitude more makes the archive a storage and bandwidth problem, not a rounding error |
 | **A25** | An envelope past **~400 KB** is prohibitive rather than merely large | Keeping embedded evidence classical instead of hybrid (§5.1) | If that size is tolerable, the simpler uniform rule — everything hybrid — becomes available |
 | **A26** | A fuzzed profile discriminating **~99% of humans** is the right privacy/utility point | The biometric query representation (§7.5) | Too specific and it approaches court-grade evidence; too vague and verification stops working |
