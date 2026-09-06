@@ -18,16 +18,21 @@ Current status: 3 Python assertion families, 3 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
 (25 lemmas) and `compliant/` (18 lemmas).
 
-**Three obligations are stated and NOT DISCHARGED**, all in `compliant/`:
+**Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
 `nothing_served_under_a_credential_this_node_superseded` /
-`nothing_delivered_after_supersession` in `attach.spthy`. Each sits in its
-file, commented out, under a block saying what it claims and what was tried.
-None was falsified — there is no counterexample, only no proof. They share one
-cause: the serving and issuing rules consume a linear capability and restore
-it, so the backward search for its origin regresses through unboundedly many
-prior services. Source invariants closed that regress for the neighbouring
-properties in both theories and did not close it for these three.
+`nothing_delivered_after_supersession` in `attach.spthy`. They share one cause:
+the serving and issuing rules consume a linear capability and restore it, so
+the backward search for its origin regresses through unboundedly many prior
+operations. Source invariants closed that regress for the neighbouring
+properties in both theories and not for these three.
+
+Bounding the loop makes the space finite and all three verify — 33, 84 and 46
+steps. The bound lives in a `.bounded` fragment that `run-all.sh` **appends to
+the real theory**, so the rules have exactly one source and the bounded result
+follows any change to them; a hand-maintained second copy would have drifted.
+Quote these three as *no counterexample within the bound*, never as the
+unbounded claim.
 
 ---
 

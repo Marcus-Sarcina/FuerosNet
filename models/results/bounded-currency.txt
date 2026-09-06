@@ -221,11 +221,8 @@ solve( (∃ #o. (RecordOpened( $I, $S, kNew ) @ #o) ∧ #o < #b)  ∥
       solve( Record( $I, $S, ~kNew ) ▶₀ #b )
         case Adoption_Arrives
         solve( Record( $I, $S, kOld ) ▶₀ #a )
-          case Adoption_Arrives
-          solve( Record( $I, $S, kOld ) ▶₀ #vr )
-            case Initial_Record
-            SOLVED // trace found
-          qed
+          case Initial_Record
+          SOLVED // trace found
         qed
       qed
     qed
@@ -290,6 +287,144 @@ solve( (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ #o < #b)  ∥
   qed
 qed
 
+restriction AtMostOneAdoption:
+  "∀ I S k1 k2 #a #b.
+    ((Superseded( I, S, k1 ) @ #a) ∧ (Superseded( I, S, k2 ) @ #b)) ⇒
+    (#a = #b)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ I S k1 k2 #a #b.
+    ((Superseded( I, S, k1 ) @ #a) ∧ (Superseded( I, S, k2 ) @ #b)) ⇒
+    (#a = #b)"
+  */
+
+restriction AtMostTwoIssuances:
+  "∀ I1 S1 k1 I2 S2 k2 I3 S3 k3 #a #b #c.
+    (((Issued( I1, S1, k1 ) @ #a) ∧ (Issued( I2, S2, k2 ) @ #b)) ∧
+     (Issued( I3, S3, k3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ I1 S1 k1 I2 S2 k2 I3 S3 k3 #a #b #c.
+    (((Issued( I1, S1, k1 ) @ #a) ∧ (Issued( I2, S2, k2 ) @ #b)) ∧
+     (Issued( I3, S3, k3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  */
+
+lemma no_issuance_for_a_key_this_issuer_superseded:
+  all-traces
+  "∀ I S k #i #j.
+    ((Superseded( I, S, k ) @ #i) ∧ (Issued( I, S, k ) @ #j)) ⇒ (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S k #i #j.
+  (Superseded( I, S, k ) @ #i) ∧ (Issued( I, S, k ) @ #j) ∧ ¬(#j < #i)"
+*/
+simplify
+solve( (#j = #i)  ∥ (#i < #j) )
+  case case_1
+  solve( (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ #o < #i)  ∥
+         (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ #a < #i) )
+    case case_1
+    solve( !Key( $S, k ) ▶₀ #o )
+      case Subject_Key
+      by solve( Superseded( $I, $S, ~k ) @ #i )
+    qed
+  next
+    case case_2
+    by solve( Superseded( $I, $S, k ) @ #i )
+  qed
+next
+  case case_2
+  solve( (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ #o < #j)  ∥
+         (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ #a < #j) )
+    case case_1
+    solve( !Key( $S, k ) ▶₀ #o )
+      case Subject_Key
+      solve( Superseded( $I, $S, ~k ) @ #i )
+        case Adoption_Arrives
+        solve( Record( $I, $S, ~k ) ▶₀ #j )
+          case Initial_Record
+          solve( Record( $I, $S, ~k ) ▶₀ #i )
+            case Issue
+            solve( (∃ #o. (RecordOpened( $I, $S, ~k ) @ #o) ∧ #o < #vr.1)  ∥
+                   (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, ~k ) @ #a) ∧ #a < #vr.1) )
+              case case_1
+              solve( Record( $I, $S, ~k ) ▶₀ #vr.1 )
+                case Initial_Record
+                by contradiction /* cyclic */
+              next
+                case Issue
+                by contradiction /* from formulas */
+              qed
+            next
+              case case_2
+              by solve( AdoptionArrived( $I, $S, kOld, ~k ) @ #a )
+            qed
+          qed
+        next
+          case Issue
+          solve( (∃ #o. (RecordOpened( $I, $S, ~k ) @ #o) ∧ #o < #vr.1)  ∥
+                 (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, ~k ) @ #a) ∧ #a < #vr.1) )
+            case case_1
+            solve( Record( $I, $S, ~k ) ▶₀ #i )
+              case Initial_Record
+              solve( Record( $I, $S, ~k ) ▶₀ #vr.1 )
+                case Issue
+                by contradiction /* from formulas */
+              qed
+            qed
+          next
+            case case_2
+            by solve( AdoptionArrived( $I, $S, kOld, ~k ) @ #a )
+          qed
+        qed
+      next
+        case Adoption_Arrives_Into_An_Abandoned_Line
+        by contradiction /* from formulas */
+      qed
+    qed
+  next
+    case case_2
+    solve( Superseded( $I, $S, k ) @ #i )
+      case Adoption_Arrives
+      solve( AdoptionArrived( $I, $S, kOld.1, k ) @ #a )
+        case Adoption_Arrives
+        solve( Record( $I, $S, ~kNew ) ▶₀ #j )
+          case Adoption_Arrives
+          solve( Record( $I, $S, ~kNew ) ▶₀ #a )
+            case Issue
+            by contradiction /* cyclic */
+          qed
+        next
+          case Issue
+          solve( (∃ #o. (RecordOpened( $I, $S, ~kNew ) @ #o) ∧ #o < #vr)  ∥
+                 (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, ~kNew ) @ #a) ∧ #a < #vr) )
+            case case_2
+            solve( AdoptionArrived( $I, $S, kOld, ~kNew ) @ #a.1 )
+              case Adoption_Arrives
+              solve( Record( $I, $S, ~kNew ) ▶₀ #a )
+                case Adoption_Arrives
+                by contradiction /* cyclic */
+              next
+                case Issue
+                by contradiction /* cyclic */
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case Adoption_Arrives_Into_An_Abandoned_Line
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -305,14 +440,15 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/currency.spthy
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/bounded-currency.spthy
 
-  processing time: 0.61s
+  processing time: 0.75s
   
   a_key_enters_a_record_once (all-traces): verified (16 steps)
   a_record_key_entered_by_one_of_two_doors (all-traces): verified (11 steps)
-  issuance_after_supersession_names_the_new_key (exists-trace): verified (8 steps)
+  issuance_after_supersession_names_the_new_key (exists-trace): verified (7 steps)
   issuance_is_reachable (exists-trace): verified (5 steps)
   stale_sibling_issuance_is_reachable (exists-trace): verified (8 steps)
+  no_issuance_for_a_key_this_issuer_superseded (all-traces): verified (33 steps)
 
 ==============================================================================

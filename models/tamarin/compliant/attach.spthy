@@ -147,7 +147,7 @@ rule Supersession_Arrives:
 */
 
 /*  ============================================================
-    NOT DISCHARGED -- the two supersession obligations
+    NOT DISCHARGED UNBOUNDED -- but verified over a bounded model
     ============================================================
 
     THE CLAIMS, which are what this theory exists for:
@@ -174,9 +174,17 @@ rule Supersession_Arrives:
     regresses through unboundedly many prior services.  Neither lemma was
     FALSIFIED; there is no counterexample, only no proof inside 420 seconds.
 
-    WHAT DOES HOLD HERE is below and is not nothing: the role gate, both
-    anti-vacuity witnesses, and the ignorance witness.  The supersession
-    consequence itself is stated and unproven.
+    WHAT IS ESTABLISHED, and it is more than belief.  `attach.bounded`
+    appends a bound -- at most one supersession, at most two services -- and
+    over that finite space BOTH obligations verify, in 84 and 46 steps.
+    `run-all.sh` builds that file by appending the fragment to THIS one, so
+    the rules have a single source and the bounded result follows any change
+    to them.  Keeping the bound in a fragment rather than in this file is also
+    what preserves `no_trust_bearing_operation_on_a_sibling` as an UNBOUNDED
+    result; carrying the restrictions here would have quietly demoted it.
+
+    WHAT ELSE HOLDS HERE: the role gate, both anti-vacuity witnesses, and the
+    ignorance witness, all unbounded.
 
     THE SAME CAUSE IN TWO THEORIES IS THE USEFUL PART.  Both obligations are
     "a node stops doing X once it knows Y", and both models express X as a

@@ -5717,3 +5717,41 @@ another kept serving. That is not a design defect -- design 12.6.5 says
 capability is now one fact per (node, client, credential).
 
 12 models, 43 lemmas verifying: 25 wire-only, 18 compliant. 3 obligations open.
+
+---
+
+## The three open obligations, bounded (2026-09-06)
+
+Author asked whether the undischarged lemmas were an open issue with the model
+or whether the models reach their target confidence. Both halves matter, so
+both were established rather than asserted.
+
+**It is the model, not the design.** No counterexample was ever produced --
+Tamarin did not falsify, it failed to terminate. And the cause is local to the
+encoding: the issuing and serving rules consume a linear capability and restore
+it, so the backward search for that fact's origin regresses through unboundedly
+many prior operations.
+
+**But "believed true" was too weak to leave standing**, so the claim was
+converted into a checked result. Bounding the loop -- at most one supersession,
+at most two issuances or services -- makes the space finite, and all three
+obligations VERIFY: 33 steps for currency's, 84 and 46 for attach's. Two things
+this is not: it is not the unbounded claim, and it is not `--bound`, which
+merely truncates the search and reports *analysis incomplete* (tried first, at
+depths 6 and 10; no verdict either way).
+
+**The bound is applied by appending a fragment to the real theory at gate
+time**, not by keeping a second copy. Tamarin has no `#include`, so a bounded
+companion would otherwise be a hand-maintained duplicate of the rules -- the
+exact drift this session split the two trees to avoid. `run-all.sh` strips the
+theory's final `end`, appends `<theory>.bounded`, and proves that. The rules
+have one source and the bounded result follows any change to them.
+
+Keeping the bound OUT of `attach.spthy` also preserves
+`no_trust_bearing_operation_on_a_sibling` as an unbounded result. Carrying the
+restrictions in the file itself would have silently demoted a target property
+that currently holds in full -- the same class of quiet weakening as the
+per-issuer key.
+
+12 models, 43 lemmas unbounded + 13 bounded. Nothing open without a number
+against it.

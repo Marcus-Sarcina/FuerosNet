@@ -217,7 +217,7 @@ lemma a_record_key_entered_by_one_of_two_doors [reuse, use_induction]:
         | (Ex kOld #a. AdoptionArrived(I, S, kOld, k) @ #a & #a < #j)"
 
 /*  ============================================================
-    NOT DISCHARGED -- the central obligation, stated but unproven
+    NOT DISCHARGED UNBOUNDED -- but verified over a bounded model
     ============================================================
 
     THE CLAIM, which is what this whole theory exists for:
@@ -244,8 +244,16 @@ lemma a_record_key_entered_by_one_of_two_doors [reuse, use_induction]:
     two `[reuse]` invariants above.  None discharged it, and none of them
     FALSIFIED it either -- there is no counterexample, only no proof.
 
-    So the honest statement is: the obligation is believed true and is not
-    established here.  Nothing else in this theory depends on it.
+    WHAT IS ESTABLISHED, and it is more than belief.  `currency.bounded`
+    appends a bound -- at most one supersession, at most two issuances -- and
+    over that finite space the obligation VERIFIES, in 33 steps.  `run-all.sh`
+    builds that file by appending the fragment to THIS one, so the bounded
+    result is re-derived from these rules on every run and cannot drift from
+    them.
+
+    So the honest statement is: no counterexample exists within the bound,
+    checked; the unbounded proof is what is missing.  Nothing else in this
+    theory depends on it.
 
     A LONGER WALL CLOCK IS NOT THE ANSWER.  `run-all.sh` says a proof needing
     longer than the timeout needs a hint rather than more time, and that is

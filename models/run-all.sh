@@ -87,6 +87,48 @@ for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/cer
   fi
 done
 
+# ---------------------------------------------------------------------------
+# 3b. BOUNDED COMPANIONS.  Three obligations -- currency's
+# `no_issuance_for_a_key_this_issuer_superseded` and attach's two supersession
+# lemmas -- do not discharge over unbounded traces: the issuing and serving
+# rules consume a linear capability and restore it, so the search for that
+# fact's origin regresses through unboundedly many prior operations.
+#
+# The bound is applied by APPENDING a fragment to the real theory here, rather
+# than by keeping a second copy of the rules.  The rules therefore have exactly
+# one source, and a change to them is picked up by the bounded check on the
+# next run.  A hand-maintained copy would have drifted.
+#
+# A pass here means: no counterexample in any trace within the bound.  It is
+# not the unbounded claim and must not be quoted as one.
+echo "=== 3b. Bounded companions (see the .bounded fragments) ==="
+for spec in compliant/currency compliant/attach; do
+  frag="$HERE/tamarin/$spec.bounded"
+  [ -f "$frag" ] || continue
+  t="bounded-${spec##*/}"
+  out="$RESULTS/$t.txt"
+  tmp="$RESULTS/$t.spthy"
+  # theory minus its LAST `end` line, then the fragment, then `end`
+  awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--) if(lines[i]=="end"){last=i;break}
+       for(i=1;i<=NR;i++) if(i!=last) print lines[i]}' "$HERE/tamarin/$spec.spthy" > "$tmp"
+  cat "$frag" >> "$tmp"; echo "" >> "$tmp"; echo "end" >> "$tmp"
+  PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
+      "$TAMARIN" --prove "$tmp" > "$out" 2>&1
+  if [ $? -eq 124 ]; then
+    echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"; fail=1; continue
+  fi
+  if grep -qE 'wellformedness check(s)? failed' "$out"; then
+    echo "  $t: WELLFORMEDNESS check failed (see results/$t.txt)"; fail=1
+  elif grep -qE 'falsified|analysis incomplete' "$out"; then
+    echo "  $t: FALSIFIED or INCOMPLETE (see results/$t.txt)"; fail=1
+  elif grep -qE 'verified' "$out"; then
+    n=$(grep -cE 'verified \(' "$out")
+    echo "  $t: $n lemmas verified (bounded)"
+  else
+    echo "  $t: no verdict (see results/$t.txt)"; fail=1
+  fi
+done
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "ALL MODELS PASS"

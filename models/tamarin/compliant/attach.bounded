@@ -1,0 +1,34 @@
+/*  BOUNDED COMPANION -- appended to `attach.spthy` by `run-all.sh`, never
+    maintained as a copy.  Same cause and same remedy as
+    `currency.bounded`: `Deliver` and `Trust_Bearing_Operation` consume
+    `Serving` and restore it, so the unbounded search regresses.
+
+    Note what is NOT bounded by this: the theory above proves
+    `no_trust_bearing_operation_on_a_sibling` over unbounded traces, and
+    keeping the bound in a separate fragment is what preserves that.  A file
+    that simply carried the restrictions would have quietly demoted it.
+
+    WHAT THIS BUYS: no counterexample to either supersession obligation in
+    any trace with at most one supersession and two services.               */
+
+restriction AtMostOneSupersession:
+  "All N1 C1 k1 N2 C2 k2 #a #b.
+      EvidenceHeld(N1, C1, k1) @ #a & EvidenceHeld(N2, C2, k2) @ #b ==> #a = #b"
+
+restriction AtMostTwoServices:
+  "All N1 C1 k1 N2 C2 k2 N3 C3 k3 #a #b #c.
+      ServedUnder(N1, C1, k1) @ #a & ServedUnder(N2, C2, k2) @ #b
+      & ServedUnder(N3, C3, k3) @ #c
+        ==> #a = #b | #a = #c | #b = #c"
+
+lemma nothing_served_under_a_credential_this_node_superseded:
+  all-traces
+  "All N C k #i #j.
+      EvidenceHeld(N, C, k) @ #i & ServedUnder(N, C, k) @ #j
+        ==> #j < #i"
+
+lemma nothing_delivered_after_supersession:
+  all-traces
+  "All N C k m #i #j.
+      EvidenceHeld(N, C, k) @ #i & Delivered(N, C, k, m) @ #j
+        ==> #j < #i"

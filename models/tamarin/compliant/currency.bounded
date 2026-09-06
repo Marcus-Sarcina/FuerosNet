@@ -1,0 +1,27 @@
+/*  BOUNDED COMPANION -- appended to `currency.spthy` by `run-all.sh`, never
+    maintained as a copy.  The theory above is the single source of the rules;
+    this fragment adds a bound and the obligation that needs one.
+
+    WHY.  `no_issuance_for_a_key_this_issuer_superseded` does not discharge
+    unbounded: `Issue` consumes `Record` and restores it, so the search for
+    that fact's origin regresses through unboundedly many prior issuances.
+    Bounding the loop makes the space finite and the obligation provable.
+
+    WHAT THIS BUYS, exactly: no counterexample exists in any trace with at
+    most one supersession and two issuances.  That is weaker than the
+    unbounded claim and much stronger than "believed true" -- it is a checked
+    result over a real, if small, space, re-derived on every run.           */
+
+restriction AtMostOneAdoption:
+  "All I S k1 k2 #a #b. Superseded(I, S, k1) @ #a & Superseded(I, S, k2) @ #b ==> #a = #b"
+
+restriction AtMostTwoIssuances:
+  "All I1 S1 k1 I2 S2 k2 I3 S3 k3 #a #b #c.
+      Issued(I1, S1, k1) @ #a & Issued(I2, S2, k2) @ #b & Issued(I3, S3, k3) @ #c
+        ==> #a = #b | #a = #c | #b = #c"
+
+lemma no_issuance_for_a_key_this_issuer_superseded:
+  all-traces
+  "All I S k #i #j.
+      Superseded(I, S, k) @ #i & Issued(I, S, k) @ #j
+        ==> #j < #i"
