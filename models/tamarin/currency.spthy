@@ -197,21 +197,40 @@ lemma expiry_is_reachable:
 // accepted; because the signature binds sk, an attestation for one key
 // cannot be replayed onto another.
 //
-// WHAT THIS DOES NOT PROVE, AND THE MODEL CANNOT CURRENTLY EXPRESS.  There
-// is no notion of a CURRENT key here: !SubjKey and !Epoch are both
-// persistent, so a patron can mint a BRAND-NEW attestation for a key the
-// subject rotated away from, stamped with an epoch that began after the
-// successor existed.  Tamarin confirms the trace exists with no compromise.
-// So this lemma establishes only that an accepted (S,sk,e) was signed for
-// that same (S,sk,e) and had not expired -- NOT that sk is current.
+// WHAT THIS DOES NOT PROVE, AND WHY THAT IS CORRECT RATHER THAN MISSING.
+// The lemma establishes that an accepted (S, sk, e) was signed for that same
+// (S, sk, e) and had not expired.  It does NOT establish that sk is the
+// subject's CURRENT key, and no protocol model can, because currency is not
+// a protocol property.
 //
-// design Section 12.6.5 keeps two rules apart and warns against conflating
-// them: "Expiry bounds what a stolen credential can spend; supersession,
-// once known, is what retires it from use." This model has the first and
-// not the second, which is exactly the conflation that section forbids.
-// Closing it needs a linear current-key binding that rotation consumes,
-// plus a relying party that can hold supersession evidence -- a rebuild
-// rather than a patch, and open work rather than a silent limitation.
+// design Section 12.6.5 keeps expiry and supersession apart -- "Expiry
+// bounds what a stolen credential can spend; supersession, once known, is
+// what retires it from use" -- and BOTH HALVES OF THE SUPERSESSION RULE ARE
+// CLIENT BEHAVIOUR [author, 2026-09-05]:
+//
+//   * the ISSUER'S half, "issue only for the key you currently record", is
+//     unenforceable because the attestation names a subject, a key and an
+//     epoch and carries nothing distinguishing one issued before a rotation
+//     from one issued after;
+//   * the RELYING PARTY'S half, "stop serving a binding you have verified
+//     superseded", is unenforceable for the ordinary reason that it is a
+//     rule about what a party does with its own records.
+//
+// AND THE TWO NEVER MEET.  A party that could detect a stale issuance is one
+// that holds the recovery adoption -- and such a party has already
+// overwritten its own record (design Section 9.0.2), so it rejects on that
+// and never consults the staple.  A party that would consult the staple is
+// outside the horizon, where by design old and new keys are separate
+// entities and there is nothing to detect.
+//
+// So there is no third-party-checkable property here for Tamarin to have.
+// What the protocol enforces is the signature and the epoch, and that is
+// what is proved.  The obligations live where obligations live:
+// `infra-client-requirements.md` Section 3 for the issuer,
+// Section 2 for the relying party.  design Section 1.1's test --
+// a rule aimed at a party you share no state with is a wish -- is the whole
+// of the answer, and a rebuild attempted on 2026-09-05 was machinery for a
+// property that was never the protocol's to have.
 lemma currency_requires_unexpired_issuance:
   "All P S sk e #i.
      Accepted(P, S, sk, e) @ #i

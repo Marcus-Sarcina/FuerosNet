@@ -8941,3 +8941,33 @@ model's to prove: that a party holding supersession evidence must stop serving
 is a client obligation, self-enforced, and already sits in the operator
 requirements. A rule aimed at a party you share no state with is a wish, and a
 symbolic model can assume such a rule or ignore it, never prove it.
+
+### 2026-09-05 (currency supersession is client behaviour, so there was no gap)
+
+Three reviews filed the currency model's missing notion of a current key as a
+modelling gap, and a rebuild was attempted and reverted before the question
+was put the right way round. Asked what the gap was, the answer is that it is
+unenforceable client behaviour, and that closes it.
+
+Neither half of the supersession rule can be checked by anyone else. An
+attestation names a subject, a key and an epoch, and carries nothing that
+tells an issuance made before a rotation from one made after, so the issuer's
+obligation to issue only for the key it currently records is a commitment
+rather than a rule. The relying party's obligation to stop serving a binding
+it has verified superseded governs what it does with its own records, which is
+the ordinary reason such a rule is unenforceable.
+
+The two never meet, which is what settles it. A party that could detect a
+stale issuance is one holding the recovery adoption, and that party has
+already overwritten its own record and rejects on that without reading the
+attestation at all. A party that would read the attestation is outside the
+horizon, where the old and new keys are separate entities by design and there
+is nothing to detect. There is no third-party-checkable property, so there was
+never a theorem.
+
+The one real gap was in the operator requirements, where the relying party's
+half was written down and the issuer's was not. It is added beside issue fresh
+never extend stale, stated as a commitment with the reason it cannot be
+checked. The model's note now says why the property is not the protocol's to
+have rather than describing it as unfinished work, and the abandoned rebuild
+is deleted rather than kept, since keeping it implied a next attempt.

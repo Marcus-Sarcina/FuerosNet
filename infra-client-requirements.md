@@ -84,6 +84,17 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   grandpatron and down-line issuance paths when the patron is unavailable (design
   §12.6.5.1).
 - **Issue fresh, never extend stale.**
+- **Issue only for the key you currently record.** A recovery adoption you
+  have received overwrites your record of that subject (design §9.0.2), and
+  after it you have nothing to issue for the old key and MUST NOT.
+  **Nobody can check this for you, and this is a commitment rather than an
+  enforceable rule** (design §1.1): an attestation names a subject, a key and
+  an epoch, and carries nothing that distinguishes one issued before a
+  rotation from one issued after. A party that could tell already holds the
+  adoption, and is therefore relying on its own record rather than on your
+  attestation. Both halves of design §12.6.5's supersession rule are of this
+  kind — yours when issuing, the relying party's when serving (§2's *"stop
+  serving a binding you have verified superseded"*).
 
 ## 4. Resolution
 

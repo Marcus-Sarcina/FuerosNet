@@ -436,45 +436,37 @@ then-diagnose loop *is* the value of the exercise.
 
 ---
 
-## Open: the currency current-key rebuild
+## Not open: currency supersession is client behaviour
 
-`currency.spthy` still has no notion of a *current* key, so it cannot prove
-that a patron will not mint a fresh attestation for a key its subject rotated
-away from. A rebuild was attempted on 2026-09-05 and **reverted**, because it
-does not converge.
+Three reviews in a row filed `currency.spthy`'s missing "current key" as a
+**model gap**, and a rebuild was attempted and reverted before the author
+named what it actually is: **both halves of §12.6.5's supersession rule are
+unenforceable client behaviour, so there is no protocol property here for a
+symbolic model to prove.**
 
-The construction is right and is preserved at
-`Robot/currency-rebuild-attempt.spthy`: a per-party `View(A, S, k)` — never a
-global current key, which per-observer trust forbids — replaced by a recovery
-adoption for whichever parties receive it, with delivery under the adversary's
-control so that "outside the horizon" needs no predicate of its own. What will
-not prove is the lemma. Induction, `[reuse]` helpers, a bounded instance and a
-reformulation splitting view-change from view-restoration were each tried; the
-whole-file proof ran past 25 minutes.
+- The **issuer's** half — *issue only for the key you currently record* — is
+  unenforceable because a currency attestation names a subject, a key and an
+  epoch, and carries nothing that distinguishes one issued before a rotation
+  from one issued after.
+- The **relying party's** half — *stop serving a binding you have verified
+  superseded* — is unenforceable for the ordinary reason that it governs what
+  a party does with its own records.
 
-**The cause is known**, which is the useful part for whoever picks it up:
-`Issue_Currency` consumes and restores the patron's view without stamping it,
-so a backward search chains through unboundedly many restorations. Stamping
-each restoration proves that lemma and breaks the other; the two want
-different event vocabularies.
+**And the two never meet.** A party that could detect a stale issuance is one
+holding the recovery adoption — and such a party has already overwritten its
+own record (§9.0.2), so it rejects on that and never consults the staple. A
+party that would consult the staple is outside the horizon, where old and new
+keys are separate entities by design and there is nothing to detect.
 
-**The lemma was not weakened to make it pass.** A property trimmed until it
-verifies is worth less than a stated gap.
+So the model proves what the protocol enforces: the signature and the epoch.
+The obligations live where obligations live — `infra-client-requirements.md`
+§3 for the issuer, §2 for the relying party — and §1.1's test is the whole of
+the answer: *a rule aimed at a party you share no state with is a wish.*
 
-Two traps from that attempt are worth knowing before repeating it:
-`--prove=<name>` **assumes** prior `[reuse]` lemmas rather than proving them,
-so two lemmas "verified" in 3 and 26 steps while the helpers they rested on
-timed out. Always run the whole file. And `run-all.sh` now bounds every
-Tamarin call (`TAMARIN_TIMEOUT`, default 600s), because a non-converging
-theory otherwise hangs the gate indefinitely.
-
-The **other half** of §12.6.5's rule was never this model's to prove: *"a
-party holding authenticated supersession evidence MUST NOT continue serving"*
-is a client obligation, self-enforced, and lives at
-`infra-client-requirements.md` — *"Stop serving a binding you have verified
-superseded"*. §1.1's test applies: a rule aimed at a party you share no state
-with is a wish, and a symbolic model can assume such a rule or ignore it,
-never prove it.
+**The lesson is the one the working notes already record**: when a finding
+assumes a component, ask whether the component is required. Three reviewers
+and this assistant took the component as given and generated work from it; the
+repair was a sentence in a requirements document.
 
 ---
 

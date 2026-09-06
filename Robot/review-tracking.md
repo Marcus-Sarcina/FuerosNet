@@ -5119,3 +5119,43 @@ division.
 (`TAMARIN_TIMEOUT`, default 600s) and fails on a timeout. A non-converging
 theory would otherwise hang the gate forever, which is exactly what happened
 here.
+
+**And then the author named it, which closed it without any of that
+(2026-09-05).** Asked what the gap was, his answer: *"It is unenforceable
+client behavior."* Checked, and he is right on both halves, which is why no
+amount of Tamarin was going to help:
+
+  * the ISSUER'S half is unenforceable because a `CurrencyAttestation` names
+    `{identity, current_key, issued_at, expires_at, signature}` and carries
+    nothing distinguishing an issuance made before a rotation from one made
+    after;
+  * the RELYING PARTY'S half is unenforceable for the ordinary reason -- it
+    governs what a party does with its own records.
+
+**And the two never meet**, which is the part that settles it. A party able to
+detect a stale issuance is one holding the recovery adoption -- and that party
+has already overwritten its own record (§9.0.2), so it rejects on that and
+never reads the staple. A party that would read the staple is outside the
+horizon, where old and new keys are separate entities by design and there is
+nothing to detect. There is no third-party-checkable property, so there was
+never a lemma.
+
+**The one real gap was in a requirements document.** The relying party's
+obligation was written (`infra-client-requirements.md` §2, "stop serving a
+binding you have verified superseded"); the issuer's was not. Added to §3
+alongside "issue fresh, never extend stale", stated as a commitment with the
+reason it cannot be checked. That is the whole repair.
+
+Actions: `currency.spthy`'s "open work" note replaced with why the property is
+not the protocol's to have; `models/README.md`'s "Open" section replaced with
+the same; `Robot/currency-rebuild-attempt.spthy` DELETED -- preserving it
+implied a next attempt, and there should not be one. The reference above is
+left as the record of what was tried.
+
+**The lesson is one CLAUDE.md already records and this assistant did not
+apply**: *when a finding assumes a component, ask whether the component is
+required* -- not whether it can be built. Three reviewers filed this as a
+model gap and I accepted the framing, planned a rebuild, got authorisation,
+and spent it on machinery for a property the protocol never had. The question
+"is this enforceable at all?" costs one message and would have closed it
+before the first line of Tamarin.
