@@ -176,8 +176,11 @@ which is honest."
   cannot prove a look-alike is impossible — that residual is design §18.3's
   colluding/deceived-counterparty case, carved out as a compromised verifier.
 
-- **A trustworthy clock** (`currency`): the `NotExpiredBeforeAccept`
-  restriction discards traces where an acceptance follows its epoch's expiry.
+- **A trustworthy clock** (`currency`, design **A33**): the
+  `NotExpiredBeforeAccept` restriction discards traces where an acceptance
+  follows its epoch's expiry. The design registers the same dependency —
+  §12.6.5's expiry is decided against the relying party's own clock, the one
+  place a clock is load-bearing, and wire §3.3 checks timestamps against none.
   A restriction *removes* traces; it does not show the protocol prevents
   them. So the currency theorem holds **relative to a relying party that
   enforces expiry**, and `expiry_is_reachable` shows only that an expiry can

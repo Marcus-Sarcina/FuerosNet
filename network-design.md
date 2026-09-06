@@ -2761,6 +2761,14 @@ to and trust whichever attester they trust; there is no mechanism to declare a
 single heir to an archive, and two keys may carry lineage from the same history
 indefinitely.
 
+**A fork costs the old key a second signature; one leaked proof does not make
+heirs.** Each successor is authorised by its own statement from the old key
+naming *that* successor and *that* patron (`wire-format.md` §4.1), so a party
+who merely observes one recovery cannot assemble a competing one from it. Two
+claims therefore mean the old key signed twice — the legitimate holder once
+and a thief once, each to their own patron — which is the case below, and not
+one proof spawning unlimited successors.
+
 **A fork does not give one observer two current keys; it gives it a choice.**
 The overwrite above is per identity per observer, so a member receiving two
 competing recovery adoptions for the same `prior_key` does not hold both as
@@ -4432,6 +4440,18 @@ This also handles the intermittently-connected light client: a user offline for
 a day arrives with a stale staple, can still receive messages, and cannot spend
 accumulated standing until they refresh.
 
+**Expiry is decided against the relying party's own clock, and that is the one
+place a clock is load-bearing here** (A33). `wire-format.md` §3.3 checks
+timestamps against no clock at all and orders claims *"not against anyone's
+clock"* — deliberately, there being no authoritative one. The table above is
+the exception: *expired* is a comparison a relying party makes locally, and it
+is making it for a **security** decision rather than an evidentiary one. **The
+error is asymmetric.** A clock running fast rejects live staples and costs
+availability; a clock running slow accepts dead ones, which is what an
+adversary who can influence it would choose. Nothing in the protocol detects
+either, and nothing can: a party with no trustworthy clock has no second
+source to check one against.
+
 **Fail-open is for ignorance, never for knowledge** [author, 2026-09-03]. The
 table above governs a party that cannot establish currentness. A party holding
 **authenticated supersession evidence** for a binding — a verified reissue
@@ -5899,6 +5919,27 @@ requirement.** The floor is what §15.1 stores and §16.3 makes visible — the
 horizon, plus the far endpoints of peering records it can see — and an
 implementation that stops there conforms.
 
+**But reach walks the hierarchy, never peering records: visibility does not
+compose.** What locator data exposes is *patronage* structure, which is why
+the ruling above says "that foreign patronage graph". A peering record is
+visible inside the two peers' horizons and **nowhere else** (§16.3), and
+**learning of a node by one relationship confers no sight of the peering
+records around it.** An evaluator that reached further by following peering
+edges outward from a node it had just learned of would be admitting edges
+§16.3.1 says it cannot see — and §16.3.1's bound is exactly that an edge an
+observer cannot see cannot raise that observer's cut, so composing
+visibility would dissolve the observer-relative property rather than extend
+it.
+
+**Stated because the natural reading of "reach" is the wrong one**, and four
+nodes show it. You adopt H. H peers with G, and you can see that record
+because H is in your horizon. G peers with X, and you cannot see *that*
+record, because neither G nor X is in any horizon of yours. An evaluator
+that expanded outward from G — a node it now knows about — would pick up
+G↔X and give X standing it has no evidence for. **Knowing a node is not
+seeing its records**, and the whole of §16.3.1's conservative direction
+depends on the difference.
+
 **The rule is stated generally so that better-informed implementations need
 no different metric.** An evaluator that can place a stranger three edges
 out runs the same computation over more graph; one that cannot, runs it
@@ -7053,7 +7094,7 @@ does all three at once.
 **This register is curated, not exhaustive, and the difference should be stated.**
 A strict reading, one that counts every claim lacking a derivation, mechanism or
 source — finds **79 load-bearing unsupported claims** across the document set and 123
-in total, against the 31 listed in §20.2. The gap is not concealment: most of it
+in total, against the 32 listed in §20.2. The gap is not concealment: most of it
 is §21's parameters and `wire-format.md` §1's array bounds, which both documents
 declare as chosen operating points and conservative ceilings rather than derived
 values.
@@ -7158,6 +7199,7 @@ targets for simulation.
 | **A30** | **A remote evaluator cannot distinguish a synthesised subnet from a real one** | The same property, and §1.2.2's claim that the discount falls hardest on the classes least able to defeat it | Follows from A29 plus the absence of cold lookup. Untested against an evaluator applying statistical structure analysis rather than key-checking |
 | **A31** | **To an attacker accountable to no evidentiary standard, cryptographic attestation adds nothing** | §1.2.2's three-class taxonomy, and the conclusion that on-device encryption is the whole defence against that class | A claim about how such parties actually decide, asserted rather than observed. If signed evidence does shift their behaviour, the archive's non-repudiability costs more than recorded |
 | **A32** | **A compromised resource leaks its own data, not the owner's archive** | The credential gateway instead of a scoped archive-read API (§11, `resource-requirements.md` §1) | Also §20.1. A confinement conclusion over every interface and side channel; if false, the read-surface question §11 claims to dissolve returns [author, 2026-09-02] |
+| **A33** | **A relying party has a clock it can trust well enough to decide whether a staple has expired** | Every fail-closed row of §12.6.5's table, and with it the claim that short credential lifetimes do revocation's work. `wire-format.md` §3.3 is emphatic that structural verification checks timestamps against **no** clock and that ordering is monotonic *"not against anyone's clock"* — currency expiry is the one place a local clock is load-bearing, and it is load-bearing for a **security** decision | An adversary who can skew a victim's clock backwards extends a stolen credential's life at will, and expiry stops doing revocation's work for that victim. Note the asymmetry: skew forward only costs availability, so the dangerous direction is the one an attacker prefers. Unregistered until 2026-09-05 |
 
 **§20.1 and §20.2 are orthogonal registers.**
 §20.1 records what is **unsourced**; §20.2 records what is **load-bearing**. A

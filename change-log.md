@@ -8971,3 +8971,38 @@ never extend stale, stated as a commitment with the reason it cannot be
 checked. The model's note now says why the property is not the protocol's to
 have rather than describing it as unfinished work, and the abandoned rebuild
 is deleted rather than kept, since keeping it implied a next attempt.
+
+### 2026-09-05 (the specification read back against the models)
+
+The reverse of the earlier audit: not whether the models say what the design
+says, but whether the design carries what the models established.
+
+The important finding is that peering visibility failing to compose was never
+written down. The peering section says such a record is visible inside the two
+peers' horizons and nowhere else, which implies it; the reach paragraph says
+an evaluator's graph grows with the relationships it is aware of, and does not
+exclude peering records from that. Between those two an implementer can
+reasonably build the wrong thing, and did — the reference simulation walked
+peering edges outward from nodes it had just learned of, giving a stranger
+standing from an edge the observer cannot see. The rule is now stated where
+the ambiguity was, with a four-node instance showing what goes wrong: knowing
+a node is not seeing its records, and the observer-relative bound depends on
+the difference.
+
+The second is that a trustworthy clock was load-bearing and unregistered. The
+encoding document is emphatic that structural verification checks timestamps
+against no clock and that ordering is monotonic against nobody's, deliberately,
+there being no authoritative one. Currency expiry is the exception: whether a
+staple has expired is a comparison a relying party makes locally, and it makes
+it for a security decision rather than an evidentiary one. The error is
+asymmetric — a fast clock costs availability, a slow one accepts dead
+credentials — and the dangerous direction is the one an adversary would choose.
+Registered as an assumption, with the same note beside the fail-open table.
+
+Two smaller repairs. The assumptions section still counted thirty-two after a
+withdrawal took it to thirty-one, a drift missed because the count is spelled
+out in words; it is corrected, and then correctly returns to thirty-two with
+the new assumption. And the passage on identity forking did not say that each
+competing successor needs its own statement from the old key naming that
+successor and that patron, so a reader could take one leaked proof to spawn
+unlimited heirs. A fork costs the old key a second signature.

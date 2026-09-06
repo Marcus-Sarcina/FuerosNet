@@ -5159,3 +5159,62 @@ model gap and I accepted the framing, planned a rebuild, got authorisation,
 and spent it on machinery for a property the protocol never had. The question
 "is this enforceable at all?" costs one message and would have closed it
 before the first line of Tamarin.
+
+---
+
+## Reverse alignment: the specification against the corrected models (2026-09-05)
+
+Author-directed, and the opposite direction to the audit above. That one asked
+whether the models say what the design says; this asks whether the design
+carries what the models established, and whether it claims anything they
+contradict. Four findings, two of them substantive.
+
+**1. Peering visibility does not compose -- NOT STATED, and security-relevant.**
+§16.3 says a peering record is visible "inside the two peers' horizons and
+nowhere else", which IMPLIES non-composition. §16.2.1's reach paragraph says
+reach grows with "what relationships you are aware of" and does not exclude
+peering records. That is the exact ambiguity that produced the defect in
+`flow_metric.py`: reading reach as walking every edge kind, which a
+cross-family review then broke in four nodes (standing 0 -> 8). The model was
+corrected on the author's own words -- locator data exposes PATRONAGE
+structure -- but the words were in a review answer, not in the document, so a
+second implementer would make the same choice. §16.2.1 now states it, with the
+four-node instance as a worked example rather than as review history.
+
+**2. A trustworthy clock was an unregistered load-bearing assumption.**
+Surfaced by the currency model's declared axioms. `wire-format.md` §3.3 is
+emphatic that structural verification checks timestamps against NO clock and
+that ordering is monotonic "not against anyone's clock" -- but §12.6.5's
+fail-closed table turns on whether a staple has EXPIRED, which is a local
+comparison, made for a security decision. Registered as **A33**, with the
+asymmetry named: a fast clock costs availability, a slow one accepts dead
+credentials, and the dangerous direction is the one an attacker prefers.
+§12.6.5 gains the same note. Register 31 -> 32; BOTH count sentences updated.
+
+**3. §20.2's count was stale, and this one is mine.** It read "The thirty-two
+below" after A20's withdrawal took the register to 31. I missed it when
+withdrawing A20 because I grepped for digits and the count is spelled out.
+Corrected -- and then correctly returned to thirty-two by A33, which is why
+both count sentences were re-checked rather than assumed.
+
+**4. The fork discussion did not reflect the successor binding.** §9.0.2 says
+two competing recovery claims become two adoptions, without saying that each
+needs its own old-key statement naming that successor and that patron
+(`wire-format.md` §4.1) -- the property the recovery model now proves as
+`successor_statement_binds_the_patron`. Without it a reader could take one
+leaked proof to spawn unlimited heirs, which is precisely what §4.1 forbids.
+Stated: a fork costs the old key a second signature.
+
+**Checked and clean**: no root document claims anything has been formally
+verified (the "formally verified" hits are external prior art, §14's MLS/PQXDH
+citations). All three model axioms now have a home in the design --
+co-presence at §7.6, face recognition at §9.1/§18.3, the clock at A33.
+
+**One self-correction during the pass.** The first draft of the §16.2.1
+addition cited "the reference simulation" and "a cross-family review" -- review
+history in a root document, against the convention the author gave on this
+same day and which I had recorded in `authoring-conventions.md`. Rewritten to
+carry the worked instance without the provenance.
+
+References 1,983 across the five specification documents, 0 flags. All eight
+models pass. Test vectors pass.
