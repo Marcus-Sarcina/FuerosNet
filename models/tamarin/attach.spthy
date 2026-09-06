@@ -135,8 +135,23 @@ rule Compromise_Key:
   Roles: a CLIENT attaches to a SERVER (its serving infra node).  We prove
   the property the plan names -- the client ends up authenticating the
   server it meant to reach -- which is the direction sibling impersonation
-  attacks.  (The reverse direction, server authenticating client, is
-  symmetric and omitted to keep the teaching model small.)
+  attacks.
+
+  THE REVERSE DIRECTION IS NOT MERELY THE SAME THEOREM MIRRORED, and calling
+  it "symmetric and omitted" understated what is missing.  `wire-format.md`
+  §9.1 requires mutual transport authentication AND requires the serving node
+  to bind the identity NAMED in the unsigned `Attach` to the identity the
+  TRANSPORT authenticated -- "otherwise queued data could be requested under
+  another keyhash".  That is an application-to-channel binding, not an
+  authentication direction: without it a peer authenticated as A submits an
+  Attach claiming B and is handed B's mailbox.
+
+  This theory cannot state that.  It has ONE client identity variable, so
+  "the identity that authenticated" and "the identity the Attach claims"
+  are the same term by construction, and Server_Respond stamps
+  ServerAccept($S, $C, nc) on a message it never authenticated $C for.
+  Representing it needs two terms and a session/queue state conditional on
+  their equality.  Recorded as absent rather than left to read as covered.
 */
 
 // Step 1: the client picks a fresh challenge and sends it, naming the

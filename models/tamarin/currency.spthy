@@ -116,12 +116,33 @@ rule Expire_Epoch:
   new one is exactly issuing fresh.
 */
 
+/*
+  THE ATTESTED FIELD IS PUBLIC, AND MODELLING IT AS A SECRET BROKE THE WHOLE
+  THEORY.  `wire-format.md` §7.1 and design §12.6.5: a CurrencyAttestation
+  carries `current_key: keyhash` -- a public commitment to key material, not
+  the material itself.  An earlier version signed over the fresh secret ~sk
+  and emitted only the signature, so a relying party could never assemble the
+  tuple Accept_Currency demands: nothing ever output ~sk.
+
+  THE CONSEQUENCE WAS NOT A FAILING LEMMA BUT A HOLLOW ONE.  currency_is_usable
+  still "verified" -- via Compromise_Patron, the adversary forging an
+  attestation with a key it stole.  So the anti-vacuity guard was satisfied by
+  a compromised trace, and currency_requires_unexpired_issuance was satisfied
+  by its own compromise disjunct.  Three green lemmas, none of them about the
+  honest protocol.  currency_is_usable_honestly below is the guard that
+  regression cannot pass: an acceptance with NO compromise anywhere.
+
+  Issuance now emits the whole attestation object, as a staple is (design
+  §12.6.5: the introducing node "staples a recent patron-signed currency
+  attestation to its introduction").
+*/
 rule Issue_Currency:
     [ !PatronKey($P, ~psk)             // only the patron can issue
     , !SubjKey($S, sk)                 // for a key the subject holds
     , !Epoch(e) ]                      // stamped with an epoch
-  --[ Issued($P, $S, sk, e) ]->
-    [ Out(sign(<'currency', $S, sk, e>, ~psk)) ]  // the stapled attestation
+  --[ Issued($P, $S, pk(sk), e) ]->
+    [ Out(<'currency', $S, pk(sk), e,
+           sign(<'currency', $S, pk(sk), e>, ~psk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -195,6 +216,20 @@ restriction NotExpiredBeforeAccept:
 lemma currency_is_usable:
   exists-trace
   "Ex P S sk e #i. Accepted(P, S, sk, e) @ #i"
+
+// THE GUARD THAT ACTUALLY GUARDS.  An acceptance with NO compromise anywhere
+// on the trace, resting on a genuine issuance.  currency_is_usable above does
+// NOT establish this and never did: it was satisfied by a trace in which the
+// patron's key was stolen and the adversary forged the attestation, so every
+// lemma below it was about compromised traces.  A vacuity guard that a
+// compromised trace can satisfy is not a vacuity guard.
+lemma currency_is_usable_honestly:
+  exists-trace
+  "Ex P S kh e #j #i.
+       Issued(P, S, kh, e) @ #j
+     & Accepted(P, S, kh, e) @ #i
+     & #j < #i
+     & not(Ex A #k. Compromised(A) @ #k)"
 
 // SANITY: an epoch can actually expire, so the NotExpiredBeforeAccept
 // restriction is not vacuously satisfiable by nothing ever expiring.

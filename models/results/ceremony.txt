@@ -254,7 +254,7 @@ rule (modulo E) Accept_Formation:
   --[
   Eq( verify(sig1, <'formation', $P1, $P2, cid>, pk1), true ),
   Eq( verify(sig2, <'formation', $P1, $P2, cid>, pk2), true ),
-  FormationAccepted( $P1, $P2, cid )
+  DistinctPair( $P1, $P2 ), FormationAccepted( $P1, $P2, cid )
   ]->
    [ ]
 
@@ -264,7 +264,9 @@ rule (modulo E) Accept_Formation:
      !Pk( $P1, pk1 ), !Pk( $P2, pk2 ), In( <'formation', $P1, $P2, cid> ),
      In( sig1 ), In( sig2 )
      ]
-    --[ Eq( z, true ), Eq( z.1, true ), FormationAccepted( $P1, $P2, cid )
+    --[
+    Eq( z, true ), Eq( z.1, true ), DistinctPair( $P1, $P2 ),
+    FormationAccepted( $P1, $P2, cid )
     ]->
      [ ]
     variants (modulo AC)
@@ -654,7 +656,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
 
-  processing time: 2.27s
+  processing time: 2.28s
   
   ceremony_is_executable (exists-trace): verified (10 steps)
   presence_requires_copresence (all-traces): verified (10 steps)

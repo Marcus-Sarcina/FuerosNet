@@ -230,6 +230,12 @@ rule Accept_Formation:
     , In(sig1), In(sig2) ]
   --[ Eq(verify(sig1, <'formation', $P1, $P2, cid>, pk1), true)
     , Eq(verify(sig2, <'formation', $P1, $P2, cid>, pk2), true)
+    // THE VALIDATOR CHECKS PARTICIPANT DISTINCTNESS ITSELF, as Accept_Record
+    // does (`wire-format.md` §3.2: the two participants are distinct).
+    // Enforcing it only at Meet_Formation is not enough: this rule takes its
+    // body and signatures from the NETWORK, so without the check a body with
+    // P1 = P2 is acceptable here and one signature satisfies both slots.
+    , DistinctPair($P1, $P2)
     , FormationAccepted($P1, $P2, cid) ]->
     [ ]
 
@@ -283,11 +289,22 @@ lemma presence_requires_copresence:
          | (Ex #k. Compromised(P2) @ #k & #k < #i)
          | (Ex #k. Compromised(W) @ #k & #k < #i) )"
 
-// STRONGER: no record without co-presence, isolating the no-theft case.
-// With NO key compromise anywhere, an accepted record requires the
-// meeting.  This is the pure form of the physical-presence guarantee: an
-// uncompromised set of identities cannot have a record fabricated about
-// them by any network adversary.
+// STRONGER: no record without co-presence, isolating the no-compromise case.
+// With NO key compromise anywhere, an accepted record requires the meeting.
+//
+// READ THE ANTECEDENT LITERALLY, because it is narrower than "an adversary
+// not physically present cannot produce a record".  "No compromise" here
+// means every key is held only by its owner AND every owner ran the honest
+// signing rule -- and in this model those are the same condition, there
+// being no way to sign but the honest rule or a stolen key.  So this is a
+// statement about CONFORMING participants against a NETWORK adversary.
+//
+// It says nothing about two legitimate owners who collude, and design §7.6
+// is explicit that they can simulate the whole exchange and no witness can
+// tell, so proof of presence is deliberately not an unforgeable primitive.
+// That case appears here only as Compromised(P1) and Compromised(P2) --
+// the carve-out covers it, and calling the rule "theft" alone under-describes
+// what it reaches.
 lemma no_remote_forgery:
   "All P1 P2 W cid #i.
      ( RecordAccepted(P1, P2, W, cid) @ #i

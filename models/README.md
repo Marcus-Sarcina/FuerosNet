@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (19 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (20 lemmas).
 
 ---
 
@@ -243,6 +243,46 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **A fourth Tamarin review: three green currency lemmas, none about the
+  honest protocol.** Seven findings, static again; the first is the most
+  serious defect any round has produced.
+
+  **`currency` could not execute its honest path at all.** The attested field
+  was modelled as the subject's fresh *secret* `~sk`, and issuance emitted only
+  the signature — so nothing ever output `~sk` and no relying party could
+  assemble the tuple `Accept_Currency` demands. The wire object carries a
+  **public keyhash** (`current_key`), not key material. The lemma still
+  "verified", which is why three review rounds missed it: the trace ran through
+  `Compromise_Patron`, the adversary forging an attestation with a stolen key.
+  So the anti-vacuity guard was satisfied by a compromised trace and the
+  security lemma by its own compromise disjunct. Issuance now emits the whole
+  staple over `pk(sk)`, and `currency_is_usable_honestly` — an acceptance with
+  **no compromise anywhere** — is the guard that regression cannot pass.
+  Machine-confirmed both ways: it verifies now, and against the old modelling
+  it is *falsified, no trace found*.
+
+  **`key_alone_insufficient` excluded the stolen key it is named for.** Its
+  antecedent carried `not(Ex V. Compromised(V))` with `V` unbound — "no
+  identity anywhere was compromised" — so instantiating `V = S` excluded the
+  thief. It now permits `Compromised(S)` and excludes only the patron and the
+  verifier actually relied on. The stronger form still verifies, so the
+  property held; it simply was not being tested. `recovery_requires_a_meeting`
+  had the same loose quantifier and is tied to `ReliedOn`.
+
+  **`Accept_Formation` did not check participant distinctness**, which
+  `Accept_Record` does. Enforcing it only at `Meet_Formation` is not enough —
+  acceptance takes its body and signatures from the network, so `P1 = P2` was
+  acceptable and one signature satisfied both slots.
+
+  Three findings were about claim width rather than rules, and each is
+  narrowed at the point it was overclaimed: `attach` calling its missing
+  direction "symmetric" when what is absent is the application-to-channel
+  binding wire §9.1 requires; `recovery` quoting a Stage 1.1 target whose
+  "outweighs" half is comparative and belongs to the flow metric; and
+  `ceremony`'s no-forgery lemma reading as a claim about any adversary when
+  its antecedent means *conforming participants*. `Met` is labelled the
+  environmental assumption it is.
 
 - **A third Tamarin review: past acquaintance is not present recognition.**
   Six findings, static again, three of them real model defects.

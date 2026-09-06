@@ -5410,3 +5410,70 @@ be, and the check belongs in the harness rather than in a session.
 Final: references 2,032 across the five specification documents, 0 flags; 160
 across the model files, 0 flags; 7 counted claims all matching; all eight
 models (19 lemmas); vectors ALL CHECKS PASS; Rust runner 149 pass, 0 fail.
+
+---
+
+## Cross-family Tamarin review 4 (2026-09-06)
+
+Seven findings, static again; all four hashes matched. Five hold, two are
+claim-width points that hold as stated. **F1 is the most serious defect any
+round has produced, and it had survived three previous reviews and every run
+of the gate.**
+
+**F1 currency could not execute its honest path. HOLDS, HIGH,
+machine-confirmed both ways.** The attested field was the subject's fresh
+SECRET `~sk`, and `Issue_Currency` emitted only the signature -- so nothing
+ever output `~sk` and no relying party could assemble the tuple
+`Accept_Currency` demands. `wire-format.md` §7.1 carries `current_key` as a
+public KEYHASH; the model had made a public field secret.
+**What hid it was that the lemma passed.** `currency_is_usable` verified in 7
+steps, and dumping the trace shows `case Compromise_Patron`: the adversary
+stealing the patron key and forging an attestation. So the anti-vacuity guard
+was satisfied by a compromised trace, and `currency_requires_unexpired_issuance`
+was satisfied by its own compromise disjunct. Three green lemmas, none about
+the honest protocol.
+Fixed: issuance signs and emits the whole staple over `pk(sk)`. Added
+`currency_is_usable_honestly` -- an acceptance with NO compromise anywhere --
+which verifies now (10 steps) and, against the old modelling, is **falsified,
+no trace found**. That is the guard the file never had.
+
+**F3 `key_alone_insufficient` excluded the stolen key it names. HOLDS, HIGH,
+by quantifier scope alone.** `not(Ex V #kv. Compromised(V) @ #kv)` with V
+unbound reads "no identity anywhere was compromised"; instantiate V = S and the
+thief is excluded. The lemma established only that recovery needs a recognition
+on traces where nothing was stolen. Rewritten to PERMIT `Compromised(S)` and
+exclude only the patron and the relied-on verifier. The stronger form still
+verifies -- the property held, it was not being tested.
+`recovery_requires_a_meeting` had the same loose `Ex V. Compromised(V)`
+carve-out and is now tied to `ReliedOn(P,V,S)`. **Both lemmas are mine**, and
+the second I had already tied to `ReliedOn` in `recognition_binds_the_successor`
+one round earlier without checking its neighbours.
+
+**F5 `Accept_Formation` omitted participant distinctness. HOLDS, MEDIUM.**
+`Accept_Record` checks it; the formation path did not, and enforcing it at
+`Meet_Formation` is not enough because acceptance takes body and signatures
+from the network. Added.
+
+**F2, F4, F6, F7 are claim-width and scope, all held, all narrowed where they
+were overclaimed.** `attach` called its missing direction "symmetric" when what
+is absent is `wire-format.md` §9.1's binding of the Attach-claimed identity to
+the transport-authenticated one -- an application-to-channel binding, not a
+direction, and the theory has one client variable so it cannot state it.
+`recovery` quoted a Stage 1.1 target whose "outweighs" half is comparative,
+belongs to per-observer weight (§16.1) and the flow metric, and is not this
+theory's. `ceremony`'s `no_remote_forgery` read as a claim against any
+adversary when its antecedent means CONFORMING participants -- §7.6's bilateral
+collusion appears only as the compromise carve-out. `Met` is now labelled the
+environmental assumption it is: no premises, so the theory is conditional on
+being handed a truthful prior-counterparty relation.
+
+**The lesson, and it is not the reviewer's finding but what it exposes about
+the gate.** `run-all.sh` checks that lemmas verify and that wellformedness
+passes. Neither catches a theory whose honest path is unreachable, because
+every lemma still goes green. An exists-trace guard is only a guard if it
+excludes compromise, and three of the four theories' executability lemmas do
+not. Widening those is the obvious next hardening and is not done here.
+
+20 lemmas, all verifying, wellformedness clean. All eight models pass.
+References 2,032 across the specification documents and 160 across the model
+files, 0 flags.

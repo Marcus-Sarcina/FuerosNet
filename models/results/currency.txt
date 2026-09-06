@@ -46,8 +46,11 @@ rule (modulo E) Expire_Epoch:
 
 rule (modulo E) Issue_Currency:
    [ !PatronKey( $P, ~psk ), !SubjKey( $S, sk ), !Epoch( e ) ]
-  --[ Issued( $P, $S, sk, e ) ]->
-   [ Out( sign(<'currency', $S, sk, e>, ~psk) ) ]
+  --[ Issued( $P, $S, pk(sk), e ) ]->
+   [
+   Out( <'currency', $S, pk(sk), e, sign(<'currency', $S, pk(sk), e>, ~psk)>
+   )
+   ]
 
   /* has exactly the trivial AC variant */
 
@@ -121,12 +124,52 @@ solve( !Pk( $P, pk(x) ) ▶₁ #i )
   solve( !Epoch( e ) ▶₂ #i )
     case New_Epoch
     solve( !KU( sign(<'currency', $S, sk, ~e>, ~psk) ) @ #vk.8 )
-      case c_sign
-      solve( !KU( ~psk ) @ #vk.12 )
-        case Compromise_Patron
-        solve( !KU( ~e ) @ #vk.12 )
-          case New_Epoch
+      case Issue_Currency
+      solve( !KU( ~e ) @ #vk.8 )
+        case Issue_Currency
+        solve( !KU( pk(~sk) ) @ #vk.8 )
+          case Issue_Currency
           SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma currency_is_usable_honestly:
+  exists-trace
+  "∃ P S kh e #j #i.
+    (((Issued( P, S, kh, e ) @ #j) ∧ (Accepted( P, S, kh, e ) @ #i)) ∧
+     (#j < #i)) ∧
+    (¬(∃ A #k. Compromised( A ) @ #k))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P S kh e #j #i.
+  (Issued( P, S, kh, e ) @ #j) ∧ (Accepted( P, S, kh, e ) @ #i)
+ ∧
+  (#j < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( !PatronKey( $P, ~psk ) ▶₀ #j )
+  case Register_Patron
+  solve( !SubjKey( $S, sk ) ▶₁ #j )
+    case Subject_Key
+    solve( !Epoch( e ) ▶₂ #j )
+      case New_Epoch
+      solve( !Pk( $P, pk(x) ) ▶₁ #i )
+        case Register_Patron
+        solve( !Epoch( ~e ) ▶₂ #i )
+          case New_Epoch
+          solve( !KU( ~e ) @ #vk.7 )
+            case Issue_Currency
+            solve( !KU( sign(<'currency', $S, pk(~sk), ~e>, ~psk) ) @ #vk.8 )
+              case Issue_Currency
+              solve( !KU( pk(~sk) ) @ #vk.8 )
+                case Issue_Currency
+                SOLVED // trace found
+              qed
+            qed
+          qed
         qed
       qed
     qed
@@ -208,9 +251,10 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.66s
+  processing time: 0.87s
   
   currency_is_usable (exists-trace): verified (7 steps)
+  currency_is_usable_honestly (exists-trace): verified (10 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)
   currency_requires_unexpired_issuance (all-traces): verified (9 steps)
 

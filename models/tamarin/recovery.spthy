@@ -13,13 +13,22 @@ WHAT THIS FILE IS
   because a thief holds the key too, and "presence alone is not recovery".
 
   The review plan's Stage 1.1 target: "A thief holding the key cannot
-  produce a rotation that outweighs the legitimate holder's."  The property
-  proved here: a recovery that a patron accepts requires both factors, so a
-  thief who has stolen ONLY the key (factor a) but is not recognised by an
-  honest verifier (factor b) cannot complete one.  This is the two-part
-  proof design Section 18.3 rests on -- recovery holds against a stolen key
-  alone, and fails only to a colluding or deceived verifier.  The model makes
-  that claim machine-checked.
+  produce a rotation that OUTWEIGHS the legitimate holder's."
+
+  **ONLY HALF OF THAT TARGET IS THIS THEORY'S.**  What is proved here is the
+  ADMISSION structure: a recovery a patron accepts requires both factors, so
+  a thief who has stolen only the key and is not recognised by an honest
+  verifier cannot complete one.  "Outweighs" is a COMPARATIVE claim about two
+  successors, and design Section 9.0.2 is explicit that competing successors
+  can both be valid, with observers routing to whichever attester they trust
+  -- so weight is per-observer policy (design Section 16.1) settled in the
+  flow metric, not a property of one acceptance.  This theory contains no
+  competing successor, no standing and no ordering, and closing the quoted
+  target needs both halves.
+
+  What it does close is the half design Section 18.3 rests on: recovery holds
+  against a stolen key alone, and fails only to a colluding or deceived
+  verifier.
 
   What this model does NOT cover, deliberately: the COLLUDING-counterparty
   case (design Section 18.3), where the thief supplies factor b through a
@@ -148,6 +157,14 @@ rule Old_Key_Proof:
 
 // PAST ACQUAINTANCE.  Persistent, because having met somebody does not stop
 // being true.  This alone licenses nothing.
+//
+// AN ENVIRONMENTAL ASSUMPTION, NOT A DERIVED FACT.  The rule has no premises,
+// so the theory may designate any pair as prior counterparties without an
+// earlier presence transaction.  What is proved is therefore conditional on
+// being handed a truthful !Met relation; the theory does NOT verify factor
+// B's provenance from protocol history.  Deriving it would mean composing
+// with ceremony.spthy -- a record accepted there licensing a !Met here --
+// which no single theory in this directory does.
 rule Met:
     [ ]
   --[ PriorCounterparty($V, $S) ]->
@@ -325,13 +342,22 @@ lemma recovery_is_executable:
 // stronger and it still verifies: with no honest prior counterparty
 // recognising the person, and no compromise of patron or verifier, nothing
 // is accepted whether the old key was held honestly or stolen.
+// QUANTIFIER SCOPE IS THE WHOLE PROPERTY HERE.  An earlier form excluded
+// `Ex V. Compromised(V)` with V unbound -- which reads "no identity anywhere
+// was compromised", and instantiating V = S excludes the stolen subject key.
+// That is the case the lemma is NAMED for, so the lemma could not test it: it
+// established only that recovery needs a recognition on traces where nothing
+// was stolen at all.  The form below PERMITS Compromised(S) -- the thief is
+// the point -- and excludes compromise only of the patron and of the verifier
+// the patron actually relied on.
 lemma key_alone_insufficient:
-  "not( Ex P S newkey #i.
+  "not( Ex P S V newkey #i.
           RecoveryAccepted(P, S, newkey) @ #i
-        & not(Ex V #b #m. Recognised(V, S) @ #b
-                        & PriorCounterparty(V, S) @ #m)
-        & not(Ex #kp. Compromised(P) @ #kp)
-        & not(Ex V #kv. Compromised(V) @ #kv) )"
+        & ReliedOn(P, V, S) @ #i
+        & not(Ex #b #m. Recognised(V, S) @ #b
+                      & PriorCounterparty(V, S) @ #m)
+        & not(Ex #kp. Compromised(P) @ #kp & #kp < #i)
+        & not(Ex #kv. Compromised(V) @ #kv & #kv < #i) )"
 
 // FACTOR A IS NECESSARY: an honest recognition with no key authorisation
 // never recovers.  A verifier vouching for the person is not enough on its
@@ -384,7 +410,8 @@ lemma recovery_requires_a_meeting:
   "All P S newkey #i.
      RecoveryAccepted(P, S, newkey) @ #i
      ==> ( (Ex V #m. RecoveryMeeting(V, S) @ #m & #m < #i)
-         | (Ex V #kv. Compromised(V) @ #kv & #kv < #i)
+         | (Ex V #kv. ReliedOn(P, V, S) @ #i
+                    & Compromised(V) @ #kv & #kv < #i)
          | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
 
 // THE TRANSFER STATEMENT BINDS ITS DESTINATION.  Every accepted transfer rests

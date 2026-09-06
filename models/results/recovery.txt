@@ -243,21 +243,22 @@ qed
 
 lemma key_alone_insufficient:
   all-traces
-  "¬(∃ P S newkey #i.
-      (((RecoveryAccepted( P, S, newkey ) @ #i) ∧
-        (¬(∃ V #b #m.
+  "¬(∃ P S V newkey #i.
+      ((((RecoveryAccepted( P, S, newkey ) @ #i) ∧
+         (ReliedOn( P, V, S ) @ #i)) ∧
+        (¬(∃ #b #m.
             (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m)))) ∧
-       (¬(∃ #kp. Compromised( P ) @ #kp))) ∧
-      (¬(∃ V #kv. Compromised( V ) @ #kv)))"
+       (¬(∃ #kp. (Compromised( P ) @ #kp) ∧ (#kp < #i)))) ∧
+      (¬(∃ #kv. (Compromised( V ) @ #kv) ∧ (#kv < #i))))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ P S newkey #i.
-  (RecoveryAccepted( P, S, newkey ) @ #i)
+"∃ P S V newkey #i.
+  (RecoveryAccepted( P, S, newkey ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)
  ∧
-  (∀ V #b #m.
+  (∀ #b #m.
     (Recognised( V, S ) @ #b) ∧ (PriorCounterparty( V, S ) @ #m) ⇒ ⊥) ∧
-  (∀ #kp. (Compromised( P ) @ #kp) ⇒ ⊥) ∧
-  (∀ V #kv. (Compromised( V ) @ #kv) ⇒ ⊥)"
+  (∀ #kp. (Compromised( P ) @ #kp) ⇒ ¬(#kp < #i)) ∧
+  (∀ #kv. (Compromised( V ) @ #kv) ⇒ ¬(#kv < #i))"
 */
 simplify
 solve( !Ltk( $P, ~psk ) ▶₀ #i )
@@ -282,7 +283,16 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
         case c_sign
         solve( !KU( ~sk ) @ #vk.17 )
           case Compromise
-          by contradiction /* from formulas */
+          solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.17 )
+            case Recognise
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            solve( !KU( ~sk.1 ) @ #vk.20 )
+              case Compromise
+              by contradiction /* from formulas */
+            qed
+          qed
         qed
       qed
     qed
@@ -433,7 +443,8 @@ lemma recovery_requires_a_meeting:
   "∀ P S newkey #i.
     (RecoveryAccepted( P, S, newkey ) @ #i) ⇒
     (((∃ V #m. (RecoveryMeeting( V, S ) @ #m) ∧ (#m < #i)) ∨
-      (∃ V #kv. (Compromised( V ) @ #kv) ∧ (#kv < #i))) ∨
+      (∃ V #kv.
+        ((ReliedOn( P, V, S ) @ #i) ∧ (Compromised( V ) @ #kv)) ∧ (#kv < #i))) ∨
      (∃ #kp. (Compromised( P ) @ #kp) ∧ (#kp < #i)))"
 /*
 guarded formula characterizing all counter-examples:
@@ -441,7 +452,8 @@ guarded formula characterizing all counter-examples:
   (RecoveryAccepted( P, S, newkey ) @ #i)
  ∧
   (∀ V #m. (RecoveryMeeting( V, S ) @ #m) ⇒ ¬(#m < #i)) ∧
-  (∀ V #kv. (Compromised( V ) @ #kv) ⇒ ¬(#kv < #i)) ∧
+  (∀ V #kv.
+    (ReliedOn( P, V, S ) @ #i) ∧ (Compromised( V ) @ #kv) ⇒ ¬(#kv < #i)) ∧
   (∀ #kp. (Compromised( P ) @ #kp) ⇒ ¬(#kp < #i))"
 */
 simplify
@@ -467,7 +479,16 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
         case c_sign
         solve( !KU( ~sk ) @ #vk.17 )
           case Compromise
-          by contradiction /* from formulas */
+          solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.17 )
+            case Recognise
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            solve( !KU( ~sk.1 ) @ #vk.20 )
+              case Compromise
+              by contradiction /* from formulas */
+            qed
+          qed
         qed
       qed
     qed
@@ -523,14 +544,14 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.61s
+  processing time: 1.79s
   
   recovery_is_executable (exists-trace): verified (8 steps)
-  key_alone_insufficient (all-traces): verified (11 steps)
+  key_alone_insufficient (all-traces): verified (14 steps)
   recognition_alone_insufficient (all-traces): verified (10 steps)
   recognition_binds_the_successor (all-traces): verified (14 steps)
   successor_statement_binds_the_patron (all-traces): verified (8 steps)
-  recovery_requires_a_meeting (all-traces): verified (11 steps)
+  recovery_requires_a_meeting (all-traces): verified (14 steps)
   transfer_statement_binds_the_destination (all-traces): verified (7 steps)
 
 ==============================================================================
