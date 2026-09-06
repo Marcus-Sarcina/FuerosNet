@@ -9062,3 +9062,30 @@ Two models also claimed targets they do not reach, each contradicted by its own
 text further down — one saying rotation and elapsed lifetime were covered when
 neither is represented, the other naming a sibling-authority target it has no
 vocabulary for. Both now say what is proved and name what is not.
+
+### 2026-09-05 (parallel edges collapse: capacity belongs to the pair)
+
+The question left open when peering was priced in a meeting is answered, and
+the answer reaches further than peering. Two parties joined by more than one
+relationship contribute one edge to an evaluator's graph, never one per
+relationship.
+
+The alternative is farmable. Capacity summed over relationship instances is
+capacity two parties can mint by repeating themselves: meet again and add an
+edge, peer as well as meet and add another, be adopted by someone you have met
+and have the hierarchy and the acquaintance graph each contribute. A second
+meeting with the same person tells an evaluator what the first one did, and a
+metric that pays for it is paying for repetition rather than for reach.
+
+The requirement that every adoption carry a meeting made this urgent rather
+than academic. Every patron and subordinate are now proof-of-presence
+counterparties as well, and every pair of peers likewise, so under summing
+every hierarchical edge in the network would have carried double. The
+simulation did exactly that, and now keeps one edge per pair.
+
+One consequence follows for peering. A peering record joins a pair that a
+meeting has already joined, so to an observer holding both it adds nothing to
+capacity — what it adds is to an observer who can see the peering record and
+not the presence record, which is one edge, and that difference is
+per-observer like everything else. What peering contributes to trust is the
+meeting it required, not a second edge beside it.

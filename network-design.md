@@ -1109,8 +1109,10 @@ consequence of subnet plurality, not a gap in this mechanism.
   meeting**, which is also what closes the question §16.3 once left open: a
   peering edge and a proof-of-presence edge now cost the same thing to
   acquire, and there is no asymmetry left for anything to price.
-- Attests investment in the network and therefore contributes to trust. **At
-  what capacity is §16.2.1's landscape question, not an edge-kind one**
+- Attests investment in the network. **What it contributes to trust is the
+  meeting it required, not a second edge beside it** (§16.2.1's collapse rule):
+  the pair is joined once however many relationships join them. **At what
+  capacity is §16.2.1's landscape question, not an edge-kind one**
   [author, 2026-09-04]: inside the two-edge horizon hierarchical edges are
   unthrottled, and beyond it trust flows equally over the hierarchical and
   the proof-of-presence/peering graphs, so a peering edge is worth what any
@@ -5856,6 +5858,27 @@ correctly. Three sources of standing exist and they enter differently.
   initial trust state; it does not install permanent capacity edges an
   evaluator must carry afterwards.**
 
+**Parallel edges collapse: capacity belongs to the pair, not to the count of
+relationships between them** [author, 2026-09-05]. Two parties joined by more
+than one relationship — and since §6.1.1 that is the ordinary case, every
+patron and subordinate being PoP counterparties too, every pair of peers
+likewise — contribute **one** edge to an evaluator's graph, not one per
+relationship.
+
+**The reason is that the alternative is farmable.** Capacity summed over
+relationship instances is capacity two parties can mint by repeating
+themselves: meet again, add an edge; peer as well as meet, add another; be
+adopted by somebody you have met, and the hierarchy and the acquaintance graph
+each contribute. None of that is new evidence about anybody. **A second meeting
+with the same person tells an evaluator what the first one did**, and a metric
+that pays for it is paying for repetition rather than for reach.
+
+**So the graph is over pairs.** An evaluator building it asks, for each pair it
+can see, whether *any* relationship joins them and what that is worth at their
+distance — never how many. This is also why §16.2.1's three sources can enter
+differently without stacking: they are three *sources* of one edge, not three
+edges.
+
 **Why this ordering matters to the bound.** If archive evidence created
 edges on presentation, an attacker's region could enlarge its own cut by
 presenting history; because the evaluator admits only what it already
@@ -6017,7 +6040,13 @@ or many subordinates, each observer computes trust in the graph it can see, unde
 its own policy (§16.1).
 
 A peering edge raises a region's cut, which is what bounds a subtree's trust claim
-(§16.2), but **only in the view of an observer who can see that edge.** Peering is
+(§16.2), but **only in the view of an observer who can see that edge and holds no
+other edge for that pair.** Since §6.3 requires a meeting to peer, the pair is
+joined twice over — and §16.2.1 collapses parallel edges, so an observer holding
+both counts one. **What a peering record adds to such an observer's graph is
+nothing**; what it adds to an observer who can see the peering record and not the
+presence record is one edge, and that difference is per-observer like everything
+else here. Peering is
 an owner-signed record returned on request within horizon (§11.5), so it is visible
 inside the two peers' horizons and **nowhere else**. An observer outside them
 never learns the edge exists, and it conveys nothing to them.

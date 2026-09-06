@@ -5314,3 +5314,41 @@ pulling the encoding's wording -- the strongest evidence, and found only
 because the author asked. The answer came out the same, which is luck rather
 than method: CLAUDE.md's rule is verify before applying, and "verify" includes
 checking whether the author has already ruled the other way.
+
+**Parallel-edge collapse, author-ruled (2026-09-05).** The open question from
+the layered pass -- peering now requires a PoP, so both edges join one pair --
+is answered and generalised: *"Parallel edges need to collapse because
+otherwise you would add multiple edges with successive PoPs between the same
+parties, which is probably exploitable. Every patron/sub is also a PoPmate,
+etc."*
+
+Scope is wider than the question asked. §6.1.1's requirement makes EVERY
+adopted pair a PoP pair, so under summing every hierarchical edge would have
+doubled -- a systematic distortion introduced by layer 1 and caught by the
+author, not by the layered consistency passes, which checked prose consistency
+and not the arithmetic the prose implies.
+
+Applied in order. §16.2.1 states the rule with the farming reason. §16.3's "a
+peering edge raises a region's cut" is qualified: it raises it only for an
+observer holding no other edge for that pair, which after §6.3's meeting
+requirement means an observer who sees the peering record and not the presence
+record -- per-observer, like everything else. §6.3's "contributes to trust"
+bullet now says what it contributes is the meeting it required. Wire and the
+vectors are unaffected: they encode transactions, and multiplicity is a
+property of the graph an evaluator builds.
+
+`FlowGraph.add_edge` summed, with the comment "so parallel logical edges
+combine"; it now keeps the larger. Measured before the fix: an adoption plus
+its required meeting gave 20 where the rule says 10. No experiment's numbers
+changed, because every fixture pair is joined once -- which is exactly why a
+regression case was needed rather than assumed. It asserts a pair joined by an
+adoption and two later meetings carries one edge's capacity; restoring the sum
+fails it.
+
+Where two constructions offer different capacities for one pair the larger is
+kept. Recorded rather than relied on: §16.2.1 makes an edge worth what an edge
+at its distance is worth whatever produced it, so they are equal in every
+construction here and the choice decides nothing today.
+
+All eight models pass, 19 lemmas. References 2,029 across the specification
+documents and 160 across the model files, 0 flags. Vectors: ALL CHECKS PASS.

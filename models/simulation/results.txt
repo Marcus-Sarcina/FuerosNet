@@ -21,6 +21,7 @@ E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)
   32 identities behind ONE acquired edge:  independent-sum =  256   conserving joint = 8   cut at the gate = 8
   general demands (each asks its own standing): individual sum = 256, simultaneously deliverable = 8, cut = 8
   the same 32 gated behind a node OUTSIDE the horizon: 0 visible -- invisibility is the conservative direction
+  a pair joined by an adoption AND two meetings carries 10, not 30: parallel edges collapse
   a peering edge one hop past a VISIBLE one stays invisible at every reach tested (0-3):
   visibility does not compose -- learning a node confers no sight of the records around it
   an edge absent from the observer's graph moves nothing: standing 2 either way

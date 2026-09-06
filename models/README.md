@@ -33,6 +33,15 @@ min-cut trust metric. Runs the four claims §16.2 argues on paper:
 | E3 | **setwise conservation** (normative, 2026-09-03), **beyond the horizon** | a region of 4→32 identities behind **one acquired peering edge** from a horizon member — visible, outside the horizon, sharing one cut the attacker bought once. The independent-per-target sum grows with population (32→256) while the conserving joint saturates at the cut (4→8→8→8) and general demands deliver 8 of 256 asked; the same region gated behind a node *outside* the observer's horizon is invisible and cannot inflate anything |
 | E4 | edge-influence amortises (§16.3.1) | with horizons over adoption+sibling scope only, one visible peering edge influences several observers and no observer that cannot see it — every cross-tree placement enumerated. **Demonstrated in one toy topology, not measured as economics**: it shows amortisation exists, not how many edges reach a target fraction of a population |
 
+**Parallel edges collapse.** design §16.2.1: *"capacity belongs to the pair,
+not to the count of relationships between them"*. `FlowGraph.add_edge` keeps
+the larger of two capacities for one pair rather than summing them — which
+stopped being a nicety once §6.1.1 required a proof of presence alongside every
+adoption, since every patron and subordinate then became PoP counterparties
+too and every hierarchical edge in the network would have carried double. The
+regression case asserts a pair joined by an adoption and two later meetings
+carries one edge's capacity; restore summing and it fails.
+
 **Three concepts kept separate.** The design is emphatic (§6.3:
 "Contributing to trust and conferring scope are different things") that
 *scope* topology (adoption + sibling edges → the horizon, §15.1), *trust-

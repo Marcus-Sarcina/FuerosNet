@@ -523,7 +523,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.53s
+  processing time: 1.47s
   
   recovery_is_executable (exists-trace): verified (8 steps)
   key_alone_insufficient (all-traces): verified (11 steps)

@@ -126,15 +126,34 @@ class FlowGraph:
         self.cap.setdefault(u, {})
 
     def add_edge(self, u, v, c):
-        """Add capacity c to the directed edge u->v.
+        """Set the capacity of u->v, COLLAPSING parallel edges rather than
+        summing them.
 
-        ADD (not set) so parallel logical edges combine; always materialise
-        the +0 reverse edge so the residual bookkeeping never hits a missing
-        key.
+        design §16.2.1 [author, 2026-09-05]: "capacity belongs to the pair, not
+        to the count of relationships between them".  Two parties joined more
+        than once contribute ONE edge, and since §6.1.1 that is the ordinary
+        case -- every patron and subordinate are PoP counterparties too, and
+        every pair of peers likewise, because peering requires a meeting
+        (§6.3).
+
+        AN EARLIER VERSION SUMMED, with the comment "so parallel logical edges
+        combine".  Once §6.1.1 required a proof of presence alongside every
+        adoption that stopped being a harmless convenience: EVERY hierarchical
+        edge in the network would have carried double, and two parties could
+        mint capacity by meeting again.  Repetition is not evidence.
+
+        Where two constructions offer different capacities for one pair the
+        larger is kept.  They are equal in every construction here -- §16.2.1
+        makes an edge worth what an edge at its distance is worth, whatever
+        relationship produced it -- so the choice decides nothing today and is
+        recorded rather than relied on.
+
+        Always materialise the +0 reverse edge so the residual bookkeeping
+        never hits a missing key.
         """
         self.add_node(u)
         self.add_node(v)
-        self.cap[u][v] = self.cap[u].get(v, 0) + c
+        self.cap[u][v] = max(self.cap[u].get(v, 0), c)
         self.cap[v].setdefault(u, 0)
 
     def copy(self):
@@ -1049,6 +1068,24 @@ def experiment_setwise(rng, report):
         f"  the same {len(fakes)} gated behind a node OUTSIDE the horizon: "
         f"{len(leaked)} visible -- invisibility is the conservative direction")
     assert leaked == [], "identities beyond an invisible edge leaked in"
+
+    # --- PARALLEL EDGES COLLAPSE (design §16.2.1) --------------------------
+    # "Capacity belongs to the pair, not to the count of relationships between
+    # them."  Since §6.1.1 this is the ordinary case rather than a corner:
+    # every adoption carries a proof of presence, so every patron and
+    # subordinate are PoP counterparties too, and peering requires a meeting
+    # (§6.3) so every pair of peers is joined twice over as well.  Summing
+    # would double every hierarchical edge in the network and would let two
+    # parties mint capacity by meeting again -- repetition is not evidence.
+    g4 = FlowGraph()
+    g4.add_edge("P", "Q", HIER_CAP)          # the adoption
+    g4.add_edge("P", "Q", PEER_CAP)          # the meeting §6.1.1 requires with it
+    g4.add_edge("P", "Q", PEER_CAP)          # and a second meeting, later
+    assert g4.cap["P"]["Q"] == HIER_CAP, \
+        "parallel edges summed: a pair joined twice carries one edge's capacity"
+    report.append(
+        f"  a pair joined by an adoption AND two meetings carries "
+        f"{g4.cap['P']['Q']}, not {HIER_CAP * 3}: parallel edges collapse")
 
     # --- INVISIBILITY DOES NOT COMPOSE (design §16.3, §16.3.1) -------------
     # The case above uses ONE isolated invisible edge, and cannot catch a
