@@ -208,7 +208,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.66s
+  processing time: 0.77s
   
   currency_is_usable (exists-trace): verified (7 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)

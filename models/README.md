@@ -178,9 +178,11 @@ which is honest."
 
 - **A trustworthy clock** (`currency`, design **A33**): the
   `NotExpiredBeforeAccept` restriction discards traces where an acceptance
-  follows its epoch's expiry. The design registers the same dependency —
-  §12.6.5's expiry is decided against the relying party's own clock, the one
-  place a clock is load-bearing, and wire §3.3 checks timestamps against none.
+  follows its epoch's expiry. A restriction *removes* traces; it does not show
+  the protocol prevents them, so the theorem holds **relative to** a relying
+  party that enforces expiry. The design registers the same dependency: a
+  node's internal timing is unconstrained and other mechanisms use it too, so
+  what singles this one out is that a *security* decision turns on it.
   A restriction *removes* traces; it does not show the protocol prevents
   them. So the currency theorem holds **relative to a relying party that
   enforces expiry**, and `expiry_is_reachable` shows only that an expiry can

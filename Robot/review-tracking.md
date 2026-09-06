@@ -5182,14 +5182,25 @@ second implementer would make the same choice. §16.2.1 now states it, with the
 four-node instance as a worked example rather than as review history.
 
 **2. A trustworthy clock was an unregistered load-bearing assumption.**
-Surfaced by the currency model's declared axioms. `wire-format.md` §3.3 is
-emphatic that structural verification checks timestamps against NO clock and
-that ordering is monotonic "not against anyone's clock" -- but §12.6.5's
-fail-closed table turns on whether a staple has EXPIRED, which is a local
-comparison, made for a security decision. Registered as **A33**, with the
-asymmetry named: a fast clock costs availability, a slow one accepts dead
-credentials, and the dangerous direction is the one an attacker prefers.
-§12.6.5 gains the same note. Register 31 -> 32; BOTH count sentences updated.
+Surfaced by the currency model's declared axioms. §12.6.5's fail-closed table
+turns on whether a staple has EXPIRED, which is a local comparison made for a
+SECURITY decision. Registered as **A33**, with the asymmetry named: a fast
+clock costs availability, a slow one accepts dead credentials, and the
+dangerous direction is the one an attacker prefers. §12.6.5 gains the same
+note. Register 31 -> 32; BOTH count sentences updated.
+
+**The first draft of this got its justification wrong** and the author caught
+it. I framed expiry as an EXCEPTION to `wire-format.md` §3.3, reading "not
+checked against a local clock" and "not against anyone's clock" as a
+prohibition on local timing. It is not: *"There is no globally enforced
+sequencing of events ... there is no limitation on using internal timing
+within a node"* [author, 2026-09-05]. §3.3 withholds global sequencing and
+reader-dependent validity, and §3.3's OWN closing paragraph relies on a node's
+clock -- "a witness declining to attest a ceremony dated far from its own
+clock". So there was never a tension, and A33 does not rest on one. The
+assumption stands on its own terms: what singles this use out is not that it
+consults a clock but that a security decision turns on the answer. Corrected
+in A33, in §12.6.5's note, and in `models/README.md`.
 
 **3. §20.2's count was stale, and this one is mine.** It read "The thirty-two
 below" after A20's withdrawal took the register to 31. I missed it when

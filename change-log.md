@@ -9006,3 +9006,24 @@ the new assumption. And the passage on identity forking did not say that each
 competing successor needs its own statement from the old key naming that
 successor and that patron, so a reader could take one leaked proof to spawn
 unlimited heirs. A fork costs the old key a second signature.
+
+### 2026-09-05 (correcting the reason given for the clock assumption)
+
+The assumption registered above stands; the justification given for it did
+not, and is corrected here rather than left to mislead.
+
+It was framed as an exception to the encoding document's rule on timestamps —
+that structural verification checks them against no clock and that
+monotonicity is bound against a signer's own history rather than anyone's
+clock — as though the design forbade a node consulting local time and currency
+expiry were the one place it did anyway. That reads the rule far too widely.
+What it withholds is globally enforced sequencing and validity that depends on
+who is reading; a node's internal timing is unconstrained, and the same
+section already leans on it, since what limits an implausibly dated ceremony
+is a witness declining to attest one dated far from its own clock.
+
+So there is no tension, and the assumption never needed one. What singles this
+use out is not that it consults a clock but that a security decision turns on
+the answer: a clock running slow accepts credentials that should be dead,
+while one running fast merely costs availability, and a party has no second
+source to check either against.
