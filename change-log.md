@@ -9089,3 +9089,35 @@ capacity — what it adds is to an observer who can see the peering record and
 not the presence record, which is one edge, and that difference is
 per-observer like everything else. What peering contributes to trust is the
 meeting it required, not a second edge beside it.
+
+### 2026-09-05 (a rule that outlawed recovery, and a corpus citing absent records)
+
+A second consistency pass over all four layers, and it found two defects the
+first pass could not have: both are places where the prose and the bytes
+disagree, and the first pass compared prose to prose.
+
+The adoption-evidence rule, as rewritten, made every recovery adoption
+malformed. It said an adoption carries a proof of presence or a former patron's
+countersignature and that carrying neither is malformed — and a recovery
+carries neither, its presence half being embedded in the recovery block rather
+than referenced by it. The passage that rewrite replaced had the carve-out and
+the rewrite dropped it, after which the encoding and the negative vectors were
+brought faithfully into line with a rule that outlawed a mechanism the design
+requires. There are three evidence forms, exactly one present: a presence
+record, a former patron's countersignature, or a recovery's own block.
+
+The corpus also referenced records it did not contain. The two presence records
+the adoptions and the peering rest on were built while generating and never
+published, so a reader following field 8 found nothing. Both are now sections
+in their own right, and both envelopes joined the sweep the independent runner
+checks, which now verifies fifteen.
+
+Neither defect was visible to the reference checker, the linter, the count
+checker or any reading. Both surfaced from two new harness checks that test a
+design rule against the actual bytes — that every adoption carries exactly one
+form of evidence, and that every reference resolves to a record naming both
+parties. The first failed on its first run against a vector nobody had thought
+about; the second failed four times out of four. Adding them also exposed two
+older checks that located the formation record positionally and would, with
+three such records present, have recomputed one record's root against
+another's body.

@@ -36,7 +36,7 @@ bytes, and are skipped by design. Cross-entry bindings are checked after the
 sweep: the TopologyPush payload is byte-identical to the minimal adoption
 envelope (and that inner envelope is itself fully verified), and the KeyGrant
 binds the prior alice–c1 record's recomputed txid to the current worked
-query's recomputed query_id, whose consent verifies under alice. 147 entries
+query's recomputed query_id, whose consent verifies under alice. 149 entries
 pass.
 
 **Findings log.** 2026-09-02: caught `B-ext-value-1024/1025` measuring

@@ -333,7 +333,8 @@ for lab, salt, val, dig in dtab:
 root = H(b'\x01' + b''.join(digests[l] for l in LABELS))
 froot = re.search(r'root: `([0-9a-f]{64})`', tx).group(1)
 check(root.hex() == froot, 'disclosure root recomputed from salts, labels and values')
-m = re.search(r'## Presence record.*?```\n([0-9a-f\n]+?)```', tx, re.S)
+m = re.search(r'## Presence record \(type 5\), formation subtype — alice and carol'
+              r'.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 fbody = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
 check(fbody[8] == froot, 'formation body field 8 equals the recomputed root')
 pres_ok = 0
@@ -373,7 +374,8 @@ for n_, c_, r_ in re.findall(r'n = (\d+), candidates = (\d+), required = (?:min\
           f'bundle case n={n_}: required matches the formula')
 
 # ---------------------------------------------------------------- formation structural
-m = re.search(r'## Presence record.*?```\n([0-9a-f\n]+?)```', tx, re.S)
+m = re.search(r'## Presence record \(type 5\), formation subtype — alice and carol'
+              r'.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 obj = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
 p0, p1 = obj[3][0][1], obj[3][1][1]
 check(4 not in obj and 5 not in obj and obj[6] == 1, 'formation: keys 4/5 absent, subtype 1')
@@ -415,6 +417,55 @@ for e in rec[3][3]:
     prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
     oks += verify_sig('alice', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:successor', succ))
 check(oks == 2 and len(rec[3][3]) == 2, 'recovery successor proof: hybrid by the OLD key over [prior, new, patron]')
+
+# ---------------------------------------- EVERY adoption carries exactly one evidence form
+# design §6.1.1 / wire §4.1: an adoption rests on field 8 (a presence record),
+# field 9 (a former patron's countersignature) or field 6 (a recovery's own
+# evidence) -- exactly one.  Swept over every adoption section in the corpus
+# rather than checked on one vector, because a rule the fixtures do not all
+# obey is a rule the fixtures disprove.
+adopt_sections = re.findall(r'\n## ([^\n]*[Aa]doption[^\n]*)\n(.*?)(?=\n## |\Z)', tx, re.S)
+ev_ok, ev_seen = 0, 0
+for title, sect_txt in adopt_sections:
+    m = re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', sect_txt)
+    if not m: continue
+    body = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
+    if body is None or 1 not in body or 2 not in body: continue
+    ev_seen += 1
+    present = [k for k in (6, 8, 9) if k in body]
+    if len(present) == 1: ev_ok += 1
+    else: print(f'      !! {title.strip()[:60]}: evidence fields {present}')
+check(ev_seen >= 4 and ev_ok == ev_seen,
+      f'every adoption carries exactly one evidence form: {ev_ok}/{ev_seen} '
+      f'(fields 6, 8, 9 — design §6.1.1)')
+
+# ------------------------- a PoP reference names BOTH parties (design §6.1.1, §8.1.1)
+# "The check is that the record exists and names these two parties."  Swept,
+# because an earlier corpus referenced the alice-carol formation from an
+# alice-bob adoption -- a reference no validator applying that check accepts,
+# and one nothing in the harness would have caught.
+by_txid = {}
+for hexs, txid in bodies:
+    o = canonical(bytes.fromhex(hexs.replace('\n', '')))
+    if o is not None: by_txid[txid] = o
+def parties_of(rec):
+    return {p[1] for p in rec.get(3, [])} if isinstance(rec.get(3), list) else set()
+ref_ok, ref_seen = 0, 0
+for title, sect_txt in adopt_sections + re.findall(
+        r'\n## ([^\n]*Peering[^\n]*)\n(.*?)(?=\n## |\Z)', tx, re.S):
+    m = re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', sect_txt)
+    if not m: continue
+    body = canonical(bytes.fromhex(m.group(1).replace('\n', '')))
+    if body is None or 8 not in body or not isinstance(body[8], str): continue
+    ref_seen += 1
+    rec = by_txid.get(body[8])
+    named = parties_of(rec) if rec else set()
+    if rec is not None and {body[1], body[2]} <= named: ref_ok += 1
+    else: print(f'      !! {title.strip()[:58]}: field 8 -> '
+                f'{"unresolvable" if rec is None else "names " + str(sorted(named))}')
+check(ref_seen >= 3 and ref_ok == ref_seen,
+      f'every field-8 reference resolves to a record naming both parties: '
+      f'{ref_ok}/{ref_seen}')
 
 # ------------------------------------------------------- transfer adoption (§4.1 field 9)
 xsect = tx[tx.index('## Adoption carrying a TRANSFER'):]

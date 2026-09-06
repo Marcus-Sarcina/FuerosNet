@@ -5352,3 +5352,61 @@ construction here and the choice decides nothing today.
 
 All eight models pass, 19 lemmas. References 2,029 across the specification
 documents and 160 across the model files, 0 flags. Vectors: ALL CHECKS PASS.
+
+---
+
+## Second full consistency pass across all four layers (2026-09-05)
+
+Author-directed after the parallel-edge ruling. **Two real defects, both
+introduced by this assistant during the layered pass, both invisible to the
+first round of consistency checks** -- because that round compared prose to
+prose, and these are places where prose and bytes disagree.
+
+**1. §6.1.1 made every recovery adoption malformed.** The rewritten rule said
+an adoption carries field 8 or field 9 and "carrying neither is malformed". A
+recovery adoption carries NEITHER: its presence half is embedded in the
+`Recovery` block, whose field 2 is "a prior counterparty who met the subject
+again". The old §6.1.1 had the carve-out -- *"Recovery adoptions have their own
+evidence requirement (§9.1)"* -- and the rewrite dropped it. Propagated to wire
+§4.1 in layer 2 and to negative vector T25 in layer 3, so all three layers
+agreed on a rule that outlaws a mechanism the design requires.
+**Fixed in layer order**: three evidence forms, exactly one present -- field 8,
+field 9, or field 6. Wire annotates field 6 as evidence and forbids doubling.
+T25 qualified to non-recovery adoptions, T26 widened to "more than one of 6, 8,
+9", and D21 added: the recovery adoption is a MUST-ACCEPT carrying neither 8
+nor 9.
+
+**2. The corpus referenced records it did not contain.** The alice-bob
+formation and bob-carol normal records were built in the generator and their
+txids used as field 8, but never emitted as vectors. `README.md` claimed "the
+fixtures build the records they reference", which was true of the generator and
+false of the published corpus. Both are now published sections, and both
+envelopes joined the `P-*` sweep so the Rust runner verifies their signatures
+independently: 147 -> 149 entries, 15 envelopes.
+
+**What found them, and what would not have.** Neither turned up in the
+reference checker, the linter, the count checker, or any prose sweep. Both
+turned up in **two new checks in `verify.py` that test a design rule against
+the actual bytes**:
+
+  * *every adoption carries exactly one evidence form* -- swept over every
+    adoption section, not asserted on one vector. Found the extension-keys
+    adoption carrying no evidence at all on its first run, and the recovery
+    conflict followed from thinking about what the sweep should accept.
+  * *every field-8 reference resolves to a record naming both parties* --
+    design §6.1.1 and §8.1.1 both state that check. It failed 0/4 immediately,
+    which is how the unpublished-records gap surfaced.
+
+Adding the first check also exposed that two pre-existing checks located "the
+formation record" **positionally** -- `## Presence record.*?` matching whatever
+came first. With three presence records in the corpus they silently recomputed
+the alice-carol root against the alice-bob body. Both now name their section.
+
+**The lesson for the next pass**: a consistency pass that only reads is a
+consistency pass that only finds what reading finds. Every rule stated in the
+design that a lower layer can be made to check against its own artefacts should
+be, and the check belongs in the harness rather than in a session.
+
+Final: references 2,032 across the five specification documents, 0 flags; 160
+across the model files, 0 flags; 7 counted claims all matching; all eight
+models (19 lemmas); vectors ALL CHECKS PASS; Rust runner 149 pass, 0 fail.

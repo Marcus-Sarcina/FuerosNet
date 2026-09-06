@@ -872,15 +872,20 @@ among that patron's children.
 
 #### 6.1.1 Proof of presence and adoption
 
-**An adoption requires evidence of one of two kinds, and carrying neither makes
-it malformed** [author, 2026-09-05]:
+**An adoption requires evidence, in exactly one of three forms, and carrying
+none makes it malformed** [author, 2026-09-05]:
 
 - **a proof of presence between the two parties** — the patron met the node —
   named by that record's `txid`; or
 - **the former patron's countersignature**, where the node is moving from a
   patron it already had. That signature does the job a meeting otherwise does:
   a party who has already vouched for this node vouches again, to a named
-  successor.
+  successor; or
+- **a recovery's own evidence**, where the adoption is a recovery (§9.1). A
+  recovery carries its presence half *inside* itself — verifier responses from
+  a prior counterparty who **met the subject again** — so it neither needs nor
+  takes a separate reference. **Rotation is adoption** (§9.0), and this is the
+  form its evidence takes.
 
 **The requirement is the point, not a cost the design regrets** [author,
 2026-09-05]: *the aim is to incentivise people to meet face to face widely and
@@ -890,9 +895,9 @@ all require a meeting outright, and adoption requires one unless somebody who
 has already met you says otherwise.
 
 **This is checkable by every validator identically**, which is why it can be a
-structural rule rather than a policy preference. Both alternatives are facts
-about the object: either field 8 names a presence record or field 9 carries the
-former patron's signature (`wire-format.md` §4.1). Neither asks a validator to
+structural rule rather than a policy preference. All three are facts about the
+object: field 8 names a presence record, field 9 carries the former patron's
+signature, and field 6 carries a recovery's own (`wire-format.md` §4.1). Neither asks a validator to
 compute anything from its own topology, so no node rejects an object its
 neighbour accepts — the rule `wire-format.md` §6.8 states for scopes and §3.3
 for timestamps.

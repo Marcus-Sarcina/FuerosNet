@@ -832,6 +832,11 @@ ext_body = e_map([
     (e_uint(2), e_bstr(bob.keyhash)),
     (e_uint(3), ext_loc),
     (e_uint(4), e_uint(TS_ADOPT)),
+    # Evidence, like every adoption (design §6.1.1): this one is between the
+    # same two parties as the first, so it names the same record.  The vector
+    # is about UNKNOWN KEY PRESERVATION, and an adoption that is malformed for
+    # an unrelated reason cannot demonstrate that a decoder preserved anything.
+    (e_uint(8), e_bstr(ab_form_txid)),
     (e_uint(99), e_bstr(bytes.fromhex('c0ffee'))),
 ])
 ext_txid = H(ext_body)
@@ -1319,6 +1324,56 @@ to look arbitrary. Body ({len(reissue_body)} bytes):
 ```
 
 txid: `{hx(reissue_txid)}`
+
+## Presence record (type 5), formation subtype — alice and bob
+
+**The evidence the adoptions between these two rest on.** design §6.1.1
+requires every adoption to carry evidence, and the check on field 8 is that the
+record *exists and names these two parties* — so a corpus whose adoptions
+reference a record it does not contain cannot demonstrate the rule. §13.1 puts
+a ceremony before a formation adoption, which is what makes a formation record
+the faithful evidence for an adoption of two parties at genesis.
+
+Same shape as the alice–carol record below: keys 4 and 5 omitted, key 6 = 1,
+key 0 the genesis value for both signers.
+
+Body bytes ({len(ab_form_body)} bytes):
+
+```
+{hexblock(ab_form_body)}
+```
+
+txid: `{hx(ab_form_txid)}` — field 8 of the adoption, the divergent-order
+adoption, and the extension-keys adoption
+
+Envelope bytes ({len(ab_form_env)} bytes):
+
+```
+{hexblock(ab_form_env)}
+```
+
+## Presence record (type 5), normal subtype — bob and carol
+
+**The evidence the peering rests on.** design §6.3: peering requires a meeting
+between the two peers, and §6.1.1's former-patron alternative cannot apply,
+peers sharing no prior relationship. Normal rather than formation — they are
+not forming a subnet, they are meeting. One witness, attestation bits `3`:
+`protocol_ran` and `both_responsive`, §3.2's floor.
+
+Body bytes ({len(bc_body)} bytes):
+
+```
+{hexblock(bc_body)}
+```
+
+txid: `{hx(bc_txid)}` — field 8 of the peering record
+
+Envelope bytes ({len(bc_env)} bytes, three signers — two participants and the
+witness):
+
+```
+{hexblock(bc_env)}
+```
 
 ## Presence record (type 5), formation subtype — alice and carol
 
@@ -2568,6 +2623,8 @@ for fid, by, kind in [
     ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
     ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
     ('P-transfer-adoption', xfer_env, 'envelope'),
+    ('P-formation-ab', ab_form_env, 'envelope'),
+    ('P-normal-bc', bc_env, 'envelope'),
     ('P-alice-c1-record', pc1_env, 'envelope'),
     ('P-presented-full', npr_full, 'presentation'), ('P-presented-partial', npr_part, 'presentation'),
     ('P-presented-minimal', npr_min, 'presentation'),

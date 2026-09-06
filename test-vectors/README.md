@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `bf35e820883088df63d7a1f6ce3c3f15b26767489c9b49ecc560826b122b6743` · network-design.md `b5529e1f5701187e45a129dab48622e7acee759568f6288e89af9af7ec1bcb79`
+**Pinned**: wire-format.md `4985d240cc3cd7643b4d666318e7cb9bcb2955febb2f1ceb2ea65958540d554f` · network-design.md `fc6922048e0e68da4163124c45523e4ba7893f5d1e0ba66fad9a6aaad7ed4837`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -81,7 +81,10 @@ from an alice–bob adoption**, which no validator applying that check would
 accept. Whether an implementation must *resolve* the referenced record to
 validate — as against treating field 8 as an opaque `txid` at the structural
 layer — the wire format does not settle, and the harness does not assume: it
-checks the reference is well-formed and leaves resolution to policy.
+checks the reference is well-formed, resolves it *within the corpus* — every
+field-8 reference is swept against the record it names, and both records the
+adoptions and the peering rest on are published here rather than only built —
+and leaves resolution against a real archive to policy.
 
 **Otherwise none remain open.** The last — whether a path may be empty — was ruled
 2026-09-01: **roots legitimately self-anchor**, the empty path

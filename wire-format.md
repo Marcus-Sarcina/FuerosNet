@@ -874,12 +874,16 @@ Subsumes key rotation and recovery.
                        ; holds the key is recipient state and a signed object
                        ; cannot depend on it. Senders include it when they believe
                        ; the recipient may lack the key
-  6: ? Recovery,       ; present iff this is a recovery adoption
+  6: ? Recovery,       ; present iff this is a recovery adoption. It is also
+                       ;   that adoption's EVIDENCE (design §6.1.1): a
+                       ;   recovery carries its presence half inside itself,
+                       ;   so fields 8 and 9 are absent
   7: ? txid,           ; archive HEAD presented (design §16.7), one hash, not
                        ; a list. The chain gives the rest
   8: ? txid,           ; proof-of-presence record between these two parties.
-                       ;   EXACTLY ONE of fields 8 and 9 is present (design
-                       ;   §6.1.1); neither, or both, is malformed
+                       ;   EXACTLY ONE of fields 6, 8 and 9 is present (design
+                       ;   §6.1.1) — a recovery's evidence is its own block;
+                       ;   none of the three, or more than one, is malformed
   9: ? Transfer        ; present iff this adoption is a transfer — the former
                        ;   patron vouching in place of a meeting
 }
@@ -1073,12 +1077,20 @@ against field 1, `former_patron_key` against the `Transfer` map's own field 1,
 sentence as above, and for the same reason: an unchecked binding is the same as
 no binding.
 
-**Fields 8 and 9 — the evidence, and exactly one of them is required.** design
-§6.1.1: an adoption rests either on a proof of presence between the two parties
-(field 8, that record's `txid`) or on the former patron's countersignature
-(field 9, a `Transfer` block). **An adoption carrying neither is malformed**,
-and one carrying both is malformed too — they are alternatives, and an object
-offering two answers to the same question invites a validator to pick.
+**The evidence fields — 6, 8 and 9 — and exactly one is present.** design
+§6.1.1: an adoption rests on a proof of presence between the two parties
+(field 8, that record's `txid`), on the former patron's countersignature
+(field 9, a `Transfer` block), or on a recovery's own evidence (field 6, a
+`Recovery` block, whose responses are the presence half). **An adoption
+carrying none of the three is malformed**, and one carrying more than one is
+malformed too — they are alternatives, and an object offering two answers to
+the same question invites a validator to pick.
+
+**A recovery takes no separate reference and MUST NOT carry one.** Its
+presence half is embedded rather than named: `Recovery` field 2's responses
+come from a prior counterparty who met the subject again. A recovery adoption
+carrying field 8 or field 9 beside field 6 is malformed on the same rule as
+any other double answer.
 
 **This is checkable without consulting anything outside the object**, which is
 what lets it be a structural rule at all. A decoder does not ask whether the
