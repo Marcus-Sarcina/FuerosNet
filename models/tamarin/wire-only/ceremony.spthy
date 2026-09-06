@@ -343,7 +343,13 @@ lemma honest_formation_completes:
     design 15.4 puts the same boundary in words -- presence is "an attack
     cost rather than an absolute primitive".  The cost lands because the
     record is attributable, so a fabricated one is a signed lie by named
-    parties.  THAT is the wire property.                                    */
+    parties.  THAT is the wire property.
+
+    MUTATION-TESTED, because a lemma this weak-sounding has to be shown to do
+    work: delete the `verify(sig1, ...)` check from `Accept_Record` and this
+    falsifies, while `an_accepted_formation_is_attributable` -- a different
+    rule -- stays verified.  The mutation hits exactly the lemma it should
+    and no other.                                                           */
 lemma an_accepted_record_is_attributable:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
