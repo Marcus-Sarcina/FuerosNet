@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `792845f55790dc6f7dfbf1c3c189f670ff8345726ae067246b916790ad2af947` · network-design.md `175d729d15e72c2c7becf1dbb52584a43d9e4c0585bb0a49e6587745c99c6a9c`
+**Pinned**: wire-format.md `bf35e820883088df63d7a1f6ce3c3f15b26767489c9b49ecc560826b122b6743` · network-design.md `b5529e1f5701187e45a129dab48622e7acee759568f6288e89af9af7ec1bcb79`
 
 ## The result model is structured, not a single status
 
@@ -153,6 +153,13 @@ works, not inputs.
 | E22 | A `NetworkPoint` writing the default port out — `3: 7431` | §1's default-omission rule [author, 2026-09-01]: a field equal to its stated default MUST be omitted; omission is the one spelling, which is what keeps §7.6's distinct-entries rule decidable |
 | T13 | Any two-party transaction whose two identity fields are equal — adoption, departure, disavowal, peering, series reissue | The degenerate pair is rejected across every two-party type (§4.1), as equal participants already are for presence (§3.2, R1). Self-adoption is also the degenerate cycle — the one a validator sees from the record alone (design §6.2.5) |
 | T14 | A `Recovery` whose `prior_key` equals the enclosing adoption's field 1 | A same-key Recovery is vacuous evidence (§4.1) — the retained-key, lost-archive case is served by archive fetch, fresh adoption and merge, never by Recovery |
+| T25 | An adoption carrying **neither** field 8 nor field 9 | design §6.1.1: every adoption rests on a proof of presence or a former patron's countersignature. Neither is not a weak adoption, it is a malformed one |
+| T26 | An adoption carrying **both** field 8 and field 9 | They are alternatives, not a floor and a bonus (§4.1). An object offering two answers to one question invites a validator to pick, and two validators may pick differently |
+| T27 | A `TransferStatement` whose `node_key` ≠ the enclosing adoption's field 1 | The countersignature would vouch for a different node than the one being adopted (§4.1) |
+| T28 | A `TransferStatement` whose `new_patron_key` ≠ the enclosing adoption's field 2 | The assembly error T12 and T15 close for recovery, one field over: a countersignature naming no destination — or the wrong one — authorises moves its signer never approved |
+| T29 | A `Transfer` whose `former_patron_key` equals the enclosing adoption's field 2, or its field 1 | Identical keys represent no transfer, the rule `prior_key` carries in a `Recovery` (§4.1); and a node does not vouch for its own move |
+| T30 | A `Transfer` field 2 that is a `COSE_Sign1`, or a `COSE_Sign` with a single entry | The former patron is hybrid: one logical signer, two entries (§3.5). The same shape as T11 |
+| T31 | A peering record with no field 8 | design §6.3: peering is always priced in a meeting, and §4.1's field-9 alternative cannot apply — peers share no prior relationship |
 
 ### VerifierResponse conditional-field matrix (§4.5)
 
@@ -232,6 +239,7 @@ photo comparison without its template version is unverifiable as evidence:
 | D17 | The counter-jump pair read as state: `[5,42]` then `[5,100]` | `state_action = replace` — and the reverse order is `ignore_stale`, not an error: absence of prior state is acceptable and staleness is ordinary (§2.3) |
 | D18 | A bounded unknown extension whose value is a tagged item, float, or any other deterministic CBOR item outside the schemas' types | §1 [author, 2026-09-01]: **opaque encoded slices, preserved and never interpreted** — uninterpretable state kept for a reader that may understand it later. An implementation reconstructing extensions through a typed model drops what it cannot type, and fails here |
 | D19 | A `Proximity` disclosure carrying the same channel kind twice — failed, then retried and passing | §4.5 [2026-09-02]: a kind may repeat; a retried channel is two measurements, both evidence. A validator imposing one-entry-per-kind rejects a valid record (`P-channel-retry`) |
+| D20 | An adoption carrying a valid field 9 `Transfer` and **no** field 8 (`transactions.md`) | design §6.1.1: the countersignature is a required alternative, not a lesser one. A decoder that demands a presence record on every adoption rejects every lateral and vertical shift (§6.2.3) |
 
 ## Resolved: the seed sentence is a writer commitment
 

@@ -626,53 +626,6 @@ resolves" instead of the key field 1 names accepts this object
 
 # ================================================================ transactions.md
 
-# --- Adoption: alice adopted by bob, both at genesis.
-TS_ADOPT = TS_2026 + 100 * 86400 + 3600
-adopt_body = e_map([
-    (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
-    (e_uint(1), e_bstr(alice.keyhash)),
-    (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), adopt_loc),
-    (e_uint(4), e_uint(TS_ADOPT)),
-])
-adopt_txid = H(adopt_body)
-adopt_env, adopt_entries = envelope(1, 1, adopt_body, [alice, bob])
-
-# --- Departure: alice leaves bob.
-TS_DEPART = TS_ADOPT + 30 * 86400
-depart_prev = adopt_txid  # alice's chain: genesis -> adoption -> departure
-depart_body = e_map([
-    (e_uint(0), backptrs([depart_prev])),
-    (e_uint(1), e_bstr(alice.keyhash)),
-    (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), seqno(5, 43)),
-    (e_uint(4), e_uint(TS_DEPART)),
-])
-depart_txid = H(depart_body)
-dep_env, dep_entries = envelope(1, 2, depart_body, [alice])
-
-# --- Disavowal: bob disavows alice, reason 4.
-disavow_body = e_map([
-    (e_uint(0), backptrs([adopt_txid])),
-    (e_uint(1), e_bstr(bob.keyhash)),
-    (e_uint(2), e_bstr(alice.keyhash)),
-    (e_uint(3), e_uint(TS_DEPART)),
-    (e_uint(4), e_uint(4)),
-])
-disavow_txid = H(disavow_body)
-
-# --- Series reissue: alice seals series 5 at max, opens series 3735928559.
-# Alternative continuation of the adoption (not of the departure): both
-# signers' chain heads are the adoption itself.
-reissue_body = e_map([
-    (e_uint(0), backptrs([adopt_txid], [adopt_txid])),
-    (e_uint(1), e_bstr(alice.keyhash)),
-    (e_uint(2), e_bstr(bob.keyhash)),
-    (e_uint(3), seqno(5, 0xFFFFFFFF)),
-    (e_uint(4), seqno(0xDEADBEEF, 0)),
-    (e_uint(5), e_uint(TS_DEPART + 86400)),
-])
-reissue_txid = H(reissue_body)
 
 # --- Presence, formation subtype: alice and carol.
 TS_START = TS_2026 + 12 * 3600
@@ -748,6 +701,80 @@ pres_full = presented(formation_env, form_slots, set(LABELS))
 pres_min = presented(formation_env, form_slots, set())
 pres_part = presented(formation_env, form_slots, {'proximity', 'p0.retention'})
 
+# --- Presence, formation subtype: ALICE AND BOB.  design §6.1.1 requires every
+# adoption to carry evidence, and §13.1 puts a ceremony before a formation
+# adoption, so the alice-adopted-by-bob transaction below needs a record naming
+# THOSE TWO.  The alice-carol record above names carol and cannot serve: the
+# check is that the record exists and NAMES THESE TWO PARTIES (§4.1 field 8).
+TS_AB_START = TS_START - 3 * 3600
+TS_AB_FINAL = TS_AB_START + 600
+ab_values = dict(form_values)
+ab_slots, ab_root = disclosure_set('formation-ab', ab_values)
+ab_hi, ab_lo = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)
+ab_form_body = e_map([
+    (e_uint(0), backptrs([genesis(ab_hi.keyhash)], [genesis(ab_lo.keyhash)])),
+    (e_uint(1), e_uint(TS_AB_START)),
+    (e_uint(2), e_uint(TS_AB_FINAL)),
+    (e_uint(3), e_arr([participant(ab_hi), participant(ab_lo)])),
+    (e_uint(6), e_uint(1)),
+    (e_uint(8), e_bstr(ab_root)),
+])
+ab_form_txid = H(ab_form_body)
+ab_form_env, ab_form_entries = envelope(1, 5, ab_form_body, [ab_hi, ab_lo])
+
+# --- Adoption: alice adopted by bob, both at genesis.
+TS_ADOPT = TS_2026 + 100 * 86400 + 3600
+# Field 8 names the alice-bob formation record above: design §6.1.1 requires
+# every adoption to carry evidence, and the check is that the record exists and
+# NAMES THESE TWO PARTIES.  Both signers continue that record, which is their
+# chain head by the time they sign this.
+adopt_body = e_map([
+    (e_uint(0), backptrs([ab_form_txid], [ab_form_txid])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), adopt_loc),
+    (e_uint(4), e_uint(TS_ADOPT)),
+    (e_uint(8), e_bstr(ab_form_txid)),
+])
+adopt_txid = H(adopt_body)
+adopt_env, adopt_entries = envelope(1, 1, adopt_body, [alice, bob])
+
+# --- Departure: alice leaves bob.
+TS_DEPART = TS_ADOPT + 30 * 86400
+depart_prev = adopt_txid  # alice's chain: genesis -> adoption -> departure
+depart_body = e_map([
+    (e_uint(0), backptrs([depart_prev])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), seqno(5, 43)),
+    (e_uint(4), e_uint(TS_DEPART)),
+])
+depart_txid = H(depart_body)
+dep_env, dep_entries = envelope(1, 2, depart_body, [alice])
+
+# --- Disavowal: bob disavows alice, reason 4.
+disavow_body = e_map([
+    (e_uint(0), backptrs([adopt_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(alice.keyhash)),
+    (e_uint(3), e_uint(TS_DEPART)),
+    (e_uint(4), e_uint(4)),
+])
+disavow_txid = H(disavow_body)
+
+# --- Series reissue: alice seals series 5 at max, opens series 3735928559.
+# Alternative continuation of the adoption (not of the departure): both
+# signers' chain heads are the adoption itself.
+reissue_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [adopt_txid])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(bob.keyhash)),
+    (e_uint(3), seqno(5, 0xFFFFFFFF)),
+    (e_uint(4), seqno(0xDEADBEEF, 0)),
+    (e_uint(5), e_uint(TS_DEPART + 86400)),
+])
+reissue_txid = H(reissue_body)
+
 alice_first, bob_first = sorted([alice, bob], key=lambda i: i.keyhash)
 ordered_names = [alice_first.name, bob_first.name]
 
@@ -763,7 +790,7 @@ div_body = e_map([
     (e_uint(2), e_bstr(div_patron.keyhash)),
     (e_uint(3), div_loc),
     (e_uint(4), e_uint(TS_ADOPT + 7200)),
-    (e_uint(8), e_bstr(formation_txid)),
+    (e_uint(8), e_bstr(ab_form_txid)),
 ])
 div_txid = H(div_body)
 div_env, div_entries = envelope(1, 1, div_body, [div_node, div_patron])
@@ -817,6 +844,7 @@ ext_env, ext_entries = envelope(1, 1, ext_body, [alice, bob])
 AAD_CONSENT = b'rhtn/1:consent'
 AAD_VERIFIER = b'rhtn/1:verifier'
 AAD_SUCCESSOR = b'rhtn/1:successor'
+AAD_TRANSFER = b'rhtn/1:transfer'
 
 TS_C2 = TS_DEPART + 40 * 86400
 TS_C2F = TS_C2 + 3600
@@ -930,6 +958,34 @@ npr_body = e_map([
     (e_uint(8), e_bstr(npr_root)),
 ])
 npr_txid = H(npr_body)
+
+# --- Presence, normal subtype: BOB AND CAROL.  design §6.3 requires a peering
+# record to name a proof of presence between the two peers, and no record above
+# names both: the formation is alice-carol, and this file's other normal record
+# is alice-bob.  Peers are in different subtrees by construction, so there is no
+# former-patron alternative (§6.1.1) — peering is always priced in a meeting.
+# Minimal but structurally complete: one witness, whose attestation bits carry
+# `protocol_ran` and `both_responsive` so §3.2's floor is met.
+TS_BC = TS_C2 + 4 * 3600
+TS_BCF = TS_BC + 720
+bc_values = dict(npr_values)
+bc_slots, bc_root = disclosure_set('normal-bc', bc_values)
+bc_hi, bc_lo = sorted([bob, carol], key=lambda i: i.keyhash, reverse=True)
+bc_signers = [bc_hi, bc_lo, W16[0]]
+def _bc_head(s):
+    if s is carol: return [formation_txid]
+    return [npr_txid]          # bob and w1 both signed the normal record above
+bc_body = e_map([
+    (e_uint(0), backptrs(*[_bc_head(s) for s in bc_signers])),
+    (e_uint(1), e_uint(TS_BC)),
+    (e_uint(2), e_uint(TS_BCF)),
+    (e_uint(3), e_arr([participant(bc_hi), participant(bc_lo)])),
+    (e_uint(4), e_arr([witness_entry(W16[0], bc_hi, 3)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(bc_root)),
+])
+bc_txid = H(bc_body)
+bc_env, bc_entries = envelope(1, 5, bc_body, bc_signers)
 npr_env, npr_entries = envelope(1, 5, npr_body, npr_signers)
 npr_full = presented(npr_env, npr_slots, set(LABELS))
 npr_min = presented(npr_env, npr_slots, set())
@@ -1049,6 +1105,7 @@ peer_body = e_map([
     (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
     (e_uint(4), network_point([192, 0, 2, 7])),
     (e_uint(5), e_uint(TS_DEPART + 7200)),
+    (e_uint(8), e_bstr(bc_txid)),
 ])
 peer_txid = H(peer_body)
 
@@ -1751,6 +1808,34 @@ rec_body = e_map([
     (e_uint(7), e_bstr(depart_txid)),   # alice's old chain head: genesis -> adopt -> depart
 ])
 rec_txid = H(rec_body)
+
+# --- Adoption carrying a TRANSFER (§4.1 field 9): alice moves from bob to
+# carol, with bob countersigning in place of a meeting.  design §6.1.1's second
+# route, and the case §6.2.3's lateral and vertical shifts take.  Field 8 is
+# ABSENT: the two are alternatives, and carrying both is malformed.
+TS_TRANSFER = TS_RECOVER + 10 * 86400
+xfer_stmt = e_arr([e_bstr(alice.keyhash),      # node_key      = field 1
+                   e_bstr(bob.keyhash),        # former_patron = Transfer field 1
+                   e_bstr(carol.keyhash)])     # new_patron    = field 2
+xfer_entries = []
+for alg in (-8, -49):
+    prot = sig_protected(alg)
+    tbs = sig_structure_sign(prot, AAD_TRANSFER, xfer_stmt)
+    sig = bob.sign(tbs) if alg == -8 else bob.sign_pq(tbs)
+    xfer_entries.append(cose_signature_entry(prot, sig))
+xfer_sign = e_arr([e_bstr(b''), b'\xa0', NULL, e_arr(xfer_entries)])
+xfer_block = e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), xfer_sign)])
+xfer_loc = locator(carol.keyhash, path([4]), seqno(13, 0))   # opens at counter 0
+xfer_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [formation_txid])),
+    (e_uint(1), e_bstr(alice.keyhash)),
+    (e_uint(2), e_bstr(carol.keyhash)),
+    (e_uint(3), xfer_loc),
+    (e_uint(4), e_uint(TS_TRANSFER)),
+    (e_uint(9), xfer_block),
+])
+xfer_txid = H(xfer_body)
+xfer_env, xfer_entries_env = envelope(1, 1, xfer_body, [alice, carol])
 rec_env, rec_entries = envelope(1, 1, rec_body, [alice2, bob])
 
 emit('transactions.md', f"""
@@ -1815,6 +1900,54 @@ key and the patron, per §3.1 — the old key signs only the embedded proof):
 
 ```
 {hexblock(rec_env)}
+```""")
+
+emit('transactions.md', f"""
+## Adoption carrying a TRANSFER (type 1, field 9) — alice moves from bob to carol
+
+design §6.1.1's second evidence route. Alice was adopted by bob; she now moves
+to carol, and **bob countersigns in place of a meeting between alice and
+carol**. This is the shape every lateral and vertical shift takes (§6.2.3).
+
+**Field 8 is ABSENT and that is required, not incidental**: fields 8 and 9 are
+alternatives, and an adoption carrying both is malformed (§4.1). A decoder that
+demands a presence record on every adoption rejects this vector and with it
+every ordinary move between patrons — negative-vectors.md D20.
+
+The `Transfer` block is `Recovery`'s shape one field over: a keyhash naming the
+former patron and a hybrid `COSE_Sign` by them. What it signs is **not** the
+map but a `TransferStatement`, the deterministic CBOR of
+
+```
+[ {hx(alice.keyhash)}    ; node_key      = field 1
+  {hx(bob.keyhash)}    ; former_patron = Transfer field 1
+  {hx(carol.keyhash)} ]  ; new_patron    = field 2
+```
+
+with `external_aad = "rhtn/1:transfer"`. All three are bound for the reason the
+successor statement binds three: a countersignature naming no destination would
+authorise an unlimited number of moves.
+
+TransferStatement bytes ({len(xfer_stmt)} bytes):
+
+```
+{hexblock(xfer_stmt)}
+```
+
+Body bytes ({len(xfer_body)} bytes):
+
+```
+{hexblock(xfer_body)}
+```
+
+txid: `{hx(xfer_txid)}`
+
+Envelope bytes ({len(xfer_env)} bytes — signers are the node and the NEW
+patron; the former patron signs only the embedded statement, exactly as a
+recovery's old key does):
+
+```
+{hexblock(xfer_env)}
 ```""")
 
 # ================================================================ records.md
@@ -2434,6 +2567,7 @@ for fid, by, kind in [
     ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
     ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
     ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
+    ('P-transfer-adoption', xfer_env, 'envelope'),
     ('P-alice-c1-record', pc1_env, 'envelope'),
     ('P-presented-full', npr_full, 'presentation'), ('P-presented-partial', npr_part, 'presentation'),
     ('P-presented-minimal', npr_min, 'presentation'),

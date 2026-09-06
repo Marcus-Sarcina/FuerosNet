@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `792845f55790dc6f…`, `network-design.md` `175d729d15e72c2c…` and `light-client-requirements.md` `afb76813ba9559c3…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `bf35e820883088df…`, `network-design.md` `b5529e1f5701187e…` and `light-client-requirements.md` `afb76813ba9559c3…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -212,21 +212,21 @@ adoption by bob (the tree above bob is asserted for the fixture, not built)
 that must not substitute for the grandpatron):
 
 ```
-a501582097e88a435e646363020b799ad58ba79d0d92f5f938114db98ca4ce2b
-7424e55f02582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6
+a5015820252e1f58e8c0d3f9002fad507fe04dcc772859f8183743106e242606
+2c840e3e02582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6
 654f61554a2cf20358208410def778a5de3a25991aba399716bc8eccfda9ad57
-d4ea8a0c8dcfc852aa6a041a69d99f68058443a10127a0f6584086ca366b3360
-81472517c42096af103431f3f14c0a099d78a4ae789a3e84e1d4a4e4de79cedf
-1f1e8bc20170d4271cbac90633e4f78e5b8d4fc4b407253bda04
+d4ea8a0c8dcfc852aa6a041a69d99f68058443a10127a0f6584082009e3fe7c5
+3edb95979bc14f6e70e70556ea3546d3c11ef9870a302dfb9ce4e053521eb90d
+78a73803c58a49b893bab4fb8c32e9b1ec0e01e0b1e65dae9c0e
 ```
 
 ```
-a501582097e88a435e646363020b799ad58ba79d0d92f5f938114db98ca4ce2b
-7424e55f02582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6
+a5015820252e1f58e8c0d3f9002fad507fe04dcc772859f8183743106e242606
+2c840e3e02582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6
 654f61554a2cf20358208410def778a5de3a25991aba399716bc8eccfda9ad57
-d4ea8a0c8dcfc852aa6a041a69d99f68058443a10127a0f65840e82b52f6f79f
-8085d528a57d417610a838c3e4d2860d615c8d16399b43b883e3236819a87a82
-d614ec4aa67011dd08b2eb01a9b23bf26d85e9638ea78c60da06
+d4ea8a0c8dcfc852aa6a041a69d99f68058443a10127a0f65840773582a549f6
+b0109e17e44034361043c99d286498c65a66334c54c169d6a6769e2faf9e7a7f
+609d63e314db232148a2725aef0e693e96dd99baca6302718909
 ```
 
 **Prekey bundle** — subject alice, construction 1 (PQXDH), 64 bytes of opaque

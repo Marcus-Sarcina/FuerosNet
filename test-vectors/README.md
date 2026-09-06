@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `792845f55790dc6f7dfbf1c3c189f670ff8345726ae067246b916790ad2af947` · network-design.md `175d729d15e72c2c7becf1dbb52584a43d9e4c0585bb0a49e6587745c99c6a9c`
+**Pinned**: wire-format.md `bf35e820883088df63d7a1f6ce3c3f15b26767489c9b49ecc560826b122b6743` · network-design.md `b5529e1f5701187e45a129dab48622e7acee759568f6288e89af9af7ec1bcb79`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -70,7 +70,20 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 ## Interpretations taken
 
-**None remain open.** The last — whether a path may be empty — was ruled
+**One choice this corpus makes, recorded because it is a choice.** design
+§6.1.1 requires every adoption to carry evidence — a proof of presence (field
+8) or a former patron's countersignature (field 9) — and the check on field 8
+is that the record *exists and names these two parties*. The fixtures
+therefore build the records they reference: an alice–bob formation for the
+adoptions between those two, and a bob–carol normal record for the peering
+between those two. **An earlier corpus referenced the alice–carol formation
+from an alice–bob adoption**, which no validator applying that check would
+accept. Whether an implementation must *resolve* the referenced record to
+validate — as against treating field 8 as an opaque `txid` at the structural
+layer — the wire format does not settle, and the harness does not assume: it
+checks the reference is well-formed and leaves resolution to policy.
+
+**Otherwise none remain open.** The last — whether a path may be empty — was ruled
 2026-09-01: **roots legitimately self-anchor**, the empty path
 `{1: h'', 2: 0}` is its one encoding, §2.1 now says so, and D13 is the
 generated must-accept: a root's complete self-anchored `SignedLocator`.

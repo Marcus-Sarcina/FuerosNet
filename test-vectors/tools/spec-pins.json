@@ -1,23 +1,23 @@
 {
  "specs": {
-  "wire-format.md": "792845f55790dc6f7dfbf1c3c189f670ff8345726ae067246b916790ad2af947",
-  "network-design.md": "175d729d15e72c2c7becf1dbb52584a43d9e4c0585bb0a49e6587745c99c6a9c",
+  "wire-format.md": "bf35e820883088df63d7a1f6ce3c3f15b26767489c9b49ecc560826b122b6743",
+  "network-design.md": "b5529e1f5701187e45a129dab48622e7acee759568f6288e89af9af7ec1bcb79",
   "light-client-requirements.md": "afb76813ba9559c3b17826cfbbee47e273eee33ec9c0e280433905ac0c7ce5f9"
  },
- "generator": "eeef065916637fc0704a5f2d08d0513b1f5755b5af8ffbe6e222e6cd0687574a",
- "verifier": "9eaa137edd8505e40a6f4552d0aa9c1dbe6ef8f6653949c318d1859ddb216a50",
+ "generator": "f13187a6de392ddcbb1b3360f162bb9adfeb0f393f8ac3f34e7d08e586d008a3",
+ "verifier": "d3478776b807cf408e00afd8b3d2531fa1ecf2c057cb577828d00bcc26f78c63",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "50.0.1"
  },
  "outputs": {
-  "keys.md": "18f30bcfd50709bdac3725019f72240937633291619f3bed2048015c72219fd1",
-  "primitives.md": "151b9b01eaa22b0e0c9804a33dff5779b18191b41dba64f8e4c9a107778b845d",
-  "transactions.md": "66a2ec6702a68042790afa8d49b18d3da5e6e934a46c31571da25ce375bd3596",
-  "records.md": "78a1939fb698c3c2de12802d67147f80a458e8133df2146e6b494c4d11fc0839",
-  "verifier-selection.md": "d705624c15c6b98e15e02d74a099caf9ee3ead5cb2470c082d386a17adc6f2b3",
-  "messages.md": "a4c6dd3c261c3199b8a19719ee1e55777fe1943a704cfba9e2cacb10800ac090",
-  "README.md": "9b6064654a459307cb81b4301f517f35d80414b00d6c7efba6bfedf547a8f962",
-  "negative-vectors.md": "d9deb78c99a0176021dfd47ba55752657aedf7dbd3ebc45155ed08d816510a2a"
+  "keys.md": "b7ab779a9b9b30635882dd4fe83e874e2283a6bb99af4e572d5066693a91f250",
+  "primitives.md": "fff44bca985691c6bf52236f5eb34a024502711eebbcef2245cb10be1aa5d552",
+  "transactions.md": "e044dd5b2540bdbe74fc0d9bd9782b940e5015aa2038f882c5b71ef792776d87",
+  "records.md": "2632ec0176bbf52620b2f440947268758b507455d57ce0a7afb33e89b1787648",
+  "verifier-selection.md": "d40c9629a27b96169d18014458aed5f84f3ce9d636e1741c042ae043e0c92a14",
+  "messages.md": "301de289aebc132181156235c5b2a0e2330f52166938eeef129eaeb6295d3222",
+  "README.md": "dc5091623d6f1b99947f415f500939f466c412578b8dc708e6ade9f93fd20116",
+  "negative-vectors.md": "9dd5099a728575bae5f6a116a6e86b25faf9870a88e681b23735b6638f1aabf8"
  }
 }

@@ -1,6 +1,6 @@
 # Verifier selection — the reasonableness criterion
 
-Generated against `wire-format.md` `792845f55790dc6f…`, `network-design.md` `175d729d15e72c2c…` and `light-client-requirements.md` `afb76813ba9559c3…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `bf35e820883088df…`, `network-design.md` `b5529e1f5701187e…` and `light-client-requirements.md` `afb76813ba9559c3…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). *The nonce-commitment, seed and hash-rank vectors that
@@ -47,10 +47,10 @@ duplicate and one non-verifying**:
 | # | Handed | Qualifies? |
 |---|---|---|
 | 1 | formation record `262a7e58b63c11f5…` (alice–carol) | yes — formations count (§5.3) |
-| 2 | ac1 `8c41bb66fba76b20…` (alice–carol) | yes |
-| 3 | ac2 `64dc98a2935b5d87…` (alice–carol) | yes |
+| 2 | ac1 `c7ceb10e39e61b3f…` (alice–carol) | yes |
+| 3 | ac2 `41eda24193685689…` (alice–carol) | yes |
 | 4 | ac1 again, byte-identical | counts **once** — duplicates dedupe by txid (§5.3) |
-| 5 | normal record `3bbeba7f8b67b07c…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
+| 5 | normal record `b5b6227510ef730e…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
 | 6 | the formation envelope with any signed-body byte mutated | **not in the pool** — a record that fails its checks contributes nothing; there is no "incomplete", it is simply absent (§5.4) |
 
 The arithmetic, stated so a harness can recompute it:

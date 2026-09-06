@@ -416,6 +416,25 @@ for e in rec[3][3]:
     oks += verify_sig('alice', alg, bytes.fromhex(e[2]), sig_sign(prot, b'rhtn/1:successor', succ))
 check(oks == 2 and len(rec[3][3]) == 2, 'recovery successor proof: hybrid by the OLD key over [prior, new, patron]')
 
+# ------------------------------------------------------- transfer adoption (§4.1 field 9)
+xsect = tx[tx.index('## Adoption carrying a TRANSFER'):]
+x_body_hex = re.search(r'```\n([0-9a-f\n]+?)```\n\ntxid:', xsect).group(1)
+x_body = canonical(bytes.fromhex(x_body_hex.replace('\n', '')))
+check(9 in x_body and 8 not in x_body,
+      'transfer adoption: field 9 present, field 8 ABSENT — they are alternatives (§4.1)')
+xfer = x_body[9]
+check(xfer[1] != x_body[2] and xfer[1] != x_body[1],
+      'transfer: former_patron differs from both the new patron and the node')
+# The statement binds all three parties, and the former patron signed it.
+xstmt = enc([x_body[1], xfer[1], x_body[2]])   # [node, former_patron, new_patron]
+okx = 0
+for e in xfer[2][3]:
+    prot = bytes.fromhex(e[0]); alg = canonical(prot)[1]
+    okx += verify_sig(BY[xfer[1]], alg, bytes.fromhex(e[2]),
+                      sig_sign(prot, b'rhtn/1:transfer', xstmt))
+check(okx == 2 and len(xfer[2][3]) == 2,
+      'transfer statement: hybrid COSE_Sign by the FORMER patron over [node, former, new]')
+
 # ------------------------------------------- remaining signed contexts (bars 8/10)
 CTX = [  # (caption, sig_slot, aad, signer-field or fixed name, wrong-signer name)
     ('Currency attestation', 7, b'rhtn/1:currency', 6, 'carol'),
