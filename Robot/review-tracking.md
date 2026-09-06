@@ -5885,3 +5885,43 @@ immediately. Fourth occurrence; second caught in the same minute.
 
 13 artifacts. 46 Tamarin lemmas unbounded (20 wire-only, 26 compliant) + 13
 bounded, 4 TLA+ models, 1 mutation that must fail.
+
+---
+
+## F3 closed, and per-folder capability READMEs (2026-09-06)
+
+**F3.** `wire-format.md` 9.1: "Authentication is mutual ... [the serving node]
+MUST bind the identity for which session state and queued data are requested to
+the identity the transport authenticated, rejecting any mismatch ... [otherwise
+a party] could claim any keyhash and receive another node's queued messages."
+The theory carried only the client-authenticates-server half.
+
+Modelled by keeping the two identities as SEPARATE TERMS -- `$A`, established
+by verifying a signature over the server's own challenge, and `$Claim`, what
+the Attach asked for. That separation is the whole requirement: a model
+carrying them as one variable cannot express the attack, which is why the
+property was previously unstatable rather than merely unproven. `$Claim` is a
+free variable in the client rule, so nothing stops a client naming someone
+else's keyhash; the defence is the server's check.
+
+Three lemmas added: `client_authentication`,
+`queued_data_reaches_only_the_authenticated_peer`, `a_delivery_is_reachable`.
+Mutation-tested: delete `Eq($A, $Claim)` and the mailbox lemma falsifies with
+the trace 9.1 describes, while `client_authentication` stays verified -- the
+mutation hits exactly its own lemma.
+
+**One correction found by a lemma rather than by reading.** The first version
+signed the client's challenge response without covering the claim, so an
+adversary could re-pair one client's authentication with a different Attach.
+`client_authentication` falsified on exactly that. The fix is faithful rather
+than cosmetic: wire 9.1 carries `Attach` INSIDE the mutually authenticated
+transport, so the claim is not a separable token, and the signature now covers
+it.
+
+**Per-folder READMEs** added to `simulation/`, `tla/`, `tamarin/wire-only/` and
+`tamarin/compliant/` at the author's instruction: two bulleted lists each, what
+the model demonstrates and what it cannot, and nothing else -- no framing, no
+history, no open items.
+
+13 artifacts. 49 Tamarin lemmas unbounded (23 wire-only, 26 compliant) + 13
+bounded, 4 TLA+ models, 1 mutation that must fail.

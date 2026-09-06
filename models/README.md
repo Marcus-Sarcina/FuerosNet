@@ -16,7 +16,7 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 4 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(20 lemmas) and `compliant/` (26 lemmas).
+(23 lemmas) and `compliant/` (26 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
@@ -232,15 +232,21 @@ opens with the reading conventions. Every theory begins with an
 `exists-trace` executability lemma — the guard against a model that cannot run
 the honest protocol and so proves every security lemma vacuously.
 
-- **`attach`** (design §14, wire §9.1) — session attach. A client that
-  completes an attach authenticated the server it intended; **a sibling (or
-  any party without the server's key) cannot impersonate the server**. Four lemmas, the fourth
-  `attach_completes_honestly` — an uncompromised run that reaches a commit. **This is endpoint authentication, not authorisation**: the theory
-  has no patron/sibling role, session mode or trust-bearing operation, so it
-  cannot express the failover case where a client knowingly attaches to a
-  sibling and trust-bearing operations must stop anyway. The third lemma is
-  named `client_commit_is_injective` rather than `no_replay`, because it
-  follows from linear-fact consumption rather than from the signature —
+- **`wire-only/attach`** (design §14, wire §9.1) — session attach.
+  **Authentication is mutual**: a client that completes an attach
+  authenticated the server it intended, and a serving node's bound session
+  names a client that proved control of its key over that server's own
+  challenge. **Queued material is released only to the transport-authenticated
+  peer** (`queued_data_reaches_only_the_authenticated_peer`) — wire §9.1
+  requires `Attach` field 1 to equal the connection-authenticated keyhash,
+  *"[otherwise a party] could claim any keyhash and receive another node's
+  queued messages"*. The authenticated identity and the claimed identity are
+  separate terms in the model, which is what lets the attack be expressed at
+  all; delete the equality check and that lemma falsifies while
+  `client_authentication` stays verified. Seven lemmas.
+
+  `client_commit_is_injective` is named that rather than `no_replay`, because
+  it follows from linear-fact consumption rather than from the signature —
   measured by deleting the signature check, which falsifies
   `server_authentication` and leaves this one verifying.
 

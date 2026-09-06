@@ -172,9 +172,14 @@ rule Client_Hello:
 // another (the standard defence against a transplant attack).
 rule Server_Respond:
     [ In(<$C, $S, nc>)                 // a hello naming $S as the server
-    , !Ltk($S, ~sks) ]                 // $S's own key -- only $S has it
+    , !Ltk($S, ~sks)                   // $S's own key -- only $S has it
+    , Fr(~ns) ]                        // a fresh SERVER challenge: wire Section
+                                       //   9.1 makes authentication MUTUAL, so
+                                       //   the client must prove its key too
+                                       //   and needs something to sign
   --[ ServerAccept($S, $C, nc) ]->     // trace: $S answered $C's attach
-    [ Out(<$S, sign(<'attach', $C, $S, nc>, ~sks)>) ]
+    [ Out(<$S, ~ns, sign(<'attach', $C, $S, nc>, ~sks)>)
+    , St_Server_1($S, ~ns) ]
 
 // Step 3: the client checks the server's signature against the PUBLIC key
 // bound to the identity it intended to reach.  If it verifies, the client
@@ -182,12 +187,22 @@ rule Server_Respond:
 // one the security lemma reasons about.
 rule Client_Finish:
     [ St_Client_1($C, $S, ~nc)         // client was awaiting a reply from $S
-    , In(<$S, sig>)                    // a purported response from $S
-    , !Pk($S, pkS) ]                   // $S's public key, by identity
+    , In(<$S, ns, sig>)                // a purported response from $S
+    , !Pk($S, pkS)                     // $S's public key, by identity
+    , !Ltk($C, ~skc) ]                 // the client's own key, to answer with
     // The restriction below fires only when the signature verifies:
   --[ Eq(verify(sig, <'attach', $C, $S, ~nc>, pkS), true)
-    , ClientFinish($C, $S, ~nc) ]->    // trace: $C committed to attaching to $S
-    [ ]
+    , ClientFinish($C, $S, ~nc)        // trace: $C committed to attaching to $S
+    , Claims($C, $S, $Claim) ]->       // ... and named $Claim in its Attach
+    // $Claim IS FREE, and that is the point.  Nothing stops a client putting
+    // someone else's keyhash in `Attach` field 1; the wire's defence is the
+    // SERVER's check, not the client's restraint.
+    // The claim sits INSIDE the signature because it sits inside the
+    // authenticated channel: wire Section 9.1 carries `Attach` within the
+    // mutually authenticated transport, so it is not a separable token an
+    // adversary can re-pair with a different claim.  Modelled with the claim
+    // outside, `client_authentication` falsified on exactly that re-pairing.
+    [ Out(<$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)>) ]
 
 /*
   The Eq(...) action above is turned into a genuine equality CHECK by the
@@ -197,6 +212,49 @@ rule Client_Finish:
   the standard Tamarin idiom for "this rule only fires when this equation
   holds".
 */
+
+/*
+--------------------------------------------------------------------------------
+  THE BINDING CHECK -- `wire-format.md` Section 9.1
+--------------------------------------------------------------------------------
+  "Authentication is mutual.  The serving node authenticates the client the
+   same way, and MUST BIND THE IDENTITY FOR WHICH SESSION STATE AND QUEUED
+   DATA ARE REQUESTED TO THE IDENTITY THE TRANSPORT AUTHENTICATED, REJECTING
+   ANY MISMATCH.  Present encoding: `Attach` field 1 must equal the
+   connection-authenticated keyhash ... [otherwise a party] could claim any
+   keyhash and receive another node's queued messages."
+
+  TWO IDENTITIES, KEPT APART ON PURPOSE, because keeping them apart IS the
+  requirement.  $A is who the transport authenticated -- established by
+  verifying a signature over this server's own challenge.  $Claim is what the
+  Attach asked for.  A model carrying them as one variable cannot express the
+  attack at all, which is why this property was previously unstatable here.
+*/
+
+rule Server_Bind:
+    [ St_Server_1($S, ~ns)
+    , In(<$A, $Claim, csig>)           // the Attach, as received
+    , !Pk($A, pkA) ]
+  --[ Eq(verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, pkA), true)
+                                       // ... so the transport authenticated $A
+    , Eq($A, $Claim)                   // THE CHECK ITSELF
+    , AuthenticatedPeer($S, $A)
+    , Bound($S, $A, $Claim) ]->
+    [ Session($S, $Claim) ]
+
+/*  Queued material and its release.  design 14.1.4 has the serving node hold
+    ciphertext for an offline client; what matters here is only who it goes
+    to.                                                                     */
+rule Enqueue:
+    [ Fr(~m) ]
+  --[ Queued($R, ~m) ]->
+    [ Mail($R, ~m) ]
+
+rule Deliver:
+    [ Session($S, $R), Mail($R, m) ]
+  --[ Delivered($S, $R, m) ]->
+    [ ]
+
 /*
   ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
   and design Section 5.1 makes a keyhash a commitment to the key material --
@@ -266,6 +324,36 @@ lemma server_authentication:
      ClientFinish(C, S, nc) @ #i
      ==> ( (Ex #j. ServerAccept(S, C, nc) @ #j & #j < #i)
          | (Ex #k. Compromised(S) @ #k & #k < #i) )"
+
+/*  THE MAILBOX PROPERTY, and the reason wire Section 9.1 states the
+    consequence it does.  Queued material is released only to the party the
+    transport actually authenticated -- never to one that merely named a
+    keyhash in its Attach.
+
+    MUTATION-TESTED: delete `Eq($A, $Claim)` from Server_Bind and this
+    falsifies, with the trace wire Section 9.1 describes -- one node claiming
+    another's keyhash and collecting its mail.                             */
+lemma queued_data_reaches_only_the_authenticated_peer:
+  all-traces
+  "All S R m #i.
+     Delivered(S, R, m) @ #i
+     ==> ( (Ex #a. AuthenticatedPeer(S, R) @ #a & #a < #i)
+         | (Ex #k. Compromised(R) @ #k & #k < #i) )"
+
+/*  The other half of "authentication is mutual": a bound session names a
+    client that proved control of its key over this server's own challenge.  */
+lemma client_authentication:
+  all-traces
+  "All S A C #i.
+     Bound(S, A, C) @ #i
+     ==> ( (Ex #c. Claims(A, S, C) @ #c & #c < #i)
+         | (Ex #k. Compromised(A) @ #k & #k < #i) )"
+
+/*  ANTI-VACUITY: an attach reaches a delivery with nobody compromised.      */
+lemma a_delivery_is_reachable:
+  exists-trace
+  "Ex S R m #i.
+     Delivered(S, R, m) @ #i & not(Ex A #k. Compromised(A) @ #k)"
 
 // CLIENT-SIDE COMMIT INJECTIVITY.  A client cannot commit twice on one
 // challenge.  NAMED FOR WHAT IT PROVES: this follows from St_Client_1 being
