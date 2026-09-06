@@ -1,0 +1,180 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CompliantRecovery] Theory loaded
+[Theory CompliantRecovery] Theory translated
+[Theory CompliantRecovery] Derivation checks started
+[Theory CompliantRecovery] Derivation checks ended
+[Theory CompliantRecovery] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CompliantRecovery
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+restriction NothingExceedsTheMaximum:
+  "∀ c #i. (StrictlyGreater( c, 'max' ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ c #i. (StrictlyGreater( c, 'max' ) @ #i) ⇒ (⊥)"
+  */
+
+restriction EqualDoesNotSupersede:
+  "∀ c #i. (StrictlyGreater( c, c ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ c #i. (StrictlyGreater( c, c ) @ #i) ⇒ (⊥)"
+  */
+
+rule (modulo E) Suspects_Compromise:
+   [ Fr( ~ln ) ] --[ Suspects( $S, ~ln ) ]-> [ Line( $S, ~ln, 'open' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Seal_Then_Reissue:
+   [ Line( $S, ln, 'open' ) ]
+  --[ Sealed( $S, ln, 'max' ), SealedBeforeReissue( $S, ln ) ]->
+   [ Line( $S, ln, 'sealed' ), !LastRecord( $S, ln, 'max' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reissue_After_Sealing:
+   [ Line( $S, ln, 'sealed' ) ]
+  --[ Reissued( $S, ln ), ReissuedInOrder( $S, ln ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reissue_Then_Seal:
+   [ Line( $S, ln, 'open' ), Fr( ~c ) ]
+  --[ Reissued( $S, ln ), ReissuedOutOfOrder( $S, ln ) ]->
+   [ !LastRecord( $S, ln, ~c ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Thief_Supersedes:
+   [ !LastRecord( $S, ln, c ), In( c2 ) ]
+  --[ ThiefSuperseded( $S, ln, c2 ), StrictlyGreater( c2, c ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Chainless_Counterparty_Accepts:
+   [ In( <'record', $S, c> ) ] --[ AcceptedWithoutAChain( $S, c ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma sealing_first_leaves_nothing_to_supersede:
+  all-traces
+  "∀ S ln c #i #j.
+    ((SealedBeforeReissue( S, ln ) @ #i) ∧
+     (ThiefSuperseded( S, ln, c ) @ #j)) ⇒
+    (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S ln c #i #j.
+  (SealedBeforeReissue( S, ln ) @ #i) ∧ (ThiefSuperseded( S, ln, c ) @ #j)"
+*/
+simplify
+solve( Line( $S, ln, 'open' ) ▶₀ #i )
+  case Suspects_Compromise
+  solve( !LastRecord( $S, ~ln, c ) ▶₀ #j )
+    case Seal_Then_Reissue
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma reissuing_first_leaves_a_window:
+  exists-trace
+  "∃ S ln c #i #j.
+    ((ReissuedOutOfOrder( S, ln ) @ #i) ∧
+     (ThiefSuperseded( S, ln, c ) @ #j)) ∧
+    (#i < #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ S ln c #i #j.
+  (ReissuedOutOfOrder( S, ln ) @ #i) ∧ (ThiefSuperseded( S, ln, c ) @ #j)
+ ∧
+  #i < #j"
+*/
+simplify
+solve( Line( $S, ln, 'open' ) ▶₀ #i )
+  case Suspects_Compromise
+  solve( !LastRecord( $S, ~ln, c.1 ) ▶₀ #j )
+    case Reissue_Then_Seal
+    SOLVED // trace found
+  qed
+qed
+
+lemma the_compliant_order_completes:
+  exists-trace
+  "∃ S ln #i #j.
+    ((SealedBeforeReissue( S, ln ) @ #i) ∧ (ReissuedInOrder( S, ln ) @ #j)) ∧
+    (#i < #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ S ln #i #j.
+  (SealedBeforeReissue( S, ln ) @ #i) ∧ (ReissuedInOrder( S, ln ) @ #j)
+ ∧
+  #i < #j"
+*/
+simplify
+solve( Line( $S, ln, 'open' ) ▶₀ #i )
+  case Suspects_Compromise
+  solve( Line( $S, ~ln, 'sealed' ) ▶₀ #j )
+    case Seal_Then_Reissue
+    SOLVED // trace found
+  qed
+qed
+
+lemma thief_wins_against_a_chainless_counterparty:
+  exists-trace
+  "∃ S ln c #i #j.
+    (SealedBeforeReissue( S, ln ) @ #i) ∧
+    (AcceptedWithoutAChain( S, c ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ S ln c #i #j.
+  (SealedBeforeReissue( S, ln ) @ #i) ∧
+  (AcceptedWithoutAChain( S, c ) @ #j)"
+*/
+simplify
+solve( Line( $S, ln, 'open' ) ▶₀ #i )
+  case Suspects_Compromise
+  SOLVED // trace found
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/recovery.spthy
+
+  processing time: 0.40s
+  
+  sealing_first_leaves_nothing_to_supersede (all-traces): verified (4 steps)
+  reissuing_first_leaves_a_window (exists-trace): verified (4 steps)
+  the_compliant_order_completes (exists-trace): verified (4 steps)
+  thief_wins_against_a_chainless_counterparty (exists-trace): verified (3 steps)
+
+==============================================================================

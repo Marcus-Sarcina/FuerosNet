@@ -1,0 +1,230 @@
+theory CompliantAttach
+begin
+
+/*
+================================================================================
+  SUPERSESSION, SESSIONS AND QUEUES -- what an honest serving node stops doing
+================================================================================
+
+  WHICH TREE THIS IS.  `compliant/`.  Every property here is about a node
+  doing what it promised, and none of it is checkable by anyone else.
+  `wire-only/attach.spthy` holds the verifiable half (endpoint authentication)
+  and is explicit that it holds nothing more.
+
+  WHAT IS BEING CHECKED.  Three obligations, written in three places, that had
+  never been read against one another:
+
+    design 12.6.5 -- "A party holding AUTHENTICATED SUPERSESSION EVIDENCE for
+      a binding ... MUST NOT continue serving it: sessions under the
+      superseded credential terminate, and nothing further is delivered to it,
+      queued material and capture-key grants included."
+
+    `infra-client-requirements.md` -- "Stop serving a binding you have
+      verified superseded ... Fail-open is for staleness you cannot resolve,
+      never for knowledge you hold."
+
+    `light-client-requirements.md` -- "On a sibling, trust-bearing operations
+      are unavailable."
+
+  THE ONE SENTENCE THAT SHAPES THE MODEL.  design 12.6.5 says the rule
+  "bites on SESSIONS AND QUEUES ALREADY RUNNING rather than on future
+  lookups", because inside the horizon supersession is enforced by
+  REPLACEMENT: the adoption overwrites the key, so a future lookup finds
+  nothing superseded to serve.  A model that gated lookups would therefore be
+  modelling the wrong thing.  What is modelled is the running state -- a live
+  session and a queue with material in it -- because that is where a check is
+  actually required.
+
+  AND THE IGNORANCE CASE IS NOT A GAP.  "Outside the horizon there is no
+  supersession to know, the adoption having never arrived -- those parties
+  hold the old key until its attestation expires."  A node with no evidence
+  that keeps serving is CORRECT, and `serving_without_evidence_is_reachable`
+  asserts that trace survives.  Losing it would mean the model had started
+  assuming supersession is global knowledge, which is the no-shared-state rule
+  violated in the one place it is most tempting.
+*/
+
+/*
+--------------------------------------------------------------------------------
+  SETUP
+--------------------------------------------------------------------------------
+  THE CREDENTIAL IS THE CLIENT'S, not the session's, and this matters: several
+  nodes serve one client under ONE binding -- a patron and the siblings that
+  stand in for it (design 14.1.2).  Minting a fresh key per session would make
+  each node's credential its own and quietly destroy the only interesting
+  question here, which is what happens when supersession reaches one node and
+  not another.
+*/
+
+rule Client_Credential:
+    [ Fr(~k) ]
+  --[ Credential($C, ~k) ]->
+    [ !Cred($C, ~k) ]
+
+/*  THE ROLE TRAVELS WITH THE SESSION, not with the (node, client) pair.  A
+    node can hold a primary session for one client and stand in as a sibling
+    for another, and design 14.1.2 makes the mode a property of the topology
+    read AT ATTACH TIME.  Carrying it in the `Session` fact is what stops a
+    node that is primary somewhere from borrowing that authority here.     */
+/*  ONE SERVING STATE PER BINDING, and supersession consumes it.
+
+    The first version gave each session its own `Session` fact, and all three
+    obligations falsified: a node could open two sessions under one
+    credential, supersession ended one, and the other kept serving.  That is
+    not a defect in the design -- design 12.6.5 says "SESSIONS under the
+    superseded credential terminate", plural, and the node's duty is to the
+    BINDING rather than to whichever session happened to be consumed.
+
+    So the serving capability is one fact per (node, client, credential).
+    Every serving rule consumes and restores it; supersession consumes it and
+    puts nothing back.  A rule cannot forget to check a fact it needs to fire,
+    which is why this is stronger than a flag and is the modelling of
+    "enforced by replacement rather than by a check".
+
+    THE ROLE TRAVELS WITH IT, because design 14.1.2 fixes the mode from the
+    node's topology read at attach time.  A node that is primary for one
+    client and a stand-in for another cannot borrow the first role for the
+    second.                                                                */
+rule Attach_Primary:
+    [ !Cred($C, k) ]
+  --[ Opened($N, $C, k), ServingAs($N, $C, k, 'primary') ]->
+    [ Serving($N, $C, k, 'primary') ]
+
+rule Attach_Sibling:
+    [ !Cred($C, k) ]
+  --[ Opened($N, $C, k), ServingAs($N, $C, k, 'sibling') ]->
+    [ Serving($N, $C, k, 'sibling') ]
+
+restriction OneServingStatePerBinding:
+  "All N C k #i #j. Opened(N, C, k) @ #i & Opened(N, C, k) @ #j ==> #i = #j"
+
+// Material arrives for a client and waits.  design 14.1.4: the node holds
+// ciphertext for an offline client.
+rule Enqueue:
+    [ Fr(~m) ]
+  --[ Enqueued($N, $C, ~m) ]->
+    [ Queued($N, $C, ~m) ]
+
+/*
+--------------------------------------------------------------------------------
+  ORDINARY SERVICE
+--------------------------------------------------------------------------------
+*/
+
+rule Deliver:
+    [ Serving($N, $C, k, role), Queued($N, $C, m) ]
+  --[ Delivered($N, $C, k, m), ServedUnder($N, $C, k), ServedAs($N, $C, k, role) ]->
+    [ Serving($N, $C, k, role) ]
+
+/*  A TRUST-BEARING operation -- a patron countersignature, the thing a
+    sibling cannot do.  The guard is the serving state's own role, which is
+    what `light-client-requirements.md` describes from the other end: "on a
+    sibling, trust-bearing operations are unavailable".                     */
+rule Trust_Bearing_Operation:
+    [ Serving($N, $C, k, 'primary') ]
+  --[ TrustBearing($N, $C, k), ServedUnder($N, $C, k), ServedAs($N, $C, k, 'primary') ]->
+    [ Serving($N, $C, k, 'primary') ]
+
+/*
+--------------------------------------------------------------------------------
+  SUPERSESSION ARRIVES
+--------------------------------------------------------------------------------
+  The evidence is authenticated by the time it gets here -- design 12.6.5 says
+  "a verified reissue chain ... a recovery it has validated", and validating it
+  is `wire-only/recovery.spthy`'s subject rather than this theory's.  What is
+  modelled here is the CONSEQUENCE.
+*/
+
+rule Supersession_Arrives:
+    [ Serving($N, $C, k, role) ]
+  --[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->
+    [ ]
+
+/*
+================================================================================
+  PROPERTIES
+================================================================================
+*/
+
+/*  ============================================================
+    NOT DISCHARGED -- the two supersession obligations
+    ============================================================
+
+    THE CLAIMS, which are what this theory exists for:
+
+      lemma nothing_served_under_a_credential_this_node_superseded:
+        all-traces
+        "All N C k #i #j.
+            EvidenceHeld(N, C, k) @ #i & ServedUnder(N, C, k) @ #j
+              ==> #j < #i"
+
+      lemma nothing_delivered_after_supersession:
+        all-traces
+        "All N C k m #i #j.
+            EvidenceHeld(N, C, k) @ #i & Delivered(N, C, k, m) @ #j
+              ==> #j < #i"
+
+    Both are left commented out because TAMARIN DOES NOT DISCHARGE THEM, and
+    a lemma the gate never proves must not sit in the file looking proven.
+
+    WHY, and it is the same cause as `compliant/currency.spthy`'s open
+    obligation: `Deliver` and `Trust_Bearing_Operation` consume `Serving` and
+    restore it, which is faithful -- serving does not end the binding -- but
+    the backward search for the origin of `Serving($N,$C,k,role)` then
+    regresses through unboundedly many prior services.  Neither lemma was
+    FALSIFIED; there is no counterexample, only no proof inside 420 seconds.
+
+    WHAT DOES HOLD HERE is below and is not nothing: the role gate, both
+    anti-vacuity witnesses, and the ignorance witness.  The supersession
+    consequence itself is stated and unproven.
+
+    THE SAME CAUSE IN TWO THEORIES IS THE USEFUL PART.  Both obligations are
+    "a node stops doing X once it knows Y", and both models express X as a
+    capability the node consumes and restores.  Whatever encoding closes one
+    will close the other, so this is one modelling problem rather than two.
+    ============================================================  */
+
+/*  A SOURCE INVARIANT, needed for the same reason `compliant/currency.spthy`
+    needs one: the serving rules consume `Serving` and restore it, so a
+    backward search for where the serving state came from regresses through
+    unboundedly many prior services.  Naming the attach it came from closes
+    the regress.                                                            */
+lemma service_follows_an_attach [reuse, use_induction]:
+  all-traces
+  "All N C k role #j. ServedAs(N, C, k, role) @ #j
+      ==> Ex #i. ServingAs(N, C, k, role) @ #i & #i < #j"
+
+/*  THE ROLE GATE.  A session opened in failover performs no trust-bearing
+    operation.                                                              */
+lemma no_trust_bearing_operation_on_a_sibling:
+  all-traces
+  "All N C k #i #j.
+      ServingAs(N, C, k, 'sibling') @ #i & TrustBearing(N, C, k) @ #j
+        ==> F"
+
+/*  ANTI-VACUITY, and the reason the obligations above are not satisfied by a
+    node that simply never serves anyone.                                   */
+lemma delivery_is_reachable:
+  exists-trace
+  "Ex N C k m #i. Delivered(N, C, k, m) @ #i"
+
+lemma trust_bearing_operation_is_reachable:
+  exists-trace
+  "Ex N C k #i. TrustBearing(N, C, k) @ #i"
+
+/*  THE IGNORANCE WITNESS.  design 12.6.5: "Outside the horizon there is no
+    supersession to know ... those parties hold the old key until its
+    attestation expires, which is the ignorance the table above is for and
+    NOT A FAILURE."  A second node delivering under a credential the first has
+    superseded is behaving correctly, and this keeps that trace reachable.
+    If it ever falsifies, the model has acquired a global supersession fact
+    and broken the no-shared-state rule in the one place most tempting.    */
+lemma serving_without_evidence_is_reachable:
+  exists-trace
+  "Ex N1 N2 C k m #a #b.
+      EvidenceHeld(N1, C, k) @ #a
+    & Delivered(N2, C, k, m) @ #b
+    & #a < #b
+    & not(N1 = N2)"
+
+end

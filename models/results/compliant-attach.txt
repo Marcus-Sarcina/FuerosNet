@@ -1,0 +1,256 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CompliantAttach] Theory loaded
+[Theory CompliantAttach] Theory translated
+[Theory CompliantAttach] Derivation checks started
+[Theory CompliantAttach] Derivation checks ended
+[Theory CompliantAttach] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CompliantAttach
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+rule (modulo E) Client_Credential:
+   [ Fr( ~k ) ] --[ Credential( $C, ~k ) ]-> [ !Cred( $C, ~k ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attach_Primary:
+   [ !Cred( $C, k ) ]
+  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'primary' ) ]->
+   [ Serving( $N, $C, k, 'primary' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attach_Sibling:
+   [ !Cred( $C, k ) ]
+  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'sibling' ) ]->
+   [ Serving( $N, $C, k, 'sibling' ) ]
+
+  /* has exactly the trivial AC variant */
+
+restriction OneServingStatePerBinding:
+  "∀ N C k #i #j.
+    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ N C k #i #j.
+    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Enqueue:
+   [ Fr( ~m ) ] --[ Enqueued( $N, $C, ~m ) ]-> [ Queued( $N, $C, ~m ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Deliver:
+   [ Serving( $N, $C, k, role ), Queued( $N, $C, m ) ]
+  --[
+  Delivered( $N, $C, k, m ), ServedUnder( $N, $C, k ),
+  ServedAs( $N, $C, k, role )
+  ]->
+   [ Serving( $N, $C, k, role ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Trust_Bearing_Operation:
+   [ Serving( $N, $C, k, 'primary' ) ]
+  --[
+  TrustBearing( $N, $C, k ), ServedUnder( $N, $C, k ),
+  ServedAs( $N, $C, k, 'primary' )
+  ]->
+   [ Serving( $N, $C, k, 'primary' ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Supersession_Arrives:
+   [ Serving( $N, $C, k, role ) ]
+  --[ EvidenceHeld( $N, $C, k ), Terminated( $N, $C, k ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma service_follows_an_attach [reuse, use_induction]:
+  all-traces
+  "∀ N C k role #j.
+    (ServedAs( N, C, k, role ) @ #j) ⇒
+    (∃ #i. (ServingAs( N, C, k, role ) @ #i) ∧ (#i < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k role #j.
+  (ServedAs( N, C, k, role ) @ #j)
+ ∧
+  ∀ #i. (ServingAs( N, C, k, role ) @ #i) ⇒ ¬(#i < #j)"
+*/
+induction
+  case empty_trace
+  by contradiction /* from formulas */
+next
+  case non_empty_trace
+  solve( (last(#j))  ∥
+         (∃ #i. (ServingAs( N, C, k, role ) @ #i) ∧ (¬(last(#i))) ∧ (#i < #j)) )
+    case case_1
+    solve( ServedAs( N, C, k, role ) @ #j )
+      case Deliver
+      solve( Queued( $N, $C, m ) ▶₁ #j )
+        case Enqueue
+        solve( Serving( $N, $C, k, role ) ▶₀ #j )
+          case Attach_Primary
+          by contradiction /* from formulas */
+        next
+          case Attach_Sibling
+          by contradiction /* from formulas */
+        next
+          case Deliver
+          by contradiction /* from formulas */
+        next
+          case Trust_Bearing_Operation
+          by contradiction /* from formulas */
+        qed
+      qed
+    next
+      case Trust_Bearing_Operation
+      solve( Serving( $N, $C, k, 'primary' ) ▶₀ #j )
+        case Attach_Primary
+        by contradiction /* from formulas */
+      next
+        case Deliver
+        by contradiction /* from formulas */
+      next
+        case Trust_Bearing_Operation
+        by contradiction /* from formulas */
+      qed
+    qed
+  next
+    case case_2
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma no_trust_bearing_operation_on_a_sibling:
+  all-traces
+  "∀ N C k #i #j.
+    ((ServingAs( N, C, k, 'sibling' ) @ #i) ∧
+     (TrustBearing( N, C, k ) @ #j)) ⇒
+    (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k #i #j.
+  (ServingAs( N, C, k, 'sibling' ) @ #i) ∧ (TrustBearing( N, C, k ) @ #j)"
+*/
+simplify
+solve( ServingAs( $N, $C, k, 'sibling' ) @ #i.1 )
+  case Attach_Sibling
+  solve( !Cred( $C, k ) ▶₀ #i )
+    case Client_Credential
+    by solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+  qed
+qed
+
+lemma delivery_is_reachable:
+  exists-trace "∃ N C k m #i. Delivered( N, C, k, m ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C k m #i. (Delivered( N, C, k, m ) @ #i)"
+*/
+simplify
+solve( Queued( $N, $C, m ) ▶₁ #i )
+  case Enqueue
+  solve( ServingAs( $N, $C, k, role ) @ #i.1 )
+    case Attach_Primary
+    solve( !Cred( $C, k ) ▶₀ #i.1 )
+      case Client_Credential
+      solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #i )
+        case Attach_Primary
+        SOLVED // trace found
+      qed
+    qed
+  qed
+qed
+
+lemma trust_bearing_operation_is_reachable:
+  exists-trace "∃ N C k #i. TrustBearing( N, C, k ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C k #i. (TrustBearing( N, C, k ) @ #i)"
+*/
+simplify
+solve( ServingAs( $N, $C, k, 'primary' ) @ #i.1 )
+  case Attach_Primary
+  solve( !Cred( $C, k ) ▶₀ #i.1 )
+    case Client_Credential
+    solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #i )
+      case Attach_Primary
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma serving_without_evidence_is_reachable:
+  exists-trace
+  "∃ N1 N2 C k m #a #b.
+    (((EvidenceHeld( N1, C, k ) @ #a) ∧ (Delivered( N2, C, k, m ) @ #b)) ∧
+     (#a < #b)) ∧
+    (¬(N1 = N2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N1 N2 C k m #a #b.
+  (EvidenceHeld( N1, C, k ) @ #a) ∧ (Delivered( N2, C, k, m ) @ #b)
+ ∧
+  (#a < #b) ∧ (¬(N1 = N2))"
+*/
+simplify
+solve( Serving( $N, $C, k, role ) ▶₀ #a )
+  case Attach_Primary
+  solve( Queued( $N.1, $C, m ) ▶₁ #b )
+    case Enqueue
+    solve( ServingAs( $N.1, $C, ~k, role ) @ #i )
+      case Attach_Primary
+      solve( !Cred( $C, ~k ) ▶₀ #i )
+        case Client_Credential
+        solve( Serving( $N.1, $C, ~k, 'primary' ) ▶₀ #b )
+          case Attach_Primary
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/attach.spthy
+
+  processing time: 0.61s
+  
+  service_follows_an_attach (all-traces): verified (15 steps)
+  no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)
+  delivery_is_reachable (exists-trace): verified (6 steps)
+  trust_bearing_operation_is_reachable (exists-trace): verified (5 steps)
+  serving_without_evidence_is_reachable (exists-trace): verified (7 steps)
+
+==============================================================================

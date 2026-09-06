@@ -45,15 +45,26 @@ for m in PartitionMerge CurrencyEscalation CycleDetection; do
   fi
 done
 
+# TWO TREES, because they prove different things and both are wanted:
+#   wire-only/  -- properties a third party checks from bytes on the wire.
+#   compliant/  -- that an honest client's OWN STATED OBLIGATIONS, in
+#                  `light-client-requirements.md` and
+#                  `infra-client-requirements.md`, are mutually coherent.
+# A compliant/ lemma is NOT a claim that anyone can verify compliance
+# remotely -- it is a claim that a node doing what it promised cannot reach
+# a state its own commitments forbid.  See models/README.md.
 echo "=== 3. Tamarin symbolic protocol models ==="
-for t in attach currency recovery ceremony; do
+for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/ceremony \
+            compliant/currency compliant/attach compliant/ceremony compliant/recovery; do
+  t="${spec%%/*}-${spec##*/}"
+  [ -f "$HERE/tamarin/$spec.spthy" ] || continue
   out="$RESULTS/$t.txt"
   # A TIMEOUT, because a theory whose search does not converge would
   # otherwise hang this gate forever -- which happened while rebuilding the
   # currency model on 2026-09-05.  A proof needing longer than this needs a
   # hint, not a longer wall clock.
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --prove "$HERE/tamarin/$t.spthy" > "$out" 2>&1
+      "$TAMARIN" --prove "$HERE/tamarin/$spec.spthy" > "$out" 2>&1
   if [ $? -eq 124 ]; then
     echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"
     fail=1; continue

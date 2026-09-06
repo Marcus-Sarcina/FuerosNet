@@ -1,0 +1,175 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CompliantCeremony] Theory loaded
+[Theory CompliantCeremony] Theory translated
+[Theory CompliantCeremony] Derivation checks started
+[Theory CompliantCeremony] Derivation checks ended
+[Theory CompliantCeremony] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CompliantCeremony
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+rule (modulo E) Neighbour:
+   [ ] --[ IsNeighbour( $X, $W ) ]-> [ !InNeighbourhood( $X, $W ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Nominate:
+   [ !InNeighbourhood( $Other, $W ) ]
+  --[ Nominated( $P, $Other, $W ), NotInOwn( $P, $W ) ]->
+   [ !Nomination( $P, $Other, $W ) ]
+
+  /* has exactly the trivial AC variant */
+
+restriction NeverFromYourOwnNeighbourhood:
+  "∀ P W #i. (NotInOwn( P, W ) @ #i) ⇒ (¬(∃ #j. IsNeighbour( P, W ) @ #j))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ P W #i. (NotInOwn( P, W ) @ #i) ⇒ (¬(∃ #j. IsNeighbour( P, W ) @ #j))"
+  */
+
+rule (modulo E) Propose_Record:
+   [ Fr( ~rec ), In( <$W, $P, $Other> ) ]
+  --[ Proposed( ~rec, $W, $P, $Other ) ]->
+   [ !Record( ~rec, $W, $P, $Other ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Sign_Record:
+   [ !Record( rec, $W, $P, $Other ), !Nomination( $P, $Other, $W ) ]
+  --[ Signed( rec, $P ), SignedAttributing( rec, $P, $W ) ]->
+   [ Out( <'signed', rec, $P> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Sign_Without_Checking:
+   [ !Record( rec, $W, $P, $Other ) ]
+  --[
+  Signed( rec, $P ), SignedAttributing( rec, $P, $W ),
+  SkippedTheCheck( $P )
+  ]->
+   [ Out( <'signed', rec, $P> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma no_signature_over_a_misattributed_nominee:
+  all-traces
+  "∀ rec P W #i.
+    ((SignedAttributing( rec, P, W ) @ #i) ∧
+     (¬(∃ #s. SkippedTheCheck( P ) @ #s))) ⇒
+    (∃ Other #n. (Nominated( P, Other, W ) @ #n) ∧ (#n < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rec P W #i.
+  (SignedAttributing( rec, P, W ) @ #i)
+ ∧
+  (∀ #s. (SkippedTheCheck( P ) @ #s) ⇒ ⊥) ∧
+  (∀ Other #n. (Nominated( P, Other, W ) @ #n) ⇒ ¬(#n < #i))"
+*/
+simplify
+solve( SignedAttributing( rec, P, W ) @ #i )
+  case Sign_Record
+  solve( !Record( rec, $W, $P, $Other ) ▶₀ #i )
+    case Propose_Record
+    solve( !Nomination( $P, $Other, $W ) ▶₁ #i )
+      case Nominate
+      by contradiction /* from formulas */
+    qed
+  qed
+next
+  case Sign_Without_Checking
+  by contradiction /* from formulas */
+qed
+
+lemma no_nominee_from_the_nominators_own_neighbourhood:
+  all-traces
+  "∀ P Other W #i #j.
+    ((Nominated( P, Other, W ) @ #i) ∧ (IsNeighbour( P, W ) @ #j)) ⇒ (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P Other W #i #j.
+  (Nominated( P, Other, W ) @ #i) ∧ (IsNeighbour( P, W ) @ #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma an_honest_signature_is_reachable:
+  exists-trace
+  "∃ rec P W #i.
+    (SignedAttributing( rec, P, W ) @ #i) ∧
+    (¬(∃ #s. SkippedTheCheck( P ) @ #s))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ rec P W #i.
+  (SignedAttributing( rec, P, W ) @ #i)
+ ∧
+  ∀ #s. (SkippedTheCheck( P ) @ #s) ⇒ ⊥"
+*/
+simplify
+solve( SignedAttributing( rec, P, W ) @ #i )
+  case Sign_Record
+  solve( !Record( rec, $W, $P, $Other ) ▶₀ #i )
+    case Propose_Record
+    solve( !Nomination( $P, $Other, $W ) ▶₁ #i )
+      case Nominate
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma misattribution_is_possible_without_the_check:
+  exists-trace
+  "∃ rec P W #i.
+    ((SignedAttributing( rec, P, W ) @ #i) ∧ (SkippedTheCheck( P ) @ #i)) ∧
+    (¬(∃ Other #n. Nominated( P, Other, W ) @ #n))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ rec P W #i.
+  (SignedAttributing( rec, P, W ) @ #i) ∧ (SkippedTheCheck( P ) @ #i)
+ ∧
+  ∀ Other #n. (Nominated( P, Other, W ) @ #n) ⇒ ⊥"
+*/
+simplify
+solve( !Record( rec, $W, $P, $Other ) ▶₀ #i )
+  case Propose_Record
+  solve( SignedAttributing( rec.2, $P, W.1 ) @ #i )
+    case Sign_Without_Checking
+    SOLVED // trace found
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/ceremony.spthy
+
+  processing time: 0.36s
+  
+  no_signature_over_a_misattributed_nominee (all-traces): verified (6 steps)
+  no_nominee_from_the_nominators_own_neighbourhood (all-traces): verified (2 steps)
+  an_honest_signature_is_reachable (exists-trace): verified (5 steps)
+  misattribution_is_possible_without_the_check (exists-trace): verified (4 steps)
+
+==============================================================================

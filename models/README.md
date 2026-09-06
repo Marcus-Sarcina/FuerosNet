@@ -2,7 +2,7 @@
 
 Stage 1 of `Robot/review-plan.md` — the formal-modelling reviews the plan
 calls "the highest-value reviews in the plan and the ones least replaceable
-by an LLM pass." Three tool families, eight artifacts, each checking claims
+by an LLM pass." Three tool families, twelve artifacts, each checking claims
 the design documents make analytically and had never run.
 
 **Every result here is the tool's, not the author's.** As the plan states:
@@ -11,11 +11,66 @@ verification result comes from the tool." Re-run everything with
 `./run-all.sh`; it exits non-zero if any check regresses.
 
 ```bash
-./run-all.sh          # builds and checks all eight; writes results/
+./run-all.sh          # builds and checks all twelve; writes results/
 ```
 
-Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (25 lemmas).
+Current status: 3 Python assertion families, 3 TLA+ models (invariants +
+temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
+(25 lemmas) and `compliant/` (18 lemmas).
+
+**Three obligations are stated and NOT DISCHARGED**, all in `compliant/`:
+`no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
+`nothing_served_under_a_credential_this_node_superseded` /
+`nothing_delivered_after_supersession` in `attach.spthy`. Each sits in its
+file, commented out, under a block saying what it claims and what was tried.
+None was falsified — there is no counterexample, only no proof. They share one
+cause: the serving and issuing rules consume a linear capability and restore
+it, so the backward search for its origin regresses through unboundedly many
+prior services. Source invariants closed that regress for the neighbouring
+properties in both theories and did not close it for these three.
+
+---
+
+## Two Tamarin trees, and why
+
+`tamarin/` holds two directories that prove different things. Keeping them
+apart was a decision [author, 2026-09-06] after a review asked which kind of
+property the suite was for; the answer was both, separately.
+
+**`wire-only/`** — properties a third party can check from bytes on the wire.
+A relying party receives a record, a staple, an attach response, and these
+theories say what it can conclude from the cryptography alone. This is the
+tree whose results transfer to an adversary who wrote their own client,
+because nothing in it depends on anyone keeping a promise.
+
+**`compliant/`** — that an honest node's **own stated obligations are mutually
+coherent**. `light-client-requirements.md` and `infra-client-requirements.md`
+are lists of commitments, several of which the design says plainly that nobody
+can verify: *"Nobody can check this for you, and this is a commitment rather
+than an enforceable rule"*; *"The wire cannot check this — you can, and you are
+the only party [who can]."* A `compliant/` lemma is **not** a claim that
+compliance is checkable. It says that a node doing what it promised cannot
+reach a state its own commitments forbid — which is worth knowing, because the
+commitments were written separately, in two documents, over months, and had
+never been read against one another by anything but a person.
+
+The distinction matters when quoting a result. A green `wire-only/` lemma
+survives a hostile counterparty. A green `compliant/` lemma does not: it
+describes a node that kept its word, and says nothing whatever about one that
+did not. Every `compliant/` theory carries at least one lemma asserting that
+the non-compliant trace is **still reachable**, so the tree cannot quietly
+start proving that the wire enforces what the design says it cannot.
+
+**What the split has already produced.** `compliant/currency.spthy`'s main
+obligation — *"issue only for the key you currently record"* — is **false read
+on its own**. The adversary can hand an issuer back a key it already
+superseded, and the issuer then issues for it in full compliance, because it is
+once again the key it records. What forbids that is written in a different
+document and binds a different party: the light client's *"never take a series
+reissue into a series you have occupied before"*, which a counterparty holding
+the chain can enforce. The infra node's rule is coherent only in company. No
+`wire-only/` theory could have found this — an attestation issued after the
+walk-back is perfectly well formed, and no relying party can see the history.
 
 ---
 
@@ -593,7 +648,16 @@ then-diagnose loop *is* the value of the exercise.
 
 ---
 
-## Not open: currency supersession is client behaviour
+## Not open as a wire property: currency supersession is client behaviour
+
+**Superseded [author, 2026-09-06] in one respect only.** Everything below
+remains true -- neither half is enforceable, and no `wire-only/` theory can
+carry it. What changed is that unenforceable-by-a-third-party stopped meaning
+unmodellable: `compliant/currency.spthy` and `compliant/attach.spthy` now model
+the two halves as the commitments they are, and ask whether a node keeping them
+can still reach a state they forbid. That is a different question from the one
+answered here, and this section's answer to *its* question stands.
+
 
 Three reviews in a row filed `currency.spthy`'s missing "current key" as a
 **model gap**, and a rebuild was attempted and reverted before the author

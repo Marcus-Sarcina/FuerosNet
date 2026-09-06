@@ -1,0 +1,144 @@
+theory CompliantCeremony
+begin
+
+/*
+================================================================================
+  WITNESS NOMINATION -- what an honest participant refuses to sign
+================================================================================
+
+  WHICH TREE THIS IS.  `compliant/`.  The obligation modelled here is one the
+  design says in terms cannot be checked by anyone else, and names the party
+  who can:
+
+    `light-client-requirements.md` -- "Refuse to sign a record attributing to
+      you a witness you did not nominate.  Your client knows exactly which
+      witnesses it nominated; an entry claiming `nominated_by = you` outside
+      that set is the counterparty dressing its own curation in your name, and
+      it defeats the split check from inside an apparently balanced record.
+      THE WIRE CANNOT CHECK THIS (`nominated_by` is a recorded claim) -- YOU
+      CAN, AND YOU ARE THE ONLY PARTY [who can]."
+
+  So `wire-only/ceremony.spthy` structurally cannot hold this property, and
+  not through any shortcoming of that theory: `nominated_by` is a claim in a
+  record, and a well-formed record can carry a false one.  The check lives in
+  one participant's own memory of what it nominated.  This theory is that
+  memory made into a state.
+
+  WHAT IT DOES NOT TOUCH.  Co-presence.  That is an axiom in the wire theory
+  and remains one here; nothing about nomination bears on whether anybody was
+  in a room.  This theory takes the ceremony as happening and asks only whether
+  the roster an honest participant signs can misattribute its own nominees.
+*/
+
+/*
+--------------------------------------------------------------------------------
+  NEIGHBOURHOODS AND NOMINATION
+--------------------------------------------------------------------------------
+  design 7.1's rule is directional: you nominate from the OTHER party's
+  neighbourhood.  A witness drawn from your own is the failure mode the split
+  exists to prevent, so `Nominate` requires membership of the counterparty's
+  neighbourhood and non-membership of the nominator's.  Overlap is possible in
+  the real graph -- horizons intersect -- and the rule resolves it the strict
+  way: "never from your own" is not weakened by the node also being in theirs.
+*/
+
+rule Neighbour:
+    [ ]
+  --[ IsNeighbour($X, $W) ]->
+    [ !InNeighbourhood($X, $W) ]
+
+rule Nominate:
+    [ !InNeighbourhood($Other, $W) ]
+  --[ Nominated($P, $Other, $W)
+    , NotInOwn($P, $W) ]->
+    [ !Nomination($P, $Other, $W) ]
+
+restriction NeverFromYourOwnNeighbourhood:
+  "All P W #i. NotInOwn(P, W) @ #i ==> not(Ex #j. IsNeighbour(P, W) @ #j)"
+
+/*
+--------------------------------------------------------------------------------
+  THE RECORD, AND THE SIGNATURE DECISION
+--------------------------------------------------------------------------------
+  A proposed record attributes each witness to a nominator.  The attribution
+  is a CLAIM -- `In(...)`, straight off the network, chosen by whoever
+  assembled the record.  That is faithful: the counterparty assembles a body
+  and offers it, and the wire has no way to tell a true `nominated_by` from a
+  false one.
+
+  The honest participant's rule is the guard on `Sign`.  It signs only if its
+  own memory of what it nominated agrees with what the record says it
+  nominated.  `!Nomination` is persistent because a client's record of its own
+  nominations is not consumed by consulting it.
+*/
+
+rule Propose_Record:
+    [ Fr(~rec), In(<$W, $P, $Other>) ]
+  --[ Proposed(~rec, $W, $P, $Other) ]->
+    [ !Record(~rec, $W, $P, $Other) ]
+
+/*  THE OBLIGATION AS A GUARD.  Signing consumes nothing and asserts one
+    thing: a nomination of $W by $P really happened.  A record attributing a
+    witness to $P that $P never nominated cannot reach this rule.          */
+rule Sign_Record:
+    [ !Record(rec, $W, $P, $Other), !Nomination($P, $Other, $W) ]
+  --[ Signed(rec, $P), SignedAttributing(rec, $P, $W) ]->
+    [ Out(<'signed', rec, $P>) ]
+
+/*  The dishonest alternative, present so the property is not true merely
+    because no rule could ever misattribute.  A client that skips the check
+    signs whatever it is handed -- and this is what the wire permits, since
+    such a record is well formed.  The lemmas below carve it out by name,
+    which is the honest way to state a compliance property: it holds of a
+    node that follows the rule, and says nothing about one that does not.  */
+rule Sign_Without_Checking:
+    [ !Record(rec, $W, $P, $Other) ]
+  --[ Signed(rec, $P), SignedAttributing(rec, $P, $W)
+    , SkippedTheCheck($P) ]->
+    [ Out(<'signed', rec, $P>) ]
+
+/*
+================================================================================
+  PROPERTIES
+================================================================================
+*/
+
+/*  THE OBLIGATION.  A participant that ran the check signs no record
+    attributing to it a witness it did not nominate.  The carve-out names the
+    non-compliant rule rather than a compromise: this is a theory about
+    keeping a promise, and the way to break it is to not keep it.          */
+lemma no_signature_over_a_misattributed_nominee:
+  all-traces
+  "All rec P W #i.
+      SignedAttributing(rec, P, W) @ #i
+      & not(Ex #s. SkippedTheCheck(P) @ #s)
+        ==> Ex Other #n. Nominated(P, Other, W) @ #n & #n < #i"
+
+/*  THE DIRECTIONAL RULE.  No witness a compliant participant nominated is
+    drawn from its own neighbourhood -- design 7.1's "never from your own",
+    which is what makes the split mean anything.                           */
+lemma no_nominee_from_the_nominators_own_neighbourhood:
+  all-traces
+  "All P Other W #i #j.
+      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j
+        ==> F"
+
+/*  ANTI-VACUITY.  An honest participant signs a record.                   */
+lemma an_honest_signature_is_reachable:
+  exists-trace
+  "Ex rec P W #i.
+      SignedAttributing(rec, P, W) @ #i
+    & not(Ex #s. SkippedTheCheck(P) @ #s)"
+
+/*  THE WITNESS THAT THE CHECK IS LOAD-BEARING.  A misattributed record CAN
+    be signed -- by a client that skipped the check.  If this ever falsifies,
+    the model has made the wire enforce something the design says it cannot,
+    and the first lemma would be true for the wrong reason.                */
+lemma misattribution_is_possible_without_the_check:
+  exists-trace
+  "Ex rec P W #i.
+      SignedAttributing(rec, P, W) @ #i
+    & SkippedTheCheck(P) @ #i
+    & not(Ex Other #n. Nominated(P, Other, W) @ #n)"
+
+end

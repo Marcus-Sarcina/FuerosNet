@@ -1,0 +1,173 @@
+theory CompliantRecovery
+begin
+
+/*
+================================================================================
+  SEALING A LINE BEFORE LEAVING IT
+================================================================================
+
+  WHICH TREE THIS IS.  `compliant/`.  `wire-only/recovery.spthy` proves what a
+  patron can check about recovery evidence.  This theory is about an ORDER OF
+  OPERATIONS the subject's own client must observe, which no one else can
+  verify it observed.
+
+  THE OBLIGATION.  `light-client-requirements.md`:
+
+    "On suspected key compromise, SEAL BEFORE YOU TAKE A SERIES REISSUE.  Set
+     the counter of the series you are leaving to its maximum, then take the
+     reissue naming that value, and do it for every patron relationship you
+     hold.  Nothing the holder of your old key signs can then supersede your
+     last record in that line.  ACT ON SUSPICION: against a counterparty that
+     holds no chain this is a race, and the thief wins it by reaching them
+     first."
+
+  and `wire-format.md` 4.6 supplies the arithmetic the promise rests on:
+
+    "A node that believes its key is compromised sets the counter it is
+     leaving to the MAXIMUM, then reissues naming that value -- after which
+     nothing the thief signs can supersede it, since a strictly greater
+     counter does not exist and an equal one [does not supersede]."
+
+  WHAT IS ACTUALLY BEING CHECKED.  Not that the arithmetic is right -- it is,
+  trivially.  What is worth checking is that the ORDER is load-bearing and
+  that the model says so: seal-then-reissue holds the line, and the reverse
+  order does not.  A client that reissues first and seals afterwards leaves a
+  window, and the design's "act on suspicion" is a statement about that
+  window.  Both traces are asserted below, because a theory that proved only
+  the good order would not show that the order is what did the work.
+
+  THE RACE IS NOT MODELLED AWAY.  "Against a counterparty that holds no chain
+  this is a race, and the thief wins it by reaching them first."  A holder
+  with no chain cannot rank the two records at all, and
+  `thief_wins_against_a_chainless_counterparty` keeps that trace reachable.
+  It is an accepted residual, not a gap, and a model that lost it would be
+  claiming more than the design does.
+*/
+
+/*
+--------------------------------------------------------------------------------
+  COUNTERS
+--------------------------------------------------------------------------------
+  Counters are symbolic.  The only facts needed are the two `wire-format.md`
+  4.6 relies on: nothing is strictly greater than the maximum, and equality
+  does not supersede.  Both are restrictions on a `StrictlyGreater` action
+  rather than arithmetic, which keeps the search small and models exactly the
+  property the text invokes -- no more.
+*/
+
+restriction NothingExceedsTheMaximum:
+  "All c #i. StrictlyGreater(c, 'max') @ #i ==> F"
+
+restriction EqualDoesNotSupersede:
+  "All c #i. StrictlyGreater(c, c) @ #i ==> F"
+
+/*
+--------------------------------------------------------------------------------
+  THE SUBJECT'S TWO ORDERS
+--------------------------------------------------------------------------------
+*/
+
+/*  THE LINE IS THE UNIT, not the subject.  A node holds one series per
+    patron relationship and the requirement says to seal "for EVERY patron
+    relationship you hold" -- so the promise is made per line, and a subject
+    sealing one line says nothing about another.  Modelling it per subject
+    made the main lemma false for an uninteresting reason: one `$S` could run
+    the compliant order on one line and the careless order on another, and
+    the thief's success on the second falsified a claim about the first.  */
+rule Suspects_Compromise:
+    [ Fr(~ln) ]
+  --[ Suspects($S, ~ln) ]->
+    [ Line($S, ~ln, 'open') ]
+
+/*  THE COMPLIANT ORDER.  Seal the line being left at the maximum counter,
+    THEN take the reissue.  The seal is the last thing the old key does
+    (`light-client-requirements.md`, design 9.0), which is why it consumes
+    the open line and nothing reopens it.                                   */
+rule Seal_Then_Reissue:
+    [ Line($S, ln, 'open') ]
+  --[ Sealed($S, ln, 'max'), SealedBeforeReissue($S, ln) ]->
+    [ Line($S, ln, 'sealed'), !LastRecord($S, ln, 'max') ]
+
+rule Reissue_After_Sealing:
+    [ Line($S, ln, 'sealed') ]
+  --[ Reissued($S, ln), ReissuedInOrder($S, ln) ]->
+    [ ]
+
+/*  THE OTHER ORDER, present because the property is about which one holds.
+    The client reissues while the old line is still open, and seals later --
+    or not at all.  The line's last record is then whatever counter it had
+    reached, not the maximum.                                               */
+rule Reissue_Then_Seal:
+    [ Line($S, ln, 'open'), Fr(~c) ]
+  --[ Reissued($S, ln), ReissuedOutOfOrder($S, ln) ]->
+    [ !LastRecord($S, ln, ~c) ]
+
+/*
+--------------------------------------------------------------------------------
+  THE THIEF
+--------------------------------------------------------------------------------
+  The thief holds the old key and can sign a record in the abandoned line at
+  any counter it likes.  Superseding the subject's last record requires a
+  STRICTLY GREATER counter, which is where the two restrictions above bite.
+*/
+
+rule Thief_Supersedes:
+    [ !LastRecord($S, ln, c), In(c2) ]
+  --[ ThiefSuperseded($S, ln, c2)
+    , StrictlyGreater(c2, c) ]->
+    [ ]
+
+/*  A counterparty that HOLDS THE CHAIN rejects the abandoned series outright
+    -- `wire-format.md` 4.6: it "knows the series was abandoned and MUST
+    reject records in it whatever their counter".  A counterparty holding no
+    chain has no basis to rank and takes what reaches it first.             */
+rule Chainless_Counterparty_Accepts:
+    [ In(<'record', $S, c>) ]
+  --[ AcceptedWithoutAChain($S, c) ]->
+    [ ]
+
+/*
+================================================================================
+  PROPERTIES
+================================================================================
+*/
+
+/*  THE OBLIGATION.  A subject that sealed before reissuing has nothing the
+    thief can supersede.  This is the promise in the client requirement,
+    stated as a trace property.                                             */
+lemma sealing_first_leaves_nothing_to_supersede:
+  all-traces
+  "All S ln c #i #j.
+      SealedBeforeReissue(S, ln) @ #i & ThiefSuperseded(S, ln, c) @ #j
+        ==> F"
+
+/*  THE ORDER IS WHAT DID IT.  Reissue first and the thief can supersede --
+    so the requirement's word "before" is load-bearing and not stylistic.
+    If this ever falsifies, the model has stopped distinguishing the two
+    orders and the lemma above would hold for the wrong reason.             */
+lemma reissuing_first_leaves_a_window:
+  exists-trace
+  "Ex S ln c #i #j.
+      ReissuedOutOfOrder(S, ln) @ #i
+    & ThiefSuperseded(S, ln, c) @ #j
+    & #i < #j"
+
+/*  ANTI-VACUITY: the compliant path completes.                             */
+lemma the_compliant_order_completes:
+  exists-trace
+  "Ex S ln #i #j.
+      SealedBeforeReissue(S, ln) @ #i
+    & ReissuedInOrder(S, ln) @ #j
+    & #i < #j"
+
+/*  THE ACCEPTED RESIDUAL.  Sealing protects a counterparty that can rank
+    records.  One holding no chain cannot, and "the thief wins it by reaching
+    them first."  Keeping this reachable is what stops the theory from
+    reading as though sealing were a complete defence.                      */
+lemma thief_wins_against_a_chainless_counterparty:
+  exists-trace
+  "Ex S ln c #i #j.
+      SealedBeforeReissue(S, ln) @ #i
+    & AcceptedWithoutAChain(S, c) @ #j"
+
+end

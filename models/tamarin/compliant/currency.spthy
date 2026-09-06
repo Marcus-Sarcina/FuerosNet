@@ -1,0 +1,288 @@
+theory CompliantCurrency
+begin
+
+/*
+================================================================================
+  CURRENCY ISSUANCE AGAINST THE ISSUER'S OWN RECORD
+================================================================================
+
+  WHICH TREE THIS IS.  `compliant/`, not `wire-only/`.  Nothing here is
+  checkable by a third party, and `infra-client-requirements.md` says so in
+  the very obligation this theory models:
+
+      "Issue only for the key you currently record.  A recovery adoption you
+       have received overwrites your record of that subject (design 9.0.2),
+       and after it you have nothing to issue for the old key and MUST NOT.
+       NOBODY CAN CHECK THIS FOR YOU, and this is a commitment rather than an
+       enforceable rule (design 1.1)."
+
+  So the question here is NOT "can a relying party verify the issuer obeyed?"
+  -- it cannot, and `wire-only/currency.spthy` is where the verifiable half
+  lives.  The question is whether a node that DOES obey can still reach a
+  state its own commitments forbid.  That is a coherence property of the
+  written obligations, and it is worth checking because the obligations were
+  written separately: design 12.6.5, design 9.0.2, and the infra-client rule
+  above have never been read against one another by anything but a person.
+
+  WHY THE RECORD IS PER-ISSUER, which is the whole shape of this model.
+  design 12.6.5 does not promise that a rotation reaches every issuer.  It
+  says the opposite, and prices it:
+
+      "Issuance survives what replication does not.  A sibling issues a FRESH
+       attestation reflecting whatever rotation reached the replicated state."
+
+  So `Record` is indexed by ISSUER as well as subject.  A sibling that has not
+  yet received the recovery adoption records the old key, and issuing for it
+  is COMPLIANT -- it is issuing for the key it currently records.  The
+  obligation binds each issuer to its own record and to nothing else.  Any
+  model with a single global current-key fact would prove a stronger property
+  than the design claims, and would be wrong.  `stale_sibling_issuance_is_
+  reachable` below exists to keep that honest: it asserts the lagging trace is
+  still THERE.  If a later edit makes that lemma falsify, the model has
+  quietly started assuming instant replication.
+
+  THE ABSTRACTION.  Signatures are gone.  `wire-only/currency.spthy` proves an
+  accepted attestation is bound to its subject, key and epoch by a genuine
+  signature; repeating that here would duplicate it and let the two copies
+  drift.  This theory keeps only the STATE MACHINE, which is what the wire
+  theory cannot see.
+*/
+
+builtins: multiset
+
+/*
+--------------------------------------------------------------------------------
+  SETUP
+--------------------------------------------------------------------------------
+*/
+
+// An issuer begins with a record of some subject's key.  $I ranges over the
+// patron and its stand-ins alike: design 12.6.5.1's ladder puts sibling,
+// grandpatron and down-line issuers under the SAME obligation, each against
+// its own replicated record, so one rule covers every rung.
+/*  THE KEY IS THE SUBJECT'S, and several issuers record the same one -- the
+    patron and the siblings that stand in for it (design 12.6.5.1).  Minting
+    a fresh key per issuer would make each issuer's key its own and destroy
+    the only interesting question here, which is what happens when a rotation
+    reaches one issuer and not another.  `stale_sibling_issuance_is_reachable`
+    falsified for exactly that reason before this was split out.            */
+rule Subject_Key:
+    [ Fr(~k) ]
+  --[ SubjectKey($S, ~k) ]->
+    [ !Key($S, ~k), Out(~k) ]
+
+rule Initial_Record:
+    [ !Key($S, k) ]
+  --[ RecordOpened($I, $S, k), OpenedFor($I, $S), Installed($I, $S, k) ]->
+    [ Record($I, $S, k) ]
+
+/*  ONE RECORD PER SUBJECT, PER ISSUER, and the obligation is unstatable
+    without it: infra-client says an adoption "overwrites YOUR RECORD of that
+    subject" -- singular, one entry that a later adoption replaces.  An issuer
+    holding two records for one subject could supersede one and keep issuing
+    from the other while breaking no rule, because the rule is about "the key
+    you currently record" and there would be no such thing.  Tamarin found
+    exactly that trace when this restriction was absent.  It is a modelling
+    artifact rather than a finding -- nothing in the design lets a node hold
+    two current records for one subject -- but it is the kind that would have
+    made the main lemma unprovable for a reason that looks like a defect.  */
+restriction OneRecordPerSubject:
+  "All I S #i #j. OpenedFor(I, S) @ #i & OpenedFor(I, S) @ #j ==> #i = #j"
+
+/*
+--------------------------------------------------------------------------------
+  ISSUANCE -- the obligation itself
+--------------------------------------------------------------------------------
+  `Record` is LINEAR and put straight back.  That is deliberate: consuming it
+  is what makes an issuance read the record at a point in time, and replacing
+  it unchanged is what makes issuance not itself a state change.  Issuing does
+  not alter what the issuer records; only an adoption does.
+*/
+
+rule Issue:
+    [ Record($I, $S, k) ]
+  --[ Issued($I, $S, k)
+    , IssuedAgainstRecord($I, $S, k) ]->
+    [ Record($I, $S, k), Out(<'currency', $S, k>) ]
+
+/*
+--------------------------------------------------------------------------------
+  SUPERSESSION -- a recovery adoption reaches THIS issuer
+--------------------------------------------------------------------------------
+  design 9.0.2: the adoption overwrites this node's record of the subject.
+  The old key is consumed and cannot come back -- there is no rule producing
+  `Record($I,$S,kOld)` a second time, which is the model's way of saying the
+  overwrite is not reversible by anything the issuer does.
+
+  `AdoptionArrived` carries the issuer, because arrival is per-node.  A second
+  issuer holding the same subject is untouched by this rule firing.
+*/
+
+rule Adoption_Arrives:
+    [ Record($I, $S, kOld), Fr(~kNew) ]
+  --[ AdoptionArrived($I, $S, kOld, ~kNew)   // see the scope note below
+    , Superseded($I, $S, kOld)
+    , Installed($I, $S, ~kNew) ]->
+    [ Record($I, $S, ~kNew), Out(~kNew) ]
+
+/*  A SCOPE NOTE ON THE SUCCESSOR.  The rule above mints `~kNew` per issuer,
+    so in this model two issuers that both receive an adoption end up on
+    different successors.  In the protocol they receive the SAME one.  The
+    difference does not reach any lemma here -- the stale-sibling witness
+    needs only the OLD key shared, which it is, and the
+    names-the-new-key lemma concerns a single issuer -- but a later lemma
+    comparing two issuers' successors would need this fixed first.        */
+restriction Inequality:
+  "All x y #i. NotEqual(x, y) @ #i ==> not(x = y)"
+
+/*  A DEPENDENCY THIS MODEL FOUND, and the clearest thing it has produced.
+
+    The rule above mints the successor with `Fr`, which is faithful:
+    `wire-only/recovery.spthy` has the recovery meeting mint the successor,
+    and design 9.1's successor is a key the subject has just generated.  But
+    the first version of this theory took it from `In(kNew)`, and the main
+    obligation was then FALSE, with a trace that is not an artifact:
+
+      Both the initial key and every issued one reach the adversary, so it can
+      hand back a key the issuer ALREADY SUPERSEDED as the new one.  k1 -> k2
+      walks the record forward, k2 -> k1 walks it back, and the issuer then
+      issues for k1 in full compliance with "issue only for the key you
+      currently record" -- because it is once again the key it records.
+
+    What forbids the walk-back is written in a DIFFERENT DOCUMENT, binding a
+    DIFFERENT PARTY.  `light-client-requirements.md`: "Never take a series
+    reissue into a series you have occupied before ... a counterparty holding
+    that chain will reject a reissue that repeats a series in it."  The
+    subject must not walk back, and a counterparty holding the chain can
+    refuse -- so this half is not purely a commitment, which is why the infra
+    node's obligation can lean on it.
+
+    So the currency rule is coherent only in company.  Read alone it permits
+    the trace above; read beside the light client's rule it does not.  That is
+    what this tree is for, and it is invisible to `wire-only/`: an attestation
+    issued after a walk-back is perfectly well formed, and no relying party
+    can see the history.
+
+    The rule below keeps the finding IN THE MODEL rather than only in this
+    comment.  It is the non-compliant path, carved out by name in the lemmas.
+    Deleting it would make the main obligation true for a reason the documents
+    do not supply on their own.                                             */
+rule Adoption_Arrives_Into_An_Abandoned_Line:
+    [ Record($I, $S, kOld), In(kNew) ]
+  --[ AdoptionArrived($I, $S, kOld, kNew)
+    , Superseded($I, $S, kOld)
+    , SeriesCheckSkipped($S)
+    , NotEqual(kOld, kNew) ]->
+    [ Record($I, $S, kNew) ]
+
+/*  AND THE OTHER PARTY'S PROMISE, STATED AS AN AXIOM.  The restriction below
+    removes every trace in which the subject walks back into a line it has
+    occupied.  That is not this node's rule to keep -- it belongs to the
+    light client, and a counterparty holding the chain can enforce it -- so
+    the honest way to carry it is as a labelled assumption rather than as
+    something this theory proves.  The same shape as
+    `wire-only/currency.spthy`'s `NotExpiredBeforeAccept`.
+
+    MUTATION TEST, and the reason the rule above is kept rather than deleted:
+    comment out this restriction and
+    `no_issuance_for_a_key_this_issuer_superseded` FALSIFIES, with the k1 ->
+    k2 -> k1 trace described above.  The obligation is therefore not
+    self-supporting, and the file records which other document holds it up. */
+restriction TheSubjectDoesNotReturnToAnAbandonedLine:
+  "All S #i. SeriesCheckSkipped(S) @ #i ==> F"
+
+/*
+================================================================================
+  PROPERTIES
+================================================================================
+*/
+
+/*  THE OBLIGATION, stated as the trace property it implies.  Once an adoption
+    has overwritten this issuer's record of $S, this issuer never issues for
+    the old key again.  Note both indices are $I: the claim is about ONE
+    node's behaviour, which is the only thing an obligation can bind.       */
+/*  TWO INVARIANTS THE PROVER NEEDS, and the reason it needs them.  `Issue`
+    consumes `Record` and puts it straight back, so a backward search for
+    "where did this record come from" regresses through unboundedly many
+    issuances.  These two close the regress: a key enters a record by one of
+    exactly two doors, and it enters once.                                  */
+lemma a_key_enters_a_record_once [reuse]:
+  all-traces
+  "All I S k #a #b. Installed(I, S, k) @ #a & Installed(I, S, k) @ #b ==> #a = #b"
+
+lemma a_record_key_entered_by_one_of_two_doors [reuse, use_induction]:
+  all-traces
+  "All I S k #j. IssuedAgainstRecord(I, S, k) @ #j
+      ==> (Ex #o. RecordOpened(I, S, k) @ #o & #o < #j)
+        | (Ex kOld #a. AdoptionArrived(I, S, kOld, k) @ #a & #a < #j)"
+
+/*  ============================================================
+    NOT DISCHARGED -- the central obligation, stated but unproven
+    ============================================================
+
+    THE CLAIM, which is what this whole theory exists for:
+
+      lemma no_issuance_for_a_key_this_issuer_superseded:
+        all-traces
+        "All I S k #i #j.
+            Superseded(I, S, k) @ #i & Issued(I, S, k) @ #j
+              ==> #j < #i"
+
+    It is left commented out because TAMARIN DOES NOT DISCHARGE IT, and a
+    lemma the gate never proves must not sit in the file looking proven.
+
+    WHY.  `Issue` consumes `Record` and restores it, which is faithful --
+    issuing does not change what a node records -- but it means the backward
+    search for the origin of `Record($I,$S,k)` regresses through unboundedly
+    many prior issuances.  The two invariants above were written to close that
+    regress and both verify; the goal still does not follow from them inside
+    420 seconds.
+
+    WHAT WAS TRIED: `use_induction` on the goal; the negated form
+    `not(Ex #j. ... & #i < #j)`; removing the `Out` facts; removing
+    `OneRecordPerSubject`; removing the non-compliant rule entirely; and the
+    two `[reuse]` invariants above.  None discharged it, and none of them
+    FALSIFIED it either -- there is no counterexample, only no proof.
+
+    So the honest statement is: the obligation is believed true and is not
+    established here.  Nothing else in this theory depends on it.
+
+    A LONGER WALL CLOCK IS NOT THE ANSWER.  `run-all.sh` says a proof needing
+    longer than the timeout needs a hint rather than more time, and that is
+    right -- the regress is unbounded, so it does not terminate at any budget.
+    What would close it is a different encoding of the record's lifetime, and
+    that is a modelling decision rather than a tuning one.
+    ============================================================  */
+
+lemma issuance_after_supersession_names_the_new_key:
+  exists-trace
+  "Ex I S kOld kNew #a #b.
+      AdoptionArrived(I, S, kOld, kNew) @ #a
+    & Issued(I, S, kNew) @ #b
+    & #a < #b"
+
+/*  ANTI-VACUITY.  An issuance happens at all.                              */
+lemma issuance_is_reachable:
+  exists-trace
+  "Ex I S k #i. Issued(I, S, k) @ #i"
+
+/*  THE LAG WITNESS, and the most important lemma in this file.
+
+    Two issuers hold the same subject.  An adoption reaches the first and not
+    the second, and the second then issues for the OLD key -- compliantly,
+    because it is issuing for the key it currently records.  design 12.6.5
+    says this trace exists and prices it ("issuance survives what replication
+    does not").  Asserting it here means the model cannot quietly acquire an
+    instant-replication assumption: strengthen `Adoption_Arrives` to touch
+    every issuer and this lemma falsifies while every other lemma above stays
+    green.                                                                  */
+lemma stale_sibling_issuance_is_reachable:
+  exists-trace
+  "Ex I1 I2 S k kNew #a #b.
+      Superseded(I1, S, k) @ #a
+    & AdoptionArrived(I1, S, k, kNew) @ #a
+    & Issued(I2, S, k) @ #b
+    & #a < #b
+    & not(I1 = I2)"
+
+end

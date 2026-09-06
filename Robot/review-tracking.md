@@ -5631,3 +5631,89 @@ and its reason travel together. The review-history entries keep their
 as-of-filing counts.
 
 25 lemmas, all verifying after the rename. All eight models pass.
+
+---
+
+## The two Tamarin trees (2026-09-06)
+
+Author's ruling, in answer to whether the suite verifies wire-enforceable
+properties or the honest client's own commitments: *"Duplicate the models and
+we'll verify both versions, as they prove different things, both of which are
+of interest. Create distinctly named folders for the compliant and wire only
+versions."*
+
+`models/tamarin/wire-only/` holds the four existing theories unchanged.
+`models/tamarin/compliant/` holds four new ones. **They are not duplicates.**
+Wire-only proves the cryptography; compliant proves the state machine and takes
+the cryptography as given. Nothing is stated twice, so the two cannot drift
+apart -- which duplication would have guaranteed within a fortnight.
+
+**Each compliant theory models an obligation the design says is unenforceable,
+and the design's own words are why the theory exists.** The four were chosen by
+reading the two client-requirements documents for commitments, not by pattern:
+
+| theory | the written obligation |
+|---|---|
+| `currency` | infra-client: *"Issue only for the key you currently record ... nobody can check this for you"* |
+| `attach` | design 12.6.5 supersession; light-client: trust-bearing stops on a sibling |
+| `ceremony` | light-client: *"Refuse to sign a record attributing to you a witness you did not nominate ... the wire cannot check this -- you can, and you are the only party"* |
+| `recovery` | light-client: *"On suspected key compromise, seal before you take a series reissue"* |
+
+**Every compliant theory carries a lemma asserting the non-compliant trace is
+STILL REACHABLE.** Without that, the tree would drift into proving that the
+wire enforces what the design says it cannot, and a green result would mean the
+opposite of what it appeared to. Four such witnesses: the stale sibling issuing
+for a rotation that has not reached it, misattribution succeeding when the
+nomination check is skipped, the thief winning against a chainless
+counterparty, and a second node serving under a credential the first superseded.
+
+**WHAT THE SPLIT FOUND.** `compliant/currency.spthy`'s obligation is FALSE read
+alone. Both the initial key and every issued one reach the adversary, so it can
+hand an issuer back a key that issuer already superseded; the issuer then
+issues for it in full compliance, because it is once again the key it records.
+What forbids the walk-back is in another document, binding another party:
+light-client's *"never take a series reissue into a series you have occupied
+before"*, which a counterparty holding the chain can enforce. The infra node's
+rule is coherent only in company. No wire-only theory could have found it -- an
+attestation issued after the walk-back is well formed and no relying party can
+see the history. The dependency is now a labelled restriction in the file with
+the mutation test recorded beside it.
+
+**THREE OBLIGATIONS ARE STATED AND NOT DISCHARGED**, and they are the central
+ones: currency's `no_issuance_for_a_key_this_issuer_superseded`, and attach's
+`nothing_served_under_a_credential_this_node_superseded` and
+`nothing_delivered_after_supersession`. They sit in their files commented out
+under a block giving the claim, the cause, and what was tried. **None was
+falsified** -- there is no counterexample, only no proof.
+
+One cause, in both theories: the issuing and serving rules consume a linear
+capability and restore it, which is faithful -- issuing does not change what a
+node records, serving does not end a binding -- so the backward search for that
+fact's origin regresses through unboundedly many prior operations. Source
+invariants (`a_key_enters_a_record_once`, `a_record_key_entered_by_one_of_two_
+doors`, `service_follows_an_attach`) closed the regress for the neighbouring
+properties in both theories and did NOT close it for these three. Tried and
+rejected: `use_induction` on each goal, the negated form, removing the `Out`
+facts, removing each restriction, removing the non-compliant rule, and a
+420-second budget. A longer wall clock is not the answer -- `run-all.sh` is
+right that a proof needing more time needs a hint, and an unbounded regress
+does not terminate at any budget. What would close it is a different encoding
+of a revocable capability's lifetime, which is a modelling decision.
+
+**Two modelling errors caught by lemmas rather than by reading**, both the same
+mistake and both worth recording because the second was made after fixing the
+first. In `attach`, minting `Fr(~k)` per session meant two nodes could never
+serve the SAME credential, which made the ignorance witness unstatable. In
+`currency`, minting a fresh key per issuer meant two issuers could never record
+the same key -- and `stale_sibling_issuance_is_reachable` FALSIFIED, which is
+how it was found. The key belongs to the subject in both cases. A per-issuer
+key would have made the model prove a stronger property than the design claims,
+silently, with every other lemma green.
+
+Also: `attach`'s first shape gave each session its own fact, and all three
+supersession lemmas falsified because supersession ended one session while
+another kept serving. That is not a design defect -- design 12.6.5 says
+"SESSIONS ... terminate", plural, and the duty is to the binding. The serving
+capability is now one fact per (node, client, credential).
+
+12 models, 43 lemmas verifying: 25 wire-only, 18 compliant. 3 obligations open.

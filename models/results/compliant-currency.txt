@@ -1,0 +1,318 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CompliantCurrency] Theory loaded
+[Theory CompliantCurrency] Theory translated
+[Theory CompliantCurrency] Derivation checks started
+[Theory CompliantCurrency] Derivation checks ended
+[Theory CompliantCurrency] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CompliantCurrency
+
+begin
+
+// Function signature and definition of the equational theory E
+
+builtins: multiset
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+rule (modulo E) Subject_Key:
+   [ Fr( ~k ) ] --[ SubjectKey( $S, ~k ) ]-> [ !Key( $S, ~k ), Out( ~k ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initial_Record:
+   [ !Key( $S, k ) ]
+  --[
+  RecordOpened( $I, $S, k ), OpenedFor( $I, $S ), Installed( $I, $S, k )
+  ]->
+   [ Record( $I, $S, k ) ]
+
+  /* has exactly the trivial AC variant */
+
+restriction OneRecordPerSubject:
+  "∀ I S #i #j.
+    ((OpenedFor( I, S ) @ #i) ∧ (OpenedFor( I, S ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ I S #i #j.
+    ((OpenedFor( I, S ) @ #i) ∧ (OpenedFor( I, S ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Issue:
+   [ Record( $I, $S, k ) ]
+  --[ Issued( $I, $S, k ), IssuedAgainstRecord( $I, $S, k ) ]->
+   [ Record( $I, $S, k ), Out( <'currency', $S, k> ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adoption_Arrives:
+   [ Record( $I, $S, kOld ), Fr( ~kNew ) ]
+  --[
+  AdoptionArrived( $I, $S, kOld, ~kNew ), Superseded( $I, $S, kOld ),
+  Installed( $I, $S, ~kNew )
+  ]->
+   [ Record( $I, $S, ~kNew ), Out( ~kNew ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+restriction Inequality:
+  "∀ x y #i. (NotEqual( x, y ) @ #i) ⇒ (¬(x = y))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (NotEqual( x, y ) @ #i) ⇒ (¬(x = y))"
+  */
+
+rule (modulo E) Adoption_Arrives_Into_An_Abandoned_Line:
+   [ Record( $I, $S, kOld ), In( kNew ) ]
+  --[
+  AdoptionArrived( $I, $S, kOld, kNew ), Superseded( $I, $S, kOld ),
+  SeriesCheckSkipped( $S ), NotEqual( kOld, kNew )
+  ]->
+   [ Record( $I, $S, kNew ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+restriction TheSubjectDoesNotReturnToAnAbandonedLine:
+  "∀ S #i. (SeriesCheckSkipped( S ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ S #i. (SeriesCheckSkipped( S ) @ #i) ⇒ (⊥)"
+  */
+
+lemma a_key_enters_a_record_once [reuse]:
+  all-traces
+  "∀ I S k #a #b.
+    ((Installed( I, S, k ) @ #a) ∧ (Installed( I, S, k ) @ #b)) ⇒ (#a = #b)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S k #a #b.
+  (Installed( I, S, k ) @ #a) ∧ (Installed( I, S, k ) @ #b) ∧ ¬(#a = #b)"
+*/
+simplify
+solve( (#a < #b)  ∥ (#b < #a) )
+  case case_1
+  solve( Installed( I, S, k ) @ #a )
+    case Adoption_Arrives
+    solve( Installed( $I, $S, ~kNew ) @ #b )
+      case Adoption_Arrives
+      by contradiction /* cyclic */
+    next
+      case Initial_Record
+      by solve( !Key( $S, ~kNew ) ▶₀ #b )
+    qed
+  next
+    case Initial_Record
+    solve( !Key( $S, k ) ▶₀ #a )
+      case Subject_Key
+      solve( Installed( $I, $S, ~k ) @ #b )
+        case Initial_Record
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Installed( I, S, k ) @ #a )
+    case Adoption_Arrives
+    solve( Installed( $I, $S, ~kNew ) @ #b )
+      case Adoption_Arrives
+      by contradiction /* cyclic */
+    next
+      case Initial_Record
+      by contradiction /* cyclic */
+    qed
+  next
+    case Initial_Record
+    solve( !Key( $S, k ) ▶₀ #a )
+      case Subject_Key
+      solve( Installed( $I, $S, ~k ) @ #b )
+        case Initial_Record
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+qed
+
+lemma a_record_key_entered_by_one_of_two_doors [reuse, use_induction]:
+  all-traces
+  "∀ I S k #j.
+    (IssuedAgainstRecord( I, S, k ) @ #j) ⇒
+    ((∃ #o. (RecordOpened( I, S, k ) @ #o) ∧ (#o < #j)) ∨
+     (∃ kOld #a. (AdoptionArrived( I, S, kOld, k ) @ #a) ∧ (#a < #j)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S k #j.
+  (IssuedAgainstRecord( I, S, k ) @ #j)
+ ∧
+  (∀ #o. (RecordOpened( I, S, k ) @ #o) ⇒ ¬(#o < #j)) ∧
+  (∀ kOld #a. (AdoptionArrived( I, S, kOld, k ) @ #a) ⇒ ¬(#a < #j))"
+*/
+induction
+  case empty_trace
+  by contradiction /* from formulas */
+next
+  case non_empty_trace
+  solve( (last(#j))  ∥
+         (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ (¬(last(#o))) ∧ (#o < #j))  ∥
+         (∃ kOld #a.
+           (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ (¬(last(#a))) ∧ (#a < #j)) )
+    case case_1
+    solve( Record( $I, $S, k ) ▶₀ #j )
+      case Adoption_Arrives
+      by contradiction /* from formulas */
+    next
+      case Initial_Record
+      by contradiction /* from formulas */
+    next
+      case Issue
+      solve( (∃ #o.
+               (RecordOpened( $I, $S, k ) @ #o) ∧ (¬(last(#o))) ∧ (#o < #vr))  ∥
+             (∃ kOld #a.
+               (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ (¬(last(#a))) ∧ (#a < #vr)) )
+        case case_1
+        by contradiction /* from formulas */
+      next
+        case case_2
+        by contradiction /* from formulas */
+      qed
+    qed
+  next
+    case case_2
+    by contradiction /* from formulas */
+  next
+    case case_3
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma issuance_after_supersession_names_the_new_key:
+  exists-trace
+  "∃ I S kOld kNew #a #b.
+    ((AdoptionArrived( I, S, kOld, kNew ) @ #a) ∧
+     (Issued( I, S, kNew ) @ #b)) ∧
+    (#a < #b)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ I S kOld kNew #a #b.
+  (AdoptionArrived( I, S, kOld, kNew ) @ #a) ∧ (Issued( I, S, kNew ) @ #b)
+ ∧
+  #a < #b"
+*/
+simplify
+solve( (∃ #o. (RecordOpened( $I, $S, kNew ) @ #o) ∧ #o < #b)  ∥
+       (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, kNew ) @ #a) ∧ #a < #b) )
+  case case_2
+  solve( AdoptionArrived( $I, $S, kOld, kNew ) @ #a )
+    case Adoption_Arrives
+    solve( AdoptionArrived( $I, $S, kOld.2, ~kNew ) @ #a.1 )
+      case Adoption_Arrives
+      solve( Record( $I, $S, ~kNew ) ▶₀ #b )
+        case Adoption_Arrives
+        solve( Record( $I, $S, kOld ) ▶₀ #a )
+          case Adoption_Arrives
+          solve( Record( $I, $S, kOld ) ▶₀ #vr )
+            case Initial_Record
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma issuance_is_reachable:
+  exists-trace "∃ I S k #i. Issued( I, S, k ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ I S k #i. (Issued( I, S, k ) @ #i)"
+*/
+simplify
+solve( (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ #o < #i)  ∥
+       (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ #a < #i) )
+  case case_1
+  solve( !Key( $S, k ) ▶₀ #o )
+    case Subject_Key
+    solve( Record( $I, $S, ~k ) ▶₀ #i )
+      case Initial_Record
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma stale_sibling_issuance_is_reachable:
+  exists-trace
+  "∃ I1 I2 S k kNew #a #b.
+    ((((Superseded( I1, S, k ) @ #a) ∧
+       (AdoptionArrived( I1, S, k, kNew ) @ #a)) ∧
+      (Issued( I2, S, k ) @ #b)) ∧
+     (#a < #b)) ∧
+    (¬(I1 = I2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ I1 I2 S k kNew #a #b.
+  (Superseded( I1, S, k ) @ #a) ∧
+  (AdoptionArrived( I1, S, k, kNew ) @ #a) ∧
+  (Issued( I2, S, k ) @ #b)
+ ∧
+  (#a < #b) ∧ (¬(I1 = I2))"
+*/
+simplify
+solve( (∃ #o. (RecordOpened( $I, $S, k ) @ #o) ∧ #o < #b)  ∥
+       (∃ kOld #a. (AdoptionArrived( $I, $S, kOld, k ) @ #a) ∧ #a < #b) )
+  case case_1
+  solve( !Key( $S, k ) ▶₀ #o )
+    case Subject_Key
+    solve( Superseded( I1, $S, ~k ) @ #a )
+      case Adoption_Arrives
+      solve( AdoptionArrived( $I, $S, ~k, kNew.1 ) @ #a )
+        case Adoption_Arrives
+        solve( Record( $I.1, $S, ~k ) ▶₀ #b )
+          case Initial_Record
+          solve( Record( $I, $S, ~k ) ▶₀ #a )
+            case Initial_Record
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/currency.spthy
+
+  processing time: 0.50s
+  
+  a_key_enters_a_record_once (all-traces): verified (16 steps)
+  a_record_key_entered_by_one_of_two_doors (all-traces): verified (11 steps)
+  issuance_after_supersession_names_the_new_key (exists-trace): verified (8 steps)
+  issuance_is_reachable (exists-trace): verified (5 steps)
+  stale_sibling_issuance_is_reachable (exists-trace): verified (8 steps)
+
+==============================================================================
