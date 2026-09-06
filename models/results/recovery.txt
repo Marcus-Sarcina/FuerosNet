@@ -33,11 +33,10 @@ rule (modulo E) Compromise:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Old_Key_Proof:
-   [ !Ltk( $S, ~oldsk ), Fr( ~newkey ), !Pk( $P, pkP ) ]
-  --[ OldKeyProof( $S, ~newkey ), OldKeyProofFor( $S, ~newkey, $P ) ]->
+   [ !Ltk( $S, ~oldsk ), In( newkey ), !Pk( $P, pkP ) ]
+  --[ OldKeyProof( $S, newkey ), OldKeyProofFor( $S, newkey, $P ) ]->
    [
-   Out( <'rotate', $S, ~newkey, $P, 
-         sign(<'rotate', $S, ~newkey, $P>, ~oldsk)>
+   Out( <'rotate', $S, newkey, $P, sign(<'rotate', $S, newkey, $P>, ~oldsk)>
    )
    ]
 
@@ -49,14 +48,14 @@ rule (modulo E) Met:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Recovery_Meeting:
-   [ !Met( $V, $S ) ]
-  --[ RecoveryMeeting( $V, $S ) ]->
-   [ AtMeeting( $V, $S ) ]
+   [ !Met( $V, $S ), Fr( ~nk ) ]
+  --[ RecoveryMeeting( $V, $S ), MeetingKey( $V, $S, ~nk ) ]->
+   [ AtMeeting( $V, $S, ~nk ), Out( ~nk ) ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Recognise:
-   [ !Ltk( $V, ~vsk ), AtMeeting( $V, $S ), In( newkey ) ]
+   [ !Ltk( $V, ~vsk ), AtMeeting( $V, $S, newkey ) ]
   --[ Recognised( $V, $S ), RecognisedFor( $V, $S, newkey ) ]->
    [ Out( <'recognise', $S, newkey, sign(<'recognise', $S, newkey>, ~vsk)> )
    ]
@@ -239,10 +238,10 @@ solve( !Met( $V, $S ) ▶₀ #m )
         case Register
         solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
           case Old_Key_Proof
-          solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+          solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
             case Recognise
-            solve( !KU( ~newkey ) @ #vk.10 )
-              case Old_Key_Proof
+            solve( !KU( ~nk ) @ #vk.10 )
+              case Recognise
               SOLVED // trace found
             qed
           qed
@@ -267,10 +266,10 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
       case Register
       solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+        solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
-          solve( !KU( ~newkey ) @ #vk.10 )
-            case Old_Key_Proof
+          solve( !KU( ~nk ) @ #vk.10 )
+            case Recognise
             SOLVED // trace found
           qed
         qed
@@ -307,7 +306,7 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
       case Register
       solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+        solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
           by contradiction /* from formulas */
         next
@@ -364,14 +363,14 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
       case Register
       solve( !Ltk( $V, ~vsk ) ▶₀ #b )
         case Register
-        solve( AtMeeting( $V, $S ) ▶₁ #b )
+        solve( AtMeeting( $V, $S, newkey ) ▶₁ #b )
           case Recovery_Meeting
-          solve( !KU( sign(<'rotate', $S, newkey.1, $P>, ~sk) ) @ #vk.11 )
+          solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
             case Old_Key_Proof
             by contradiction /* from formulas */
           next
             case c_sign
-            solve( !KU( ~sk ) @ #vk.18 )
+            solve( !KU( ~sk ) @ #vk.17 )
               case Compromise
               by contradiction /* from formulas */
             qed
@@ -379,6 +378,27 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
         qed
       qed
     qed
+  qed
+qed
+
+lemma recognition_names_the_meeting_key:
+  all-traces
+  "∀ V S newkey #b.
+    (RecognisedFor( V, S, newkey ) @ #b) ⇒
+    (∃ #m. (MeetingKey( V, S, newkey ) @ #m) ∧ (#m < #b))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ V S newkey #b.
+  (RecognisedFor( V, S, newkey ) @ #b)
+ ∧
+  ∀ #m. (MeetingKey( V, S, newkey ) @ #m) ⇒ ¬(#m < #b)"
+*/
+simplify
+solve( !Ltk( $V, ~vsk ) ▶₀ #b )
+  case Register
+  solve( AtMeeting( $V, $S, newkey ) ▶₁ #b )
+    case Recovery_Meeting
+    by contradiction /* from formulas */
   qed
 qed
 
@@ -409,7 +429,7 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
       case Register
       solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+        solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
           by contradiction /* from formulas */
         next
@@ -503,7 +523,7 @@ solve( !Ltk( $P, ~psk ) ▶₀ #i )
       case Register
       solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
         case Old_Key_Proof
-        solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+        solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
           case Recognise
           by contradiction /* from formulas */
         next
@@ -582,12 +602,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.51s
+  processing time: 1.59s
   
   recovery_completes_honestly (exists-trace): verified (9 steps)
   recovery_is_executable (exists-trace): verified (8 steps)
   key_alone_insufficient (all-traces): verified (14 steps)
   recognition_alone_insufficient (all-traces): verified (10 steps)
+  recognition_names_the_meeting_key (all-traces): verified (4 steps)
   recognition_binds_the_successor (all-traces): verified (14 steps)
   successor_statement_binds_the_patron (all-traces): verified (8 steps)
   recovery_requires_a_meeting (all-traces): verified (14 steps)

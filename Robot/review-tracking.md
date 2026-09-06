@@ -5536,3 +5536,37 @@ two readings give different models and different security claims.
 
 24 lemmas, all verifying, wellformedness clean. All eight models pass. Model
 references 171, 0 flags; specification references 2,032, 0 flags.
+
+**TAM-02 resolved from the documents, not by ruling (2026-09-06).** The author
+asked where the "network adversary" entered and what "bound to the device in
+the room" meant -- fair, since the finding had been relayed in the reviewer's
+framing rather than grounded in the protocol. Run down:
+
+The adversary entered **only in the model**. `Recognise` took the successor
+from `In(newkey)`, a Dolev-Yao network input, so the term was whatever the
+adversary supplied. In the protocol there is no such step: design §7.1's
+channel 3 is optical, *"QR codes exchanged screen-to-camera"*, and it
+**"carries key exchange"**; §9.1 makes a recovery meeting a ceremony. The
+verifier's client reads the successor off the screen in front of it.
+
+So substituting the key requires a device in the room, which is §7.6's
+co-presence residual -- already accepted and priced -- and not a network
+attack. **No specification change is needed and none was made.** The model
+over-approximated, and is corrected: `Recovery_Meeting` mints the successor and
+`AtMeeting` carries it, with `recognition_names_the_meeting_key` checking that
+a recognition names the key the meeting exchanged. Mutation-tested: restore
+`In(newkey)` and only that lemma falsifies.
+
+**The honest-path guard added earlier this session paid for itself
+immediately.** The first version of this fix left `Old_Key_Proof` minting its
+own `Fr(~newkey)`, so the two factors could never name one successor and no
+honest recovery could complete. `recovery_completes_honestly` reported
+*falsified, no trace found* on the first run. Under the old guards -- which
+permit compromise -- every other lemma still verified and the break would have
+shipped.
+
+Worth recording as the general shape: this is the third time a change made the
+honest path unreachable while the universal lemmas stayed green, and the first
+time it was caught in the same minute it was introduced.
+
+25 lemmas, all verifying. All eight models pass.

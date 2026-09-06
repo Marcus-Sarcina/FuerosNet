@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (24 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (25 lemmas).
 
 ---
 
@@ -265,6 +265,18 @@ then-diagnose loop *is* the value of the exercise.
   **Every theory now carries an honest-path guard** that excludes compromise,
   which closes the class rather than the instance: `attach` and `recovery`
   turned out to be reachable honestly, but nothing had been checking.
+
+  **The fourth finding was a question, and the documents answer it.** The model
+  took the successor key from `In(newkey)` — a network input — so an adversary
+  chose which key an honest verifier's recognition attached to. §7.1's channel
+  list settles it: channel 3 is optical, *"QR codes exchanged screen-to-camera"*,
+  and it *"carries key exchange"*; a recovery meeting is a ceremony (§9.1). The
+  verifier reads the successor off the screen in front of it, so there is no
+  network step to occupy — substituting the key means putting a device in the
+  room, which is §7.6's co-presence residual rather than a network attack. The
+  model over-approximated; the meeting now carries the key, and
+  `recognition_names_the_meeting_key` checks it. Restoring the network input
+  falsifies only that lemma.
 
   Two further findings held. `presence_requires_copresence` carved out a
   compromised **witness**, which §7.6 says attests that the protocol ran and

@@ -102,12 +102,18 @@ rule Compromise:
 */
 rule Old_Key_Proof:
     [ !Ltk($S, ~oldsk)                 // the subject's (or thief's) old key
-    , Fr(~newkey)                      // the proposed new key material
+    , In(newkey)                       // the successor -- PUBLIC once exchanged
+                                       //   at the meeting, so anyone holding
+                                       //   the old key can sign over it. It is
+                                       //   not minted here: one keypair is
+                                       //   generated and both factors must
+                                       //   name THAT one, which is what makes
+                                       //   the two halves of a recovery meet.
     , !Pk($P, pkP) ]                   // a REGISTERED patron, not any label
-  --[ OldKeyProof($S, ~newkey)
-    , OldKeyProofFor($S, ~newkey, $P) ]->
-    [ Out(<'rotate', $S, ~newkey, $P,
-           sign(<'rotate', $S, ~newkey, $P>, ~oldsk)>) ]
+  --[ OldKeyProof($S, newkey)
+    , OldKeyProofFor($S, newkey, $P) ]->
+    [ Out(<'rotate', $S, newkey, $P,
+           sign(<'rotate', $S, newkey, $P>, ~oldsk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -184,9 +190,11 @@ rule Met:
   the stolen key alone, remotely, cannot manufacture one.
 */
 rule Recovery_Meeting:
-    [ !Met($V, $S) ]                   // they had met before -- design §9.1
-  --[ RecoveryMeeting($V, $S) ]->
-    [ AtMeeting($V, $S) ]              // LINEAR: one recognition per meeting
+    [ !Met($V, $S)                     // they had met before -- design §9.1
+    , Fr(~nk) ]                        // the successor, exchanged AT the meeting
+  --[ RecoveryMeeting($V, $S), MeetingKey($V, $S, ~nk) ]->
+    [ AtMeeting($V, $S, ~nk)           // LINEAR: one recognition per meeting
+    , Out(~nk) ]                       // the key is public once exchanged
 
 /*
   THE RECOGNITION NAMES THE SUCCESSOR IT ATTESTS CONTINUITY TO.  The verifier
@@ -199,10 +207,23 @@ rule Recovery_Meeting:
   one honest recognition beside two accepted recoveries for different keys.
   See recognition_binds_the_successor below, which falsifies without this.
 */
+/*
+  THE SUCCESSOR COMES FROM THE MEETING, NOT FROM THE NETWORK.  An earlier
+  version took it from In(newkey) -- a Dolev-Yao network input, so the
+  adversary chose which key an honest verifier's genuine recognition attached
+  to, with neither verifier nor patron compromised.  That is an
+  over-approximation: design §7.1's channel 3 is an OPTICAL channel, "QR codes
+  exchanged screen-to-camera", which "carries key exchange", and a recovery
+  meeting is a ceremony (§9.1).  The verifier's client reads the successor off
+  the screen in front of it, so there is no network step for an adversary to
+  occupy -- substituting the key means putting a device in the room, which is
+  the co-presence residual §7.6 already accepts and prices, not a network
+  attack.
+*/
 rule Recognise:
     [ !Ltk($V, ~vsk)                   // the verifier's key
-    , AtMeeting($V, $S)                // CONSUMED: they are meeting NOW
-    , In(newkey) ]                     // the successor presented at the meeting
+    , AtMeeting($V, $S, newkey) ]      // CONSUMED: meeting now, and the key
+                                       //   came over the direct channel
   --[ Recognised($V, $S)
     , RecognisedFor($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey,
@@ -381,6 +402,17 @@ lemma recognition_alone_insufficient:
         & not(Ex #a. OldKeyProof(S, newkey) @ #a)   // no honest key proof
         & not(Ex #c. Compromised(S) @ #c)           // and no stolen key
         & not(Ex #kp. Compromised(P) @ #kp) )"       // and no patron compromise
+
+// THE RECOGNITION NAMES THE KEY THE MEETING EXCHANGED, and no other.  This is
+// what taking the successor from AtMeeting rather than from the network buys:
+// an honest verifier's recognition attaches to the key that came over the
+// direct channel in front of it (design §7.1's optical channel "carries key
+// exchange"), never to one an adversary supplied.  Restore In(newkey) in
+// Recognise and this falsifies.
+lemma recognition_names_the_meeting_key:
+  "All V S newkey #b.
+     RecognisedFor(V, S, newkey) @ #b
+     ==> (Ex #m. MeetingKey(V, S, newkey) @ #m & #m < #b)"
 
 // THE SUCCESSOR BINDING IS LOAD-BEARING.  Every accepted recovery rests on a
 // recognition NAMING THAT successor key.  This is the model's check on wire
