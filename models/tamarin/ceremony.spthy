@@ -131,9 +131,24 @@ rule Participant_Sign:
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
 // A witness signs the ceremony it observed.
+/*
+  A WITNESS NOTARISES WHAT IT IS SHOWN, and takes the roster FROM THE NETWORK
+  rather than from a ground-truth fact.  design Section 7.6: "Witnesses
+  notarise; they do not verify proximity ... the co-presence evidence that
+  matters is generated between the two devices and merely reported to
+  witnesses" -- and design Section 7.6 also says two colluding parties can
+  simulate the whole exchange and NO WITNESS CAN TELL.
+
+  An earlier version premised this rule on !Ceremony, which only the physical
+  Meet rule creates, so an honest witness could sign only a meeting that had
+  really happened -- a remote notary given a truth oracle the design says it
+  does not have.  Removing it costs the theorems nothing, because what carries
+  them is the PARTICIPANTS' co-presence tokens, and gains honesty: a witness
+  here will notarise a fabricated roster exactly as the design says it would.
+*/
 rule Witness_Sign:
     [ !Ltk($W, ~sk)
-    , !Ceremony($P1, $P2, $W, cid) ]   // notarises the roster; not present
+    , In(<'presence', $P1, $P2, $W, cid>) ]   // whatever it is handed
   --[ WitnessSigned($W, $P1, $P2, $W, cid) ]->
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
@@ -155,6 +170,15 @@ rule Accept_Record:
   --[ Eq(verify(sig1, <'presence', $P1, $P2, $W, cid>, pk1), true)
     , Eq(verify(sig2, <'presence', $P1, $P2, $W, cid>, pk2), true)
     , Eq(verify(sigw, <'presence', $P1, $P2, $W, cid>, pkw), true)
+    // THE VALIDATOR CHECKS ROLE DISTINCTNESS ITSELF (`wire-format.md` §3.2:
+    // a participant is not its own witness, the two participants are
+    // distinct).  It was previously enforced only at Meet and reached this
+    // rule transitively, through the !Ceremony premise Witness_Sign used to
+    // carry.  Once a witness notarises what it is handed, that path is gone
+    // and the degenerate roster P1 = P2 = W becomes assemblable from ONE
+    // signature, which satisfies all three checks at once.  A real validator
+    // rejects it structurally, so this rule does too.
+    , DistinctParties($P1, $P2, $W)
     , RecordAccepted($P1, $P2, $W, cid) ]->
     [ ]
 

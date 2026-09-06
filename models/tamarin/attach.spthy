@@ -22,10 +22,14 @@ WHAT THIS FILE IS
   is expected behaviour; that it may not then act as patron is a separate
   property, and modelling it needs role facts this theory does not have.
 
-  This is the review plan's Stage 1.1 target "Session attach: a sibling
-  cannot impersonate the patron for trust-bearing operations", and it is
-  the simplest of the four, chosen first as the model that teaches the
-  tool.
+  The review plan's Stage 1.1 names the target "Session attach: a sibling
+  cannot impersonate the patron for trust-bearing operations".  **THIS
+  THEORY DOES NOT CLOSE THAT TARGET** -- see the paragraph above: it has no
+  authority relation and no trust-bearing operation, so it cannot say
+  whether an authenticated sibling may act as patron.  What it establishes
+  is the endpoint-authentication half, which is a precondition of the target
+  and not the target.  It is also the simplest of the four, chosen first as
+  the model that teaches the tool.
 
 HOW TO READ A TAMARIN THEORY (for a first-time reader)
   Tamarin proves properties of protocols in the SYMBOLIC (Dolev-Yao) model:

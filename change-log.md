@@ -9027,3 +9027,38 @@ use out is not that it consults a clock but that a security decision turns on
 the answer: a clock running slow accepts credentials that should be dead,
 while one running fast merely costs availability, and a party has no second
 source to check either against.
+
+### 2026-09-05 (past acquaintance is not present recognition)
+
+A third review of the symbolic models, and the sharpest finding yet concerns
+recovery. The design asks a user rotating a key to meet, in person, someone
+they have met before — two facts, a past acquaintance and a present encounter
+— and the model carried only the first, as a permanent record that licensed
+recognition forever. A thief holding the stolen key could therefore draw the
+human factor out of an entirely honest verifier without anyone meeting
+anybody, which the prover confirms in nine steps. The file had explained that
+outcome away as the accepted risk of a colluding or deceived counterparty, but
+nobody in the trace colludes and nobody is deceived: the rule simply fires.
+
+The two facts are now separate. A recovery meeting mints a token that
+recognition consumes, and a lemma states what that buys — no recovery without
+somebody turning up, absent compromise of the verifier or the patron. Revert
+the change and only that lemma fails, which is why the four already there
+never caught it. What it deliberately does not claim is who turned up: a thief
+taken for the subject satisfies it too, and that remains an accepted risk
+rather than something closed.
+
+The ceremony model gave its witness a truth oracle. A witness could only
+notarise a meeting the model already knew had happened, while the design says
+two colluding parties can simulate the whole exchange and no witness can tell.
+A witness now signs whatever roster it is handed. Removing the oracle exposed
+that the model had been leaning on it for a second purpose: role distinctness
+was enforced where meetings are created and reached acceptance through that
+premise, so without it a record naming one party three times could be
+assembled from a single signature. A validator checks distinctness itself, so
+now it does here.
+
+Two models also claimed targets they do not reach, each contradicted by its own
+text further down — one saying rotation and elapsed lifetime were covered when
+neither is represented, the other naming a sibling-authority target it has no
+vocabulary for. Both now say what is proved and name what is not.

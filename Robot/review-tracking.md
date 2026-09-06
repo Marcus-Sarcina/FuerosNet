@@ -5229,3 +5229,70 @@ carry the worked instance without the provenance.
 
 References 1,983 across the five specification documents, 0 flags. All eight
 models pass. Test vectors pass.
+
+---
+
+## Cross-family Tamarin review 3 (2026-09-05)
+
+Six findings, static-only again; all four file hashes matched the committed
+versions. Three are real model defects, two are claim/prose mismatches, one is
+a lemma-strength point. All checked with the prover.
+
+**T-01 recovery collapses past acquaintance into present recognition. HOLDS,
+High, machine-confirmed, and the sharpest finding of the three rounds.**
+design §9.1 step 1 asks the subject to *"meet, IN PERSON, someone they have
+met BEFORE"* -- two facts. The model had only the past one: a persistent
+`!Met(V,S)` that `Recognise` read forever. Probe verified in 9 steps: a thief
+holding the stolen key completes a recovery with **verifier and patron both
+honest and no meeting anywhere**. The file called that §18.3's
+colluding/deceived residual; it is not, since nobody in the trace colludes or
+is deceived -- the honest rule simply fires. Fixed with `Recovery_Meeting`
+minting a linear `AtMeeting` token that `Recognise` consumes, a second
+physical axiom of the same kind as ceremony's co-presence, plus
+`recovery_requires_a_meeting` stating what it buys. Mutation-tested: revert to
+history-only and ONLY the new lemma falsifies, which is exactly why the four
+existing ones never caught it. Deliberately not claimed: WHO turned up. A
+thief taken for the subject satisfies the token too; that residual stays
+§18.3's and is stated in the file.
+
+**T-03 the witness held a truth oracle. HOLDS, High.** `Witness_Sign` was
+premised on `!Ceremony`, which only the physical `Meet` creates, so an honest
+witness could notarise only a genuine meeting -- against §7.6, which says
+colluding parties can simulate the whole exchange and NO WITNESS CAN TELL. The
+witness now takes its roster from the network. **Removing the oracle revealed
+the model had been leaning on it for something else**: `DistinctParties` was
+enforced at `Meet` only and reached acceptance through that premise, so with
+it gone the degenerate roster P1 = P2 = W became assemblable from a single
+signature satisfying all three checks. A validator checks role distinctness
+itself (`wire-format.md` §3.2), so `Accept_Record` now does. All six lemmas
+verify and the theorem rests on the PARTICIPANTS' tokens alone.
+
+**T-06 `recognition_binds_the_successor`'s escapes were loose. HOLDS,
+Low-Medium.** Compromise disjuncts untimed, and the verifier disjunct named
+ANY verifier rather than the relied-on one. Tied to `ReliedOn(P,V,S)` and
+time-bounded, matching `successor_statement_binds_the_patron` beside it.
+
+**T-02 and T-05 are claim mismatches, and each file contradicted itself.**
+`currency`'s introduction said that once the patron rotates and the lifetime
+passes, no attestation makes the old key current -- while the note above its
+security lemma, added last round, says there is no rotation state. `attach`'s
+said it WAS the Stage 1.1 sibling-authority target, while the paragraph
+directly above explains it cannot reach authorization. Both introductions
+rewritten to state what is proved and name what is not.
+
+**T-04 holds and is already disclosed.** Expiry is an event plus a
+restriction; "beyond the attestation lifetime" has no meaning in the model.
+The reviewer's framing is better than what was there and is adopted into the
+currency introduction: what is proved is "an epoch DECLARED expired is not
+subsequently accepted", never "a lifetime elapsed".
+
+**T-02's second argument was engaged, not dismissed.** The reviewer allows
+that "issue only for the current key" is unenforceable externally but argues
+Tamarin routinely models honest-party local state anyway. True in general;
+here the rebuild was attempted on 2026-09-05, does not converge, and the
+author has ruled the property is client behaviour on both sides. The
+disclosure is the answer, and the introduction now carries it rather than
+contradicting it.
+
+18 lemmas, all verifying, all wellformedness clean. All eight models pass.
+Model references 141, 0 flags.

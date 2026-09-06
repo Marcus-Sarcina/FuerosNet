@@ -8,16 +8,31 @@ WHAT THIS FILE IS
   design Section 12.6.5 replaces revocation with short-lived patron-signed
   CURRENCY ATTESTATIONS, stapled to introductions.  The review plan's Stage
   1.1 target: "a revoked key cannot be made to appear current beyond the
-  attestation lifetime".  The property proved here: a relying party accepts
-  a key as current only if the patron signed an attestation for it that has
-  not expired -- so once the patron rotates the subject to a new key and the
-  old attestation's lifetime passes, no attestation the adversary can
-  assemble makes the OLD key look current.
+  attestation lifetime".
 
-  This model also exercises the 2026-08-6 "issue fresh, never extend stale"
-  rule and the fail-open/fail-closed split (design Section 12.6.5): the
-  lemma is about TRUST-BEARING acceptance, which fails closed, not routine
-  payload, which does not.
+  THAT TARGET IS NOT CLOSED HERE, and the introduction used to say it was.
+  What is proved is narrower and worth stating exactly: a relying party
+  accepts a key as current only if the patron signed an attestation for THAT
+  EXACT key and epoch, and no expiry for that epoch was declared first.  Two
+  things the target's wording implies are absent --
+
+    * ROTATION.  There is no current-key state, so "once the patron rotates
+      the subject to a new key" has no representation at all.  That is not an
+      oversight: both halves of design Section 12.6.5's supersession rule are
+      unenforceable client behaviour, which the note above
+      currency_requires_unexpired_issuance sets out in full.
+    * TIME.  "Beyond the attestation lifetime" has no meaning here.  Expiry
+      is an event that may or may not occur, plus a restriction discarding
+      acceptances after it; nothing makes an attestation expire, so a trace
+      may accept one at an arbitrarily late position.  What is proved is
+      "an epoch DECLARED expired is not subsequently accepted", never "a
+      lifetime elapsed".
+
+  The lemma is about TRUST-BEARING acceptance, which fails closed, not
+  routine payload, which does not (design Section 12.6.5), and it does
+  exercise the "issue fresh, never extend stale" rule (design Section
+  12.6.5.1) in the sense that every issuance signs a new attestation rather
+  than restamping an old one.
 
 TIME, SYMBOLICALLY
   Tamarin has no clock.  We model expiry as EVENT ORDER using action facts

@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (17 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (18 lemmas).
 
 ---
 
@@ -132,8 +132,12 @@ the honest protocol and so proves every security lemma vacuously.
   expiry and supersession apart and warns against conflating them; this
   model has the first and not the second. See "What the models found".
 
-- **`recovery`** (design §9.1) — recovery adoption. **Neither factor alone is
-  recovery**: a key proof with no honest recognition never recovers
+- **`recovery`** (design §9.1) — recovery adoption. **A recovery requires a
+  physical meeting** (`recovery_requires_a_meeting`) — §9.1 asks the subject to
+  *"meet, in person, someone they have met before"*, which is **two** facts,
+  and an earlier version carried only the past half, letting a thief with the
+  stolen key draw a recognition out of an honest verifier remotely. **Neither
+  factor alone is recovery**: a key proof with no honest recognition never recovers
   (`key_alone_insufficient` — the stolen-key case), and a recognition with no
   key authorisation never recovers (`recognition_alone_insufficient`). A
   fourth lemma, `recognition_binds_the_successor`, checks wire §4.1's rule
@@ -160,7 +164,9 @@ fact holds ... the target property becomes provable relative to that axiom,
 which is honest."
 
 - **Co-presence** (`ceremony`): the `Meet` rule mints co-presence tokens **for
-  the two participants only**. The witness signs as a remote notary and
+  the two participants only**, and nothing else in the theory reads ground
+  truth — a witness signs whatever roster it is handed, because §7.6 says two
+  colluding parties can simulate the exchange and no witness can tell. The witness signs as a remote notary and
   consumes none — design §7.6: *"Witnesses notarise; they do not verify
   proximity … the record format must not imply otherwise."* The theorem
   proves the protocol admits a record *only when a meeting occurred or
@@ -171,7 +177,9 @@ which is honest."
   collusion lives, not merely §18.3's theft.
 
 - **Face recognition** (`recovery`): an honest verifier recognises the true
-  person, encoded as `!Met(V,S)` gating honest recognition. The theorem proves
+  person. Encoded as **two** facts kept apart — persistent `!Met(V,S)` for past
+  acquaintance, and a linear `AtMeeting(V,S)` minted by `Recovery_Meeting` for
+  the present encounter, which honest recognition consumes. The theorem proves
   recovery *structurally* requires both a key and a human recognition; it
   cannot prove a look-alike is impossible — that residual is design §18.3's
   colluding/deceived-counterparty case, carved out as a compromised verifier.
@@ -219,6 +227,48 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **A third Tamarin review: past acquaintance is not present recognition.**
+  Six findings, static again, three of them real model defects.
+
+  **`recovery` let a thief draw a recognition out of an honest verifier.**
+  §9.1 asks the subject to *"meet, in person, someone they have met before"* —
+  two facts — and the model had only the past one, a persistent `!Met(V,S)`
+  that `Recognise` read forever. So a thief holding the stolen key completed a
+  recovery with **verifier and patron both honest and no meeting at all**:
+  machine-confirmed in 9 steps. The file called that §18.3's
+  colluding/deceived residual, which it was not — nobody colluded or was
+  deceived, the rule simply fired. Now `Recovery_Meeting` mints a linear
+  `AtMeeting` token that recognition consumes, and
+  `recovery_requires_a_meeting` states what that buys. Mutation-tested:
+  reverting to history-only falsifies **only** the new lemma, which is why the
+  other four never caught it. What it deliberately does not claim is *who*
+  turned up — a thief taken for the subject satisfies it too, and that residual
+  stays §18.3's.
+
+  **`ceremony` gave the witness a truth oracle.** `Witness_Sign` was premised
+  on `!Ceremony`, which only the physical `Meet` creates, so an honest witness
+  could notarise only a meeting that really happened — while §7.6 says
+  colluding parties can simulate the exchange and *no witness can tell*. The
+  witness now signs whatever roster it is handed. Removing the oracle exposed
+  that the model had been leaning on it for something else: `DistinctParties`
+  was enforced only at `Meet` and reached acceptance transitively, so the
+  degenerate roster P1=P2=W became assemblable from one signature. A real
+  validator checks role distinctness itself (wire §3.2), so `Accept_Record`
+  now does. All six lemmas verify, and the co-presence theorem now rests on
+  the **participants'** tokens alone, which is what the design claims.
+
+  **Two theories claimed targets they do not close**, each contradicted by its
+  own file lower down. `currency`'s introduction said that once the patron
+  rotates and the lifetime passes no attestation makes the old key current —
+  but there is no rotation state and no time, as the note above its security
+  lemma already said. `attach`'s said it *was* the Stage 1.1 sibling-authority
+  target, while the paragraph above it explains it cannot reach authorization.
+  Both introductions now say what is proved and name what is not.
+
+  The remaining finding tightened `recognition_binds_the_successor`, whose
+  compromise escapes were untimed and named any verifier rather than the
+  relied-on one.
 
 - **A second Tamarin review, and the gate that let a malformed lemma pass.**
   Nine findings, again filed without a prover. Two were mine from the round

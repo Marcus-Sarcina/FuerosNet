@@ -129,13 +129,44 @@ rule Old_Key_Proof:
   in the lemma as a compromised verifier.
 */
 
+/*
+  TWO DIFFERENT FACTS, AND COLLAPSING THEM IS A REAL ERROR.  design Section
+  9.1 step 1: "A user rotating a key MEETS, IN PERSON, someone they have met
+  BEFORE."  That is past acquaintance AND a present encounter, and only the
+  pair licenses a recognition.
+
+  An earlier version had only the past half -- a persistent !Met(V,S) that
+  Recognise read forever -- so a thief holding the stolen key could obtain
+  factor B from an HONEST verifier with no new meeting at all.  Tamarin found
+  that trace in 9 steps, with neither verifier nor patron compromised.  The
+  file called it design Section 18.3's colluding/deceived residual, which it
+  was not: nobody in the trace colludes or is deceived, the rule simply fires.
+*/
+
+// PAST ACQUAINTANCE.  Persistent, because having met somebody does not stop
+// being true.  This alone licenses nothing.
 rule Met:
-    // A ground-truth meeting between subject and verifier, established out
-    // of band (a past ceremony).  It licenses honest recognition, and
-    // stands in for "V can recognise S's face".
     [ ]
   --[ PriorCounterparty($V, $S) ]->
     [ !Met($V, $S) ]
+
+/*
+  THE PRESENT ENCOUNTER, and this is the model's second physical AXIOM,
+  of the same kind as ceremony.spthy's co-presence: the token below stands
+  for "the two of them are in a room now", the adversary has no rule that
+  mints one, and the theorems are proved RELATIVE to that.
+
+  WHAT THE AXIOM DOES NOT SAY is who the verifier is looking at.  A thief who
+  physically turns up and is taken for the subject produces this same token --
+  that is design Section 18.3's deceived counterparty, and it stays a
+  residual.  What the axiom buys is narrower and is exactly what was missing:
+  a recognition requires SOMEBODY to have shown up, so a thief working from
+  the stolen key alone, remotely, cannot manufacture one.
+*/
+rule Recovery_Meeting:
+    [ !Met($V, $S) ]                   // they had met before -- design §9.1
+  --[ RecoveryMeeting($V, $S) ]->
+    [ AtMeeting($V, $S) ]              // LINEAR: one recognition per meeting
 
 /*
   THE RECOGNITION NAMES THE SUCCESSOR IT ATTESTS CONTINUITY TO.  The verifier
@@ -150,7 +181,7 @@ rule Met:
 */
 rule Recognise:
     [ !Ltk($V, ~vsk)                   // the verifier's key
-    , !Met($V, $S)                     // and it really met the subject
+    , AtMeeting($V, $S)                // CONSUMED: they are meeting NOW
     , In(newkey) ]                     // the successor presented at the meeting
   --[ Recognised($V, $S)
     , RecognisedFor($V, $S, newkey) ]->
@@ -289,8 +320,9 @@ lemma recognition_binds_the_successor:
   "All P S newkey #i.
      RecoveryAccepted(P, S, newkey) @ #i
      ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
-         | (Ex V #kv. Compromised(V) @ #kv)
-         | (Ex #kp. Compromised(P) @ #kp) )"
+         | (Ex V #kv. ReliedOn(P, V, S) @ #i
+                    & Compromised(V) @ #kv & #kv < #i)
+         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
 
 // THE PATRON BINDING IS LOAD-BEARING TOO.  Every accepted recovery rests on
 // an old-key proof naming THE ACCEPTING PATRON.  Drop the third element of
@@ -301,6 +333,22 @@ lemma successor_statement_binds_the_patron:
      RecoveryAccepted(P, S, newkey) @ #i
      ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
          | (Ex #c. Compromised(S) @ #c & #c < #i)
+         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
+
+// NO RECOVERY WITHOUT A PHYSICAL MEETING.  This is what the AtMeeting token
+// buys and what was missing: absent compromise of the relied-on verifier or
+// the patron, a recovery requires somebody to have turned up.  A thief
+// working from the stolen key alone, remotely, cannot manufacture one.
+//
+// WHAT IT DELIBERATELY DOES NOT SAY is that the person who turned up was the
+// subject.  The model cannot see a face, so a thief who appears in person and
+// is taken for the subject satisfies this too -- design Section 18.3's
+// deceived counterparty, which stays a residual and is not claimed closed.
+lemma recovery_requires_a_meeting:
+  "All P S newkey #i.
+     RecoveryAccepted(P, S, newkey) @ #i
+     ==> ( (Ex V #m. RecoveryMeeting(V, S) @ #m & #m < #i)
+         | (Ex V #kv. Compromised(V) @ #kv & #kv < #i)
          | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
 
 end

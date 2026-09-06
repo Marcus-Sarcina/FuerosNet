@@ -64,7 +64,7 @@ rule (modulo E) Participant_Sign:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Witness_Sign:
-   [ !Ltk( $W, ~sk ), !Ceremony( $P1, $P2, $W, cid ) ]
+   [ !Ltk( $W, ~sk ), In( <'presence', $P1, $P2, $W, cid> ) ]
   --[ WitnessSigned( $W, $P1, $P2, $W, cid ) ]->
    [ Out( sign(<'presence', $P1, $P2, $W, cid>, ~sk) ) ]
 
@@ -79,7 +79,7 @@ rule (modulo E) Accept_Record:
   Eq( verify(sig1, <'presence', $P1, $P2, $W, cid>, pk1), true ),
   Eq( verify(sig2, <'presence', $P1, $P2, $W, cid>, pk2), true ),
   Eq( verify(sigw, <'presence', $P1, $P2, $W, cid>, pkw), true ),
-  RecordAccepted( $P1, $P2, $W, cid )
+  DistinctParties( $P1, $P2, $W ), RecordAccepted( $P1, $P2, $W, cid )
   ]->
    [ ]
 
@@ -91,7 +91,7 @@ rule (modulo E) Accept_Record:
      ]
     --[
     Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ),
-    RecordAccepted( $P1, $P2, $W, cid )
+    DistinctParties( $P1, $P2, $W ), RecordAccepted( $P1, $P2, $W, cid )
     ]->
      [ ]
     variants (modulo AC)
@@ -349,11 +349,8 @@ solve( !Pk( $P1, pk(x) ) ▶₀ #i )
             solve( !KU( ~sk.1 ) @ #vk.13 )
               case Compromise
               solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~sk.2) ) @ #vk.13 )
-                case c_sign
-                solve( !KU( ~sk.2 ) @ #vk.14 )
-                  case Compromise
-                  SOLVED // trace found
-                qed
+                case Witness_Sign
+                SOLVED // trace found
               qed
             qed
           qed
@@ -657,9 +654,9 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/ceremony.spthy
 
-  processing time: 2.12s
+  processing time: 2.17s
   
-  ceremony_is_executable (exists-trace): verified (11 steps)
+  ceremony_is_executable (exists-trace): verified (10 steps)
   presence_requires_copresence (all-traces): verified (10 steps)
   no_remote_forgery (all-traces): verified (10 steps)
   copresence_binds_one_roster (all-traces): verified (38 steps)
