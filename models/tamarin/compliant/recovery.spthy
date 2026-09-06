@@ -170,4 +170,105 @@ lemma thief_wins_against_a_chainless_counterparty:
       SealedBeforeReissue(S, ln) @ #i
     & AcceptedWithoutAChain(S, c) @ #j"
 
+
+/*
+================================================================================
+  THE RECOVERY MEETING -- what a conforming verifier will not sign
+================================================================================
+
+  WHY THIS IS HERE AND NOT IN `wire-only/`.  Three properties used to live in
+  `wire-only/recovery.spthy` and did not belong there.  `wire-format.md` 4.1
+  says the human evidence carries no guarantee: a verifier "can be mistaken
+  or lying and nothing checks it".  A theory that requires a meeting before V
+  may use V's OWN uncompromised key is assuming client conformity, and no
+  validator can check conformity.
+
+  KEY COMPROMISE IS NOT DISHONESTY.  The old model carved the residual out
+  under `Compromised(V)`, which means someone stole V's key.  A verifier who
+  lies with its own key needs no theft, so the carve-out was naming the wrong
+  capability and the theorem read stronger than it was.  Here it is
+  `SkippedTheMeeting`, named for what it is.
+
+  design 19 already registers the composition -- a stolen device plus a
+  colluding counterparty producing false recovery evidence -- as an accepted
+  residual, so nothing below is a new weakness.  It is the same residual,
+  stated where it can be seen.
+*/
+
+rule Prior_Counterparty:
+    [ ]
+  --[ PriorCounterparty($V, $S) ]->
+    [ !Met($V, $S) ]
+
+/*  The successor is minted AT the meeting and travels the direct channel --
+    design 7.1's optical channel "carries key exchange" -- never the network. */
+rule Recovery_Meeting:
+    [ !Met($V, $S), Fr(~nk) ]
+  --[ MeetingHappened($V, $S, ~nk) ]->
+    [ AtMeeting($V, $S, ~nk), Out(~nk) ]
+    // `Out` because the SUBJECT leaves the meeting holding its own successor
+    // and must name it in the old-key proof.  Without it the two factors can
+    // never name one key and no honest recovery completes --
+    // `a_conforming_recovery_completes` reported *falsified, no trace found*
+    // the first time this rule was written, which is what that lemma is for.
+
+rule Recognise_Compliant:
+    [ AtMeeting($V, $S, nk) ]
+  --[ RecognisedFor($V, $S, nk) ]->
+    [ Recognition($V, $S, nk) ]
+
+/*  AND THE VERIFIER THAT LIES.  A genuine prior counterparty, its own key,
+    a successor off the network, no meeting.                                */
+rule Recognise_Without_Meeting:
+    [ !Met($V, $S), In(nk) ]
+  --[ RecognisedFor($V, $S, nk), SkippedTheMeeting($V) ]->
+    [ Recognition($V, $S, nk) ]
+
+rule Old_Key_Proof:
+    [ In(nk) ]
+  --[ OldKeyProof($S, nk, $P) ]->
+    [ Proof($S, nk, $P) ]
+
+rule Patron_Accept_Recovery:
+    [ Proof($S, nk, $P), Recognition($V, $S, nk) ]
+  --[ RecoveryAccepted($P, $S, nk), ReliedOn($P, $V, $S) ]->
+    [ ]
+
+/*  THE CONFORMANCE THEOREM.  Where verifiers keep the discipline, an accepted
+    recovery implies a meeting.  The honest form of what
+    `recovery_requires_a_meeting` was reaching for.                         */
+lemma recovery_between_conforming_parties_requires_a_meeting:
+  all-traces
+  "All P S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i
+      & not(Ex V #s. SkippedTheMeeting(V) @ #s)
+        ==> Ex V #m. MeetingHappened(V, S, nk) @ #m & #m < #i"
+
+/*  And that a conforming recognition names the key THAT meeting exchanged --
+    not one supplied to the verifier some other way.                        */
+lemma a_conforming_recognition_names_the_meeting_key:
+  all-traces
+  "All V S nk #b.
+      RecognisedFor(V, S, nk) @ #b
+      & not(Ex X #s. SkippedTheMeeting(X) @ #s)
+        ==> Ex #m. MeetingHappened(V, S, nk) @ #m & #m < #b"
+
+/*  ANTI-VACUITY: a conforming recovery completes.                          */
+lemma a_conforming_recovery_completes:
+  exists-trace
+  "Ex P S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i
+    & not(Ex V #s. SkippedTheMeeting(V) @ #s)"
+
+/*  THE RESIDUAL, KEPT REACHABLE.  A thief with the old key plus one prior
+    counterparty willing to lie completes a recovery with no meeting behind
+    it, using nothing but their own keys.  design 19 accepts this; a model in
+    which it became unreachable would claim more than the design does.     */
+lemma a_lying_verifier_completes_a_recovery_without_a_meeting:
+  exists-trace
+  "Ex P S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i
+    & not(Ex V #m. MeetingHappened(V, S, nk) @ #m)"
+
+
 end

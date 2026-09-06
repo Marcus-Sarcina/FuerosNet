@@ -141,4 +141,102 @@ lemma misattribution_is_possible_without_the_check:
     & SkippedTheCheck(P) @ #i
     & not(Ex Other #n. Nominated(P, Other, W) @ #n)"
 
+
+/*
+================================================================================
+  CO-PRESENCE -- what a conforming participant will not sign
+================================================================================
+
+  WHY THIS IS HERE AND NOT IN `wire-only/`.  These four properties used to
+  live in `wire-only/ceremony.spthy`, and a review was right that they did not
+  belong: they hold only of participants who follow the signing discipline,
+  and the wire cannot check that anyone did.  design 7 is explicit --
+  "bilateral collusion is unpreventable" -- and design 15.4 that presence "is
+  not an unforgeable primitive, and bilateral collusion defeats it
+  regardless".
+
+  The tell was that the old model let a `CoPresent` token gate the USE OF A
+  PARTY'S OWN KEY.  Nothing in the protocol does that, and nothing could.
+  Add a rule letting a legitimate principal sign a body it never met for --
+  no compromise, its own key -- and all four lemmas falsify at once, which is
+  how the partition was settled rather than argued.
+
+  KEY COMPROMISE AND DISHONESTY ARE DIFFERENT CAPABILITIES, and conflating
+  them was the actual error.  `Compromised(P)` means someone stole P's key.
+  It cannot stand for "P used P's own key contrary to client policy" -- that
+  needs no theft, and carving it out under the same name made the theorem
+  look stronger than it was.  Here the carve-out is `SkippedTheMeeting`,
+  named for what it is.
+*/
+
+rule Party:
+    [ ] --[ IsParty($P) ]-> [ !Party($P) ]
+
+rule Meeting:
+    [ Fr(~cid) ]
+  --[ MeetHappened($P1, $P2, ~cid) ]->
+    [ CoPresent($P1, ~cid), CoPresent($P2, ~cid), !Roster($P1, $P2, ~cid) ]
+
+/*  THE DISCIPLINE.  A conforming participant signs a presence body only for
+    a meeting it was at: the token is consumed, so one meeting licenses one
+    signature.                                                              */
+rule Sign_Presence_Compliant:
+    [ CoPresent($P, cid), !Roster($P1, $P2, cid) ]
+  --[ PresenceSigned($P, $P1, $P2, cid) ]->
+    [ Sig($P, $P1, $P2, cid) ]
+
+/*  AND THE PARTY THAT DOES NOT KEEP IT.  Its own key, a body off the
+    network, no meeting.  This is not an attack on the protocol -- it is two
+    people deciding to lie, and the design prices it as attack cost rather
+    than preventing it.                                                     */
+rule Sign_Presence_Without_Meeting:
+    [ !Party($P), In(<$P1, $P2, cid>) ]
+  --[ PresenceSigned($P, $P1, $P2, cid), SkippedTheMeeting($P) ]->
+    [ Sig($P, $P1, $P2, cid) ]
+
+rule Accept_Presence:
+    [ Sig($P1, $P1, $P2, cid), Sig($P2, $P1, $P2, cid) ]
+  --[ PresenceAccepted($P1, $P2, cid) ]->
+    [ ]
+
+/*  THE CONFORMANCE THEOREM.  Among participants who kept the discipline, an
+    accepted record implies the meeting happened.  This is the honest form of
+    what `presence_requires_copresence` was reaching for.                   */
+lemma a_record_between_conforming_participants_implies_a_meeting:
+  all-traces
+  "All P1 P2 cid #i.
+      PresenceAccepted(P1, P2, cid) @ #i
+      & not(Ex P #s. SkippedTheMeeting(P) @ #s)
+        ==> Ex #m. MeetHappened(P1, P2, cid) @ #m & #m < #i"
+
+/*  ONE MEETING, ONE ROSTER: a conforming participant's signature cannot be
+    transplanted onto a different pairing, because the token it consumed
+    belonged to that roster.  The honest form of
+    `copresence_binds_one_roster`.                                          */
+lemma a_conforming_signature_binds_one_roster:
+  all-traces
+  "All P1 P2 cid Q1 Q2 #i #j.
+      PresenceAccepted(P1, P2, cid) @ #i & PresenceAccepted(Q1, Q2, cid) @ #j
+      & not(Ex P #s. SkippedTheMeeting(P) @ #s)
+        ==> P1 = Q1 & P2 = Q2"
+
+/*  ANTI-VACUITY: conforming participants do produce records.               */
+lemma a_conforming_record_is_reachable:
+  exists-trace
+  "Ex P1 P2 cid #i.
+      PresenceAccepted(P1, P2, cid) @ #i
+    & not(Ex P #s. SkippedTheMeeting(P) @ #s)"
+
+/*  THE RESIDUAL, KEPT REACHABLE.  Two parties who simply lie produce an
+    accepted record with no meeting behind it, using nothing but their own
+    keys.  design 7 says this is unpreventable, so a model in which it became
+    unreachable would be claiming more than the design does -- and would put
+    these lemmas back in the wrong tree.                                    */
+lemma collusion_produces_a_record_without_a_meeting:
+  exists-trace
+  "Ex P1 P2 cid #i.
+      PresenceAccepted(P1, P2, cid) @ #i
+    & not(Ex #m. MeetHappened(P1, P2, cid) @ #m)"
+
+
 end

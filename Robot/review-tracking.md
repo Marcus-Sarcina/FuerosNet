@@ -5813,3 +5813,75 @@ lemmas in those theories rest on -- rather than a separate TLA+ encoding.
 
 13 artifacts. 43 Tamarin lemmas unbounded + 13 bounded, 4 TLA+ models, 1
 mutation that must fail. Nothing open.
+
+---
+
+## Cross-family Tamarin review 7: the partition was wrong (2026-09-06)
+
+Static-only again. The reviewer's scope was the WIRE component, and the finding
+is the sharpest of the series: **`wire-only/` contained lemmas that are not
+wire properties.** Verified and applied.
+
+**The claim.** `ceremony`'s `Participant_Sign` consumed a `CoPresent` token,
+so a legitimate participant could not use its own key without having met.
+`recovery`'s `Recognise` consumed `AtMeeting` the same way. Nothing in the
+protocol gates the use of a party's own key, and nothing could. The design says
+so twice: design 7, "bilateral collusion is unpreventable"; design 15.4,
+presence "is not an unforgeable primitive, and bilateral collusion defeats it
+regardless". `wire-format.md` 4.1 says a recovery verifier "can be mistaken or
+lying and nothing checks it".
+
+**The partition was settled by the prover, not by argument.** A rule was added
+letting a legitimate principal sign a body off the network with its own
+uncompromised key -- no theft, no `CoPresent`. Seven lemmas falsified and named
+themselves: four in ceremony (`presence_requires_copresence`,
+`no_remote_forgery`, `copresence_binds_one_roster`,
+`formation_requires_copresence`) and three in recovery
+(`key_alone_insufficient`, `recognition_names_the_meeting_key`,
+`recovery_requires_a_meeting`). All seven moved to `compliant/`, reframed with
+a `SkippedTheMeeting` carve-out. Both trees now carry a reachable witness that
+the collusion trace survives.
+
+**The first probe was wrong and green, which is the lesson.** It required
+`!Ceremony`, a fact only `Meet` produces, so it still needed a meeting and
+every lemma verified -- the partition looked confirmed when nothing had been
+tested. A second probe on recovery emitted `Recognised` where the rule emits
+`RecognisedFor`, and mislabelled two lemmas in the opposite direction. Both
+were caught by reading the rules rather than the verdict. **A green result from
+a probe proves nothing until the probe is shown to reach the thing it probes.**
+
+**KEY COMPROMISE IS NOT DISHONESTY**, and that conflation was the root error.
+`Compromised(P)` means P's key was stolen. It was doing double duty for "P used
+its own key contrary to client policy", which requires no theft -- so the
+theorems read stronger than they were while the carve-out looked principled.
+
+**What wire-only now proves instead is ATTRIBUTABILITY**: an accepted record
+was really signed, over that exact body, by each party it names, or that
+party's key was stolen. That survives collusion, and it is what makes design
+15.4's "attack cost rather than an absolute primitive" bite -- a fabricated
+record is a signed lie by named parties. Recovery keeps its four bindings for
+the same reason: a lying verifier signs a real recognition, so acceptance stays
+attributable to it.
+
+**F4, verified and half-fixable.** `Distinct($P, $S)` was commented as the
+wire's "node and patron MUST differ" rule. It is not: `$S` is the PRIOR
+identity, and `wire-format.md` 4.1's field 1 is the NEW key. `Distinct(pkOld,
+newkey)` -- "prior_key MUST differ from field 1" -- was missing entirely and is
+now added. The node/patron rule CANNOT be stated in this abstraction, which
+carries identity as a stable name while RHTN identifies a node by its keyhash;
+the comment now says so instead of implying the check is made.
+
+**F5 recorded, not closed.** Any registered patron may issue currency for any
+subject -- no `PatronOf` relation, no issuer role. The lemmas establish "the P
+whose key signed this issued it", not "P was authorised by one of the ladder's
+paths". Noted in the file. F3 (client authentication) and F6 (0-RTT) remain as
+already documented.
+
+**The honest-path guard fired once more**, on the first version of
+`compliant/recovery`'s meeting: the meeting minted the successor but never
+published it, so the two factors could never name one key.
+`a_conforming_recovery_completes` reported *falsified, no trace found*
+immediately. Fourth occurrence; second caught in the same minute.
+
+13 artifacts. 46 Tamarin lemmas unbounded (20 wire-only, 26 compliant) + 13
+bounded, 4 TLA+ models, 1 mutation that must fail.

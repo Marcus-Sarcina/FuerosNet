@@ -148,6 +148,200 @@ solve( !Record( rec, $W, $P, $Other ) ▶₀ #i )
   qed
 qed
 
+rule (modulo E) Party:
+   [ ] --[ IsParty( $P ) ]-> [ !Party( $P ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Meeting:
+   [ Fr( ~cid ) ]
+  --[ MeetHappened( $P1, $P2, ~cid ) ]->
+   [
+   CoPresent( $P1, ~cid ), CoPresent( $P2, ~cid ), !Roster( $P1, $P2, ~cid )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Sign_Presence_Compliant:
+   [ CoPresent( $P, cid ), !Roster( $P1, $P2, cid ) ]
+  --[ PresenceSigned( $P, $P1, $P2, cid ) ]->
+   [ Sig( $P, $P1, $P2, cid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Sign_Presence_Without_Meeting:
+   [ !Party( $P ), In( <$P1, $P2, cid> ) ]
+  --[ PresenceSigned( $P, $P1, $P2, cid ), SkippedTheMeeting( $P ) ]->
+   [ Sig( $P, $P1, $P2, cid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Accept_Presence:
+   [ Sig( $P1, $P1, $P2, cid ), Sig( $P2, $P1, $P2, cid ) ]
+  --[ PresenceAccepted( $P1, $P2, cid ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma a_record_between_conforming_participants_implies_a_meeting:
+  all-traces
+  "∀ P1 P2 cid #i.
+    ((PresenceAccepted( P1, P2, cid ) @ #i) ∧
+     (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))) ⇒
+    (∃ #m. (MeetHappened( P1, P2, cid ) @ #m) ∧ (#m < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 cid #i.
+  (PresenceAccepted( P1, P2, cid ) @ #i)
+ ∧
+  (∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥) ∧
+  (∀ #m. (MeetHappened( P1, P2, cid ) @ #m) ⇒ ¬(#m < #i))"
+*/
+simplify
+solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
+  case Sign_Presence_Compliant_case_1
+  by contradiction /* from formulas */
+next
+  case Sign_Presence_Compliant_case_2
+  by contradiction /* from formulas */
+next
+  case Sign_Presence_Without_Meeting
+  by contradiction /* from formulas */
+qed
+
+lemma a_conforming_signature_binds_one_roster:
+  all-traces
+  "∀ P1 P2 cid Q1 Q2 #i #j.
+    (((PresenceAccepted( P1, P2, cid ) @ #i) ∧
+      (PresenceAccepted( Q1, Q2, cid ) @ #j)) ∧
+     (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))) ⇒
+    ((P1 = Q1) ∧ (P2 = Q2))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 cid Q1 Q2 #i #j.
+  (PresenceAccepted( P1, P2, cid ) @ #i) ∧
+  (PresenceAccepted( Q1, Q2, cid ) @ #j)
+ ∧
+  (∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥) ∧
+  (((¬(P1 = Q1)) ∨ (¬(P2 = Q2))))"
+*/
+simplify
+solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1)) )
+  case case_1
+  solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
+    case Sign_Presence_Compliant_case_1
+    solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
+      case Sign_Presence_Compliant
+      solve( Sig( $P1.1, $P1.1, $P2.1, ~cid ) ▶₀ #j )
+        case Sign_Presence_Compliant
+        by contradiction /* from formulas */
+      next
+        case Sign_Presence_Without_Meeting
+        by contradiction /* from formulas */
+      qed
+    next
+      case Sign_Presence_Without_Meeting
+      by contradiction /* from formulas */
+    qed
+  next
+    case Sign_Presence_Compliant_case_2
+    solve( Sig( $P1, $P1, $P1, ~cid ) ▶₁ #i )
+      case Sign_Presence_Compliant
+      solve( Sig( $P1.1, $P1.1, $P2, ~cid ) ▶₀ #j )
+        case Sign_Presence_Compliant
+        by contradiction /* from formulas */
+      next
+        case Sign_Presence_Without_Meeting
+        by contradiction /* from formulas */
+      qed
+    next
+      case Sign_Presence_Without_Meeting
+      by contradiction /* from formulas */
+    qed
+  next
+    case Sign_Presence_Without_Meeting
+    by contradiction /* from formulas */
+  qed
+next
+  case case_2
+  solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
+    case Sign_Presence_Compliant_case_1
+    solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
+      case Sign_Presence_Compliant
+      solve( Sig( $P1.1, $P1.1, $P2.1, ~cid ) ▶₀ #j )
+        case Sign_Presence_Compliant
+        by contradiction /* from formulas */
+      next
+        case Sign_Presence_Without_Meeting
+        by contradiction /* from formulas */
+      qed
+    next
+      case Sign_Presence_Without_Meeting
+      by contradiction /* from formulas */
+    qed
+  next
+    case Sign_Presence_Compliant_case_2
+    solve( Sig( $P1, $P1, $P1, ~cid ) ▶₁ #i )
+      case Sign_Presence_Compliant
+      solve( Sig( $P1.1, $P1.1, $P2, ~cid ) ▶₀ #j )
+        case Sign_Presence_Compliant
+        by contradiction /* from formulas */
+      next
+        case Sign_Presence_Without_Meeting
+        by contradiction /* from formulas */
+      qed
+    next
+      case Sign_Presence_Without_Meeting
+      by contradiction /* from formulas */
+    qed
+  next
+    case Sign_Presence_Without_Meeting
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma a_conforming_record_is_reachable:
+  exists-trace
+  "∃ P1 P2 cid #i.
+    (PresenceAccepted( P1, P2, cid ) @ #i) ∧
+    (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P1 P2 cid #i.
+  (PresenceAccepted( P1, P2, cid ) @ #i)
+ ∧
+  ∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥"
+*/
+simplify
+solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
+  case Sign_Presence_Compliant_case_1
+  solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
+    case Sign_Presence_Compliant
+    SOLVED // trace found
+  qed
+qed
+
+lemma collusion_produces_a_record_without_a_meeting:
+  exists-trace
+  "∃ P1 P2 cid #i.
+    (PresenceAccepted( P1, P2, cid ) @ #i) ∧
+    (¬(∃ #m. MeetHappened( P1, P2, cid ) @ #m))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P1 P2 cid #i.
+  (PresenceAccepted( P1, P2, cid ) @ #i)
+ ∧
+  ∀ #m. (MeetHappened( P1, P2, cid ) @ #m) ⇒ ⊥"
+*/
+simplify
+solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
+  case Sign_Presence_Without_Meeting
+  solve( Sig( $P2, $P1, $P2, cid ) ▶₁ #i )
+    case Sign_Presence_Without_Meeting
+    SOLVED // trace found
+  qed
+qed
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -165,11 +359,15 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/ceremony.spthy
 
-  processing time: 0.37s
+  processing time: 0.64s
   
   no_signature_over_a_misattributed_nominee (all-traces): verified (6 steps)
   no_nominee_from_the_nominators_own_neighbourhood (all-traces): verified (2 steps)
   an_honest_signature_is_reachable (exists-trace): verified (5 steps)
   misattribution_is_possible_without_the_check (exists-trace): verified (4 steps)
+  a_record_between_conforming_participants_implies_a_meeting (all-traces): verified (5 steps)
+  a_conforming_signature_binds_one_roster (all-traces): verified (26 steps)
+  a_conforming_record_is_reachable (exists-trace): verified (4 steps)
+  collusion_produces_a_record_without_a_meeting (exists-trace): verified (4 steps)
 
 ==============================================================================

@@ -153,6 +153,141 @@ solve( Line( $S, ln, 'open' ) ▶₀ #i )
   SOLVED // trace found
 qed
 
+rule (modulo E) Prior_Counterparty:
+   [ ] --[ PriorCounterparty( $V, $S ) ]-> [ !Met( $V, $S ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Recovery_Meeting:
+   [ !Met( $V, $S ), Fr( ~nk ) ]
+  --[ MeetingHappened( $V, $S, ~nk ) ]->
+   [ AtMeeting( $V, $S, ~nk ), Out( ~nk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Recognise_Compliant:
+   [ AtMeeting( $V, $S, nk ) ]
+  --[ RecognisedFor( $V, $S, nk ) ]->
+   [ Recognition( $V, $S, nk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Recognise_Without_Meeting:
+   [ !Met( $V, $S ), In( nk ) ]
+  --[ RecognisedFor( $V, $S, nk ), SkippedTheMeeting( $V ) ]->
+   [ Recognition( $V, $S, nk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Old_Key_Proof:
+   [ In( nk ) ] --[ OldKeyProof( $S, nk, $P ) ]-> [ Proof( $S, nk, $P ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Patron_Accept_Recovery:
+   [ Proof( $S, nk, $P ), Recognition( $V, $S, nk ) ]
+  --[ RecoveryAccepted( $P, $S, nk ), ReliedOn( $P, $V, $S ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma recovery_between_conforming_parties_requires_a_meeting:
+  all-traces
+  "∀ P S nk #i.
+    ((RecoveryAccepted( P, S, nk ) @ #i) ∧
+     (¬(∃ V #s. SkippedTheMeeting( V ) @ #s))) ⇒
+    (∃ V #m. (MeetingHappened( V, S, nk ) @ #m) ∧ (#m < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i)
+ ∧
+  (∀ V #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥) ∧
+  (∀ V #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ¬(#m < #i))"
+*/
+simplify
+solve( Proof( $S, nk, $P ) ▶₀ #i )
+  case Old_Key_Proof
+  solve( Recognition( $V, $S, nk ) ▶₁ #i )
+    case Recognise_Compliant
+    by contradiction /* from formulas */
+  next
+    case Recognise_Without_Meeting
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma a_conforming_recognition_names_the_meeting_key:
+  all-traces
+  "∀ V S nk #b.
+    ((RecognisedFor( V, S, nk ) @ #b) ∧
+     (¬(∃ X #s. SkippedTheMeeting( X ) @ #s))) ⇒
+    (∃ #m. (MeetingHappened( V, S, nk ) @ #m) ∧ (#m < #b))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ V S nk #b.
+  (RecognisedFor( V, S, nk ) @ #b)
+ ∧
+  (∀ X #s. (SkippedTheMeeting( X ) @ #s) ⇒ ⊥) ∧
+  (∀ #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ¬(#m < #b))"
+*/
+simplify
+solve( RecognisedFor( V, S, nk ) @ #b )
+  case Recognise_Compliant
+  solve( AtMeeting( $V, $S, nk ) ▶₀ #b )
+    case Recovery_Meeting
+    by contradiction /* from formulas */
+  qed
+next
+  case Recognise_Without_Meeting
+  by contradiction /* from formulas */
+qed
+
+lemma a_conforming_recovery_completes:
+  exists-trace
+  "∃ P S nk #i.
+    (RecoveryAccepted( P, S, nk ) @ #i) ∧
+    (¬(∃ V #s. SkippedTheMeeting( V ) @ #s))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i)
+ ∧
+  ∀ V #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥"
+*/
+simplify
+solve( Proof( $S, nk, $P ) ▶₀ #i )
+  case Old_Key_Proof
+  solve( Recognition( $V, $S, nk ) ▶₁ #i )
+    case Recognise_Compliant
+    solve( !KU( ~nk ) @ #vk )
+      case Recovery_Meeting
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma a_lying_verifier_completes_a_recovery_without_a_meeting:
+  exists-trace
+  "∃ P S nk #i.
+    (RecoveryAccepted( P, S, nk ) @ #i) ∧
+    (¬(∃ V #m. MeetingHappened( V, S, nk ) @ #m))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i)
+ ∧
+  ∀ V #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ⊥"
+*/
+simplify
+solve( Proof( $S, nk, $P ) ▶₀ #i )
+  case Old_Key_Proof
+  solve( Recognition( $V, $S, nk ) ▶₁ #i )
+    case Recognise_Without_Meeting
+    SOLVED // trace found
+  qed
+qed
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -170,11 +305,15 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/recovery.spthy
 
-  processing time: 0.36s
+  processing time: 0.57s
   
   sealing_first_leaves_nothing_to_supersede (all-traces): verified (4 steps)
   reissuing_first_leaves_a_window (exists-trace): verified (4 steps)
   the_compliant_order_completes (exists-trace): verified (4 steps)
   thief_wins_against_a_chainless_counterparty (exists-trace): verified (3 steps)
+  recovery_between_conforming_parties_requires_a_meeting (all-traces): verified (5 steps)
+  a_conforming_recognition_names_the_meeting_key (all-traces): verified (5 steps)
+  a_conforming_recovery_completes (exists-trace): verified (5 steps)
+  a_lying_verifier_completes_a_recovery_without_a_meeting (exists-trace): verified (4 steps)
 
 ==============================================================================

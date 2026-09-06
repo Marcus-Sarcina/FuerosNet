@@ -16,7 +16,7 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 4 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(25 lemmas) and `compliant/` (18 lemmas).
+(20 lemmas) and `compliant/` (26 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
@@ -73,6 +73,24 @@ describes a node that kept its word, and says nothing whatever about one that
 did not. Every `compliant/` theory carries at least one lemma asserting that
 the non-compliant trace is **still reachable**, so the tree cannot quietly
 start proving that the wire enforces what the design says it cannot.
+
+**How the boundary is decided, and it is not by argument.** Each `wire-only/`
+theory carries a rule letting a **legitimate principal misbehave with its own
+uncompromised key** — signing a presence body it never met for, or a
+recognition it never earned. Add that rule and any lemma resting on client
+conformity falsifies immediately, naming itself. That is how seven lemmas were
+moved out of `wire-only/` [2026-09-06]: four from `ceremony`
+(`presence_requires_copresence`, `no_remote_forgery`,
+`copresence_binds_one_roster`, `formation_requires_copresence`) and three from
+`recovery` (`key_alone_insufficient`, `recognition_names_the_meeting_key`,
+`recovery_requires_a_meeting`). None was wrong; each was in the wrong tree.
+
+**Key compromise is not dishonesty**, and conflating them was the error
+underneath. `Compromised(P)` means someone stole P's key. It cannot stand for
+"P used P's own key contrary to client policy" — that needs no theft. Carving
+the residual out under the compromise name made those theorems read stronger
+than they were. In `compliant/` the carve-out is `SkippedTheMeeting`, named for
+what it is.
 
 **What the split has already produced.** `compliant/currency.spthy`'s main
 obligation — *"issue only for the key you currently record"* — is **false read
@@ -237,19 +255,15 @@ the honest protocol and so proves every security lemma vacuously.
   expiry and supersession apart and warns against conflating them; this
   model has the first and not the second. See "What the models found".
 
-- **`recovery`** (design §9.1) — recovery adoption. **A recovery requires a
-  physical meeting** (`recovery_requires_a_meeting`) — §9.1 asks the subject to
-  *"meet, in person, someone they have met before"*, which is **two** facts,
-  and an earlier version carried only the past half, letting a thief with the
-  stolen key draw a recognition out of an honest verifier remotely. **Neither
-  factor alone is recovery**: a key proof with no honest recognition never recovers
-  (`key_alone_insufficient` — the stolen-key case), and a recognition with no
-  key authorisation never recovers (`recognition_alone_insufficient`). A
-  fourth lemma, `recognition_binds_the_successor`, checks wire §4.1's rule
-  that a verifier response names the key it attests continuity to — without
-  which "one observed proof would authorise an unlimited number of competing
-  successors". *See "What the models found," below — this one earned its
-  keep twice.*
+- **`wire-only/recovery`** (design §9.1) — what a validator concludes from
+  recovery evidence: **the bindings**. The old-key proof names *this* patron
+  (`successor_statement_binds_the_patron`) — drop the third element of the
+  successor statement and one proof is accepted by two patrons. Acceptance
+  implies a recognition naming *that* successor
+  (`recognition_binds_the_successor`) — without which "one observed proof
+  would authorise an unlimited number of competing successors". A recognition
+  with no key authorisation never recovers
+  (`recognition_alone_insufficient`). Six lemmas.
 
   It also models the **other** evidence route an adoption may carry (design
   §6.1.1): a former patron's countersignature, with
@@ -258,13 +272,25 @@ the honest protocol and so proves every security lemma vacuously.
   that lemma falsifies — the same replay primitive the successor statement
   closes, one field over.
 
-- **`ceremony`** (design §7–8) — the presence ceremony, the plan's
-  highest-value target. **A record a third party accepts implies the named
-  participants were co-present** (`presence_requires_copresence`,
-  `no_remote_forgery`), and one meeting's signatures cannot be transplanted
-  onto a different roster (`copresence_binds_one_roster`). Eight lemmas,
-  two of them (`honest_ceremony_completes`, `honest_formation_completes`)
-  witnesses that the honest path is still reachable.
+  **What it deliberately does not claim** is that a recovery happened at a
+  meeting. `wire-format.md` §4.1 says a verifier *"can be mistaken or lying
+  and nothing checks it"*, so that is a conformance property and lives in
+  `compliant/recovery`.
+
+- **`wire-only/ceremony`** (design §7–8) — the presence ceremony.
+  **Attributability**: a record a third party accepts was really signed, over
+  that exact body, by each party it names — or that party's key was stolen
+  (`an_accepted_record_is_attributable`, and the formation counterpart). Six
+  lemmas.
+
+  **Not co-presence.** design §7 says *"bilateral collusion is unpreventable"*
+  and §15.4 that presence *"is not an unforgeable primitive, and bilateral
+  collusion defeats it regardless"*. The theory therefore carries
+  `Participant_Sign_Without_Meeting` — a legitimate principal signing a body
+  it never met for, its own key, no compromise. Attributability is what
+  survives that, and it is what makes the design's *"attack cost rather than
+  an absolute primitive"* bite: a fabricated record is a signed lie by named
+  parties.
 
 ---
 

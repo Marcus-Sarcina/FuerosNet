@@ -156,6 +156,37 @@ rule Participant_Sign:
   them is the PARTICIPANTS' co-presence tokens, and gains honesty: a witness
   here will notarise a fabricated roster exactly as the design says it would.
 */
+/*  A LEGITIMATE PRINCIPAL SIGNING A BODY IT NEVER MET FOR.
+    ================================================================
+    Its own key, no `CoPresent` token, no compromise, and the roster taken
+    from the network -- which is what two parties agreeing a fake meeting
+    remotely actually looks like.
+
+    THIS RULE IS WHY THE THEORY IS HONEST ABOUT ITS TREE.  design 7 says
+    "bilateral collusion is unpreventable", and design 15.4 that proof of
+    presence "is not an unforgeable primitive, and bilateral collusion
+    defeats it regardless".  A wire theory that forbids a key owner from
+    signing what it likes is assuming CLIENT CONFORMITY, and conformity is
+    not something a validator can check.
+
+    Adding this rule falsified four lemmas that used to live here --
+    presence_requires_copresence, no_remote_forgery,
+    copresence_binds_one_roster and formation_requires_copresence.  They were
+    not wrong; they were in the wrong tree, and they are now in
+    `compliant/ceremony.spthy` where the discipline they assume is stated as
+    the participant obligation it is.                                       */
+rule Participant_Sign_Without_Meeting:
+    [ !Ltk($P, ~sk), In(<$P1, $P2, $W, cid>) ]
+  --[ ParticipantSigned($P, $P1, $P2, $W, cid)
+    , SignedWithoutMeeting($P) ]->
+    [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
+
+rule Formation_Sign_Without_Meeting:
+    [ !Ltk($P, ~sk), In(<$P1, $P2, cid>) ]
+  --[ FormationSigned($P, $P1, $P2, cid)
+    , SignedWithoutMeeting($P) ]->
+    [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
+
 rule Witness_Sign:
     [ !Ltk($W, ~sk)
     , In(<'presence', $P1, $P2, $W, cid>) ]   // whatever it is handed
@@ -300,83 +331,41 @@ lemma honest_formation_completes:
      & FormationAccepted(P1, P2, cid) @ #i & #m < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
-// THE MAIN PROPERTY (Stage 1.1).  Every accepted record for roster
-// <P1,P2,W,cid> implies a real meeting of exactly those parties under that
-// ceremony id -- UNLESS one of the named parties' keys was compromised.
-// Because each binding signature consumes a CoPresent token, and CoPresent
-// tokens come only from Meet (which stamps MeetHappened for the same
-// roster and cid), a record cannot exist without the meeting having
-// happened.  The compromise carve-out is the design's own residual: a
-// thief with a participant's key can sign as them (design Section 18.3),
-// which is theft, not remote forgery.
-//
-// This is the plan's target verbatim: "An adversary not physically present
-// cannot produce a record a third party accepts" -- relative to the
-// co-presence axiom, and modulo key theft, both stated.
-// NO WITNESS CARVE-OUT, and its absence is the point.  A witness attests that
-// the protocol ran and both participants were responsive; design §7.6 is
-// explicit that it does NOT attest that two humans were in a room.  So a
-// stolen witness key should not buy up the participant co-presence claim --
-// and it does not need to: the stronger form verifies unchanged, because what
-// carries the theorem is the PARTICIPANTS' tokens.  An earlier version carved
-// the witness out anyway, which would have hidden any future regression in
-// which one compromised witness manufactured presence.
-lemma presence_requires_copresence:
+/*  WHAT A VALIDATOR CAN ACTUALLY CONCLUDE: ATTRIBUTABILITY.
+
+    Not "these people met" -- the wire cannot deliver that, and the rule
+    above is why.  What it delivers is that an accepted record is ATTRIBUTED
+    correctly: each party the record names really did sign that exact body,
+    or its key was stolen.  A colluding participant satisfies this, because
+    it genuinely signed; that is the point, and it is what makes the record
+    evidence against the signer rather than proof of a meeting.
+
+    design 15.4 puts the same boundary in words -- presence is "an attack
+    cost rather than an absolute primitive".  The cost lands because the
+    record is attributable, so a fabricated one is a signed lie by named
+    parties.  THAT is the wire property.                                    */
+lemma an_accepted_record_is_attributable:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
-     ==> ( (Ex #m. MeetHappened(P1, P2, W, cid) @ #m & #m < #i)
-         | (Ex #k. Compromised(P1) @ #k & #k < #i)
-         | (Ex #k. Compromised(P2) @ #k & #k < #i) )"
+     ==> ( ( (Ex #a. ParticipantSigned(P1, P1, P2, W, cid) @ #a & #a < #i)
+           | (Ex #k. Compromised(P1) @ #k & #k < #i) )
+         & ( (Ex #b. ParticipantSigned(P2, P1, P2, W, cid) @ #b & #b < #i)
+           | (Ex #k. Compromised(P2) @ #k & #k < #i) ) )"
 
-// STRONGER: no record without co-presence, isolating the no-compromise case.
-// With NO key compromise anywhere, an accepted record requires the meeting.
-//
-// READ THE ANTECEDENT LITERALLY, because it is narrower than "an adversary
-// not physically present cannot produce a record".  "No compromise" here
-// means every key is held only by its owner AND every owner ran the honest
-// signing rule -- and in this model those are the same condition, there
-// being no way to sign but the honest rule or a stolen key.  So this is a
-// statement about CONFORMING participants against a NETWORK adversary.
-//
-// It says nothing about two legitimate owners who collude, and design §7.6
-// is explicit that they can simulate the whole exchange and no witness can
-// tell, so proof of presence is deliberately not an unforgeable primitive.
-// That case appears here only as Compromised(P1) and Compromised(P2) --
-// the carve-out covers it, and calling the rule "theft" alone under-describes
-// what it reaches.
-lemma no_remote_forgery:
-  "All P1 P2 W cid #i.
-     ( RecordAccepted(P1, P2, W, cid) @ #i
-     & not(Ex A #k. Compromised(A) @ #k) )
-     ==> (Ex #m. MeetHappened(P1, P2, W, cid) @ #m & #m < #i)"
-
-// FRESHNESS / NO CEREMONY-ID REUSE: each accepted record's ceremony id
-// traces to a distinct Meet.  Two different accepted rosters cannot share
-// one meeting -- the CoPresent tokens for a cid bind to one roster only.
-// (This guards against a transplant where one meeting's signatures are
-// re-used to vouch for a different pairing.)
-lemma copresence_binds_one_roster:
-  "All P1 P2 W cid Q1 Q2 X #i #j.
-     ( RecordAccepted(P1, P2, W, cid) @ #i
-     & RecordAccepted(Q1, Q2, X, cid) @ #j
-     & not(Ex A #k. Compromised(A) @ #k) )
-     ==> ( P1 = Q1 & P2 = Q2 & W = X )"
-
-// SANITY: a formation ceremony produces an acceptable record.
 lemma formation_is_executable:
   exists-trace
   "Ex P1 P2 cid #i. FormationAccepted(P1, P2, cid) @ #i"
 
-// THE SAME PHYSICAL CLAIM FOR THE WITNESSLESS SUBTYPE.  An accepted
-// formation record implies its two participants met -- unless someone held
-// a participant's key.  Without this the theory's co-presence result was
-// silent about a structurally legal record (`wire-format.md` Section 4.5
-// field 6).
-lemma formation_requires_copresence:
+/*  The formation counterpart, and the same boundary.  A formation record
+    carries no witness (design 13.2), so attributability is the whole of what
+    a validator gets -- which the design already says plainly, treating
+    colluding creation as expected rather than impossible.                  */
+lemma an_accepted_formation_is_attributable:
   "All P1 P2 cid #i.
      FormationAccepted(P1, P2, cid) @ #i
-     ==> ( (Ex #m. FormationMeetHappened(P1, P2, cid) @ #m & #m < #i)
-         | (Ex #k. Compromised(P1) @ #k & #k < #i)
-         | (Ex #k. Compromised(P2) @ #k & #k < #i) )"
+     ==> ( ( (Ex #a. FormationSigned(P1, P1, P2, cid) @ #a & #a < #i)
+           | (Ex #k. Compromised(P1) @ #k & #k < #i) )
+         & ( (Ex #b. FormationSigned(P2, P1, P2, cid) @ #b & #b < #i)
+           | (Ex #k. Compromised(P2) @ #k & #k < #i) ) )"
 
 end

@@ -100,6 +100,32 @@ rule Compromise:
   successor_statement_binds_the_patron below, which falsifies without the
   third element.
 */
+/*  A LEGITIMATE VERIFIER SIGNING A RECOGNITION IT NEVER EARNED.
+    ================================================================
+    Its own uncompromised key, no meeting, subject and successor off the
+    network.  `wire-format.md` 4.1 says the human evidence carries no
+    guarantee -- a verifier "can be mistaken or lying and nothing checks it"
+    -- so a wire theory that requires a meeting before V may use V's own key
+    is assuming client conformity.
+
+    Adding this rule falsified three lemmas that used to live here:
+    key_alone_insufficient, recognition_names_the_meeting_key and
+    recovery_requires_a_meeting.  They were not wrong, they were in the wrong
+    tree, and they are now in `compliant/recovery.spthy`.  What survives here
+    is what a validator can genuinely conclude -- the BINDINGS -- and those
+    are below.
+
+    NOTE WHAT DID NOT FALSIFY: recognition_binds_the_successor still holds.
+    A lying verifier signs a real recognition for that successor, so
+    acceptance is still attributable to it.  That is the wire's actual
+    contribution and the reason a false recovery is a signed lie by a named
+    party rather than an anonymous one.                                     */
+rule Recognise_Without_Meeting:
+    [ !Ltk($V, ~vsk), In(<$S, newkey>) ]
+  --[ Recognised($V, $S), RecognisedFor($V, $S, newkey)
+    , RecognisedWithoutMeeting($V) ]->
+    [ Out(sign(<'recognise', $S, newkey>, ~vsk)) ]
+
 rule Old_Key_Proof:
     [ !Ltk($S, ~oldsk)                 // the subject's (or thief's) old key
     , In(newkey)                       // the successor -- PUBLIC once exchanged
@@ -287,9 +313,32 @@ rule Patron_Accept_Recovery:
   --[ Eq(verify(provA, <'rotate', $S, newkey, $P>, pkOld), true)
     , Eq(verify(provB, <'recognise', $S, newkey>, pkV), true)
     , Distinct($V, $S)                          // the verifier is NOT the subject
-    , Distinct($P, $S)                          // nor is the patron: adoption
-                                                //   is bilateral between two
-                                                //   distinct parties (§6.1)
+    , Distinct($P, $S)                          // nor is the patron the subject
+    , Distinct(pkOld, newkey)                   // and the rotation is real
+
+/*  WHAT THESE CHECKS ARE AND ARE NOT.  `wire-format.md` 4.1 requires two
+    inequalities of a recovery adoption: "The node and the patron MUST
+    differ", where the node is FIELD 1 -- the NEW key -- and "`prior_key`
+    MUST differ from field 1".
+
+    `Distinct(pkOld, newkey)` is the second of those, and it was missing: a
+    "recovery" onto the key already held is no rotation, and nothing here
+    rejected it.
+
+    THE FIRST ONE CANNOT BE STATED IN THIS ABSTRACTION, and saying so is more
+    useful than pretending otherwise.  This theory carries a node's identity
+    as a stable public name `$S` with keys as separate terms, whereas RHTN
+    identifies a node BY its keyhash -- which is exactly why a rotation
+    changes identity and needs a successor statement at all.  So `newkey` and
+    `$P` live in different domains here and cannot be compared, and
+    `Distinct($P, $S)` is a check on the PRIOR identity, not on field 1.
+    It was previously commented as though it were the wire's node/patron
+    rule.  It is not, and the wire's rule is therefore unexercised: a
+    validator that omitted it would not be caught by this theory.
+
+    Closing that properly means carrying identities and keys in one keyhash
+    domain throughout, which is a reshape of this theory rather than an added
+    line.  Recorded rather than papered over.                              */
     , ReliedOn($P, $V, $S)                      // which verifier was trusted
     , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
     [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
@@ -377,32 +426,6 @@ lemma recovery_is_executable:
 // break of the two-factor structure.  The two lemmas below sidestep the
 // artifact by asking the sound question: is EITHER factor alone enough?
 
-// FACTOR B IS NECESSARY: NO recovery at all without an honest recognition,
-// however factor a was produced.  The antecedent deliberately does NOT
-// require the honest OldKeyProof action: a thief who has stolen the key
-// signs the successor statement directly, so demanding that action would
-// exclude the very case the lemma is named for -- "a thief holding the key
-// cannot produce a rotation".  Dropping it makes the statement strictly
-// stronger and it still verifies: with no honest prior counterparty
-// recognising the person, and no compromise of patron or verifier, nothing
-// is accepted whether the old key was held honestly or stolen.
-// QUANTIFIER SCOPE IS THE WHOLE PROPERTY HERE.  An earlier form excluded
-// `Ex V. Compromised(V)` with V unbound -- which reads "no identity anywhere
-// was compromised", and instantiating V = S excludes the stolen subject key.
-// That is the case the lemma is NAMED for, so the lemma could not test it: it
-// established only that recovery needs a recognition on traces where nothing
-// was stolen at all.  The form below PERMITS Compromised(S) -- the thief is
-// the point -- and excludes compromise only of the patron and of the verifier
-// the patron actually relied on.
-lemma key_alone_insufficient:
-  "not( Ex P S V newkey #i.
-          PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-        & ReliedOn(P, V, S) @ #i
-        & not(Ex #b #m. Recognised(V, S) @ #b
-                      & PriorCounterparty(V, S) @ #m)
-        & not(Ex #kp. Compromised(P) @ #kp & #kp < #i)
-        & not(Ex #kv. Compromised(V) @ #kv & #kv < #i) )"
-
 // FACTOR A IS NECESSARY: an honest recognition with no key authorisation
 // never recovers.  A verifier vouching for the person is not enough on its
 // own; without the old key signing the rotation (OldKeyProof by the honest
@@ -416,17 +439,6 @@ lemma recognition_alone_insufficient:
         & not(Ex #a. OldKeyProof(S, newkey) @ #a)   // no honest key proof
         & not(Ex #c. Compromised(S) @ #c)           // and no stolen key
         & not(Ex #kp. Compromised(P) @ #kp) )"       // and no patron compromise
-
-// THE RECOGNITION NAMES THE KEY THE MEETING EXCHANGED, and no other.  This is
-// what taking the successor from AtMeeting rather than from the network buys:
-// an honest verifier's recognition attaches to the key that came over the
-// direct channel in front of it (design §7.1's optical channel "carries key
-// exchange"), never to one an adversary supplied.  Restore In(newkey) in
-// Recognise and this falsifies.
-lemma recognition_names_the_meeting_key:
-  "All V S newkey #b.
-     RecognisedFor(V, S, newkey) @ #b
-     ==> (Ex #m. MeetingKey(V, S, newkey) @ #m & #m < #b)"
 
 // THE SUCCESSOR BINDING IS LOAD-BEARING.  Every accepted recovery rests on a
 // recognition NAMING THAT successor key.  This is the model's check on wire
@@ -450,23 +462,6 @@ lemma successor_statement_binds_the_patron:
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
          | (Ex #c. Compromised(S) @ #c & #c < #i)
-         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
-
-// NO RECOVERY WITHOUT A PHYSICAL MEETING.  This is what the AtMeeting token
-// buys and what was missing: absent compromise of the relied-on verifier or
-// the patron, a recovery requires somebody to have turned up.  A thief
-// working from the stolen key alone, remotely, cannot manufacture one.
-//
-// WHAT IT DELIBERATELY DOES NOT SAY is that the person who turned up was the
-// subject.  The model cannot see a face, so a thief who appears in person and
-// is taken for the subject satisfies this too -- design Section 18.3's
-// deceived counterparty, which stays a residual and is not claimed closed.
-lemma recovery_requires_a_meeting:
-  "All P S newkey #i.
-     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-     ==> ( (Ex V #m. RecoveryMeeting(V, S) @ #m & #m < #i)
-         | (Ex V #kv. ReliedOn(P, V, S) @ #i
-                    & Compromised(V) @ #kv & #kv < #i)
          | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
 
 // THE TRANSFER STATEMENT BINDS ITS DESTINATION.  Every accepted transfer rests

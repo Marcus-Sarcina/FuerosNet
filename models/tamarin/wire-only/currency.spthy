@@ -139,6 +139,22 @@ rule Expire_Epoch:
   §12.6.5: the introducing node "staples a recent patron-signed currency
   attestation to its introduction").
 */
+/*  A SCOPE LIMIT ON THE ISSUER, recorded because a green lemma here reads
+    stronger than it is.  Any `!PatronKey($P, ~psk)` may issue for any
+    `!SubjKey($S, sk)`: there is no `PatronOf($P, $S)` relation and no issuer
+    ROLE, whereas the wire object carries both an issuer identity and its
+    role -- patron, sibling, grandpatron or down-line (design 12.6.5.1).
+
+    So what the lemmas below establish is "the P whose key signed this tuple
+    issued it", NOT "P was an authorised issuer for S by any of the paths the
+    ladder allows".  A relying party inside the horizon can check the latter
+    from its own topology; one outside cannot, which is part of why the
+    design puts the escalation ladder's correctness in
+    `tla/CurrencyEscalation.tla` -- where the rungs and their conditions ARE
+    modelled -- rather than here.
+
+    Closing it in this theory means adding a topology relation and stating
+    the lemmas conditional on it.  Not done; recorded.                     */
 rule Issue_Currency:
     [ !PatronKey($P, ~psk)             // only the patron can issue
     , !SubjKey($S, sk)                 // for a key the subject holds
