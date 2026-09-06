@@ -2,7 +2,7 @@
 
 Stage 1 of `Robot/review-plan.md` — the formal-modelling reviews the plan
 calls "the highest-value reviews in the plan and the ones least replaceable
-by an LLM pass." Three tool families, twelve artifacts, each checking claims
+by an LLM pass." Three tool families, thirteen artifacts, each checking claims
 the design documents make analytically and had never run.
 
 **Every result here is the tool's, not the author's.** As the plan states:
@@ -11,10 +11,10 @@ verification result comes from the tool." Re-run everything with
 `./run-all.sh`; it exits non-zero if any check regresses.
 
 ```bash
-./run-all.sh          # builds and checks all twelve; writes results/
+./run-all.sh          # builds and checks all thirteen; writes results/
 ```
 
-Current status: 3 Python assertion families, 3 TLA+ models (invariants +
+Current status: 3 Python assertion families, 4 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
 (25 lemmas) and `compliant/` (18 lemmas).
 
@@ -27,12 +27,20 @@ the backward search for its origin regresses through unboundedly many prior
 operations. Source invariants closed that regress for the neighbouring
 properties in both theories and not for these three.
 
-Bounding the loop makes the space finite and all three verify — 33, 84 and 46
-steps. The bound lives in a `.bounded` fragment that `run-all.sh` **appends to
-the real theory**, so the rules have exactly one source and the bounded result
-follows any change to them; a hand-maintained second copy would have drifted.
-Quote these three as *no counterexample within the bound*, never as the
-unbounded claim.
+**All three are discharged in TLA+ instead**, by
+`tla/SupersessionDiscipline.tla`, which checks them exhaustively over every
+reachable state of a finite instance. They are safety properties of a mutable
+local state machine, which is what TLC enumerates for a living; Tamarin's
+difficulty was isolated to a three-rule theory carrying nothing but the
+pattern — delete the restore and the same lemma verifies in four steps, keep it
+and no budget or heuristic terminates. That is a fact about the backward
+search, not about the claim.
+
+They are also verified in Tamarin under a bound (33, 84 and 46 steps), by
+`.bounded` fragments that `run-all.sh` **appends to the real theory** so the
+rules keep one source. That check is weaker than TLC's, and it earns its place
+by checking the *Tamarin* rules — the ones the other lemmas in those theories
+rely on — rather than a separate TLA+ encoding of them.
 
 ---
 
@@ -171,6 +179,32 @@ constants and lists the invariants and temporal properties.
 All three run with `-deadlock` (checking off) because the models legitimately
 terminate — quiescence is a valid end state, not an error; the properties
 that matter are the invariants and temporal properties, checked regardless.
+
+### 2d. `tla/SupersessionDiscipline.tla` — the supersession discipline (design §12.6.5)
+
+Where three obligations live that Tamarin could not discharge: currency's
+*"issue only for the key you currently record"* and both halves of §12.6.5's
+rule on sessions and queues. They are safety properties of a **mutable local
+state machine**, and TLC enumerates every reachable state of two nodes and
+three key generations — 100 distinct states, exhaustive.
+
+**What makes the invariants non-vacuous.** `Issue` and `Serve` are *unguarded*:
+a node issues for whatever its record holds and serves whatever its session
+holds, and a flag records whether that key had already been superseded. The
+invariant is therefore a claim about the state machine's shape, not a
+restatement of an action's precondition — which is exactly what §12.6.5 means
+by *"enforced by replacement rather than by a check"*.
+
+`superseded` is accumulated history, not `everHeld \ {record}`. Derived, the
+current generation would be excluded **by definition** and a walk-back onto a
+superseded key would satisfy the invariant silently.
+
+**And the mutation must fail.** `SeriesCheck = FALSE` drops the light client's
+*"never take a series reissue into a series you have occupied before"* — a rule
+in another document binding another party — and TLC then violates
+`NeverIssuedForASupersededKey`. `run-all.sh` fails if that violation stops
+happening, because a clean run would mean the invariant had quietly stopped
+depending on the cross-document rule.
 
 ### 3. `tamarin/` — cryptographic properties (Tamarin, symbolic model)
 

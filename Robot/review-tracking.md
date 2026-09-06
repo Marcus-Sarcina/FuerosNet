@@ -5755,3 +5755,61 @@ per-issuer key.
 
 12 models, 43 lemmas unbounded + 13 bounded. Nothing open without a number
 against it.
+
+---
+
+## Closing the three obligations: the right tool (2026-09-06)
+
+Author: *"Go ahead and attempt."*
+
+**The diagnosis came first, and it is the part worth keeping.** Rather than
+reshape the theories on a hunch, the pattern was reduced to a three-rule
+theory carrying nothing else:
+
+```
+rule Set:  [ Fr(~k) ]              --[ Set($I, ~k) ]->             [ St($I, ~k) ]
+rule Read: [ St($I, k) ]           --[ Read($I, k) ]->             [ St($I, k) ]
+rule Kill: [ St($I, k), Fr(~k2) ]  --[ Kill($I, k), Set($I, ~k2) ]-> [ St($I, ~k2) ]
+```
+
+`no_read_after_kill` does not terminate here, with or without induction.
+Delete the restore from `Read` and it **verifies in four steps**. So the cause
+is the consume-restore loop alone, it is fundamental to Tamarin's backward
+search, and nothing in the RHTN modelling caused it. Everything tried before
+that diagnosis -- five invariant shapes, the loop-aware heuristics, removing
+the adversary -- was guessing, and the minimal theory settled it in one run.
+
+**Which means the obligations were in the wrong tool.** They are safety
+properties of a mutable local state machine: a record that is written, read
+many times, and overwritten. That is what TLC enumerates for a living, and
+this repository already had a TLA+ layer. `tla/SupersessionDiscipline.tla`
+checks all three exhaustively over two nodes and three key generations -- 100
+distinct states, complete graph depth 7.
+
+**Two modelling traps caught while writing it**, both of which would have made
+the check pass while meaning nothing:
+
+- `Superseded(n)` was first DERIVED as `everHeld[n] \ {record[n]}`. That makes
+  `RecordIsNeverSuperseded` a tautology -- the current generation is excluded
+  by definition, so a walk-back onto a superseded key satisfies it silently.
+  Supersession is history and never un-happens, so it is now accumulated state.
+- `Issue` and `Serve` are deliberately UNGUARDED. Had they required the key to
+  be current, the invariants would restate their own preconditions. Instead
+  they act on whatever the state holds and a flag records whether that was
+  superseded, so the invariant tests the machine's shape. That is precisely
+  design 12.6.5's "enforced by replacement rather than by a check", and the
+  claim is now tested rather than assumed.
+
+**The cross-document dependency is now an executable gate.** Setting
+`SeriesCheck = FALSE` removes light-client's "never take a series reissue into
+a series you have occupied before" -- another document, another party -- and
+TLC violates `NeverIssuedForASupersededKey`. `run-all.sh` FAILS if that
+violation stops occurring, because a clean mutation run would mean the
+invariant had quietly stopped depending on the rule that holds it up.
+
+The Tamarin `.bounded` fragments are kept. They are strictly weaker than TLC's
+result and earn their place by checking the TAMARIN rules -- the ones the other
+lemmas in those theories rest on -- rather than a separate TLA+ encoding.
+
+13 artifacts. 43 Tamarin lemmas unbounded + 13 bounded, 4 TLA+ models, 1
+mutation that must fail. Nothing open.

@@ -260,6 +260,13 @@ lemma a_record_key_entered_by_one_of_two_doors [reuse, use_induction]:
     right -- the regress is unbounded, so it does not terminate at any budget.
     What would close it is a different encoding of the record's lifetime, and
     that is a modelling decision rather than a tuning one.
+    AND IT IS DISCHARGED ELSEWHERE.  `tla/SupersessionDiscipline.tla` checks
+    this obligation EXHAUSTIVELY over a finite instance -- every reachable
+    state of two nodes and three key generations -- because it is a safety
+    property of a mutable local state machine, which is what TLC enumerates
+    for a living.  The Tamarin difficulty was isolated to a three-rule
+    theory: delete the restore and the same lemma verifies in four steps.
+    That is a fact about the tool's backward search, not about the claim.
     ============================================================  */
 
 lemma issuance_after_supersession_names_the_new_key:

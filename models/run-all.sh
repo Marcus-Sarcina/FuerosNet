@@ -30,10 +30,10 @@ else
 fi
 
 echo "=== 2. TLA+ distributed-systems models (TLC) ==="
-# All three run with -deadlock: the models terminate (quiescence), which the
+# All run with -deadlock: the models terminate (quiescence), which the
 # default deadlock check would flag; the properties that matter are the
 # invariants and temporal properties, checked regardless.
-for m in PartitionMerge CurrencyEscalation CycleDetection; do
+for m in PartitionMerge CurrencyEscalation CycleDetection SupersessionDiscipline; do
   out="$RESULTS/$m.txt"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
       -workers 4 -deadlock -metadir "/tmp/tlc_$m" \
@@ -53,6 +53,30 @@ done
 # A compliant/ lemma is NOT a claim that anyone can verify compliance
 # remotely -- it is a claim that a node doing what it promised cannot reach
 # a state its own commitments forbid.  See models/README.md.
+# THE MUTATION, and it must FAIL.  SupersessionDiscipline's invariant holds
+# because the SUBJECT is separately forbidden to re-occupy an abandoned series
+# (light-client-requirements.md) -- a rule in another document binding another
+# party.  Setting SeriesCheck = FALSE removes that assumption, and the record
+# can then walk back onto a generation the node had already superseded.
+#
+# If TLC reports NO error here, the compliant-world result has stopped
+# depending on the cross-document rule and has become true for some other
+# reason -- which would mean the model no longer says what it claims.  So a
+# clean run is a FAILURE of this gate.
+echo "=== 2b. Mutation: the cross-document dependency must be load-bearing ==="
+mout="$RESULTS/SupersessionDiscipline_Mutation.txt"
+"$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
+    -workers 4 -deadlock -metadir "/tmp/tlc_supmut" \
+    -config "$HERE/tla/SupersessionDiscipline_Mutation.cfg" \
+    "$HERE/tla/SupersessionDiscipline.tla" > "$mout" 2>&1
+if grep -q "Invariant NeverIssuedForASupersededKey is violated" "$mout"; then
+  echo "  SupersessionDiscipline_Mutation: violated as expected"
+else
+  echo "  SupersessionDiscipline_Mutation: DID NOT VIOLATE -- the invariant no"
+  echo "    longer depends on the series rule (see results/SupersessionDiscipline_Mutation.txt)"
+  fail=1
+fi
+
 echo "=== 3. Tamarin symbolic protocol models ==="
 for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/ceremony \
             compliant/currency compliant/attach compliant/ceremony compliant/recovery; do

@@ -190,6 +190,11 @@ rule Supersession_Arrives:
     "a node stops doing X once it knows Y", and both models express X as a
     capability the node consumes and restores.  Whatever encoding closes one
     will close the other, so this is one modelling problem rather than two.
+    AND THEY ARE DISCHARGED ELSEWHERE.  `tla/SupersessionDiscipline.tla`
+    checks both exhaustively over a finite instance, as safety properties of
+    a mutable local state machine.  The Tamarin difficulty was isolated to a
+    three-rule theory: delete the restore and the same lemma verifies in four
+    steps -- a fact about the backward search, not about the claim.
     ============================================================  */
 
 /*  A SOURCE INVARIANT, needed for the same reason `compliant/currency.spthy`
