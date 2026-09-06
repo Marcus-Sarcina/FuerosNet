@@ -214,6 +214,44 @@ restriction VerifierIsNotSubject:
   "∀ V S #i. (Distinct( V, S ) @ #i) ⇒ (¬(V = S))"
   */
 
+lemma recovery_completes_honestly:
+  exists-trace
+  "∃ P S newkey V #m #i.
+    (((RecoveryMeeting( V, S ) @ #m) ∧
+      (RecoveryAccepted( P, S, newkey ) @ #i)) ∧
+     (#m < #i)) ∧
+    (¬(∃ A #k. Compromised( A ) @ #k))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ P S newkey V #m #i.
+  (RecoveryMeeting( V, S ) @ #m) ∧ (RecoveryAccepted( P, S, newkey ) @ #i)
+ ∧
+  (#m < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( !Met( $V, $S ) ▶₀ #m )
+  case Met
+  solve( !Ltk( $P, ~psk ) ▶₀ #i )
+    case Register
+    solve( !Pk( $S, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( $V, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
+          case Old_Key_Proof
+          solve( !KU( sign(<'recognise', $S, ~newkey>, ~sk.1) ) @ #vk.13 )
+            case Recognise
+            solve( !KU( ~newkey ) @ #vk.10 )
+              case Old_Key_Proof
+              SOLVED // trace found
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
 lemma recovery_is_executable:
   exists-trace "∃ P S newkey #i. RecoveryAccepted( P, S, newkey ) @ #i"
 /*
@@ -544,8 +582,9 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/recovery.spthy
 
-  processing time: 1.79s
+  processing time: 1.51s
   
+  recovery_completes_honestly (exists-trace): verified (9 steps)
   recovery_is_executable (exists-trace): verified (8 steps)
   key_alone_insufficient (all-traces): verified (14 steps)
   recognition_alone_insufficient (all-traces): verified (10 steps)

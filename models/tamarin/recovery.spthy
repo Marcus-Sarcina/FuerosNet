@@ -310,6 +310,15 @@ restriction VerifierIsNotSubject:
 // SANITY: an honest recovery completes -- old-key proof plus honest
 // recognition plus patron acceptance.  Guards against a vacuous security
 // lemma.
+// AND THE HONEST ONE, excluding compromise -- see attach.spthy for why an
+// executability lemma that permits it guards nothing.
+lemma recovery_completes_honestly:
+  exists-trace
+  "Ex P S newkey V #m #i.
+       RecoveryMeeting(V, S) @ #m
+     & RecoveryAccepted(P, S, newkey) @ #i & #m < #i
+     & not(Ex A #k. Compromised(A) @ #k)"
+
 lemma recovery_is_executable:
   exists-trace
   "Ex P S newkey #i. RecoveryAccepted(P, S, newkey) @ #i"

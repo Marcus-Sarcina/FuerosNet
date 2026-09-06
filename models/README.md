@@ -15,7 +15,7 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: **all models pass** — 3 Python assertion families, 3 TLA+
-models (invariants + temporal properties), 4 Tamarin theories (20 lemmas).
+models (invariants + temporal properties), 4 Tamarin theories (24 lemmas).
 
 ---
 
@@ -243,6 +243,36 @@ The exercise is worth more than a row of green checks; two models pushed back.
 
 Both are recorded here rather than silently fixed, because the counterexample-
 then-diagnose loop *is* the value of the exercise.
+
+- **A fifth review found the same defect in `ceremony`, and it was predicted.**
+  The previous round ended by noting that the gate catches neither an
+  unreachable honest path nor an executability lemma that permits compromise,
+  and that widening those guards was the obvious next hardening. It was not
+  done, and the next review found exactly that in `ceremony`.
+
+  `Meet` minted a fresh `~cid` and never published it, while `Witness_Sign`
+  and `Accept_Record` take the record body **from the network** — a change made
+  two rounds earlier to remove the witness's truth oracle and to bind `cid`.
+  So no honest ceremony could reach acceptance: nobody could construct a body
+  containing a value nobody had published. All six lemmas still verified,
+  through traces where participant keys were stolen and the adversary chose
+  its own id. Machine-confirmed: an honest-completion probe was **falsified,
+  no trace found**, for both the normal and formation paths. A presence record
+  is published — witnesses are handed it, evaluators fetch it — so `Meet` now
+  outputs the id, and `honest_ceremony_completes` / `honest_formation_completes`
+  are the guards that were missing.
+
+  **Every theory now carries an honest-path guard** that excludes compromise,
+  which closes the class rather than the instance: `attach` and `recovery`
+  turned out to be reachable honestly, but nothing had been checking.
+
+  Two further findings held. `presence_requires_copresence` carved out a
+  compromised **witness**, which §7.6 says attests that the protocol ran and
+  *not* that two humans shared a room — so a stolen witness key should not buy
+  up the participant claim, and the stronger form verifies unchanged. And
+  "issue fresh, never extend stale" was asserted in `currency`'s comments while
+  nothing enforced it: `!Epoch` is persistent, so a patron could keep stamping
+  an epoch that had already expired. It is now a restriction.
 
 - **A fourth Tamarin review: three green currency lemmas, none about the
   honest protocol.** Seven findings, static again; the first is the most

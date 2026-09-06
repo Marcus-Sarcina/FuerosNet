@@ -5477,3 +5477,62 @@ not. Widening those is the obvious next hardening and is not done here.
 20 lemmas, all verifying, wellformedness clean. All eight models pass.
 References 2,032 across the specification documents and 160 across the model
 files, 0 flags.
+
+---
+
+## Cross-family Tamarin review 5 (2026-09-06)
+
+Four findings, static again. All four hold. **TAM-01 is the defect the previous
+round predicted and did not act on**, in a different theory.
+
+**TAM-01 no honest ceremony could reach acceptance. HOLDS, HIGH,
+machine-confirmed.** `Meet` minted a fresh `~cid` and never published it, while
+`Witness_Sign` and `Accept_Record` take the record body from the NETWORK -- both
+changes this assistant made two rounds earlier, to remove the witness's truth
+oracle and to bind an unbound `cid`. Neither change published the id, so the
+network could not construct a body containing it and the honest path died.
+Probe: an honest completion with no compromise is **falsified, no trace found**,
+for the normal path (5 steps) and the formation path (4 steps). All six lemmas
+verified anyway, through traces where participant keys were stolen and the
+adversary chose its own id.
+Fixed: `Meet` and `Meet_Formation` publish the id, which is faithful -- a
+presence record is published, witnesses are handed it and evaluators fetch it
+(§15's attestation class), and nothing treats the id as secret. Added
+`honest_ceremony_completes` and `honest_formation_completes`.
+
+**And the class is now closed rather than the instance.** All four theories
+carry an honest-path guard excluding compromise. `attach` and `recovery` turn
+out to be honestly reachable, but nothing had been checking, and that is the
+same gap that let currency's defect survive three rounds and ceremony's survive
+two. **This is the hardening the previous entry named as obvious and left
+undone**, which is why the review found it.
+
+**TAM-04 the witness carve-out was unnecessary and wrong. HOLDS, MEDIUM.**
+`presence_requires_copresence` discharged on `Compromised(W)`, but design §7.6
+gives a witness `protocol_ran` and `both_responsive` and explicitly NOT a claim
+that two humans shared a room. Removing the disjunct: verifies unchanged, in
+the same 10 steps. Carrying it would have hidden a future regression in which
+one compromised witness manufactured presence.
+
+**TAM-03 "issue fresh, never extend stale" was asserted, not enforced. HOLDS,
+MEDIUM.** `!Epoch` is persistent and `Expire_Epoch` does not consume it, so a
+patron could keep stamping an epoch already expired -- which is what extending
+stale state looks like -- while the file's comment claimed every issuance draws
+a current epoch. The acceptance restriction does not cover it: that blocks
+accepting an expired attestation, not minting one. Added
+`restriction IssueFreshNotStale`.
+
+**TAM-02 is a SPECIFICATION question and is NOT resolved here.** Put to the
+author rather than guessed: `Recognise` takes the successor key from `In(newkey)`,
+so the model lets a network adversary choose which key an honest verifier's
+genuine recognition attaches to, with neither verifier nor patron compromised.
+Whether that is an over-approximation or a real gap depends on whether the
+design binds `new_key` to the device physically present at the recovery
+meeting. §9.1 says the new key countersigns the query and that "the counterparty
+is its own querier", which reads as a binding -- and in the same paragraph says
+continuity "rests on the response's prior-key binding and the old key's proof,
+**never on the consent**", which reads as explicitly NOT relying on it. Those
+two readings give different models and different security claims.
+
+24 lemmas, all verifying, wellformedness clean. All eight models pass. Model
+references 171, 0 flags; specification references 2,032, 0 flags.

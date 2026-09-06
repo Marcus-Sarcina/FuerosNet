@@ -101,6 +101,19 @@ restriction Equality:
   "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
   */
 
+restriction IssueFreshNotStale:
+  "∀ P S kh e #j.
+    (Issued( P, S, kh, e ) @ #j) ⇒
+    (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #j)))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ P S kh e #j.
+    (Issued( P, S, kh, e ) @ #j) ⇒
+    (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #j)))"
+  */
+
 restriction NotExpiredBeforeAccept:
   "∀ e #a.
     (NotExpiredAt( e ) @ #a) ⇒ (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #a)))"
@@ -251,7 +264,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/currency.spthy
 
-  processing time: 0.87s
+  processing time: 0.89s
   
   currency_is_usable (exists-trace): verified (7 steps)
   currency_is_usable_honestly (exists-trace): verified (10 steps)

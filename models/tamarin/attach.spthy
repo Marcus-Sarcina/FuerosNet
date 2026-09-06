@@ -232,6 +232,17 @@ restriction Equality:
 // every "for all traces" lemma is vacuously true and proves nothing.  This
 // is the beginner trap the plan-adjacent notes warn about, written first
 // on purpose.
+// AND THE HONEST ONE.  attach_is_executable above does not exclude
+// compromise, so it can be satisfied by a trace in which the server's key was
+// stolen -- which would leave server_authentication holding because no
+// uncompromised commit ever occurred.  This is the guard that catches an
+// unreachable honest path, the defect found in currency and then ceremony.
+lemma attach_completes_honestly:
+  exists-trace
+  "Ex C S nc #j #i.
+       ServerAccept(S, C, nc) @ #j & ClientFinish(C, S, nc) @ #i & #j < #i
+     & not(Ex A #k. Compromised(A) @ #k)"
+
 lemma attach_is_executable:
   exists-trace
   "Ex C S nc #i. ClientFinish(C, S, nc) @ #i"

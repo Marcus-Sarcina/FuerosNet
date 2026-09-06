@@ -86,7 +86,17 @@ rule Meet:
     , DistinctParties($P1, $P2, $W) ]->
     [ CoPresent($P1, ~cid)             // the two PARTICIPANTS were present
     , CoPresent($P2, ~cid)
-    , !Ceremony($P1, $P2, $W, ~cid) ]  // persistent record of the roster
+    , !Ceremony($P1, $P2, $W, ~cid)    // persistent record of the roster
+    // THE CEREMONY ID IS PUBLIC.  A presence record is published -- witnesses
+    // are handed it to notarise, evaluators fetch it (§15's attestation
+    // class), and nothing anywhere treats the id as a secret.  Withholding it
+    // made the honest path UNREACHABLE: Witness_Sign and Accept_Record take
+    // the body from the network, and the network could not construct a body
+    // containing a fresh value nobody published.  Every lemma still verified,
+    // through traces in which the participants' keys were stolen and the
+    // adversary chose its own id -- so six green lemmas said nothing about an
+    // honest ceremony.  See the two honest-completion guards below.
+    , Out(~cid) ]
 
 /*
   THE WITNESS GETS NO CO-PRESENCE TOKEN, and this is the design's rule, not
@@ -212,7 +222,8 @@ rule Meet_Formation:
     , DistinctPair($P1, $P2) ]->
     [ CoPresent($P1, ~cid)
     , CoPresent($P2, ~cid)
-    , !Formation($P1, $P2, ~cid) ]
+    , !Formation($P1, $P2, ~cid)
+    , Out(~cid) ]                      // public, as above
 
 restriction DistinctPair:
   "All a b #i. DistinctPair(a, b) @ #i ==> not(a = b)"
@@ -268,6 +279,27 @@ lemma ceremony_is_executable:
   exists-trace
   "Ex P1 P2 W cid #i. RecordAccepted(P1, P2, W, cid) @ #i"
 
+// THE GUARDS THAT ACTUALLY GUARD.  An honest ceremony, and an honest
+// formation, reaching acceptance with NO compromise anywhere.  The
+// executability lemmas above do not establish this and did not: both were
+// satisfied by traces in which participant keys were stolen, so every
+// universal lemma below could have held because uncompromised acceptance
+// never occurred.  An exists-trace guard is only a guard if it excludes
+// compromise.
+lemma honest_ceremony_completes:
+  exists-trace
+  "Ex P1 P2 W cid #m #i.
+       MeetHappened(P1, P2, W, cid) @ #m
+     & RecordAccepted(P1, P2, W, cid) @ #i & #m < #i
+     & not(Ex A #k. Compromised(A) @ #k)"
+
+lemma honest_formation_completes:
+  exists-trace
+  "Ex P1 P2 cid #m #i.
+       FormationMeetHappened(P1, P2, cid) @ #m
+     & FormationAccepted(P1, P2, cid) @ #i & #m < #i
+     & not(Ex A #k. Compromised(A) @ #k)"
+
 // THE MAIN PROPERTY (Stage 1.1).  Every accepted record for roster
 // <P1,P2,W,cid> implies a real meeting of exactly those parties under that
 // ceremony id -- UNLESS one of the named parties' keys was compromised.
@@ -281,13 +313,20 @@ lemma ceremony_is_executable:
 // This is the plan's target verbatim: "An adversary not physically present
 // cannot produce a record a third party accepts" -- relative to the
 // co-presence axiom, and modulo key theft, both stated.
+// NO WITNESS CARVE-OUT, and its absence is the point.  A witness attests that
+// the protocol ran and both participants were responsive; design §7.6 is
+// explicit that it does NOT attest that two humans were in a room.  So a
+// stolen witness key should not buy up the participant co-presence claim --
+// and it does not need to: the stronger form verifies unchanged, because what
+// carries the theorem is the PARTICIPANTS' tokens.  An earlier version carved
+// the witness out anyway, which would have hidden any future regression in
+// which one compromised witness manufactured presence.
 lemma presence_requires_copresence:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
      ==> ( (Ex #m. MeetHappened(P1, P2, W, cid) @ #m & #m < #i)
          | (Ex #k. Compromised(P1) @ #k & #k < #i)
-         | (Ex #k. Compromised(P2) @ #k & #k < #i)
-         | (Ex #k. Compromised(W) @ #k & #k < #i) )"
+         | (Ex #k. Compromised(P2) @ #k & #k < #i) )"
 
 // STRONGER: no record without co-presence, isolating the no-compromise case.
 // With NO key compromise anywhere, an accepted record requires the meeting.

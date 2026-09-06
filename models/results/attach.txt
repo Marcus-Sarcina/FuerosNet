@@ -93,6 +93,37 @@ restriction Equality:
   "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
   */
 
+lemma attach_completes_honestly:
+  exists-trace
+  "∃ C S nc #j #i.
+    (((ServerAccept( S, C, nc ) @ #j) ∧ (ClientFinish( C, S, nc ) @ #i)) ∧
+     (#j < #i)) ∧
+    (¬(∃ A #k. Compromised( A ) @ #k))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S nc #j #i.
+  (ServerAccept( S, C, nc ) @ #j) ∧ (ClientFinish( C, S, nc ) @ #i)
+ ∧
+  (#j < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( !Ltk( $S, ~sks ) ▶₁ #j )
+  case Register_Node
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !Pk( $S, pk(x) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( ~nc ) @ #vk.5 )
+        case Client_Hello
+        solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sks) ) @ #vk.6 )
+          case Server_Respond
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
 lemma attach_is_executable:
   exists-trace "∃ C S nc #i. ClientFinish( C, S, nc ) @ #i"
 /*
@@ -202,8 +233,9 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/attach.spthy
 
-  processing time: 0.51s
+  processing time: 0.59s
   
+  attach_completes_honestly (exists-trace): verified (7 steps)
   attach_is_executable (exists-trace): verified (6 steps)
   server_authentication (all-traces): verified (7 steps)
   client_commit_is_injective (all-traces): verified (10 steps)

@@ -202,6 +202,17 @@ restriction Equality:
 // expiry_is_reachable establish that every issued attestation eventually
 // expires -- only that an expiry can occur, so the restriction is not
 // vacuously satisfied by nothing ever expiring.
+// "ISSUE FRESH, NEVER EXTEND STALE" (design §12.6.5.1), modelled rather than
+// asserted.  !Epoch is persistent, so without this a patron could keep
+// stamping an epoch that had already expired -- which is exactly what
+// extending stale state looks like, and the file's own comment claimed every
+// issuance draws a CURRENT epoch when nothing enforced it.  The acceptance
+// restriction below does not cover this: it blocks accepting an expired
+// attestation, not minting one.
+restriction IssueFreshNotStale:
+  "All P S kh e #j. Issued(P, S, kh, e) @ #j
+     ==> not(Ex #x. Expired(e) @ #x & #x < #j)"
+
 restriction NotExpiredBeforeAccept:
   "All e #a. NotExpiredAt(e) @ #a
      ==> not(Ex #x. Expired(e) @ #x & #x < #a)"
