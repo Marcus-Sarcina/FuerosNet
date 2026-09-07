@@ -209,6 +209,7 @@ rule Issue_Currency:
     , In(role) ]                       // claiming whatever role it likes
   --[ Issued($I, $S, pk(sk), iat, exp)
     , IssuedAs($I, $S, role)
+    , IssuedAttestation($I, $S, pk(sk), iat, exp, role)
     , IssuedFresh($I, $S, exp) ]->
     [ Out(<'currency', $S, pk(sk), iat, exp, role, $I,
            sign(<'rhtn/1:currency', <$S, pk(sk), iat, exp, role, $I>>, ~isk)>) ]
@@ -226,6 +227,7 @@ rule Issue_Currency_Arbitrary:
     , In(<$S, kh, role>) ]
   --[ Issued($I, $S, kh, iat, exp)
     , IssuedAs($I, $S, role)
+    , IssuedAttestation($I, $S, kh, iat, exp, role)
     , SignedWithoutTransition($I) ]->
     [ Out(<'currency', $S, kh, iat, exp, role, $I,
            sign(<'rhtn/1:currency', <$S, kh, iat, exp, role, $I>>, ~isk)>) ]
@@ -425,10 +427,21 @@ lemma the_accepted_issue_time_is_the_signed_one:
     attributed to another.  `wire-format.md` puts fields 5 and 6 under the
     signature for exactly this; drop either from the signed tuple and this
     lemma falsifies.                                                        */
+/*  ONE ISSUANCE EVENT, NOT TWO CORRELATED BY COINCIDENCE.  This lemma used
+    `IssuedAs(I, S, role)`, which carries no key and no timestamps -- so a
+    DIFFERENT attestation from the same issuer, for the same subject, in that
+    role, discharged it.  Together with `currency_requires_unexpired_issuance`
+    witnessed by the accepted key's own `Issued(...)`, the pair could be
+    satisfied by two separate attestations, and neither lemma noticed that the
+    accepted role had never been signed over the accepted key.
+
+    `IssuedAttestation` carries the whole signed tuple -- fields 1 to 6 -- so
+    the property now says the ACCEPTED attestation was issued, not that
+    something like it was.                                                 */
 lemma an_attestation_binds_its_issuer_and_role:
   "All R I S sk iat exp role #i.
      Accepted(R, I, S, sk, iat, exp, role) @ #i
-     ==> ( (Ex #j. IssuedAs(I, S, role) @ #j & #j < #i)
+     ==> ( (Ex #j. IssuedAttestation(I, S, sk, iat, exp, role) @ #j & #j < #i)
          | (Ex #k. Compromised(I) @ #k & #k < #i) )"
 
 /*  AND THE RELYING PARTY CHECKED ITS OWN RECORDS.  Acceptance names an issuer

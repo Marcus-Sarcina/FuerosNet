@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 25 and seed -3761335063083387563 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 191815] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 99 and seed 165319098774418541 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 195307] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/IssuerAuthorisation.tla
 Parsing file /tmp/FiniteSets.tla
 Parsing file /tmp/Naturals.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module IssuerAuthorisation
-Starting... (2026-09-07 16:49:04)
+Starting... (2026-09-07 17:56:54)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-07 16:49:04.
+Finished computing initial states: 1 distinct state generated at 2026-09-07 17:56:54.
 Error: Invariant NeverAcceptedOnALapsedAuthorisation is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -36,4 +36,4 @@ State 4: <Accept line 77, col 3 to line 81, col 41 of module IssuerAuthorisation
 26 states generated, 12 distinct states found, 1 states left on queue.
 The depth of the complete state graph search is 4.
 The average outdegree of the complete state graph is 2 (minimum is 2, the maximum 2 and the 95th percentile is 2).
-Finished in 00s at (2026-09-07 16:49:04)
+Finished in 00s at (2026-09-07 17:56:54)

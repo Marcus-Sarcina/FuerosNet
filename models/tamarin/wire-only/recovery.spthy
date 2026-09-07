@@ -358,6 +358,7 @@ rule Patron_Accept_Recovery_One_Response:
     , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
     , RecognisedAs($V, $S, newkey, result)
     , ReliedOn($P, $V, $S)
+    , ReliedOnResponse($P, $V, $S, newkey, result)
     , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
     [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]
 
@@ -478,6 +479,8 @@ rule Patron_Accept_Recovery:
     Closing that properly means carrying identities and keys in one keyhash
     domain throughout, which is a reshape of this theory rather than an added
     line.  Recorded rather than papered over.                              */
+    , ReliedOnResponse($P, $V,  $S, newkey,  result)
+    , ReliedOnResponse($P, $V2, $S, newkey2, result2)
     , ReliedOn($P, $V, $S)                      // BOTH verifiers were trusted,
     , ReliedOn($P, $V2, $S)                     //   so both are covered by
                                                 //   forging_a_recognition_needs_
@@ -591,12 +594,19 @@ lemma no_relied_on_verifier_is_the_subject:
     lemma demanded a match from EVERY verifier relied on, and falsified as soon
     as a second response was modelled -- correctly, because that is not the
     rule.                                                                    */
+/*  THE MATCH MUST BE ONE OF THE RESPONSES THIS ACCEPTANCE CONSUMED.  The
+    earlier form asked only that SOME `RecognisedAs(V, S, newkey, 'match')`
+    existed anywhere in the trace, and its compromise branch quantified over
+    ANY verifier -- one that had never taken part in this recovery would
+    discharge it.  A regression admitting a response with the wrong result
+    could therefore leave the lemma satisfied by an unrelated recognition.
+
+    `ReliedOnResponse` is emitted once per response actually accepted, so the
+    property now has a provenance edge rather than a trace-wide existential. */
 lemma acceptance_requires_a_signed_match:
   "All P S newkey #i.
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-     ==> ( (Ex V #b. RecognisedAs(V, S, newkey, 'match') @ #b & #b < #i)
-         | (Ex V #x #y. CompromisedClassical(V) @ #x & CompromisedPQ(V) @ #y
-              & #x < #i & #y < #i) )"
+     ==> Ex V. ReliedOnResponse(P, V, S, newkey, 'match') @ #i"
 
 /*  AND THE MIRROR.  The lemma above shows the CLASSICAL half alone does not
     suffice.  It does not, by itself, show the post-quantum half alone does
@@ -712,20 +722,22 @@ lemma recognition_alone_insufficient:
 // Section 4.1's rule that a verifier response must name the newly adopted
 // node and the prior key; drop the binding from Recognise above and this
 // lemma is falsified, which is how we know it is doing work.
+/*  EVERY RESPONSE CONSUMED, not some recognition somewhere.  The earlier form
+    concluded that SOME `RecognisedFor(V, S, newkey)` existed, which an
+    unrelated earlier recognition satisfied -- so a defective response in
+    either slot could be accepted while the lemma discharged on a different
+    verifier's good one.  Quantifying over `ReliedOnResponse` makes it
+    universal across the responses this acceptance took, and ties each
+    compromise exception to THAT verifier rather than to any.            */
 lemma recognition_binds_the_successor:
-  "All P S newkey #i.
-     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-     ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
-         | (Ex V #kv. ReliedOn(P, V, S) @ #i
-                    & CompromisedClassical(V) @ #kv & #kv < #i
-                    & (Ex #ky. CompromisedPQ(V) @ #ky & #ky < #i))
+  "All P V S newkey result #i.
+     ReliedOnResponse(P, V, S, newkey, result) @ #i
+     ==> ( (Ex #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
+         | ( (Ex #x. CompromisedClassical(V) @ #x & #x < #i)
+           & (Ex #y. CompromisedPQ(V) @ #y & #y < #i) )
          | ( (Ex #x. CompromisedClassical(P) @ #x & #x < #i)
-             & (Ex #y. CompromisedPQ(P) @ #y & #y < #i) ) )"
+           & (Ex #y. CompromisedPQ(P) @ #y & #y < #i) ) )"
 
-// THE PATRON BINDING IS LOAD-BEARING TOO.  Every accepted recovery rests on
-// an old-key proof naming THE ACCEPTING PATRON.  Drop the third element of
-// the successor statement and this falsifies with one proof accepted by two
-// patrons -- wire Section 4.1's reason for putting patron_key in it.
 lemma successor_statement_binds_the_patron:
   "All P S newkey #i.
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i

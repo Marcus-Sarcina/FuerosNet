@@ -84,6 +84,7 @@ rule (modulo E) Issue_Currency:
    ]
   --[
   Issued( $I, $S, pk(sk), iat, exp ), IssuedAs( $I, $S, role ),
+  IssuedAttestation( $I, $S, pk(sk), iat, exp, role ),
   IssuedFresh( $I, $S, exp )
   ]->
    [
@@ -98,6 +99,7 @@ rule (modulo E) Issue_Currency_Arbitrary:
    [ !PatronKey( $I, ~isk ), !Epoch( iat, exp ), In( <$S, kh, role> ) ]
   --[
   Issued( $I, $S, kh, iat, exp ), IssuedAs( $I, $S, role ),
+  IssuedAttestation( $I, $S, kh, iat, exp, role ),
   SignedWithoutTransition( $I )
   ]->
    [
@@ -508,14 +510,16 @@ lemma an_attestation_binds_its_issuer_and_role:
   all-traces
   "∀ R I S sk iat exp role #i.
     (Accepted( R, I, S, sk, iat, exp, role ) @ #i) ⇒
-    ((∃ #j. (IssuedAs( I, S, role ) @ #j) ∧ (#j < #i)) ∨
+    ((∃ #j.
+       (IssuedAttestation( I, S, sk, iat, exp, role ) @ #j) ∧ (#j < #i)) ∨
      (∃ #k. (Compromised( I ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ R I S sk iat exp role #i.
   (Accepted( R, I, S, sk, iat, exp, role ) @ #i)
  ∧
-  (∀ #j. (IssuedAs( I, S, role ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #j.
+    (IssuedAttestation( I, S, sk, iat, exp, role ) @ #j) ⇒ ¬(#j < #i)) ∧
   (∀ #k. (Compromised( I ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
@@ -645,7 +649,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/currency.spthy
 
-  processing time: 6.64s
+  processing time: 6.83s
   
   currency_is_usable (exists-trace): verified (8 steps)
   currency_is_usable_honestly (exists-trace): verified (14 steps)

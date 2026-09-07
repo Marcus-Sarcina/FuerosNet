@@ -6404,3 +6404,48 @@ not only the adoption's node/patron inequality. Recorded in the README.
 
 14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 14 (2026-09-07)
+
+Static-only. Two findings, both verified, both applied, both mutation-tested.
+They are one class: **the rule holds the provenance and the lemma throws it
+away.**
+
+**F1 -- recovery lemmas discharged on evidence the acceptance never
+consumed.** `acceptance_requires_a_signed_match` asked only that SOME
+`RecognisedAs(V, S, newkey, 'match')` existed anywhere in the trace, and its
+compromise branch quantified over ANY verifier -- one that had never taken part
+in the recovery satisfied it. `recognition_binds_the_successor` was the same
+shape. So a regression admitting a bad response in either slot could leave both
+lemmas satisfied by an unrelated verifier's good one.
+
+`ReliedOnResponse(P, V, S, newkey, result)` is now emitted once per response
+actually accepted, in both the one- and two-response rules. The match lemma
+requires the match to be among them; the successor lemma is UNIVERSAL over
+them, with each compromise exception tied to that verifier rather than to any.
+Removing the second response's signature checks now falsifies it -- the exact
+regression the old form could not see. The stronger property costs 1398 proof
+steps against the old handful, which is about what the extra content is worth.
+
+**F2 -- currency's role binding was split across two uncorrelated facts.**
+`Issued(I,S,key,iat,exp)` and `IssuedAs(I,S,role)` shared no attestation, so
+the pair of lemmas could be discharged by TWO DIFFERENT attestations: the
+accepted key's timestamps from one, the accepted role from another the same
+issuer had made earlier for the same subject. Neither lemma noticed that the
+accepted role had never been signed over the accepted key.
+`IssuedAttestation(I,S,key,iat,exp,role)` carries the whole signed tuple --
+wire fields 1 to 6 -- and both lemmas now depend on it. Dropping `role` from
+the signature falsifies.
+
+**The class is worth naming, because it is the third distinct way this suite
+has been green while proving less than it read as.** Earlier rounds: a lemma
+whose carve-out fired on one compromise half; a guard naming actions rather
+than the signature consumed; and now an existential satisfiable by a coincident
+trace fact. In all three the RULES were right. What failed each time was the
+edge between the rule and the property -- and none would have been caught by
+re-running the suite.
+
+14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.
