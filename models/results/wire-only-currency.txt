@@ -74,7 +74,10 @@ rule (modulo E) Records_Downline:
 
 rule (modulo E) Issue_Currency:
    [ !PatronKey( $I, ~isk ), !SubjKey( $S, sk ), !Epoch( e ), In( role ) ]
-  --[ Issued( $I, $S, pk(sk), e ), IssuedAs( $I, $S, role ) ]->
+  --[
+  Issued( $I, $S, pk(sk), e ), IssuedAs( $I, $S, role ),
+  IssuedFresh( $I, $S, e )
+  ]->
    [
    Out( <'currency', $S, pk(sk), e, role, $I, 
          sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>
@@ -157,15 +160,15 @@ restriction Equality:
   */
 
 restriction IssueFreshNotStale:
-  "∀ P S kh e #j.
-    (Issued( P, S, kh, e ) @ #j) ⇒
+  "∀ P S e #j.
+    (IssuedFresh( P, S, e ) @ #j) ⇒
     (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #j)))"
   // safety formula
 
   /*
   expanded formula:
-  "∀ P S kh e #j.
-    (Issued( P, S, kh, e ) @ #j) ⇒
+  "∀ P S e #j.
+    (IssuedFresh( P, S, e ) @ #j) ⇒
     (¬(∃ #x. (Expired( e ) @ #x) ∧ (#x < #j)))"
   */
 
@@ -455,7 +458,7 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
   qed
 qed
 
-lemma acceptance_names_an_issuer_this_party_authorised:
+lemma acceptance_names_an_issuer_this_party_recorded_as_authorised:
   all-traces
   "∀ R I S sk e role #i.
     (Accepted( R, I, S, sk, e, role ) @ #i) ⇒
@@ -510,13 +513,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/currency.spthy
 
-  processing time: 1.76s
+  processing time: 1.59s
   
   currency_is_usable (exists-trace): verified (8 steps)
   currency_is_usable_honestly (exists-trace): verified (12 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)
   currency_requires_unexpired_issuance (all-traces): verified (26 steps)
   an_attestation_binds_its_issuer_and_role (all-traces): verified (24 steps)
-  acceptance_names_an_issuer_this_party_authorised (all-traces): verified (8 steps)
+  acceptance_names_an_issuer_this_party_recorded_as_authorised (all-traces): verified (8 steps)
 
 ==============================================================================

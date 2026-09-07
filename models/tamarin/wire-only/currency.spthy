@@ -197,7 +197,8 @@ rule Issue_Currency:
     , !Epoch(e)                        // stamped with an epoch
     , In(role) ]                       // claiming whatever role it likes
   --[ Issued($I, $S, pk(sk), e)
-    , IssuedAs($I, $S, role) ]->
+    , IssuedAs($I, $S, role)
+    , IssuedFresh($I, $S, e) ]->
     [ Out(<'currency', $S, pk(sk), e, role, $I,
            sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>) ]
 
@@ -241,7 +242,7 @@ rule Accept_Currency:
     [ In(<'currency', $S, sk, e, role, $I, att>)  // the staple, as received
     , !Pk($I, pkI)                     // the ISSUER's public key
     , !Epoch(e)
-    , !Authorised($R, $I, $S, role) ]  // ... and $R's OWN record that this
+    , !Authorised($R, $I, $S, role) ] // ... and $R's OWN record that this
                                        //   issuer may act in this role for $S
   --[ Eq(verify(att, <'currency', $S, sk, e, role, $I>, pkI), true)
     , NotExpiredAt(e)                  // guarded by the restriction below
@@ -285,8 +286,14 @@ restriction Equality:
 // issuance draws a CURRENT epoch when nothing enforced it.  The acceptance
 // restriction below does not cover this: it blocks accepting an expired
 // attestation, not minting one.
+/*  "ISSUE FRESH; NEVER EXTEND STALE" IS A CONFORMING ISSUER'S BEHAVIOUR, and
+    this restriction now says only that.  It used to quantify over `Issued`,
+    which BOTH issuance rules emit, so it also made a dishonest keyholder
+    cryptographically unable to sign a stale epoch -- an inability no wire
+    format confers.  A conforming issuer refuses; anyone else may sign what
+    they like and the acceptance side is what rejects it.                   */
 restriction IssueFreshNotStale:
-  "All P S kh e #j. Issued(P, S, kh, e) @ #j
+  "All P S e #j. IssuedFresh(P, S, e) @ #j
      ==> not(Ex #x. Expired(e) @ #x & #x < #j)"
 
 restriction NotExpiredBeforeAccept:
@@ -393,7 +400,20 @@ lemma an_attestation_binds_its_issuer_and_role:
     exists -- but that the accepting party consulted its own topology rather
     than the attestation's say-so.  Delete the `!Authorised` premise from
     Accept_Currency and this falsifies.                                     */
-lemma acceptance_names_an_issuer_this_party_authorised:
+/*  "RECORDED", NOT "CURRENTLY AUTHORISES", and the difference is real.
+    `!Authorised` is persistent here and nothing withdraws it, so what this
+    establishes is that the accepting party recorded this issuer in this role
+    at some earlier point -- not that the relationship still holds when the
+    attestation is accepted.  The roles name CURRENT relationships (design
+    12.6.5.1's ladder moves among them as topology changes), so the gap is
+    real rather than notational.
+
+    IT IS CLOSED IN TLA+, not here.  Making the record revocable means a
+    capability that is read many times and withdrawn once, and Tamarin's
+    backward search does not terminate on that shape -- the same
+    consume-and-restore regress diagnosed for currency issuance and session
+    serving.  `tla/IssuerAuthorisation.tla` checks the lifecycle exhaustively.  */
+lemma acceptance_names_an_issuer_this_party_recorded_as_authorised:
   "All R I S sk e role #i.
      Accepted(R, I, S, sk, e, role) @ #i
      ==> Ex #a. AuthorisedBy(R, I, S, role) @ #a & #a < #i"

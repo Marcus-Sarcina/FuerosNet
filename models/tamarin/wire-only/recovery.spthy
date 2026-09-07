@@ -57,17 +57,48 @@ builtins: signing
   Each has a long-term signing key registered as in the other theories.
 */
 
+/*
+--------------------------------------------------------------------------------
+  HYBRID, BUT NOT UNIFORMLY -- and the asymmetry is deliberate
+--------------------------------------------------------------------------------
+  `wire-format.md` makes recovery's long-lived evidence hybrid and says
+  exactly which parts and why:
+
+    FIELD 9, the verifier's `match`, is "an untagged detached COSE_Sign
+      carrying one Ed25519 and one ML-DSA-65 entry" -- because "field 9 forges
+      a VERIFIER'S attestation, which is the attack", and its protection "is
+      permanent".
+    FIELD 3, the old key's successor statement, "is a COSE_Sign, not a
+      COSE_Sign1 -- the old identity is hybrid, so it contributes two entries
+      like any other logical signer".
+    FIELD 7 STAYS CLASSICAL, "and the reason is not cost": it is "signed by
+      the very key an attacker mounting a fraudulent recovery already
+      controls -- hybridising it protects nothing."
+
+  So the two rules that produce archive-retained evidence sign twice, and
+  nothing else does.  Hybridising uniformly would have been easier and would
+  have misrepresented a decision the design took on purpose.
+*/
+
 rule Register:
-    [ Fr(~sk) ]
+    [ Fr(~skc), Fr(~skp) ]
   --[ Reg($A), OnlyOnce($A) ]->
-    [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+    [ !LtkC($A, ~skc), !LtkP($A, ~skp)
+    , !Pk($A, pk(~skc))                // the classical half, for field 7
+    , !PkC($A, pk(~skc)), !PkP($A, pk(~skp))
+    , Out(<pk(~skc), pk(~skp)>) ]
 
 // Explicit key theft, stamped in the trace, as in attach.spthy.  This is
 // how the "thief holding the key" of the plan's target enters the model.
-rule Compromise:
-    [ !Ltk($A, ~sk) ]
-  --[ Compromised($A) ]->
-    [ Out(~sk) ]
+rule Compromise_Classical:
+    [ !LtkC($A, ~skc) ]
+  --[ Compromised($A), CompromisedClassical($A) ]->
+    [ Out(~skc) ]
+
+rule Compromise_PostQuantum:
+    [ !LtkP($A, ~skp) ]
+  --[ Compromised($A), CompromisedPQ($A) ]->
+    [ Out(~skp) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -121,13 +152,15 @@ rule Compromise:
     contribution and the reason a false recovery is a signed lie by a named
     party rather than an anonymous one.                                     */
 rule Recognise_Without_Meeting:
-    [ !Ltk($V, ~vsk), In(<$S, newkey>) ]
+    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp), In(<$S, newkey>) ]
   --[ Recognised($V, $S), RecognisedFor($V, $S, newkey)
     , RecognisedWithoutMeeting($V) ]->
-    [ Out(sign(<'recognise', $S, newkey>, ~vsk)) ]
+    [ Out(<'recognise', $S, newkey,
+           <sign(<'recognise', $S, newkey>, ~vsc),
+            sign(<'recognise', $S, newkey>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
-    [ !Ltk($S, ~oldsk)                 // the subject's (or thief's) old key
+    [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
     , In(newkey)                       // the successor -- PUBLIC once exchanged
                                        //   at the meeting, so anyone holding
                                        //   the old key can sign over it. It is
@@ -139,7 +172,8 @@ rule Old_Key_Proof:
   --[ OldKeyProof($S, newkey)
     , OldKeyProofFor($S, newkey, $P) ]->
     [ Out(<'rotate', $S, newkey, $P,
-           sign(<'rotate', $S, newkey, $P>, ~oldsk)>) ]
+           <sign(<'rotate', $S, newkey, $P>, ~oldc),
+            sign(<'rotate', $S, newkey, $P>, ~oldp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -250,14 +284,15 @@ rule Recovery_Meeting:
   attack.
 */
 rule Recognise:
-    [ !Ltk($V, ~vsk)                   // the verifier's key
+    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp)  // the verifier's two halves
     , AtMeeting($V, $S, newkey) ]      // CONSUMED: meeting now, and the key
                                        //   came over the direct channel
   --[ Recognised($V, $S)
     , RecognisedFor($V, $S, newkey)
     , HonestlyRecognised($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey,
-           sign(<'recognise', $S, newkey>, ~vsk)>) ]
+           <sign(<'recognise', $S, newkey>, ~vsc),
+            sign(<'recognise', $S, newkey>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -288,16 +323,23 @@ rule Recognise:
   lemma below is the same lemma one field over.
 */
 
+/*  THE SUBJECT COMES OFF THE NETWORK, not from `Fr`.  An earlier version
+    minted the transferred node with `Fr(~nodekey)`, which meant a former
+    patron could only ever countersign a transfer for a node nobody else had
+    heard of -- the interesting case, a signed transfer statement naming an
+    EXISTING node, was outside the model.  Nothing on the wire stops a
+    keyholder signing such a statement; what stops it mattering is the
+    destination binding, which is what the lemma below tests.             */
 rule Transfer_Countersign:
-    [ !Ltk($Old, ~osk)                 // the FORMER patron's key
-    , Fr(~nodekey)                     // the node being transferred
+    [ !LtkC($Old, ~osk)                // the FORMER patron's key (classical)
+    , In(nodekey)                      // ANY node it cares to name
     , !Pk($New, pkNew) ]               // a registered destination patron
-  --[ CountersignedFor($Old, ~nodekey, $New) ]->
-    [ Out(<'transfer', ~nodekey, $Old, $New,
-           sign(<'transfer', ~nodekey, $Old, $New>, ~osk)>) ]
+  --[ CountersignedFor($Old, nodekey, $New) ]->
+    [ Out(<'transfer', nodekey, $Old, $New,
+           sign(<'transfer', nodekey, $Old, $New>, ~osk)>) ]
 
 rule Patron_Accept_Transfer:
-    [ !Ltk($New, ~nsk)                          // the new patron signs the result
+    [ !LtkC($New, ~nsk)                         // the new patron signs the result
     , !Pk($Old, pkOld)                          // the former patron's key
     , In(<'transfer', nodekey, $Old, $New, prov>) ]
   --[ Eq(verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true)
@@ -306,16 +348,18 @@ rule Patron_Accept_Transfer:
     [ Out(sign(<'adopted', nodekey, $New>, ~nsk)) ]
 
 rule Patron_Accept_Recovery:
-    [ !Ltk($P, ~psk)                            // patron's own key (it signs)
-    , !Pk($S, pkOld)                            // subject's OLD public key
-    , !Pk($V, pkV)                              // verifier's public key
-    , In(<'rotate', $S, newkey, $P, provA>)     // factor a, bound to THIS patron
-    , In(<'recognise', $S, newkey, provB>) ]    // factor b, bound to newkey
-  --[ Eq(verify(provA, <'rotate', $S, newkey, $P>, pkOld), true)
-    , Eq(verify(provB, <'recognise', $S, newkey>, pkV), true)
+    [ !LtkC($P, ~psk)                           // patron's own key (classical)
+    , !PkC($S, pkOldC), !PkP($S, pkOldP)        // the old identity, both halves
+    , !PkC($V, pkVC),   !PkP($V, pkVP)          // the verifier, both halves
+    , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
+    , In(<'recognise', $S, newkey, <provBc, provBp>>) ]  // factor b (field 9)
+  --[ Eq(verify(provAc, <'rotate', $S, newkey, $P>, pkOldC), true)
+    , Eq(verify(provAp, <'rotate', $S, newkey, $P>, pkOldP), true)
+    , Eq(verify(provBc, <'recognise', $S, newkey>, pkVC), true)
+    , Eq(verify(provBp, <'recognise', $S, newkey>, pkVP), true)
     , Distinct($V, $S)                          // the verifier is NOT the subject
     , Distinct($P, $S)                          // nor is the patron the subject
-    , Distinct(pkOld, newkey)                   // and the rotation is real
+    , Distinct(pkOldC, newkey)                  // and the rotation is real
 
 /*  WHAT THESE CHECKS ARE AND ARE NOT.  `wire-format.md` 4.1 requires two
     inequalities of a recovery adoption: "The node and the patron MUST
@@ -397,6 +441,20 @@ restriction VerifierIsNotSubject:
 // lemma.
 // AND THE HONEST ONE, excluding compromise -- see attach.spthy for why an
 // executability lemma that permits it guards nothing.
+/*  WHAT HYBRIDISING FIELD 9 BUYS.  `wire-format.md`: "field 9 forges a
+    VERIFIER'S attestation, which is the attack", and its protection "is
+    permanent" -- a forged classical `match` would otherwise "sit inside an
+    authentic post-quantum record indefinitely".  So an attacker holding only
+    the verifier's classical half cannot put that verifier's recognition on an
+    accepted recovery.  Delete either `verify(provB...)` check and this
+    falsifies.                                                              */
+lemma forging_a_recognition_needs_both_verifier_halves:
+  "All P S newkey V #i.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & ReliedOn(P, V, S) @ #i
+     & not(Ex #k. CompromisedPQ(V) @ #k)
+     ==> Ex #b. RecognisedFor(V, S, newkey) @ #b & #b < #i"
+
 /*  THIS MUST TIE THE MEETING TO THE KEY THAT WAS RECOVERED, and an earlier
     version did not.  It asked only for SOME meeting before SOME acceptance,
     which `Recognise_Without_Meeting` satisfies trivially: hold a meeting with

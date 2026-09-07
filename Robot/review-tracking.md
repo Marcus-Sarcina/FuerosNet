@@ -6048,3 +6048,74 @@ verdict.
 
 13 artifacts. 54 Tamarin lemmas unbounded (25 wire-only, 29 compliant) + 16
 bounded, 4 TLA+ models, 1 mutation that must fail.
+
+---
+
+## Cross-family wire-only review 9 (2026-09-07)
+
+Static-only. Five findings, all verified against the text, all applied, each
+mutation-tested. Two were mine from review 8; three are refinement gaps at the
+boundary between the symbolic abstraction and the wire.
+
+**W1 (HIGH) -- the identity/key binding was assumed, not checked.**
+`Register_Node` produced `!Pk($A, pk(~sk))` and `Client_Finish` looked the key
+up BY IDENTITY, so the symbolic name was born bound to exactly the key that
+authenticates it. But that binding is a normative wire check under review:
+`infra-client-requirements.md` says "the handshake presents the CLASSICAL
+COMPONENT while the keyhash COMMITS TO THE PAIR", so reaching an intended
+identity takes two checks -- `h(KeyMaterial)` equals the intended keyhash, and
+the presented key equals that pair's classical half. An implementation omitting
+either had NO REPRESENTATION: there was no trace in which the wrong key could
+be reached under the right name.
+
+`KeyMaterial` now arrives over the network ("transmitted on first contact and
+pinned thereafter") and both checks are explicit, in both directions -- 9.1 has
+the serving node "authenticate the client the same way". Mutation-tested
+separately: deleting either check falsifies `server_authentication`.
+
+**W4 (MEDIUM) -- hybrid signatures were one key with one compromise event.**
+The wire "requires both identity components to sign an archive-retained
+transaction". One symbolic key could express only whole-signer-intact or
+whole-signer-gone, so the state hybrid EXISTS TO SURVIVE -- one component
+broken, the other sound -- was not a state, and a validator checking only the
+classical entry was indistinguishable from one checking both.
+
+Split into `!LtkC`/`!LtkP` with separate compromise events, and acceptance now
+verifies both entries per logical signer. Two new lemmas state what the second
+component buys: `classical_compromise_alone_does_not_forge` (ceremony) and
+`forging_a_recognition_needs_both_verifier_halves` (recovery). Both
+mutation-tested by dropping a post-quantum check.
+
+**The asymmetry was modelled rather than smoothed over.** `wire-format.md`
+hybridises field 9 (a verifier's `match` -- "field 9 forges a VERIFIER'S
+attestation, which is the attack", protection "permanent") and field 3 (the old
+identity's successor statement), but leaves **field 7 classical on purpose**:
+"signed by the very key an attacker mounting a fraudulent recovery already
+controls -- hybridising it protects nothing." Hybridising uniformly would have
+been easier and would have misrepresented a deliberate decision.
+
+**W2 (MEDIUM) -- authorisation was permanently historical.** `!Authorised` was
+persistent and nothing withdrew it, so the lemma meant "recorded at some
+point", not "authorises now" -- while the roles name CURRENT relationships that
+design 12.6.5.1's ladder moves among. Making the record revocable in Tamarin
+produced the consume-and-restore regress again (attempted; no verdict in two
+minutes), so the lifecycle went to `tla/IssuerAuthorisation.tla`, checked
+exhaustively, with a mutation: the STALE reading -- which is precisely what the
+persistent Tamarin fact embodies -- violates the invariant. The Tamarin lemma
+is renamed `..._recorded_as_authorised` for what it actually proves.
+
+**W3 (MEDIUM) -- mine.** `ClientAuthSigned` carried no `ns`, so the lemma had
+no challenge to compare and an edit removing the challenge from the signed
+payload would not have falsified it. Propagated into the action, `Bound`, and
+the lemma; mutation-tested.
+
+**W5 (LOW) -- mine, and two parts.** `IssueFreshNotStale` quantified over
+`Issued`, which BOTH issuance rules emit, so it made a dishonest keyholder
+cryptographically unable to sign a stale epoch -- an inability no wire format
+confers. Now bound to `IssuedFresh`, emitted only by the conforming
+transition. And `Transfer_Countersign` minted its subject with `Fr`, so a
+former patron could only countersign for a node nobody had heard of; the
+subject now comes off the network.
+
+14 artifacts. 56 Tamarin lemmas unbounded (27 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.

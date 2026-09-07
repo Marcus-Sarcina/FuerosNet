@@ -50,15 +50,44 @@ builtins: signing
   DOES in a ceremony, not a separate kind of identity (design Section 3).
 */
 
-rule Register:
-    [ Fr(~sk) ]
-  --[ Reg($A), OnlyOnce($A) ]->
-    [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+/*
+--------------------------------------------------------------------------------
+  IDENTITIES ARE HYBRID, AND THE TWO HALVES FAIL SEPARATELY
+--------------------------------------------------------------------------------
+  `wire-format.md`: a presence record is archive-retained, and the protocol
+  "requires both identity components to sign an archive-retained transaction"
+  -- one Ed25519 and one ML-DSA-65 signature over the same body, per logical
+  signer.  The keyhash commits to the pair (Section 2.2).
 
-rule Compromise:
-    [ !Ltk($A, ~sk) ]
-  --[ Compromised($A) ]->
-    [ Out(~sk) ]
+  An earlier version of this theory carried ONE symbolic key and ONE
+  `Compromised` event per party, which could express only "the whole signer is
+  intact" or "the whole signer is gone".  The state the hybrid construction
+  exists to survive -- ONE COMPONENT BROKEN, THE OTHER SOUND -- had no
+  representation, so the theory could not distinguish a validator that checks
+  both signatures from one that checks only the classical entry.  That is the
+  property two components are there to buy, and it was the one thing the model
+  could not see.
+
+  Both halves are now separate keys with separate compromise events, and
+  acceptance verifies both signatures.
+*/
+
+rule Register:
+    [ Fr(~skc), Fr(~skp) ]
+  --[ Reg($A), OnlyOnce($A) ]->
+    [ !LtkC($A, ~skc), !LtkP($A, ~skp)
+    , !PkC($A, pk(~skc)), !PkP($A, pk(~skp))
+    , Out(<pk(~skc), pk(~skp)>) ]
+
+rule Compromise_Classical:
+    [ !LtkC($A, ~skc) ]
+  --[ Compromised($A), CompromisedClassical($A) ]->
+    [ Out(~skc) ]
+
+rule Compromise_PostQuantum:
+    [ !LtkP($A, ~skp) ]
+  --[ Compromised($A), CompromisedPQ($A) ]->
+    [ Out(~skp) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -135,13 +164,14 @@ restriction DistinctParties:
 
 // A participant signs the ceremony it attended.
 rule Participant_Sign:
-    [ !Ltk($P, ~sk)
+    [ !LtkC($P, ~skc), !LtkP($P, ~skp)
     , CoPresent($P, cid)               // consumed: this party was present
     , !Ceremony($P1, $P2, $W, cid) ]   // the roster this cid belongs to
   --[ ParticipantSigned($P, $P1, $P2, $W, cid)
     , HonestParticipantSigned($P, $P1, $P2, $W, cid)
     , SignedBody($P, $P1, $P2, $W, cid) ]->
-    [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
+    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
+           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
 
 // A witness signs the ceremony it observed.
 /*
@@ -179,25 +209,28 @@ rule Participant_Sign:
     `compliant/ceremony.spthy` where the discipline they assume is stated as
     the participant obligation it is.                                       */
 rule Participant_Sign_Without_Meeting:
-    [ !Ltk($P, ~sk), In(<$P1, $P2, $W, cid>) ]
+    [ !LtkC($P, ~skc), !LtkP($P, ~skp), In(<$P1, $P2, $W, cid>) ]
   --[ ParticipantSigned($P, $P1, $P2, $W, cid)
     , SignedWithoutMeeting($P)
     , SignedBody($P, $P1, $P2, $W, cid) ]->
-    [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
+    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
+           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
 
 rule Formation_Sign_Without_Meeting:
-    [ !Ltk($P, ~sk), In(<$P1, $P2, cid>) ]
+    [ !LtkC($P, ~skc), !LtkP($P, ~skp), In(<$P1, $P2, cid>) ]
   --[ FormationSigned($P, $P1, $P2, cid)
     , SignedWithoutMeeting($P)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
+    [ Out(<sign(<'formation', $P1, $P2, cid>, ~skc),
+           sign(<'formation', $P1, $P2, cid>, ~skp)>) ]
 
 rule Witness_Sign:
-    [ !Ltk($W, ~sk)
+    [ !LtkC($W, ~skc), !LtkP($W, ~skp)
     , In(<'presence', $P1, $P2, $W, cid>) ]   // whatever it is handed
   --[ WitnessSigned($W, $P1, $P2, $W, cid)
     , SignedBody($W, $P1, $P2, $W, cid) ]->
-    [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
+    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
+           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -211,12 +244,19 @@ rule Witness_Sign:
 */
 
 rule Accept_Record:
-    [ !Pk($P1, pk1), !Pk($P2, pk2), !Pk($W, pkw)
+    [ !PkC($P1, c1), !PkP($P1, q1)
+    , !PkC($P2, c2), !PkP($P2, q2)
+    , !PkC($W,  cw), !PkP($W,  qw)
     , In(<'presence', $P1, $P2, $W, cid>)   // the record body, as received
-    , In(sig1), In(sig2), In(sigw) ]
-  --[ Eq(verify(sig1, <'presence', $P1, $P2, $W, cid>, pk1), true)
-    , Eq(verify(sig2, <'presence', $P1, $P2, $W, cid>, pk2), true)
-    , Eq(verify(sigw, <'presence', $P1, $P2, $W, cid>, pkw), true)
+    , In(<sig1c, sig1p>), In(<sig2c, sig2p>), In(<sigwc, sigwp>) ]
+    // BOTH entries per logical signer.  Drop any one of the six and
+    // `classical_compromise_alone_does_not_forge` falsifies.
+  --[ Eq(verify(sig1c, <'presence', $P1, $P2, $W, cid>, c1), true)
+    , Eq(verify(sig1p, <'presence', $P1, $P2, $W, cid>, q1), true)
+    , Eq(verify(sig2c, <'presence', $P1, $P2, $W, cid>, c2), true)
+    , Eq(verify(sig2p, <'presence', $P1, $P2, $W, cid>, q2), true)
+    , Eq(verify(sigwc, <'presence', $P1, $P2, $W, cid>, cw), true)
+    , Eq(verify(sigwp, <'presence', $P1, $P2, $W, cid>, qw), true)
     // THE VALIDATOR CHECKS ROLE DISTINCTNESS ITSELF (`wire-format.md` §3.2:
     // a participant is not its own witness, the two participants are
     // distinct).  It was previously enforced only at Meet and reached this
@@ -266,20 +306,24 @@ restriction DistinctPair:
   "All a b #i. DistinctPair(a, b) @ #i ==> not(a = b)"
 
 rule Formation_Sign:
-    [ !Ltk($P, ~sk)
+    [ !LtkC($P, ~skc), !LtkP($P, ~skp)
     , CoPresent($P, cid)
     , !Formation($P1, $P2, cid) ]
   --[ FormationSigned($P, $P1, $P2, cid)
     , HonestFormationSigned($P, $P1, $P2, cid)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
+    [ Out(<sign(<'formation', $P1, $P2, cid>, ~skc),
+           sign(<'formation', $P1, $P2, cid>, ~skp)>) ]
 
 rule Accept_Formation:
-    [ !Pk($P1, pk1), !Pk($P2, pk2)
+    [ !PkC($P1, c1), !PkP($P1, q1)
+    , !PkC($P2, c2), !PkP($P2, q2)
     , In(<'formation', $P1, $P2, cid>)      // the record body, as received
-    , In(sig1), In(sig2) ]
-  --[ Eq(verify(sig1, <'formation', $P1, $P2, cid>, pk1), true)
-    , Eq(verify(sig2, <'formation', $P1, $P2, cid>, pk2), true)
+    , In(<sig1c, sig1p>), In(<sig2c, sig2p>) ]
+  --[ Eq(verify(sig1c, <'formation', $P1, $P2, cid>, c1), true)
+    , Eq(verify(sig1p, <'formation', $P1, $P2, cid>, q1), true)
+    , Eq(verify(sig2c, <'formation', $P1, $P2, cid>, c2), true)
+    , Eq(verify(sig2p, <'formation', $P1, $P2, cid>, q2), true)
     // THE VALIDATOR CHECKS PARTICIPANT DISTINCTNESS ITSELF, as Accept_Record
     // does (`wire-format.md` §3.2: the two participants are distinct).
     // Enforcing it only at Meet_Formation is not enough: this rule takes its
@@ -383,6 +427,19 @@ lemma an_accepted_record_is_attributable:
            | (Ex #k. Compromised(P2) @ #k & #k < #i) )
          & ( (Ex #w. SignedBody(W, P1, P2, W, cid) @ #w & #w < #i)
            | (Ex #k. Compromised(W) @ #k & #k < #i) ) )"
+
+
+/*  WHAT THE SECOND COMPONENT BUYS, and the reason it is worth two signatures
+    and 3.3 KB per signer.  An attacker holding only a party's CLASSICAL key
+    cannot put that party's name on an accepted record: the post-quantum entry
+    is missing and acceptance checks it.  This is the property a single
+    symbolic key could not express -- with one key and one compromise event,
+    "classical broken, post-quantum sound" is not a state.               */
+lemma classical_compromise_alone_does_not_forge:
+  "All P1 P2 W cid #i.
+     RecordAccepted(P1, P2, W, cid) @ #i
+     & not(Ex #k. CompromisedPQ(P1) @ #k)
+     ==> Ex #a. SignedBody(P1, P1, P2, W, cid) @ #a & #a < #i"
 
 /*  WHAT "EVERY PARTY IT NAMES" MEANS HERE, stated because the lemma above is
     easy to read as more than it is.

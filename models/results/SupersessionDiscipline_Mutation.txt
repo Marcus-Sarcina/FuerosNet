@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 22 and seed -494482471445995364 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 143964] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 101 and seed 3705790556053001156 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 150841] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/SupersessionDiscipline.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module SupersessionDiscipline
-Starting... (2026-09-06 23:12:10)
+Starting... (2026-09-07 01:24:04)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-06 23:12:11.
+Finished computing initial states: 1 distinct state generated at 2026-09-07 01:24:04.
 Error: Invariant NeverIssuedForASupersededKey is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -21,31 +21,39 @@ State 1: <Initial predicate>
 /\ badIssue = FALSE
 /\ serving = (n1 :> -1 @@ n2 :> -1)
 
-State 2: <AdoptionArrives line 111, col 3 to line 119, col 37 of module SupersessionDiscipline>
-/\ everHeld = (n1 :> {0, 1} @@ n2 :> {0})
-/\ record = (n1 :> 1 @@ n2 :> 0)
+State 2: <Attach line 94, col 3 to line 96, col 67 of module SupersessionDiscipline>
+/\ everHeld = (n1 :> {0} @@ n2 :> {0})
+/\ record = (n1 :> 0 @@ n2 :> 0)
 /\ badServe = FALSE
-/\ superseded = (n1 :> {0} @@ n2 :> {})
+/\ superseded = (n1 :> {} @@ n2 :> {})
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> -1)
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
 State 3: <AdoptionArrives line 111, col 3 to line 119, col 37 of module SupersessionDiscipline>
-/\ everHeld = (n1 :> {0, 1} @@ n2 :> {0})
-/\ record = (n1 :> 0 @@ n2 :> 0)
+/\ everHeld = (n1 :> {0} @@ n2 :> {0, 1})
+/\ record = (n1 :> 0 @@ n2 :> 1)
 /\ badServe = FALSE
-/\ superseded = (n1 :> {0, 1} @@ n2 :> {})
+/\ superseded = (n1 :> {} @@ n2 :> {0})
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> -1)
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
-State 4: <Issue line 81, col 3 to line 82, col 66 of module SupersessionDiscipline>
-/\ everHeld = (n1 :> {0, 1} @@ n2 :> {0})
+State 4: <AdoptionArrives line 111, col 3 to line 119, col 37 of module SupersessionDiscipline>
+/\ everHeld = (n1 :> {0} @@ n2 :> {0, 1})
 /\ record = (n1 :> 0 @@ n2 :> 0)
 /\ badServe = FALSE
-/\ superseded = (n1 :> {0, 1} @@ n2 :> {})
-/\ badIssue = TRUE
-/\ serving = (n1 :> -1 @@ n2 :> -1)
+/\ superseded = (n1 :> {} @@ n2 :> {0, 1})
+/\ badIssue = FALSE
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
-199 states generated, 76 distinct states found, 44 states left on queue.
-The depth of the complete state graph search is 4.
-The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 6 and the 95th percentile is 6).
-Finished in 00s at (2026-09-06 23:12:11)
+State 5: <Issue line 81, col 3 to line 82, col 66 of module SupersessionDiscipline>
+/\ everHeld = (n1 :> {0} @@ n2 :> {0, 1})
+/\ record = (n1 :> 0 @@ n2 :> 0)
+/\ badServe = FALSE
+/\ superseded = (n1 :> {} @@ n2 :> {0, 1})
+/\ badIssue = TRUE
+/\ serving = (n1 :> 0 @@ n2 :> -1)
+
+143 states generated, 54 distinct states found, 29 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 5 and the 95th percentile is 5).
+Finished in 00s at (2026-09-07 01:24:04)

@@ -14,16 +14,29 @@ begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
 equations:
     fst(<x.1, x.2>) = x.1,
     snd(<x.1, x.2>) = x.2,
     verify(sign(x.1, x.2), x.1, pk(x.2)) = true
 
 rule (modulo E) Register_Node:
-   [ Fr( ~sk ) ]
-  --[ Registered( $A ), OnlyOnce( $A ) ]->
-   [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
+   [ Fr( ~skc ), Fr( ~skp ) ]
+  --[
+  Registered( $A ), OnlyOnce( $A ),
+  IdentityIs( $A, h(<pk(~skc), pk(~skp)>) )
+  ]->
+   [
+   !Ltk( $A, ~skc ), !Identity( $A, h(<pk(~skc), pk(~skp)>) ),
+   Out( <pk(~skc), pk(~skp)> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Learns_KeyMaterial:
+   [ !Identity( $S, kh ), In( km ) ]
+  --[ Eq( h(km), kh ), Pinned( $C, $S, km ) ]->
+   [ !PinnedFor( $C, $S, km ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -51,78 +64,131 @@ rule (modulo E) Server_Respond:
 
 rule (modulo E) Client_Finish:
    [
-   St_Client_1( $C, $S, ~nc ), In( <$S, ns, sig> ), !Pk( $S, pkS ),
-   !Ltk( $C, ~skc )
+   St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig> ),
+   !PinnedFor( $C, $S, km ), !PinnedFor( $C, $C, kmSelf ), !Ltk( $C, ~skc )
    ]
   --[
-  Eq( verify(sig, <'attach', $C, $S, ~nc>, pkS), true ),
+  Eq( fst(km), presented ),
+  Eq( verify(sig, <'attach', $C, $S, ~nc>, presented), true ),
   ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim ),
-  ClientAuthSigned( $C, $S, $Claim )
+  ClientAuthSigned( $C, $S, ns, $Claim )
   ]->
-   [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
+   [
+   Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+        >
+   )
+   ]
 
   /*
   rule (modulo AC) Client_Finish:
      [
-     St_Client_1( $C, $S, ~nc ), In( <$S, ns, sig> ), !Pk( $S, pkS ),
-     !Ltk( $C, ~skc )
+     St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig> ),
+     !PinnedFor( $C, $S, km ), !PinnedFor( $C, $C, kmSelf ), !Ltk( $C, ~skc )
      ]
     --[
-    Eq( z, true ), ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim ),
-    ClientAuthSigned( $C, $S, $Claim )
+    Eq( z, presented ), Eq( z.1, true ), ClientFinish( $C, $S, ~nc ),
+    Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
     ]->
-     [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
+     [
+     Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+          >
+     )
+     ]
     variants (modulo AC)
-    1. $C    = $C.12
-       $S    = $S.14
-       ~nc   = ~nc.15
-       pkS   = pkS.18
-       sig   = sig.19
-       z     = verify(sig.19, <'attach', $C.12, $S.14, ~nc.15>, pkS.18)
+    1. $C    = $C.15
+       $S    = $S.17
+       ~nc   = ~nc.18
+       km    = km.20
+       presented
+             = presented.23
+       sig   = sig.24
+       z     = fst(km.20)
+       z.1   = verify(sig.24, <'attach', $C.15, $S.17, ~nc.18>, presented.23)
     
-    2. $C    = $C.18
-       $S    = $S.20
-       ~nc   = ~nc.21
-       pkS   = pk(x.34)
-       sig   = sign(<'attach', $C.18, $S.20, ~nc.21>, x.34)
-       z     = true
+    2. $C    = $C.17
+       $S    = $S.19
+       ~nc   = ~nc.20
+       km    = <z.28, x.31>
+       presented
+             = presented.25
+       sig   = sig.26
+       z     = z.28
+       z.1   = verify(sig.26, <'attach', $C.17, $S.19, ~nc.20>, presented.25)
+    
+    3. $C    = $C.24
+       $S    = $S.26
+       ~nc   = ~nc.27
+       km    = km.29
+       presented
+             = pk(x.45)
+       sig   = sign(<'attach', $C.24, $S.26, ~nc.27>, x.45)
+       z     = fst(km.29)
+       z.1   = true
+    
+    4. $C    = $C.24
+       $S    = $S.26
+       ~nc   = ~nc.27
+       km    = <z.35, x.43>
+       presented
+             = pk(x.46)
+       sig   = sign(<'attach', $C.24, $S.26, ~nc.27>, x.46)
+       z     = z.35
+       z.1   = true
   */
 
 rule (modulo E) Server_Bind:
-   [ St_Server_1( $S, ~ns ), In( <$A, $Claim, csig> ), !Pk( $A, pkA ) ]
+   [
+   St_Server_1( $S, ~ns ), In( <$A, $Claim, kmA, csig> ),
+   !Identity( $A, khA )
+   ]
   --[
-  Eq( verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, pkA), true ),
-  Eq( $A, $Claim ), AuthenticatedPeer( $S, $A ), Bound( $S, $A, $Claim )
+  Eq( h(kmA), khA ),
+  Eq( verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, fst(kmA)), true ),
+  Eq( $A, $Claim ), AuthenticatedPeer( $S, $A ),
+  Bound( $S, $A, ~ns, $Claim )
   ]->
    [ Session( $S, $Claim ) ]
 
   /*
   rule (modulo AC) Server_Bind:
-     [ St_Server_1( $S, ~ns ), In( <$A, $Claim, csig> ), !Pk( $A, pkA ) ]
+     [
+     St_Server_1( $S, ~ns ), In( <$A, $Claim, kmA, csig> ),
+     !Identity( $A, khA )
+     ]
     --[
-    Eq( z, true ), Eq( $A, $Claim ), AuthenticatedPeer( $S, $A ),
-    Bound( $S, $A, $Claim )
+    Eq( h(kmA), khA ), Eq( z, true ), Eq( $A, $Claim ),
+    AuthenticatedPeer( $S, $A ), Bound( $S, $A, ~ns, $Claim )
     ]->
      [ Session( $S, $Claim ) ]
     variants (modulo AC)
-    1. $A    = $A.8
+    1. $A    = $A.9
        $Claim
-             = $Claim.8
-       $S    = $S.8
-       ~ns   = ~ns.8
-       csig  = csig.8
-       pkA   = pkA.8
-       z     = verify(csig.8, <'client-auth', $A.8, $S.8, ~ns.8, $Claim.8>,
-                      pkA.8)
+             = $Claim.9
+       $S    = $S.9
+       ~ns   = ~ns.9
+       csig  = csig.9
+       kmA   = kmA.9
+       z     = verify(csig.9, <'client-auth', $A.9, $S.9, ~ns.9, $Claim.9>,
+                      fst(kmA.9))
     
-    2. $A    = $x.8
+    2. $A    = $x.9
        $Claim
-             = $x.9
-       $S    = $x.10
-       ~ns   = ~x.11
-       csig  = sign(<'client-auth', $x.8, $x.10, ~x.11, $x.9>, x.12)
-       pkA   = pk(x.12)
+             = $x.10
+       $S    = $x.11
+       ~ns   = ~x.12
+       csig  = sign(<'client-auth', $x.9, $x.11, ~x.12, $x.10>, x.13)
+       kmA   = <pk(x.13), x.15>
        z     = true
+    
+    3. $A    = $A.11
+       $Claim
+             = $Claim.11
+       $S    = $S.11
+       ~ns   = ~ns.11
+       csig  = csig.11
+       kmA   = <x.9, x.10>
+       z     = verify(csig.11, <'client-auth', $A.11, $S.11, ~ns.11, $Claim.11>,
+                      x.9)
   */
 
 rule (modulo E) Enqueue:
@@ -143,9 +209,12 @@ rule (modulo E) Server_Signs_Without_Responding:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Client_Signs_Without_Attaching:
-   [ !Ltk( $C, ~skc ), In( <$S, ns, $Claim> ) ]
-  --[ ClientAuthSigned( $C, $S, $Claim ), SignedWithoutTransition( $C ) ]->
-   [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
+   [ !Ltk( $C, ~skc ), In( <$S, ns, $Claim, km> ) ]
+  --[ ClientAuthSigned( $C, $S, ns, $Claim ), SignedWithoutTransition( $C )
+  ]->
+   [
+   Out( <$C, $Claim, km, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> )
+   ]
 
   /* has exactly the trivial AC variant */
 
@@ -193,15 +262,30 @@ solve( !Ltk( $S, ~sks ) ▶₁ #j )
   case Register_Node
   solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
     case Client_Hello
-    solve( !Pk( $S, pk(x) ) ▶₂ #i )
-      case Register_Node
-      solve( !Ltk( $C, ~skc ) ▶₃ #i )
-        case Register_Node
-        solve( !KU( ~nc ) @ #vk.5 )
-          case Client_Hello
-          solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sks) ) @ #vk.8 )
-            case Server_Respond
-            SOLVED // trace found
+    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
+      case Client_Learns_KeyMaterial
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( ~nc ) @ #vk.4 )
+            case Client_Hello
+            solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sks) ) @ #vk.10 )
+              case Server_Respond
+              solve( !KU( pk(~sks) ) @ #vk.7 )
+                case Register_Node
+                solve( !KU( pk(~skp) ) @ #vk.11 )
+                  case Register_Node
+                  solve( !KU( pk(~skc) ) @ #vk.13 )
+                    case Register_Node
+                    solve( !KU( pk(~skp.1) ) @ #vk.14 )
+                      case Register_Node
+                      SOLVED // trace found
+                    qed
+                  qed
+                qed
+              qed
+            qed
           qed
         qed
       qed
@@ -218,15 +302,30 @@ guarded formula characterizing all satisfying traces:
 simplify
 solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
   case Client_Hello
-  solve( !Pk( $S, pk(x) ) ▶₂ #i )
-    case Register_Node
-    solve( !Ltk( $C, ~skc ) ▶₃ #i )
-      case Register_Node
-      solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sk) ) @ #vk.4 )
-        case Server_Respond
-        solve( !KU( ~nc ) @ #vk.8 )
-          case Client_Hello
-          SOLVED // trace found
+  solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
+    case Client_Learns_KeyMaterial
+    solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+      case Client_Learns_KeyMaterial
+      solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+        case Register_Node
+        solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
+          case Server_Respond
+          solve( !KU( ~nc ) @ #vk.14 )
+            case Client_Hello
+            solve( !KU( pk(~skc) ) @ #vk.4 )
+              case Register_Node
+              solve( !KU( pk(~skp) ) @ #vk.9 )
+                case Register_Node
+                solve( !KU( pk(~skc.1) ) @ #vk.11 )
+                  case Register_Node
+                  solve( !KU( pk(~skp.1) ) @ #vk.12 )
+                    case Register_Node
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
         qed
       qed
     qed
@@ -250,21 +349,24 @@ guarded formula characterizing all counter-examples:
 simplify
 solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
   case Client_Hello
-  solve( !Pk( $S, pk(x) ) ▶₂ #i )
-    case Register_Node
-    solve( !Ltk( $C, ~skc ) ▶₃ #i )
-      case Register_Node
-      solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sk) ) @ #vk.4 )
-        case Server_Respond
-        by contradiction /* from formulas */
-      next
-        case Server_Signs_Without_Responding
-        by contradiction /* from formulas */
-      next
-        case c_sign
-        solve( !KU( ~sk ) @ #vk.7 )
-          case Compromise_Key
+  solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
+    case Client_Learns_KeyMaterial
+    solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+      case Client_Learns_KeyMaterial
+      solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+        case Register_Node
+        solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
+          case Server_Respond
           by contradiction /* from formulas */
+        next
+          case Server_Signs_Without_Responding
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.11 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
         qed
       qed
     qed
@@ -293,24 +395,24 @@ qed
 
 lemma client_authentication:
   all-traces
-  "∀ S A C #i.
-    (Bound( S, A, C ) @ #i) ⇒
-    ((∃ #c. (ClientAuthSigned( A, S, C ) @ #c) ∧ (#c < #i)) ∨
+  "∀ S A ns C #i.
+    (Bound( S, A, ns, C ) @ #i) ⇒
+    ((∃ #c. (ClientAuthSigned( A, S, ns, C ) @ #c) ∧ (#c < #i)) ∨
      (∃ #k. (Compromised( A ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ S A C #i.
-  (Bound( S, A, C ) @ #i)
+"∃ S A ns C #i.
+  (Bound( S, A, ns, C ) @ #i)
  ∧
-  (∀ #c. (ClientAuthSigned( A, S, C ) @ #c) ⇒ ¬(#c < #i)) ∧
+  (∀ #c. (ClientAuthSigned( A, S, ns, C ) @ #c) ⇒ ¬(#c < #i)) ∧
   (∀ #k. (Compromised( A ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
 solve( St_Server_1( $S, ~ns ) ▶₀ #i )
   case Server_Respond
-  solve( !Pk( $A, pk(x) ) ▶₂ #i )
+  solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
     case Register_Node
-    solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~sk) ) @ #vk.3 )
+    solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~skc) ) @ #vk.5 )
       case Client_Finish
       by contradiction /* from formulas */
     next
@@ -318,7 +420,7 @@ solve( St_Server_1( $S, ~ns ) ▶₀ #i )
       by contradiction /* from formulas */
     next
       case c_sign
-      solve( !KU( ~sk ) @ #vk.13 )
+      solve( !KU( ~skc ) @ #vk.17 )
         case Compromise_Key
         by contradiction /* from formulas */
       qed
@@ -340,14 +442,14 @@ solve( Session( $S, $R ) ▶₀ #i )
   case Server_Bind
   solve( Mail( $R, m ) ▶₁ #i )
     case Enqueue
-    solve( !KU( sign(<'client-auth', $R, $S, ~ns, $R>, ~sk) ) @ #vk.3 )
-      case Client_Finish
-      solve( !KU( sign(<'attach', $R, $S, ~nc.1>, ~sks) ) @ #vk.12 )
+    solve( !KU( sign(<'client-auth', $R, $S, ~ns, $R>, ~skc) ) @ #vk.5 )
+      case Client_Signs_Without_Attaching
+      solve( !KU( ~ns ) @ #vk.16 )
         case Server_Respond
-        solve( !KU( ~ns ) @ #vk.14 )
-          case Server_Respond
-          solve( !KU( ~nc.1 ) @ #vk.15 )
-            case Client_Hello
+        solve( !KU( pk(~skc) ) @ #vk.9 )
+          case Register_Node
+          solve( !KU( pk(~skp) ) @ #vk.11 )
+            case Register_Node
             SOLVED // trace found
           qed
         qed
@@ -373,13 +475,16 @@ solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
   case case_1
   solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
     case Client_Hello
-    solve( !Pk( $S, pk(x) ) ▶₂ #i1 )
-      case Register_Node
-      solve( !Ltk( $C, ~skc ) ▶₃ #i1 )
-        case Register_Node
-        solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
-          case Client_Hello
-          by contradiction /* cyclic */
+    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
+      case Client_Learns_KeyMaterial
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+          case Register_Node
+          solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            case Client_Hello
+            by contradiction /* cyclic */
+          qed
         qed
       qed
     qed
@@ -388,13 +493,16 @@ next
   case case_2
   solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
     case Client_Hello
-    solve( !Pk( $S, pk(x) ) ▶₂ #i1 )
-      case Register_Node
-      solve( !Ltk( $C, ~skc ) ▶₃ #i1 )
-        case Register_Node
-        solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
-          case Client_Hello
-          by contradiction /* cyclic */
+    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
+      case Client_Learns_KeyMaterial
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+          case Register_Node
+          solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            case Client_Hello
+            by contradiction /* cyclic */
+          qed
         qed
       qed
     qed
@@ -418,14 +526,14 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/attach.spthy
 
-  processing time: 1.10s
+  processing time: 1.94s
   
-  attach_completes_honestly (exists-trace): verified (8 steps)
-  attach_is_executable (exists-trace): verified (7 steps)
-  server_authentication (all-traces): verified (9 steps)
+  attach_completes_honestly (exists-trace): verified (13 steps)
+  attach_is_executable (exists-trace): verified (12 steps)
+  server_authentication (all-traces): verified (10 steps)
   queued_data_reaches_only_the_authenticated_peer (all-traces): verified (3 steps)
   client_authentication (all-traces): verified (8 steps)
   a_delivery_is_reachable (exists-trace): verified (8 steps)
-  client_commit_is_injective (all-traces): verified (12 steps)
+  client_commit_is_injective (all-traces): verified (14 steps)
 
 ==============================================================================

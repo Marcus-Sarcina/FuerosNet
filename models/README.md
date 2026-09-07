@@ -2,7 +2,7 @@
 
 Stage 1 of `Robot/review-plan.md` — the formal-modelling reviews the plan
 calls "the highest-value reviews in the plan and the ones least replaceable
-by an LLM pass." Three tool families, thirteen artifacts, each checking claims
+by an LLM pass." Three tool families, fourteen artifacts, each checking claims
 the design documents make analytically and had never run.
 
 **Every result here is the tool's, not the author's.** As the plan states:
@@ -11,12 +11,12 @@ verification result comes from the tool." Re-run everything with
 `./run-all.sh`; it exits non-zero if any check regresses.
 
 ```bash
-./run-all.sh          # builds and checks all thirteen; writes results/
+./run-all.sh          # builds and checks all fourteen; writes results/
 ```
 
-Current status: 3 Python assertion families, 4 TLA+ models (invariants +
+Current status: 3 Python assertion families, 5 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(25 lemmas) and `compliant/` (29 lemmas).
+(27 lemmas) and `compliant/` (29 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and

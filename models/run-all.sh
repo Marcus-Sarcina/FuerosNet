@@ -33,7 +33,7 @@ echo "=== 2. TLA+ distributed-systems models (TLC) ==="
 # All run with -deadlock: the models terminate (quiescence), which the
 # default deadlock check would flag; the properties that matter are the
 # invariants and temporal properties, checked regardless.
-for m in PartitionMerge CurrencyEscalation CycleDetection SupersessionDiscipline; do
+for m in PartitionMerge CurrencyEscalation CycleDetection SupersessionDiscipline IssuerAuthorisation; do
   out="$RESULTS/$m.txt"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
       -workers 4 -deadlock -metadir "/tmp/tlc_$m" \
@@ -63,19 +63,29 @@ done
 # depending on the cross-document rule and has become true for some other
 # reason -- which would mean the model no longer says what it claims.  So a
 # clean run is a FAILURE of this gate.
-echo "=== 2b. Mutation: the cross-document dependency must be load-bearing ==="
-mout="$RESULTS/SupersessionDiscipline_Mutation.txt"
-"$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
-    -workers 4 -deadlock -metadir "/tmp/tlc_supmut" \
-    -config "$HERE/tla/SupersessionDiscipline_Mutation.cfg" \
-    "$HERE/tla/SupersessionDiscipline.tla" > "$mout" 2>&1
-if grep -q "Invariant NeverIssuedForASupersededKey is violated" "$mout"; then
-  echo "  SupersessionDiscipline_Mutation: violated as expected"
-else
-  echo "  SupersessionDiscipline_Mutation: DID NOT VIOLATE -- the invariant no"
-  echo "    longer depends on the series rule (see results/SupersessionDiscipline_Mutation.txt)"
-  fail=1
-fi
+echo "=== 2b. Mutations: each must FAIL ==="
+# A mutation that stops violating means the invariant it belongs to has quietly
+# stopped depending on the rule that holds it up, and a clean run here is
+# therefore a FAILURE of this gate.
+#   SupersessionDiscipline -- drops the light client's series rule.
+#   IssuerAuthorisation    -- lets acceptance rest on any role ever recorded,
+#                             which is what a permanently-persistent
+#                             authorisation record amounts to.
+for mut in "SupersessionDiscipline:NeverIssuedForASupersededKey" \
+           "IssuerAuthorisation:NeverAcceptedOnALapsedAuthorisation"; do
+  mm="${mut%%:*}"; inv="${mut##*:}"
+  mout="$RESULTS/${mm}_Mutation.txt"
+  "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
+      -workers 4 -deadlock -metadir "/tmp/tlc_${mm}_mut" \
+      -config "$HERE/tla/${mm}_Mutation.cfg" \
+      "$HERE/tla/${mm}.tla" > "$mout" 2>&1
+  if grep -q "Invariant $inv is violated" "$mout"; then
+    echo "  ${mm}_Mutation: violated as expected"
+  else
+    echo "  ${mm}_Mutation: DID NOT VIOLATE (see results/${mm}_Mutation.txt)"
+    fail=1
+  fi
+done
 
 echo "=== 3. Tamarin symbolic protocol models ==="
 for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/ceremony \

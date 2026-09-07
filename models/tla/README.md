@@ -6,7 +6,8 @@
 - `CurrencyEscalation`: no state exists in which a node's attestation is expired, an issuer up the ladder is reachable, and no rung is enabled (`SomeIssuerCanAct`); no action extends a stale attestation instead of issuing a fresh one (`FreshOnly`); the ladder makes progress while the patron is eventually reachable (`LadderMakesProgress`).
 - `CycleDetection`: authority cycles resolve (`CyclesResolve`).
 - `SupersessionDiscipline`: a node never issues for a key generation it has superseded, never serves under one, and neither its record nor its session is ever a superseded generation — over every reachable state of two nodes and three generations.
-- That the supersession result is load-bearing on the subject's series rule: removing it violates `NeverIssuedForASupersededKey`.
+- `IssuerAuthorisation`: a relying party never accepts a currency attestation on an issuer role it has withdrawn or replaced (`NeverAcceptedOnALapsedAuthorisation`).
+- That both results are load-bearing on the rules that hold them up: removing the subject's series rule violates `NeverIssuedForASupersededKey`, and treating authorisation as permanent rather than current violates `NeverAcceptedOnALapsedAuthorisation`.
 
 ## 2. What it cannot demonstrate
 
