@@ -6449,3 +6449,47 @@ re-running the suite.
 
 14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 15 (2026-09-07)
+
+Static-only. One finding, verified and applied, and it is the same class as the
+last round's two: **the rule holds the provenance and the lemma throws it
+away.** Third round running.
+
+**T-01 -- the queue theorem lost the session.** `Server_Bind` checked the wire's
+binding correctly and then produced `Session($S, $Claim)`, dropping the
+challenge `~ns` the session was established under. `Deliver` could not name the
+session that authorised it, and the lemma asked only whether S had
+authenticated R SOMEWHERE EARLIER IN THE TRACE. A stale authentication from a
+finished session discharged it.
+
+`Server_Bind` is the only producer of `Session`, so the present rules could not
+exhibit the defect -- which is exactly why it was worth fixing. The property
+existed to catch a future session-creation path (resumption, restore, failover)
+that skipped the bind, and it would not have.
+
+**Demonstrated rather than argued, on the second attempt.** The first mutation
+-- a restore rule producing `Session` out of nothing -- falsified BOTH the old
+and new forms, because the trace it found contained no authentication at all
+and so failed even the weak version. It discriminated nothing. The faithful
+construction is the reviewer's own scenario: a restore path reachable only
+AFTER a legitimate authentication for that pair. Against that,
+
+    new (per-session) form:  falsified  (8 steps)
+    old (trace-wide)  form:  verified   (4 steps)
+
+which is the finding, exhibited. Worth recording because a mutation that
+falsifies is not automatically a mutation that DISCRIMINATES, and the first one
+looked like success.
+
+**One consequence handled.** Threading the token meant `Deliver` briefly
+restored `Session`, which is the consume-and-restore shape whose backward
+search does not terminate here -- the same regress that moved three obligations
+to `tla/`. `Deliver` no longer restores it: one delivery per session loses
+nothing for this property, since the question is whether ANY delivery happens
+off an unauthenticated session.
+
+14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.

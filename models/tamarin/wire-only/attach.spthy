@@ -283,9 +283,13 @@ rule Server_Bind:
     , Eq(verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, fst(kmA)), true)
                                        // ... so the transport authenticated $A
     , Eq($A, $Claim)                   // THE CHECK ITSELF
-    , AuthenticatedPeer($S, $A)
+    , AuthenticatedPeer($S, $A, ~ns)
     , Bound($S, $A, ~ns, $Claim) ]->
-    [ Session($S, $Claim) ]
+    [ Session($S, $Claim, ~ns) ]
+    // THE SESSION CARRIES THE CHALLENGE IT WAS ESTABLISHED UNDER.  `~ns` is
+    // fresh per handshake, so it is an unforgeable session token: two
+    // legitimate sessions between the same pair are distinguishable, and a
+    // delivery can name the session that authorised it rather than the pair.
 
 /*  Queued material and its release.  design 14.1.4 has the serving node hold
     ciphertext for an offline client; what matters here is only who it goes
@@ -296,9 +300,15 @@ rule Enqueue:
     [ Mail($R, ~m) ]
 
 rule Deliver:
-    [ Session($S, $R), Mail($R, m) ]
-  --[ Delivered($S, $R, m) ]->
+    [ Session($S, $R, ns), Mail($R, m) ]
+  --[ Delivered($S, $R, ns, m) ]->
     [ ]
+    // NOT restored, deliberately.  A session serving many deliveries would be
+    // consume-and-restore, and that is the shape whose backward search does
+    // not terminate here -- the same regress that moved three obligations to
+    // `tla/`.  One delivery per session loses nothing for this property: the
+    // question is whether ANY delivery happens off an unauthenticated
+    // session, not how many happen on an authenticated one.
 
 
 /*
@@ -409,11 +419,23 @@ lemma server_authentication:
     MUTATION-TESTED: delete `Eq($A, $Claim)` from Server_Bind and this
     falsifies, with the trace wire Section 9.1 describes -- one node claiming
     another's keyhash and collecting its mail.                             */
+/*  ON THIS SESSION, not at some point in the past.  The earlier form asked
+    only that S had authenticated R SOMEWHERE EARLIER IN THE TRACE, which a
+    stale authentication from a finished session discharges.  `Server_Bind` is
+    currently the only producer of `Session`, so the present rules cannot
+    exhibit that -- but the property would not have noticed a second
+    session-creation path (resumption, restore, failover) that skipped the
+    bind, which is the regression a queue theorem most needs to catch.
+
+    wire Section 9.1's requirement is per-connection: the serving node "MUST
+    bind the identity for which session state and queued data are requested to
+    the identity the transport authenticated".  The lemma now names the same
+    `ns` on both sides.                                                     */
 lemma queued_data_reaches_only_the_authenticated_peer:
   all-traces
-  "All S R m #i.
-     Delivered(S, R, m) @ #i
-     ==> ( (Ex #a. AuthenticatedPeer(S, R) @ #a & #a < #i)
+  "All S R ns m #i.
+     Delivered(S, R, ns, m) @ #i
+     ==> ( (Ex #a. AuthenticatedPeer(S, R, ns) @ #a & #a < #i)
          | (Ex #k. Compromised(R) @ #k & #k < #i) )"
 
 /*  The other half of "authentication is mutual": a bound session names a
@@ -434,8 +456,8 @@ lemma client_authentication:
 /*  ANTI-VACUITY: an attach reaches a delivery with nobody compromised.      */
 lemma a_delivery_is_reachable:
   exists-trace
-  "Ex S R m #i.
-     Delivered(S, R, m) @ #i & not(Ex A #k. Compromised(A) @ #k)"
+  "Ex S R ns m #i.
+     Delivered(S, R, ns, m) @ #i & not(Ex A #k. Compromised(A) @ #k)"
 
 // CLIENT-SIDE COMMIT INJECTIVITY.  A client cannot commit twice on one
 // challenge.  NAMED FOR WHAT IT PROVES: this follows from St_Client_1 being

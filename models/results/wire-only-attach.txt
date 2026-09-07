@@ -144,10 +144,10 @@ rule (modulo E) Server_Bind:
   --[
   Eq( h(kmA), khA ),
   Eq( verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, fst(kmA)), true ),
-  Eq( $A, $Claim ), AuthenticatedPeer( $S, $A ),
+  Eq( $A, $Claim ), AuthenticatedPeer( $S, $A, ~ns ),
   Bound( $S, $A, ~ns, $Claim )
   ]->
-   [ Session( $S, $Claim ) ]
+   [ Session( $S, $Claim, ~ns ) ]
 
   /*
   rule (modulo AC) Server_Bind:
@@ -157,9 +157,9 @@ rule (modulo E) Server_Bind:
      ]
     --[
     Eq( h(kmA), khA ), Eq( z, true ), Eq( $A, $Claim ),
-    AuthenticatedPeer( $S, $A ), Bound( $S, $A, ~ns, $Claim )
+    AuthenticatedPeer( $S, $A, ~ns ), Bound( $S, $A, ~ns, $Claim )
     ]->
-     [ Session( $S, $Claim ) ]
+     [ Session( $S, $Claim, ~ns ) ]
     variants (modulo AC)
     1. $A    = $A.9
        $Claim
@@ -197,7 +197,9 @@ rule (modulo E) Enqueue:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Deliver:
-   [ Session( $S, $R ), Mail( $R, m ) ] --[ Delivered( $S, $R, m ) ]-> [ ]
+   [ Session( $S, $R, ns ), Mail( $R, m ) ]
+  --[ Delivered( $S, $R, ns, m ) ]->
+   [ ]
 
   /* has exactly the trivial AC variant */
 
@@ -375,20 +377,20 @@ qed
 
 lemma queued_data_reaches_only_the_authenticated_peer:
   all-traces
-  "∀ S R m #i.
-    (Delivered( S, R, m ) @ #i) ⇒
-    ((∃ #a. (AuthenticatedPeer( S, R ) @ #a) ∧ (#a < #i)) ∨
+  "∀ S R ns m #i.
+    (Delivered( S, R, ns, m ) @ #i) ⇒
+    ((∃ #a. (AuthenticatedPeer( S, R, ns ) @ #a) ∧ (#a < #i)) ∨
      (∃ #k. (Compromised( R ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ S R m #i.
-  (Delivered( S, R, m ) @ #i)
+"∃ S R ns m #i.
+  (Delivered( S, R, ns, m ) @ #i)
  ∧
-  (∀ #a. (AuthenticatedPeer( S, R ) @ #a) ⇒ ¬(#a < #i)) ∧
+  (∀ #a. (AuthenticatedPeer( S, R, ns ) @ #a) ⇒ ¬(#a < #i)) ∧
   (∀ #k. (Compromised( R ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
-solve( Session( $S, $R ) ▶₀ #i )
+solve( Session( $S, $R, ns ) ▶₀ #i )
   case Server_Bind
   by contradiction /* from formulas */
 qed
@@ -430,15 +432,15 @@ qed
 
 lemma a_delivery_is_reachable:
   exists-trace
-  "∃ S R m #i.
-    (Delivered( S, R, m ) @ #i) ∧ (¬(∃ A #k. Compromised( A ) @ #k))"
+  "∃ S R ns m #i.
+    (Delivered( S, R, ns, m ) @ #i) ∧ (¬(∃ A #k. Compromised( A ) @ #k))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ S R m #i.
-  (Delivered( S, R, m ) @ #i) ∧ ∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥"
+"∃ S R ns m #i.
+  (Delivered( S, R, ns, m ) @ #i) ∧ ∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥"
 */
 simplify
-solve( Session( $S, $R ) ▶₀ #i )
+solve( Session( $S, $R, ns ) ▶₀ #i )
   case Server_Bind
   solve( Mail( $R, m ) ▶₁ #i )
     case Enqueue
@@ -526,7 +528,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/attach.spthy
 
-  processing time: 2.02s
+  processing time: 2.10s
   
   attach_completes_honestly (exists-trace): verified (13 steps)
   attach_is_executable (exists-trace): verified (12 steps)
