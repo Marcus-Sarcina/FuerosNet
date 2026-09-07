@@ -6342,3 +6342,65 @@ repeatedly in the other direction, and the strict assertion cost one round trip
 where a weak one has repeatedly cost a false claim.
 
 31 wire-only lemmas. 60 Tamarin lemmas unbounded, 14 artifacts, all pass.
+
+---
+
+## Cross-family wire-only review 13 (2026-09-07)
+
+Static-only. Five findings, all verified, all applied. One is a real defect;
+**three are overclaims of mine, and two of those are a worse kind than this
+session has seen before.**
+
+**F1 (HIGH) -- a per-slot check written into one slot.** The two-response
+recovery rule carried `Distinct($V, $S)` and no `Distinct($V2, $S)`, while
+emitting `ReliedOn` for both verifiers. A subject could sign its own
+recognition into slot 2 and every lemma stayed green -- because the
+self-recognition emits genuine `RecognisedAs` and `RecognisedFor` facts and the
+old-key proof is real. Nothing in the suite looked at WHICH identities had been
+excluded.
+
+Fixed, and guarded by `no_relied_on_verifier_is_the_subject`, stated over the
+RELIANCE ACTION rather than over a slot. That is the point: a property
+quantified over "every verifier relied on" cannot be satisfied by adding the
+next check to only one of them. Mutation-tested.
+
+**F2 and F3 -- I manufactured the collisions I then cited as evidence.**
+
+`a_recognition_is_not_accepted_as_an_old_key_proof` falsified when the verifier
+dropped its `external_aad`, and that was reported as a concrete cross-context
+replay the tag prevents. It was not. The falsification depended on the
+successor statement and a verifier response sharing one symbolic three-tuple,
+so that `result = P` made them the same term. On the wire a `SuccessorStatement`
+is a CBOR ARRAY of three keyhashes and a verifier signature covers a MAP of
+fields 1-8 and 10; the top-level structures differ before any field is read.
+
+`a_formation_signature_is_not_accepted_as_a_normal_record` was the same
+mistake. It needed a formation to carry the sentinel `'none'` in the witness
+slot a normal record uses -- but `wire-format.md` says keys 4 and 5 are "ABSENT
+always on a formation" and that their absence "announce[s] it regardless". The
+shared shape was mine.
+
+Both models are now faithful -- `succ_stmt/3` and `vresp/3` are distinct
+constructors, a formation payload is a shorter tuple -- and **both lemmas are
+deleted rather than repaired.** Domain separation and the signed subtype remain
+normative and are still modelled; what is gone is the claim that this suite
+demonstrates why they are needed.
+
+The distinction worth keeping: an abstraction that is too COARSE loses attacks,
+which is the familiar failure. These two were too coarse in a way that
+INVENTED one, and the mutation then "confirmed" it. A green mutation is only
+evidence if the collision it exploits exists in the thing being modelled.
+
+**F4 -- a claim about my own file that was false.** The comment said splitting
+the timestamps made "omitting or substituting either mutation-testable". Only
+`exp` appeared in `Issued` and `Accepted`, so no property had an `iat` to
+compare and an implementation consistently leaving `issued_at` unsigned
+contradicted nothing. `the_accepted_issue_time_is_the_signed_one` added and
+mutation-tested.
+
+**F5 -- a disclosed limitation that was narrower than the truth.** The
+identity/keyhash split also suppresses the transfer's `former_patron != node`,
+not only the adoption's node/patron inequality. Recorded in the README.
+
+14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.

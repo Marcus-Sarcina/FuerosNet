@@ -350,7 +350,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/attach.spthy
 
-  processing time: 0.70s
+  processing time: 0.65s
   
   service_follows_an_attach (all-traces): verified (15 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)

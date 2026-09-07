@@ -235,8 +235,8 @@ rule Formation_Sign_Without_Meeting:
   --[ FormationSigned($P, $P1, $P2, cid)
     , SignedWithoutMeeting($P)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(<sign(<'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, ~skc),
-           sign(<'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:envelope', <'1', $P1, $P2, cid>>, ~skc),
+           sign(<'rhtn/1:envelope', <'1', $P1, $P2, cid>>, ~skp)>) ]
 
 rule Witness_Sign:
     [ !LtkC($W, ~skc), !LtkP($W, ~skp)
@@ -341,8 +341,8 @@ rule Formation_Sign:
   --[ FormationSigned($P, $P1, $P2, cid)
     , HonestFormationSigned($P, $P1, $P2, cid)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(<sign(<'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, ~skc),
-           sign(<'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:envelope', <'1', $P1, $P2, cid>>, ~skc),
+           sign(<'rhtn/1:envelope', <'1', $P1, $P2, cid>>, ~skp)>) ]
 
 rule Accept_Formation:
     [ !Kh($P1, kh1), !Kh($P2, kh2)
@@ -350,10 +350,10 @@ rule Accept_Formation:
     , In(<'formation', $P1, $P2, cid>)      // the record body, as received
     , In(<sig1c, sig1p>), In(<sig2c, sig2p>) ]
   --[ Eq(h(km1), kh1), Eq(h(km2), kh2)
-    , Eq(verify(sig1c, <'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, fst(km1)), true)
-    , Eq(verify(sig1p, <'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, snd(km1)), true)
-    , Eq(verify(sig2c, <'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, fst(km2)), true)
-    , Eq(verify(sig2p, <'rhtn/1:envelope', <'1', $P1, $P2, 'none', cid>>, snd(km2)), true)
+    , Eq(verify(sig1c, <'rhtn/1:envelope', <'1', $P1, $P2, cid>>, fst(km1)), true)
+    , Eq(verify(sig1p, <'rhtn/1:envelope', <'1', $P1, $P2, cid>>, snd(km1)), true)
+    , Eq(verify(sig2c, <'rhtn/1:envelope', <'1', $P1, $P2, cid>>, fst(km2)), true)
+    , Eq(verify(sig2p, <'rhtn/1:envelope', <'1', $P1, $P2, cid>>, snd(km2)), true)
     // THE VALIDATOR CHECKS PARTICIPANT DISTINCTNESS ITSELF, as Accept_Record
     // does (`wire-format.md` §3.2: the two participants are distinct).
     // Enforcing it only at Meet_Formation is not enough: this rule takes its
@@ -462,23 +462,27 @@ lemma an_accepted_record_is_attributable:
              & (Ex #y. CompromisedPQ(W) @ #y & #y < #i) ) ) )"
 
 
-/*  THE SUBTYPE IS LOAD-BEARING, stated narrowly so it can actually be
-    mutation-tested.  `an_accepted_record_is_attributable` is the general
-    property, but mutating it does not terminate: removing the subtype makes
-    the presence and formation payload languages collide, which is exactly the
-    point and also what explodes the search.  This lemma pins the witness slot
-    to the value a formation carries there and drops the compromise
-    disjunctions, which is enough to expose the confusion cheaply.
+/*  WHY THERE IS NO CROSS-SUBTYPE LEMMA HERE, and there was one until
+    2026-09-07.
 
-    With the subtype signed, a formation signature over
-    <'rhtn/1:envelope', <'1', P1, P2, 'none', cid>> cannot satisfy a normal
-    record's check over <'rhtn/1:envelope', <'0', P1, P2, W, cid>> -- the two
-    do not unify.  Remove the subtype and they do, at W = 'none'.          */
-lemma a_formation_signature_is_not_accepted_as_a_normal_record:
-  "All P1 P2 cid #i.
-     RecordAccepted(P1, P2, 'none', cid) @ #i
-     & not(Ex A #k. Compromised(A) @ #k)
-     ==> Ex #a. SignedBody(P1, P1, P2, 'none', cid) @ #a & #a < #i"
+    A formation body was modelled with the sentinel `'none'` sitting in the
+    witness slot a normal record uses, which gave the two subtypes a SHARED
+    PAYLOAD SHAPE.  On that shape, deleting the signed subtype let a formation
+    signature satisfy a normal record's check, and
+    `a_formation_signature_is_not_accepted_as_a_normal_record` falsified
+    accordingly.  That was cited as evidence the subtype is load-bearing.
+
+    The wire has no such shape.  `wire-format.md`: keys 4 and 5 are "ABSENT
+    always on a formation", and "a formation record's absent keys 4 and 5
+    announce it regardless".  The collision was manufactured by the sentinel,
+    so the mutation demonstrated a property of the abstraction and not of the
+    encoding.  Absence is now modelled as absence -- the formation payload is
+    a shorter tuple -- and the lemma is gone rather than left to look like
+    byte-level evidence.
+
+    Field 6 remains normative and is still signed.  What it buys is
+    unambiguous semantics, not the prevention of a transplant the structures
+    already prevent.                                                       */
 
 /*  WHAT "EVERY PARTY IT NAMES" MEANS HERE, stated because the lemma above is
     easy to read as more than it is.

@@ -46,6 +46,12 @@ begin
 
 builtins: signing, hashing
 
+// The two archive-retained payloads have DIFFERENT top-level CBOR shapes on
+// the wire: a SuccessorStatement is an ARRAY of three keyhashes, while a
+// verifier signature covers a MAP of VerifierResponse fields.  Distinct
+// constructors keep them non-unifiable, as the encoding does.
+functions: succ_stmt/3, vresp/3
+
 /*
 --------------------------------------------------------------------------------
   PARTIES
@@ -160,8 +166,8 @@ rule Recognise_Without_Meeting:
     , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
     [ Out(<'recognise', $S, newkey, result,
-           <sign(<'rhtn/1:verifier', <$S, newkey, result>>, ~vsc),
-            sign(<'rhtn/1:verifier', <$S, newkey, result>>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', vresp($S, newkey, result)>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp($S, newkey, result)>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -176,8 +182,8 @@ rule Old_Key_Proof:
   --[ OldKeyProof($S, newkey)
     , OldKeyProofFor($S, newkey, $P) ]->
     [ Out(<'rotate', $S, newkey, $P,
-           <sign(<'rhtn/1:successor', <$S, newkey, $P>>, ~oldc),
-            sign(<'rhtn/1:successor', <$S, newkey, $P>>, ~oldp)> >) ]
+           <sign(<'rhtn/1:successor', succ_stmt($S, newkey, $P)>, ~oldc),
+            sign(<'rhtn/1:successor', succ_stmt($S, newkey, $P)>, ~oldp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -296,8 +302,8 @@ rule Recognise:
     , RecognisedAs($V, $S, newkey, 'match')
     , HonestlyRecognised($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey, 'match',
-           <sign(<'rhtn/1:verifier', <$S, newkey, 'match'>>, ~vsc),
-            sign(<'rhtn/1:verifier', <$S, newkey, 'match'>>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', vresp($S, newkey, 'match')>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp($S, newkey, 'match')>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -344,10 +350,10 @@ rule Patron_Accept_Recovery_One_Response:
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)
     , In(<'recognise', $S, newkey, result, <provBc, provBp>>) ]
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV)
-    , Eq(verify(provAc, <'rhtn/1:successor', <$S, newkey, $P>>, fst(kmOld)), true)
-    , Eq(verify(provAp, <'rhtn/1:successor', <$S, newkey, $P>>, snd(kmOld)), true)
-    , Eq(verify(provBc, <'rhtn/1:verifier', <$S, newkey, result>>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', <$S, newkey, result>>, snd(kmV)), true)
+    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp($S, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp($S, newkey, result)>, snd(kmV)), true)
     , Eq(result, 'match')              // the only response, so it must match
     , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
     , RecognisedAs($V, $S, newkey, result)
@@ -412,12 +418,12 @@ rule Patron_Accept_Recovery:
     , Distinct($V, $V2)                // duplicate verifier responses are
                                        //   malformed -- the collection must
                                        //   be independent verifiers
-    , Eq(verify(provB2c, <'rhtn/1:verifier', <$S, newkey2, result2>>, fst(kmV2)), true)
-    , Eq(verify(provB2p, <'rhtn/1:verifier', <$S, newkey2, result2>>, snd(kmV2)), true)
-    , Eq(verify(provAc, <'rhtn/1:successor', <$S, newkey, $P>>, fst(kmOld)), true)
-    , Eq(verify(provAp, <'rhtn/1:successor', <$S, newkey, $P>>, snd(kmOld)), true)
-    , Eq(verify(provBc, <'rhtn/1:verifier', <$S, newkey, result>>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', <$S, newkey, result>>, snd(kmV)), true)
+    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp($S, newkey2, result2)>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp($S, newkey2, result2)>, snd(kmV2)), true)
+    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp($S, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp($S, newkey, result)>, snd(kmV)), true)
     , BlockResults(result, result2)    // AT LEAST ONE match, in EITHER slot --
                                        //   see the restriction below.  Pinning
                                        //   it to the first response made
@@ -428,7 +434,15 @@ rule Patron_Accept_Recovery:
                                        //   unavailable -- are signed responses
                                        //   too, and a validator that took any
                                        //   signed response would accept them
-    , Distinct($V, $S)                          // the verifier is NOT the subject
+    , Distinct($V, $S)                          // NEITHER verifier is the subject
+    , Distinct($V2, $S)                         //   -- and this second one was
+                                                //   missing until 2026-09-07,
+                                                //   so a subject could sign its
+                                                //   own recognition into slot 2
+                                                //   and no lemma failed: the
+                                                //   self-recognition produces
+                                                //   genuine trace facts, so
+                                                //   attribution stayed true.
     , Distinct($P, $S)                          // nor is the patron the subject
     , Distinct(khOld, newkey)                   // and the rotation is real
 
@@ -554,6 +568,23 @@ lemma forging_a_recognition_needs_both_verifier_halves:
     only ever built from a wire `VerifierResponse` whose consent and
     consistency checks already passed.  No refinement argument establishes
     that assumption; it is an assumption.                                   */
+/*  NO VERIFIER RELIED ON IS THE SUBJECT, stated over `ReliedOn` so it covers
+    EVERY response rather than whichever slot a check happened to be written
+    into.  The two-response rule carried `Distinct($V, $S)` and not
+    `Distinct($V2, $S)`; every lemma stayed green, because a subject signing
+    its own recognition emits real `RecognisedAs` and `RecognisedFor` facts and
+    the old-key proof is genuine too.  Nothing in the suite was looking at
+    which identities had been excluded.
+
+    That is the shape to guard against: a per-element check added to one slot
+    and not the other. Quantifying over the reliance action makes the property
+    independent of how many slots the rule happens to have.               */
+lemma no_relied_on_verifier_is_the_subject:
+  "All P V S newkey #i.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & ReliedOn(P, V, S) @ #i
+     ==> not(V = S)"
+
 /*  AT LEAST ONE match, not all of them.  `wire-format.md` requires the block
     to carry "at least one actual `match`"; the other responses may legitimately
     say `no-match`, `inconclusive` or `unavailable`.  An earlier version of this
@@ -590,43 +621,31 @@ lemma a_recovery_never_installs_the_prior_identity:
      & IdentityIs(S, newkey) @ #r
      ==> F"
 
-/*  DOMAIN SEPARATION IS THE VERIFIER'S JOB, and it is now modelled as one.
-    `wire-format.md` supplies the role through COSE `external_aad`,
-    reconstructed by the verifier from the context it is checking in, and says
-    why structure is not a substitute: "exploiting cross-context confusion
-    requires a byte string valid in two roles, which the differing CBOR
-    structures argue against WITHOUT RULING OUT -- and unproven
+/*  DOMAIN SEPARATION IS MODELLED, NOT DEMONSTRATED, and the difference
+    matters.  Until 2026-09-07 this theory carried
+    `a_recognition_is_not_accepted_as_an_old_key_proof`, whose mutation
+    falsified when the verifier checked the payload without its
+    `external_aad`.  That was cited as a concrete cross-context replay the AAD
+    prevents.  It was not one.
+
+    The falsification depended on the successor statement and a verifier
+    response sharing one symbolic three-tuple, so that setting a response's
+    result to the patron made the two THE SAME TERM.  The wire has no such
+    coincidence: a `SuccessorStatement` is a CBOR ARRAY of three keyhashes,
+    while a verifier signature covers a MAP of `VerifierResponse` fields 1-8
+    and 10, and a result is an enumerated value rather than a keyhash.  The
+    top-level structures differ before any field is compared.
+
+    `succ_stmt/3` and `vresp/3` now keep them non-unifiable, as the encoding
+    does, and the lemma is removed rather than left reading as byte-level
+    evidence.
+
+    THE REQUIREMENT STANDS AND IS ASSUMED HERE.  `wire-format.md` requires the
+    role tag on all thirteen signing contexts and says why: "unproven
     non-confusability is precisely what domain separation exists to replace."
+    That is a refinement obligation this theory OBSERVES -- every signature
+    carries its role -- and does not prove.                                */
 
-    Until 2026-09-07 this theory put the role INSIDE the signed tuple, so
-    separation held by symbolic message shape: `<'rotate', ...>` and
-    `<'recognise', ...>` simply are different terms, and an implementation
-    that failed to bind the context had nothing to falsify.  Signed terms are
-    now `<aad, payload>`, and the aad is supplied by the verifying rule.
-
-    THE COLLISION IS REAL HERE, which is why the lemma below can test it: the
-    successor statement's payload is <S, newkey, P> and a verifier response's
-    is <S, newkey, result>.  Set result = P and the two payloads are THE SAME
-    TERM.  Only the aad separates them.  Verify either signature over the
-    payload alone -- dropping the aad, which is exactly the implementation
-    error -- and a recognition is accepted as an old-key proof.            */
-lemma a_recognition_is_not_accepted_as_an_old_key_proof:
-  "All P S newkey #i.
-     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-     ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
-         | ( (Ex #x. CompromisedClassical(S) @ #x & #x < #i)
-           & (Ex #y. CompromisedPQ(S) @ #y & #y < #i) ) )"
-
-/*  THIS MUST TIE THE MEETING TO THE KEY THAT WAS RECOVERED, and an earlier
-    version did not.  It asked only for SOME meeting before SOME acceptance,
-    which `Recognise_Without_Meeting` satisfies trivially: hold a meeting with
-    one verifier about one key, then recover a different key on a different
-    verifier's unearned recognition, with nothing compromised.  The honest
-    path could have been deleted and this would still have verified.
-
-    `HonestlyRecognised` is emitted only by the rule that consumes
-    `AtMeeting`, and the meeting, the recognition, the verifier relied upon
-    and the accepted successor are now the SAME (V, S, newkey).            */
 /*  THE GUARD MUST EXCLUDE THE BYPASS, and until 2026-09-07 it did not.  It
     named only ACTIONS -- a meeting, an honest recognition, an acceptance --
     and `Recognise_Without_Meeting` could supply the signature acceptance

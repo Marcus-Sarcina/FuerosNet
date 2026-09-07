@@ -207,7 +207,7 @@ rule Issue_Currency:
     , !SubjKey($S, sk)                 // for a key the subject holds
     , !Epoch(iat, exp)                 // stamped with both timestamps
     , In(role) ]                       // claiming whatever role it likes
-  --[ Issued($I, $S, pk(sk), exp)
+  --[ Issued($I, $S, pk(sk), iat, exp)
     , IssuedAs($I, $S, role)
     , IssuedFresh($I, $S, exp) ]->
     [ Out(<'currency', $S, pk(sk), iat, exp, role, $I,
@@ -224,7 +224,7 @@ rule Issue_Currency_Arbitrary:
     [ !PatronKey($I, ~isk)
     , !Epoch(iat, exp)
     , In(<$S, kh, role>) ]
-  --[ Issued($I, $S, kh, exp)
+  --[ Issued($I, $S, kh, iat, exp)
     , IssuedAs($I, $S, role)
     , SignedWithoutTransition($I) ]->
     [ Out(<'currency', $S, kh, iat, exp, role, $I,
@@ -270,7 +270,7 @@ rule Accept_Currency:
                                        //   omitting the check had no trace.
     , Eq(verify(att, <'rhtn/1:currency', <$S, sk, iat, exp, role, $I>>, fst(kmI)), true)
     , NotExpiredAt(exp)                  // guarded by the restriction below
-    , Accepted($R, $I, $S, sk, exp, role) ]->
+    , Accepted($R, $I, $S, sk, iat, exp, role) ]->
     [ ]
 
 /*
@@ -333,7 +333,7 @@ restriction NotExpiredBeforeAccept:
 // SANITY: the honest flow runs -- a patron issues, a party accepts.
 lemma currency_is_usable:
   exists-trace
-  "Ex R I S sk e role #i. Accepted(R, I, S, sk, e, role) @ #i"
+  "Ex R I S sk iat exp role #i. Accepted(R, I, S, sk, iat, exp, role) @ #i"
 
 // THE GUARD THAT ACTUALLY GUARDS.  An acceptance with NO compromise anywhere
 // on the trace, resting on a genuine issuance.  currency_is_usable above does
@@ -343,9 +343,9 @@ lemma currency_is_usable:
 // compromised trace can satisfy is not a vacuity guard.
 lemma currency_is_usable_honestly:
   exists-trace
-  "Ex R I S kh e role #j #i.
-       Issued(I, S, kh, e) @ #j
-     & Accepted(R, I, S, kh, e, role) @ #i
+  "Ex R I S kh iat exp role #j #i.
+       Issued(I, S, kh, iat, exp) @ #j
+     & Accepted(R, I, S, kh, iat, exp, role) @ #i
      & #j < #i
      & not(Ex A #k. Compromised(A) @ #k)
      & not(Ex X #t. SignedWithoutTransition(X) @ #t)"
@@ -401,10 +401,23 @@ lemma expiry_is_reachable:
 // of the answer, and a rebuild attempted on 2026-09-05 was machinery for a
 // property that was never the protocol's to have.
 lemma currency_requires_unexpired_issuance:
-  "All R I S sk e role #i.
-     Accepted(R, I, S, sk, e, role) @ #i
-     ==> ( ( (Ex #j. Issued(I, S, sk, e) @ #j & #j < #i)
-           & not(Ex #x. Expired(e) @ #x & #x < #i) )
+  "All R I S sk iat exp role #i.
+     Accepted(R, I, S, sk, iat, exp, role) @ #i
+     ==> ( ( (Ex #j. Issued(I, S, sk, iat, exp) @ #j & #j < #i)
+           & not(Ex #x. Expired(exp) @ #x & #x < #i) )
+         | (Ex #k. Compromised(I) @ #k & #k < #i) )"
+
+/*  ISSUED_AT IS GUARDED TOO, and until 2026-09-07 it was not.  Both
+    timestamps sat inside the signed term and the note above claimed
+    "omitting or substituting either is mutation-testable" -- but only `exp`
+    appeared in `Issued` and `Accepted`, so no property had an `iat` value to
+    compare.  An implementation family that consistently left `issued_at` out
+    of the signed payload, at issuer and validator alike, contradicted
+    nothing.  Now the accepted value must be the issued one.              */
+lemma the_accepted_issue_time_is_the_signed_one:
+  "All R I S sk iat exp role #i.
+     Accepted(R, I, S, sk, iat, exp, role) @ #i
+     ==> ( (Ex #j. Issued(I, S, sk, iat, exp) @ #j & #j < #i)
          | (Ex #k. Compromised(I) @ #k & #k < #i) )"
 
 /*  THE ISSUER AND ROLE ARE INSIDE THE SIGNATURE.  An attestation issued as a
@@ -413,8 +426,8 @@ lemma currency_requires_unexpired_issuance:
     signature for exactly this; drop either from the signed tuple and this
     lemma falsifies.                                                        */
 lemma an_attestation_binds_its_issuer_and_role:
-  "All R I S sk e role #i.
-     Accepted(R, I, S, sk, e, role) @ #i
+  "All R I S sk iat exp role #i.
+     Accepted(R, I, S, sk, iat, exp, role) @ #i
      ==> ( (Ex #j. IssuedAs(I, S, role) @ #j & #j < #i)
          | (Ex #k. Compromised(I) @ #k & #k < #i) )"
 
@@ -438,8 +451,8 @@ lemma an_attestation_binds_its_issuer_and_role:
     consume-and-restore regress diagnosed for currency issuance and session
     serving.  `tla/IssuerAuthorisation.tla` checks the lifecycle exhaustively.  */
 lemma acceptance_names_an_issuer_this_party_recorded_as_authorised:
-  "All R I S sk e role #i.
-     Accepted(R, I, S, sk, e, role) @ #i
+  "All R I S sk iat exp role #i.
+     Accepted(R, I, S, sk, iat, exp, role) @ #i
      ==> Ex #a. AuthorisedBy(R, I, S, role) @ #a & #a < #i"
 
 // PATRON COMPROMISE, made available so the carve-out above is real rather
