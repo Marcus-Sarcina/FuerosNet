@@ -160,8 +160,8 @@ rule Recognise_Without_Meeting:
     , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
     [ Out(<'recognise', $S, newkey, result,
-           <sign(<'rhtn/1:recognise', <$S, newkey, result>>, ~vsc),
-            sign(<'rhtn/1:recognise', <$S, newkey, result>>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', <$S, newkey, result>>, ~vsc),
+            sign(<'rhtn/1:verifier', <$S, newkey, result>>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -296,8 +296,8 @@ rule Recognise:
     , RecognisedAs($V, $S, newkey, 'match')
     , HonestlyRecognised($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey, 'match',
-           <sign(<'recognise', $S, newkey, 'match'>, ~vsc),
-            sign(<'recognise', $S, newkey, 'match'>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', <$S, newkey, 'match'>>, ~vsc),
+            sign(<'rhtn/1:verifier', <$S, newkey, 'match'>>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -327,6 +327,36 @@ rule Recognise:
   number of moves.  That is the same replay primitive, one field over, and the
   lemma below is the same lemma one field over.
 */
+
+
+/*  CARDINALITY ONE.  `wire-format.md` makes the response array NONEMPTY --
+    one signed `match` is a wire-valid recovery -- and the two-response rule
+    above cannot represent it.  That gap was not cosmetic: with two responses
+    mandatory and one honest meeting modelled, the CONFORMING path could not
+    reach acceptance at all, and `recovery_completes_honestly` only passed
+    because `Recognise_Without_Meeting` supplied the second response.  The
+    guard now excludes that rule, so this shape is what carries the honest
+    witness.                                                               */
+rule Patron_Accept_Recovery_One_Response:
+    [ !LtkC($P, ~psk)
+    , !Kh($S, khOld), !Kh($V, khV)
+    , In(<kmOld, kmV>)
+    , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)
+    , In(<'recognise', $S, newkey, result, <provBc, provBp>>) ]
+  --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV)
+    , Eq(verify(provAc, <'rhtn/1:successor', <$S, newkey, $P>>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', <$S, newkey, $P>>, snd(kmOld)), true)
+    , Eq(verify(provBc, <'rhtn/1:verifier', <$S, newkey, result>>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', <$S, newkey, result>>, snd(kmV)), true)
+    , Eq(result, 'match')              // the only response, so it must match
+    , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
+    , RecognisedAs($V, $S, newkey, result)
+    , ReliedOn($P, $V, $S)
+    , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
+    [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]
+
+restriction AtLeastOneMatchInTheBlock:
+  "All r1 r2 #i. BlockResults(r1, r2) @ #i ==> r1 = 'match' | r2 = 'match'"
 
 /*  THE SUBJECT COMES OFF THE NETWORK, not from `Fr`.  An earlier version
     minted the transferred node with `Fr(~nodekey)`, which meant a former
@@ -382,13 +412,17 @@ rule Patron_Accept_Recovery:
     , Distinct($V, $V2)                // duplicate verifier responses are
                                        //   malformed -- the collection must
                                        //   be independent verifiers
-    , Eq(verify(provB2c, <'rhtn/1:recognise', <$S, newkey2, result2>>, fst(kmV2)), true)
-    , Eq(verify(provB2p, <'rhtn/1:recognise', <$S, newkey2, result2>>, snd(kmV2)), true)
+    , Eq(verify(provB2c, <'rhtn/1:verifier', <$S, newkey2, result2>>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:verifier', <$S, newkey2, result2>>, snd(kmV2)), true)
     , Eq(verify(provAc, <'rhtn/1:successor', <$S, newkey, $P>>, fst(kmOld)), true)
     , Eq(verify(provAp, <'rhtn/1:successor', <$S, newkey, $P>>, snd(kmOld)), true)
-    , Eq(verify(provBc, <'rhtn/1:recognise', <$S, newkey, result>>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:recognise', <$S, newkey, result>>, snd(kmV)), true)
-    , Eq(result, 'match')              // `wire-format.md`: a Recovery needs at
+    , Eq(verify(provBc, <'rhtn/1:verifier', <$S, newkey, result>>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', <$S, newkey, result>>, snd(kmV)), true)
+    , BlockResults(result, result2)    // AT LEAST ONE match, in EITHER slot --
+                                       //   see the restriction below.  Pinning
+                                       //   it to the first response made
+                                       //   [no-match, match] unrepresentable,
+                                       //   which the wire permits.
                                        //   least one actual `match`; the other
                                        //   results -- no-match, inconclusive,
                                        //   unavailable -- are signed responses
@@ -533,6 +567,19 @@ lemma acceptance_requires_a_signed_match:
          | (Ex V #x #y. CompromisedClassical(V) @ #x & CompromisedPQ(V) @ #y
               & #x < #i & #y < #i) )"
 
+/*  AND THE MIRROR.  The lemma above shows the CLASSICAL half alone does not
+    suffice.  It does not, by itself, show the post-quantum half alone does
+    not: delete the classical verification and an attack using a compromised
+    PQ half makes that lemma's antecedent false rather than contradicting its
+    conclusion.  Both directions need stating for both signature checks to be
+    guarded.                                                               */
+lemma forging_a_recognition_needs_the_classical_half_too:
+  "All P S newkey V #i.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & ReliedOn(P, V, S) @ #i
+     & not(Ex #k. CompromisedClassical(V) @ #k)
+     ==> Ex #b. RecognisedFor(V, S, newkey) @ #b & #b < #i"
+
 /*  THE ROTATION IS REAL.  A recovery never installs the identity it is
     recovering FROM -- `wire-format.md`: "`prior_key` MUST differ from field
     1 ... identical keys represent no rotation".  Delete `Distinct(khOld,
@@ -580,6 +627,19 @@ lemma a_recognition_is_not_accepted_as_an_old_key_proof:
     `HonestlyRecognised` is emitted only by the rule that consumes
     `AtMeeting`, and the meeting, the recognition, the verifier relied upon
     and the accepted successor are now the SAME (V, S, newkey).            */
+/*  THE GUARD MUST EXCLUDE THE BYPASS, and until 2026-09-07 it did not.  It
+    named only ACTIONS -- a meeting, an honest recognition, an acceptance --
+    and `Recognise_Without_Meeting` could supply the signature acceptance
+    actually consumed.  So the trace contained an honest recognition event
+    whose SIGNATURE was never used, which is what the guard exists to rule
+    out.  It went unnoticed because the honest rule had been left signing a
+    term acceptance cannot verify: last round's context separation matched on
+    the variable `result` and missed this rule, which signs the literal
+    'match'.  A substitution that reports "3 roles separated" and is not
+    checked site by site is how that happens.
+
+    Excluding `RecognisedWithoutMeeting` outright is what makes this a witness
+    that the CONFORMING path reaches acceptance.                           */
 lemma recovery_completes_honestly:
   exists-trace
   "Ex P S newkey V #m #r #i.
@@ -588,7 +648,8 @@ lemma recovery_completes_honestly:
      & ReliedOn(P, V, S) @ #i
      & PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      & #m < #r & #r < #i
-     & not(Ex A #k. Compromised(A) @ #k)"
+     & not(Ex A #k. Compromised(A) @ #k)
+     & not(Ex X #w. RecognisedWithoutMeeting(X) @ #w)"
 
 lemma recovery_is_executable:
   exists-trace

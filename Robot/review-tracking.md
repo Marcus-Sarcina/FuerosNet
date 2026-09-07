@@ -6240,3 +6240,78 @@ would have let a real failure through.
 
 14 artifacts. 58 Tamarin lemmas unbounded (29 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 12 (2026-09-07)
+
+Static-only. Five findings, all verified, all applied. **F1 is a bug I
+introduced in review 11, and it is the most instructive entry in this file.**
+
+**F1 (HIGH) -- the honest recovery path signed a term acceptance could not
+verify.** Review 11's context separation substituted on the pattern
+`<'recognise', $S, newkey, result>`. The honest `Recognise` rule signs the
+LITERAL `'match'`, not the variable, so the pattern missed it and that rule was
+left signing the old flat term. Its signature could never satisfy
+`Patron_Accept_Recovery`.
+
+The gate did not catch it because `recovery_completes_honestly` named only
+ACTIONS -- a meeting, an honest recognition, an acceptance -- and
+`Recognise_Without_Meeting` supplied the signature acceptance actually
+consumed. The trace contained an honest recognition whose SIGNATURE WAS NEVER
+USED. That is the sixth occurrence this session of an honest path being
+unreachable or unrequired while the universal lemmas stayed green, and the
+second where the guard itself was the thing at fault.
+
+Two things were wrong and both are fixed: the guard now excludes
+`RecognisedWithoutMeeting` outright, so it witnesses the conforming path
+reaching acceptance; and the substitution that caused it is recorded as what it
+was -- **a replacement reporting "3 roles separated" that was never checked
+site by site.** The CLAUDE.md rule about mechanical substitution says exactly
+this, and the count assertion I did write (`count > 0`) was too weak to catch a
+missed site.
+
+**Three role tags were invented.** `rhtn/1:recognise`, `rhtn/1:presence` and
+`rhtn/1:formation` do not appear in `wire-format.md`'s role table. The wire has
+`rhtn/1:verifier` for verifier responses and `rhtn/1:envelope` for transaction
+envelopes -- both presence subtypes use the latter. Corrected. The two I got
+right, `rhtn/1:successor` and `rhtn/1:transfer`, were the two I copied from the
+table rather than named from the rule.
+
+**F3 (MEDIUM) -- the invented contexts also hid the real mechanism.** Normal
+and formation are separated on the wire by SIGNED BODY FIELD 6, not by
+context. Giving them different contexts added a cryptographic separation the
+protocol does not have and made the one it does have untestable. The subtype is
+now the first element of a shared payload shape, with the formation witness
+slot carrying `'none'` rather than being absent.
+
+**F2 (MEDIUM) -- cardinality and match position.** Acceptance required exactly
+two responses with the match hard-wired to the first slot; the wire's array is
+nonempty, and the match requirement is existential. A one-response acceptance
+is added and the match is now a disjunctive restriction over the block. This
+was not cosmetic: with two responses mandatory and one honest meeting
+modelled, the conforming path could not reach acceptance at all, which is why
+F1's corrected guard falsified until this was fixed. The two findings were one
+problem seen from two sides.
+
+**F4 (MEDIUM) -- one epoch token stood for two signed timestamps.** Splitting
+them was not enough on its own: acceptance took `!Epoch(iat, exp)` as a PAIR,
+which re-bound the two to something the environment had minted together, so the
+binding of field 4 was enforced by the model rather than by the signature. A
+validator consults no such registry. With the premise removed, omitting
+`expires_at` from the signed payload falsifies
+`currency_requires_unexpired_issuance` -- three mutation attempts were needed
+to find a form that tested the right thing.
+
+**F5 (LOW) -- the hybrid lemma was one-directional.** Added the mirror.
+
+**One mutation is not yet resolved.** Dropping the signed subtype from
+`ceremony.spthy` should let a formation signature satisfy a normal record's
+check; the proof search on the mutated theory has not returned a verdict within
+900 seconds, which is unsurprising because removing the subtype is exactly what
+makes the two payload languages collide. **The subtype's load-bearingness is
+therefore asserted from the term structure and NOT established by mutation.**
+Recorded rather than claimed.
+
+14 artifacts. 59 Tamarin lemmas unbounded (30 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.

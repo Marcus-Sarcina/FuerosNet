@@ -93,14 +93,23 @@ rule Subject_Key:
   whether an expiry preceded an acceptance.
 */
 
+/*  TWO SIGNED TIMESTAMPS, NOT ONE TOKEN.  `wire-format.md`'s attestation
+    carries field 3 `issued_at` and field 4 `expires_at` as SEPARATE signed
+    fields, and the signature covers both.  Collapsing them into a single
+    epoch made the expiry boundary unrepresentable as a signed value: a
+    validator that reconstructed the payload without field 4, letting an
+    intermediary move `expires_at`, had no trace.  The ordering abstraction
+    stays coarse -- there is still no arithmetic on time -- but the two
+    fields are now distinct terms inside the signature, so omitting or
+    substituting either is mutation-testable.                              */
 rule New_Epoch:
-    [ Fr(~e) ]
-  --[ EpochStart(~e) ]->
-    [ !Epoch(~e), Out(~e) ]            // epochs are public tokens
+    [ Fr(~iat), Fr(~exp) ]
+  --[ EpochStart(~iat, ~exp) ]->
+    [ !Epoch(~iat, ~exp), Out(<~iat, ~exp>) ]   // both are public
 
 rule Expire_Epoch:
-    [ !Epoch(~e) ]
-  --[ Expired(~e) ]->                  // trace: epoch ~e is now past
+    [ !Epoch(~iat, ~exp) ]
+  --[ Expired(~exp) ]->                // trace: this expiry boundary is past
     [ ]
 
 /*
@@ -196,13 +205,13 @@ rule Records_Downline:
 rule Issue_Currency:
     [ !PatronKey($I, ~isk)             // ANY keyholder -- see above
     , !SubjKey($S, sk)                 // for a key the subject holds
-    , !Epoch(e)                        // stamped with an epoch
+    , !Epoch(iat, exp)                 // stamped with both timestamps
     , In(role) ]                       // claiming whatever role it likes
-  --[ Issued($I, $S, pk(sk), e)
+  --[ Issued($I, $S, pk(sk), exp)
     , IssuedAs($I, $S, role)
-    , IssuedFresh($I, $S, e) ]->
-    [ Out(<'currency', $S, pk(sk), e, role, $I,
-           sign(<'rhtn/1:currency', <$S, pk(sk), e, role, $I>>, ~isk)>) ]
+    , IssuedFresh($I, $S, exp) ]->
+    [ Out(<'currency', $S, pk(sk), iat, exp, role, $I,
+           sign(<'rhtn/1:currency', <$S, pk(sk), iat, exp, role, $I>>, ~isk)>) ]
 
 
 /*  ISSUING WITHOUT THE MODELLED STEP.  `Issue_Currency` above requires a
@@ -213,13 +222,13 @@ rule Issue_Currency:
     which transition produced it.                                          */
 rule Issue_Currency_Arbitrary:
     [ !PatronKey($I, ~isk)
-    , !Epoch(e)
+    , !Epoch(iat, exp)
     , In(<$S, kh, role>) ]
-  --[ Issued($I, $S, kh, e)
+  --[ Issued($I, $S, kh, exp)
     , IssuedAs($I, $S, role)
     , SignedWithoutTransition($I) ]->
-    [ Out(<'currency', $S, kh, e, role, $I,
-           sign(<'rhtn/1:currency', <$S, kh, e, role, $I>>, ~isk)>) ]
+    [ Out(<'currency', $S, kh, iat, exp, role, $I,
+           sign(<'rhtn/1:currency', <$S, kh, iat, exp, role, $I>>, ~isk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -234,6 +243,14 @@ rule Issue_Currency_Arbitrary:
       trust-bearing operations (design Section 12.6.5).
 */
 
+/*  ACCEPTANCE READS THE TIMESTAMPS FROM THE ATTESTATION, not from a registry.
+    It used to take `!Epoch(iat, exp)` as a premise, which re-bound the two to
+    a pair the environment had minted together -- so an attestation signed for
+    one expiry could not be presented with another, and the binding of field 4
+    was enforced by the MODEL rather than by the signature.  A validator does
+    not consult such a registry; it reads both fields off the object and
+    relies on the signature covering them.  With the premise gone, omitting
+    `expires_at` from the signed payload is mutation-testable.            */
 rule Accept_Currency:
     // The staple arrives carrying its fields AND the signature over them
     // (design Section 12.6.5: the introducing node "staples a recent
@@ -241,10 +258,9 @@ rule Accept_Currency:
     // fields from the message is also what BINDS them: an earlier version
     // read `sk` from nowhere, which Tamarin reports as an unbound variable
     // and unintended pattern matching.
-    [ In(<'currency', $S, sk, e, role, $I, att>)  // the staple, as received
+    [ In(<'currency', $S, sk, iat, exp, role, $I, att>)  // the staple, as received
     , !Kh($I, khI)                     // the ISSUER's identity, and
     , In(kmI)                          //   CANDIDATE KeyMaterial for it
-    , !Epoch(e)
     , !Authorised($R, $I, $S, role) ] // ... and $R's OWN record that this
                                        //   issuer may act in this role for $S
   --[ Eq(h(kmI), khI)                // BOUND BEFORE USE.  Looking the issuer's
@@ -252,9 +268,9 @@ rule Accept_Currency:
                                        //   identity-to-key relation true
                                        //   before validation; a validator
                                        //   omitting the check had no trace.
-    , Eq(verify(att, <'rhtn/1:currency', <$S, sk, e, role, $I>>, fst(kmI)), true)
-    , NotExpiredAt(e)                  // guarded by the restriction below
-    , Accepted($R, $I, $S, sk, e, role) ]->
+    , Eq(verify(att, <'rhtn/1:currency', <$S, sk, iat, exp, role, $I>>, fst(kmI)), true)
+    , NotExpiredAt(exp)                  // guarded by the restriction below
+    , Accepted($R, $I, $S, sk, exp, role) ]->
     [ ]
 
 /*

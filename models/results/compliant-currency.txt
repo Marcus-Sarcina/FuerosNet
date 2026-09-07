@@ -307,7 +307,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/currency.spthy
 
-  processing time: 0.59s
+  processing time: 0.54s
   
   a_key_enters_a_record_once (all-traces): verified (16 steps)
   a_record_key_entered_by_one_of_two_doors (all-traces): verified (11 steps)
