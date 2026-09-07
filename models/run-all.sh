@@ -98,7 +98,7 @@ for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/cer
   # currency model on 2026-09-05.  A proof needing longer than this needs a
   # hint, not a longer wall clock.
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --prove "$HERE/tamarin/$spec.spthy" > "$out" 2>&1
+      "$TAMARIN" --derivcheck-timeout=60 --prove "$HERE/tamarin/$spec.spthy" > "$out" 2>&1
   if [ $? -eq 124 ]; then
     echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"
     fail=1; continue
@@ -147,7 +147,7 @@ for spec in compliant/currency compliant/attach; do
        for(i=1;i<=NR;i++) if(i!=last) print lines[i]}' "$HERE/tamarin/$spec.spthy" > "$tmp"
   cat "$frag" >> "$tmp"; echo "" >> "$tmp"; echo "end" >> "$tmp"
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --prove "$tmp" > "$out" 2>&1
+      "$TAMARIN" --derivcheck-timeout=60 --prove "$tmp" > "$out" 2>&1
   if [ $? -eq 124 ]; then
     echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"; fail=1; continue
   fi

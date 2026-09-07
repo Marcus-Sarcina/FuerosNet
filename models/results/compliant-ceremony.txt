@@ -359,7 +359,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/ceremony.spthy
 
-  processing time: 0.62s
+  processing time: 0.61s
   
   no_signature_over_a_misattributed_nominee (all-traces): verified (6 steps)
   no_nominee_from_the_nominators_own_neighbourhood (all-traces): verified (2 steps)

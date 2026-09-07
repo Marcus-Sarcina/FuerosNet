@@ -14,16 +14,19 @@ begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
 equations:
     fst(<x.1, x.2>) = x.1,
     snd(<x.1, x.2>) = x.2,
     verify(sign(x.1, x.2), x.1, pk(x.2)) = true
 
 rule (modulo E) Register_Patron:
-   [ Fr( ~psk ) ]
+   [ Fr( ~psk ), Fr( ~ppq ) ]
   --[ PatronReg( $P ), OnlyOnce( $P ) ]->
-   [ !PatronKey( $P, ~psk ), !Pk( $P, pk(~psk) ), Out( pk(~psk) ) ]
+   [
+   !PatronKey( $P, ~psk ), !Kh( $P, h(<pk(~psk), pk(~ppq)>) ),
+   Out( <pk(~psk), pk(~ppq)> )
+   ]
 
   /* has exactly the trivial AC variant */
 
@@ -80,7 +83,7 @@ rule (modulo E) Issue_Currency:
   ]->
    [
    Out( <'currency', $S, pk(sk), e, role, $I, 
-         sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>
+         sign(<'rhtn/1:currency', $S, pk(sk), e, role, $I>, ~isk)>
    )
    ]
 
@@ -94,7 +97,7 @@ rule (modulo E) Issue_Currency_Arbitrary:
   ]->
    [
    Out( <'currency', $S, kh, e, role, $I, 
-         sign(<'currency', $S, kh, e, role, $I>, ~isk)>
+         sign(<'rhtn/1:currency', $S, kh, e, role, $I>, ~isk)>
    )
    ]
 
@@ -102,11 +105,13 @@ rule (modulo E) Issue_Currency_Arbitrary:
 
 rule (modulo E) Accept_Currency:
    [
-   In( <'currency', $S, sk, e, role, $I, att> ), !Pk( $I, pkI ),
+   In( <'currency', $S, sk, e, role, $I, att> ), !Kh( $I, khI ), In( kmI ),
    !Epoch( e ), !Authorised( $R, $I, $S, role )
    ]
   --[
-  Eq( verify(att, <'currency', $S, sk, e, role, $I>, pkI), true ),
+  Eq( h(kmI), khI ),
+  Eq( verify(att, <'rhtn/1:currency', $S, sk, e, role, $I>, fst(kmI)), true
+  ),
   NotExpiredAt( e ), Accepted( $R, $I, $S, sk, e, role )
   ]->
    [ ]
@@ -114,30 +119,43 @@ rule (modulo E) Accept_Currency:
   /*
   rule (modulo AC) Accept_Currency:
      [
-     In( <'currency', $S, sk, e, role, $I, att> ), !Pk( $I, pkI ),
+     In( <'currency', $S, sk, e, role, $I, att> ), !Kh( $I, khI ), In( kmI ),
      !Epoch( e ), !Authorised( $R, $I, $S, role )
      ]
-    --[ Eq( z, true ), NotExpiredAt( e ), Accepted( $R, $I, $S, sk, e, role )
+    --[
+    Eq( h(kmI), khI ), Eq( z, true ), NotExpiredAt( e ),
+    Accepted( $R, $I, $S, sk, e, role )
     ]->
      [ ]
     variants (modulo AC)
-    1. $I    = $I.12
-       $S    = $S.14
-       att   = att.15
-       e     = e.16
-       pkI   = pkI.17
-       role  = role.18
-       sk    = sk.19
-       z     = verify(att.15, <'currency', $S.14, sk.19, e.16, role.18, $I.12>,
-                      pkI.17)
+    1. $I    = $I.13
+       $S    = $S.15
+       att   = att.16
+       e     = e.17
+       kmI   = kmI.19
+       role  = role.20
+       sk    = sk.21
+       z     = verify(att.16,
+                      <'rhtn/1:currency', $S.15, sk.21, e.17, role.20, $I.13>, fst(kmI.19))
     
-    2. $I    = $I.18
-       $S    = $S.20
-       att   = sign(<'currency', $S.20, sk.25, e.22, role.24, $I.18>, x.34)
-       e     = e.22
-       pkI   = pk(x.34)
-       role  = role.24
-       sk    = sk.25
+    2. $I    = $I.15
+       $S    = $S.17
+       att   = att.18
+       e     = e.19
+       kmI   = <x.26, x.27>
+       role  = role.22
+       sk    = sk.23
+       z     = verify(att.18,
+                      <'rhtn/1:currency', $S.17, sk.23, e.19, role.22, $I.15>, x.26)
+    
+    3. $I    = $I.21
+       $S    = $S.23
+       att   = sign(<'rhtn/1:currency', $S.23, sk.29, e.25, role.28, $I.21>,
+                    x.38)
+       e     = e.25
+       kmI   = <pk(x.38), x.40>
+       role  = role.28
+       sk    = sk.29
        z     = true
   */
 
@@ -191,20 +209,26 @@ guarded formula characterizing all satisfying traces:
 "∃ R I S sk e role #i. (Accepted( R, I, S, sk, e, role ) @ #i)"
 */
 simplify
-solve( !Pk( $I, pk(x) ) ▶₁ #i )
+solve( !Kh( $I, h(<pk(x), x.1>) ) ▶₁ #i )
   case Register_Patron
-  solve( !Epoch( e ) ▶₂ #i )
+  solve( !Epoch( e ) ▶₃ #i )
     case New_Epoch
-    solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+    solve( !Authorised( $R, $I, $S, role ) ▶₄ #i )
       case Records_Downline
-      solve( !KU( sign(<'currency', $S, sk, ~e, 'downline', $I>, ~psk)
+      solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'downline', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
         solve( !KU( ~e ) @ #vk.8 )
           case Issue_Currency
-          solve( !KU( pk(~sk) ) @ #vk.8 )
-            case Issue_Currency
-            SOLVED // trace found
+          solve( !KU( pk(~psk) ) @ #vk.14 )
+            case Register_Patron
+            solve( !KU( pk(~ppq) ) @ #vk.15 )
+              case Register_Patron
+              solve( !KU( pk(~sk) ) @ #vk.13 )
+                case Issue_Currency
+                SOLVED // trace found
+              qed
+            qed
           qed
         qed
       qed
@@ -230,11 +254,11 @@ guarded formula characterizing all satisfying traces:
   (∀ X #t. (SignedWithoutTransition( X ) @ #t) ⇒ ⊥)"
 */
 simplify
-solve( !Pk( $I, pk(x) ) ▶₁ #i )
+solve( !Kh( $I, h(<pk(x), x.1>) ) ▶₁ #i )
   case Register_Patron
-  solve( !Epoch( e ) ▶₂ #i )
+  solve( !Epoch( e ) ▶₃ #i )
     case New_Epoch
-    solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+    solve( !Authorised( $R, $I, $S, role ) ▶₄ #i )
       case Records_Downline
       solve( Issued( $I, $S, kh, ~e ) @ #j )
         case Issue_Currency
@@ -244,14 +268,21 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
             case Subject_Key
             solve( !Epoch( ~e ) ▶₂ #j )
               case New_Epoch
-              solve( !KU( sign(<'currency', $S, pk(~sk), ~e, 'downline', $I>, ~isk)
+              solve( !KU( sign(<'rhtn/1:currency', $S, pk(~sk), ~e, 'downline', $I>,
+                               ~isk)
                      ) @ #vk.12 )
                 case Issue_Currency
                 solve( !KU( ~e ) @ #vk.8 )
                   case Issue_Currency
-                  solve( !KU( pk(~sk) ) @ #vk.8 )
-                    case Issue_Currency
-                    SOLVED // trace found
+                  solve( !KU( pk(~isk) ) @ #vk.14 )
+                    case Register_Patron
+                    solve( !KU( pk(~ppq) ) @ #vk.15 )
+                      case Register_Patron
+                      solve( !KU( pk(~sk) ) @ #vk.13 )
+                        case Issue_Currency
+                        SOLVED // trace found
+                      qed
+                    qed
                   qed
                 qed
               qed
@@ -295,13 +326,13 @@ simplify
 solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
        (∃ #x. (Expired( e ) @ #x) ∧ #x < #i) )
   case case_1
-  solve( !Pk( $I, pk(x) ) ▶₁ #i )
+  solve( !Kh( $I, h(<pk(x), x.1>) ) ▶₁ #i )
     case Register_Patron
-    solve( !Epoch( e ) ▶₂ #i )
+    solve( !Epoch( e ) ▶₃ #i )
       case New_Epoch
-      solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+      solve( !Authorised( $R, $I, $S, role ) ▶₄ #i )
         case Records_Downline
-        solve( !KU( sign(<'currency', $S, sk, ~e, 'downline', $I>, ~psk)
+        solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'downline', $I>, ~psk)
                ) @ #vk.12 )
           case Issue_Currency
           by contradiction /* from formulas */
@@ -310,14 +341,15 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~psk ) @ #vk.18 )
+          solve( !KU( ~psk ) @ #vk.21 )
             case Compromise_Patron
             by contradiction /* from formulas */
           qed
         qed
       next
         case Records_Grandpatron
-        solve( !KU( sign(<'currency', $S, sk, ~e, 'grandpatron', $I>, ~psk)
+        solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'grandpatron', $I>,
+                         ~psk)
                ) @ #vk.12 )
           case Issue_Currency
           by contradiction /* from formulas */
@@ -326,14 +358,14 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~psk ) @ #vk.18 )
+          solve( !KU( ~psk ) @ #vk.21 )
             case Compromise_Patron
             by contradiction /* from formulas */
           qed
         qed
       next
         case Records_Patron
-        solve( !KU( sign(<'currency', $S, sk, ~e, 'patron', $I>, ~psk)
+        solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'patron', $I>, ~psk)
                ) @ #vk.12 )
           case Issue_Currency
           by contradiction /* from formulas */
@@ -342,14 +374,14 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~psk ) @ #vk.18 )
+          solve( !KU( ~psk ) @ #vk.21 )
             case Compromise_Patron
             by contradiction /* from formulas */
           qed
         qed
       next
         case Records_Sibling
-        solve( !KU( sign(<'currency', $S, sk, ~e, 'sibling', $I>, ~psk)
+        solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'sibling', $I>, ~psk)
                ) @ #vk.12 )
           case Issue_Currency
           by contradiction /* from formulas */
@@ -358,7 +390,7 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~psk ) @ #vk.18 )
+          solve( !KU( ~psk ) @ #vk.21 )
             case Compromise_Patron
             by contradiction /* from formulas */
           qed
@@ -386,13 +418,13 @@ guarded formula characterizing all counter-examples:
   (∀ #k. (Compromised( I ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
-solve( !Pk( $I, pk(x) ) ▶₁ #i )
+solve( !Kh( $I, h(<pk(x), x.1>) ) ▶₁ #i )
   case Register_Patron
-  solve( !Epoch( e ) ▶₂ #i )
+  solve( !Epoch( e ) ▶₃ #i )
     case New_Epoch
-    solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+    solve( !Authorised( $R, $I, $S, role ) ▶₄ #i )
       case Records_Downline
-      solve( !KU( sign(<'currency', $S, sk, ~e, 'downline', $I>, ~psk)
+      solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'downline', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
         by contradiction /* from formulas */
@@ -401,14 +433,15 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         by contradiction /* from formulas */
       next
         case c_sign
-        solve( !KU( ~psk ) @ #vk.18 )
+        solve( !KU( ~psk ) @ #vk.21 )
           case Compromise_Patron
           by contradiction /* from formulas */
         qed
       qed
     next
       case Records_Grandpatron
-      solve( !KU( sign(<'currency', $S, sk, ~e, 'grandpatron', $I>, ~psk)
+      solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'grandpatron', $I>,
+                       ~psk)
              ) @ #vk.12 )
         case Issue_Currency
         by contradiction /* from formulas */
@@ -417,14 +450,14 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         by contradiction /* from formulas */
       next
         case c_sign
-        solve( !KU( ~psk ) @ #vk.18 )
+        solve( !KU( ~psk ) @ #vk.21 )
           case Compromise_Patron
           by contradiction /* from formulas */
         qed
       qed
     next
       case Records_Patron
-      solve( !KU( sign(<'currency', $S, sk, ~e, 'patron', $I>, ~psk)
+      solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'patron', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
         by contradiction /* from formulas */
@@ -433,14 +466,14 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         by contradiction /* from formulas */
       next
         case c_sign
-        solve( !KU( ~psk ) @ #vk.18 )
+        solve( !KU( ~psk ) @ #vk.21 )
           case Compromise_Patron
           by contradiction /* from formulas */
         qed
       qed
     next
       case Records_Sibling
-      solve( !KU( sign(<'currency', $S, sk, ~e, 'sibling', $I>, ~psk)
+      solve( !KU( sign(<'rhtn/1:currency', $S, sk, ~e, 'sibling', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
         by contradiction /* from formulas */
@@ -449,7 +482,7 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         by contradiction /* from formulas */
       next
         case c_sign
-        solve( !KU( ~psk ) @ #vk.18 )
+        solve( !KU( ~psk ) @ #vk.21 )
           case Compromise_Patron
           by contradiction /* from formulas */
         qed
@@ -471,11 +504,11 @@ guarded formula characterizing all counter-examples:
   ∀ #a. (AuthorisedBy( R, I, S, role ) @ #a) ⇒ ¬(#a < #i)"
 */
 simplify
-solve( !Pk( $I, pk(x) ) ▶₁ #i )
+solve( !Kh( $I, h(<pk(x), x.1>) ) ▶₁ #i )
   case Register_Patron
-  solve( !Epoch( e ) ▶₂ #i )
+  solve( !Epoch( e ) ▶₃ #i )
     case New_Epoch
-    solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+    solve( !Authorised( $R, $I, $S, role ) ▶₄ #i )
       case Records_Downline
       by contradiction /* from formulas */
     next
@@ -513,10 +546,10 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/currency.spthy
 
-  processing time: 1.70s
+  processing time: 5.95s
   
-  currency_is_usable (exists-trace): verified (8 steps)
-  currency_is_usable_honestly (exists-trace): verified (12 steps)
+  currency_is_usable (exists-trace): verified (10 steps)
+  currency_is_usable_honestly (exists-trace): verified (14 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)
   currency_requires_unexpired_issuance (all-traces): verified (26 steps)
   an_attestation_binds_its_issuer_and_role (all-traces): verified (24 steps)

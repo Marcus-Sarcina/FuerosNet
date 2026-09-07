@@ -39,7 +39,7 @@ WHAT THIS FILE IS
 
 begin
 
-builtins: signing
+builtins: signing, hashing
 
 /*
 --------------------------------------------------------------------------------
@@ -76,8 +76,8 @@ rule Register:
     [ Fr(~skc), Fr(~skp) ]
   --[ Reg($A), OnlyOnce($A) ]->
     [ !LtkC($A, ~skc), !LtkP($A, ~skp)
-    , !PkC($A, pk(~skc)), !PkP($A, pk(~skp))
-    , Out(<pk(~skc), pk(~skp)>) ]
+    , !Kh($A, h(<pk(~skc), pk(~skp)>))  // the identity IS the keyhash (§2.2)
+    , Out(<pk(~skc), pk(~skp)>) ]      // KeyMaterial is public
 
 rule Compromise_Classical:
     [ !LtkC($A, ~skc) ]
@@ -170,8 +170,8 @@ rule Participant_Sign:
   --[ ParticipantSigned($P, $P1, $P2, $W, cid)
     , HonestParticipantSigned($P, $P1, $P2, $W, cid)
     , SignedBody($P, $P1, $P2, $W, cid) ]->
-    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
-           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skc),
+           sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skp)>) ]
 
 // A witness signs the ceremony it observed.
 /*
@@ -213,24 +213,24 @@ rule Participant_Sign_Without_Meeting:
   --[ ParticipantSigned($P, $P1, $P2, $W, cid)
     , SignedWithoutMeeting($P)
     , SignedBody($P, $P1, $P2, $W, cid) ]->
-    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
-           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skc),
+           sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skp)>) ]
 
 rule Formation_Sign_Without_Meeting:
     [ !LtkC($P, ~skc), !LtkP($P, ~skp), In(<$P1, $P2, cid>) ]
   --[ FormationSigned($P, $P1, $P2, cid)
     , SignedWithoutMeeting($P)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(<sign(<'formation', $P1, $P2, cid>, ~skc),
-           sign(<'formation', $P1, $P2, cid>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:formation', <$P1, $P2, cid>>, ~skc),
+           sign(<'rhtn/1:formation', <$P1, $P2, cid>>, ~skp)>) ]
 
 rule Witness_Sign:
     [ !LtkC($W, ~skc), !LtkP($W, ~skp)
     , In(<'presence', $P1, $P2, $W, cid>) ]   // whatever it is handed
   --[ WitnessSigned($W, $P1, $P2, $W, cid)
     , SignedBody($W, $P1, $P2, $W, cid) ]->
-    [ Out(<sign(<'presence', $P1, $P2, $W, cid>, ~skc),
-           sign(<'presence', $P1, $P2, $W, cid>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skc),
+           sign(<'rhtn/1:presence', <$P1, $P2, $W, cid>>, ~skp)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -244,23 +244,34 @@ rule Witness_Sign:
 */
 
 rule Accept_Record:
-    [ !PkC($P1, c1), !PkP($P1, q1)
-    , !PkC($P2, c2), !PkP($P2, q2)
-    , !PkC($W,  cw), !PkP($W,  qw)
+    [ !Kh($P1, kh1), !Kh($P2, kh2), !Kh($W, khw)
     , In(<'presence', $P1, $P2, $W, cid>)   // the record body, as received
+    , In(<km1, km2, kmw>)                   // and CANDIDATE KeyMaterial for
+                                            //   each party the record names
     , In(<sig1c, sig1p>), In(<sig2c, sig2p>), In(<sigwc, sigwp>) ]
+    /*  THE KEY MATERIAL IS BOUND BEFORE IT IS USED.  `wire-format.md`
+        requires carried `KeyMaterial` to hash to the keyhash it purports to
+        describe; without that, one identity can be presented with another
+        party's keys.  Looking `!PkC`/`!PkP` up BY IDENTITY -- as this rule
+        did until 2026-09-07 -- made the identity-to-key relation true before
+        validation, so a validator omitting the check had no representation
+        and the attribution lemmas stayed green for exactly that error.
+        `attach.spthy` had already been corrected this way; these three
+        theories had not.  Drop any of the three Eq(h(...)) below and
+        `an_accepted_record_is_attributable` falsifies.                    */
     // BOTH entries per logical signer.  Drop any one of the six and
     // `an_accepted_record_is_attributable` falsifies -- which is true only
     // because its carve-out requires BOTH halves of a signer to be
     // compromised.  An earlier version carved out on `Compromised(A)`, which
     // either half emits, so dropping P2's or W's post-quantum check left
     // every lemma green.  Verified: that mutation now falsifies.
-  --[ Eq(verify(sig1c, <'presence', $P1, $P2, $W, cid>, c1), true)
-    , Eq(verify(sig1p, <'presence', $P1, $P2, $W, cid>, q1), true)
-    , Eq(verify(sig2c, <'presence', $P1, $P2, $W, cid>, c2), true)
-    , Eq(verify(sig2p, <'presence', $P1, $P2, $W, cid>, q2), true)
-    , Eq(verify(sigwc, <'presence', $P1, $P2, $W, cid>, cw), true)
-    , Eq(verify(sigwp, <'presence', $P1, $P2, $W, cid>, qw), true)
+  --[ Eq(h(km1), kh1), Eq(h(km2), kh2), Eq(h(kmw), khw)
+    , Eq(verify(sig1c, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, fst(km1)), true)
+    , Eq(verify(sig1p, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, snd(km1)), true)
+    , Eq(verify(sig2c, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, fst(km2)), true)
+    , Eq(verify(sig2p, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, snd(km2)), true)
+    , Eq(verify(sigwc, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, fst(kmw)), true)
+    , Eq(verify(sigwp, <'rhtn/1:presence', <$P1, $P2, $W, cid>>, snd(kmw)), true)
     // THE VALIDATOR CHECKS ROLE DISTINCTNESS ITSELF (`wire-format.md` §3.2:
     // a participant is not its own witness, the two participants are
     // distinct).  It was previously enforced only at Meet and reached this
@@ -316,18 +327,19 @@ rule Formation_Sign:
   --[ FormationSigned($P, $P1, $P2, cid)
     , HonestFormationSigned($P, $P1, $P2, cid)
     , SignedFormation($P, $P1, $P2, cid) ]->
-    [ Out(<sign(<'formation', $P1, $P2, cid>, ~skc),
-           sign(<'formation', $P1, $P2, cid>, ~skp)>) ]
+    [ Out(<sign(<'rhtn/1:formation', <$P1, $P2, cid>>, ~skc),
+           sign(<'rhtn/1:formation', <$P1, $P2, cid>>, ~skp)>) ]
 
 rule Accept_Formation:
-    [ !PkC($P1, c1), !PkP($P1, q1)
-    , !PkC($P2, c2), !PkP($P2, q2)
+    [ !Kh($P1, kh1), !Kh($P2, kh2)
+    , In(<km1, km2>)                        // candidate KeyMaterial, bound below
     , In(<'formation', $P1, $P2, cid>)      // the record body, as received
     , In(<sig1c, sig1p>), In(<sig2c, sig2p>) ]
-  --[ Eq(verify(sig1c, <'formation', $P1, $P2, cid>, c1), true)
-    , Eq(verify(sig1p, <'formation', $P1, $P2, cid>, q1), true)
-    , Eq(verify(sig2c, <'formation', $P1, $P2, cid>, c2), true)
-    , Eq(verify(sig2p, <'formation', $P1, $P2, cid>, q2), true)
+  --[ Eq(h(km1), kh1), Eq(h(km2), kh2)
+    , Eq(verify(sig1c, <'rhtn/1:formation', <$P1, $P2, cid>>, fst(km1)), true)
+    , Eq(verify(sig1p, <'rhtn/1:formation', <$P1, $P2, cid>>, snd(km1)), true)
+    , Eq(verify(sig2c, <'rhtn/1:formation', <$P1, $P2, cid>>, fst(km2)), true)
+    , Eq(verify(sig2p, <'rhtn/1:formation', <$P1, $P2, cid>>, snd(km2)), true)
     // THE VALIDATOR CHECKS PARTICIPANT DISTINCTNESS ITSELF, as Accept_Record
     // does (`wire-format.md` §3.2: the two participants are distinct).
     // Enforcing it only at Meet_Formation is not enough: this rule takes its

@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 88 and seed 2634788568504696101 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 155235] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 10 and seed -2659354157709042070 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 171735] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/SupersessionDiscipline.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module SupersessionDiscipline
-Starting... (2026-09-07 02:04:41)
+Starting... (2026-09-07 11:29:39)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-07 02:04:42.
+Finished computing initial states: 1 distinct state generated at 2026-09-07 11:29:39.
 Error: Invariant NeverIssuedForASupersededKey is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -45,7 +45,7 @@ State 4: <Issue line 81, col 3 to line 82, col 66 of module SupersessionDiscipli
 /\ badIssue = TRUE
 /\ serving = (n1 :> -1 @@ n2 :> -1)
 
-181 states generated, 68 distinct states found, 40 states left on queue.
+174 states generated, 69 distinct states found, 40 states left on queue.
 The depth of the complete state graph search is 5.
-The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 5 and the 95th percentile is 5).
-Finished in 00s at (2026-09-07 02:04:42)
+The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 6 and the 95th percentile is 5).
+Finished in 00s at (2026-09-07 11:29:39)

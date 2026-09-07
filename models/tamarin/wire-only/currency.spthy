@@ -53,7 +53,7 @@ TIME, SYMBOLICALLY
 
 begin
 
-builtins: signing
+builtins: signing, hashing
 
 /*
 --------------------------------------------------------------------------------
@@ -66,11 +66,13 @@ builtins: signing
 */
 
 rule Register_Patron:
-    [ Fr(~psk) ]
+    [ Fr(~psk), Fr(~ppq) ]
   --[ PatronReg($P), OnlyOnce($P) ]->
     [ !PatronKey($P, ~psk)             // the patron's long-term secret key
-    , !Pk($P, pk(~psk))
-    , Out(pk(~psk)) ]
+    , !Kh($P, h(<pk(~psk), pk(~ppq)>))  // the identity IS the keyhash over the
+                                        //   pair, even though an attestation
+                                        //   is signed classically only
+    , Out(<pk(~psk), pk(~ppq)>) ]
 
 // A subject's key.  The `key` term ~sk stands for the whole key material
 // the keyhash commits to; $S is the subject identity.  A subject may hold
@@ -200,7 +202,7 @@ rule Issue_Currency:
     , IssuedAs($I, $S, role)
     , IssuedFresh($I, $S, e) ]->
     [ Out(<'currency', $S, pk(sk), e, role, $I,
-           sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>) ]
+           sign(<'rhtn/1:currency', <$S, pk(sk), e, role, $I>>, ~isk)>) ]
 
 
 /*  ISSUING WITHOUT THE MODELLED STEP.  `Issue_Currency` above requires a
@@ -217,7 +219,7 @@ rule Issue_Currency_Arbitrary:
     , IssuedAs($I, $S, role)
     , SignedWithoutTransition($I) ]->
     [ Out(<'currency', $S, kh, e, role, $I,
-           sign(<'currency', $S, kh, e, role, $I>, ~isk)>) ]
+           sign(<'rhtn/1:currency', <$S, kh, e, role, $I>>, ~isk)>) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -240,11 +242,17 @@ rule Accept_Currency:
     // read `sk` from nowhere, which Tamarin reports as an unbound variable
     // and unintended pattern matching.
     [ In(<'currency', $S, sk, e, role, $I, att>)  // the staple, as received
-    , !Pk($I, pkI)                     // the ISSUER's public key
+    , !Kh($I, khI)                     // the ISSUER's identity, and
+    , In(kmI)                          //   CANDIDATE KeyMaterial for it
     , !Epoch(e)
     , !Authorised($R, $I, $S, role) ] // ... and $R's OWN record that this
                                        //   issuer may act in this role for $S
-  --[ Eq(verify(att, <'currency', $S, sk, e, role, $I>, pkI), true)
+  --[ Eq(h(kmI), khI)                // BOUND BEFORE USE.  Looking the issuer's
+                                       //   key up by identity made the
+                                       //   identity-to-key relation true
+                                       //   before validation; a validator
+                                       //   omitting the check had no trace.
+    , Eq(verify(att, <'rhtn/1:currency', <$S, sk, e, role, $I>>, fst(kmI)), true)
     , NotExpiredAt(e)                  // guarded by the restriction below
     , Accepted($R, $I, $S, sk, e, role) ]->
     [ ]

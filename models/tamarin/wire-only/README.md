@@ -16,12 +16,17 @@
 - Identities are hybrid and the halves fail separately: every attribution carve-out requires **both** halves of a signer to be compromised, so an attacker holding only a party's classical key cannot put that party on an accepted presence record, forge a verifier's recovery `match`, or countersign a transfer. Dropping any one post-quantum check falsifies the corresponding lemma.
 - A recovery installs a successor that differs from the identity being recovered from (`a_recovery_never_installs_the_prior_identity`), compared at keyhash level.
 - Acceptance requires a signed `match`, not merely an authentic verifier response (`acceptance_requires_a_signed_match`) — `no-match`, `inconclusive` and `unavailable` are signed by the same key over the same fields.
+- Key material is bound to the identity that claims it **before any key from it is used**: acceptance takes candidate `KeyMaterial` and checks it hashes to the claimed keyhash. Removing that check falsifies the corresponding attribution lemma in each of the four theories.
+- The signing role is supplied by the verifier as COSE `external_aad`, separately from the payload, so a recognition is not accepted as an old-key proof (`a_recognition_is_not_accepted_as_an_old_key_proof`) — the two payloads coincide when a response's result equals the patron, and only the context separates them. Verifying over the payload alone falsifies it.
+- Every verifier response in a recovery block is validated, not only the first: responses name the new node, come from distinct verifiers, and the block needs at least one signed `match`. Dropping the second response's checks falsifies `forging_a_recognition_needs_both_verifier_halves`.
 - Each of the above holds against a legitimate principal signing whatever it likes with its own uncompromised key. Every signing context in all four theories has a rule permitting it, and the authentication properties are stated over *this key signed this term*, not over a protocol transition having been taken.
 
 ## 2. What it cannot demonstrate
 
 - That participants named in a presence record were physically co-present. A legitimate keyholder may sign a body for a meeting that never happened.
 - That a recovery meeting occurred, or that a verifier's recognition is truthful.
+- Recovery blocks larger than two responses. The wire permits 32; two is enough to exercise the per-collection rules (subject, distinct verifiers, at-least-one-match) but not any rule whose failure needs three or more.
+- The COSE structure itself — protected headers, `alg`, `kid` grouping, canonical CBOR. The role context is modelled; its encoding is not.
 - A recovery verifier response's `query_id`, its field 7 subject-consent signature, and its selection basis. Entering the theory assumes a `recognise` term is only ever built from a wire `VerifierResponse` whose consent and consistency checks already passed; no refinement argument establishes that.
 - That a complete recovery *transaction* was accepted. These are properties of one patron's evidence gate; the successor's envelope signature, the Adoption body, the signer set and the remaining structural checks are outside the theory.
 - Attribution over the full wire body. The signed term is a projection — the wire body also carries timestamps, verifier responses, witness metadata and disclosure commitments — so a signature-coverage error distinguishing two bodies that agree on the projection is invisible here. No refinement argument connects the two.

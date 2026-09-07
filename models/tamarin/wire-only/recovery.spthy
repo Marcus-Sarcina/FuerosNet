@@ -160,8 +160,8 @@ rule Recognise_Without_Meeting:
     , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
     [ Out(<'recognise', $S, newkey, result,
-           <sign(<'recognise', $S, newkey, result>, ~vsc),
-            sign(<'recognise', $S, newkey, result>, ~vsp)> >) ]
+           <sign(<'rhtn/1:recognise', <$S, newkey, result>>, ~vsc),
+            sign(<'rhtn/1:recognise', <$S, newkey, result>>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -176,8 +176,8 @@ rule Old_Key_Proof:
   --[ OldKeyProof($S, newkey)
     , OldKeyProofFor($S, newkey, $P) ]->
     [ Out(<'rotate', $S, newkey, $P,
-           <sign(<'rotate', $S, newkey, $P>, ~oldc),
-            sign(<'rotate', $S, newkey, $P>, ~oldp)> >) ]
+           <sign(<'rhtn/1:successor', <$S, newkey, $P>>, ~oldc),
+            sign(<'rhtn/1:successor', <$S, newkey, $P>>, ~oldp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -341,15 +341,17 @@ rule Transfer_Countersign:
     , !Pk($New, pkNew) ]               // a registered destination patron
   --[ CountersignedFor($Old, nodekey, $New) ]->
     [ Out(<'transfer', nodekey, $Old, $New,
-           <sign(<'transfer', nodekey, $Old, $New>, ~oc),
-            sign(<'transfer', nodekey, $Old, $New>, ~op)> >) ]
+           <sign(<'rhtn/1:transfer', <nodekey, $Old, $New>>, ~oc),
+            sign(<'rhtn/1:transfer', <nodekey, $Old, $New>>, ~op)> >) ]
 
 rule Patron_Accept_Transfer:
     [ !LtkC($New, ~nsk)                         // the new patron signs the result
-    , !PkC($Old, pkOldTC), !PkP($Old, pkOldTP)  // the former patron, both halves
+    , !Kh($Old, khOldT), In(kmOldT)             // the former patron's identity
+                                                //   and candidate KeyMaterial
     , In(<'transfer', nodekey, $Old, $New, <provC, provP>>) ]
-  --[ Eq(verify(provC, <'transfer', nodekey, $Old, $New>, pkOldTC), true)
-    , Eq(verify(provP, <'transfer', nodekey, $Old, $New>, pkOldTP), true)
+  --[ Eq(h(kmOldT), khOldT)                   // BOUND BEFORE USE
+    , Eq(verify(provC, <'rhtn/1:transfer', <nodekey, $Old, $New>>, fst(kmOldT)), true)
+    , Eq(verify(provP, <'rhtn/1:transfer', <nodekey, $Old, $New>>, snd(kmOldT)), true)
       // HYBRID, and this was wrong until 2026-09-07.  `wire-format.md` makes
       // Transfer field 2 a `COSE_Sign` "for the same reason field 3 of
       // Recovery" is one: the former patron is a hybrid identity and
@@ -362,15 +364,30 @@ rule Patron_Accept_Transfer:
 
 rule Patron_Accept_Recovery:
     [ !LtkC($P, ~psk)                           // patron's own key (classical)
-    , !PkC($S, pkOldC), !PkP($S, pkOldP)        // the old identity, both halves
-    , !Kh($S, khOld)                            // and the old identity ITSELF
-    , !PkC($V, pkVC),   !PkP($V, pkVP)          // the verifier, both halves
+    , !Kh($S, khOld), !Kh($V, khV), !Kh($V2, khV2)
+    , In(<kmOld, kmV, kmV2>)                    // CANDIDATE KeyMaterial, bound
+                                                //   below before use
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
-    , In(<'recognise', $S, newkey, result, <provBc, provBp>>) ] // factor b
-  --[ Eq(verify(provAc, <'rotate', $S, newkey, $P>, pkOldC), true)
-    , Eq(verify(provAp, <'rotate', $S, newkey, $P>, pkOldP), true)
-    , Eq(verify(provBc, <'recognise', $S, newkey, result>, pkVC), true)
-    , Eq(verify(provBp, <'recognise', $S, newkey, result>, pkVP), true)
+    , In(<'recognise', $S, newkey,  result,  <provBc,  provBp>>)   // response 1
+    , In(<'recognise', $S, newkey2, result2, <provB2c, provB2p>>) ] // response 2
+    /*  A RECOVERY CARRIES A COLLECTION, not one response: `wire-format.md`
+        allows up to 32, and its rules are per-collection -- every response
+        names the new node as subject, duplicate verifier responses are
+        malformed, and the block needs at least one `match`.  Two responses
+        are enough to exercise all three.  A validator that checked the first
+        and stopped would satisfy a one-response model; it does not satisfy
+        this one.                                                          */
+  --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV), Eq(h(kmV2), khV2)  // BOUND FIRST
+    , Eq(newkey2, newkey)              // EVERY response names the new node
+    , Distinct($V, $V2)                // duplicate verifier responses are
+                                       //   malformed -- the collection must
+                                       //   be independent verifiers
+    , Eq(verify(provB2c, <'rhtn/1:recognise', <$S, newkey2, result2>>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:recognise', <$S, newkey2, result2>>, snd(kmV2)), true)
+    , Eq(verify(provAc, <'rhtn/1:successor', <$S, newkey, $P>>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', <$S, newkey, $P>>, snd(kmOld)), true)
+    , Eq(verify(provBc, <'rhtn/1:recognise', <$S, newkey, result>>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:recognise', <$S, newkey, result>>, snd(kmV)), true)
     , Eq(result, 'match')              // `wire-format.md`: a Recovery needs at
                                        //   least one actual `match`; the other
                                        //   results -- no-match, inconclusive,
@@ -413,7 +430,13 @@ rule Patron_Accept_Recovery:
     Closing that properly means carrying identities and keys in one keyhash
     domain throughout, which is a reshape of this theory rather than an added
     line.  Recorded rather than papered over.                              */
-    , ReliedOn($P, $V, $S)                      // which verifier was trusted
+    , ReliedOn($P, $V, $S)                      // BOTH verifiers were trusted,
+    , ReliedOn($P, $V2, $S)                     //   so both are covered by
+                                                //   forging_a_recognition_needs_
+                                                //   both_verifier_halves -- a
+                                                //   validator that checked the
+                                                //   first response and stopped
+                                                //   falsifies it for $V2
     , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
     [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
 
@@ -497,13 +520,18 @@ lemma forging_a_recognition_needs_both_verifier_halves:
     only ever built from a wire `VerifierResponse` whose consent and
     consistency checks already passed.  No refinement argument establishes
     that assumption; it is an assumption.                                   */
+/*  AT LEAST ONE match, not all of them.  `wire-format.md` requires the block
+    to carry "at least one actual `match`"; the other responses may legitimately
+    say `no-match`, `inconclusive` or `unavailable`.  An earlier version of this
+    lemma demanded a match from EVERY verifier relied on, and falsified as soon
+    as a second response was modelled -- correctly, because that is not the
+    rule.                                                                    */
 lemma acceptance_requires_a_signed_match:
-  "All P S newkey V #i.
+  "All P S newkey #i.
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
-     & ReliedOn(P, V, S) @ #i
-     ==> ( (Ex #b. RecognisedAs(V, S, newkey, 'match') @ #b & #b < #i)
-         | ( (Ex #x. CompromisedClassical(V) @ #x & #x < #i)
-           & (Ex #y. CompromisedPQ(V) @ #y & #y < #i) ) )"
+     ==> ( (Ex V #b. RecognisedAs(V, S, newkey, 'match') @ #b & #b < #i)
+         | (Ex V #x #y. CompromisedClassical(V) @ #x & CompromisedPQ(V) @ #y
+              & #x < #i & #y < #i) )"
 
 /*  THE ROTATION IS REAL.  A recovery never installs the identity it is
     recovering FROM -- `wire-format.md`: "`prior_key` MUST differ from field
@@ -514,6 +542,33 @@ lemma a_recovery_never_installs_the_prior_identity:
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      & IdentityIs(S, newkey) @ #r
      ==> F"
+
+/*  DOMAIN SEPARATION IS THE VERIFIER'S JOB, and it is now modelled as one.
+    `wire-format.md` supplies the role through COSE `external_aad`,
+    reconstructed by the verifier from the context it is checking in, and says
+    why structure is not a substitute: "exploiting cross-context confusion
+    requires a byte string valid in two roles, which the differing CBOR
+    structures argue against WITHOUT RULING OUT -- and unproven
+    non-confusability is precisely what domain separation exists to replace."
+
+    Until 2026-09-07 this theory put the role INSIDE the signed tuple, so
+    separation held by symbolic message shape: `<'rotate', ...>` and
+    `<'recognise', ...>` simply are different terms, and an implementation
+    that failed to bind the context had nothing to falsify.  Signed terms are
+    now `<aad, payload>`, and the aad is supplied by the verifying rule.
+
+    THE COLLISION IS REAL HERE, which is why the lemma below can test it: the
+    successor statement's payload is <S, newkey, P> and a verifier response's
+    is <S, newkey, result>.  Set result = P and the two payloads are THE SAME
+    TERM.  Only the aad separates them.  Verify either signature over the
+    payload alone -- dropping the aad, which is exactly the implementation
+    error -- and a recognition is accepted as an old-key proof.            */
+lemma a_recognition_is_not_accepted_as_an_old_key_proof:
+  "All P S newkey #i.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
+         | ( (Ex #x. CompromisedClassical(S) @ #x & #x < #i)
+           & (Ex #y. CompromisedPQ(S) @ #y & #y < #i) ) )"
 
 /*  THIS MUST TIE THE MEETING TO THE KEY THAT WAS RECOVERED, and an earlier
     version did not.  It asked only for SOME meeting before SOME acceptance,

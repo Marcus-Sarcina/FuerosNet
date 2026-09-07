@@ -6180,3 +6180,63 @@ re-running the suite, because the suite was green in both cases.
 
 14 artifacts. 57 Tamarin lemmas unbounded (28 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 11 (2026-09-07)
+
+Static-only. Three findings, all verified, all applied, each mutation-tested.
+
+**F1 (HIGH) -- three theories used the abstraction attach's own comments say is
+inadequate.** `attach.spthy` was corrected in review 9 to carry candidate
+`KeyMaterial` and check `h(km)` against the intended keyhash before using any
+key from it. Ceremony, currency and recovery still looked verification keys up
+BY SYMBOLIC NAME, which makes the identity-to-key relation true before
+validation: a validator that resolved the wrong key material under the right
+identity had no trace, and the attribution lemmas stayed green for exactly that
+error. The reviewer found this by reading attach's own rationale against the
+other three -- an internal-consistency argument, which is the strongest kind.
+
+Fixed in all three: acceptance now takes candidate `KeyMaterial` off the
+network and binds it before use. Mutation-tested in each.
+
+Note what this closes that the hybrid work did not. Review 10's carve-outs
+require both halves of a NAMED signer to be compromised -- but under a missing
+keyhash check, neither half need be: the attacker binds its OWN pair to the
+victim's identity. The two findings look similar and are not.
+
+**F2 (MEDIUM) -- domain separation held by symbolic message shape.** The role
+tag sat inside the signed tuple, so `<'rotate', ...>` and `<'recognise', ...>`
+were simply different terms. `wire-format.md` declines to rely on that:
+"exploiting cross-context confusion requires a byte string valid in two roles,
+which the differing CBOR structures argue against WITHOUT RULING OUT -- and
+unproven non-confusability is precisely what domain separation exists to
+replace." Signed terms are now `<aad, payload>` with the aad supplied by the
+verifying rule.
+
+**The collision is real in recovery**, which is what makes the new lemma more
+than decoration: the successor statement's payload is `<S, newkey, P>` and a
+verifier response's is `<S, newkey, result>`. Set `result = P` and they are the
+SAME TERM. `a_recognition_is_not_accepted_as_an_old_key_proof` falsifies when
+the verifier checks the payload alone.
+
+**F3 (MEDIUM) -- a recovery block is a collection.** The wire allows 32
+responses and its rules are per-collection: every response names the new node,
+duplicate verifier responses are malformed, and the block needs at least one
+`match`. The model had one response, so a validator that checked the first and
+stopped satisfied it. Two responses now, with all three rules; dropping the
+second response's checks falsifies
+`forging_a_recognition_needs_both_verifier_halves`.
+
+**One lemma was wrong and its falsification said so.** `acceptance_requires_a_
+signed_match` demanded a match from EVERY verifier relied on, and broke the
+moment a second response existed -- correctly, because the wire requires at
+least one, not all. Restated.
+
+**A gate change, not an exemption.** Recovery's derivation checks began timing
+out, which the gate reports as a wellformedness failure. The fix is
+`--derivcheck-timeout=60` so the check COMPLETES, rather than a pattern that
+would have let a real failure through.
+
+14 artifacts. 58 Tamarin lemmas unbounded (29 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.
