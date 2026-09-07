@@ -41,7 +41,7 @@ rule (modulo E) Client_Hello:
 
 rule (modulo E) Server_Respond:
    [ In( <$C, $S, nc> ), !Ltk( $S, ~sks ), Fr( ~ns ) ]
-  --[ ServerAccept( $S, $C, nc ) ]->
+  --[ ServerAccept( $S, $C, nc ), AttachResponseSigned( $S, $C, nc ) ]->
    [
    Out( <$S, ~ns, sign(<'attach', $C, $S, nc>, ~sks)> ),
    St_Server_1( $S, ~ns )
@@ -56,7 +56,8 @@ rule (modulo E) Client_Finish:
    ]
   --[
   Eq( verify(sig, <'attach', $C, $S, ~nc>, pkS), true ),
-  ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim )
+  ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim ),
+  ClientAuthSigned( $C, $S, $Claim )
   ]->
    [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
 
@@ -66,7 +67,9 @@ rule (modulo E) Client_Finish:
      St_Client_1( $C, $S, ~nc ), In( <$S, ns, sig> ), !Pk( $S, pkS ),
      !Ltk( $C, ~skc )
      ]
-    --[ Eq( z, true ), ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim )
+    --[
+    Eq( z, true ), ClientFinish( $C, $S, ~nc ), Claims( $C, $S, $Claim ),
+    ClientAuthSigned( $C, $S, $Claim )
     ]->
      [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
     variants (modulo AC)
@@ -132,6 +135,20 @@ rule (modulo E) Deliver:
 
   /* has exactly the trivial AC variant */
 
+rule (modulo E) Server_Signs_Without_Responding:
+   [ !Ltk( $S, ~sks ), In( <$C, nc> ) ]
+  --[ AttachResponseSigned( $S, $C, nc ), SignedWithoutTransition( $S ) ]->
+   [ Out( <$S, nc, sign(<'attach', $C, $S, nc>, ~sks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Signs_Without_Attaching:
+   [ !Ltk( $C, ~skc ), In( <$S, ns, $Claim> ) ]
+  --[ ClientAuthSigned( $C, $S, $Claim ), SignedWithoutTransition( $C ) ]->
+   [ Out( <$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)> ) ]
+
+  /* has exactly the trivial AC variant */
+
 restriction OneKeyPerName:
   "∀ a #i #j. ((OnlyOnce( a ) @ #i) ∧ (OnlyOnce( a ) @ #j)) ⇒ (#i = #j)"
   // safety formula
@@ -152,16 +169,24 @@ restriction Equality:
 
 lemma attach_completes_honestly:
   exists-trace
-  "∃ C S nc #j #i.
-    (((ServerAccept( S, C, nc ) @ #j) ∧ (ClientFinish( C, S, nc ) @ #i)) ∧
-     (#j < #i)) ∧
-    (¬(∃ A #k. Compromised( A ) @ #k))"
+  "∃ C S nc #s #j #i.
+    ((((((ClientStart( C, S, nc ) @ #s) ∧ (ServerAccept( S, C, nc ) @ #j)) ∧
+        (ClientFinish( C, S, nc ) @ #i)) ∧
+       (#s < #j)) ∧
+      (#j < #i)) ∧
+     (¬(∃ A #k. Compromised( A ) @ #k))) ∧
+    (¬(∃ X #t. SignedWithoutTransition( X ) @ #t))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ C S nc #j #i.
-  (ServerAccept( S, C, nc ) @ #j) ∧ (ClientFinish( C, S, nc ) @ #i)
+"∃ C S nc #s #j #i.
+  (ClientStart( C, S, nc ) @ #s) ∧
+  (ServerAccept( S, C, nc ) @ #j) ∧
+  (ClientFinish( C, S, nc ) @ #i)
  ∧
-  (#j < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+  (#s < #j) ∧
+  (#j < #i) ∧
+  (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥) ∧
+  (∀ X #t. (SignedWithoutTransition( X ) @ #t) ⇒ ⊥)"
 */
 simplify
 solve( !Ltk( $S, ~sks ) ▶₁ #j )
@@ -212,14 +237,14 @@ lemma server_authentication:
   all-traces
   "∀ C S nc #i.
     (ClientFinish( C, S, nc ) @ #i) ⇒
-    ((∃ #j. (ServerAccept( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
+    ((∃ #j. (AttachResponseSigned( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
      (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i.
   (ClientFinish( C, S, nc ) @ #i)
  ∧
-  (∀ #j. (ServerAccept( S, C, nc ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #j. (AttachResponseSigned( S, C, nc ) @ #j) ⇒ ¬(#j < #i)) ∧
   (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
@@ -231,6 +256,9 @@ solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
       case Register_Node
       solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sk) ) @ #vk.4 )
         case Server_Respond
+        by contradiction /* from formulas */
+      next
+        case Server_Signs_Without_Responding
         by contradiction /* from formulas */
       next
         case c_sign
@@ -267,14 +295,14 @@ lemma client_authentication:
   all-traces
   "∀ S A C #i.
     (Bound( S, A, C ) @ #i) ⇒
-    ((∃ #c. (Claims( A, S, C ) @ #c) ∧ (#c < #i)) ∨
+    ((∃ #c. (ClientAuthSigned( A, S, C ) @ #c) ∧ (#c < #i)) ∨
      (∃ #k. (Compromised( A ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ S A C #i.
   (Bound( S, A, C ) @ #i)
  ∧
-  (∀ #c. (Claims( A, S, C ) @ #c) ⇒ ¬(#c < #i)) ∧
+  (∀ #c. (ClientAuthSigned( A, S, C ) @ #c) ⇒ ¬(#c < #i)) ∧
   (∀ #k. (Compromised( A ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
@@ -284,6 +312,9 @@ solve( St_Server_1( $S, ~ns ) ▶₀ #i )
     case Register_Node
     solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~sk) ) @ #vk.3 )
       case Client_Finish
+      by contradiction /* from formulas */
+    next
+      case Client_Signs_Without_Attaching
       by contradiction /* from formulas */
     next
       case c_sign
@@ -329,13 +360,13 @@ lemma client_commit_is_injective:
   all-traces
   "∀ C S nc #i1 #i2.
     ((ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)) ⇒
-    ((#i1 = #i2) ∨ (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i1)))"
+    (#i1 = #i2)"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i1 #i2.
   (ClientFinish( C, S, nc ) @ #i1) ∧ (ClientFinish( C, S, nc ) @ #i2)
  ∧
-  (¬(#i1 = #i2)) ∧ (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i1))"
+  ¬(#i1 = #i2)"
 */
 simplify
 solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
@@ -387,13 +418,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/attach.spthy
 
-  processing time: 0.97s
+  processing time: 1.10s
   
   attach_completes_honestly (exists-trace): verified (8 steps)
   attach_is_executable (exists-trace): verified (7 steps)
-  server_authentication (all-traces): verified (8 steps)
+  server_authentication (all-traces): verified (9 steps)
   queued_data_reaches_only_the_authenticated_peer (all-traces): verified (3 steps)
-  client_authentication (all-traces): verified (7 steps)
+  client_authentication (all-traces): verified (8 steps)
   a_delivery_is_reachable (exists-trace): verified (8 steps)
   client_commit_is_injective (all-traces): verified (12 steps)
 

@@ -201,6 +201,23 @@ rule Issue_Currency:
     [ Out(<'currency', $S, pk(sk), e, role, $I,
            sign(<'currency', $S, pk(sk), e, role, $I>, ~isk)>) ]
 
+
+/*  ISSUING WITHOUT THE MODELLED STEP.  `Issue_Currency` above requires a
+    `!SubjKey`, so every attestation in the model named a key the subject
+    really held.  Nothing on the wire enforces that: an issuer can attest any
+    keyhash it likes for any subject.  This rule says so, and the lemmas
+    below are unaffected because they speak about what was SIGNED, not about
+    which transition produced it.                                          */
+rule Issue_Currency_Arbitrary:
+    [ !PatronKey($I, ~isk)
+    , !Epoch(e)
+    , In(<$S, kh, role>) ]
+  --[ Issued($I, $S, kh, e)
+    , IssuedAs($I, $S, role)
+    , SignedWithoutTransition($I) ]->
+    [ Out(<'currency', $S, kh, e, role, $I,
+           sign(<'currency', $S, kh, e, role, $I>, ~isk)>) ]
+
 /*
 --------------------------------------------------------------------------------
   RELYING ON AN ATTESTATION
@@ -299,7 +316,8 @@ lemma currency_is_usable_honestly:
        Issued(I, S, kh, e) @ #j
      & Accepted(R, I, S, kh, e, role) @ #i
      & #j < #i
-     & not(Ex A #k. Compromised(A) @ #k)"
+     & not(Ex A #k. Compromised(A) @ #k)
+     & not(Ex X #t. SignedWithoutTransition(X) @ #t)"
 
 // SANITY: an epoch can actually expire, so the NotExpiredBeforeAccept
 // restriction is not vacuously satisfiable by nothing ever expiring.

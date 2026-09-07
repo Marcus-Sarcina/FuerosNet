@@ -5975,3 +5975,76 @@ on early data binds the same `Attach` twice with no second handshake.
 13 artifacts. 54 Tamarin lemmas unbounded (25 wire-only, 29 compliant) + 16
 bounded, 4 TLA+ models, 1 mutation that must fail. Every finding from reviews
 6 and 7 is now applied or closed.
+
+---
+
+## Cross-family wire-only review 8 (2026-09-06)
+
+Static-only. Five findings, all verified, all applied. **F2 is a regression I
+introduced in review 7** and is the most important thing in this entry.
+
+**F2 -- the anti-vacuity guards stopped guarding.** Adding
+`Participant_Sign_Without_Meeting` to repartition the trees left
+`honest_ceremony_completes` satisfiable without the honest rule firing at all:
+a genuine `Meet`, two without-meeting signatures, a witness, an accepted
+record, nothing compromised. Verified by deleting `Participant_Sign` outright
+-- **the guard still verified.** Recovery was worse: its guard asked only for
+SOME meeting before SOME acceptance, binding neither the successor, the
+verifier relied upon, nor an honest recognition.
+
+Fixed by emitting a distinct action from the co-presence-consuming branch
+(`HonestParticipantSigned`, `HonestFormationSigned`, `HonestlyRecognised`) and
+requiring it from both parties, with the recovery guard now naming the same
+`(V, S, newkey)` across `MeetingKey`, `HonestlyRecognised`, `ReliedOn` and the
+acceptance. Both re-tested by deletion: each guard now reports *falsified, no
+trace found*.
+
+**This is the fifth time this session a change made an honest path unreachable
+or unrequired while every universal lemma stayed green, and the first time an
+outside reviewer caught it rather than the guard.** The guard was the thing
+that failed. Worth stating plainly: adding a rule that BYPASSES an honest
+branch silently weakens every exists-trace lemma that does not name that
+branch, and the branch must be named by an action, not implied by the shape of
+the trace.
+
+**F1 -- attribution overstated.** The lemma quantified the two participants
+only, while the README claimed "every party it names". Extending it to the
+witness FALSIFIED, and the trace was instructive: `Participant_Sign_Without_
+Meeting` instantiates at `W` too, producing the same body under W's key, so
+`WitnessSigned` never fires. The honest statement is authorship -- *this key
+signed this body* -- so all three signing rules now emit a common `SignedBody`
+and the lemma is stated over that. The projection limit (the signed term omits
+timestamps, verifier responses, witness metadata, disclosure commitments) and
+the single-witness signer set against the wire's sixteen are now stated in the
+file and in both READMEs.
+
+**F3 -- the threat model was not uniform.** Ceremony and recovery let a
+legitimate principal sign anything; attach and currency did not, so their
+authentication lemmas concluded that an honest TRANSITION had been taken when a
+signature can only show that A KEY SIGNED A TERM. Added
+`Server_Signs_Without_Responding`, `Client_Signs_Without_Attaching` and
+`Issue_Currency_Arbitrary`, and restated `server_authentication` and
+`client_authentication` over `AttachResponseSigned` / `ClientAuthSigned`. The
+honest guards in both theories now also exclude `SignedWithoutTransition`, or
+F2 would have reappeared immediately in the theories just repaired.
+
+**F4 -- README wording.** "An accepted recovery" became "a patron that accepts
+recovery evidence", matching the scope note the file already carried.
+
+**F5 -- verified and applied.** `client_commit_is_injective`'s
+server-compromise disjunct was unnecessary: removed, and the unconditional
+lemma verifies in 12 steps.
+
+**Stale header removed.** `ceremony.spthy`'s introduction still claimed an
+accepted record implies co-presence and that binding signatures can only come
+from a `CoPresent` token -- both false of this theory since review 7.
+
+**Three mutation attempts were no-ops before they were caught**, all in this
+session's pattern: a slice taken in the wrong direction because
+`Recognise_Without_Meeting` precedes `Recognise` in the file, and an assertion
+whose expected count ignored that the action name also appears in a comment.
+Each was found by asserting the mutation landed rather than reading its
+verdict.
+
+13 artifacts. 54 Tamarin lemmas unbounded (25 wire-only, 29 compliant) + 16
+bounded, 4 TLA+ models, 1 mutation that must fail.

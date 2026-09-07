@@ -83,6 +83,20 @@ rule (modulo E) Issue_Currency:
 
   /* has exactly the trivial AC variant */
 
+rule (modulo E) Issue_Currency_Arbitrary:
+   [ !PatronKey( $I, ~isk ), !Epoch( e ), In( <$S, kh, role> ) ]
+  --[
+  Issued( $I, $S, kh, e ), IssuedAs( $I, $S, role ),
+  SignedWithoutTransition( $I )
+  ]->
+   [
+   Out( <'currency', $S, kh, e, role, $I, 
+         sign(<'currency', $S, kh, e, role, $I>, ~isk)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
 rule (modulo E) Accept_Currency:
    [
    In( <'currency', $S, sk, e, role, $I, att> ), !Pk( $I, pkI ),
@@ -198,38 +212,44 @@ qed
 lemma currency_is_usable_honestly:
   exists-trace
   "∃ R I S kh e role #j #i.
-    (((Issued( I, S, kh, e ) @ #j) ∧
-      (Accepted( R, I, S, kh, e, role ) @ #i)) ∧
-     (#j < #i)) ∧
-    (¬(∃ A #k. Compromised( A ) @ #k))"
+    ((((Issued( I, S, kh, e ) @ #j) ∧
+       (Accepted( R, I, S, kh, e, role ) @ #i)) ∧
+      (#j < #i)) ∧
+     (¬(∃ A #k. Compromised( A ) @ #k))) ∧
+    (¬(∃ X #t. SignedWithoutTransition( X ) @ #t))"
 /*
 guarded formula characterizing all satisfying traces:
 "∃ R I S kh e role #j #i.
   (Issued( I, S, kh, e ) @ #j) ∧ (Accepted( R, I, S, kh, e, role ) @ #i)
  ∧
-  (#j < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+  (#j < #i) ∧
+  (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥) ∧
+  (∀ X #t. (SignedWithoutTransition( X ) @ #t) ⇒ ⊥)"
 */
 simplify
-solve( !PatronKey( $I, ~isk ) ▶₀ #j )
+solve( !Pk( $I, pk(x) ) ▶₁ #i )
   case Register_Patron
-  solve( !SubjKey( $S, sk ) ▶₁ #j )
-    case Subject_Key
-    solve( !Epoch( e ) ▶₂ #j )
-      case New_Epoch
-      solve( !Pk( $I, pk(x) ) ▶₁ #i )
-        case Register_Patron
-        solve( !Epoch( ~e ) ▶₂ #i )
-          case New_Epoch
-          solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
-            case Records_Downline
-            solve( !KU( sign(<'currency', $S, pk(~sk), ~e, 'downline', $I>, ~isk)
-                   ) @ #vk.13 )
-              case Issue_Currency
-              solve( !KU( ~e ) @ #vk.9 )
+  solve( !Epoch( e ) ▶₂ #i )
+    case New_Epoch
+    solve( !Authorised( $R, $I, $S, role ) ▶₃ #i )
+      case Records_Downline
+      solve( Issued( $I, $S, kh, ~e ) @ #j )
+        case Issue_Currency
+        solve( !PatronKey( $I, ~isk ) ▶₀ #j )
+          case Register_Patron
+          solve( !SubjKey( $S, sk ) ▶₁ #j )
+            case Subject_Key
+            solve( !Epoch( ~e ) ▶₂ #j )
+              case New_Epoch
+              solve( !KU( sign(<'currency', $S, pk(~sk), ~e, 'downline', $I>, ~isk)
+                     ) @ #vk.12 )
                 case Issue_Currency
-                solve( !KU( pk(~sk) ) @ #vk.9 )
+                solve( !KU( ~e ) @ #vk.8 )
                   case Issue_Currency
-                  SOLVED // trace found
+                  solve( !KU( pk(~sk) ) @ #vk.8 )
+                    case Issue_Currency
+                    SOLVED // trace found
+                  qed
                 qed
               qed
             qed
@@ -283,6 +303,9 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           case Issue_Currency
           by contradiction /* from formulas */
         next
+          case Issue_Currency_Arbitrary
+          by contradiction /* from formulas */
+        next
           case c_sign
           solve( !KU( ~psk ) @ #vk.18 )
             case Compromise_Patron
@@ -294,6 +317,9 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
         solve( !KU( sign(<'currency', $S, sk, ~e, 'grandpatron', $I>, ~psk)
                ) @ #vk.12 )
           case Issue_Currency
+          by contradiction /* from formulas */
+        next
+          case Issue_Currency_Arbitrary
           by contradiction /* from formulas */
         next
           case c_sign
@@ -309,6 +335,9 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
           case Issue_Currency
           by contradiction /* from formulas */
         next
+          case Issue_Currency_Arbitrary
+          by contradiction /* from formulas */
+        next
           case c_sign
           solve( !KU( ~psk ) @ #vk.18 )
             case Compromise_Patron
@@ -320,6 +349,9 @@ solve( (∀ #j. (Issued( $I, $S, sk, e ) @ #j) ⇒ ¬(#j < #i))  ∥
         solve( !KU( sign(<'currency', $S, sk, ~e, 'sibling', $I>, ~psk)
                ) @ #vk.12 )
           case Issue_Currency
+          by contradiction /* from formulas */
+        next
+          case Issue_Currency_Arbitrary
           by contradiction /* from formulas */
         next
           case c_sign
@@ -362,6 +394,9 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         case Issue_Currency
         by contradiction /* from formulas */
       next
+        case Issue_Currency_Arbitrary
+        by contradiction /* from formulas */
+      next
         case c_sign
         solve( !KU( ~psk ) @ #vk.18 )
           case Compromise_Patron
@@ -373,6 +408,9 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
       solve( !KU( sign(<'currency', $S, sk, ~e, 'grandpatron', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
+        by contradiction /* from formulas */
+      next
+        case Issue_Currency_Arbitrary
         by contradiction /* from formulas */
       next
         case c_sign
@@ -388,6 +426,9 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
         case Issue_Currency
         by contradiction /* from formulas */
       next
+        case Issue_Currency_Arbitrary
+        by contradiction /* from formulas */
+      next
         case c_sign
         solve( !KU( ~psk ) @ #vk.18 )
           case Compromise_Patron
@@ -399,6 +440,9 @@ solve( !Pk( $I, pk(x) ) ▶₁ #i )
       solve( !KU( sign(<'currency', $S, sk, ~e, 'sibling', $I>, ~psk)
              ) @ #vk.12 )
         case Issue_Currency
+        by contradiction /* from formulas */
+      next
+        case Issue_Currency_Arbitrary
         by contradiction /* from formulas */
       next
         case c_sign
@@ -466,13 +510,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/currency.spthy
 
-  processing time: 1.28s
+  processing time: 1.76s
   
   currency_is_usable (exists-trace): verified (8 steps)
-  currency_is_usable_honestly (exists-trace): verified (11 steps)
+  currency_is_usable_honestly (exists-trace): verified (12 steps)
   expiry_is_reachable (exists-trace): verified (3 steps)
-  currency_requires_unexpired_issuance (all-traces): verified (22 steps)
-  an_attestation_binds_its_issuer_and_role (all-traces): verified (20 steps)
+  currency_requires_unexpired_issuance (all-traces): verified (26 steps)
+  an_attestation_binds_its_issuer_and_role (all-traces): verified (24 steps)
   acceptance_names_an_issuer_this_party_authorised (all-traces): verified (8 steps)
 
 ==============================================================================

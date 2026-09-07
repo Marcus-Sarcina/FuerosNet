@@ -177,7 +177,8 @@ rule Server_Respond:
                                        //   9.1 makes authentication MUTUAL, so
                                        //   the client must prove its key too
                                        //   and needs something to sign
-  --[ ServerAccept($S, $C, nc) ]->     // trace: $S answered $C's attach
+  --[ ServerAccept($S, $C, nc)         // trace: $S answered $C's attach
+    , AttachResponseSigned($S, $C, nc) ]->
     [ Out(<$S, ~ns, sign(<'attach', $C, $S, nc>, ~sks)>)
     , St_Server_1($S, ~ns) ]
 
@@ -193,7 +194,8 @@ rule Client_Finish:
     // The restriction below fires only when the signature verifies:
   --[ Eq(verify(sig, <'attach', $C, $S, ~nc>, pkS), true)
     , ClientFinish($C, $S, ~nc)        // trace: $C committed to attaching to $S
-    , Claims($C, $S, $Claim) ]->       // ... and named $Claim in its Attach
+    , Claims($C, $S, $Claim)           // ... and named $Claim in its Attach
+    , ClientAuthSigned($C, $S, $Claim) ]->
     // $Claim IS FREE, and that is the point.  Nothing stops a client putting
     // someone else's keyhash in `Attach` field 1; the wire's defence is the
     // SERVER's check, not the client's restraint.
@@ -255,6 +257,33 @@ rule Deliver:
   --[ Delivered($S, $R, m) ]->
     [ ]
 
+
+/*
+--------------------------------------------------------------------------------
+  SIGNING WITHOUT TAKING THE PROTOCOL STEP
+--------------------------------------------------------------------------------
+  The other three theories let a legitimate principal sign what it likes with
+  its own uncompromised key; this one did not, and its authentication lemmas
+  were correspondingly stronger than the threat model claimed.  They concluded
+  that the honest STATE-MACHINE TRANSITION had been taken, when what a
+  signature can show is only that THE KEY SIGNED THE TERM.
+
+  With these rules present the lemmas below are restated over
+  `AttachResponseSigned` / `ClientAuthSigned` -- emitted by the honest rules
+  and by these -- so what they assert is cryptographic authorship, which is
+  what the wire actually delivers.
+*/
+
+rule Server_Signs_Without_Responding:
+    [ !Ltk($S, ~sks), In(<$C, nc>) ]
+  --[ AttachResponseSigned($S, $C, nc), SignedWithoutTransition($S) ]->
+    [ Out(<$S, nc, sign(<'attach', $C, $S, nc>, ~sks)>) ]
+
+rule Client_Signs_Without_Attaching:
+    [ !Ltk($C, ~skc), In(<$S, ns, $Claim>) ]
+  --[ ClientAuthSigned($C, $S, $Claim), SignedWithoutTransition($C) ]->
+    [ Out(<$C, $Claim, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)>) ]
+
 /*
   ONE REGISTRATION PER NAME.  A public label like $A stands for a keyhash,
   and design Section 5.1 makes a keyhash a commitment to the key material --
@@ -300,9 +329,13 @@ restriction Equality:
 // unreachable honest path, the defect found in currency and then ceremony.
 lemma attach_completes_honestly:
   exists-trace
-  "Ex C S nc #j #i.
-       ServerAccept(S, C, nc) @ #j & ClientFinish(C, S, nc) @ #i & #j < #i
-     & not(Ex A #k. Compromised(A) @ #k)"
+  "Ex C S nc #s #j #i.
+       ClientStart(C, S, nc) @ #s
+     & ServerAccept(S, C, nc) @ #j
+     & ClientFinish(C, S, nc) @ #i
+     & #s < #j & #j < #i
+     & not(Ex A #k. Compromised(A) @ #k)
+     & not(Ex X #t. SignedWithoutTransition(X) @ #t)"
 
 lemma attach_is_executable:
   exists-trace
@@ -322,7 +355,7 @@ lemma attach_is_executable:
 lemma server_authentication:
   "All C S nc #i.
      ClientFinish(C, S, nc) @ #i
-     ==> ( (Ex #j. ServerAccept(S, C, nc) @ #j & #j < #i)
+     ==> ( (Ex #j. AttachResponseSigned(S, C, nc) @ #j & #j < #i)
          | (Ex #k. Compromised(S) @ #k & #k < #i) )"
 
 /*  THE MAILBOX PROPERTY, and the reason wire Section 9.1 states the
@@ -346,7 +379,7 @@ lemma client_authentication:
   all-traces
   "All S A C #i.
      Bound(S, A, C) @ #i
-     ==> ( (Ex #c. Claims(A, S, C) @ #c & #c < #i)
+     ==> ( (Ex #c. ClientAuthSigned(A, S, C) @ #c & #c < #i)
          | (Ex #k. Compromised(A) @ #k & #k < #i) )"
 
 /*  ANTI-VACUITY: an attach reaches a delivery with nobody compromised.      */
@@ -371,7 +404,6 @@ lemma client_commit_is_injective:
   "All C S nc #i1 #i2.
      ( ClientFinish(C, S, nc) @ #i1
      & ClientFinish(C, S, nc) @ #i2 )
-     ==> ( #i1 = #i2
-         | (Ex #k. Compromised(S) @ #k & #k < #i1) )"
+     ==> #i1 = #i2"
 
 end

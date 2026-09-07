@@ -66,7 +66,10 @@ rule (modulo E) Recovery_Meeting:
 
 rule (modulo E) Recognise:
    [ !Ltk( $V, ~vsk ), AtMeeting( $V, $S, newkey ) ]
-  --[ Recognised( $V, $S ), RecognisedFor( $V, $S, newkey ) ]->
+  --[
+  Recognised( $V, $S ), RecognisedFor( $V, $S, newkey ),
+  HonestlyRecognised( $V, $S, newkey )
+  ]->
    [ Out( <'recognise', $S, newkey, sign(<'recognise', $S, newkey>, ~vsk)> )
    ]
 
@@ -227,33 +230,47 @@ restriction VerifierIsNotSubject:
 
 lemma recovery_completes_honestly:
   exists-trace
-  "∃ P S newkey V #m #i.
-    (((RecoveryMeeting( V, S ) @ #m) ∧
-      (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)) ∧
-     (#m < #i)) ∧
+  "∃ P S newkey V #m #r #i.
+    ((((((MeetingKey( V, S, newkey ) @ #m) ∧
+         (HonestlyRecognised( V, S, newkey ) @ #r)) ∧
+        (ReliedOn( P, V, S ) @ #i)) ∧
+       (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)) ∧
+      (#m < #r)) ∧
+     (#r < #i)) ∧
     (¬(∃ A #k. Compromised( A ) @ #k))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ P S newkey V #m #i.
-  (RecoveryMeeting( V, S ) @ #m) ∧
+"∃ P S newkey V #m #r #i.
+  (MeetingKey( V, S, newkey ) @ #m) ∧
+  (HonestlyRecognised( V, S, newkey ) @ #r) ∧
+  (ReliedOn( P, V, S ) @ #i) ∧
   (PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i)
  ∧
-  (#m < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
+  (#m < #r) ∧ (#r < #i) ∧ (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥)"
 */
 simplify
 solve( !Met( $V, $S ) ▶₀ #m )
   case Met
-  solve( !Ltk( $P, ~psk ) ▶₀ #i )
+  solve( !Ltk( $V, ~vsk ) ▶₀ #r )
     case Register
-    solve( !Pk( $S, pk(x) ) ▶₁ #i )
-      case Register
-      solve( !Pk( $V, pk(x) ) ▶₂ #i )
+    solve( AtMeeting( $V, $S, ~nk ) ▶₁ #r )
+      case Recovery_Meeting
+      solve( !Ltk( $P, ~psk ) ▶₀ #i )
         case Register
-        solve( !KU( sign(<'rotate', $S, newkey, $P>, ~sk) ) @ #vk.11 )
-          case Old_Key_Proof
-          solve( !KU( sign(<'recognise', $S, newkey>, ~sk.1) ) @ #vk.13 )
-            case Recognise_Without_Meeting
-            SOLVED // trace found
+        solve( !Pk( $S, pk(x) ) ▶₁ #i )
+          case Register
+          solve( !Pk( $V, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'rotate', $S, ~nk, $P>, ~sk) ) @ #vk.11 )
+              case Old_Key_Proof
+              solve( !KU( ~nk ) @ #vk.8 )
+                case Recognise
+                solve( !KU( sign(<'recognise', $S, ~nk>, ~vsk) ) @ #vk.13 )
+                  case Recognise
+                  SOLVED // trace found
+                qed
+              qed
+            qed
           qed
         qed
       qed
@@ -501,9 +518,9 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/recovery.spthy
 
-  processing time: 1.56s
+  processing time: 1.82s
   
-  recovery_completes_honestly (exists-trace): verified (8 steps)
+  recovery_completes_honestly (exists-trace): verified (11 steps)
   recovery_is_executable (exists-trace): verified (8 steps)
   recognition_alone_insufficient (all-traces): verified (16 steps)
   recognition_binds_the_successor (all-traces): verified (16 steps)

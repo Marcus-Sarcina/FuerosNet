@@ -5,31 +5,32 @@ theory RHTNCeremony
 ================================================================================
 
 WHAT THIS FILE IS
-  The review plan's Stage 1.1, highest-value target: "An adversary not
-  physically present cannot produce a [presence] record a third party
-  accepts."  A presence record (design Section 7-8, wire Section 4.5) is the
-  signed artifact of a face-to-face ceremony: two participants and a set of
-  witnesses co-sign that a meeting happened.  The property proved here: a
-  record a third party accepts implies the two named participants were
-  CO-PRESENT -- an adversary who was not in the room cannot manufacture one,
-  short of stealing a participant's key.
+  The wire half of the presence ceremony (design Section 7-8, `wire-format.md`
+  Section 4.5): a record a third party receives, and what that party can
+  conclude from it alone.
 
-  THE CENTRAL MODELLING DECISION: co-presence as an AXIOM.
-  Physical co-location is not a protocol mechanism -- it is the real-world
-  fact the whole design meters trust against (design Section 1.2.1).  A
-  symbolic prover has no notion of physical space, so we introduce
-  co-presence as a restricted resource:
-    * a `Meet` rule produces a CoPresent fact for a set of parties, and a
-      restriction lets it fire only for genuinely distinct parties;
-    * the ceremony's binding signatures can only be produced by a party
-      that holds a CoPresent token for that ceremony.
-  The theorem is then HONEST about its dependency: it proves that the
-  protocol admits a record ONLY when the co-presence axiom was invoked (or a
-  key was stolen).  It does not prove co-presence is unforgeable in the
-  physical world -- nothing symbolic could.  This is exactly the plan's
-  instruction: "Model the ceremony channel as one the adversary can only
-  use when a co-location fact holds ... the target property becomes
-  provable relative to that axiom, which is honest."
+  WHAT IT PROVES: ATTRIBUTABILITY.  An accepted record was signed, over that
+  exact body, by every party the record names -- or that party's key was
+  stolen.
+
+  WHAT IT DOES NOT PROVE, AND WHY NOT.  Not that anybody met.  design Section
+  7 says "bilateral collusion is unpreventable" and Section 15.4 that proof of
+  presence "is not an unforgeable primitive, and bilateral collusion defeats
+  it regardless".  Two people with their own uncompromised keys can sign a
+  record for a meeting that never happened, and no validator can tell.  So
+  this theory carries `Participant_Sign_Without_Meeting`, and any property
+  resting on client conformity falsifies here by construction.
+
+  The co-presence properties live in `compliant/ceremony.spthy`, where the
+  signing discipline they assume is stated as the participant obligation it
+  is, and where the collusion trace is kept reachable.
+
+  WHY ATTRIBUTABILITY IS THE USEFUL THING.  design Section 15.4 treats
+  presence as "an attack cost rather than an absolute primitive".  The cost
+  lands because a fabricated record is a SIGNED LIE BY NAMED PARTIES rather
+  than an anonymous forgery, and because no single signature can be
+  transplanted onto another roster.  That is what a validator gets, and it is
+  what this file establishes.
 
   Reading conventions (rule shape, sorts, trace, temporal logic) are in
   attach.spthy; new idioms are explained where they first appear.
@@ -137,7 +138,9 @@ rule Participant_Sign:
     [ !Ltk($P, ~sk)
     , CoPresent($P, cid)               // consumed: this party was present
     , !Ceremony($P1, $P2, $W, cid) ]   // the roster this cid belongs to
-  --[ ParticipantSigned($P, $P1, $P2, $W, cid) ]->
+  --[ ParticipantSigned($P, $P1, $P2, $W, cid)
+    , HonestParticipantSigned($P, $P1, $P2, $W, cid)
+    , SignedBody($P, $P1, $P2, $W, cid) ]->
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
 // A witness signs the ceremony it observed.
@@ -178,19 +181,22 @@ rule Participant_Sign:
 rule Participant_Sign_Without_Meeting:
     [ !Ltk($P, ~sk), In(<$P1, $P2, $W, cid>) ]
   --[ ParticipantSigned($P, $P1, $P2, $W, cid)
-    , SignedWithoutMeeting($P) ]->
+    , SignedWithoutMeeting($P)
+    , SignedBody($P, $P1, $P2, $W, cid) ]->
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
 rule Formation_Sign_Without_Meeting:
     [ !Ltk($P, ~sk), In(<$P1, $P2, cid>) ]
   --[ FormationSigned($P, $P1, $P2, cid)
-    , SignedWithoutMeeting($P) ]->
+    , SignedWithoutMeeting($P)
+    , SignedFormation($P, $P1, $P2, cid) ]->
     [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
 
 rule Witness_Sign:
     [ !Ltk($W, ~sk)
     , In(<'presence', $P1, $P2, $W, cid>) ]   // whatever it is handed
-  --[ WitnessSigned($W, $P1, $P2, $W, cid) ]->
+  --[ WitnessSigned($W, $P1, $P2, $W, cid)
+    , SignedBody($W, $P1, $P2, $W, cid) ]->
     [ Out(sign(<'presence', $P1, $P2, $W, cid>, ~sk)) ]
 
 /*
@@ -263,7 +269,9 @@ rule Formation_Sign:
     [ !Ltk($P, ~sk)
     , CoPresent($P, cid)
     , !Formation($P1, $P2, cid) ]
-  --[ FormationSigned($P, $P1, $P2, cid) ]->
+  --[ FormationSigned($P, $P1, $P2, cid)
+    , HonestFormationSigned($P, $P1, $P2, cid)
+    , SignedFormation($P, $P1, $P2, cid) ]->
     [ Out(sign(<'formation', $P1, $P2, cid>, ~sk)) ]
 
 rule Accept_Formation:
@@ -317,18 +325,34 @@ lemma ceremony_is_executable:
 // universal lemma below could have held because uncompromised acceptance
 // never occurred.  An exists-trace guard is only a guard if it excludes
 // compromise.
+/*  THESE MUST NAME THE CO-PRESENCE BRANCH, and an earlier version did not.
+    Once `Participant_Sign_Without_Meeting` exists, "a meeting happened AND a
+    record was accepted" can be satisfied with the honest rule never firing --
+    the meeting and the signatures need not be connected.  Deleting
+    `Participant_Sign` outright left this lemma VERIFYING, which is precisely
+    the vacuity an anti-vacuity guard exists to catch.
+
+    `HonestParticipantSigned` is emitted only by the rule that consumes a
+    `CoPresent` token, so requiring it from BOTH participants pins the guard
+    to the path it is meant to protect.                                     */
 lemma honest_ceremony_completes:
   exists-trace
-  "Ex P1 P2 W cid #m #i.
+  "Ex P1 P2 W cid #m #a #b #i.
        MeetHappened(P1, P2, W, cid) @ #m
-     & RecordAccepted(P1, P2, W, cid) @ #i & #m < #i
+     & HonestParticipantSigned(P1, P1, P2, W, cid) @ #a
+     & HonestParticipantSigned(P2, P1, P2, W, cid) @ #b
+     & RecordAccepted(P1, P2, W, cid) @ #i
+     & #m < #a & #m < #b & #a < #i & #b < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
 lemma honest_formation_completes:
   exists-trace
-  "Ex P1 P2 cid #m #i.
+  "Ex P1 P2 cid #m #a #b #i.
        FormationMeetHappened(P1, P2, cid) @ #m
-     & FormationAccepted(P1, P2, cid) @ #i & #m < #i
+     & HonestFormationSigned(P1, P1, P2, cid) @ #a
+     & HonestFormationSigned(P2, P1, P2, cid) @ #b
+     & FormationAccepted(P1, P2, cid) @ #i
+     & #m < #a & #m < #b & #a < #i & #b < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
 /*  WHAT A VALIDATOR CAN ACTUALLY CONCLUDE: ATTRIBUTABILITY.
@@ -353,10 +377,33 @@ lemma honest_formation_completes:
 lemma an_accepted_record_is_attributable:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
-     ==> ( ( (Ex #a. ParticipantSigned(P1, P1, P2, W, cid) @ #a & #a < #i)
+     ==> ( ( (Ex #a. SignedBody(P1, P1, P2, W, cid) @ #a & #a < #i)
            | (Ex #k. Compromised(P1) @ #k & #k < #i) )
-         & ( (Ex #b. ParticipantSigned(P2, P1, P2, W, cid) @ #b & #b < #i)
-           | (Ex #k. Compromised(P2) @ #k & #k < #i) ) )"
+         & ( (Ex #b. SignedBody(P2, P1, P2, W, cid) @ #b & #b < #i)
+           | (Ex #k. Compromised(P2) @ #k & #k < #i) )
+         & ( (Ex #w. SignedBody(W, P1, P2, W, cid) @ #w & #w < #i)
+           | (Ex #k. Compromised(W) @ #k & #k < #i) ) )"
+
+/*  WHAT "EVERY PARTY IT NAMES" MEANS HERE, stated because the lemma above is
+    easy to read as more than it is.
+
+    THE SIGNER SET IS ONE WITNESS.  `wire-format.md` permits a presence record
+    up to 16 witnesses and 32 verifier responses; this theory carries a single
+    `W`.  So the lemma covers every party the MODEL names, and a validator bug
+    that verified witness 1 of 2 and skipped the rest has no representation
+    here.
+
+    THE BODY IS A PROJECTION.  The signed term is <'presence', P1, P2, W, cid>,
+    where the wire body also carries timestamps, verifier responses, witness
+    metadata and disclosure commitments, all of which the signature must
+    cover.  Two distinct wire bodies agreeing on this projection map to one
+    Tamarin term, so a signature-coverage error that distinguishes them is
+    invisible to this theory.
+
+    Neither is a defect in the specification, which requires the coverage and
+    the full signer set.  Both are limits on what has been FORMALLY
+    established, and no refinement argument has been supplied connecting this
+    projection to arbitrary permitted wire bodies.                          */
 
 lemma formation_is_executable:
   exists-trace
@@ -369,9 +416,9 @@ lemma formation_is_executable:
 lemma an_accepted_formation_is_attributable:
   "All P1 P2 cid #i.
      FormationAccepted(P1, P2, cid) @ #i
-     ==> ( ( (Ex #a. FormationSigned(P1, P1, P2, cid) @ #a & #a < #i)
+     ==> ( ( (Ex #a. SignedFormation(P1, P1, P2, cid) @ #a & #a < #i)
            | (Ex #k. Compromised(P1) @ #k & #k < #i) )
-         & ( (Ex #b. FormationSigned(P2, P1, P2, cid) @ #b & #b < #i)
+         & ( (Ex #b. SignedFormation(P2, P1, P2, cid) @ #b & #b < #i)
            | (Ex #k. Compromised(P2) @ #k & #k < #i) ) )"
 
 end

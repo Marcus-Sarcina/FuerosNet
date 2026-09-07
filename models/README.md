@@ -267,8 +267,11 @@ the honest protocol and so proves every security lemma vacuously.
   has the first. The second is `compliant/currency` and
   `tla/SupersessionDiscipline`.
 
-- **`wire-only/recovery`** (design §9.1) — what a validator concludes from
-  recovery evidence: **the bindings**. The old-key proof names *this* patron
+- **`wire-only/recovery`** (design §9.1) — what a **patron** concludes from
+  recovery evidence: **the bindings**. The target is that patron's evidence
+  gate, not a complete accepted transaction — the successor's envelope
+  signature, the Adoption body and the remaining structural checks sit outside
+  it, which the file states at the acceptance rule. The old-key proof names *this* patron
   (`successor_statement_binds_the_patron`) — drop the third element of the
   successor statement and one proof is accepted by two patrons. Acceptance
   implies a recognition naming *that* successor
@@ -291,9 +294,13 @@ the honest protocol and so proves every security lemma vacuously.
 
 - **`wire-only/ceremony`** (design §7–8) — the presence ceremony.
   **Attributability**: a record a third party accepts was really signed, over
-  that exact body, by each party it names — or that party's key was stolen
+  the body as modelled, by each party the model names — both participants and
+  the witness — or that party's key was stolen
   (`an_accepted_record_is_attributable`, and the formation counterpart). Six
-  lemmas.
+  lemmas. The signed term is a **projection** of the wire body and the signer
+  set is **one witness** against the wire's sixteen; both limits are stated in
+  the file, and no refinement argument connects the projection to arbitrary
+  permitted bodies.
 
   **Not co-presence.** design §7 says *"bilateral collusion is unpreventable"*
   and §15.4 that presence *"is not an unforgeable primitive, and bilateral

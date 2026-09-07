@@ -254,7 +254,8 @@ rule Recognise:
     , AtMeeting($V, $S, newkey) ]      // CONSUMED: meeting now, and the key
                                        //   came over the direct channel
   --[ Recognised($V, $S)
-    , RecognisedFor($V, $S, newkey) ]->
+    , RecognisedFor($V, $S, newkey)
+    , HonestlyRecognised($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey,
            sign(<'recognise', $S, newkey>, ~vsk)>) ]
 
@@ -396,11 +397,24 @@ restriction VerifierIsNotSubject:
 // lemma.
 // AND THE HONEST ONE, excluding compromise -- see attach.spthy for why an
 // executability lemma that permits it guards nothing.
+/*  THIS MUST TIE THE MEETING TO THE KEY THAT WAS RECOVERED, and an earlier
+    version did not.  It asked only for SOME meeting before SOME acceptance,
+    which `Recognise_Without_Meeting` satisfies trivially: hold a meeting with
+    one verifier about one key, then recover a different key on a different
+    verifier's unearned recognition, with nothing compromised.  The honest
+    path could have been deleted and this would still have verified.
+
+    `HonestlyRecognised` is emitted only by the rule that consumes
+    `AtMeeting`, and the meeting, the recognition, the verifier relied upon
+    and the accepted successor are now the SAME (V, S, newkey).            */
 lemma recovery_completes_honestly:
   exists-trace
-  "Ex P S newkey V #m #i.
-       RecoveryMeeting(V, S) @ #m
-     & PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i & #m < #i
+  "Ex P S newkey V #m #r #i.
+       MeetingKey(V, S, newkey) @ #m
+     & HonestlyRecognised(V, S, newkey) @ #r
+     & ReliedOn(P, V, S) @ #i
+     & PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & #m < #r & #r < #i
      & not(Ex A #k. Compromised(A) @ #k)"
 
 lemma recovery_is_executable:
