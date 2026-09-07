@@ -6315,3 +6315,30 @@ Recorded rather than claimed.
 
 14 artifacts. 59 Tamarin lemmas unbounded (30 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+**Correction to the entry above, same day.** It records the subtype mutation as
+"asserted from the term structure and NOT established by mutation". That is no
+longer true and the correction is worth more than the original note.
+
+The general lemma could not be mutated -- 900 seconds, no verdict, killed
+during source saturation -- because removing the subtype is precisely what
+makes the presence and formation payload languages collide, and that collision
+is what explodes the search. The fix was not a longer budget but a NARROWER
+PROPERTY: `a_formation_signature_is_not_accepted_as_a_normal_record` pins the
+witness slot to the value a formation carries there and drops the compromise
+disjunctions. It verifies in seconds, and falsifies in seconds when the subtype
+is removed from all 20 signing and verifying sites.
+
+Worth keeping as a technique. When a mutation will not terminate against a
+general property, the answer is a property narrow enough to isolate the thing
+being mutated -- not more wall clock, and not a claim asserted from reading the
+terms.
+
+Also worth noting: the assertion in that mutation script fired on its first
+run, catching sites that had NOT been replaced. They turned out to be inside a
+comment quoting the terms, so the assertion was over-strict rather than the
+substitution being wrong -- but that is the failure this session has hit
+repeatedly in the other direction, and the strict assertion cost one round trip
+where a weak one has repeatedly cost a false claim.
+
+31 wire-only lemmas. 60 Tamarin lemmas unbounded, 14 artifacts, all pass.

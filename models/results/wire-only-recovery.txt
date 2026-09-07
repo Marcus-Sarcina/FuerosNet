@@ -9614,7 +9614,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/recovery.spthy
 
-  processing time: 125.85s
+  processing time: 125.91s
   
   forging_a_recognition_needs_both_verifier_halves (all-traces): verified (400 steps)
   acceptance_requires_a_signed_match (all-traces): verified (115 steps)

@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 60 and seed 1690388117294063432 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 177161] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 126 and seed 7580527633741076490 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 179986] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/IssuerAuthorisation.tla
 Parsing file /tmp/FiniteSets.tla
 Parsing file /tmp/Naturals.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module IssuerAuthorisation
-Starting... (2026-09-07 12:52:10)
+Starting... (2026-09-07 13:18:08)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-07 12:52:10.
+Finished computing initial states: 1 distinct state generated at 2026-09-07 13:18:09.
 Error: Invariant NeverAcceptedOnALapsedAuthorisation is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -19,21 +19,21 @@ State 1: <Initial predicate>
 /\ everRecorded = (r1 :> (i1 :> {}))
 
 State 2: <Record line 55, col 3 to line 58, col 24 of module IssuerAuthorisation>
+/\ recorded = (r1 :> (i1 :> sibling))
+/\ badAccept = FALSE
+/\ everRecorded = (r1 :> (i1 :> {sibling}))
+
+State 3: <Record line 55, col 3 to line 58, col 24 of module IssuerAuthorisation>
 /\ recorded = (r1 :> (i1 :> patron))
 /\ badAccept = FALSE
-/\ everRecorded = (r1 :> (i1 :> {patron}))
-
-State 3: <Withdraw line 67, col 3 to line 69, col 42 of module IssuerAuthorisation>
-/\ recorded = (r1 :> (i1 :> "none"))
-/\ badAccept = FALSE
-/\ everRecorded = (r1 :> (i1 :> {patron}))
+/\ everRecorded = (r1 :> (i1 :> {patron, sibling}))
 
 State 4: <Accept line 77, col 3 to line 81, col 41 of module IssuerAuthorisation>
-/\ recorded = (r1 :> (i1 :> "none"))
+/\ recorded = (r1 :> (i1 :> patron))
 /\ badAccept = TRUE
-/\ everRecorded = (r1 :> (i1 :> {patron}))
+/\ everRecorded = (r1 :> (i1 :> {patron, sibling}))
 
 26 states generated, 12 distinct states found, 1 states left on queue.
 The depth of the complete state graph search is 4.
 The average outdegree of the complete state graph is 2 (minimum is 2, the maximum 2 and the 95th percentile is 2).
-Finished in 00s at (2026-09-07 12:52:10)
+Finished in 00s at (2026-09-07 13:18:09)

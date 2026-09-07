@@ -6216,6 +6216,51 @@ next
   qed
 qed
 
+lemma a_formation_signature_is_not_accepted_as_a_normal_record:
+  all-traces
+  "∀ P1 P2 cid #i.
+    ((RecordAccepted( P1, P2, 'none', cid ) @ #i) ∧
+     (¬(∃ A #k. Compromised( A ) @ #k))) ⇒
+    (∃ #a. (SignedBody( P1, P1, P2, 'none', cid ) @ #a) ∧ (#a < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ P1 P2 cid #i.
+  (RecordAccepted( P1, P2, 'none', cid ) @ #i)
+ ∧
+  (∀ A #k. (Compromised( A ) @ #k) ⇒ ⊥) ∧
+  (∀ #a. (SignedBody( P1, P1, P2, 'none', cid ) @ #a) ⇒ ¬(#a < #i))"
+*/
+simplify
+solve( !Kh( $P1, h(<pk(x), pk(x.1)>) ) ▶₀ #i )
+  case Register
+  solve( !Kh( $P2, h(<pk(x), pk(x.1)>) ) ▶₁ #i )
+    case Register
+    solve( !Kh( 'none', h(<pk(x), pk(x.1)>) ) ▶₂ #i )
+      case Register
+      solve( !KU( sign(<'rhtn/1:envelope', '0', $P1, $P2, 'none', cid>, ~skc)
+             ) @ #vk.15 )
+        case Participant_Sign_Without_Meeting
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_1
+        by contradiction /* from formulas */
+      next
+        case Participant_Sign_case_2
+        by contradiction /* from formulas */
+      next
+        case Witness_Sign
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~skc ) @ #vk.31 )
+          case Compromise_Classical
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+qed
+
 lemma formation_is_executable:
   exists-trace "∃ P1 P2 cid #i. FormationAccepted( P1, P2, cid ) @ #i"
 /*
@@ -6677,12 +6722,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/ceremony.spthy
 
-  processing time: 197.06s
+  processing time: 186.22s
   
   ceremony_is_executable (exists-trace): verified (18 steps)
   honest_ceremony_completes (exists-trace): verified (26 steps)
   honest_formation_completes (exists-trace): verified (21 steps)
   an_accepted_record_is_attributable (all-traces): verified (607 steps)
+  a_formation_signature_is_not_accepted_as_a_normal_record (all-traces): verified (11 steps)
   formation_is_executable (exists-trace): verified (13 steps)
   an_accepted_formation_is_attributable (all-traces): verified (114 steps)
 

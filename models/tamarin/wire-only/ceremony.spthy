@@ -462,6 +462,24 @@ lemma an_accepted_record_is_attributable:
              & (Ex #y. CompromisedPQ(W) @ #y & #y < #i) ) ) )"
 
 
+/*  THE SUBTYPE IS LOAD-BEARING, stated narrowly so it can actually be
+    mutation-tested.  `an_accepted_record_is_attributable` is the general
+    property, but mutating it does not terminate: removing the subtype makes
+    the presence and formation payload languages collide, which is exactly the
+    point and also what explodes the search.  This lemma pins the witness slot
+    to the value a formation carries there and drops the compromise
+    disjunctions, which is enough to expose the confusion cheaply.
+
+    With the subtype signed, a formation signature over
+    <'rhtn/1:envelope', <'1', P1, P2, 'none', cid>> cannot satisfy a normal
+    record's check over <'rhtn/1:envelope', <'0', P1, P2, W, cid>> -- the two
+    do not unify.  Remove the subtype and they do, at W = 'none'.          */
+lemma a_formation_signature_is_not_accepted_as_a_normal_record:
+  "All P1 P2 cid #i.
+     RecordAccepted(P1, P2, 'none', cid) @ #i
+     & not(Ex A #k. Compromised(A) @ #k)
+     ==> Ex #a. SignedBody(P1, P1, P2, 'none', cid) @ #a & #a < #i"
+
 /*  WHAT "EVERY PARTY IT NAMES" MEANS HERE, stated because the lemma above is
     easy to read as more than it is.
 
