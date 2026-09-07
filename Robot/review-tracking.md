@@ -6119,3 +6119,64 @@ subject now comes off the network.
 
 14 artifacts. 56 Tamarin lemmas unbounded (27 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 10 (2026-09-07)
+
+Static-only. Four findings, all verified, all applied, each mutation-tested.
+**Two were false claims I had written**, and those are the ones worth reading.
+
+**F2 (HIGH) -- the hybrid guard guarded one signer out of three, and a comment
+in the file said otherwise.** `Accept_Record` checks six signature components,
+and the comment beside them claimed dropping "any one of the six" falsifies
+`classical_compromise_alone_does_not_forge`. It does not: that lemma quantified
+only over `P1`. Verified by deleting P2's post-quantum check -- **every lemma
+stayed green.**
+
+The deeper fault was the carve-out. `an_accepted_record_is_attributable`
+excused a signer on `Compromised(A)`, and BOTH `Compromise_Classical` and
+`Compromise_PostQuantum` emit that event -- so compromising one half exempted
+that signer from attribution entirely, which is the exact opposite of what
+hybrid is for. Every carve-out in ceremony and recovery now requires BOTH
+halves. That single change guards all six checks, so
+`classical_compromise_alone_does_not_forge` was deleted as subsumed rather than
+repaired. Re-tested by deleting each of P1's, P2's and W's PQ check in turn:
+all three now falsify.
+
+**F1 (HIGH) -- Transfer was classical, and that was my error.** Last round I
+read the Recovery block's field-by-field hybrid decisions and generalised
+"field 7 stays classical" into leaving the transfer countersignature classical
+too. `wire-format.md` is explicit: Transfer field 2 is a `COSE_Sign` "for the
+same reason field 3 of Recovery" is one. The model admitted a transfer evidence
+gate after CLASSICAL-ONLY compromise of the former patron. Now hybrid;
+mutation-tested.
+
+**F3 (MEDIUM) -- the rotation check compared unlike terms.** `Distinct(pkOldC,
+newkey)` compared the prior identity's classical PUBLIC KEY with the successor,
+while `wire-format.md`'s rule -- "`prior_key` MUST differ from field 1" -- is
+between two KEYHASHES, an identity being the hash over its `KeyMaterial` pair.
+The check caught a successor equal to the old classical key, which is not the
+wire's case, and nothing in the theory stood for the old identity itself. `!Kh`
+now does. New lemma `a_recovery_never_installs_the_prior_identity`, falsified
+when the check is removed.
+
+**F4 (MEDIUM) -- the verifier response had no result, and the README claimed a
+field that is not modelled at all.** `wire-format.md` gives a response four
+results and requires "at least one actual `match`"; all four are signed by the
+same verifier over the same fields, so a validator taking any authentic
+response would accept a signed `no-match`. Now modelled, with
+`acceptance_requires_a_signed_match`. The README said "Recovery's field 7 is
+modelled classical" -- field 7 is not modelled, and the line is removed. What
+remains abstracted (`query_id`, field 7 consent, selection basis) is now stated
+as an assumption in both the file and the README, because no refinement
+argument establishes it.
+
+**A pattern worth naming.** Both false claims were about MUTATIONS AND
+COVERAGE, not about the protocol: a comment asserting a mutation I had not run,
+and a README sentence generalising from one signer to all. The lemmas were
+sound; the prose around them was not. Neither would have been caught by
+re-running the suite, because the suite was green in both cases.
+
+14 artifacts. 57 Tamarin lemmas unbounded (28 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.

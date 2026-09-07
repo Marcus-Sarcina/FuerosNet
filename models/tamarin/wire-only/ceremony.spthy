@@ -250,7 +250,11 @@ rule Accept_Record:
     , In(<'presence', $P1, $P2, $W, cid>)   // the record body, as received
     , In(<sig1c, sig1p>), In(<sig2c, sig2p>), In(<sigwc, sigwp>) ]
     // BOTH entries per logical signer.  Drop any one of the six and
-    // `classical_compromise_alone_does_not_forge` falsifies.
+    // `an_accepted_record_is_attributable` falsifies -- which is true only
+    // because its carve-out requires BOTH halves of a signer to be
+    // compromised.  An earlier version carved out on `Compromised(A)`, which
+    // either half emits, so dropping P2's or W's post-quantum check left
+    // every lemma green.  Verified: that mutation now falsifies.
   --[ Eq(verify(sig1c, <'presence', $P1, $P2, $W, cid>, c1), true)
     , Eq(verify(sig1p, <'presence', $P1, $P2, $W, cid>, q1), true)
     , Eq(verify(sig2c, <'presence', $P1, $P2, $W, cid>, c2), true)
@@ -422,24 +426,15 @@ lemma an_accepted_record_is_attributable:
   "All P1 P2 W cid #i.
      RecordAccepted(P1, P2, W, cid) @ #i
      ==> ( ( (Ex #a. SignedBody(P1, P1, P2, W, cid) @ #a & #a < #i)
-           | (Ex #k. Compromised(P1) @ #k & #k < #i) )
+           | ( (Ex #x. CompromisedClassical(P1) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P1) @ #y & #y < #i) ) )
          & ( (Ex #b. SignedBody(P2, P1, P2, W, cid) @ #b & #b < #i)
-           | (Ex #k. Compromised(P2) @ #k & #k < #i) )
+           | ( (Ex #x. CompromisedClassical(P2) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P2) @ #y & #y < #i) ) )
          & ( (Ex #w. SignedBody(W, P1, P2, W, cid) @ #w & #w < #i)
-           | (Ex #k. Compromised(W) @ #k & #k < #i) ) )"
+           | ( (Ex #x. CompromisedClassical(W) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(W) @ #y & #y < #i) ) ) )"
 
-
-/*  WHAT THE SECOND COMPONENT BUYS, and the reason it is worth two signatures
-    and 3.3 KB per signer.  An attacker holding only a party's CLASSICAL key
-    cannot put that party's name on an accepted record: the post-quantum entry
-    is missing and acceptance checks it.  This is the property a single
-    symbolic key could not express -- with one key and one compromise event,
-    "classical broken, post-quantum sound" is not a state.               */
-lemma classical_compromise_alone_does_not_forge:
-  "All P1 P2 W cid #i.
-     RecordAccepted(P1, P2, W, cid) @ #i
-     & not(Ex #k. CompromisedPQ(P1) @ #k)
-     ==> Ex #a. SignedBody(P1, P1, P2, W, cid) @ #a & #a < #i"
 
 /*  WHAT "EVERY PARTY IT NAMES" MEANS HERE, stated because the lemma above is
     easy to read as more than it is.
@@ -474,8 +469,10 @@ lemma an_accepted_formation_is_attributable:
   "All P1 P2 cid #i.
      FormationAccepted(P1, P2, cid) @ #i
      ==> ( ( (Ex #a. SignedFormation(P1, P1, P2, cid) @ #a & #a < #i)
-           | (Ex #k. Compromised(P1) @ #k & #k < #i) )
+           | ( (Ex #x. CompromisedClassical(P1) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P1) @ #y & #y < #i) ) )
          & ( (Ex #b. SignedFormation(P2, P1, P2, cid) @ #b & #b < #i)
-           | (Ex #k. Compromised(P2) @ #k & #k < #i) ) )"
+           | ( (Ex #x. CompromisedClassical(P2) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P2) @ #y & #y < #i) ) ) )"
 
 end

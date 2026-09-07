@@ -44,7 +44,7 @@ WHAT THIS FILE IS
 
 begin
 
-builtins: signing
+builtins: signing, hashing
 
 /*
 --------------------------------------------------------------------------------
@@ -82,10 +82,13 @@ builtins: signing
 
 rule Register:
     [ Fr(~skc), Fr(~skp) ]
-  --[ Reg($A), OnlyOnce($A) ]->
+  --[ Reg($A), OnlyOnce($A)
+    , IdentityIs($A, h(<pk(~skc), pk(~skp)>)) ]->
     [ !LtkC($A, ~skc), !LtkP($A, ~skp)
-    , !Pk($A, pk(~skc))                // the classical half, for field 7
+    , !Pk($A, pk(~skc))                // the classical half, where one is used
     , !PkC($A, pk(~skc)), !PkP($A, pk(~skp))
+    , !Kh($A, h(<pk(~skc), pk(~skp)>)) // AND THE IDENTITY ITSELF, which is the
+                                       //   keyhash over the pair (Section 2.2)
     , Out(<pk(~skc), pk(~skp)>) ]
 
 // Explicit key theft, stamped in the trace, as in attach.spthy.  This is
@@ -152,12 +155,13 @@ rule Compromise_PostQuantum:
     contribution and the reason a false recovery is a signed lie by a named
     party rather than an anonymous one.                                     */
 rule Recognise_Without_Meeting:
-    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp), In(<$S, newkey>) ]
+    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp), In(<$S, newkey, result>) ]
   --[ Recognised($V, $S), RecognisedFor($V, $S, newkey)
+    , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
-    [ Out(<'recognise', $S, newkey,
-           <sign(<'recognise', $S, newkey>, ~vsc),
-            sign(<'recognise', $S, newkey>, ~vsp)> >) ]
+    [ Out(<'recognise', $S, newkey, result,
+           <sign(<'recognise', $S, newkey, result>, ~vsc),
+            sign(<'recognise', $S, newkey, result>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -289,10 +293,11 @@ rule Recognise:
                                        //   came over the direct channel
   --[ Recognised($V, $S)
     , RecognisedFor($V, $S, newkey)
+    , RecognisedAs($V, $S, newkey, 'match')
     , HonestlyRecognised($V, $S, newkey) ]->
-    [ Out(<'recognise', $S, newkey,
-           <sign(<'recognise', $S, newkey>, ~vsc),
-            sign(<'recognise', $S, newkey>, ~vsp)> >) ]
+    [ Out(<'recognise', $S, newkey, 'match',
+           <sign(<'recognise', $S, newkey, 'match'>, ~vsc),
+            sign(<'recognise', $S, newkey, 'match'>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -331,18 +336,26 @@ rule Recognise:
     keyholder signing such a statement; what stops it mattering is the
     destination binding, which is what the lemma below tests.             */
 rule Transfer_Countersign:
-    [ !LtkC($Old, ~osk)                // the FORMER patron's key (classical)
+    [ !LtkC($Old, ~oc), !LtkP($Old, ~op)  // the former patron, both halves
     , In(nodekey)                      // ANY node it cares to name
     , !Pk($New, pkNew) ]               // a registered destination patron
   --[ CountersignedFor($Old, nodekey, $New) ]->
     [ Out(<'transfer', nodekey, $Old, $New,
-           sign(<'transfer', nodekey, $Old, $New>, ~osk)>) ]
+           <sign(<'transfer', nodekey, $Old, $New>, ~oc),
+            sign(<'transfer', nodekey, $Old, $New>, ~op)> >) ]
 
 rule Patron_Accept_Transfer:
     [ !LtkC($New, ~nsk)                         // the new patron signs the result
-    , !Pk($Old, pkOld)                          // the former patron's key
-    , In(<'transfer', nodekey, $Old, $New, prov>) ]
-  --[ Eq(verify(prov, <'transfer', nodekey, $Old, $New>, pkOld), true)
+    , !PkC($Old, pkOldTC), !PkP($Old, pkOldTP)  // the former patron, both halves
+    , In(<'transfer', nodekey, $Old, $New, <provC, provP>>) ]
+  --[ Eq(verify(provC, <'transfer', nodekey, $Old, $New>, pkOldTC), true)
+    , Eq(verify(provP, <'transfer', nodekey, $Old, $New>, pkOldTP), true)
+      // HYBRID, and this was wrong until 2026-09-07.  `wire-format.md` makes
+      // Transfer field 2 a `COSE_Sign` "for the same reason field 3 of
+      // Recovery" is one: the former patron is a hybrid identity and
+      // contributes both entries.  Modelled classical, the theory admitted a
+      // transfer evidence gate after CLASSICAL-ONLY compromise of the former
+      // patron -- weaker than the durable evidence it represents.
     , Distinct($Old, $New)                      // identical keys = no transfer
     , PatronAcceptedTransferEvidence($New, $Old, nodekey) ]->
     [ Out(sign(<'adopted', nodekey, $New>, ~nsk)) ]
@@ -350,18 +363,34 @@ rule Patron_Accept_Transfer:
 rule Patron_Accept_Recovery:
     [ !LtkC($P, ~psk)                           // patron's own key (classical)
     , !PkC($S, pkOldC), !PkP($S, pkOldP)        // the old identity, both halves
+    , !Kh($S, khOld)                            // and the old identity ITSELF
     , !PkC($V, pkVC),   !PkP($V, pkVP)          // the verifier, both halves
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
-    , In(<'recognise', $S, newkey, <provBc, provBp>>) ]  // factor b (field 9)
+    , In(<'recognise', $S, newkey, result, <provBc, provBp>>) ] // factor b
   --[ Eq(verify(provAc, <'rotate', $S, newkey, $P>, pkOldC), true)
     , Eq(verify(provAp, <'rotate', $S, newkey, $P>, pkOldP), true)
-    , Eq(verify(provBc, <'recognise', $S, newkey>, pkVC), true)
-    , Eq(verify(provBp, <'recognise', $S, newkey>, pkVP), true)
+    , Eq(verify(provBc, <'recognise', $S, newkey, result>, pkVC), true)
+    , Eq(verify(provBp, <'recognise', $S, newkey, result>, pkVP), true)
+    , Eq(result, 'match')              // `wire-format.md`: a Recovery needs at
+                                       //   least one actual `match`; the other
+                                       //   results -- no-match, inconclusive,
+                                       //   unavailable -- are signed responses
+                                       //   too, and a validator that took any
+                                       //   signed response would accept them
     , Distinct($V, $S)                          // the verifier is NOT the subject
     , Distinct($P, $S)                          // nor is the patron the subject
-    , Distinct(pkOldC, newkey)                  // and the rotation is real
+    , Distinct(khOld, newkey)                   // and the rotation is real
 
-/*  WHAT THESE CHECKS ARE AND ARE NOT.  `wire-format.md` 4.1 requires two
+/*  THE ROTATION CHECK COMPARES KEYHASHES, and until 2026-09-07 it did not.
+    `wire-format.md`: "`prior_key` MUST differ from field 1", and both fields
+    are KEYHASHES -- an identity IS the hash over its `KeyMaterial` pair.  The
+    check here was `Distinct(pkOldC, newkey)`, comparing the prior identity's
+    CLASSICAL PUBLIC KEY with the successor.  That catches a successor equal
+    to the old classical key, which is not the wire's case; the wire's case is
+    a successor equal to the old IDENTITY, and no term in the theory stood for
+    that.  `!Kh` now does, and the comparison is keyhash to keyhash.
+
+    WHAT THESE CHECKS ARE AND ARE NOT.  `wire-format.md` 4.1 requires two
     inequalities of a recovery adoption: "The node and the patron MUST
     differ", where the node is FIELD 1 -- the NEW key -- and "`prior_key`
     MUST differ from field 1".
@@ -455,6 +484,37 @@ lemma forging_a_recognition_needs_both_verifier_halves:
      & not(Ex #k. CompromisedPQ(V) @ #k)
      ==> Ex #b. RecognisedFor(V, S, newkey) @ #b & #b < #i"
 
+/*  A SIGNED RESPONSE IS NOT A SIGNED MATCH.  `wire-format.md` gives a
+    verifier response four possible results -- `match`, `no-match`,
+    `inconclusive`, `unavailable` -- and a Recovery "needs at least one actual
+    `match`".  All four are signed by the same verifier over the same fields,
+    so a validator that accepted any authentic response would accept a signed
+    `no-match`.  Delete `Eq(result, 'match')` and this falsifies.
+
+    WHAT IS STILL ABSTRACTED, said plainly: the response's `query_id`, its
+    field 7 subject-consent signature, and the selection basis are NOT
+    modelled.  Entering this theory therefore assumes a `recognise` term is
+    only ever built from a wire `VerifierResponse` whose consent and
+    consistency checks already passed.  No refinement argument establishes
+    that assumption; it is an assumption.                                   */
+lemma acceptance_requires_a_signed_match:
+  "All P S newkey V #i.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & ReliedOn(P, V, S) @ #i
+     ==> ( (Ex #b. RecognisedAs(V, S, newkey, 'match') @ #b & #b < #i)
+         | ( (Ex #x. CompromisedClassical(V) @ #x & #x < #i)
+           & (Ex #y. CompromisedPQ(V) @ #y & #y < #i) ) )"
+
+/*  THE ROTATION IS REAL.  A recovery never installs the identity it is
+    recovering FROM -- `wire-format.md`: "`prior_key` MUST differ from field
+    1 ... identical keys represent no rotation".  Delete `Distinct(khOld,
+    newkey)` from Patron_Accept_Recovery and this falsifies.              */
+lemma a_recovery_never_installs_the_prior_identity:
+  "All P S newkey #i #r.
+     PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
+     & IdentityIs(S, newkey) @ #r
+     ==> F"
+
 /*  THIS MUST TIE THE MEETING TO THE KEY THAT WAS RECOVERED, and an earlier
     version did not.  It asked only for SOME meeting before SOME acceptance,
     which `Recognise_Without_Meeting` satisfies trivially: hold a meeting with
@@ -522,8 +582,10 @@ lemma recognition_binds_the_successor:
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex V #b. RecognisedFor(V, S, newkey) @ #b & #b < #i)
          | (Ex V #kv. ReliedOn(P, V, S) @ #i
-                    & Compromised(V) @ #kv & #kv < #i)
-         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
+                    & CompromisedClassical(V) @ #kv & #kv < #i
+                    & (Ex #ky. CompromisedPQ(V) @ #ky & #ky < #i))
+         | ( (Ex #x. CompromisedClassical(P) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P) @ #y & #y < #i) ) )"
 
 // THE PATRON BINDING IS LOAD-BEARING TOO.  Every accepted recovery rests on
 // an old-key proof naming THE ACCEPTING PATRON.  Drop the third element of
@@ -533,8 +595,10 @@ lemma successor_statement_binds_the_patron:
   "All P S newkey #i.
      PatronAcceptedRecoveryEvidence(P, S, newkey) @ #i
      ==> ( (Ex #a. OldKeyProofFor(S, newkey, P) @ #a & #a < #i)
-         | (Ex #c. Compromised(S) @ #c & #c < #i)
-         | (Ex #kp. Compromised(P) @ #kp & #kp < #i) )"
+         | ( (Ex #x. CompromisedClassical(S) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(S) @ #y & #y < #i) )
+         | ( (Ex #x. CompromisedClassical(P) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(P) @ #y & #y < #i) ) )"
 
 // THE TRANSFER STATEMENT BINDS ITS DESTINATION.  Every accepted transfer rests
 // on a countersignature naming THIS new patron -- so one countersignature does
@@ -545,6 +609,7 @@ lemma transfer_statement_binds_the_destination:
   "All New Old nodekey #i.
      PatronAcceptedTransferEvidence(New, Old, nodekey) @ #i
      ==> ( (Ex #a. CountersignedFor(Old, nodekey, New) @ #a & #a < #i)
-         | (Ex #k. Compromised(Old) @ #k & #k < #i) )"
+         | ( (Ex #x. CompromisedClassical(Old) @ #x & #x < #i)
+             & (Ex #y. CompromisedPQ(Old) @ #y & #y < #i) ) )"
 
 end

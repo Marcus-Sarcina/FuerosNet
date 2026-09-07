@@ -2393,104 +2393,57 @@ lemma an_accepted_record_is_attributable:
   "∀ P1 P2 W cid #i.
     (RecordAccepted( P1, P2, W, cid ) @ #i) ⇒
     ((((∃ #a. (SignedBody( P1, P1, P2, W, cid ) @ #a) ∧ (#a < #i)) ∨
-       (∃ #k. (Compromised( P1 ) @ #k) ∧ (#k < #i))) ∧
+       ((∃ #x. (CompromisedClassical( P1 ) @ #x) ∧ (#x < #i)) ∧
+        (∃ #y. (CompromisedPQ( P1 ) @ #y) ∧ (#y < #i)))) ∧
       ((∃ #b. (SignedBody( P2, P1, P2, W, cid ) @ #b) ∧ (#b < #i)) ∨
-       (∃ #k. (Compromised( P2 ) @ #k) ∧ (#k < #i)))) ∧
+       ((∃ #x. (CompromisedClassical( P2 ) @ #x) ∧ (#x < #i)) ∧
+        (∃ #y. (CompromisedPQ( P2 ) @ #y) ∧ (#y < #i))))) ∧
      ((∃ #w. (SignedBody( W, P1, P2, W, cid ) @ #w) ∧ (#w < #i)) ∨
-      (∃ #k. (Compromised( W ) @ #k) ∧ (#k < #i))))"
+      ((∃ #x. (CompromisedClassical( W ) @ #x) ∧ (#x < #i)) ∧
+       (∃ #y. (CompromisedPQ( W ) @ #y) ∧ (#y < #i)))))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P1 P2 W cid #i.
   (RecordAccepted( P1, P2, W, cid ) @ #i)
  ∧
   (((∀ #a. (SignedBody( P1, P1, P2, W, cid ) @ #a) ⇒ ¬(#a < #i)) ∧
-    (∀ #k. (Compromised( P1 ) @ #k) ⇒ ¬(#k < #i))) ∨
+    (((∀ #x. (CompromisedClassical( P1 ) @ #x) ⇒ ¬(#x < #i)) ∨
+      (∀ #y. (CompromisedPQ( P1 ) @ #y) ⇒ ¬(#y < #i))))) ∨
    ((∀ #b. (SignedBody( P2, P1, P2, W, cid ) @ #b) ⇒ ¬(#b < #i)) ∧
-    (∀ #k. (Compromised( P2 ) @ #k) ⇒ ¬(#k < #i))) ∨
+    (((∀ #x. (CompromisedClassical( P2 ) @ #x) ⇒ ¬(#x < #i)) ∨
+      (∀ #y. (CompromisedPQ( P2 ) @ #y) ⇒ ¬(#y < #i))))) ∨
    ((∀ #w. (SignedBody( W, P1, P2, W, cid ) @ #w) ⇒ ¬(#w < #i)) ∧
-    (∀ #k. (Compromised( W ) @ #k) ⇒ ¬(#k < #i))))"
+    (((∀ #x. (CompromisedClassical( W ) @ #x) ⇒ ¬(#x < #i)) ∨
+      (∀ #y. (CompromisedPQ( W ) @ #y) ⇒ ¬(#y < #i))))))"
 */
 simplify
 solve( ((∀ #a.
           (SignedBody( $P1, $P1, $P2, $W, cid ) @ #a) ⇒ ¬(#a < #i)) ∧
-        (∀ #k. (Compromised( $P1 ) @ #k) ⇒ ¬(#k < #i)))  ∥
+        (((∀ #x. (CompromisedClassical( $P1 ) @ #x) ⇒ ¬(#x < #i)) ∨
+          (∀ #y. (CompromisedPQ( $P1 ) @ #y) ⇒ ¬(#y < #i)))))  ∥
        ((∀ #b. (SignedBody( $P2, $P1, $P2, $W, cid ) @ #b) ⇒ ¬(#b < #i)) ∧
-        (∀ #k. (Compromised( $P2 ) @ #k) ⇒ ¬(#k < #i)))  ∥
+        (((∀ #x. (CompromisedClassical( $P2 ) @ #x) ⇒ ¬(#x < #i)) ∨
+          (∀ #y. (CompromisedPQ( $P2 ) @ #y) ⇒ ¬(#y < #i)))))  ∥
        ((∀ #w. (SignedBody( $W, $P1, $P2, $W, cid ) @ #w) ⇒ ¬(#w < #i)) ∧
-        (∀ #k. (Compromised( $W ) @ #k) ⇒ ¬(#k < #i))) )
+        (((∀ #x. (CompromisedClassical( $W ) @ #x) ⇒ ¬(#x < #i)) ∨
+          (∀ #y. (CompromisedPQ( $W ) @ #y) ⇒ ¬(#y < #i))))) )
   case case_1
-  solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-    case Register
-    solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+  solve( (∀ #x. (CompromisedClassical( $P1 ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( $P1 ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
       case Register
-      solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
         case Register
-        solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
           case Register
-          solve( !PkC( $W, pk(x) ) ▶₄ #i )
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
             case Register
-            solve( !PkP( $W, pk(x) ) ▶₅ #i )
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
               case Register
-              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
-                case Participant_Sign_Without_Meeting
-                by contradiction /* from formulas */
-              next
-                case Participant_Sign_case_1
-                by contradiction /* from formulas */
-              next
-                case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Witness_Sign
-                by contradiction /* from formulas */
-              next
-                case c_sign
-                solve( !KU( ~skc ) @ #vk.18 )
-                  case Compromise_Classical
-                  by contradiction /* from formulas */
-                qed
-              qed
-            qed
-          qed
-        qed
-      qed
-    qed
-  qed
-next
-  case case_2
-  solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-    case Register
-    solve( !PkP( $P1, pk(x) ) ▶₁ #i )
-      case Register
-      solve( !PkC( $P2, pk(x) ) ▶₂ #i )
-        case Register
-        solve( !PkP( $P2, pk(x) ) ▶₃ #i )
-          case Register
-          solve( !PkC( $W, pk(x) ) ▶₄ #i )
-            case Register
-            solve( !PkP( $W, pk(x) ) ▶₅ #i )
-              case Register
-              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
-                case Participant_Sign_Without_Meeting
-                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
-                  case Participant_Sign
-                  by contradiction /* from formulas */
-                next
-                  case Participant_Sign_Without_Meeting
-                  by contradiction /* from formulas */
-                next
-                  case Witness_Sign
-                  by contradiction /* from formulas */
-                next
-                  case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.18 )
-                    case Compromise_Classical
-                    by contradiction /* from formulas */
-                  qed
-                qed
-              next
-                case Participant_Sign_case_1
-                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
                   case Participant_Sign_Without_Meeting
                   by contradiction /* from formulas */
                 next
@@ -2504,57 +2457,118 @@ next
                   by contradiction /* from formulas */
                 next
                   case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.18 )
+                  solve( !KU( ~skc ) @ #vk.18 )
                     case Compromise_Classical
                     by contradiction /* from formulas */
                   qed
                 qed
-              next
-                case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Witness_Sign
-                by contradiction /* from formulas */
-              next
-                case c_sign
-                solve( !KU( ~skc ) @ #vk.18 )
-                  case Compromise_Classical
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
-                    case Participant_Sign_Without_Meeting
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
-                      case Participant_Sign
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
+                  case Participant_Sign_Without_Meeting
+                  by contradiction /* from formulas */
+                next
+                  case Participant_Sign_case_1
+                  by contradiction /* from formulas */
+                next
+                  case Participant_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skc ) @ #vk.18 )
+                    case Compromise_Classical
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+                      case Participant_Sign_Without_Meeting
                       by contradiction /* from formulas */
                     next
-                      case Participant_Sign_Without_Meeting
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
                       by contradiction /* from formulas */
                     next
                       case Witness_Sign
                       by contradiction /* from formulas */
                     next
                       case c_sign
-                      solve( !KU( ~skc.1 ) @ #vk.19 )
-                        case Compromise_Classical
+                      solve( !KU( ~skp ) @ #vk.19 )
+                        case Compromise_PostQuantum
                         by contradiction /* from formulas */
                       qed
                     qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( (∀ #x. (CompromisedClassical( $P2 ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( $P2 ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
+                  case Participant_Sign_Without_Meeting
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_1
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign_Without_Meeting
+                    by contradiction /* from formulas */
                   next
                     case Participant_Sign_case_1
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
-                      case Participant_Sign
-                      by contradiction /* from formulas */
-                    next
-                      case Participant_Sign_Without_Meeting
-                      by contradiction /* from formulas */
-                    next
-                      case Witness_Sign
-                      by contradiction /* from formulas */
-                    next
-                      case c_sign
-                      solve( !KU( ~skc.1 ) @ #vk.19 )
-                        case Compromise_Classical
-                        by contradiction /* from formulas */
-                      qed
-                    qed
+                    by contradiction /* from formulas */
                   next
                     case Participant_Sign_case_2
                     by contradiction /* from formulas */
@@ -2563,9 +2577,24 @@ next
                     by contradiction /* from formulas */
                   next
                     case c_sign
-                    solve( !KU( ~skp ) @ #vk.19 )
-                      case Compromise_PostQuantum
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skc ) @ #vk.18 )
+                    case Compromise_Classical
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+                      case Participant_Sign_Without_Meeting
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
                         case Participant_Sign
                         by contradiction /* from formulas */
                       next
@@ -2576,9 +2605,267 @@ next
                         by contradiction /* from formulas */
                       next
                         case c_sign
-                        solve( !KU( ~skc.1 ) @ #vk.20 )
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
                           case Compromise_Classical
                           by contradiction /* from formulas */
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_1
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Participant_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
+                          case Compromise_Classical
+                          by contradiction /* from formulas */
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skp ) @ #vk.19 )
+                        case Compromise_PostQuantum
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.1 ) @ #vk.20 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
+                  case Participant_Sign_Without_Meeting
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Participant_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          by contradiction /* from formulas */
+                        qed
+                      qed
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_1
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_1
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_2
+                    by contradiction /* from formulas */
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Participant_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          by contradiction /* from formulas */
+                        qed
+                      qed
+                    qed
+                  qed
+                next
+                  case Participant_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skc ) @ #vk.18 )
+                    case Compromise_Classical
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+                      case Participant_Sign_Without_Meeting
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Participant_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
+                          case Compromise_Classical
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              by contradiction /* from formulas */
+                            qed
+                          qed
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_1
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Participant_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
+                          case Compromise_Classical
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_case_1
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_case_2
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              by contradiction /* from formulas */
+                            qed
+                          qed
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skp ) @ #vk.19 )
+                        case Compromise_PostQuantum
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.1 ) @ #vk.20 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.17 )
+                              case Participant_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.1 ) @ #vk.21 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
                         qed
                       qed
                     qed
@@ -2593,98 +2880,66 @@ next
   qed
 next
   case case_3
-  solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-    case Register
-    solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+  solve( (∀ #x. (CompromisedClassical( $W ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( $W ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
       case Register
-      solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
         case Register
-        solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
           case Register
-          solve( !PkC( $W, pk(x) ) ▶₄ #i )
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
             case Register
-            solve( !PkP( $W, pk(x) ) ▶₅ #i )
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
               case Register
-              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
-                case Participant_Sign_Without_Meeting
-                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
-                  case Participant_Sign
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
-                    case Participant_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case Participant_Sign_Without_Meeting
-                    by contradiction /* from formulas */
-                  next
-                    case Witness_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case c_sign
-                    solve( !KU( ~skc.2 ) @ #vk.18 )
-                      case Compromise_Classical
-                      by contradiction /* from formulas */
-                    qed
-                  qed
-                next
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
                   case Participant_Sign_Without_Meeting
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.16 )
-                    case Participant_Sign_Without_Meeting
-                    by contradiction /* from formulas */
-                  next
-                    case Witness_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case c_sign
-                    solve( !KU( ~skc.2 ) @ #vk.18 )
-                      case Compromise_Classical
-                      by contradiction /* from formulas */
-                    qed
-                  qed
-                next
-                  case Witness_Sign
-                  by contradiction /* from formulas */
-                next
-                  case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.18 )
-                    case Compromise_Classical
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.15 )
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
                       case Participant_Sign
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
+                      by contradiction /* from formulas */
                     next
                       case Participant_Sign_Without_Meeting
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
+                      by contradiction /* from formulas */
                     next
                       case Witness_Sign
                       by contradiction /* from formulas */
                     next
                       case c_sign
-                      solve( !KU( ~skp.1 ) @ #vk.19 )
-                        case Compromise_PostQuantum
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Participant_Sign_Without_Meeting
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
                           case Participant_Sign_Without_Meeting
                           by contradiction /* from formulas */
                         next
@@ -2692,110 +2947,104 @@ next
                           by contradiction /* from formulas */
                         next
                           case c_sign
-                          solve( !KU( ~skc.2 ) @ #vk.20 )
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
                             case Compromise_Classical
                             by contradiction /* from formulas */
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              by contradiction /* from formulas */
+                            qed
                           qed
                         qed
                       qed
                     qed
                   qed
-                qed
-              next
-                case Participant_Sign_case_1
-                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
-                  case Participant_Sign_Without_Meeting
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
-                    case Participant_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case Participant_Sign_Without_Meeting
-                    by contradiction /* from formulas */
-                  next
-                    case Witness_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case c_sign
-                    solve( !KU( ~skc.2 ) @ #vk.18 )
-                      case Compromise_Classical
-                      by contradiction /* from formulas */
-                    qed
-                  qed
                 next
                   case Participant_Sign_case_1
-                  by contradiction /* from formulas */
-                next
-                  case Participant_Sign_case_2
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
                     case Participant_Sign_Without_Meeting
-                    by contradiction /* from formulas */
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        by contradiction /* from formulas */
+                      qed
+                    qed
                   next
                     case Participant_Sign_case_1
                     by contradiction /* from formulas */
                   next
                     case Participant_Sign_case_2
-                    by contradiction /* from formulas */
-                  next
-                    case Witness_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case c_sign
-                    solve( !KU( ~skc.2 ) @ #vk.18 )
-                      case Compromise_Classical
-                      by contradiction /* from formulas */
-                    qed
-                  qed
-                next
-                  case Witness_Sign
-                  by contradiction /* from formulas */
-                next
-                  case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.18 )
-                    case Compromise_Classical
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.15 )
-                      case Participant_Sign
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
-                    next
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
                       case Participant_Sign_Without_Meeting
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
                     next
                       case Witness_Sign
                       by contradiction /* from formulas */
                     next
                       case c_sign
-                      solve( !KU( ~skp.1 ) @ #vk.19 )
-                        case Compromise_PostQuantum
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
                           case Participant_Sign
                           by contradiction /* from formulas */
                         next
@@ -2806,70 +3055,277 @@ next
                           by contradiction /* from formulas */
                         next
                           case c_sign
-                          solve( !KU( ~skc.2 ) @ #vk.20 )
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
                             case Compromise_Classical
                             by contradiction /* from formulas */
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              by contradiction /* from formulas */
+                            qed
                           qed
                         qed
                       qed
                     qed
                   qed
-                qed
-              next
-                case Participant_Sign_case_2
-                by contradiction /* from formulas */
-              next
-                case Witness_Sign
-                by contradiction /* from formulas */
-              next
-                case c_sign
-                solve( !KU( ~skc ) @ #vk.18 )
-                  case Compromise_Classical
-                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
-                    case Participant_Sign_Without_Meeting
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
-                      case Participant_Sign
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                next
+                  case Participant_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case Witness_Sign
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skc ) @ #vk.18 )
+                    case Compromise_Classical
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+                      case Participant_Sign_Without_Meeting
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
                         case Participant_Sign
-                        by contradiction /* from formulas */
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
                       next
                         case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
                       next
                         case Witness_Sign
                         by contradiction /* from formulas */
                       next
                         case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
                           case Compromise_Classical
-                          by contradiction /* from formulas */
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          next
+                            case Participant_Sign_Without_Meeting
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
                         qed
                       qed
                     next
-                      case Participant_Sign_Without_Meeting
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
+                      case Participant_Sign_case_1
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      next
                         case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            by contradiction /* from formulas */
+                          qed
+                        qed
                       next
                         case Witness_Sign
                         by contradiction /* from formulas */
                       next
                         case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
                           case Compromise_Classical
-                          by contradiction /* from formulas */
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign_Without_Meeting
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          next
+                            case Participant_Sign_case_1
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_case_2
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
                         qed
                       qed
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
                     next
                       case Witness_Sign
                       by contradiction /* from formulas */
                     next
                       case c_sign
-                      solve( !KU( ~skc.1 ) @ #vk.19 )
-                        case Compromise_Classical
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.16 )
+                      solve( !KU( ~skp ) @ #vk.19 )
+                        case Compromise_PostQuantum
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
                           case Participant_Sign
                           solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign
+                            by contradiction /* from formulas */
+                          next
                             case Participant_Sign_Without_Meeting
                             by contradiction /* from formulas */
                           next
@@ -2902,212 +3358,11 @@ next
                           by contradiction /* from formulas */
                         next
                           case c_sign
-                          solve( !KU( ~skp.1 ) @ #vk.20 )
-                            case Compromise_PostQuantum
-                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
-                              case Participant_Sign_Without_Meeting
-                              by contradiction /* from formulas */
-                            next
-                              case Witness_Sign
-                              by contradiction /* from formulas */
-                            next
-                              case c_sign
-                              solve( !KU( ~skc.2 ) @ #vk.21 )
-                                case Compromise_Classical
-                                by contradiction /* from formulas */
-                              qed
-                            qed
-                          qed
-                        qed
-                      qed
-                    qed
-                  next
-                    case Participant_Sign_case_1
-                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
-                      case Participant_Sign
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
-                    next
-                      case Participant_Sign_Without_Meeting
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
-                        case Participant_Sign_Without_Meeting
-                        by contradiction /* from formulas */
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.2 ) @ #vk.19 )
-                          case Compromise_Classical
-                          by contradiction /* from formulas */
-                        qed
-                      qed
-                    next
-                      case Witness_Sign
-                      by contradiction /* from formulas */
-                    next
-                      case c_sign
-                      solve( !KU( ~skc.1 ) @ #vk.19 )
-                        case Compromise_Classical
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.16 )
-                          case Participant_Sign_Without_Meeting
-                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
-                            case Participant_Sign_Without_Meeting
-                            by contradiction /* from formulas */
-                          next
-                            case Witness_Sign
-                            by contradiction /* from formulas */
-                          next
-                            case c_sign
-                            solve( !KU( ~skc.2 ) @ #vk.20 )
-                              case Compromise_Classical
-                              by contradiction /* from formulas */
-                            qed
-                          qed
-                        next
-                          case Participant_Sign_case_1
-                          by contradiction /* from formulas */
-                        next
-                          case Participant_Sign_case_2
-                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
-                            case Participant_Sign_Without_Meeting
-                            by contradiction /* from formulas */
-                          next
-                            case Witness_Sign
-                            by contradiction /* from formulas */
-                          next
-                            case c_sign
-                            solve( !KU( ~skc.2 ) @ #vk.20 )
-                              case Compromise_Classical
-                              by contradiction /* from formulas */
-                            qed
-                          qed
-                        next
-                          case Witness_Sign
-                          by contradiction /* from formulas */
-                        next
-                          case c_sign
-                          solve( !KU( ~skp.1 ) @ #vk.20 )
-                            case Compromise_PostQuantum
-                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
-                              case Participant_Sign_Without_Meeting
-                              by contradiction /* from formulas */
-                            next
-                              case Witness_Sign
-                              by contradiction /* from formulas */
-                            next
-                              case c_sign
-                              solve( !KU( ~skc.2 ) @ #vk.21 )
-                                case Compromise_Classical
-                                by contradiction /* from formulas */
-                              qed
-                            qed
-                          qed
-                        qed
-                      qed
-                    qed
-                  next
-                    case Participant_Sign_case_2
-                    by contradiction /* from formulas */
-                  next
-                    case Witness_Sign
-                    by contradiction /* from formulas */
-                  next
-                    case c_sign
-                    solve( !KU( ~skp ) @ #vk.19 )
-                      case Compromise_PostQuantum
-                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
-                        case Participant_Sign
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
-                          case Participant_Sign
-                          by contradiction /* from formulas */
-                        next
-                          case Participant_Sign_Without_Meeting
-                          by contradiction /* from formulas */
-                        next
-                          case Witness_Sign
-                          by contradiction /* from formulas */
-                        next
-                          case c_sign
-                          solve( !KU( ~skc.2 ) @ #vk.20 )
+                          solve( !KU( ~skc.1 ) @ #vk.20 )
                             case Compromise_Classical
-                            by contradiction /* from formulas */
-                          qed
-                        qed
-                      next
-                        case Participant_Sign_Without_Meeting
-                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
-                          case Participant_Sign_Without_Meeting
-                          by contradiction /* from formulas */
-                        next
-                          case Witness_Sign
-                          by contradiction /* from formulas */
-                        next
-                          case c_sign
-                          solve( !KU( ~skc.2 ) @ #vk.20 )
-                            case Compromise_Classical
-                            by contradiction /* from formulas */
-                          qed
-                        qed
-                      next
-                        case Witness_Sign
-                        by contradiction /* from formulas */
-                      next
-                        case c_sign
-                        solve( !KU( ~skc.1 ) @ #vk.20 )
-                          case Compromise_Classical
-                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.17 )
-                            case Participant_Sign
-                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
-                              case Participant_Sign_Without_Meeting
-                              by contradiction /* from formulas */
-                            next
-                              case Witness_Sign
-                              by contradiction /* from formulas */
-                            next
-                              case c_sign
-                              solve( !KU( ~skc.2 ) @ #vk.21 )
-                                case Compromise_Classical
-                                by contradiction /* from formulas */
-                              qed
-                            qed
-                          next
-                            case Participant_Sign_Without_Meeting
-                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
-                              case Participant_Sign_Without_Meeting
-                              by contradiction /* from formulas */
-                            next
-                              case Witness_Sign
-                              by contradiction /* from formulas */
-                            next
-                              case c_sign
-                              solve( !KU( ~skc.2 ) @ #vk.21 )
-                                case Compromise_Classical
-                                by contradiction /* from formulas */
-                              qed
-                            qed
-                          next
-                            case Witness_Sign
-                            by contradiction /* from formulas */
-                          next
-                            case c_sign
-                            solve( !KU( ~skp.1 ) @ #vk.21 )
-                              case Compromise_PostQuantum
-                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.20 )
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.17 )
+                              case Participant_Sign
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
                                 case Participant_Sign_Without_Meeting
                                 by contradiction /* from formulas */
                               next
@@ -3115,9 +3370,45 @@ next
                                 by contradiction /* from formulas */
                               next
                                 case c_sign
-                                solve( !KU( ~skc.2 ) @ #vk.22 )
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
                                   case Compromise_Classical
                                   by contradiction /* from formulas */
+                                qed
+                              qed
+                            next
+                              case Participant_Sign_Without_Meeting
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.1 ) @ #vk.21 )
+                                case Compromise_PostQuantum
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.20 )
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skc.2 ) @ #vk.22 )
+                                    case Compromise_Classical
+                                    by contradiction /* from formulas */
+                                  qed
                                 qed
                               qed
                             qed
@@ -3133,58 +3424,356 @@ next
         qed
       qed
     qed
-  qed
-qed
-
-lemma classical_compromise_alone_does_not_forge:
-  all-traces
-  "∀ P1 P2 W cid #i.
-    ((RecordAccepted( P1, P2, W, cid ) @ #i) ∧
-     (¬(∃ #k. CompromisedPQ( P1 ) @ #k))) ⇒
-    (∃ #a. (SignedBody( P1, P1, P2, W, cid ) @ #a) ∧ (#a < #i))"
-/*
-guarded formula characterizing all counter-examples:
-"∃ P1 P2 W cid #i.
-  (RecordAccepted( P1, P2, W, cid ) @ #i)
- ∧
-  (∀ #k. (CompromisedPQ( P1 ) @ #k) ⇒ ⊥) ∧
-  (∀ #a. (SignedBody( P1, P1, P2, W, cid ) @ #a) ⇒ ¬(#a < #i))"
-*/
-simplify
-solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-  case Register
-  solve( !PkP( $P1, pk(x) ) ▶₁ #i )
-    case Register
-    solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+  next
+    case case_2
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
       case Register
-      solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
         case Register
-        solve( !PkC( $W, pk(x) ) ▶₄ #i )
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
           case Register
-          solve( !PkP( $W, pk(x) ) ▶₅ #i )
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
             case Register
-            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
-              case Participant_Sign_Without_Meeting
-              by contradiction /* from formulas */
-            next
-              case Participant_Sign_case_1
-              by contradiction /* from formulas */
-            next
-              case Participant_Sign_case_2
-              by contradiction /* from formulas */
-            next
-              case Witness_Sign
-              by contradiction /* from formulas */
-            next
-              case c_sign
-              solve( !KU( ~skc ) @ #vk.18 )
-                case Compromise_Classical
-                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+            solve( !PkC( $W, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !PkP( $W, pk(x) ) ▶₅ #i )
+                case Register
+                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc) ) @ #vk.10 )
                   case Participant_Sign_Without_Meeting
-                  by contradiction /* from formulas */
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.18 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skp.2 ) @ #vk.19 )
+                            case Compromise_PostQuantum
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
+                    qed
+                  next
+                    case Participant_Sign_Without_Meeting
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.18 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skp.2 ) @ #vk.19 )
+                            case Compromise_PostQuantum
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.20 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skp.2 ) @ #vk.21 )
+                                  case Compromise_PostQuantum
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
                 next
                   case Participant_Sign_case_1
-                  by contradiction /* from formulas */
+                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.13 )
+                    case Participant_Sign_Without_Meeting
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.18 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skp.2 ) @ #vk.19 )
+                            case Compromise_PostQuantum
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
+                    qed
+                  next
+                    case Participant_Sign_case_1
+                    by contradiction /* from formulas */
+                  next
+                    case Participant_Sign_case_2
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.16 )
+                      case Participant_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_1
+                      by contradiction /* from formulas */
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.2 ) @ #vk.18 )
+                        case Compromise_Classical
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.18 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skp.2 ) @ #vk.19 )
+                            case Compromise_PostQuantum
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
+                    qed
+                  next
+                    case Witness_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.18 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.15 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.19 )
+                          case Compromise_PostQuantum
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.20 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skp.2 ) @ #vk.21 )
+                                  case Compromise_PostQuantum
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
                 next
                   case Participant_Sign_case_2
                   by contradiction /* from formulas */
@@ -3193,9 +3782,513 @@ solve( !PkC( $P1, pk(x) ) ▶₀ #i )
                   by contradiction /* from formulas */
                 next
                   case c_sign
-                  solve( !KU( ~skp ) @ #vk.19 )
-                    case Compromise_PostQuantum
-                    by contradiction /* from formulas */
+                  solve( !KU( ~skc ) @ #vk.18 )
+                    case Compromise_Classical
+                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp) ) @ #vk.12 )
+                      case Participant_Sign_Without_Meeting
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
+                          case Compromise_Classical
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.20 )
+                                  case Participant_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skp.2 ) @ #vk.21 )
+                                    case Compromise_PostQuantum
+                                    by contradiction /* from formulas */
+                                  qed
+                                qed
+                              qed
+                            qed
+                          next
+                            case Participant_Sign_Without_Meeting
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.20 )
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skp.2 ) @ #vk.21 )
+                                    case Compromise_PostQuantum
+                                    by contradiction /* from formulas */
+                                  qed
+                                qed
+                              qed
+                            qed
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.21 )
+                                    case Participant_Sign_Without_Meeting
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Witness_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case c_sign
+                                    solve( !KU( ~skp.2 ) @ #vk.22 )
+                                      case Compromise_PostQuantum
+                                      by contradiction /* from formulas */
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_1
+                      solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.1) ) @ #vk.14 )
+                        case Participant_Sign
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Participant_Sign_Without_Meeting
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.17 )
+                          case Participant_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.2 ) @ #vk.19 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.19 )
+                              case Participant_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.2 ) @ #vk.20 )
+                                case Compromise_PostQuantum
+                                by contradiction /* from formulas */
+                              qed
+                            qed
+                          qed
+                        qed
+                      next
+                        case Witness_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skc.1 ) @ #vk.19 )
+                          case Compromise_Classical
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.1) ) @ #vk.16 )
+                            case Participant_Sign_Without_Meeting
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.20 )
+                                  case Participant_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skp.2 ) @ #vk.21 )
+                                    case Compromise_PostQuantum
+                                    by contradiction /* from formulas */
+                                  qed
+                                qed
+                              qed
+                            qed
+                          next
+                            case Participant_Sign_case_1
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_case_2
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                              case Participant_Sign_Without_Meeting
+                              by contradiction /* from formulas */
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skc.2 ) @ #vk.20 )
+                                case Compromise_Classical
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.20 )
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Participant_Sign_case_1
+                                  by contradiction /* from formulas */
+                                next
+                                  case Participant_Sign_case_2
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skp.2 ) @ #vk.21 )
+                                    case Compromise_PostQuantum
+                                    by contradiction /* from formulas */
+                                  qed
+                                qed
+                              qed
+                            qed
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skp.1 ) @ #vk.20 )
+                              case Compromise_PostQuantum
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.21 )
+                                    case Participant_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Participant_Sign_Without_Meeting
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Witness_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case c_sign
+                                    solve( !KU( ~skp.2 ) @ #vk.22 )
+                                      case Compromise_PostQuantum
+                                      by contradiction /* from formulas */
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    next
+                      case Participant_Sign_case_2
+                      by contradiction /* from formulas */
+                    next
+                      case Witness_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skp ) @ #vk.19 )
+                        case Compromise_PostQuantum
+                        solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.1) ) @ #vk.15 )
+                          case Participant_Sign
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.20 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skp.2 ) @ #vk.21 )
+                                  case Compromise_PostQuantum
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
+                        next
+                          case Participant_Sign_Without_Meeting
+                          solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.18 )
+                            case Participant_Sign_Without_Meeting
+                            by contradiction /* from formulas */
+                          next
+                            case Witness_Sign
+                            by contradiction /* from formulas */
+                          next
+                            case c_sign
+                            solve( !KU( ~skc.2 ) @ #vk.20 )
+                              case Compromise_Classical
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.20 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skp.2 ) @ #vk.21 )
+                                  case Compromise_PostQuantum
+                                  by contradiction /* from formulas */
+                                qed
+                              qed
+                            qed
+                          qed
+                        next
+                          case Witness_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skc.1 ) @ #vk.20 )
+                            case Compromise_Classical
+                            solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.1) ) @ #vk.17 )
+                              case Participant_Sign
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  solve( !KU( sign(<'presence', $P1, $P2, $W, ~cid>, ~skp.2) ) @ #vk.21 )
+                                    case Participant_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Participant_Sign_Without_Meeting
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Witness_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case c_sign
+                                    solve( !KU( ~skp.2 ) @ #vk.22 )
+                                      case Compromise_PostQuantum
+                                      by contradiction /* from formulas */
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            next
+                              case Participant_Sign_Without_Meeting
+                              solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.19 )
+                                case Participant_Sign_Without_Meeting
+                                by contradiction /* from formulas */
+                              next
+                                case Witness_Sign
+                                by contradiction /* from formulas */
+                              next
+                                case c_sign
+                                solve( !KU( ~skc.2 ) @ #vk.21 )
+                                  case Compromise_Classical
+                                  solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.21 )
+                                    case Participant_Sign_Without_Meeting
+                                    by contradiction /* from formulas */
+                                  next
+                                    case Witness_Sign
+                                    by contradiction /* from formulas */
+                                  next
+                                    case c_sign
+                                    solve( !KU( ~skp.2 ) @ #vk.22 )
+                                      case Compromise_PostQuantum
+                                      by contradiction /* from formulas */
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            next
+                              case Witness_Sign
+                              by contradiction /* from formulas */
+                            next
+                              case c_sign
+                              solve( !KU( ~skp.1 ) @ #vk.21 )
+                                case Compromise_PostQuantum
+                                solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skc.2) ) @ #vk.20 )
+                                  case Participant_Sign_Without_Meeting
+                                  by contradiction /* from formulas */
+                                next
+                                  case Witness_Sign
+                                  by contradiction /* from formulas */
+                                next
+                                  case c_sign
+                                  solve( !KU( ~skc.2 ) @ #vk.22 )
+                                    case Compromise_Classical
+                                    solve( !KU( sign(<'presence', $P1, $P2, $W, cid>, ~skp.2) ) @ #vk.22 )
+                                      case Participant_Sign_Without_Meeting
+                                      by contradiction /* from formulas */
+                                    next
+                                      case Witness_Sign
+                                      by contradiction /* from formulas */
+                                    next
+                                      case c_sign
+                                      solve( !KU( ~skp.2 ) @ #vk.23 )
+                                        case Compromise_PostQuantum
+                                        by contradiction /* from formulas */
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
                   qed
                 qed
               qed
@@ -3248,82 +4341,44 @@ lemma an_accepted_formation_is_attributable:
   "∀ P1 P2 cid #i.
     (FormationAccepted( P1, P2, cid ) @ #i) ⇒
     (((∃ #a. (SignedFormation( P1, P1, P2, cid ) @ #a) ∧ (#a < #i)) ∨
-      (∃ #k. (Compromised( P1 ) @ #k) ∧ (#k < #i))) ∧
+      ((∃ #x. (CompromisedClassical( P1 ) @ #x) ∧ (#x < #i)) ∧
+       (∃ #y. (CompromisedPQ( P1 ) @ #y) ∧ (#y < #i)))) ∧
      ((∃ #b. (SignedFormation( P2, P1, P2, cid ) @ #b) ∧ (#b < #i)) ∨
-      (∃ #k. (Compromised( P2 ) @ #k) ∧ (#k < #i))))"
+      ((∃ #x. (CompromisedClassical( P2 ) @ #x) ∧ (#x < #i)) ∧
+       (∃ #y. (CompromisedPQ( P2 ) @ #y) ∧ (#y < #i)))))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P1 P2 cid #i.
   (FormationAccepted( P1, P2, cid ) @ #i)
  ∧
   (((∀ #a. (SignedFormation( P1, P1, P2, cid ) @ #a) ⇒ ¬(#a < #i)) ∧
-    (∀ #k. (Compromised( P1 ) @ #k) ⇒ ¬(#k < #i))) ∨
+    (((∀ #x. (CompromisedClassical( P1 ) @ #x) ⇒ ¬(#x < #i)) ∨
+      (∀ #y. (CompromisedPQ( P1 ) @ #y) ⇒ ¬(#y < #i))))) ∨
    ((∀ #b. (SignedFormation( P2, P1, P2, cid ) @ #b) ⇒ ¬(#b < #i)) ∧
-    (∀ #k. (Compromised( P2 ) @ #k) ⇒ ¬(#k < #i))))"
+    (((∀ #x. (CompromisedClassical( P2 ) @ #x) ⇒ ¬(#x < #i)) ∨
+      (∀ #y. (CompromisedPQ( P2 ) @ #y) ⇒ ¬(#y < #i))))))"
 */
 simplify
 solve( ((∀ #a.
           (SignedFormation( $P1, $P1, $P2, cid ) @ #a) ⇒ ¬(#a < #i)) ∧
-        (∀ #k. (Compromised( $P1 ) @ #k) ⇒ ¬(#k < #i)))  ∥
+        (((∀ #x. (CompromisedClassical( $P1 ) @ #x) ⇒ ¬(#x < #i)) ∨
+          (∀ #y. (CompromisedPQ( $P1 ) @ #y) ⇒ ¬(#y < #i)))))  ∥
        ((∀ #b. (SignedFormation( $P2, $P1, $P2, cid ) @ #b) ⇒ ¬(#b < #i)) ∧
-        (∀ #k. (Compromised( $P2 ) @ #k) ⇒ ¬(#k < #i))) )
+        (((∀ #x. (CompromisedClassical( $P2 ) @ #x) ⇒ ¬(#x < #i)) ∨
+          (∀ #y. (CompromisedPQ( $P2 ) @ #y) ⇒ ¬(#y < #i))))) )
   case case_1
-  solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-    case Register
-    solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+  solve( (∀ #x. (CompromisedClassical( $P1 ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( $P1 ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
       case Register
-      solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
         case Register
-        solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
           case Register
-          solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
-            case Formation_Sign_Without_Meeting
-            by contradiction /* from formulas */
-          next
-            case Formation_Sign_case_1
-            by contradiction /* from formulas */
-          next
-            case Formation_Sign_case_2
-            by contradiction /* from formulas */
-          next
-            case c_sign
-            solve( !KU( ~skc ) @ #vk.13 )
-              case Compromise_Classical
-              by contradiction /* from formulas */
-            qed
-          qed
-        qed
-      qed
-    qed
-  qed
-next
-  case case_2
-  solve( !PkC( $P1, pk(x) ) ▶₀ #i )
-    case Register
-    solve( !PkP( $P1, pk(x) ) ▶₁ #i )
-      case Register
-      solve( !PkC( $P2, pk(x) ) ▶₂ #i )
-        case Register
-        solve( !PkP( $P2, pk(x) ) ▶₃ #i )
-          case Register
-          solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
-            case Formation_Sign_Without_Meeting
-            solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.11 )
-              case Formation_Sign
-              by contradiction /* from formulas */
-            next
-              case Formation_Sign_Without_Meeting
-              by contradiction /* from formulas */
-            next
-              case c_sign
-              solve( !KU( ~skc.1 ) @ #vk.13 )
-                case Compromise_Classical
-                by contradiction /* from formulas */
-              qed
-            qed
-          next
-            case Formation_Sign_case_1
-            solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.11 )
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
               case Formation_Sign_Without_Meeting
               by contradiction /* from formulas */
             next
@@ -3334,56 +4389,117 @@ next
               by contradiction /* from formulas */
             next
               case c_sign
-              solve( !KU( ~skc.1 ) @ #vk.13 )
+              solve( !KU( ~skc ) @ #vk.13 )
                 case Compromise_Classical
                 by contradiction /* from formulas */
               qed
             qed
-          next
-            case Formation_Sign_case_2
-            by contradiction /* from formulas */
-          next
-            case c_sign
-            solve( !KU( ~skc ) @ #vk.13 )
-              case Compromise_Classical
-              solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp) ) @ #vk.10 )
-                case Formation_Sign_Without_Meeting
-                solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.12 )
-                  case Formation_Sign
-                  by contradiction /* from formulas */
-                next
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
+              case Formation_Sign_Without_Meeting
+              by contradiction /* from formulas */
+            next
+              case Formation_Sign_case_1
+              by contradiction /* from formulas */
+            next
+              case Formation_Sign_case_2
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.13 )
+                case Compromise_Classical
+                solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp) ) @ #vk.10 )
                   case Formation_Sign_Without_Meeting
                   by contradiction /* from formulas */
                 next
+                  case Formation_Sign_case_1
+                  by contradiction /* from formulas */
+                next
+                  case Formation_Sign_case_2
+                  by contradiction /* from formulas */
+                next
                   case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.14 )
-                    case Compromise_Classical
+                  solve( !KU( ~skp ) @ #vk.14 )
+                    case Compromise_PostQuantum
                     by contradiction /* from formulas */
                   qed
                 qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( (∀ #x. (CompromisedClassical( $P2 ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( $P2 ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
+              case Formation_Sign_Without_Meeting
+              solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.11 )
+                case Formation_Sign
+                by contradiction /* from formulas */
+              next
+                case Formation_Sign_Without_Meeting
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~skc.1 ) @ #vk.13 )
+                  case Compromise_Classical
+                  by contradiction /* from formulas */
+                qed
+              qed
+            next
+              case Formation_Sign_case_1
+              solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.11 )
+                case Formation_Sign_Without_Meeting
+                by contradiction /* from formulas */
               next
                 case Formation_Sign_case_1
-                solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.12 )
-                  case Formation_Sign
-                  by contradiction /* from formulas */
-                next
-                  case Formation_Sign_Without_Meeting
-                  by contradiction /* from formulas */
-                next
-                  case c_sign
-                  solve( !KU( ~skc.1 ) @ #vk.14 )
-                    case Compromise_Classical
-                    by contradiction /* from formulas */
-                  qed
-                qed
+                by contradiction /* from formulas */
               next
                 case Formation_Sign_case_2
                 by contradiction /* from formulas */
               next
                 case c_sign
-                solve( !KU( ~skp ) @ #vk.14 )
-                  case Compromise_PostQuantum
-                  solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.13 )
+                solve( !KU( ~skc.1 ) @ #vk.13 )
+                  case Compromise_Classical
+                  by contradiction /* from formulas */
+                qed
+              qed
+            next
+              case Formation_Sign_case_2
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.13 )
+                case Compromise_Classical
+                solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp) ) @ #vk.10 )
+                  case Formation_Sign_Without_Meeting
+                  solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.12 )
                     case Formation_Sign
                     by contradiction /* from formulas */
                   next
@@ -3391,9 +4507,216 @@ next
                     by contradiction /* from formulas */
                   next
                     case c_sign
-                    solve( !KU( ~skc.1 ) @ #vk.15 )
+                    solve( !KU( ~skc.1 ) @ #vk.14 )
                       case Compromise_Classical
                       by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Formation_Sign_case_1
+                  solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.12 )
+                    case Formation_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Formation_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.14 )
+                      case Compromise_Classical
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                next
+                  case Formation_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skp ) @ #vk.14 )
+                    case Compromise_PostQuantum
+                    solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.13 )
+                      case Formation_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case Formation_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.1 ) @ #vk.15 )
+                        case Compromise_Classical
+                        by contradiction /* from formulas */
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !PkC( $P1, pk(x) ) ▶₀ #i )
+      case Register
+      solve( !PkP( $P1, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !PkC( $P2, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !PkP( $P2, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc) ) @ #vk.8 )
+              case Formation_Sign_Without_Meeting
+              solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.11 )
+                case Formation_Sign
+                by contradiction /* from formulas */
+              next
+                case Formation_Sign_Without_Meeting
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~skc.1 ) @ #vk.13 )
+                  case Compromise_Classical
+                  solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp.1) ) @ #vk.13 )
+                    case Formation_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Formation_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skp.1 ) @ #vk.14 )
+                      case Compromise_PostQuantum
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                qed
+              qed
+            next
+              case Formation_Sign_case_1
+              solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.11 )
+                case Formation_Sign_Without_Meeting
+                by contradiction /* from formulas */
+              next
+                case Formation_Sign_case_1
+                by contradiction /* from formulas */
+              next
+                case Formation_Sign_case_2
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                solve( !KU( ~skc.1 ) @ #vk.13 )
+                  case Compromise_Classical
+                  solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skp.1) ) @ #vk.13 )
+                    case Formation_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Formation_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skp.1 ) @ #vk.14 )
+                      case Compromise_PostQuantum
+                      by contradiction /* from formulas */
+                    qed
+                  qed
+                qed
+              qed
+            next
+              case Formation_Sign_case_2
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.13 )
+                case Compromise_Classical
+                solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp) ) @ #vk.10 )
+                  case Formation_Sign_Without_Meeting
+                  solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.12 )
+                    case Formation_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Formation_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.14 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp.1) ) @ #vk.14 )
+                        case Formation_Sign
+                        by contradiction /* from formulas */
+                      next
+                        case Formation_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.15 )
+                          case Compromise_PostQuantum
+                          by contradiction /* from formulas */
+                        qed
+                      qed
+                    qed
+                  qed
+                next
+                  case Formation_Sign_case_1
+                  solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skc.1) ) @ #vk.12 )
+                    case Formation_Sign
+                    by contradiction /* from formulas */
+                  next
+                    case Formation_Sign_Without_Meeting
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    solve( !KU( ~skc.1 ) @ #vk.14 )
+                      case Compromise_Classical
+                      solve( !KU( sign(<'formation', $P1, $P2, ~cid>, ~skp.1) ) @ #vk.14 )
+                        case Formation_Sign_Without_Meeting
+                        by contradiction /* from formulas */
+                      next
+                        case Formation_Sign_case_1
+                        by contradiction /* from formulas */
+                      next
+                        case Formation_Sign_case_2
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        solve( !KU( ~skp.1 ) @ #vk.15 )
+                          case Compromise_PostQuantum
+                          by contradiction /* from formulas */
+                        qed
+                      qed
+                    qed
+                  qed
+                next
+                  case Formation_Sign_case_2
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  solve( !KU( ~skp ) @ #vk.14 )
+                    case Compromise_PostQuantum
+                    solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skc.1) ) @ #vk.13 )
+                      case Formation_Sign
+                      by contradiction /* from formulas */
+                    next
+                      case Formation_Sign_Without_Meeting
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      solve( !KU( ~skc.1 ) @ #vk.15 )
+                        case Compromise_Classical
+                        solve( !KU( sign(<'formation', $P1, $P2, cid>, ~skp.1) ) @ #vk.15 )
+                          case Formation_Sign
+                          by contradiction /* from formulas */
+                        next
+                          case Formation_Sign_Without_Meeting
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          solve( !KU( ~skp.1 ) @ #vk.16 )
+                            case Compromise_PostQuantum
+                            by contradiction /* from formulas */
+                          qed
+                        qed
+                      qed
                     qed
                   qed
                 qed
@@ -3423,14 +4746,13 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/ceremony.spthy
 
-  processing time: 15.66s
+  processing time: 33.11s
   
   ceremony_is_executable (exists-trace): verified (15 steps)
   honest_ceremony_completes (exists-trace): verified (23 steps)
   honest_formation_completes (exists-trace): verified (19 steps)
-  an_accepted_record_is_attributable (all-traces): verified (241 steps)
-  classical_compromise_alone_does_not_forge (all-traces): verified (20 steps)
+  an_accepted_record_is_attributable (all-traces): verified (625 steps)
   formation_is_executable (exists-trace): verified (11 steps)
-  an_accepted_formation_is_attributable (all-traces): verified (48 steps)
+  an_accepted_formation_is_attributable (all-traces): verified (122 steps)
 
 ==============================================================================
