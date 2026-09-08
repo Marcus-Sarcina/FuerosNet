@@ -751,6 +751,21 @@ def region_ceiling(g, observer, entry, scope_adj=None, peer_edges=()):
 # ---------------------------------------------------------------------------
 
 def experiment_divergence(report):
+    """E1, and what its `f` is: ADOPTION-TREE ARITHMETIC.
+
+    The series counts an attacker's fake SUBTREE, so its branching parameter
+    is `f`, design 21's "max subordinates per node".  That is the graph the
+    derivation in design 16.2 describes and the one this experiment tests.
+
+    IT IS NOT THE GRAPH A DECAY POLICY RUNS ON.  design 16.2.1 puts
+    proof-of-presence and peering edges in the trust graph too, and says that
+    "to any party other than the two the edge joins, both carry trust by the
+    same rules".  Acquaintance degree has no bound -- meeting widely is the
+    point of the network -- so effective branching is not f, and the second
+    regression below shows the criterion passing while the series diverges.
+    design 16.2 now records that lambda < 1/f is necessary and not sufficient
+    [author, 2026-09-08]; this experiment is the necessary half.
+    """
     f = 10
     D = 1
     def fake_mass(lam, levels):
@@ -826,6 +841,43 @@ def attach_fake_region(g, boundary_node, width, depth):
         frontier = nxt
     return fakes
 
+
+def regression_f_is_not_the_branching_bound(report):
+    """The criterion passes while the series diverges.
+
+    design 21 configures f = 10, so lambda = 0.095 satisfies lambda < 1/f.
+    Effective branching of 11 -- one acquaintance edge per node beyond the
+    hierarchy's fanout -- puts the same policy in the divergent regime.
+    """
+    f, lam, D = 10, 0.095, 1
+    assert lam < 1 / f, "the configured criterion must be satisfied"
+    def mass(branching, levels):
+        return sum((lam ** (D + i)) * (branching ** i) for i in range(levels + 1))
+    honest = lam ** D
+    report.append("")
+    report.append("LAMBDA < 1/f IS NECESSARY, NOT SUFFICIENT (design 16.2)")
+    report.append(
+        f"  f = {f}, lambda = {lam}: lambda < 1/f = {1/f} is SATISFIED")
+    for branching, note in [(f, "hierarchy fanout only"),
+                            (f + 1, "one acquaintance edge per node")]:
+        ratios = [mass(branching, n) / honest for n in (10, 40, 100, 200)]
+        shape = "converges" if branching * lam < 1 else "DIVERGES"
+        report.append(
+            f"    branching {branching:>2} ({note:<30s}) {shape}: "
+            + ", ".join(f"{r:.2f}" for r in ratios))
+    # At branching f the geometric series converges to 1/(1 - f*lambda) = 20;
+    # at f+1 it is unbounded in the number of levels.  The gap is what the
+    # criterion is meant to detect and, on this graph, does not.
+    assert mass(f, 200) / honest < 21, "at branching f the series must converge"
+    assert mass(f + 1, 200) / honest > 1000, \
+        "at branching f+1 the same lambda must diverge"
+    report.append(
+        "  f bounds subordinates; design 16.2.1's acquaintance edges are "
+        "unbounded and carry")
+    report.append(
+        "  trust by the same rules, so f is not the branching bound of the "
+        "graph a decay")
+    report.append("  policy evaluates.")
 
 def experiment_cut_bound(rng, report):
     """E2, with the entry adoption in SCOPE as well as in the flow graph.
@@ -1375,6 +1427,19 @@ def experiment_fanout(rng, report):
             see = influenced = 0
             gains = []
             for obs in nodes:
+                # THE TWO ENDPOINTS ARE NOT THIRD-PARTY OBSERVERS, and counting
+                # them inflated every placement by exactly two [2026-09-08].
+                # `pb` was asked to evaluate ITS OWN standing -- zero before the
+                # edge existed, positive after, which is an artefact of
+                # self-evaluation and not a persuaded observer.  `pa` is the
+                # other end of the relationship: peering requires a meeting
+                # (§6.3), so it already holds that pair's presence edge, and
+                # §16.2.1 collapses parallel sources to one pair edge -- the
+                # peering record adds nothing to a graph that already has it.
+                # The economics claim is about OTHER observers, so the
+                # statistic counts other observers.
+                if obs == pa or obs == pb:
+                    continue
                 hz = horizon(scope, obs)
                 # §16.3.1: the record is visible inside BOTH peers' horizons.
                 visible = (pa in hz) or (pb in hz)
@@ -1406,8 +1471,9 @@ def experiment_fanout(rng, report):
     assert max(sees) > 1, "coverage claim needs more than one observer"
     assert max(infl) > 1, "amortisation claim needs more than one influenced"
     report.append(
-        f"  {len(rows)} cross-tree placements enumerated over {len(nodes)} "
-        f"observers (worst-case aware)")
+        f"  {len(rows)} cross-tree placements enumerated over "
+        f"{len(nodes) - 2} THIRD-PARTY observers (worst-case aware); the two "
+        f"endpoints are excluded, see the loop")
     report.append(
         f"  observers who can SEE the edge:      min {min(sees)}, "
         f"median {int(statistics.median(sees))}, max {max(sees)}")
@@ -1416,7 +1482,7 @@ def experiment_fanout(rng, report):
         f"median {int(statistics.median(infl))}, max {max(infl)}")
     report.append(
         f"  best placement {best[0]!r}<->{best[1]!r}: {best[3]} of "
-        f"{len(nodes)} observers influenced by ONE edge (max gain "
+        f"{len(nodes) - 2} third parties influenced by ONE edge (max gain "
         f"{best[4]})")
     report.append(
         "  seeing the edge does NOT imply being influenced -- an observer "
@@ -1459,6 +1525,7 @@ def main():
     rng = random.Random(args.seed)
     report = [f"flow_metric.py report (seed {args.seed})", ""]
     experiment_divergence(report)
+    regression_f_is_not_the_branching_bound(report)
     experiment_cut_bound(rng, report)
     experiment_setwise(rng, report)
     regression_conservation_is_per_computation(rng, report)

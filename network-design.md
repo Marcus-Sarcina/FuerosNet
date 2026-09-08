@@ -5783,6 +5783,19 @@ a single node.
 expressly local and pluggable (§16.1), so the spec cannot compel a foreign
 implementation's choice of λ.
 
+**And it is necessary, not sufficient** [author, 2026-09-08]. The series above
+counts an attacker's fake *subtree*, where branching is bounded by f — but f
+bounds subordinates, and §16.2.1's trust graph also carries proof-of-presence
+and peering edges, which "to any party other than the two the edge joins ...
+carry trust by the same rules". **Acquaintance degree has no bound and is not
+meant to have one**: meeting widely is what the network is for. So effective
+branching in the graph a decay policy actually runs on is not f, and λ = 0.095
+satisfies λ < 1/f = 0.1 while diverging at branching 11. **No f-only
+convergence guarantee is available for the full trust graph**, and none is
+claimed here. The flow metric does not rest on this argument — it is the
+alternative to it — which is why the reference metric is flow-based and this
+section is a warning about the metric it is not.
+
 **Nothing publishes a policy, and nothing should.** A node's account of its own
 policy is unverifiable, so a positive claim is exactly what an attacker would assert
 and a mechanism carrying one would invite the mental model this design rejects —
@@ -6143,9 +6156,12 @@ a plausible-looking distance decay is exploitable for a few hundred dollars a
 month while believing itself protected by the fanout rule.
 
 **Proposed mitigation:** ship a flow-based reference implementation as the
-default, publish the λ < 1/f criterion prominently, and provide a conformance
-test that reports a policy's resistance bound so anyone tuning their own can see
-what they have given up.
+default, publish the λ < 1/f criterion prominently **together with what it does
+not cover** — it bounds the hierarchy's fanout and not §16.2.1's unbounded
+acquaintance degree, so it is necessary and not sufficient — and provide a
+conformance test that reports a policy's resistance bound so anyone tuning their
+own can see what they have given up. A criterion published as though it were
+sufficient would give exactly the false assurance this finding is about.
 
 **Scarce-capacity allocation is reference-policy, not a network invariant**
 [author, 2026-09-04]. Each principal's *individual* standing is its own
@@ -7316,7 +7332,7 @@ worth checking for the others.
 
 ## 21. Parameters
 
-**Almost every value here is a chosen operating point rather than a derived one.** The exception is the soundness condition λ < 1/f, which follows from the arithmetic of §16.2 rather than from a choice — what is chosen is any particular λ satisfying it. Seventeen of
+**Almost every value here is a chosen operating point rather than a derived one.** The exception is the soundness condition λ < 1/f, which follows from the arithmetic of §16.2 rather than from a choice — what is chosen is any particular λ satisfying it, and §16.2 records that satisfying it is necessary rather than sufficient. Seventeen of
 them are unjustified quantitative claims in the strict sense: the document explains *why each parameter exists* and *what it trades
 off*, and for none of them does it show that the number is right.
 
@@ -7341,7 +7357,7 @@ not derived.
 | h_store | Topology storage horizon | 2 | ~110 nodes |
 | h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
 | — | Cross-tree peers per infra node | ≥2 **recommended** | For fault independence — hierarchical replication has cut 1. **Not required**: peering is voluntary and zero peers is a supported, degraded state (§6.3, §12.7.5) |
-| λ | Trust decay per hop (if decay metric used) | < 1/f | Convergence requirement (§16.2) |
+| λ | Trust decay per hop (if decay metric used) | < 1/f | Convergence requirement (§16.2) — **necessary, not sufficient**: f bounds subordinates, not §16.2.1's acquaintance degree |
 | — | Verifiers sought per subject | min(floor(n/2), 10, \|candidates\|) | A reasonableness criterion — n is the subject's own claim (§8.1.2); candidates = distinct prior counterparties (§8.1) |
 | — | Capture retention | 2 years | Schelling point; §7.5.1 |
 | — | Images per capture | 3–5 | Guided variation, not burst; doubles as liveness (§7.5) |

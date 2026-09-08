@@ -6743,3 +6743,57 @@ addition, and adding one on an unreproduced finding is worse than missing it.
 Referred with the numbers.
 
 Flow metric: all assertions pass on seeds 1, 7, 23, 99, 500.
+
+---
+
+## Flow-metric review 2 (2026-09-08)
+
+Executed review again: 900 exhaustive min-cut comparisons against `max_flow()`,
+seeds 0-9 clean, and the reviewer was explicit that an attempted 100-seed sweep
+was cut short and should not count as a passed test. Two findings, both applied,
+**one producing a specification change**.
+
+**F1 (MEDIUM) -- `f` is not the branching bound of the graph a decay policy
+runs on.** design 16.2 derives the divergence of an attacker's fake subtree as
+`λ^D · Σ(fλ)^k` and calls `λ < 1/f` a soundness condition; 21's table gives it
+as the convergence requirement; 16.4 proposes publishing it prominently. But
+`f` is "max subordinates per node", while 16.2.1 puts proof-of-presence and
+peering edges in the same trust graph, where "to any party other than the two
+the edge joins, both carry trust by the same rules". **Nothing bounds
+acquaintance degree, and nothing should** -- meeting widely is what the network
+is for. Checked the parameter table: it bounds f, L, the horizons, verifiers
+per subject, and a floor on cross-tree peers; there is no cap on meetings.
+
+So the criterion can be satisfied while the series diverges. At the configured
+f = 10, λ = 0.095 satisfies λ < 1/f = 0.1 and diverges at branching 11.
+
+Put to the author because it is a normative claim about what a published
+criterion guarantees. **Ruling: say plainly that no f-only guarantee exists**
+[author, 2026-09-08]. Applied at four sites -- the soundness statement in 16.2,
+16.4's publishing proposal, 21's parameter-table basis, and 21's
+chosen-versus-derived note. Appendix B's rejected-alternatives row says
+"diverges unless λ < 1/f", which is a necessity claim and remains accurate;
+history left alone.
+
+E1 is now labelled adoption-tree arithmetic, and
+`regression_f_is_not_the_branching_bound` exhibits the gap: branching 10
+converges to 20.00, branching 11 reaches 154560.83 over 200 levels, on the same
+λ. Those figures match the reviewer's to two decimal places.
+
+**F2 (LOW) -- E4 counted the two endpoints.** The influence loop ran over every
+node, so `pb` was asked to evaluate its OWN standing -- zero before the edge
+existed, positive after, an artefact of self-evaluation -- and `pa` is the other
+end of a relationship that requires a meeting, so it already holds the pair's
+presence edge and 16.2.1 collapses parallel sources to one pair edge. Both
+excluded, and the denominators corrected from 16 to the 14 third parties
+actually evaluated. Counts fell from min/median/max 7/8/12 to 5/6/10 and the
+best placement from 12 to 10 -- exactly the reviewer's predicted figures. The
+qualitative result survives: one edge still moves 10 of 14 third-party
+observers.
+
+**One error of mine, caught by an assertion.** The new regression first asserted
+the converging series stays under 2. It converges to 1/(1 - fλ) = 20. The
+threshold was wrong, not the model.
+
+Flow metric: all assertions pass on seeds 1, 7, 23, 99, 500. 14 artifacts pass.
+References 2038 / 0 flags; model citations 176 / 0.
