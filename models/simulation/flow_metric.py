@@ -145,18 +145,26 @@ class FlowGraph:
         edge in the network would have carried double, and two parties could
         mint capacity by meeting again.  Repetition is not evidence.
 
-        Where two constructions offer different capacities for one pair the
-        larger is kept.  They are equal in every construction here -- §16.2.1
-        makes an edge worth what an edge at its distance is worth, whatever
-        relationship produced it -- so the choice decides nothing today and is
-        recorded rather than relied on.
+        A pair offered two DIFFERENT capacities is a construction error, and
+        asserted as one.  §16.2.1 makes an edge worth what an edge at its
+        distance is worth, whatever relationship produced it, and every
+        construction here agrees -- split_graph drops in-horizon adoption
+        edges before it adds the unthrottled ones, so even that pair is
+        offered one value.  An earlier version kept the larger and said the
+        choice decided nothing; a cross-family review asked for the
+        assertion so that a later experiment could not come to rely on it
+        by accident.
 
         Always materialise the +0 reverse edge so the residual bookkeeping
         never hits a missing key.
         """
         self.add_node(u)
         self.add_node(v)
-        self.cap[u][v] = max(self.cap[u].get(v, 0), c)
+        existing = self.cap[u].get(v, 0)
+        assert existing in (0, c), (
+            f"{u!r}->{v!r} offered two capacities, {existing} and {c}: one "
+            f"pair carries one edge (§16.2.1), and no construction here differs")
+        self.cap[u][v] = c
         self.cap[v].setdefault(u, 0)
 
     def copy(self):

@@ -7090,3 +7090,31 @@ modelling parameters the file labels as such.
 
 Flow metric clean on seed 1. References 2038 / 0 flags (one new, the 16.3
 citation); model citations 189 / 0.
+
+## Flow-metric review 6 (2026-09-08) -- PASS
+
+Executed review of the committed version (hashes match): seeds 1-30, 1,080
+exhaustive min-cut comparisons against `max_flow()`, 12,600 random allocation
+cases against the one-shot super-sink flow, ten `PYTHONHASHSEED` values with
+byte-identical reports. **No new material finding**, no vacuous headline
+experiment. E1-E4 and the 16.4 ordering each confirmed for the property
+actually claimed, with the per-computation boundary of E3 read as the
+declared limitation it is. The author is treating the family as passed and
+moving the other models on against the same version of the documents.
+
+**Two informational notes.** `add_edge` collapsed a pair's repeated
+capacities with `max`, which the docstring said decided nothing; the reviewer
+asked for an assertion so that nothing later could come to rely on it.
+Applied: a pair offered two different capacities now fails, after checking
+that `split_graph` drops in-horizon adoption edges before adding the
+unthrottled ones, so no pair is ever offered two. Seeds 1-30 clean. The
+`UNTHROTTLED` sentinel (10^9) is not semantic infinity; at every scale
+exercised it dominates, and deriving a per-graph bound would be machinery
+for a stress model that does not exist. Not acted on, and the file already
+says what the sentinel stands for.
+
+**Not acted on.** The three unspecified questions are the same three as the
+previous two rounds: capacity schedule, evaluator reach, and the E4 evidence
+split, all labelled as modelling parameters.
+
+Model citations 189 / 0 flags.
