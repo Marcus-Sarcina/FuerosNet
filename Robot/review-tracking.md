@@ -6674,3 +6674,72 @@ silence.
 
 14 artifacts pass. 63 Tamarin lemmas unbounded, 16 bounded, 5 TLA+ models,
 2 mutations that must fail. References 2034 / 0 flags; model citations 176 / 0.
+
+---
+
+## Flow-metric review (2026-09-08)
+
+**The first reviewer with a working interpreter**, and it shows: 1,800
+exhaustive min-cut comparisons against `max_flow()` over 2-7 vertex graphs with
+antiparallel arcs, plus E3/E4 over seeds 1-100. Zero discrepancies, zero
+assertion failures. Those negative results are worth more than most of the
+Tamarin rounds' positives, which were all static.
+
+Three findings. **Two applied, one NOT REPRODUCED.**
+
+**F3 (LOW) -- applied.** E4's header claimed one peering edge "helps every
+observer whose horizon contains a peer". The experiment refutes it: an
+observer can see the edge and already have standing to the beneficiary, so
+visibility and influence are counted separately -- seed 1 reports up to 13
+observers seeing an edge and at most 7 changing. Both header sites now say
+visible-to and may-influence, with a note recording what the old wording
+claimed.
+
+**F1 (MEDIUM) -- applied as a regression.** design 16.2's bound is normative
+for a set's *simultaneously usable* standing, "one computation, shared
+capacity", and says a policy materialising per-principal decisions draws them
+"from one conserved computation, not from one computation per principal". E3
+demonstrated that for a set submitted together; nothing tested what happens
+across two calls, and `admit_reference_order` builds a fresh residual per call
+-- correct as a pure function, and the exact shape that would let an
+incremental policy spend one cut twice.
+
+`regression_conservation_is_per_computation` exhibits it: two disjoint halves
+of one region admitted separately draw 8 + 8 against a cut of 8; the same
+identities admitted together draw 8. Stable across seeds 1, 7, 23, 99, 500. No
+specification change -- the rule is already stated, and "simultaneously usable"
+covers the cross-time case. What was missing was the demonstration that the
+calling convention carries it.
+
+**F2 (MEDIUM) -- NOT REPRODUCED, and I tried hard.** The claim: 16.3.1's
+conservative-evidence property ("unseen edges cannot inflate a claim") needs the
+distance-to-capacity schedule to be monotone, because a richer graph can
+SHORTEN a node's landscape distance and a non-monotone schedule could then
+lower its capacity.
+
+The mechanism is real in principle and the file does say its halving schedule
+is "MODELLER'S CHOICE OF SCHEDULE, NOT FROM THE DESIGN". But:
+
+- Building the reviewer's own described graph (capacity 1 at distance 2, 100 at
+  distance 3) gave the SAME standing either way, not 2 versus 1.
+- A random search over 6-node graphs first appeared to confirm it -- 3 hits
+  under a non-monotone schedule. **Those were artifacts.** The targets were at
+  distance 1, inside the horizon, where scores are saturated sentinels around
+  1e9 and where 16.2 says "there is nothing for the metric to do". The same
+  search then produced 35 apparent hits under the REFERENCE schedule, which is
+  what exposed the artifact: a result that damning against the reference metric
+  was likelier to be my harness than the design.
+- Restricted to targets OUTSIDE the horizon, where the claim applies: **5,851
+  pairs, 0 counterexamples, under both the reference and a deliberately
+  non-monotone schedule.**
+
+A likely reason it resists construction: distance along a shortest path
+increases by one per hop, so the low-capacity bracket is traversed in the
+poorer graph too. Not a proof that no counterexample exists -- an explanation
+of why my search found none.
+
+**No specification change on F2.** A monotonicity requirement is a normative
+addition, and adding one on an unreproduced finding is worse than missing it.
+Referred with the numbers.
+
+Flow metric: all assertions pass on seeds 1, 7, 23, 99, 500.

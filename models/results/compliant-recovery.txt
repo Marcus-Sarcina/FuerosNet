@@ -305,7 +305,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/recovery.spthy
 
-  processing time: 0.54s
+  processing time: 0.57s
   
   sealing_first_leaves_nothing_to_supersede (all-traces): verified (4 steps)
   reissuing_first_leaves_a_window (exists-trace): verified (4 steps)

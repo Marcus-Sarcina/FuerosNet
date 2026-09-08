@@ -21,9 +21,12 @@ review plan's Stage 1, have been argued but never run:
       own independent max-flow instead lets the same capacity count once
       per identity, and the aggregate grows with population.
   E4. Edge-influence fanout (design §16.3.1, the coverage bound): one
-      acquired peering edge is visible inside both peers' horizons, so it
-      helps every observer whose horizon contains a peer -- the cost of
+      acquired peering edge is VISIBLE to every observer whose horizon
+      contains an endpoint, and MAY INFLUENCE several of them -- the cost of
       influencing a population amortises over coverage, not observer count.
+      Visibility is not influence: an observer that already has standing to
+      the beneficiary sees the edge and is unchanged by it, so E4 reports the
+      two counts separately.
 
 SCOPE, TRUST-CAPACITY, AND VISIBILITY ARE THREE DIFFERENT THINGS
 ===============================================================
@@ -1216,9 +1219,15 @@ def experiment_setwise(rng, report):
 # EXPERIMENT E4 -- edge-influence fanout, with correct horizon semantics.
 #
 # Claim (§16.3.1): one acquired PEERING edge is visible inside both peers'
-# horizons, so it helps every observer whose horizon contains a peer -- cost
-# scales with COVERAGE over the population, not with the number of
-# observers.
+# horizons, so it is VISIBLE to every observer whose horizon contains an
+# endpoint and MAY INFLUENCE several of them -- cost scales with COVERAGE
+# over the population, not with the number of observers.
+#
+# NOT "helps every observer whose horizon contains a peer", which is what
+# this header said until 2026-09-08 and which the experiment below refutes:
+# an observer can see the edge and already have standing to the beneficiary,
+# in which case its score does not move.  Visibility and influence are
+# counted separately for that reason.
 #
 # Method, corrected from the earlier version in three ways:
 #   1. horizons are computed over SCOPE (adoption + sibling) edges; the
@@ -1236,6 +1245,77 @@ def experiment_setwise(rng, report):
 #     `changed <= holds_edge`, which the strong claim's wording outran;
 #   * holds_edge > 1           (coverage, not per-target).
 # ---------------------------------------------------------------------------
+
+def regression_conservation_is_per_computation(rng, report):
+    """SETWISE CONSERVATION IS A PROPERTY OF ONE COMPUTATION, and nothing here
+    tested what that means across two.
+
+    design 16.2 makes the aggregate bound normative for "any set of identities
+    separated from it by a cut", whose *simultaneously usable* standing "totals
+    at most the cut's capacity -- one computation, shared capacity", and says
+    a policy materialising per-principal decisions "draws them from one
+    conserved computation, not from one computation per principal".
+
+    E3 demonstrates the bound for a set submitted TOGETHER.  It cannot
+    demonstrate what happens when a policy materialises A now and B later,
+    because `admit_reference_order` builds a fresh residual per call -- which
+    is correct as a pure function and is exactly the shape that would let an
+    incremental implementation spend one cut twice.
+
+    This regression pins the gap by exhibiting it: two disjoint halves of one
+    region, each admitted alone, together draw MORE than the same identities
+    admitted jointly.  The joint figure is the design's bound; the solo pair is
+    what retaining separately materialised entitlements would produce.  The
+    assertion is not that the metric is wrong -- it is that the calling
+    convention is load-bearing, so a lifecycle that recomputes per principal
+    and keeps the results is outside the bound the design states.
+    """
+    base, nodes, children = build_tree(rng, depth=3, fanout=3)
+    observer = nodes[0]
+    scope = scope_adjacency(nodes, children)
+    hz = horizon(scope, observer)
+    inside = children[observer][0]
+    GATE = "GATE"
+
+    g = base.copy()
+    fakes = attach_region_behind(g, GATE, 16)
+    peer_edges = [(inside, GATE, PEER_CAP)]
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
+    seen = [f for f in fakes if f in vis.cap]
+    half = len(seen) // 2
+    A, B = seen[:half], seen[half:]
+
+    solo_a = admit_reference_order(vis, observer, A, demand=1,
+                                   scope_adj=scope, peer_edges=peer_edges)[1]
+    solo_b = admit_reference_order(vis, observer, B, demand=1,
+                                   scope_adj=scope, peer_edges=peer_edges)[1]
+    joint = admit_reference_order(vis, observer, A + B, demand=1,
+                                  scope_adj=scope, peer_edges=peer_edges)[1]
+    ceiling = region_ceiling(vis, observer, GATE, scope, peer_edges)
+
+    report.append("")
+    report.append("SETWISE CONSERVATION HOLDS PER COMPUTATION, NOT PER LIFETIME")
+    report.append(
+        f"  {len(A)} + {len(B)} identities behind one gate (cut = {ceiling}):")
+    report.append(
+        f"    admitted separately: {solo_a} + {solo_b} = {solo_a + solo_b}")
+    report.append(
+        f"    admitted together:   {joint}  <- the design's aggregate bound")
+
+    assert joint <= ceiling, (joint, ceiling)
+    assert solo_a + solo_b > joint, (solo_a, solo_b, joint)
+    report.append(
+        "  Separate admission draws more than the cut allows, so the bound "
+        "rests on the")
+    report.append(
+        "  whole set entering ONE computation. A policy that materialises "
+        "per principal and")
+    report.append(
+        "  retains prior entitlements is outside it -- design 16.2's "
+        "\"one conserved")
+    report.append(
+        "  computation, not one computation per principal\".")
+
 
 def experiment_fanout(rng, report):
     """E4, rebuilt with TWO-ENDED cross-tree peering.
@@ -1381,6 +1461,7 @@ def main():
     experiment_divergence(report)
     experiment_cut_bound(rng, report)
     experiment_setwise(rng, report)
+    regression_conservation_is_per_computation(rng, report)
     experiment_fanout(rng, report)
     report.append("all assertions passed")
     report.append("")

@@ -32,11 +32,20 @@ E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)
   the conserving joint saturates at the cut, and identities behind an invisible edge
   cannot inflate it: CONFIRMED
 
+
+SETWISE CONSERVATION HOLDS PER COMPUTATION, NOT PER LIFETIME
+  8 + 8 identities behind one gate (cut = 8):
+    admitted separately: 8 + 8 = 16
+    admitted together:   8  <- the design's aggregate bound
+  Separate admission draws more than the cut allows, so the bound rests on the
+  whole set entering ONE computation. A policy that materialises per principal and
+  retains prior entitlements is outside it -- design 16.2's "one conserved
+  computation, not one computation per principal".
 E4: edge-influence fanout, two-ended peering (design 16.3.1)
-  42 cross-tree placements enumerated over 13 observers (worst-case aware)
-  observers who can SEE the edge:      min 8, median 12, max 13
-  observers whose standing CHANGED:    min 5, median 6, max 7
-  best placement 'A'<->'B': 7 of 13 observers influenced by ONE edge (max gain 10)
+  55 cross-tree placements enumerated over 16 observers (worst-case aware)
+  observers who can SEE the edge:      min 11, median 12, max 16
+  observers whose standing CHANGED:    min 7, median 8, max 12
+  best placement 'A'<->'B': 12 of 16 observers influenced by ONE edge (max gain 10)
   seeing the edge does NOT imply being influenced -- an observer already holding standing
   to the far peer through its own tree is unaffected; the equality an earlier version
   asserted was an artifact of a one-ended attacker.
