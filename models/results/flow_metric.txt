@@ -25,9 +25,9 @@ E2: the individual cut bound (design 16.2, 17.3)
 E3: setwise conservation beyond the horizon (design 16.2, 16.2.1)
    4 identities behind ONE acquired edge:  independent-sum =   32   conserving joint = 4   cut at the gate = 8
    8 identities behind ONE acquired edge:  independent-sum =   64   conserving joint = 8   cut at the gate = 8
-  16 identities behind ONE acquired edge:  independent-sum =  128   conserving joint = 8   cut at the gate = 8
-  32 identities behind ONE acquired edge:  independent-sum =  256   conserving joint = 8   cut at the gate = 8
-  general demands (each asks its own standing): individual sum = 256, simultaneously deliverable = 8, cut = 8
+  16 identities behind ONE acquired edge:  independent-sum =  104   conserving joint = 8   cut at the gate = 8
+  32 identities behind ONE acquired edge:  independent-sum =  168   conserving joint = 8   cut at the gate = 8
+  general demands (each asks its own standing): individual sum = 168, simultaneously deliverable = 8, cut = 8
   the same 32 gated behind a node OUTSIDE the horizon: 0 visible -- invisibility is the conservative direction
   a pair joined by an adoption AND two meetings carries 10, not 30: parallel edges collapse
   a peering edge one hop past a VISIBLE one stays invisible at every reach tested (0-3):

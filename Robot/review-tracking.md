@@ -6859,3 +6859,70 @@ difference rather than a disagreement.
 
 14 artifacts pass; flow metric clean on seeds 1, 7, 23. References 2037 / 0
 flags; model citations 177 / 0.
+
+## Flow-metric review 4 (2026-09-08)
+
+Executed review: 600 exhaustive min-cut comparisons against `max_flow()`,
+`admit_reference_order()` against a joint super-sink flow on 1,215 graphs,
+whole-script seeds 0-34, and the same disclaimer as last round that a 0-199
+sweep hit the execution limit and does not count. Two findings, both verified,
+both applied. **No specification change.** The reviewer reports the
+conservation result survives their own corrected construction.
+
+**F-01 (MEDIUM) -- E3's region was not a construction the evidence rules
+permit.** `visible_flow_subgraph`'s outward shells walk the adoption
+FlowGraph, and the docstring says why: the ruling has an evaluator discerning
+"some of a foreign subtree's structure from locator data", and locators expose
+patronage. So the adoption graph is already the typed container -- peering
+lives in `peer_edges` -- and whatever is put in it is, to reach, patronage
+structure. `attach_region_behind` put a 32-way star and a clique at capacity
+100 there and called it generosity. design 3.1: "Within a subnet the
+authority relation is a tree. Every non-root node has exactly one patron, and
+every node has at most f = 10 subordinates" -- so at widths 16 and 32 the gate
+had more subordinates than the design permits, at ten times HIER_CAP, and E3
+was proving max-flow arithmetic over an injected region rather than
+conservation over what an observer's evidence can hold. All premises verified
+against the file and the design; the file hashes the reviewer reports match
+the committed ones.
+
+The reviewer's first remedy was an edge-type tag on the FlowGraph. Not
+required: the type split exists structurally, and what was missing was the
+construction respecting it. So no component. The region is now a patronage
+tree -- breadth-first, round-robin, at most FANOUT children per node, HIER_CAP
+edges -- and returns its depth, which is the `reach` an observer's evidence
+must cover; E3 also checks §3.1's bound on the adoption graph itself,
+independently of the builder's bookkeeping. **Mutation:** the old clique
+builder run through the new E3 trips that check ("the visible region is not a
+patronage structure §3.1 permits"). The generosity argument survives where it
+belongs: the attacker's interior acquaintance edges are presence records the
+observer holds none of (16.3.1's conservative direction), and E2 already shows
+interior wiring does not move a cut. E2's own region was checked for the same
+pattern: a tree at fanout 2-4 at capacity 100, not walked by reach, a bound
+test whose over-approximation favours the attacker -- the case the reviewer
+explicitly allows -- and left as is.
+
+Figures: independent sums 32/64/104/168 (was 32/64/128/256), joint 4/8/8/8,
+cut 8, general demands 8 of 168 (was 8 of 256), regression unchanged at 8 + 8
+against 8. The reviewer's 160 is 8 children by 8 plus 24 grandchildren by 4;
+mine is 10 by 8 plus 22 by 4 -- the same arithmetic on a different fill, so
+the harnesses agree. Both READMEs now say the region is a patronage tree at
+§3.1's fanout, and the models README carries the new figures.
+
+**F-02 (LOW) -- two comments described a program that no longer existed.**
+Verified: the `expanded` comment said `add_edge` "ACCUMULATES capacity" while
+`add_edge` keeps `max`; the E4 preamble said `changed == holds_edge` is
+asserted while the docstring and the code say it is not, because it is false.
+Both rewritten to say what is asserted. The `expanded` set is what makes
+`reach` count shells outward from visible peering endpoints, and that is now
+its stated purpose.
+
+**Not acted on.** The reviewer's U-01 (vertex-capacity schedule) and U-02
+(how much foreign patronage an evaluator knows) are the modelling parameters
+the file already labels as such; U-03 (population split between E4's two
+evidence states) is the simulation README's third limitation. Nothing new to
+record.
+
+Flow metric clean on seeds 0-34 and 7, 23. Model citations 179 / 0 flags
+(two new, both §3.1); references 2037 / 0. Gate: 14 artifacts pass (two
+mutations violated as expected, two bounded companions verified), ALL MODELS
+PASS; the old clique construction trips E3's new check by mutation.

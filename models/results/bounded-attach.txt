@@ -786,7 +786,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/bounded-attach.spthy
 
-  processing time: 1.29s
+  processing time: 1.35s
   
   service_follows_an_attach (all-traces): verified (15 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)

@@ -222,6 +222,7 @@ class FlowGraph:
 # peculiar to peering is off-protocol and stays between the two peers.
 HIER_CAP = 10   # capacity of an adoption (hierarchical) edge
 PEER_CAP = 10   # a peering edge is worth what any edge at its distance is
+FANOUT = 10     # design §3.1: "every node has at most f = 10 subordinates"
 
 def build_tree(rng, depth, fanout, prefix="n"):
     """Build a random adoption tree.
@@ -329,7 +330,7 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges, reach=0):
     cross-family review found the earlier fixed one-shell view could not
     express the case setwise conservation is actually about -- a whole
     region behind ONE acquired edge -- because the region's interior was
-    always invisible.  E3 needs reach>=1 for exactly that reason.
+    always invisible.  E3 needs reach equal to its region's depth for exactly that reason.
     """
     hz = horizon(scope_adj, observer)
     sub = FlowGraph()
@@ -363,8 +364,13 @@ def visible_flow_subgraph(flow, scope_adj, observer, peer_edges, reach=0):
     # moved X's standing from 0 to 8 -- an edge the design says O never
     # learns about, changing O's own computation.
     #
-    # `expanded` stops a node's edges being added twice: add_edge ACCUMULATES
-    # capacity, so re-expanding a node would silently double its edges.
+    # `expanded` makes `reach` count shells: a round expands only the nodes
+    # the previous round brought in, starting from the horizon, so the shells
+    # grow outward from the far endpoints of visible peering edges as the
+    # docstring says.  It protects nothing else: add_edge keeps the larger
+    # value for a repeated pair (§16.2.1), so re-expanding a node would
+    # change no capacity.  An earlier comment here said add_edge accumulates;
+    # that described the version that summed.
     expanded = set(hz)
     for _ in range(reach):
         frontier = [u for u in list(sub.cap) if u not in expanded]
@@ -1010,24 +1016,67 @@ def experiment_cut_bound(rng, report):
 # ---------------------------------------------------------------------------
 
 def attach_region_behind(g, gate, width):
-    """A fake region of `width` identities behind a single `gate` node.
+    """A fake region of `width` identities behind a single `gate` node, AS A
+    PATRONAGE TREE.
 
-    Fake-internal edges are GENEROUS (a clique at capacity 100): the attacker
-    wires their own region however they like, and design §17.2 is explicit
-    that topology cannot provide Sybil resistance -- only the boundary is
-    real.  Returns the fake identities.
+    `g` is the adoption graph, and that is the graph `reach` walks: the
+    ruling has an evaluator discerning *"some of a foreign subtree's
+    structure from locator data"*, and locators expose patronage.  So
+    whatever is put here is, to the observer, patronage structure, and
+    design §3.1 says what that can be -- *"Within a subnet the authority
+    relation is a tree.  Every non-root node has exactly one patron, and
+    every node has at most f = 10 subordinates"* -- at an ordinary edge's
+    capacity (HIER_CAP).
+
+    AN EARLIER VERSION WIRED THE REGION AS A CLIQUE AT CAPACITY 100, the gate
+    joined directly to every identity, and called it generosity: the
+    attacker wires their own region however they like, and §17.2 is explicit
+    that topology cannot provide Sybil resistance.  Both are still true, and
+    a cross-family review showed why the construction was not.  It put that
+    wiring in the ADOPTION graph, so reach walked it as patronage -- a gate
+    with 32 subordinates, which §3.1 forbids, at ten times what any adoption
+    edge carries.  The conservation result did not depend on it (the
+    reviewer rebuilt the region as a conforming tree and got the same cut),
+    but a test that injects whatever visible region it wants through the
+    untyped graph proves max-flow arithmetic, not the evidence boundary the
+    design puts its weight on.
+
+    The attacker's internal acquaintance edges are unchanged in status: they
+    are presence records, and a presence record enters an observer's graph
+    as evidence that observer holds (§16.3).  This construction gives the
+    observer none of them -- §16.3.1's conservative direction -- and E2
+    already shows that interior wiring, however generous, does not move a
+    cut.
+
+    Fills breadth-first and round-robin, at most FANOUT children per node,
+    and asserts it.  Returns (fakes, depth): the identities, and how many
+    patronage generations lie behind the gate -- the `reach` an observer's
+    evidence must cover to see all of them.
     """
-    fakes = []
-    for i in range(width):
-        v = f"REGION.f{i}"
-        g.add_edge(gate, v, 100)
-        g.add_edge(v, gate, 100)
-        fakes.append(v)
-    for a in fakes:                    # ... and richly interconnected
-        for b in fakes:
-            if a != b:
-                g.add_edge(a, b, 100)
-    return fakes
+    fakes, depth = [], 0
+    frontier = [gate]
+    children = {gate: []}
+    while len(fakes) < width:
+        depth += 1
+        shell = []
+        while (len(fakes) < width
+               and any(len(children[p]) < FANOUT for p in frontier)):
+            for parent in frontier:            # one child per parent per pass
+                if len(fakes) == width:
+                    break
+                if len(children[parent]) < FANOUT:
+                    v = f"REGION.f{len(fakes)}"
+                    g.add_edge(parent, v, HIER_CAP)
+                    g.add_edge(v, parent, HIER_CAP)
+                    children[parent].append(v)
+                    children[v] = []
+                    fakes.append(v)
+                    shell.append(v)
+        frontier = shell
+    assert all(len(kids) <= FANOUT for kids in children.values()), \
+        "a patronage node exceeded design §3.1's f subordinates"
+    assert len(fakes) == width
+    return fakes, depth
 
 
 def experiment_setwise(rng, report):
@@ -1039,8 +1088,9 @@ def experiment_setwise(rng, report):
     region is then:
 
       * VISIBLE -- H is in the observer's horizon, so the observer sees the
-        peering record and G with it, and (given evidence reaching one shell
-        further, `reach`) the region behind G;
+        peering record and G with it, and (given evidence reaching the
+        region's patronage generations, `reach`) the region behind G, a
+        tree at §3.1's fanout -- see attach_region_behind;
       * BEYOND the horizon -- peering confers no scope (§6.3), so G is at
         landscape distance 2 and the metric DOES ration it;
       * behind ONE CUT the attacker bought ONCE.
@@ -1066,13 +1116,23 @@ def experiment_setwise(rng, report):
     joints = []
     for width in [4, 8, 16, 32]:
         g = base.copy()
-        fakes = attach_region_behind(g, GATE, width)
+        fakes, depth = attach_region_behind(g, GATE, width)
         peer_edges = [(inside, GATE, PEER_CAP)]      # ONE acquired edge
-        # reach=1: the observer's evidence covers the shell past the gate.
-        # See visible_flow_subgraph -- how much graph an evaluator can
-        # populate is available evidence, not a protocol quantity [author].
-        vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
+        # reach = the region's depth: the observer's evidence covers every
+        # patronage generation behind the gate -- two of them at widths 16
+        # and 32, since §3.1 allows ten subordinates per node.  See
+        # visible_flow_subgraph -- how much graph an evaluator can populate
+        # is available evidence, not a protocol quantity [author].
+        vis = visible_flow_subgraph(g, scope, observer, peer_edges,
+                                    reach=depth)
         visible_fakes = [f for f in fakes if f in vis.cap]
+        # Independent of the builder's own bookkeeping: what reach walked
+        # from the gate is a structure §3.1 permits -- at most f subordinates
+        # and one patron at every node -- checked on the adoption graph
+        # itself, which is the graph the observer's evidence populates.
+        assert all(sum(1 for c in g.cap[u].values() if c > 0) <= FANOUT + 1
+                   for u in [GATE] + visible_fakes), \
+            "the visible region is not a patronage structure §3.1 permits"
         indep_sum = sum(score_independent(vis, observer, t, scope, peer_edges)
                         for t in visible_fakes)
         joint = admit_reference_order(vis, observer, visible_fakes, demand=1,
@@ -1093,9 +1153,10 @@ def experiment_setwise(rng, report):
     # everything it could get alone -- which is the strongest reading of
     # "simultaneously usable standing".
     g = base.copy()
-    fakes = attach_region_behind(g, GATE, 32)
+    fakes, depth = attach_region_behind(g, GATE, 32)
     peer_edges = [(inside, GATE, PEER_CAP)]
-    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=depth)
+    assert all(t in vis.cap for t in fakes), "the region must all be visible"
     individual = {t: score_independent(vis, observer, t, scope, peer_edges)
                   for t in fakes}
     total_individual = sum(individual.values())
@@ -1115,9 +1176,9 @@ def experiment_setwise(rng, report):
     # horizon: the observer cannot see that peering record at all, so
     # nothing behind it ever enters its graph.
     g = base.copy()
-    fakes = attach_region_behind(g, GATE, 32)
+    fakes, depth = attach_region_behind(g, GATE, 32)
     far_edges = [(outside, GATE, PEER_CAP)]
-    vis_far = visible_flow_subgraph(g, scope, observer, far_edges, reach=1)
+    vis_far = visible_flow_subgraph(g, scope, observer, far_edges, reach=depth)
     leaked = [f for f in fakes if f in vis_far.cap]
     report.append(
         f"  the same {len(fakes)} gated behind a node OUTSIDE the horizon: "
@@ -1290,12 +1351,18 @@ def experiment_setwise(rng, report):
 #      a few, because the design claim is about coverage over a population
 #      and placement is the quantity an adversary optimises.
 #
-# Two properties are asserted, matching the design's careful separation of
-# the strong claim from its conservative half:
-#   * changed == holds_edge   (STRONG: every observer that can see the edge
-#     is influenced, and only those) -- the earlier version asserted only
-#     `changed <= holds_edge`, which the strong claim's wording outran;
-#   * holds_edge > 1           (coverage, not per-target).
+# What is asserted, and what is not:
+#   * no observer that cannot see the edge is influenced by it -- the
+#     conservative direction, §16.3.1, asserted per observer;
+#   * an observer already holding the pair's presence record is moved by
+#     the peering record in NO placement -- §16.3's "adds nothing", asserted
+#     per placement;
+#   * more than one observer sees the edge, and more than one is influenced
+#     -- coverage and amortisation, not per-target figures.
+# `changed == holds_edge` is NOT asserted.  An earlier version asserted it
+# and a cross-family review disproved it: an observer already holding
+# standing to the far peer through its own tree sees the edge and is not
+# moved.  See the docstring.
 # ---------------------------------------------------------------------------
 
 def regression_conservation_is_per_computation(rng, report):
@@ -1331,9 +1398,9 @@ def regression_conservation_is_per_computation(rng, report):
     GATE = "GATE"
 
     g = base.copy()
-    fakes = attach_region_behind(g, GATE, 16)
+    fakes, depth = attach_region_behind(g, GATE, 16)
     peer_edges = [(inside, GATE, PEER_CAP)]
-    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=1)
+    vis = visible_flow_subgraph(g, scope, observer, peer_edges, reach=depth)
     seen = [f for f in fakes if f in vis.cap]
     half = len(seen) // 2
     A, B = seen[:half], seen[half:]
