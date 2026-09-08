@@ -5836,9 +5836,13 @@ count once per identity, and an operator minting identities behind a fixed
 boundary would grow aggregate entitlement with population — exactly what "the
 entire subtree inherits at most what flows through that one vertex" is
 claiming cannot happen. §18.4's Potemkin acceptance rests on the aggregate
-reading, so the aggregate reading is the specified one; a policy materialising
-per-principal decisions (§11.4) draws them from one conserved computation, not
-from one computation per principal.
+reading, so the aggregate reading is the specified one.
+
+**And it is a property of one computation** [author, 2026-09-08]: an observer
+computes standing on demand from its own graph, and nothing here is a retained
+entitlement, so there is no allocation carried from one evaluation to the next.
+The bound holds for the set an evaluation scores, which is the only set whose
+standing is simultaneously usable.
 
 #### 16.2.1 What counts as an edge in the reference graph
 

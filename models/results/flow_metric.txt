@@ -47,19 +47,22 @@ SETWISE CONSERVATION HOLDS PER COMPUTATION, NOT PER LIFETIME
     admitted together:   8  <- the design's aggregate bound
   Separate admission draws more than the cut allows, so the bound rests on the
   whole set entering ONE computation. A policy that materialises per principal and
-  retains prior entitlements is outside it -- design 16.2's "one conserved
-  computation, not one computation per principal".
+  retains prior entitlements is outside it -- design 16.2: standing is computed on
+  demand and "nothing here is a retained entitlement".
 E4: edge-influence fanout, two-ended peering (design 16.3.1)
   55 cross-tree placements enumerated over 14 THIRD-PARTY observers (worst-case aware); the two endpoints are excluded, see the loop
   observers who can SEE the edge:      min 9, median 10, max 14
   observers whose standing CHANGED:    min 5, median 6, max 10
+    ... when the observer does NOT already hold the pair's presence record.  Where it does:  0 in every placement
   best placement 'A'<->'B': 10 of 14 third parties influenced by ONE edge (max gain 10)
   seeing the edge does NOT imply being influenced -- an observer already holding standing
   to the far peer through its own tree is unaffected; the equality an earlier version
   asserted was an artifact of a one-ended attacker.
   DEMONSTRATED IN THIS TOPOLOGY (not confirmed as economics): one visible peering edge
   influences several observers, and no observer that cannot see an edge is influenced by
-  it.  That establishes amortisation EXISTS and the conservative direction HOLDS.  It does
+  it.  That establishes amortisation EXISTS -- in the evidence state where the observer
+  lacks the pair's presence record; where it already holds it the peering record adds
+  nothing (16.3), and the count is zero -- and the conservative direction HOLDS.  It does
   NOT measure the population-coverage economics 16.3.1 argues: how many edges are needed
   to reach a target fraction, how successive cover sets overlap, or how any of it varies
   across topology families.  Those need a topology model this file does not have.

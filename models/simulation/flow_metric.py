@@ -1304,9 +1304,10 @@ def regression_conservation_is_per_computation(rng, report):
 
     design 16.2 makes the aggregate bound normative for "any set of identities
     separated from it by a cut", whose *simultaneously usable* standing "totals
-    at most the cut's capacity -- one computation, shared capacity", and says
-    a policy materialising per-principal decisions "draws them from one
-    conserved computation, not from one computation per principal".
+    at most the cut's capacity -- one computation, shared capacity", and that
+    it "is a property of one computation": an observer computes standing on
+    demand from its own graph, and "nothing here is a retained entitlement"
+    [author, 2026-09-08].
 
     E3 demonstrates the bound for a set submitted TOGETHER.  It cannot
     demonstrate what happens when a policy materialises A now and B later,
@@ -1363,10 +1364,10 @@ def regression_conservation_is_per_computation(rng, report):
         "  whole set entering ONE computation. A policy that materialises "
         "per principal and")
     report.append(
-        "  retains prior entitlements is outside it -- design 16.2's "
-        "\"one conserved")
+        "  retains prior entitlements is outside it -- design 16.2: standing "
+        "is computed on")
     report.append(
-        "  computation, not one computation per principal\".")
+        "  demand and \"nothing here is a retained entitlement\".")
 
 
 def experiment_fanout(rng, report):
@@ -1424,7 +1425,7 @@ def experiment_fanout(rng, report):
             # observer inside pb's own tree already has standing to pb and
             # gains nothing, even though it can see the new edge.
             beneficiary = pb
-            see = influenced = 0
+            see = influenced = held_changed = 0
             gains = []
             for obs in nodes:
                 # THE TWO ENDPOINTS ARE NOT THIRD-PARTY OBSERVERS, and counting
@@ -1452,6 +1453,32 @@ def experiment_fanout(rng, report):
                 a = (score_independent(after, obs, beneficiary, scope,
                                        peer_edges)
                      if beneficiary in after.cap else 0)
+                # THE OTHER EVIDENCE STATE [2026-09-08].  `before` above has NO
+                # pair edge, so it measures an observer that has not fetched
+                # this pair's presence record.  But peering requires a meeting
+                # (§6.3), so the pair already HAS a presence edge; whether a
+                # given observer holds that record is per-observer evidence.
+                # design §16.3: "What a peering record adds to such an
+                # observer's graph is nothing; what it adds to an observer who
+                # can see the peering record and not the presence record is
+                # one edge".  So the marginal influence measured above is
+                # conditional on the FIRST state.  Here is the second: the
+                # observer already holds the pair edge, and the peering record
+                # arrives on top of it.  §16.2.1 collapses parallel sources to
+                # one pair edge, so the change must be exactly zero -- asserted
+                # per placement, which is the collapse rule exercised on the
+                # actual visible subgraph rather than in isolation.
+                held_before = visible_flow_subgraph(flow, scope, obs, peer_edges)
+                held_after = visible_flow_subgraph(flow, scope, obs,
+                                                   peer_edges + peer_edges)
+                hb = (score_independent(held_before, obs, beneficiary, scope,
+                                        peer_edges)
+                      if beneficiary in held_before.cap else 0)
+                ha = (score_independent(held_after, obs, beneficiary, scope,
+                                        peer_edges)
+                      if beneficiary in held_after.cap else 0)
+                if ha != hb:
+                    held_changed += 1
                 if a != b:
                     influenced += 1
                     gains.append(a - b)
@@ -1459,6 +1486,10 @@ def experiment_fanout(rng, report):
                     # observer cannot see must never move its evaluation.
                     assert visible, \
                         f"observer {obs!r} influenced by an invisible edge"
+            assert held_changed == 0, (
+                f"placement {pa!r}<->{pb!r}: {held_changed} observers moved by "
+                f"a peering record over a pair edge they already held -- "
+                f"§16.3 says that adds nothing")
             rows.append((pa, pb, see, influenced,
                          max(gains) if gains else 0))
 
@@ -1481,6 +1512,9 @@ def experiment_fanout(rng, report):
         f"  observers whose standing CHANGED:    min {min(infl)}, "
         f"median {int(statistics.median(infl))}, max {max(infl)}")
     report.append(
+        f"    ... when the observer does NOT already hold the pair's presence "
+        f"record.  Where it does:  0 in every placement")
+    report.append(
         f"  best placement {best[0]!r}<->{best[1]!r}: {best[3]} of "
         f"{len(nodes) - 2} third parties influenced by ONE edge (max gain "
         f"{best[4]})")
@@ -1499,7 +1533,13 @@ def experiment_fanout(rng, report):
         "  influences several observers, and no observer that cannot see an "
         "edge is influenced by")
     report.append(
-        "  it.  That establishes amortisation EXISTS and the conservative "
+        "  it.  That establishes amortisation EXISTS -- in the evidence state "
+        "where the observer")
+    report.append(
+        "  lacks the pair's presence record; where it already holds it the "
+        "peering record adds")
+    report.append(
+        "  nothing (16.3), and the count is zero -- and the conservative "
         "direction HOLDS.  It does")
     report.append(
         "  NOT measure the population-coverage economics 16.3.1 argues: how "

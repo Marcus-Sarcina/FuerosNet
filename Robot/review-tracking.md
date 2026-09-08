@@ -6797,3 +6797,65 @@ threshold was wrong, not the model.
 
 Flow metric: all assertions pass on seeds 1, 7, 23, 99, 500. 14 artifacts pass.
 References 2038 / 0 flags; model citations 176 / 0.
+
+---
+
+## Flow-metric review 3 (2026-09-08)
+
+Executed review: 480 exhaustive min-cut comparisons against `max_flow()`,
+`admit_reference_order()` against a one-shot super-sink flow on 250 graphs,
+whole-script seeds 1-8, E4-only seeds 1-50, and an explicit disclaimer that a
+larger sweep hit the execution limit and does not count. Two findings, both
+verified, both applied, **one producing a specification change by ruling.**
+
+**F1 (MEDIUM-HIGH) -- the lifecycle gap, sharpened into a specification
+claim.** Last round's disclosed limitation was that conservation holds per
+computation and the model cannot speak to retained entitlements. This reviewer
+followed the documents' own pointer: 16.2 named 11.4 as the consumer of
+"one conserved computation" -- but 11.4's scopes never leave the Dunbar Org,
+and 16.2.1 says the metric is "a mechanism for reaching past the horizon rather
+than for grading inside it". So the only named consumer sits where the metric
+does not ration, and nothing defines a lifecycle for one that does. Four
+premises verified against the text; a fifth found while checking --
+`resource-requirements.md` 7.2.1's *Absolute rank* predicate consumes standing,
+so infra 413's "changed member only" guidance would matter if such a consumer
+existed.
+
+The reviewer's remedy was to define an allocation lifecycle -- population,
+epoch, lease, release. That is the shape the author's corrections have removed
+before, so it went to him as the question CLAUDE.md prescribes: is the
+component required? **Ruling: standing is not a persistent entitlement**
+[author, 2026-09-08]. An observer computes it on demand from its own graph and
+nothing is retained between evaluations, so there is no lifecycle to specify.
+16.2 now says so in its own words and the 11.4 pointer is gone (references
+2038 to 2037, exactly that one). The model's regression stands unchanged in
+substance -- it exhibits why retention would break the bound -- and its
+docstring, its report text, and the simulation README were updated because
+they quoted the sentence that no longer exists; the quote checker is what makes
+that a requirement rather than a nicety.
+
+**F2 (MEDIUM) -- E4 measured one evidence state.** design 16.3 says it
+outright: "What a peering record adds to such an observer's graph is nothing;
+what it adds to an observer who can see the peering record and not the
+presence record is one edge." E4's baseline had no pair edge before peering,
+so it measured only the second state.
+
+Reproduced with a harness that first self-validated against E4's own
+per-placement figures (5/6/10, exact): 610 visible observer-placement cases,
+390 changed with the presence record absent, **0 changed with it held**. The
+reviewer reported 140/80/0 -- a different denominator I could not reconstruct
+-- but the conclusion is identical and independently established. E4 now
+computes both states per case, asserts zero change per placement (the collapse
+rule exercised on the actual visible subgraph, not in isolation), and its
+report says amortisation exists in the state where the observer lacks the
+presence record.
+
+**Two discipline notes.** A sweep's `||` was bound to `cut` rather than `grep`,
+so its silence proved nothing; re-run correctly, the one remaining carrier of
+the old clause was generated gate output, since regenerated. And the harness
+was built to self-validate before its new numbers were trusted, which is what
+let the reviewer's differing denominator be reported as a denominator
+difference rather than a disagreement.
+
+14 artifacts pass; flow metric clean on seeds 1, 7, 23. References 2037 / 0
+flags; model citations 177 / 0.
