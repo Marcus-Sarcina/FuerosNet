@@ -2,7 +2,7 @@
 
 Stage 1 of `Robot/review-plan.md` — the formal-modelling reviews the plan
 calls "the highest-value reviews in the plan and the ones least replaceable
-by an LLM pass." Three tool families, fourteen artifacts, each checking claims
+by an LLM pass." Three tool families, fifteen artifacts, each checking claims
 the design documents make analytically and had never run.
 
 **Every result here is the tool's, not the author's.** As the plan states:
@@ -169,14 +169,18 @@ constants and lists the invariants and temporal properties.
   (`SelfTruth`), views never invent transactions (`NoInvention`), and — the
   headline — **convergence restated for a no-shared-state system**: once the
   network heals and stays healed, every pair of nodes eventually agrees about
-  every subject (`Convergence`). 21,032 distinct states, no error. Adoption
-  does **not** require the subject to be patronless: design §6.2 says moving
-  between patrons is *"adopt at the destination, depart the origin, in either
-  order"*, and the adopt-first order is the one that puts two adoptions for a
-  single subject in flight across a partition at once. An earlier version
-  required patronlessness and so never explored it — 15,080 states rather than
-  21,032; the properties hold either way, so the restriction was costing
-  coverage rather than hiding a defect.
+  every subject **once topology changes stop** (`Convergence`). 21,416
+  distinct states, no error. **A node's bindings are a set, held per patron
+  relationship**: §6.2.1 says *"a node that adopts elsewhere remains in the
+  old subtree's view indefinitely, since adoption says nothing about existing
+  bindings"*, so adopting adds one and ends none, and a departure names the
+  relationship it ends. That is what makes the adopt-first transfer order
+  complete — adopt at the destination, then depart the origin — which an
+  earlier scalar version could not do, having overwritten the origin. Records
+  are ordered only within one relationship, since `wire-format.md` §2.3 gives
+  each its own series and P36 makes cross-series unrankable. The quiescence
+  half of the convergence antecedent is now stated rather than supplied by the
+  event budget in silence.
 
 - **`CurrencyEscalation`** — the patron→sibling→grandpatron ladder (design
   §12.6.5.1) under outage. The table's **fourth** rung (re-adopt at a new
@@ -206,7 +210,15 @@ constants and lists the invariants and temporal properties.
   against the detector's own row; `CycleDetection_FourNodes.cfg` is the
   instance where a cycle node has an off-cycle child, so the choice is real,
   and `CycleDetection_Mutation.cfg` lets repair cut any child there, which
-  spends every memo on innocent children and leaves the cycle standing.
+  spends every memo on innocent children and leaves the cycle standing. **The
+  memo is the patron's statement about its own subordinate slot** (§15.2), so
+  field 1 is the patron, it travels from the patron's own patron rootward, and
+  it fires where field 1 comes home — an earlier version named the occupant
+  and detected from the other end of the loop. The detector's guard is its own
+  row and no global cycle test, which no node in a loop could perform, so
+  §18.2's accepted case is reachable here: a memo matching the current row can
+  cost an edge that is on no cycle, without prejudice and with re-adoption
+  available.
 
 All three run with `-deadlock` (checking off) because the models legitimately
 terminate — quiescence is a valid end state, not an error; the properties

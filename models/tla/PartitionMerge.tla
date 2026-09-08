@@ -56,19 +56,41 @@ ASSUME None \notin Nodes
 (*          Section 10.1's storage rule ("a node stores a topology-class   *)
 (*          transaction when its subject falls within its h_store")        *)
 (*   pat  : the patron named by the transaction                            *)
-(*   n    : a per-subject ordinal.  The real design orders one subject's   *)
-(*          chain by signed back-pointers (wire Section 3.1); an ordinal   *)
-(*          is the standard finite-model abstraction of "later in the      *)
-(*          subject's own chain".  Supersession below uses it.             *)
+(*   n    : an ordinal, COMPARED ONLY WITHIN ONE RELATIONSHIP.  wire      *)
+(*          Section 2.3: "One series per patron relationship is the        *)
+(*          expected shape -- a node bound under two patrons keeps two",   *)
+(*          and design Section 19.4's P36 makes within-series the only     *)
+(*          comparison and cross-series unrankable.  A single counter is   *)
+(*          therefore admissible as the value: nothing here ever compares  *)
+(*          two ordinals from different relationships.  An earlier version *)
+(*          ordered every transaction about a subject on one scale, which  *)
+(*          ranked records the design says cannot be ranked.               *)
 (***************************************************************************)
 
 Tx == [kind : {"adopt","depart"}, subj : Nodes, pat : Nodes, n : 1..MaxEvents]
 
 VARIABLES
-  patron,   \* patron[c] : the patron c ITSELF currently acknowledges.
-            \* This is c's own ground truth -- the design has no shared
-            \* state, and everything any OTHER node believes about c is
-            \* derived from transactions in that node's own store.
+  bindings, \* bindings[c] : the SET of patrons c ITSELF currently
+            \* acknowledges.  This is c's own ground truth -- the design
+            \* has no shared state, and everything any OTHER node believes
+            \* about c is derived from transactions in that node's own
+            \* store.
+            \*
+            \* A SET, not a scalar, and design Section 6.2.1 is why: "a
+            \* node that adopts elsewhere remains in the old subtree's view
+            \* indefinitely, since ADOPTION SAYS NOTHING ABOUT EXISTING
+            \* BINDINGS".  Moving is "adopt at the destination, depart the
+            \* origin, in either order, with no requirement to do both"
+            \* (Section 6.2), so holding two at once is an ordinary state
+            \* and holding two indefinitely is a permitted one.  An earlier
+            \* version had one scalar overwritten by each adoption, so the
+            \* adopt-first order it claimed to model could not be
+            \* completed: after adopting at the destination there was no
+            \* origin left to depart.  A cross-family review found it.
+            \*
+            \* No transaction names this set -- Section 6.2: "the protocol
+            \* has no concept of a node's SET of patrons" -- and none here
+            \* does either: every action below names one relationship.
   store,    \* store[u] : the set of transactions u holds (its archive
             \* slice of topology-class objects, wire Section 10.1)
   events,   \* how many topology events have occurred (bounds the model)
@@ -76,28 +98,27 @@ VARIABLES
             \* down -- the partition.  {u,v} is a two-element set, so the
             \* relation is symmetric by construction.
 
-vars == <<patron, store, events, severed>>
+vars == <<bindings, store, events, severed>>
 
 (***************************************************************************)
 (* DERIVED NOTIONS.                                                        *)
 (***************************************************************************)
 
-\* The latest transaction u's store holds about subject c, if any.
-\* "Latest" = highest ordinal: within one subject the design compares
-\* positions in the subject's own chain, which the ordinal stands in for.
-LatestAbout(u, c) ==
-  LET about == {t \in store[u] : t.subj = c}
+\* The latest transaction u's store holds about ONE RELATIONSHIP (c under
+\* p), if any.  "Latest" = highest ordinal within that relationship, which
+\* is the only comparison the design permits (see Tx above).
+LatestRel(u, c, p) ==
+  LET about == {t \in store[u] : t.subj = c /\ t.pat = p}
   IN IF about = {} THEN None
      ELSE CHOOSE t \in about : \A s \in about : s.n <= t.n
 
-\* u's VIEW of c's patron: what u would answer if asked "who is c's
-\* patron?", from u's own store alone.  None = "no patron, as far as I
-\* hold".  This is the per-observer view the design insists on -- there is
-\* no global topology variable anywhere in this specification.
-ViewPatron(u, c) ==
-  LET t == LatestAbout(u, c)
-  IN IF t = None THEN None
-     ELSE IF t.kind = "adopt" THEN t.pat ELSE None
+\* u's VIEW of who c's patrons are: what u would answer if asked, from
+\* u's own store alone -- the relationships whose latest record u holds is
+\* an adoption.  This is the per-observer view the design insists on;
+\* there is no global topology variable anywhere in this specification.
+ViewPatrons(u, c) ==
+  {p \in Nodes : LET t == LatestRel(u, c, p)
+                 IN t # None /\ t.kind = "adopt"}
 
 \* Communication is possible between u and v when their link is not
 \* severed.  In the real system adjacency is the sessions a node holds
@@ -114,7 +135,7 @@ CanTalk(u, v) == u # v /\ {u,v} \notin severed
 (***************************************************************************)
 
 Init ==
-  /\ patron = [c \in Nodes |-> None]
+  /\ bindings = [c \in Nodes |-> {}]
   /\ store  = [u \in Nodes |-> {}]
   /\ events = 0
   /\ severed = {}
@@ -136,48 +157,51 @@ Init ==
 (* change if it were modelled -- convergence is about which transactions   *)
 (* reach whom, not about why they were admitted.                           *)
 (*                                                                         *)
-(* c NEED NOT BE PATRONLESS.  design Section 6.2 is explicit that there is *)
-(* no transfer transaction and that moving between patrons is "adopt at    *)
-(* the destination, depart the origin, IN EITHER ORDER, with no            *)
-(* requirement to do both".  An earlier version of this model required     *)
-(* patron[c] = None, which silently excluded the adopt-first order -- and  *)
-(* that is precisely the order worth checking here, since it puts two      *)
+(* AN ADOPTION ADDS A RELATIONSHIP AND ENDS NONE.  design Section 6.2.1:   *)
+(* "a node that adopts elsewhere remains in the old subtree's view         *)
+(* indefinitely, since adoption says nothing about existing bindings."     *)
+(* So c need not be patronless, and the binding it already had SURVIVES    *)
+(* this step -- which is what makes the adopt-first transfer order         *)
+(* representable, since the origin is still there to be departed.  Two     *)
 (* adoption transactions for one subject in flight across a partition at   *)
-(* once.  Relaxing it grew the reachable state space from 15,080 to 21,032 *)
-(* distinct states; all three properties still hold, so the restriction    *)
-(* was hiding coverage rather than a defect.                               *)
+(* once is exactly the case worth checking here.                           *)
 (*                                                                         *)
-(* Supersession then does the work: LatestAbout picks the highest ordinal, *)
-(* so the later adoption wins in every store that holds both, which is how *)
-(* the design orders one subject's own chain (wire Section 3.1).           *)
+(* Supersession is per relationship: LatestRel picks the highest ordinal   *)
+(* WITHIN one relationship, so a later record about (c under p) supersedes *)
+(* an earlier one about (c under p) in every store that holds both, and no *)
+(* record about (c under q) is ranked against either.                      *)
 (***************************************************************************)
 
 Adopt(c, p) ==
   /\ events < MaxEvents
-  /\ patron[c] # p
+  /\ p \notin bindings[c]
   /\ c # p
   /\ CanTalk(c, p)
   /\ LET t == [kind |-> "adopt", subj |-> c, pat |-> p, n |-> events + 1]
-     IN /\ patron' = [patron EXCEPT ![c] = p]
+     IN /\ bindings' = [bindings EXCEPT ![c] = @ \cup {p}]
         /\ store'  = [store  EXCEPT ![c] = @ \cup {t},
                                     ![p] = @ \cup {t}]
         /\ events' = events + 1
         /\ UNCHANGED severed
 
 (***************************************************************************)
-(* ACTION: Depart(c).  Unilateral: the old patron does not sign (design    *)
+(* ACTION: Depart(c, p).  Unilateral: the old patron does not sign (design *)
 (* Section 6.2's escape hatch), so at the moment of signing only c itself  *)
 (* holds the departure.  Everyone else -- the old patron included --       *)
 (* learns of it by propagation.  This asymmetry is exactly what makes      *)
 (* partition behaviour worth checking.                                     *)
+(*                                                                         *)
+(* IT NAMES THE RELATIONSHIP BEING ENDED, which is what completes the      *)
+(* adopt-first transfer: having adopted at the destination, c departs the  *)
+(* ORIGIN, not whichever binding it happens to hold latest.  An earlier    *)
+(* version departed a scalar and so could only ever end the newest.        *)
 (***************************************************************************)
 
-Depart(c) ==
+Depart(c, p) ==
   /\ events < MaxEvents
-  /\ patron[c] # None
-  /\ LET t == [kind |-> "depart", subj |-> c, pat |-> patron[c],
-               n |-> events + 1]
-     IN /\ patron' = [patron EXCEPT ![c] = None]
+  /\ p \in bindings[c]
+  /\ LET t == [kind |-> "depart", subj |-> c, pat |-> p, n |-> events + 1]
+     IN /\ bindings' = [bindings EXCEPT ![c] = @ \ {p}]
         /\ store'  = [store EXCEPT ![c] = @ \cup {t}]
         /\ events' = events + 1
         /\ UNCHANGED severed
@@ -198,7 +222,7 @@ Gossip(u, v) ==
   /\ \E t \in store[u] :
        /\ t \notin store[v]
        /\ store' = [store EXCEPT ![v] = @ \cup {t}]
-  /\ UNCHANGED <<patron, events, severed>>
+  /\ UNCHANGED <<bindings, events, severed>>
 
 (***************************************************************************)
 (* ACTIONS: Partition and Heal.  The adversary (or the world) may sever    *)
@@ -214,16 +238,16 @@ Partition(u, v) ==
   /\ u # v
   /\ {u,v} \notin severed
   /\ severed' = severed \cup {{u,v}}
-  /\ UNCHANGED <<patron, store, events>>
+  /\ UNCHANGED <<bindings, store, events>>
 
 Heal(u, v) ==
   /\ {u,v} \in severed
   /\ severed' = severed \ {{u,v}}
-  /\ UNCHANGED <<patron, store, events>>
+  /\ UNCHANGED <<bindings, store, events>>
 
 Next ==
   \/ \E c \in Nodes, p \in Nodes : Adopt(c, p)
-  \/ \E c \in Nodes : Depart(c)
+  \/ \E c \in Nodes, p \in Nodes : Depart(c, p)
   \/ \E u \in Nodes, v \in Nodes : Gossip(u, v)
   \/ \E u \in Nodes, v \in Nodes : Partition(u, v)
   \/ \E u \in Nodes, v \in Nodes : Heal(u, v)
@@ -253,7 +277,7 @@ Spec == Init /\ [][Next]_vars /\ Fairness
 \* Type correctness -- the everything-is-what-it-claims invariant that
 \* catches modelling typos before they masquerade as protocol results.
 TypeOK ==
-  /\ patron \in [Nodes -> Nodes \cup {None}]
+  /\ bindings \in [Nodes -> SUBSET Nodes]
   /\ store \in [Nodes -> SUBSET Tx]
   /\ events \in 0..MaxEvents
   /\ severed \subseteq {{u,v} : u \in Nodes, v \in Nodes}
@@ -264,7 +288,7 @@ TypeOK ==
 \* starts with the node's view of itself being
 \* right.  If this ever failed the model (or the design reading) would be
 \* broken at the root.
-SelfTruth == \A c \in Nodes : ViewPatron(c, c) = patron[c]
+SelfTruth == \A c \in Nodes : ViewPatrons(c, c) = bindings[c]
 
 \* SAFETY 2: views never invent.  Every transaction a node holds
 \* genuinely occurred -- it is in its subject's own store.  Gossip copies,
@@ -284,8 +308,21 @@ NoInvention ==
 \* network healed THEN it eventually keeps all views agreed.
 Agreed ==
   \A u \in Nodes, v \in Nodes, c \in Nodes :
-    ViewPatron(u, c) = ViewPatron(v, c)
+    ViewPatrons(u, c) = ViewPatrons(v, c)
 
-Convergence == <>[](severed = {}) => <>[]Agreed
+\* AND ON TOPOLOGY QUIESCENCE, the second half of the antecedent, which
+\* the event budget previously supplied in silence.  `events` advances on
+\* every adoption and departure and on nothing else, so this says: from
+\* some point on, no topology change occurs.  Without it the implication
+\* is false for an indefinitely active topology -- each update propagates,
+\* fair gossip satisfied, while the next is signed before the last has
+\* reached everyone, so there need never be a point after which all views
+\* agree forever.  A cross-family review put it exactly that way.
+\* MaxEvents makes the conjunct true in every execution of this instance,
+\* which is the point: what is checked is convergence UNDER quiescence,
+\* and saying so is the difference between the result and its shadow.
+Quiesces == <>[][events' = events]_vars
+
+Convergence == (<>[](severed = {}) /\ Quiesces) => <>[]Agreed
 
 =============================================================================

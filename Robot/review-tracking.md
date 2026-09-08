@@ -7118,3 +7118,97 @@ previous two rounds: capacity schedule, evaluator reach, and the E4 evidence
 split, all labelled as modelling parameters.
 
 Model citations 189 / 0 flags.
+
+## TLA+ review 2 (2026-09-08)
+
+Clean-room review of the five models. No TLC available to the reviewer; they
+rebuilt the transition relations as enumerators and reported state counts.
+Those counts agree with this session's TLC runs wherever both exist --
+PartitionMerge 21,032, CurrencyEscalation 256, SupersessionDiscipline 108,
+CycleDetection 1,621 at three nodes and 330,301 at four -- which is good
+evidence they enumerated the same machines. Four findings, **all four
+verified with TLC before anything changed, all four applied, no
+specification change.** No new defect in CurrencyEscalation,
+SupersessionDiscipline or IssuerAuthorisation.
+
+**F1 (HIGH) -- CycleDetection detected from the wrong end of the loop.** The
+memo's principal is the patron. design 15.2: "A memo is a patron's statement
+about one of its own subordinate slots: it names the patron, the patron's
+position, which slot, when, and who is in it." wire 10.2.1: "field 1 names
+the patron it speaks for. If field 1 is you, a memo you originated has come
+back to you from below." design 18.2 says the same of the replay case, a
+captured memo "matches that patron's own row". The model named the OCCUPANT,
+fired when the memo reached the adopted child, and confirmed by asking
+whether that child's own patron pointer still agreed. Both constructions cut
+an edge of the loop, from opposite ends, which is why the two-node cycle in
+the old three-node instance never showed it. Rebuilt: the memo carries `pat`
+(field 1) and `occ`, originates at the adopter's own patron -- "a receiving
+node forwards the memo to its own patron", and a rootless adopter therefore
+originates no travelling memo, which costs nothing because the adoption that
+CLOSES a cycle always has a patron chain leading back -- and fires where
+field 1 comes home.
+
+**Found while fixing, not in the review.** The guard also required
+`OnCycle`, that the loop genuinely exists. No node in a loop can see the
+loop; that is why the memo exists. It is a check 1.1 puts beyond the party
+asked to make it, and it was doing real work in the model -- suppressing
+exactly design 18.2's accepted case, "a replayed rootward memo can cost one
+edge, without prejudice". Dropped, leaving the row check the documents
+actually specify. The accepted case is now reachable rather than assumed
+away, and CyclesResolve still holds.
+
+**F2 (HIGH) -- PartitionMerge scalarised the binding, and 6.2.1 says so.**
+"a node that adopts elsewhere remains in the old subtree's view
+indefinitely, since ADOPTION SAYS NOTHING ABOUT EXISTING BINDINGS", and
+moving is "adopt at the destination, depart the origin, in either order,
+with no requirement to do both" (6.2). The model overwrote one scalar per
+adoption, so after adopting at the destination there was no origin left to
+depart -- the very order the file's own comment claimed to have been relaxed
+to cover. Rebuilt around a SET of bindings per node, transactions naming one
+relationship, departures naming the relationship they end, and ordering
+within a relationship only, which wire 2.3 requires: "one series per patron
+relationship ... a node bound under two patrons keeps two", cross-series
+unrankable per P36. No action names the set, because 6.2 says the protocol
+has no concept of one. 21,032 to 21,416 states, all three properties hold.
+
+**F3 (MEDIUM) -- the convergence antecedent was half unstated.** `<>[](healed)
+=> <>[]Agreed` does not hold for an indefinitely active topology: each update
+propagates under fair gossip while the next is signed before the last has
+arrived, so there need never be a point after which all views agree forever.
+MaxEvents supplied the missing half in silence. The property now conjoins
+`<>[][events' = events]_vars` -- topology changes eventually stop -- which
+TLC accepts and which is true in every execution of this instance. That is
+the point: what is checked is convergence UNDER quiescence, and the cfg now
+says the budget is what produces it.
+
+**F4 (MEDIUM) -- the disavowal blacklist outlived the protocol's.** `Adopt`
+refused any pair ever cut, in both orientations, forever. Reason 5 is
+"without prejudice" (wire 10.2.4) and design 18.2 bounds the replay attack
+partly ON re-adoption remaining available. Removed; `disavowed` is now a
+record of what was cut and gates nothing.
+
+**Anti-vacuity, because three of these changes shrink or reshape the space.**
+CycleDetection's three-node instance fell 1,621 to 370 states -- fewer memos
+travel, since a rootless adopter originates none -- so cycle reachability was
+checked directly rather than inferred: cycles form at three nodes and at
+four, and repairs fire at four. In PartitionMerge, two simultaneous bindings
+are reachable, the reviewer's exact transfer trace runs (b under a, then b
+under a and c, then b departs a leaving c), and disagreement is reachable, so
+`<>[]Agreed` is a real requirement.
+
+**Hardening note, not acted on as code.** Every unpartitioned pair in
+PartitionMerge can exchange frames directly, so no relay or chokepoint
+reconciliation failure is reachable. Recorded as a declared limitation in
+`models/tla/README.md` rather than modelled, along with the patron-row /
+child-binding divergence CycleDetection cannot show and the memo timestamp
+rule it does not carry.
+
+**Not modelled, deliberately.** The reviewer asked for the full memo tuple.
+Position stays out because the cycle check is an identity comparison with
+"no path arithmetic ... deliberately" (wire 10.2.1); the timestamp stays out
+because it serves the forwarding rule that stops replays, which this model
+does not carry and now says so.
+
+Figures: CycleDetection 370 (3 nodes), 35,777 (4 nodes), mutation violates
+CyclesResolve at 50,897 states. PartitionMerge 21,416. Model citations
+192 / 0 flags (three new); references 2038 / 0.

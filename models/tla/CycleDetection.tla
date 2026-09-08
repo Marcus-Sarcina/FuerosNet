@@ -45,25 +45,48 @@
 (* the regression and CycleDetection_Mutation.cfg switches the old choice   *)
 (* back on, where CyclesResolve must fail.                                 *)
 (*                                                                         *)
-(* AND THE MEMO IS CHECKED AGAINST THE DETECTOR'S ROW.  wire Section 10.2  *)
-(* has the detector act "once the memo is confirmed against its own        *)
-(* records", and the memo carries what it claims -- field 2 here, `pat`.   *)
-(* The earlier version carried `pat` and never compared it, confirming     *)
-(* only that the detector was on SOME cycle.  Repairing the four-node     *)
-(* instance exposed why that is not enough: a memo that has arrived and    *)
-(* not yet been acted on can outlive the loop it travelled -- another      *)
-(* memo's repair breaks that loop, the detector is re-adopted elsewhere    *)
-(* and a new loop forms -- and the stale memo's arrival branch is then an  *)
-(* innocent child.  A memo whose stated patron is no longer the detector's *)
-(* patron is a replay of a past slot state, and stops.                     *)
+(* THE MEMO IS THE PATRON'S, AND SO IS THE CHECK.  design Section 15.2:    *)
+(* "A memo is a patron's statement about one of its own subordinate slots: *)
+(* it names the patron, the patron's position, which slot, when, and who   *)
+(* is in it."  wire Section 10.2.1: "field 1 names the patron it speaks    *)
+(* for.  If field 1 is you, a memo you originated has come back to you     *)
+(* from below."  So field 1 is the PATRON, the detector is the patron, and *)
+(* the confirmation is against the patron's own slot row -- design Section *)
+(* 18.2 says exactly that of the replay case, a captured memo "matches     *)
+(* that patron's own row".                                                 *)
 (*                                                                         *)
-(* WHAT IS NOT CLAIMED.  That every edge cut lies on a live cycle.  design *)
-(* Section 18.2 accepts that a replayed memo matching the detector's       *)
-(* current row can sever an edge, and bounds the damage rather than       *)
-(* preventing it: the edge is the one that handed the memo over, reason 5, *)
-(* re-adoption available.  A property asserting more than that was tried  *)
-(* while repairing this file and TLC refuted it in two seconds; the claim  *)
-(* checked here is the design's, that cycles resolve.                     *)
+(* AN EARLIER VERSION NAMED THE OCCUPANT.  Its memo carried `about = c`,   *)
+(* the adopted child, fired when the memo reached the CHILD, and confirmed *)
+(* by asking whether the child's own patron pointer still agreed.  A       *)
+(* cross-family review found it: that is a different mechanism, detecting  *)
+(* from the opposite end of the same loop, and the two-node cycle hides    *)
+(* the difference because either end cuts one of the two edges.  The memo  *)
+(* now names its patron, travels from the patron's own patron rootward,    *)
+(* and fires where field 1 comes home.                                     *)
+(*                                                                         *)
+(* WHAT THE DETECTOR MAY CHECK, and nothing more.  It holds the memo and   *)
+(* its own row.  It does NOT hold the loop: no node can see a cycle it is  *)
+(* part of, which is why the memo exists.  So the guard is the row and     *)
+(* not a global cycle test -- an earlier version required the cycle to be  *)
+(* genuine, a check Section 1.1 puts beyond the party asked to make it.    *)
+(* The consequence is design Section 18.2's accepted case, now reachable   *)
+(* here: a memo matching the current row can sever an edge that is on no   *)
+(* cycle, bounded rather than prevented -- "the edge severed is the one    *)
+(* that handed the memo over, and the disavowal is reason code 5 with      *)
+(* re-adoption available".                                                 *)
+(*                                                                         *)
+(* WHAT IS NOT CLAIMED.  That every edge cut lies on a live cycle; see     *)
+(* above.  A property asserting it was tried while repairing this file and *)
+(* TLC refuted it in two seconds.  The claim checked here is the design's, *)
+(* that cycles resolve.                                                    *)
+(*                                                                         *)
+(* ONE RELATION STANDS FOR THE RELATIONSHIP.  `patron` is read both as the *)
+(* child's binding and as the patron's slot row, so the two cannot diverge *)
+(* here.  They can in the design -- a departure is unilateral (Section     *)
+(* 6.2), so a patron's row can name an occupant that has left -- and this  *)
+(* model has nothing to say about that case, because it models no          *)
+(* departure.  Nor does it model the timestamp rule that stops a replayed  *)
+(* memo at the first table-holding hop (wire Section 10.2).                *)
 (*                                                                         *)
 (* Shares the reading conventions of PartitionMerge.tla.                    *)
 (***************************************************************************)
@@ -85,16 +108,29 @@ VARIABLES
                \* by c itself), or None
   memos,       \* the multiset (modelled as a set of records, each unique
                \* by a serial number) of memos in flight or held.  A memo:
-               \*   [about |-> the node whose position it reports,
-               \*    pat   |-> that node's patron per the memo,
+               \*   [pat   |-> FIELD 1: the patron the memo speaks for,
+               \*    occ   |-> who is in the slot it reports,
                \*    at    |-> the node currently HOLDING the memo,
                \*    from  |-> the node that handed it to `at` -- the
                \*             arrival branch, which repair cuts,
                \*    id    |-> a unique serial]
+               \* The patron's position and the memo's timestamp (design
+               \* Section 15.2) are not modelled: no path arithmetic is
+               \* involved in the cycle check (wire Section 10.2.1), and
+               \* the timestamp serves the forwarding rule this model
+               \* omits.
                \* Rootward travel is modelled by the memo's `at` moving up
                \* patron edges (the Forward action).
   disavowed,   \* set of {patron, child} edges cut by cycle-repair (reason
-               \* 5).  A cut edge is removed from the patron relation.
+               \* 5).  A cut edge is removed from the patron relation.  It is
+               \* a RECORD OF WHAT WAS CUT and nothing more: reason 5 is
+               \* "without prejudice" (wire Section 10.2.4) and design
+               \* Section 18.2 bounds the replay case partly ON re-adoption
+               \* remaining available, so nothing here refuses to remake a
+               \* cut edge.  An earlier version made this a permanent
+               \* blacklist, which removed edges from the model's future for
+               \* good and made cycles easier to be rid of than the protocol
+               \* makes them.
   events,      \* adoption counter (bounds the model)
   serial       \* next unused memo id
 
@@ -137,9 +173,15 @@ Init ==
   /\ serial = 0
 
 (***************************************************************************)
-(* ACTION: Adopt(c, p).  c is adopted by p and immediately originates a    *)
-(* memo about itself (design Section 15.2: a membership change travels     *)
-(* rootward).  The memo starts held at p -- the parent forwards it onward.  *)
+(* ACTION: Adopt(c, p).  c is adopted by p, and P originates a memo about  *)
+(* its own slot (design Section 15.2: a membership change travels          *)
+(* rootward, and the memo is the patron's statement about its subordinate  *)
+(* slot).  "A receiving node forwards the memo to its own patron" (wire    *)
+(* Section 10.2), so the memo's first hop is p's patron and that is where  *)
+(* it starts here.  A root has no patron and forwarding stops there, so a  *)
+(* rootless adopter originates no travelling memo -- which costs nothing:  *)
+(* the adoption that CLOSES a cycle is always one whose adopter already    *)
+(* has a patron chain leading back to the adoptee, so its memo travels.    *)
 (*                                                                         *)
 (* The concurrency that creates cycles: we DO NOT forbid an adoption that  *)
 (* closes a loop here.  In the real protocol the closing adoption is one   *)
@@ -155,20 +197,22 @@ Adopt(c, p) ==
   /\ events < MaxEvents
   /\ patron[c] = None
   /\ c # p
-  /\ {p, c} \notin disavowed          \* a cut edge is not silently remade
   /\ patron' = [patron EXCEPT ![c] = p]
   /\ memos' = memos \cup
-       {[about |-> c, pat |-> p, at |-> p, from |-> c, id |-> serial]}
+       (IF patron[p] = None
+          THEN {}                     \* p is a root: forwarding stops there
+          ELSE {[pat |-> p, occ |-> c, at |-> patron[p], from |-> p,
+                 id |-> serial]})
   /\ serial' = serial + 1
   /\ events' = events + 1
   /\ UNCHANGED disavowed
 
 (***************************************************************************)
-(* ACTION: Forward(m).  A memo held at node u, where u is not the node the  *)
-(* memo is about-ancestor-of yet, moves up one patron edge -- rootward     *)
-(* travel (design Section 15.2).  Forwarding unchanged is the rule; the    *)
-(* memo's `about`/`pat` never change, only `at`.  A memo whose holder has   *)
-(* no patron has reached a root and simply stops (no new memo replaces it). *)
+(* ACTION: Forward(m).  A memo held at a node that is not the patron it    *)
+(* names moves up one patron edge -- rootward travel (design Section       *)
+(* 15.2).  Forwarding unchanged is the rule; the memo's `pat`/`occ` never  *)
+(* change, only `at` and the arrival branch.  A memo whose holder has no   *)
+(* patron has reached a root and simply stops.                             *)
 (*                                                                         *)
 (* Loss is modelled by NOT forwarding -- a memo that never advances is the *)
 (* lost memo.  Reconciliation (replay) is Forward firing later: the design *)
@@ -178,7 +222,7 @@ Adopt(c, p) ==
 Forward(m) ==
   /\ m \in memos
   /\ patron[m.at] # None
-  /\ m.at # m.about                 \* a memo does not climb past its subject
+  /\ m.at # m.pat                   \* field 1 is not this holder: keep climbing
   \* The memo advances to its holder's patron, and remembers who handed it
   \* over.  We replace the memo record with a copy whose `at` has moved up;
   \* same id, so it is the same memo.
@@ -188,19 +232,17 @@ Forward(m) ==
 
 (***************************************************************************)
 (* ACTION: DetectAndRepair(m).  The cycle check: a memo has arrived at the *)
-(* very node it is about (m.at = m.about), meaning that node is its own    *)
-(* ancestor -- field 1 identity match (wire Section 10.2: "If field 1 is   *)
-(* you, a memo you originated has come back to you from below").  The       *)
-(* detector confirms against its OWN records (here: the cycle genuinely     *)
-(* exists, which the detector can verify because it is a party to its own   *)
-(* patron edge) and cuts the edge on the arrival branch with a reason-5     *)
-(* disavowal.                                                              *)
+(* patron it names (m.at = m.pat) -- field 1 identity match (wire Section  *)
+(* 10.2.1: "If field 1 is you, a memo you originated has come back to you  *)
+(* from below").  The detector confirms the memo against its OWN slot row  *)
+(* -- it still holds that occupant -- and cuts the edge on the arrival     *)
+(* branch with a reason-5 disavowal.                                       *)
 (*                                                                         *)
 (* Which edge is cut: the detector disavows the direct subordinate that    *)
 (* forwarded the memo to it (wire Section 10.2.4) -- `from`, the arrival    *)
-(* branch.  That subordinate is on the cycle by construction: the memo     *)
-(* climbed patron edges from its subject back to its subject, so every     *)
-(* node it passed through lies on the loop, `from` last of all.  The       *)
+(* branch.  The memo climbed patron edges from the detector's own patron   *)
+(* back to the detector, so the nodes it passed lie on that walk, `from`   *)
+(* last of all.  The                                                       *)
 (* detector's own outgoing membership as a child is not what it may cut    *)
 (* (that is someone else's authority, design Section 6.2.2); it cuts a     *)
 (* subordinate's edge, and it has exactly one candidate.                   *)
@@ -214,17 +256,17 @@ Forward(m) ==
 
 DetectAndRepair(m) ==
   /\ m \in memos
-  /\ m.at = m.about                 \* the memo returned to its subject: a cycle
-  /\ m.pat = patron[m.about]        \* and it matches the detector's own row --
-                                    \* a memo naming a patron the detector no
-                                    \* longer has is a stale replay, and stops
-  /\ OnCycle(m.about)               \* the loop is real, per those records
+  /\ m.at = m.pat                   \* field 1 is you: a memo you originated
+                                    \* has come back to you from below
+  /\ patron[m.occ] = m.pat          \* confirmed against your own row: you
+                                    \* still hold that occupant in that slot
   /\ \E child \in Nodes :
-        /\ patron[child] = m.about
+        /\ patron[child] = m.pat
         /\ CutAnyChild \/ child = m.from   \* the arrival branch, and only it
         /\ patron' = [patron EXCEPT ![child] = None]  \* reason-5 disavowal
-        /\ disavowed' = disavowed \cup {{m.about, child}}
-  \* The memo is consumed (it terminated at its subject, design Section 15.2).
+        /\ disavowed' = disavowed \cup {{m.pat, child}}
+  \* The memo terminates here (wire Section 10.2.1: the check "fires at any
+  \* depth, on the memo alone, and terminates the memo there").
   /\ memos' = memos \ {m}
   /\ UNCHANGED <<events, serial>>
 
@@ -263,7 +305,7 @@ TypeOK ==
   /\ events \in 0..MaxEvents
   /\ serial \in 0..(MaxEvents)
   /\ \A m \in memos :
-       /\ m.about \in Nodes /\ m.pat \in Nodes
+       /\ m.pat \in Nodes /\ m.occ \in Nodes
        /\ m.at \in Nodes /\ m.from \in Nodes /\ m.id \in 0..MaxEvents
 
 \* LIVENESS (the design's claim): a cycle never persists forever.  If a

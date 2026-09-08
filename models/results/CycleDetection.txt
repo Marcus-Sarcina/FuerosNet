@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 100 and seed 4703358204910453831 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 249306] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 21 and seed 7514540281525371821 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 260471] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/CycleDetection.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,18 +8,18 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module CycleDetection
-Starting... (2026-09-08 12:55:09)
+Starting... (2026-09-08 17:20:56)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-08 12:55:09.
-Progress(11) at 2026-09-08 12:55:09: 3,319 states generated, 1,621 distinct states found, 0 states left on queue.
-Checking temporal properties for the complete state space with 1621 total distinct states at (2026-09-08 12:55:09)
-Finished checking temporal properties in 00s at 2026-09-08 12:55:09
+Finished computing initial states: 1 distinct state generated at 2026-09-08 17:20:56.
+Progress(10) at 2026-09-08 17:20:57: 481 states generated, 370 distinct states found, 0 states left on queue.
+Checking temporal properties for the complete state space with 370 total distinct states at (2026-09-08 17:20:57)
+Finished checking temporal properties in 00s at 2026-09-08 17:20:57
 Model checking completed. No error has been found.
   Estimates of the probability that TLC did not check all reachable states
   because two distinct states had the same fingerprint:
-  calculated (optimistic):  val = 1.5E-13
-3319 states generated, 1621 distinct states found, 0 states left on queue.
-The depth of the complete state graph search is 11.
-The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 3).
-Finished in 01s at (2026-09-08 12:55:09)
+  calculated (optimistic):  val = 2.2E-15
+481 states generated, 370 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 10.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 2).
+Finished in 01s at (2026-09-08 17:20:57)
