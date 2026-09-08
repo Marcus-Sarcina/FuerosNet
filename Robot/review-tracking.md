@@ -7212,3 +7212,80 @@ does not carry and now says so.
 Figures: CycleDetection 370 (3 nodes), 35,777 (4 nodes), mutation violates
 CyclesResolve at 50,897 states. PartitionMerge 21,416. Model citations
 192 / 0 flags (three new); references 2038 / 0.
+
+## Tamarin wire-only review (2026-09-08)
+
+Clean-room review of the four wire-only theories. No Tamarin available to the
+reviewer; static source-to-spec comparison only, with file hashes reported --
+all four match the committed files. Two findings, both HIGH, both in
+`recovery`, both the same class: **a value the wire requires a validator to
+COMPARE was carried in one variable on both sides, so the comparison held by
+unification and no mutation could remove it.** Both verified against the wire
+text, both applied, **no specification change.** No new defect in `attach`,
+`ceremony` or `currency`.
+
+**The class matters more than the two instances.** This suite has fixed it
+four times now -- `claimKh`, `priorKh`, the response result, the second
+response's subject -- and each time the fix was local. The reviewer's
+contribution is noticing the same shape in the fields that bind a recovery or
+transfer to its ENCLOSING ADOPTION, which is where the wire is most explicit
+about it.
+
+**F1 (HIGH) -- assembly bindings were unification.** wire 4.1 on Recovery
+field 3: "A verifier MUST check `new_key` and `patron_key` against adoption
+fields 1 and 2 and reject on mismatch. An unchecked binding is the same as no
+binding." On Transfer: "A verifier MUST check all three against the enclosing
+adoption -- `node_key` against field 1, `former_patron_key` against the
+`Transfer` map's own field 1, `new_patron_key` against field 2 -- and reject
+on mismatch. The same sentence as above, and for the same reason." The model
+verified the successor statement over a body REBUILT from the accepting
+patron's own name and the adoption's key, and the transfer statement likewise.
+That is a sound validator -- one of the conforming implementations -- but it
+is not the one the wire's separate MUST exists to catch, which verifies what
+the object says and then compares. The other implementation's error was not
+representable.
+
+Rebuilt: the adoption's field 1 enters both recovery rules as its own term
+(`adoptNew`), the successor statement carries `stmtNew`/`stmtPat`, the
+transfer object carries the map's field 1 and the statement's three values
+separately, signatures are verified over what the object says, and acceptance
+then compares. The transfer's map field 1 is also tied to the identity whose
+key the validator fetched -- the fetch step, not a fourth MUST, and commented
+as such.
+
+**F2 (HIGH) -- the first response's subject was assumed.** wire 4.1: "Every
+response's `subject` MUST equal the newly adopted node" (field 1). The
+two-response rule got this right for response 2 -- independent `newkey2`,
+explicit `Eq` -- and parsed response 1 straight into the enclosing successor.
+The one-response rule, which the wire's nonempty array makes a real shape, did
+the same. So a correctly signed response about successor K1 could not be
+transplanted under a recovery for K2, not because the model rejected it but
+because the model could not write it down. The reviewer's point about the
+action is exact: `ReliedOnResponse` was emitted after unification, so it
+recorded the desired conclusion. Both responses now carry their own subject
+and both are compared against `adoptNew`, which is also what the action now
+records.
+
+**Mutations, which is what makes this different from a comment.** The gate
+grew a section 3c: each entry replaces ONE comparison with a tautology of the
+same shape, leaving every signature valid, and the named lemma must falsify.
+Replacing rather than deleting the line is deliberate -- an earlier mutation
+script left a dangling comma, which Tamarin rejects, and a rejected theory
+reads from outside exactly like a mutation that worked. The substitution is
+literal and the gate fails if the pattern is absent, for the same reason.
+Three mutations: the patron comparison, the first response's subject, the
+transfer destination.
+
+Recovery after the rebuild: 14 lemmas verified, wellformedness clean.
+`recognition_binds_the_successor` now takes 1,458 proof steps, having been
+nearly free when the binding was syntactic. Each mutation falsifies its lemma
+against a WELL-FORMED mutant -- checked, because a theory Tamarin rejects
+reports much like one a mutation broke: the patron comparison in 26 steps, the
+first response's subject in 19, the transfer destination in 9.
+
+**Not acted on.** The reviewer's UNSPECIFIED question -- whether an upstream
+parser is assumed to have reconciled the object with its adoption -- is
+answered no, and the wire-only README now says so rather than leaving it to
+inference. The already-declared limitations they list (multi-witness, body
+projection, query_id and consent, elapsed time, TLS agreement, current issuer
+authorisation) are unchanged.

@@ -358,12 +358,39 @@ rule Patron_Accept_Recovery_One_Response:
     [ !LtkC($P, ~psk)
     , !Kh($S, khOld), !Kh($V, khV)
     , In(<kmOld, kmV>)
-    , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)
-    , In(<'recognise', $S, newkey, result, claimKh, priorKh, <provBc, provBp>>) ]
+    , In(adoptNew)                     // THE ENCLOSING ADOPTION'S FIELD 1 --
+                                       //   supplied by whoever assembled the
+                                       //   object, independently of anything
+                                       //   signed inside it.  Every comparison
+                                       //   below is against this.
+    , In(<'rotate', $S, stmtNew, stmtPat, <provAc, provAp>>)
+    , In(<'recognise', $S, respNew1, result, claimKh, priorKh, <provBc, provBp>>) ]
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV)
-    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
-    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
-    , Distinct(khV, newkey)            // wire 4.1 [author, 2026-09-08]: a
+    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, stmtNew, stmtPat)>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, stmtNew, stmtPat)>, snd(kmOld)), true)
+    , Eq(stmtNew, adoptNew)            // wire 4.1: "A verifier MUST check
+    , Eq(stmtPat, $P)                  //   `new_key` and `patron_key` against
+                                       //   adoption fields 1 and 2 and reject
+                                       //   on mismatch.  An unchecked binding
+                                       //   is the same as no binding."
+                                       //
+                                       //   TWO COMPARISONS, NOT ONE SYMBOL.
+                                       //   Until 2026-09-08 the statement was
+                                       //   verified over a body rebuilt from
+                                       //   the accepting patron's own name and
+                                       //   the adoption's key, so the check
+                                       //   held by unification and no mutation
+                                       //   could remove it.  That is a sound
+                                       //   validator, but it is only ONE of
+                                       //   the conforming implementations, and
+                                       //   the wire writes the comparison as a
+                                       //   separate MUST precisely because the
+                                       //   other one -- verify what it says,
+                                       //   then compare -- is where the check
+                                       //   can be dropped.  A cross-family
+                                       //   review found the model could not
+                                       //   express that error.
+    , Distinct(khV, adoptNew)          // wire 4.1 [author, 2026-09-08]: a
                                        //   response's verifier MUST differ
                                        //   from its subject.  A successor
                                        //   cannot supply its own continuity
@@ -388,15 +415,29 @@ rule Patron_Accept_Recovery_One_Response:
                                        //   then sit under a recovery claiming
                                        //   Y with every signature valid, and
                                        //   this theory had no way to say so.
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, snd(kmV)), true)
+    , Eq(respNew1, adoptNew)           // wire 4.1: "Every response's `subject`
+                                       //   MUST equal the newly adopted node"
+                                       //   (field 1).  The SECOND response has
+                                       //   been compared this way since it was
+                                       //   added; the first was parsed straight
+                                       //   into the accepted successor, so the
+                                       //   malformed assembly was syntactically
+                                       //   impossible and the comparison had
+                                       //   nothing to remove.  A correctly
+                                       //   signed response about successor K1
+                                       //   could not be transplanted under a
+                                       //   recovery for K2 -- not because the
+                                       //   model rejected it, but because the
+                                       //   model could not write it down.
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, respNew1, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, respNew1, result)>, snd(kmV)), true)
     , Eq(result, 'match')              // the only response, so it must match
-    , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
-    , RecognisedAs($V, $S, newkey, result)
+    , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, adoptNew)
+    , RecognisedAs($V, $S, adoptNew, result)
     , ReliedOn($P, $V, $S)
-    , ReliedOnResponse($P, $V, $S, newkey, result)
-    , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
-    [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]
+    , ReliedOnResponse($P, $V, $S, adoptNew, result)
+    , PatronAcceptedRecoveryEvidence($P, $S, adoptNew) ]->
+    [ Out(sign(<'recovered', $S, adoptNew>, ~psk)) ]
 
 restriction AtLeastOneMatchInTheBlock:
   "All r1 r2 #i. BlockResults(r1, r2) @ #i ==> r1 = 'match' | r2 = 'match'"
@@ -413,18 +454,41 @@ rule Transfer_Countersign:
     , In(nodekey)                      // ANY node it cares to name
     , !Pk($New, pkNew) ]               // a registered destination patron
   --[ CountersignedFor($Old, nodekey, $New) ]->
-    [ Out(<'transfer', nodekey, $Old, $New,
+    [ Out(<'transfer', $Old, <nodekey, $Old, $New>,
            <sign(<'rhtn/1:transfer', <nodekey, $Old, $New>>, ~oc),
             sign(<'rhtn/1:transfer', <nodekey, $Old, $New>>, ~op)> >) ]
+      // FIELD 1 OF THE `Transfer` MAP, then the signed statement.  They carry
+      // the same values in an honest object and are separate terms here,
+      // because the wire's check below is between them.
 
 rule Patron_Accept_Transfer:
     [ !LtkC($New, ~nsk)                         // the new patron signs the result
     , !Kh($Old, khOldT), In(kmOldT)             // the former patron's identity
                                                 //   and candidate KeyMaterial
-    , In(<'transfer', nodekey, $Old, $New, <provC, provP>>) ]
+    , In(adoptNode)                             // the enclosing adoption's
+                                                //   field 1
+    , In(<'transfer', mapOld, <stmtNode, stmtOld, stmtNew>, <provC, provP>>) ]
   --[ Eq(h(kmOldT), khOldT)                   // BOUND BEFORE USE
-    , Eq(verify(provC, <'rhtn/1:transfer', <nodekey, $Old, $New>>, fst(kmOldT)), true)
-    , Eq(verify(provP, <'rhtn/1:transfer', <nodekey, $Old, $New>>, snd(kmOldT)), true)
+    , Eq(mapOld, $Old)                          // the map's field 1 names the
+                                                //   identity whose key the
+                                                //   validator fetched and
+                                                //   verified with -- the fetch
+                                                //   step, not one of the three
+                                                //   comparisons below
+    , Eq(verify(provC, <'rhtn/1:transfer', <stmtNode, stmtOld, stmtNew>>, fst(kmOldT)), true)
+    , Eq(verify(provP, <'rhtn/1:transfer', <stmtNode, stmtOld, stmtNew>>, snd(kmOldT)), true)
+      // THE THREE COMPARISONS, verbatim from `wire-format.md` 4.1: "A verifier
+      // MUST check all three against the enclosing adoption -- `node_key`
+      // against field 1, `former_patron_key` against the `Transfer` map's own
+      // field 1, `new_patron_key` against field 2 -- and reject on mismatch.
+      // The same sentence as above, and for the same reason: an unchecked
+      // binding is the same as no binding."  All three were unification until
+      // 2026-09-08: the statement was verified over a body rebuilt from the
+      // accepting patron's own name and the object's own node field, so there
+      // was nothing a mutation could delete.
+    , Eq(stmtNode, adoptNode)
+    , Eq(stmtOld, mapOld)
+    , Eq(stmtNew, $New)
       // HYBRID, and this was wrong until 2026-09-07.  `wire-format.md` makes
       // Transfer field 2 a `COSE_Sign` "for the same reason field 3 of
       // Recovery" is one: the former patron is a hybrid identity and
@@ -432,17 +496,19 @@ rule Patron_Accept_Transfer:
       // transfer evidence gate after CLASSICAL-ONLY compromise of the former
       // patron -- weaker than the durable evidence it represents.
     , Distinct($Old, $New)                      // identical keys = no transfer
-    , PatronAcceptedTransferEvidence($New, $Old, nodekey) ]->
-    [ Out(sign(<'adopted', nodekey, $New>, ~nsk)) ]
+    , PatronAcceptedTransferEvidence($New, $Old, adoptNode) ]->
+    [ Out(sign(<'adopted', adoptNode, $New>, ~nsk)) ]
 
 rule Patron_Accept_Recovery:
     [ !LtkC($P, ~psk)                           // patron's own key (classical)
     , !Kh($S, khOld), !Kh($V, khV), !Kh($V2, khV2)
     , In(<kmOld, kmV, kmV2>)                    // CANDIDATE KeyMaterial, bound
                                                 //   below before use
-    , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
-    , In(<'recognise', $S, newkey,  result,  claimKh,  priorKh,  <provBc,  provBp>>)  // response 1
-    , In(<'recognise', $S, newkey2, result2, claimKh2, priorKh2, <provB2c, provB2p>>) ] // response 2
+    , In(adoptNew)                     // THE ENCLOSING ADOPTION'S FIELD 1 --
+                                       //   see the one-response rule above
+    , In(<'rotate', $S, stmtNew, stmtPat, <provAc, provAp>>)   // factor a (field 3)
+    , In(<'recognise', $S, respNew1, result,  claimKh,  priorKh,  <provBc,  provBp>>)  // response 1
+    , In(<'recognise', $S, respNew2, result2, claimKh2, priorKh2, <provB2c, provB2p>>) ] // response 2
     /*  A RECOVERY CARRIES A COLLECTION, not one response: `wire-format.md`
         allows up to 32, and its rules are per-collection -- every response
         names the new node as subject, duplicate verifier responses are
@@ -451,18 +517,40 @@ rule Patron_Accept_Recovery:
         and stopped would satisfy a one-response model; it does not satisfy
         this one.                                                          */
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV), Eq(h(kmV2), khV2)  // BOUND FIRST
-    , Eq(newkey2, newkey)              // EVERY response names the new node
+    , Eq(respNew2, adoptNew)           // EVERY response names the new node
     , Distinct($V, $V2)                // duplicate verifier responses are
                                        //   malformed -- the collection must
                                        //   be independent verifiers
-    , Distinct(khV2, newkey2)          // and the second response's verifier
+    , Distinct(khV2, adoptNew)         // and the second response's verifier
     , Eq(claimKh2, khV2), ResponseNames($V2, claimKh2)
     , Eq(priorKh2, khOld)              // and the second response's too
-    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, newkey2, result2)>, fst(kmV2)), true)
-    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, newkey2, result2)>, snd(kmV2)), true)
-    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
-    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
-    , Distinct(khV, newkey)            // wire 4.1 [author, 2026-09-08]: a
+    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, respNew2, result2)>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, respNew2, result2)>, snd(kmV2)), true)
+    , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, stmtNew, stmtPat)>, fst(kmOld)), true)
+    , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, stmtNew, stmtPat)>, snd(kmOld)), true)
+    , Eq(stmtNew, adoptNew)            // wire 4.1: "A verifier MUST check
+    , Eq(stmtPat, $P)                  //   `new_key` and `patron_key` against
+                                       //   adoption fields 1 and 2 and reject
+                                       //   on mismatch.  An unchecked binding
+                                       //   is the same as no binding."
+                                       //
+                                       //   TWO COMPARISONS, NOT ONE SYMBOL.
+                                       //   Until 2026-09-08 the statement was
+                                       //   verified over a body rebuilt from
+                                       //   the accepting patron's own name and
+                                       //   the adoption's key, so the check
+                                       //   held by unification and no mutation
+                                       //   could remove it.  That is a sound
+                                       //   validator, but it is only ONE of
+                                       //   the conforming implementations, and
+                                       //   the wire writes the comparison as a
+                                       //   separate MUST precisely because the
+                                       //   other one -- verify what it says,
+                                       //   then compare -- is where the check
+                                       //   can be dropped.  A cross-family
+                                       //   review found the model could not
+                                       //   express that error.
+    , Distinct(khV, adoptNew)          // wire 4.1 [author, 2026-09-08]: a
                                        //   response's verifier MUST differ
                                        //   from its subject.  A successor
                                        //   cannot supply its own continuity
@@ -487,8 +575,22 @@ rule Patron_Accept_Recovery:
                                        //   then sit under a recovery claiming
                                        //   Y with every signature valid, and
                                        //   this theory had no way to say so.
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, snd(kmV)), true)
+    , Eq(respNew1, adoptNew)           // wire 4.1: "Every response's `subject`
+                                       //   MUST equal the newly adopted node"
+                                       //   (field 1).  The SECOND response has
+                                       //   been compared this way since it was
+                                       //   added; the first was parsed straight
+                                       //   into the accepted successor, so the
+                                       //   malformed assembly was syntactically
+                                       //   impossible and the comparison had
+                                       //   nothing to remove.  A correctly
+                                       //   signed response about successor K1
+                                       //   could not be transplanted under a
+                                       //   recovery for K2 -- not because the
+                                       //   model rejected it, but because the
+                                       //   model could not write it down.
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, respNew1, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, respNew1, result)>, snd(kmV)), true)
     , BlockResults(result, result2)    // AT LEAST ONE match, in EITHER slot --
                                        //   see the restriction below.  Pinning
                                        //   it to the first response made
@@ -509,7 +611,7 @@ rule Patron_Accept_Recovery:
                                                 //   genuine trace facts, so
                                                 //   attribution stayed true.
     , Distinct($P, $S)                          // nor is the patron the subject
-    , Distinct(khOld, newkey)                   // and the rotation is real
+    , Distinct(khOld, adoptNew)                 // and the rotation is real
 
 /*  THE ROTATION CHECK COMPARES KEYHASHES, and until 2026-09-07 it did not.
     `wire-format.md`: "`prior_key` MUST differ from field 1", and both fields
@@ -543,8 +645,8 @@ rule Patron_Accept_Recovery:
     Closing that properly means carrying identities and keys in one keyhash
     domain throughout, which is a reshape of this theory rather than an added
     line.  Recorded rather than papered over.                              */
-    , ReliedOnResponse($P, $V,  $S, newkey,  result)
-    , ReliedOnResponse($P, $V2, $S, newkey2, result2)
+    , ReliedOnResponse($P, $V,  $S, adoptNew, result)
+    , ReliedOnResponse($P, $V2, $S, adoptNew, result2)
     , ReliedOn($P, $V, $S)                      // BOTH verifiers were trusted,
     , ReliedOn($P, $V2, $S)                     //   so both are covered by
                                                 //   forging_a_recognition_needs_
@@ -552,8 +654,8 @@ rule Patron_Accept_Recovery:
                                                 //   validator that checked the
                                                 //   first response and stopped
                                                 //   falsifies it for $V2
-    , PatronAcceptedRecoveryEvidence($P, $S, newkey) ]->
-    [ Out(sign(<'recovered', $S, newkey>, ~psk)) ]  // the countersigned result
+    , PatronAcceptedRecoveryEvidence($P, $S, adoptNew) ]->
+    [ Out(sign(<'recovered', $S, adoptNew>, ~psk)) ]  // the countersigned result
 
 /*  WHAT THAT ACTION DOES NOT MEAN.  It marks the moment THIS PATRON judged the
     two recovery factors sufficient -- nothing wider.  A recovery adoption is a

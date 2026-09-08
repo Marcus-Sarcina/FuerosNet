@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 70 and seed 8711964053714546576 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 260512] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 73 and seed -3876671966766089829 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 266873] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/SupersessionDiscipline.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,14 +8,14 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module SupersessionDiscipline
-Starting... (2026-09-08 17:20:57)
+Starting... (2026-09-08 19:26:02)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-08 17:20:58.
+Finished computing initial states: 1 distinct state generated at 2026-09-08 19:26:02.
 Model checking completed. No error has been found.
   Estimates of the probability that TLC did not check all reachable states
   because two distinct states had the same fingerprint:
   calculated (optimistic):  val = 3.2E-15
 649 states generated, 108 distinct states found, 0 states left on queue.
-The depth of the complete state graph search is 7.
+The depth of the complete state graph search is 8.
 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 4 and the 95th percentile is 3).
-Finished in 00s at (2026-09-08 17:20:58)
+Finished in 00s at (2026-09-08 19:26:02)

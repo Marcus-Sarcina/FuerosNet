@@ -202,6 +202,56 @@ for spec in compliant/currency compliant/attach; do
   fi
 done
 
+# ---------------------------------------------------------------------------
+# 3c. WIRE-ONLY MUTATIONS, and each must FALSIFY.  `wire-format.md` writes
+# several bindings as a comparison the validator MUST make -- "an unchecked
+# binding is the same as no binding" -- and until 2026-09-08 this suite got
+# those bindings by naming one variable in both places, so no mutation could
+# remove them and a green lemma meant only that the model could not write the
+# error down.  Each entry below deletes ONE comparison by replacing it with a
+# tautology of the same shape, leaving every signature valid, and the named
+# lemma must then falsify.  A clean run is a FAILURE of this gate.
+#
+# Replacing rather than deleting the line is deliberate: an earlier mutation
+# script left a dangling comma and Tamarin rejected the theory, which reads
+# from the outside exactly like a mutation that worked.
+MUTATIONS=(
+  'wire-only/recovery|successor_statement_binds_the_patron|Eq(stmtPat, $P)|Eq($P, $P)'
+  'wire-only/recovery|recognition_binds_the_successor|Eq(respNew1, adoptNew)|Eq(adoptNew, adoptNew)'
+  'wire-only/recovery|transfer_statement_binds_the_destination|Eq(stmtNew, $New)|Eq($New, $New)'
+)
+
+echo "=== 3c. Wire-only mutations: each must FALSIFY ==="
+for m in "${MUTATIONS[@]}"; do
+  IFS='|' read -r spec lem from to <<< "$m"
+  t="${spec%%/*}-${spec##*/}"
+  src="$HERE/tamarin/$spec.spthy"
+  mfile="$RESULTS/mutant-${t}-${lem}.spthy"
+  mout="$RESULTS/mutant-${t}-${lem}.txt"
+  # The substitution is literal and MUST land: a mutation that matched nothing
+  # would prove the unmutated theory and report a clean pass.
+  if ! python3 -c '
+import sys
+src, dst, frm, to = sys.argv[1:5]
+s = open(src).read()
+if frm not in s:
+    sys.exit("pattern absent: " + frm)
+open(dst, "w").write(s.replace(frm, to))
+' "$src" "$mfile" "$from" "$to"; then
+    echo "  ${lem}: MUTATION DID NOT APPLY (pattern absent)"; fail=1; continue
+  fi
+  PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
+      "$TAMARIN" --derivcheck-timeout=60 --prove="$lem" "$mfile" > "$mout" 2>&1
+  if [ $? -eq 124 ]; then
+    echo "  ${lem}: TIMED OUT (see results/$(basename "$mout"))"; fail=1; continue
+  fi
+  if grep -qE "${lem}.*falsified" "$mout"; then
+    echo "  ${lem}: falsified as expected"
+  else
+    echo "  ${lem}: DID NOT FALSIFY (see results/$(basename "$mout"))"; fail=1
+  fi
+done
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "ALL MODELS PASS"
