@@ -45,6 +45,23 @@ for m in PartitionMerge CurrencyEscalation CycleDetection SupersessionDiscipline
   fi
 done
 
+# FURTHER INSTANCES of a module above, each a configuration the default
+# instance is too small to exercise.
+#   CycleDetection_FourNodes -- a cycle node with a child NOT on the cycle,
+#                               so which subordinate repair cuts is a choice.
+for pair in "CycleDetection:CycleDetection_FourNodes"; do
+  m="${pair%%:*}"; cfg="${pair##*:}"
+  out="$RESULTS/$cfg.txt"
+  "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
+      -workers 4 -deadlock -metadir "/tmp/tlc_$cfg" \
+      -config "$HERE/tla/$cfg.cfg" "$HERE/tla/$m.tla" > "$out" 2>&1
+  if grep -q "Model checking completed. No error has been found." "$out"; then
+    echo "  $cfg: no error"
+  else
+    echo "  $cfg: FAILED (see results/$cfg.txt)"; fail=1
+  fi
+done
+
 # TWO TREES, because they prove different things and both are wanted:
 #   wire-only/  -- properties a third party checks from bytes on the wire.
 #   compliant/  -- that an honest client's OWN STATED OBLIGATIONS, in
@@ -53,36 +70,58 @@ done
 # A compliant/ lemma is NOT a claim that anyone can verify compliance
 # remotely -- it is a claim that a node doing what it promised cannot reach
 # a state its own commitments forbid.  See models/README.md.
-# THE MUTATION, and it must FAIL.  SupersessionDiscipline's invariant holds
-# because the SUBJECT is separately forbidden to re-occupy an abandoned series
-# (light-client-requirements.md) -- a rule in another document binding another
-# party.  Setting SeriesCheck = FALSE removes that assumption, and the record
-# can then walk back onto a generation the node had already superseded.
+# THE MUTATIONS, and each must FAIL.  Every TLA+ result above holds because
+# of a rule stated somewhere in the documents -- the series rule, chain-length
+# ordering, current rather than permanent authorisation, fresh issuance
+# rather than a grace period, cutting the subordinate that handed the memo
+# over.  Each mutation switches one such rule off by a constant.
 #
-# If TLC reports NO error here, the compliant-world result has stopped
-# depending on the cross-document rule and has become true for some other
-# reason -- which would mean the model no longer says what it claims.  So a
-# clean run is a FAILURE of this gate.
+# If TLC reports NO error for one, the compliant-world result has stopped
+# depending on that rule and has become true for some other reason -- which
+# would mean the model no longer says what it claims.  So a clean run is a
+# FAILURE of this gate.
 echo "=== 2b. Mutations: each must FAIL ==="
 # A mutation that stops violating means the invariant it belongs to has quietly
 # stopped depending on the rule that holds it up, and a clean run here is
 # therefore a FAILURE of this gate.
-#   SupersessionDiscipline -- drops the light client's series rule.
-#   IssuerAuthorisation    -- lets acceptance rest on any role ever recorded,
-#                             which is what a permanently-persistent
-#                             authorisation record amounts to.
-for mut in "SupersessionDiscipline:NeverIssuedForASupersededKey" \
-           "IssuerAuthorisation:NeverAcceptedOnALapsedAuthorisation"; do
-  mm="${mut%%:*}"; inv="${mut##*:}"
-  mout="$RESULTS/${mm}_Mutation.txt"
+#   SupersessionDiscipline_Mutation      -- drops the series rule (light
+#                                           client and chain holder alike).
+#   SupersessionDiscipline_OrderMutation -- drops wire 4.6.1's chain-length
+#                                           ordering, so a shorter chain
+#                                           replaces a longer one.
+#   IssuerAuthorisation_Mutation         -- lets acceptance rest on any role
+#                                           ever recorded, which is what a
+#                                           permanently-persistent
+#                                           authorisation record amounts to.
+#   CurrencyEscalation_Mutation          -- allows the grace period design
+#                                           12.6.5.1 rejects: the attestation
+#                                           is extended while the patron is
+#                                           down, with nobody signing.
+#   CycleDetection_Mutation              -- lets repair cut any direct
+#                                           subordinate rather than the one
+#                                           that handed the memo over.
+# Each entry is module:configuration:what TLC must report -- an invariant
+# name, an action property name, or "Temporal" for a temporal property.
+for mut in "SupersessionDiscipline:SupersessionDiscipline_Mutation:NeverIssuedForASupersededKey" \
+           "SupersessionDiscipline:SupersessionDiscipline_OrderMutation:NeverIssuedForASupersededKey" \
+           "IssuerAuthorisation:IssuerAuthorisation_Mutation:NeverAcceptedOnALapsedAuthorisation" \
+           "CurrencyEscalation:CurrencyEscalation_Mutation:FreshOnly" \
+           "CycleDetection:CycleDetection_Mutation:Temporal"; do
+  IFS=: read -r mm cfg inv <<< "$mut"
+  mout="$RESULTS/$cfg.txt"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
-      -workers 4 -deadlock -metadir "/tmp/tlc_${mm}_mut" \
-      -config "$HERE/tla/${mm}_Mutation.cfg" \
-      "$HERE/tla/${mm}.tla" > "$mout" 2>&1
-  if grep -q "Invariant $inv is violated" "$mout"; then
-    echo "  ${mm}_Mutation: violated as expected"
+      -workers 4 -deadlock -metadir "/tmp/tlc_$cfg" \
+      -config "$HERE/tla/$cfg.cfg" \
+      "$HERE/tla/$mm.tla" > "$mout" 2>&1
+  if [ "$inv" = "Temporal" ]; then
+    pat="Temporal properties were violated"
   else
-    echo "  ${mm}_Mutation: DID NOT VIOLATE (see results/${mm}_Mutation.txt)"
+    pat="Invariant $inv is violated\|Action property $inv is violated"
+  fi
+  if grep -q "$pat" "$mout"; then
+    echo "  $cfg: violated as expected"
+  else
+    echo "  $cfg: DID NOT VIOLATE (see results/$cfg.txt)"
     fail=1
   fi
 done

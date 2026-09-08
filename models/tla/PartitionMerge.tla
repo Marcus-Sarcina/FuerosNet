@@ -266,12 +266,14 @@ TypeOK ==
 \* broken at the root.
 SelfTruth == \A c \in Nodes : ViewPatron(c, c) = patron[c]
 
-\* SAFETY 2: views never invent.  Any adoption a node believes in
-\* corresponds to a transaction that genuinely occurred (is in its
-\* subject's own store).  Gossip copies, never creates; this pins it.
+\* SAFETY 2: views never invent.  Every transaction a node holds
+\* genuinely occurred -- it is in its subject's own store.  Gossip copies,
+\* never creates; this pins it.  Over EVERY held transaction: an earlier
+\* version checked only the latest per subject, under which a store could
+\* carry an invented older transaction beneath a genuine latest one and
+\* pass -- weaker than the name, as a cross-family review put it.
 NoInvention ==
-  \A u \in Nodes, c \in Nodes :
-    LatestAbout(u, c) # None => LatestAbout(u, c) \in store[c]
+  \A u \in Nodes : \A t \in store[u] : t \in store[t.subj]
 
 \* CONVERGENCE.  The design's claim, restated for a no-shared-state
 \* system: once the network is healed and stays healed, every pair of

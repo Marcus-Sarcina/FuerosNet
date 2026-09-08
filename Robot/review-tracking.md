@@ -6926,3 +6926,121 @@ Flow metric clean on seeds 0-34 and 7, 23. Model citations 179 / 0 flags
 (two new, both §3.1); references 2037 / 0. Gate: 14 artifacts pass (two
 mutations violated as expected, two bounded companions verified), ALL MODELS
 PASS; the old clique construction trips E3's new check by mutation.
+
+## TLA+ review (2026-09-08)
+
+Clean-room review of the five TLA+ models. No TLC in the reviewer's
+environment; they built enumerators from the transition relations and
+reproduced PartitionMerge's 21,032 states exactly, then argued the rest from
+the text. Six findings. All six verified here with TLC before anything was
+changed, all six applied, **no specification change**, and one thing found
+while repairing that the reviewer had not reported.
+
+**TLA-01 (HIGH) -- cycle repair could cut the wrong subordinate.**
+`DetectAndRepair` chose any child whose patron is the detector "and which
+reaches the detector going up" -- but a direct child reaches its patron in one
+hop, so the second conjunct excluded nobody. `Forward` kept no previous
+holder. On three nodes each cycle node has one child, so the choice never
+existed. Reproduced: four nodes, four adoptions, TLC finds a counterexample to
+`CyclesResolve` in 66 s -- both cycle-detecting memos spent on innocent
+off-cycle children, the loop standing, the remaining memos circling it
+forever under a schedule that satisfies weak fairness. The documents say
+which edge: wire 10.2.4, "it disavows the direct subordinate that forwarded
+the memo to it"; design 18.2, "the edge severed is the one that handed the
+memo over". The model now carries `from` on each memo, `Forward` sets it to
+the holder it left, and repair cuts `from` and nothing else. Fairness is
+stated per memo id rather than per record (the record set would have grown
+to |Nodes|^4 conjuncts). `CycleDetection_FourNodes.cfg` is the regression:
+330,301 states, no error, 31 s. `CycleDetection_Mutation.cfg` sets
+`CutAnyChild = TRUE` there and TLC reports the temporal violation in 30 s,
+the reviewer's shape exactly.
+
+**Found while repairing, not in the review.** A first attempt added a safety
+property, "an edge is cut only from a node on a cycle", and TLC refuted it
+under the rule in two seconds: a memo that had arrived and not yet fired
+outlived its loop -- another memo's repair broke it, the detector was
+re-adopted elsewhere, a new loop formed -- and the stale memo's arrival
+branch was by then an innocent child. Two conclusions, both applied. The
+model carried the memo's stated patron (`pat`) and never compared it with the
+detector's row, though wire 10.2 has the detector act "once the memo is
+confirmed against its own records"; the guard now requires `m.pat =
+patron[m.about]`, and a memo naming a patron the detector no longer has
+stops. And the property itself is not the design's: 18.2 accepts that a
+replay matching the current row can sever an edge and bounds the damage
+rather than preventing it, so no operator asserts it, and the header says
+so. The mutation was retargeted to `CyclesResolve`, which is the claim.
+
+**TLA-02 (HIGH) -- the clock stopped and liveness followed.** Verified by
+reading and by TLC: a state with `clock = MaxClock` holding an attestation
+stamped at `MaxClock` is reachable in eight steps, `Tick` is then disabled,
+and that attestation can never expire, so `<>[]Current` held because time had
+ended. The reviewer's second point also holds: for unbounded time the
+property is false anyway, since weak fairness lets the patron issue only after
+each expiry. Remodelled as the reviewer proposed -- the held attestation's
+AGE, saturating at LIFETIME, so the space is finite and cyclic (256 states) --
+and the property restated as recovery: every expiry is followed by renewal
+while a rung is the operative one from some point on, one property per rung
+(`LadderMakesProgress`, `SiblingRungServes`, `GrandpatronRungServes`). Per
+sibling rather than "some sibling", because two siblings flapping in
+alternation keep either from being continuously enabled, which is a real
+behaviour the property does not claim.
+
+**TLA-03 (MEDIUM) -- `FreshOnly` checked nothing.** `att.issued <= clock`
+held in every state for free; the README credited it with "issue fresh; never
+extend stale". The reviewer's remedy was attestation serials. Not required:
+the design names the rejected alternative itself -- 12.6.5.1, "the tempting
+fix is a grace period -- extend the last attestation while the patron is
+verifiably down. Do not." -- so the model now has that action, switched by
+`GraceOK`, and `FreshOnly` is the step property that validity is renewed only
+by an issuer reachable under its rung in that step. The mutation violates it
+on the first extension of a patron-issued attestation. What it cannot
+distinguish is said in the header and the README: with no key rotation in the
+model, a live issuer re-signing and its old attestation being stretched are
+one state.
+
+**TLA-04 (MEDIUM) -- the two-live-answers question was assumed away.**
+Verified: one attestation slot, and `rotated` initialised and never written.
+The single slot was presented as answering the question. The question is now
+stated as not asked, `rotated` is deleted, and the README lists two current
+attestations among what the model cannot demonstrate. The top-level README
+had never claimed it.
+
+**TLA-05 (MEDIUM) -- the series rule was checked against the wrong
+history.** Reproduced in three states: a node records 0, then 2, then takes
+1 as current, having never recorded 1, and every invariant stays green because
+"superseded" meant "what this node moved off". The documents say what a node
+holds: wire 4.6.1, a node proves its series "by presenting its adoption ...
+and each series reissue since", and "chain length is the order"; wire 4.6,
+the series rule is "checkable by anyone holding the chain, who MUST reject a
+reissue naming a series already in it". The model now has the subject's
+chain, each node holding some prefix of it as of its last arrival, a node's
+record being the tip, and `superseded` accumulating every series a held chain
+shows was left. Two constants, two mutations: `SeriesCheck` (the rule, at the
+subject's reissue and at the chain holder) and `OrderCheck` (wire 4.6.1's
+ordering). Compliant: 108 states, six invariants including that every held
+chain is a prefix. `SupersessionDiscipline_Mutation.cfg` (no series rule):
+chain 0-1-0 arrives, the record walks back, violated. The new
+`SupersessionDiscipline_OrderMutation.cfg` (no ordering): a node holding 0-1
+takes 0, and issues for a series only the chain said was left -- the
+reviewer's stale-unseen class, now covered and shown load-bearing.
+
+**TLA-06 (LOW).** `NoInvention` checked only the latest transaction per
+subject; the stronger form over every held transaction was checked first on
+the old model (21,032 states, holds) and is now the invariant. The
+`IssuerAuthorisation_Mutation.cfg` comment called `StaleOK = TRUE` the current
+reading; corrected.
+
+**Gate.** Section 2 now runs further instances of a module
+(`CycleDetection_FourNodes`), and section 2b's entries carry module,
+configuration and what TLC must report -- an invariant, an action property or
+a temporal violation -- five mutations in all. Both READMEs updated;
+`models/README.md` carries the new counts.
+
+**Not acted on.** The reviewer's "recurring-age currency instead of
+MaxClock" was adopted; their attestation-serial suggestion was not needed
+once the design's own rejected alternative was the mutation.
+
+Gate: 15 artifacts pass (the four-node instance is new), five mutations
+violated as expected, two bounded companions verified, ALL MODELS PASS.
+Flow metric unchanged. Model citations 189 / 0 flags (ten new); references
+2037 / 0.

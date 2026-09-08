@@ -31,6 +31,40 @@
 (* happen before the first has propagated.  This model builds exactly such *)
 (* races and checks the memo catches them.                                 *)
 (*                                                                         *)
+(* WHICH EDGE IS CUT, and why the memo carries its arrival branch.  wire   *)
+(* Section 10.2.4: the detector "disavows the direct subordinate that       *)
+(* forwarded the memo to it"; design Section 18.2 bounds the replay attack  *)
+(* the same way -- "the edge severed is the one that handed the memo over". *)
+(* So a memo here records `from`, the node that handed it to its holder,    *)
+(* and repair cuts that node and no other.  A cross-family review found the *)
+(* earlier version choosing ANY direct subordinate that "climbs back to the *)
+(* detector" -- a test every direct subordinate passes in one hop -- and    *)
+(* showed that with four nodes the memos can be spent cutting innocent      *)
+(* off-cycle children while the cycle stands.  Three nodes hid it, each    *)
+(* cycle node having exactly one child.  CycleDetection_FourNodes.cfg is    *)
+(* the regression and CycleDetection_Mutation.cfg switches the old choice   *)
+(* back on, where CyclesResolve must fail.                                 *)
+(*                                                                         *)
+(* AND THE MEMO IS CHECKED AGAINST THE DETECTOR'S ROW.  wire Section 10.2  *)
+(* has the detector act "once the memo is confirmed against its own        *)
+(* records", and the memo carries what it claims -- field 2 here, `pat`.   *)
+(* The earlier version carried `pat` and never compared it, confirming     *)
+(* only that the detector was on SOME cycle.  Repairing the four-node     *)
+(* instance exposed why that is not enough: a memo that has arrived and    *)
+(* not yet been acted on can outlive the loop it travelled -- another      *)
+(* memo's repair breaks that loop, the detector is re-adopted elsewhere    *)
+(* and a new loop forms -- and the stale memo's arrival branch is then an  *)
+(* innocent child.  A memo whose stated patron is no longer the detector's *)
+(* patron is a replay of a past slot state, and stops.                     *)
+(*                                                                         *)
+(* WHAT IS NOT CLAIMED.  That every edge cut lies on a live cycle.  design *)
+(* Section 18.2 accepts that a replayed memo matching the detector's       *)
+(* current row can sever an edge, and bounds the damage rather than       *)
+(* preventing it: the edge is the one that handed the memo over, reason 5, *)
+(* re-adoption available.  A property asserting more than that was tried  *)
+(* while repairing this file and TLC refuted it in two seconds; the claim  *)
+(* checked here is the design's, that cycles resolve.                     *)
+(*                                                                         *)
 (* Shares the reading conventions of PartitionMerge.tla.                    *)
 (***************************************************************************)
 
@@ -39,7 +73,10 @@ EXTENDS Naturals, FiniteSets, Sequences
 CONSTANTS
   Nodes,       \* participating nodes
   None,        \* "no patron" sentinel
-  MaxEvents    \* bound on adoptions, for finiteness
+  MaxEvents,   \* bound on adoptions, for finiteness
+  CutAnyChild  \* FALSE: repair cuts the subordinate that handed the memo
+               \* over (the rule).  TRUE only in the mutation: any direct
+               \* subordinate may be cut, which is the defect described above.
 
 ASSUME None \notin Nodes
 
@@ -51,6 +88,8 @@ VARIABLES
                \*   [about |-> the node whose position it reports,
                \*    pat   |-> that node's patron per the memo,
                \*    at    |-> the node currently HOLDING the memo,
+               \*    from  |-> the node that handed it to `at` -- the
+               \*             arrival branch, which repair cuts,
                \*    id    |-> a unique serial]
                \* Rootward travel is modelled by the memo's `at` moving up
                \* patron edges (the Forward action).
@@ -119,7 +158,7 @@ Adopt(c, p) ==
   /\ {p, c} \notin disavowed          \* a cut edge is not silently remade
   /\ patron' = [patron EXCEPT ![c] = p]
   /\ memos' = memos \cup
-       {[about |-> c, pat |-> p, at |-> p, id |-> serial]}
+       {[about |-> c, pat |-> p, at |-> p, from |-> c, id |-> serial]}
   /\ serial' = serial + 1
   /\ events' = events + 1
   /\ UNCHANGED disavowed
@@ -140,9 +179,10 @@ Forward(m) ==
   /\ m \in memos
   /\ patron[m.at] # None
   /\ m.at # m.about                 \* a memo does not climb past its subject
-  \* The memo advances to its holder's patron.  We replace the memo record
-  \* with a copy whose `at` has moved up; same id, so it is the same memo.
-  /\ LET moved == [m EXCEPT !.at = patron[m.at]]
+  \* The memo advances to its holder's patron, and remembers who handed it
+  \* over.  We replace the memo record with a copy whose `at` has moved up;
+  \* same id, so it is the same memo.
+  /\ LET moved == [m EXCEPT !.at = patron[m.at], !.from = m.at]
      IN memos' = (memos \ {m}) \cup {moved}
   /\ UNCHANGED <<patron, disavowed, events, serial>>
 
@@ -156,26 +196,32 @@ Forward(m) ==
 (* patron edge) and cuts the edge on the arrival branch with a reason-5     *)
 (* disavowal.                                                              *)
 (*                                                                         *)
-(* Which edge is cut: the detector disavows its own subordinate on the     *)
-(* branch the memo came up -- in this minimal model, the detector breaks    *)
-(* the cycle by cutting the patron edge OF the node whose adoption closed   *)
-(* it.  We cut the edge (detector-as-patron -> the child that leads back    *)
-(* around).  Concretely we remove the patron pointer that keeps the        *)
-(* detector on the cycle: the detector's own outgoing membership as a       *)
-(* child is not what it may cut (that is someone else's authority); it      *)
-(* cuts a subordinate's edge.  The subordinate on the cycle is the node     *)
-(* whose patron is the detector AND which reaches the detector going up.    *)
+(* Which edge is cut: the detector disavows the direct subordinate that    *)
+(* forwarded the memo to it (wire Section 10.2.4) -- `from`, the arrival    *)
+(* branch.  That subordinate is on the cycle by construction: the memo     *)
+(* climbed patron edges from its subject back to its subject, so every     *)
+(* node it passed through lies on the loop, `from` last of all.  The       *)
+(* detector's own outgoing membership as a child is not what it may cut    *)
+(* (that is someone else's authority, design Section 6.2.2); it cuts a     *)
+(* subordinate's edge, and it has exactly one candidate.                   *)
+(*                                                                         *)
+(* THE EARLIER TEST WAS VACUOUS.  It admitted any child whose patron is    *)
+(* the detector "and which reaches the detector going up" -- but a direct  *)
+(* child reaches its patron in one hop, so the second conjunct excluded    *)
+(* nobody, and the choice among children was free.  CutAnyChild restores   *)
+(* that freedom for the mutation and for nothing else.                     *)
 (***************************************************************************)
 
 DetectAndRepair(m) ==
   /\ m \in memos
   /\ m.at = m.about                 \* the memo returned to its subject: a cycle
-  /\ OnCycle(m.about)               \* confirmed against the detector's records
-  \* Find the detector's direct subordinate that lies on the cycle: a child
-  \* whose patron is the detector and which climbs back to the detector.
+  /\ m.pat = patron[m.about]        \* and it matches the detector's own row --
+                                    \* a memo naming a patron the detector no
+                                    \* longer has is a stale replay, and stops
+  /\ OnCycle(m.about)               \* the loop is real, per those records
   /\ \E child \in Nodes :
         /\ patron[child] = m.about
-        /\ ReachesUp(child, m.about, Cardinality(Nodes))
+        /\ CutAnyChild \/ child = m.from   \* the arrival branch, and only it
         /\ patron' = [patron EXCEPT ![child] = None]  \* reason-5 disavowal
         /\ disavowed' = disavowed \cup {{m.about, child}}
   \* The memo is consumed (it terminated at its subject, design Section 15.2).
@@ -195,11 +241,16 @@ Next ==
 (* pattern.                                                                *)
 (***************************************************************************)
 
+\* A memo is identified by its serial: the record changes as it moves, so
+\* fairness is stated per id rather than per record.  (The earlier version
+\* quantified over every possible record; with `from` added that set grows
+\* to |Nodes|^4 * (MaxEvents+1) conjuncts, for the same meaning.)
+ForwardMemo(id) == \E m \in memos : m.id = id /\ Forward(m)
+RepairMemo(id)  == \E m \in memos : m.id = id /\ DetectAndRepair(m)
+
 Fairness ==
-  /\ \A m \in [about: Nodes, pat: Nodes, at: Nodes, id: 0..MaxEvents] :
-       WF_vars(Forward(m))
-  /\ \A m \in [about: Nodes, pat: Nodes, at: Nodes, id: 0..MaxEvents] :
-       WF_vars(DetectAndRepair(m))
+  /\ \A id \in 0..MaxEvents : WF_vars(ForwardMemo(id))
+  /\ \A id \in 0..MaxEvents : WF_vars(RepairMemo(id))
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 
@@ -213,7 +264,7 @@ TypeOK ==
   /\ serial \in 0..(MaxEvents)
   /\ \A m \in memos :
        /\ m.about \in Nodes /\ m.pat \in Nodes
-       /\ m.at \in Nodes /\ m.id \in 0..MaxEvents
+       /\ m.at \in Nodes /\ m.from \in Nodes /\ m.id \in 0..MaxEvents
 
 \* LIVENESS (the design's claim): a cycle never persists forever.  If a
 \* cycle exists it is eventually broken -- reconciliation carries the memo
@@ -224,15 +275,12 @@ TypeOK ==
 \* cycle holds, it is eventually gone.
 CyclesResolve == [](HasCycle => <>(~HasCycle))
 
-\* SAFETY: repair only cuts genuine cycles.  An edge is disavowed for
-\* reason 5 only in a step where the cut node was on a cycle -- the memo is
-\* a hint confirmed against records (wire Section 10.2: "No node acts on
-\* a memo alone").  We assert the contrapositive as an invariant on the
-\* action's guard: disavowed edges only grow via DetectAndRepair, whose
-\* guard requires OnCycle.  (Checked structurally by the guard; stated here
-\* for the reader, and TypeOK plus the guard enforce it.)
-\* No operator is defined for this either: it is enforced by the action's
-\* guard rather than by a state predicate, and a definition equal to TRUE
-\* would read as a checked property while checking nothing.
+\* SAFETY, and why none is stated.  "Repair only cuts genuine cycles" is
+\* what an earlier note here claimed the guard enforced, and it enforced
+\* half: the DETECTOR is on a cycle, and nothing is said of the child.
+\* The full claim is not the design's -- see the header -- so no operator
+\* asserts it, and a definition that held only on the instances checked
+\* would be the three-node mistake again.  What the action does enforce,
+\* by its guard, is which edge: the one that handed the memo over.
 
 =============================================================================

@@ -183,16 +183,30 @@ constants and lists the invariants and temporal properties.
   patron) and the light-client pre-delegation path are *not* modelled, which
   the file now states: both are escapes from the frozen state rather than
   rungs of the issuing ladder, so the liveness claim proved here is strictly
-  weaker than the design's. Checks the plan's two questions: the ladder never
-  deadlocks while a rung can serve (`SomeIssuerCanAct`, `LadderMakesProgress`)
-  and never extends a stale attestation (`FreshOnly`, the "issue fresh, never
-  extend stale" rule). Time is modelled as event order, not a clock.
+  weaker than the design's. Checks the plan's deadlock question — the ladder
+  never deadlocks while a rung can serve (`SomeIssuerCanAct`), and every
+  expiry is followed by renewal from whichever rung outage leaves operative
+  (`LadderMakesProgress`, `SiblingRungServes`, `GrandpatronRungServes`) — and
+  the "issue fresh; never extend stale" rule as `FreshOnly`: validity is
+  renewed only by an issuer reachable under its rung in that step, which the
+  grace period §12.6.5.1 rejects violates (`CurrencyEscalation_Mutation.cfg`).
+  The plan's other question, two live answers, is not asked: the subject
+  holds one attestation. Time is the held attestation's **age**, saturating
+  at the lifetime, so the state space is finite and cyclic; an earlier
+  absolute clock bounded at a maximum let time stop, after which nothing
+  could expire and "eventually always current" held for that reason.
 
 - **`CycleDetection`** — rootward-memo cycle detection (design §15.2) under
   *concurrent* adoptions that each look legal against a stale local view.
   Checks that a patron cycle never persists forever (`CyclesResolve`): the
   memo reaches the node it names as its own ancestor and a reason-5 disavowal
-  breaks the loop, even with message loss repaired only by replay.
+  breaks the loop, even with message loss repaired only by replay. The memo
+  carries the node that handed it over and repair cuts that subordinate
+  (`wire-format.md` §10.2.4), after confirming the memo's stated patron
+  against the detector's own row; `CycleDetection_FourNodes.cfg` is the
+  instance where a cycle node has an off-cycle child, so the choice is real,
+  and `CycleDetection_Mutation.cfg` lets repair cut any child there, which
+  spends every memo on innocent children and leaves the cycle standing.
 
 All three run with `-deadlock` (checking off) because the models legitimately
 terminate — quiescence is a valid end state, not an error; the properties
@@ -203,8 +217,12 @@ that matter are the invariants and temporal properties, checked regardless.
 Where three obligations live that Tamarin could not discharge: currency's
 *"issue only for the key you currently record"* and both halves of §12.6.5's
 rule on sessions and queues. They are safety properties of a **mutable local
-state machine**, and TLC enumerates every reachable state of two nodes and
-three key generations — 100 distinct states, exhaustive.
+state machine**, and TLC enumerates every reachable state of two nodes,
+three series and chains up to length three — 108 distinct states, exhaustive.
+What a node holds is a prefix of the subject's **chain** (`wire-format.md`
+§4.6.1), ordered by length; an earlier version held a generation per node
+and could take a series it had never seen as current after the chain had
+already left it.
 
 **What makes the invariants non-vacuous.** `Issue` and `Serve` are *unguarded*:
 a node issues for whatever its record holds and serves whatever its session
