@@ -6551,3 +6551,65 @@ delimit what each lemma means cannot afford stale commentary.
 
 14 artifacts. 61 Tamarin lemmas unbounded (32 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 17 (2026-09-08)
+
+Static-only. Two findings, both verified, both applied, both mutation-tested.
+**One produced a specification change** -- the first from this review series to
+do so, and it turned on a distinction the model had been unable to draw.
+
+**F1 (HIGH) -- the self-verifier lemma compared the wrong pair, and the wire
+was missing the check.** `no_relied_on_verifier_is_the_subject` compares the
+model names `$V` and `$S`, where `$S` is the identity being recovered FROM.
+`wire-format.md`'s `VerifierResponse` field 2 is the NEWLY ADOPTED node. Two
+different pairs; the lemma's name read as though it covered both, and the
+README repeated that reading.
+
+Stated over the successor it FALSIFIED: nothing compared the verifier's
+keyhash with `newkey`, so a recovery could rely on a response whose verifier
+WAS the new node -- a successor attesting to its own continuity, which
+collapses recovery's second factor into the first. An attacker holding the old
+key and controlling one new identity satisfies both.
+
+**The design excluded it; 4.1 did not enforce it.** design 9.1 has the subject
+meet "someone they have met before", which a key generated for this rotation is
+not, and `wire-format.md` 7.3 that the party being established "is never a
+candidate for their own verification". But 4.1's enumerated Recovery
+consistency rules -- subject equals the newly adopted node, field 8 equals
+`prior_key`, no duplicate verifier, querier is the verifier -- carried no
+inequality between response fields 1 and 2.
+
+Put to the author rather than assumed, because adding a MUST to a normative
+document is his call and not a modelling decision. **Ruling: add it as a
+structural rule** [author, 2026-09-08]. 4.1 now carries "every response's
+verifier MUST differ from its subject", stated with the reason it belongs
+there rather than in 7.3's selection rules: it is the half of that principle a
+patron can check from the block alone. Both acceptance rules gained
+`Distinct(khV, newkey)`; the lemma verifies and falsifies when either site is
+removed.
+
+**F2 (MEDIUM) -- the signed projection had no verifier identity.**
+`vresp(priorKh, newkey, result)` collapsed the verifier a response NAMES (wire
+field 1, covered by the signature) into the identity whose key validates it.
+An implementation binding the signature to one and its duplicate-slot
+accounting to the other had no representation. `vresp/4` now carries field 1,
+signers set it, and acceptance compares it against the verifying identity.
+`the_named_verifier_is_the_signing_verifier` falsifies when that comparison
+goes.
+
+**A shape error found while doing it.** The signer's wrapper and the
+acceptance's input pattern had drifted to different arities, so an honest
+response could only reach acceptance by adversary reassembly of its published
+signatures. Both sides now carry the same six fields. Worth noting because the
+exists-trace guards did not catch it: reassembly is a legitimate adversary
+capability, so the honest path "completed" through it.
+
+**Not done, and flagged.** `change-log.md`'s last dated entry is 2026-09-01;
+everything since has gone here. A new MUST in a root document is the kind of
+decision that file exists to trace, but restarting it after a week's gap is a
+convention change and not mine to make.
+
+14 artifacts. 63 Tamarin lemmas unbounded (34 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail. References 2034 / 0 flags.

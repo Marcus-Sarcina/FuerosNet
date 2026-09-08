@@ -966,6 +966,16 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
 - **Every response's `subject` MUST equal the newly adopted node** (field 1). The
   verifier is attesting continuity *to* the new key; a response naming a third
   party attests something else.
+- **Every response's verifier MUST differ from its subject** — field 1 from
+  field 2 [author, 2026-09-08]. A successor cannot supply its own continuity
+  attestation: §7.3 already holds that the party being established "is never a
+  candidate for their own verification", and design §9.1 has the subject meet
+  *someone they have met before*, which a key generated for this rotation is
+  not. Stated here because it is the half of that principle a **patron can
+  check from the block alone** — prior-counterparty status generally is not
+  validator-visible, but this inequality is, and without it an attacker holding
+  the old key satisfies both of recovery's factors by controlling one new
+  identity.
 - **Duplicate responses from one verifier are malformed**, as they are in a
   presence record (§4.5) and for the same reason: one verifier occupies one slot.
 - **The querier is the verifier** (design §9.1): recovery runs §7.3 in reverse,

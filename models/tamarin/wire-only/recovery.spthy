@@ -50,7 +50,7 @@ builtins: signing, hashing
 // the wire: a SuccessorStatement is an ARRAY of three keyhashes, while a
 // verifier signature covers a MAP of VerifierResponse fields.  Distinct
 // constructors keep them non-unifiable, as the encoding does.
-functions: succ_stmt/3, vresp/3
+functions: succ_stmt/3, vresp/4
 
 /*
 --------------------------------------------------------------------------------
@@ -170,13 +170,13 @@ rule Recognise_Without_Meeting:
                                        //   response signed about one identity
                                        //   could be presented under another
                                        //   with no `RecognisedFor` for it.
-    , In(<newkey, result>) ]
+    , In(<claimKh, newkey, result>) ]  // ... and field 1 is whatever it likes
   --[ Recognised($V, $S), RecognisedFor($V, $S, newkey)
     , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
-    [ Out(<'recognise', $S, newkey, result,
-           <sign(<'rhtn/1:verifier', vresp(priorKh, newkey, result)>, ~vsc),
-            sign(<'rhtn/1:verifier', vresp(priorKh, newkey, result)>, ~vsp)> >) ]
+    [ Out(<'recognise', $S, newkey, result, claimKh, priorKh,
+           <sign(<'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -304,16 +304,17 @@ rule Recovery_Meeting:
 */
 rule Recognise:
     [ !LtkC($V, ~vsc), !LtkP($V, ~vsp)  // the verifier's two halves
-    , !Kh($S, khS)                     // and the prior identity it attests about
+    , !Kh($S, khS)                     // the prior identity it attests about
+    , !Kh($V, khVself)                 // and its OWN identity, which is field 1
     , AtMeeting($V, $S, newkey) ]      // CONSUMED: meeting now, and the key
                                        //   came over the direct channel
   --[ Recognised($V, $S)
     , RecognisedFor($V, $S, newkey)
     , RecognisedAs($V, $S, newkey, 'match')
     , HonestlyRecognised($V, $S, newkey) ]->
-    [ Out(<'recognise', $S, newkey, 'match',
-           <sign(<'rhtn/1:verifier', vresp(khS, newkey, 'match')>, ~vsc),
-            sign(<'rhtn/1:verifier', vresp(khS, newkey, 'match')>, ~vsp)> >) ]
+    [ Out(<'recognise', $S, newkey, 'match', khVself, khS,
+           <sign(<'rhtn/1:verifier', vresp(khVself, khS, newkey, 'match')>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp(khVself, khS, newkey, 'match')>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -358,10 +359,24 @@ rule Patron_Accept_Recovery_One_Response:
     , !Kh($S, khOld), !Kh($V, khV)
     , In(<kmOld, kmV>)
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)
-    , In(<'recognise', $S, newkey, result, priorKh, <provBc, provBp>>) ]
+    , In(<'recognise', $S, newkey, result, claimKh, priorKh, <provBc, provBp>>) ]
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV)
     , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
     , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
+    , Distinct(khV, newkey)            // wire 4.1 [author, 2026-09-08]: a
+                                       //   response's verifier MUST differ
+                                       //   from its subject.  A successor
+                                       //   cannot supply its own continuity
+                                       //   attestation.
+    , Eq(claimKh, khV)                 // wire field 1 names the verifier, and
+                                       //   the signature covers it -- so the
+                                       //   identity a response NAMES must be
+                                       //   the one whose key verifies it.
+                                       //   Without an independent field there
+                                       //   was nothing to compare: the model
+                                       //   turned the named and the verifying
+                                       //   verifier into one symbol.
+    , ResponseNames($V, claimKh)
     , Eq(priorKh, khOld)               // wire: EVERY response's prior identity
                                        //   MUST equal the recovery's own.
                                        //   Until 2026-09-07 the response's
@@ -373,8 +388,8 @@ rule Patron_Accept_Recovery_One_Response:
                                        //   then sit under a recovery claiming
                                        //   Y with every signature valid, and
                                        //   this theory had no way to say so.
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, snd(kmV)), true)
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, snd(kmV)), true)
     , Eq(result, 'match')              // the only response, so it must match
     , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
     , RecognisedAs($V, $S, newkey, result)
@@ -426,8 +441,8 @@ rule Patron_Accept_Recovery:
     , In(<kmOld, kmV, kmV2>)                    // CANDIDATE KeyMaterial, bound
                                                 //   below before use
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
-    , In(<'recognise', $S, newkey,  result,  priorKh, <provBc,  provBp>>)  // response 1
-    , In(<'recognise', $S, newkey2, result2, priorKh2, <provB2c, provB2p>>) ] // response 2
+    , In(<'recognise', $S, newkey,  result,  claimKh,  priorKh,  <provBc,  provBp>>)  // response 1
+    , In(<'recognise', $S, newkey2, result2, claimKh2, priorKh2, <provB2c, provB2p>>) ] // response 2
     /*  A RECOVERY CARRIES A COLLECTION, not one response: `wire-format.md`
         allows up to 32, and its rules are per-collection -- every response
         names the new node as subject, duplicate verifier responses are
@@ -440,11 +455,27 @@ rule Patron_Accept_Recovery:
     , Distinct($V, $V2)                // duplicate verifier responses are
                                        //   malformed -- the collection must
                                        //   be independent verifiers
+    , Distinct(khV2, newkey2)          // and the second response's verifier
+    , Eq(claimKh2, khV2), ResponseNames($V2, claimKh2)
     , Eq(priorKh2, khOld)              // and the second response's too
-    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp(priorKh2, newkey2, result2)>, fst(kmV2)), true)
-    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp(priorKh2, newkey2, result2)>, snd(kmV2)), true)
+    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, newkey2, result2)>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp(claimKh2, priorKh2, newkey2, result2)>, snd(kmV2)), true)
     , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
     , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
+    , Distinct(khV, newkey)            // wire 4.1 [author, 2026-09-08]: a
+                                       //   response's verifier MUST differ
+                                       //   from its subject.  A successor
+                                       //   cannot supply its own continuity
+                                       //   attestation.
+    , Eq(claimKh, khV)                 // wire field 1 names the verifier, and
+                                       //   the signature covers it -- so the
+                                       //   identity a response NAMES must be
+                                       //   the one whose key verifies it.
+                                       //   Without an independent field there
+                                       //   was nothing to compare: the model
+                                       //   turned the named and the verifying
+                                       //   verifier into one symbol.
+    , ResponseNames($V, claimKh)
     , Eq(priorKh, khOld)               // wire: EVERY response's prior identity
                                        //   MUST equal the recovery's own.
                                        //   Until 2026-09-07 the response's
@@ -456,8 +487,8 @@ rule Patron_Accept_Recovery:
                                        //   then sit under a recovery claiming
                                        //   Y with every signature valid, and
                                        //   this theory had no way to say so.
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, snd(kmV)), true)
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(claimKh, priorKh, newkey, result)>, snd(kmV)), true)
     , BlockResults(result, result2)    // AT LEAST ONE match, in EITHER slot --
                                        //   see the restriction below.  Pinning
                                        //   it to the first response made
@@ -627,6 +658,44 @@ lemma no_relied_on_verifier_is_the_subject:
     lemma demanded a match from EVERY verifier relied on, and falsified as soon
     as a second response was modelled -- correctly, because that is not the
     rule.                                                                    */
+/*  THE VERIFIER IS NOT THE NEW SUBJECT.  `no_relied_on_verifier_is_the_subject`
+    does NOT cover this: it compares the model names `$V` and `$S`, and `$S` is
+    the identity being recovered FROM, while `wire-format.md`'s
+    `VerifierResponse` field 2 is the NEWLY ADOPTED node.  Two different pairs,
+    and the older lemma's name read as though it covered both.
+
+    Stated over the successor, it FALSIFIED: nothing compared the verifier's
+    keyhash with `newkey`, so a recovery could rely on a response whose
+    verifier was the new node -- the successor attesting to itself, which
+    collapses recovery's second factor into the first.
+
+    The design excluded it already -- design 9.1 has the subject meet "someone
+    they have met before", and 7.3 that the party being established "is never a
+    candidate for their own verification" -- but 4.1's enumerated Recovery
+    checks did not, and this is the half a patron can check from the block
+    alone.  4.1 now carries it [author, 2026-09-08], and so do both acceptance
+    rules.  Delete either `Distinct(khV, newkey)` and this falsifies.      */
+lemma no_relied_on_verifier_is_the_new_subject:
+  "All P V S newkey result #i.
+     ReliedOnResponse(P, V, S, newkey, result) @ #i
+     ==> not(Ex #r. IdentityIs(V, newkey) @ #r)"
+
+/*  A RESPONSE IS ATTRIBUTED TO THE KEY THAT SIGNED IT.  `wire-format.md`'s
+    `VerifierResponse` field 1 is the verifier's keyhash and field 9 covers
+    fields 1-8, so the identity a response NAMES is authenticated.  Until
+    2026-09-08 the projection was `vresp(priorKh, newkey, result)` with no
+    verifier argument at all: the identity claimed by field 1 and the identity
+    of the key that validated the signature were one symbol, so an
+    implementation that bound the signature to one and its slot accounting to
+    the other had no representation.  That matters here because verifier
+    identity drives duplicate-slot accounting.
+
+    Delete `Eq(claimKh, khV)` and this falsifies.                          */
+lemma the_named_verifier_is_the_signing_verifier:
+  "All V claimKh #i.
+     ResponseNames(V, claimKh) @ #i
+     ==> Ex #r. IdentityIs(V, claimKh) @ #r & #r < #i"
+
 /*  THE RESULT ON THE ACCEPTANCE EDGE IS THE RESULT THE VERIFIER SIGNED, and
     until 2026-09-07 nothing said so.  `acceptance_requires_a_signed_match`
     concludes `ReliedOnResponse(..., 'match')` -- but that action is emitted by
