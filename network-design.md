@@ -6125,13 +6125,17 @@ Consequences:
 - **The acquisition economics are coverage, not per-target counts** [author,
   2026-09-03]. An attacker needs edges *visible to* each intended victim, but
   horizons overlap, so one acquired edge sits inside every horizon that
-  contains it and helps each of those observers at once — the cost of
+  contains it and can help several of those observers at once — the cost of
   influencing a population scales with the **coverage of acquired edges over
-  that population**, not with the number of observers. What survives, and is
-  the conservative direction, is the per-observer half: an edge an observer
-  cannot see cannot help with that observer, which is §1.1 as ever. **A
-  per-target framing overstates the cost**, treating as fresh work for each
-  victim what one edge does for every horizon containing it.
+  that population**, not with the number of observers. **Visibility bounds
+  that coverage and is not it** [2026-09-08]: an edge helps only the
+  observers whose evaluation adding it changes, and an observer that already
+  holds standing to the far peer, or the pair's presence record (§16.3), sees
+  the edge and is not moved. What survives, and is the conservative
+  direction, is the per-observer half: an edge an observer cannot see cannot
+  help with that observer, which is §1.1 as ever. **A per-target framing
+  overstates the cost**, treating as fresh work for each victim what one edge
+  does for several horizons containing it.
 
 ### 16.4 The pluggability tension
 
@@ -6370,8 +6374,9 @@ Three independent mechanisms, none relying on topology rules:
 **All three bounds below are per-observer** (§16.3.1): an attacker's region is
 bounded by the edges *a given observer* can see into it, not by every edge that
 exists — no standing accumulates globally, and the acquisition economics are
-§16.3.1's coverage bound: one visible edge helps every observer whose horizon
-contains it, never only one.
+§16.3.1's coverage bound: one acquired edge is visible to every observer whose
+horizon contains it and helps those of them whose evaluation it changes —
+several at once, not one per acquisition.
 
 1. **Face-to-face attestation** makes *identities* expensive. Proof of presence
    is the one resource an attacker cannot parallelise. This is the strongest

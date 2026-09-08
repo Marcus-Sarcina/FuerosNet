@@ -7044,3 +7044,49 @@ Gate: 15 artifacts pass (the four-node instance is new), five mutations
 violated as expected, two bounded companions verified, ALL MODELS PASS.
 Flow metric unchanged. Model citations 189 / 0 flags (ten new); references
 2037 / 0.
+
+## Flow-metric review 5 (2026-09-08)
+
+Executed review: seeds 1-10, 1,200 exhaustive min-cut comparisons against
+`max_flow()`, and seed 1 under five `PYTHONHASHSEED` values with byte-identical
+reports. One material finding, against the design's prose rather than the
+model, verified and applied. One informational packaging note, applied.
+
+**F1 (MEDIUM analytical) -- the design claimed that visibility is influence.**
+16.3.1: one acquired edge "sits inside every horizon that contains it and
+helps each of those observers at once"; 17.3: "one visible edge helps every
+observer whose horizon contains it, never only one". 16.3 itself says a
+peering record adds nothing to an observer already holding the pair's
+presence record, and E4 -- corrected two rounds ago on exactly this point --
+reports visible and moved separately: seed 1, visible 9-14 (median 10),
+moved 5-10 (median 6), and zero moved wherever the presence record is held.
+So the categorical sentence was false in the document that the model was
+built to check, and the model had absorbed the correction while the prose
+had not. Swept all five root documents and the model READMEs for the same
+claim: the two sites only.
+
+Both narrowed to what holds, with a dated tag. 16.3.1 now says visibility
+BOUNDS coverage and is not it -- an edge helps only the observers whose
+evaluation adding it changes, and one already holding standing to the far
+peer, or the presence record, sees it and is not moved -- and "every horizon
+containing it" became "several"; 17.3's sentence says the edge is visible to
+every such observer and helps those whose evaluation it changes, several at
+once rather than one per acquisition. The author's ruling of 2026-09-03
+stands in substance: amortisation exists and a per-target framing overstates
+the cost. What went was the word "every". The reviewer notes, and the
+tracking agrees, that the error ran in the conservative direction for the
+security argument -- an attack priced from raw visibility needs more edges,
+not fewer -- and would have contaminated later cost modelling, which is why
+it is worth a sentence rather than a shrug.
+
+**Informational.** `flow_metric.py` said the committed run was `results.txt`;
+it is `models/results/flow_metric.txt`, and the docstring now says so and
+names the gate that writes it.
+
+**Not acted on.** The reviewer's three unspecified questions -- what
+"coverage" means (now answered by F1), the capacity policy, and how much
+foreign hierarchy an evaluator knows -- are, for the latter two, the
+modelling parameters the file labels as such.
+
+Flow metric clean on seed 1. References 2038 / 0 flags (one new, the 16.3
+citation); model citations 189 / 0.

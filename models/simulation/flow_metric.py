@@ -82,7 +82,7 @@ HOW TO RUN
     python3 flow_metric.py            # runs E1-E4, prints a report
     python3 flow_metric.py --seed 7   # a different random topology draw
 
-The committed run is results.txt.
+The committed run is models/results/flow_metric.txt, written by models/run-all.sh.
 
 WHAT THIS SIMULATION IS NOT
 ===========================
