@@ -161,13 +161,22 @@ rule Compromise_PostQuantum:
     contribution and the reason a false recovery is a signed lie by a named
     party rather than an anonymous one.                                     */
 rule Recognise_Without_Meeting:
-    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp), In(<$S, newkey, result>) ]
+    [ !LtkC($V, ~vsc), !LtkP($V, ~vsp)
+    , !Kh($S, priorKh)                 // the identity this response is ABOUT --
+                                       //   a lying verifier still picks which,
+                                       //   but the action it emits and the
+                                       //   payload it signs then agree.  Taken
+                                       //   from `In` they did not, so a
+                                       //   response signed about one identity
+                                       //   could be presented under another
+                                       //   with no `RecognisedFor` for it.
+    , In(<newkey, result>) ]
   --[ Recognised($V, $S), RecognisedFor($V, $S, newkey)
     , RecognisedAs($V, $S, newkey, result)
     , RecognisedWithoutMeeting($V) ]->
     [ Out(<'recognise', $S, newkey, result,
-           <sign(<'rhtn/1:verifier', vresp($S, newkey, result)>, ~vsc),
-            sign(<'rhtn/1:verifier', vresp($S, newkey, result)>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', vresp(priorKh, newkey, result)>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp(priorKh, newkey, result)>, ~vsp)> >) ]
 
 rule Old_Key_Proof:
     [ !LtkC($S, ~oldc), !LtkP($S, ~oldp)  // the old identity's two halves
@@ -295,6 +304,7 @@ rule Recovery_Meeting:
 */
 rule Recognise:
     [ !LtkC($V, ~vsc), !LtkP($V, ~vsp)  // the verifier's two halves
+    , !Kh($S, khS)                     // and the prior identity it attests about
     , AtMeeting($V, $S, newkey) ]      // CONSUMED: meeting now, and the key
                                        //   came over the direct channel
   --[ Recognised($V, $S)
@@ -302,8 +312,8 @@ rule Recognise:
     , RecognisedAs($V, $S, newkey, 'match')
     , HonestlyRecognised($V, $S, newkey) ]->
     [ Out(<'recognise', $S, newkey, 'match',
-           <sign(<'rhtn/1:verifier', vresp($S, newkey, 'match')>, ~vsc),
-            sign(<'rhtn/1:verifier', vresp($S, newkey, 'match')>, ~vsp)> >) ]
+           <sign(<'rhtn/1:verifier', vresp(khS, newkey, 'match')>, ~vsc),
+            sign(<'rhtn/1:verifier', vresp(khS, newkey, 'match')>, ~vsp)> >) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -348,12 +358,23 @@ rule Patron_Accept_Recovery_One_Response:
     , !Kh($S, khOld), !Kh($V, khV)
     , In(<kmOld, kmV>)
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)
-    , In(<'recognise', $S, newkey, result, <provBc, provBp>>) ]
+    , In(<'recognise', $S, newkey, result, priorKh, <provBc, provBp>>) ]
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV)
     , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
     , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp($S, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp($S, newkey, result)>, snd(kmV)), true)
+    , Eq(priorKh, khOld)               // wire: EVERY response's prior identity
+                                       //   MUST equal the recovery's own.
+                                       //   Until 2026-09-07 the response's
+                                       //   prior WAS the recovery's -- one
+                                       //   symbol, so nothing to compare and
+                                       //   the check was true by
+                                       //   construction.  A correctly signed
+                                       //   response about identity X could
+                                       //   then sit under a recovery claiming
+                                       //   Y with every signature valid, and
+                                       //   this theory had no way to say so.
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, snd(kmV)), true)
     , Eq(result, 'match')              // the only response, so it must match
     , Distinct($V, $S), Distinct($P, $S), Distinct(khOld, newkey)
     , RecognisedAs($V, $S, newkey, result)
@@ -405,8 +426,8 @@ rule Patron_Accept_Recovery:
     , In(<kmOld, kmV, kmV2>)                    // CANDIDATE KeyMaterial, bound
                                                 //   below before use
     , In(<'rotate', $S, newkey, $P, <provAc, provAp>>)   // factor a (field 3)
-    , In(<'recognise', $S, newkey,  result,  <provBc,  provBp>>)   // response 1
-    , In(<'recognise', $S, newkey2, result2, <provB2c, provB2p>>) ] // response 2
+    , In(<'recognise', $S, newkey,  result,  priorKh, <provBc,  provBp>>)  // response 1
+    , In(<'recognise', $S, newkey2, result2, priorKh2, <provB2c, provB2p>>) ] // response 2
     /*  A RECOVERY CARRIES A COLLECTION, not one response: `wire-format.md`
         allows up to 32, and its rules are per-collection -- every response
         names the new node as subject, duplicate verifier responses are
@@ -419,12 +440,24 @@ rule Patron_Accept_Recovery:
     , Distinct($V, $V2)                // duplicate verifier responses are
                                        //   malformed -- the collection must
                                        //   be independent verifiers
-    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp($S, newkey2, result2)>, fst(kmV2)), true)
-    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp($S, newkey2, result2)>, snd(kmV2)), true)
+    , Eq(priorKh2, khOld)              // and the second response's too
+    , Eq(verify(provB2c, <'rhtn/1:verifier', vresp(priorKh2, newkey2, result2)>, fst(kmV2)), true)
+    , Eq(verify(provB2p, <'rhtn/1:verifier', vresp(priorKh2, newkey2, result2)>, snd(kmV2)), true)
     , Eq(verify(provAc, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, fst(kmOld)), true)
     , Eq(verify(provAp, <'rhtn/1:successor', succ_stmt($S, newkey, $P)>, snd(kmOld)), true)
-    , Eq(verify(provBc, <'rhtn/1:verifier', vresp($S, newkey, result)>, fst(kmV)), true)
-    , Eq(verify(provBp, <'rhtn/1:verifier', vresp($S, newkey, result)>, snd(kmV)), true)
+    , Eq(priorKh, khOld)               // wire: EVERY response's prior identity
+                                       //   MUST equal the recovery's own.
+                                       //   Until 2026-09-07 the response's
+                                       //   prior WAS the recovery's -- one
+                                       //   symbol, so nothing to compare and
+                                       //   the check was true by
+                                       //   construction.  A correctly signed
+                                       //   response about identity X could
+                                       //   then sit under a recovery claiming
+                                       //   Y with every signature valid, and
+                                       //   this theory had no way to say so.
+    , Eq(verify(provBc, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, fst(kmV)), true)
+    , Eq(verify(provBp, <'rhtn/1:verifier', vresp(priorKh, newkey, result)>, snd(kmV)), true)
     , BlockResults(result, result2)    // AT LEAST ONE match, in EITHER slot --
                                        //   see the restriction below.  Pinning
                                        //   it to the first response made
@@ -594,6 +627,27 @@ lemma no_relied_on_verifier_is_the_subject:
     lemma demanded a match from EVERY verifier relied on, and falsified as soon
     as a second response was modelled -- correctly, because that is not the
     rule.                                                                    */
+/*  THE RESULT ON THE ACCEPTANCE EDGE IS THE RESULT THE VERIFIER SIGNED, and
+    until 2026-09-07 nothing said so.  `acceptance_requires_a_signed_match`
+    concludes `ReliedOnResponse(..., 'match')` -- but that action is emitted by
+    the ACCEPTANCE RULE ITSELF, at the same instant, so alone it says only that
+    acceptance recorded a match, not that any verifier signed one.
+
+    It was introduced while fixing the OPPOSITE fault: the form before it was a
+    trace-wide existential satisfiable by an unrelated recognition, and
+    replacing that with a rule-emitted action swapped one kind of empty
+    provenance for another.  Two rounds, two directions, same hole.
+
+    This closes the loop back to the signing event carrying the SAME `result`.
+    Leave the result out of the verifier's signed payload and it falsifies --
+    which is the regression "signed match" is supposed to name.           */
+lemma every_relied_on_response_was_signed_as_such:
+  "All P V S newkey result #i.
+     ReliedOnResponse(P, V, S, newkey, result) @ #i
+     ==> ( (Ex #b. RecognisedAs(V, S, newkey, result) @ #b & #b < #i)
+         | ( (Ex #x. CompromisedClassical(V) @ #x & #x < #i)
+           & (Ex #y. CompromisedPQ(V) @ #y & #y < #i) ) )"
+
 /*  THE MATCH MUST BE ONE OF THE RESPONSES THIS ACCEPTANCE CONSUMED.  The
     earlier form asked only that SOME `RecognisedAs(V, S, newkey, 'match')`
     existed anywhere in the trace, and its compromise branch quantified over

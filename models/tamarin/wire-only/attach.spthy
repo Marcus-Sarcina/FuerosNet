@@ -185,12 +185,17 @@ rule Compromise_Key:
   authentication direction: without it a peer authenticated as A submits an
   Attach claiming B and is handed B's mailbox.
 
-  This theory cannot state that.  It has ONE client identity variable, so
-  "the identity that authenticated" and "the identity the Attach claims"
-  are the same term by construction, and Server_Respond stamps
-  ServerAccept($S, $C, nc) on a message it never authenticated $C for.
-  Representing it needs two terms and a session/queue state conditional on
-  their equality.  Recorded as absent rather than left to read as covered.
+  This theory DOES state that, since 2026-09-06.  `Server_Bind` keeps `$A`,
+  the identity the transport authenticated, and `$Claim`, the identity the
+  Attach names, as separate terms and requires `Eq($A, $Claim)` before any
+  session or queue state exists.  Delete that equality and
+  `queued_data_reaches_only_the_authenticated_peer` falsifies with the trace
+  Section 9.1 describes.
+
+  (This paragraph said the opposite until 2026-09-07 -- it was written when
+  the theory had one client identity variable and was never updated when the
+  rule was.  A file that leans this heavily on commentary to say what each
+  lemma means cannot afford stale commentary.)
 */
 
 // Step 1: the client picks a fresh challenge and sends it, naming the
@@ -287,9 +292,19 @@ rule Server_Bind:
     , Bound($S, $A, ~ns, $Claim) ]->
     [ Session($S, $Claim, ~ns) ]
     // THE SESSION CARRIES THE CHALLENGE IT WAS ESTABLISHED UNDER.  `~ns` is
-    // fresh per handshake, so it is an unforgeable session token: two
-    // legitimate sessions between the same pair are distinguishable, and a
-    // delivery can name the session that authorised it rather than the pair.
+    // fresh per handshake, so two legitimate sessions between the same pair
+    // are distinguishable and a delivery can name the session that authorised
+    // it rather than the pair.
+    //
+    // IT IS NOT A CONNECTION HANDLE, and an earlier comment here called it an
+    // "unforgeable session token", which was wrong: `~ns` is sent in the
+    // clear, so it is fresh but not secret and any principal that sees it can
+    // sign the client-auth term over it.  What the two authentication lemmas
+    // give is each side's own authentication fact, NOT an agreement theorem
+    // that both completed the same TLS connection -- the transcript machinery
+    // that would supply that is abstracted away.  Binding it properly needs a
+    // connection handle carried through both endpoint facts; recorded, not
+    // done.
 
 /*  Queued material and its release.  design 14.1.4 has the serving node hold
     ciphertext for an offline client; what matters here is only who it goes

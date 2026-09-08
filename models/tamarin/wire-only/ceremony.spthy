@@ -148,8 +148,10 @@ restriction DistinctParties:
 /*  ONE ENVELOPE CONTEXT, AND THE SUBTYPE IS SIGNED BODY.  Both records are
     type-5 presence transactions on the wire: envelope signatures use the
     common `rhtn/1:envelope` context, and normal-versus-formation is signed
-    body FIELD 6 (0 normal, 1 formation), with the witness slot empty for a
-    formation rather than absent.
+    body FIELD 6 (0 normal, 1 formation), with a formation's witness key
+    ABSENT rather than present-and-empty -- `wire-format.md` says keys 4 and 5
+    are "ABSENT always on a formation", and the payload here is correspondingly
+    a shorter tuple.
 
     This theory used to sign the two under DIFFERENT invented contexts,
     `rhtn/1:presence` and `rhtn/1:formation`, neither of which exists in the

@@ -528,7 +528,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/attach.spthy
 
-  processing time: 2.10s
+  processing time: 1.87s
   
   attach_completes_honestly (exists-trace): verified (13 steps)
   attach_is_executable (exists-trace): verified (12 steps)

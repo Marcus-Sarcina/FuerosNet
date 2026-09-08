@@ -16,7 +16,7 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(31 lemmas) and `compliant/` (29 lemmas).
+(32 lemmas) and `compliant/` (29 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and

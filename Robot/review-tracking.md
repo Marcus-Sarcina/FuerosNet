@@ -6493,3 +6493,61 @@ off an unauthenticated session.
 
 14 artifacts. 60 Tamarin lemmas unbounded (31 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail.
+
+---
+
+## Cross-family wire-only review 16 (2026-09-07)
+
+Static-only. Three findings, all verified, all applied; the two HIGH ones
+mutation-tested.
+
+**F1 (HIGH) -- I swapped one empty provenance for another.** Review 14 replaced
+a trace-wide existential in `acceptance_requires_a_signed_match` with
+`ReliedOnResponse`, an action emitted BY THE ACCEPTANCE RULE at the same
+instant. So the lemma concluded that acceptance had recorded a match -- true by
+construction, and silent about what any verifier signed. A response whose
+result was outside signature coverage could be upgraded from `no-match` to
+`match` in transit and nothing would fail.
+
+Two rounds, two directions, same hole: first a property that could be
+discharged by an unrelated trace fact, then one that could be discharged by the
+rule's own emission. The link that was missing both times is between the
+acceptance edge and the SIGNING event, carrying the same `result`.
+`every_relied_on_response_was_signed_as_such` supplies it; removing `result`
+from the verifier's signed payload falsifies it.
+
+**F2 (HIGH) -- the wire's prior-key equality was true by representation.**
+`vresp($S, newkey, result)` used the same symbol for the response's prior
+identity and the recovery's, so there were never two values to compare and the
+mandatory check could not be stated. The wire is explicit that a correctly
+signed response about identity X can otherwise sit under a recovery claiming Y
+with every signature valid. The response now carries its own prior-key field
+and both acceptance rules compare it; removing the comparison falsifies.
+
+**A correction found while fixing F2, by reading a counterexample.** Giving the
+lying verifier its prior identity from `In` let its emitted `RecognisedFor`
+name one identity while its signature covered another --
+`recognition_binds_the_successor` falsified and the trace showed why. The rule
+now takes `!Kh($S, priorKh)`, so a dishonest verifier still chooses WHICH
+identity to lie about, but the action it emits and the payload it signs agree.
+That is the right shape: dishonesty is in the content, not in a mismatch
+between the model's bookkeeping and its cryptography.
+
+**F3 (LOW) -- and a comment of mine that was simply wrong.** The attach theory
+called `~ns` "an unforgeable session token". It is fresh but PUBLIC -- sent in
+the clear -- so any principal seeing it can sign the client-auth term over it.
+The two authentication lemmas are each side's own fact and do not compose into
+an agreement theorem that both completed the same TLS connection. Corrected in
+the file and registered in the README; a real fix needs a connection handle
+carried through both endpoint facts, which is recorded and not done.
+
+**Documentation hygiene, which is not cosmetic in this suite.** A paragraph in
+`attach.spthy` still said the theory "cannot state" the authenticated-versus-
+claimed identity binding -- written when that was true, never updated when
+`Server_Bind` was changed to do exactly that. A `ceremony.spthy` comment still
+described a formation's witness slot as "empty" after the model moved to
+absence. Both corrected. A suite that leans this heavily on commentary to
+delimit what each lemma means cannot afford stale commentary.
+
+14 artifacts. 61 Tamarin lemmas unbounded (32 wire-only, 29 compliant) + 16
+bounded, 5 TLA+ models, 2 mutations that must fail.
