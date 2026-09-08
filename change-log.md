@@ -9121,3 +9121,50 @@ about; the second failed four times out of four. Adding them also exposed two
 older checks that located the formation record positionally and would, with
 three such records present, have recomputed one record's root against
 another's body.
+
+## 2026-09-08
+
+### 2026-09-08 (formal models: a review series, and one rule it produced)
+Twelve external review passes over the symbolic and distributed-systems models,
+run on other model families and applied here. **One changed a root document**;
+the rest changed the models or what is claimed of them.
+
+**The rule.** `wire-format.md` §4.1's Recovery consistency list gains **every
+response's verifier MUST differ from its subject** — field 1 from field 2
+[author, 2026-09-08]. §9.1 already has the subject meet *someone they have met
+before*, and `wire-format.md` §7.3 that the party being established "is never
+a candidate for their own verification", but neither is a check a patron
+performs on the block.
+This one is: without it an attacker holding the old key satisfies both of
+recovery's factors by controlling a single new identity, the successor
+attesting to its own continuity. The model stated the property, it falsified,
+and the rule follows.
+
+**The suite is now fourteen artifacts**: one trust-metric simulation, five TLA+
+models, and eight Tamarin theories in two trees. 63 lemmas verify unbounded,
+16 more under a stated bound, and two TLA+ mutations must fail on every run —
+each removes a rule the invariant beside it depends on, so a clean run there is
+a gate failure.
+
+**The two trees are the structural change.** `wire-only/` proves what a third
+party concludes from bytes; `compliant/` proves that an honest node's own
+stated obligations are mutually coherent. The split matters because several of
+those obligations are ones the documents say plainly nobody can verify —
+*"nobody can check this for you"*, *"the wire cannot check this"* — and results
+about them must not be quoted as though a hostile counterparty were bound by
+them. Every `compliant/` theory therefore carries a lemma asserting its
+non-compliant trace is still reachable.
+
+**Three obligations resisted proof in Tamarin and moved to TLA+**, where they
+belong: they are safety properties of a mutable local record, and the backward
+search does not terminate on a capability that is read repeatedly and revoked
+once. Reduced to a three-rule theory the failure is unambiguous — delete the
+restore and the same lemma verifies in four steps.
+
+**What the passes mostly found was not defects in the protocol.** Across the
+series they produced one rule change and no demonstrated system flaw. The
+recurring fault was a model or a claim that read stronger than what it
+established: a carve-out satisfied by half a compromise, a property dischargeable
+by a coincident trace fact, a collision manufactured by an abstraction and then
+cited as evidence about bytes. The design's own scope statements held up better
+than the descriptions of the models did.

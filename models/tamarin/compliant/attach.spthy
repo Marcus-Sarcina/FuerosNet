@@ -228,7 +228,7 @@ lemma trust_bearing_operation_is_reachable:
 /*  THE IGNORANCE WITNESS.  design 12.6.5: "Outside the horizon there is no
     supersession to know ... those parties hold the old key until its
     attestation expires, which is the ignorance the table above is for and
-    NOT A FAILURE."  A second node delivering under a credential the first has
+    NOT A VIOLATION OF THIS RULE."  A second node delivering under a credential the first has
     superseded is behaving correctly, and this keeps that trace reachable.
     If it ever falsifies, the model has acquired a global supersession fact
     and broken the no-shared-state rule in the one place most tempting.    */

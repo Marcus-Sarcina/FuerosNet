@@ -259,8 +259,9 @@ TypeOK ==
   /\ severed \subseteq {{u,v} : u \in Nodes, v \in Nodes}
 
 \* SAFETY 1: a subject is never behind its own store.  c's own patron
-\* state always equals what c's own store implies -- the design's "every
-\* node's view is its own" starts with the node's view of itself being
+\* state always equals what c's own store implies -- design 16.1's "each
+\* node computes its own trust ... from the transactions it observes"
+\* starts with the node's view of itself being
 \* right.  If this ever failed the model (or the design reading) would be
 \* broken at the root.
 SelfTruth == \A c \in Nodes : ViewPatron(c, c) = patron[c]

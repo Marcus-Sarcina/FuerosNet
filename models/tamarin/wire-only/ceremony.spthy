@@ -25,8 +25,10 @@ WHAT THIS FILE IS
   signing discipline they assume is stated as the participant obligation it
   is, and where the collusion trace is kept reachable.
 
-  WHY ATTRIBUTABILITY IS THE USEFUL THING.  design Section 15.4 treats
-  presence as "an attack cost rather than an absolute primitive".  The cost
+  WHY ATTRIBUTABILITY IS THE USEFUL THING.  design Section 7 says presence is
+  "not an unforgeable primitive and must not be designed as one", but "a cost
+  imposed on acquiring edges into territory the attacker does not already
+  control".  The cost
   lands because a fabricated record is a SIGNED LIE BY NAMED PARTIES rather
   than an anonymous forgery, and because no single signature can be
   transplanted onto another roster.  That is what a validator gets, and it is
@@ -440,8 +442,8 @@ lemma honest_formation_completes:
     it genuinely signed; that is the point, and it is what makes the record
     evidence against the signer rather than proof of a meeting.
 
-    design 15.4 puts the same boundary in words -- presence is "an attack
-    cost rather than an absolute primitive".  The cost lands because the
+    design 7 puts the same boundary in words -- proof of presence is "a cost,
+    not an unforgeable primitive".  The cost lands because the
     record is attributable, so a fabricated one is a signed lie by named
     parties.  THAT is the wire property.
 

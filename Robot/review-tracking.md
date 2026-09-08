@@ -6613,3 +6613,64 @@ convention change and not mine to make.
 
 14 artifacts. 63 Tamarin lemmas unbounded (34 wire-only, 29 compliant) + 16
 bounded, 5 TLA+ models, 2 mutations that must fail. References 2034 / 0 flags.
+
+---
+
+## Coherence pass across the base documents, and models against them (2026-09-08)
+
+Run at the author's request after review 17, alongside a change-log entry
+covering the model review series.
+
+**Base documents.** References 2034 / 0 flags. The role table carries 13 rows
+against §1.2's "Thirteen roles carry a tag" -- consistent. §4.1's Recovery
+consistency list gained a row this session and has no sentence counting its
+members, so nothing drifted. §23.2 summarises autonomous participation and is
+untouched by any of this work. The verifier-selection chain holds in one
+direction only, which is right: `light-client-requirements.md` cites
+`wire-format.md` §7.3 for selection, §7.3 states the candidate rule, and §4.1
+now carries the structural check -- one normative home each, no third
+statement added.
+
+**One citation error in the change-log entry, found by its own convention.**
+`change-log.md` has no numbered sections and its bare §N mean
+`network-design.md` -- which is why refcheck.py excludes it, a documented scope
+boundary rather than an exemption. A bare "§7.3" written there would have
+resolved to design §7.3, "Verification by query", when the sentence quoted is
+`wire-format.md` §7.3. Qualified.
+
+**Models against the documents: two new checks, because neither existed.**
+
+`Robot/modelrefcheck.py` checks every section citation in `models/` against
+actual headings. refcheck.py covers the root and Robot/ and never covered
+models/, which cite the specification 176 times. **First run: 1 flag.** `design
+15.4` does not exist; the passage is design §7's preamble. It appeared in two
+comment blocks in `wire-only/ceremony.spthy` and again in `models/README.md`.
+Now 176 / 0 flags, and the checker is permanent.
+
+**A quotation check, run once.** 55 quotations attributed to a document were
+compared against the documents' own text. It found:
+
+- **"an attack cost rather than an absolute primitive"** -- FABRICATED. That
+  string is in no base document. design §7 says proof of presence is "a cost,
+  not an unforgeable primitive" and "a cost imposed on acquiring edges into
+  territory the attacker does not already control". Three sites, all corrected.
+  The first fix caught one of the two occurrences in ceremony.spthy and the
+  checker caught the second -- fixing the instance rather than the claim, in
+  the same pass as writing the check that catches it.
+- **"and NOT A FAILURE"** for "and not a violation of this rule" -- the sense
+  survived, the words did not (compliant/attach).
+- **"knows the series was abandoned"** for "knows which series was abandoned"
+  (compliant/recovery).
+- **"every node's view is its own"** attributed to the design -- that is
+  `CLAUDE.md`'s phrasing, a working file. Replaced with design §16.1's own
+  words (PartitionMerge.tla).
+
+Nine flags remain and all nine are understood: one is a scare-quoted paraphrase
+of mine, eight are the checker's line-flattener mangling TLA+ `\*` and `(* *)`
+comment markers. Six of those eight were verified present by hand. The checker
+is left in the session scratchpad rather than `Robot/` -- a gate that reports
+nine known artifacts every run is the kind of noise exemptions get bought to
+silence.
+
+14 artifacts pass. 63 Tamarin lemmas unbounded, 16 bounded, 5 TLA+ models,
+2 mutations that must fail. References 2034 / 0 flags; model citations 176 / 0.

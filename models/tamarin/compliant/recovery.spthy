@@ -118,7 +118,7 @@ rule Thief_Supersedes:
     [ ]
 
 /*  A counterparty that HOLDS THE CHAIN rejects the abandoned series outright
-    -- `wire-format.md` 4.6: it "knows the series was abandoned and MUST
+    -- `wire-format.md` 4.6: it "knows which series was abandoned and MUST
     reject records in it whatever their counter".  A counterparty holding no
     chain has no basis to rank and takes what reaches it first.             */
 rule Chainless_Counterparty_Accepts:

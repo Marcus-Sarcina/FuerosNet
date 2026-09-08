@@ -303,13 +303,13 @@ the honest protocol and so proves every security lemma vacuously.
   permitted bodies.
 
   **Not co-presence.** design §7 says *"bilateral collusion is unpreventable"*
-  and §15.4 that presence *"is not an unforgeable primitive, and bilateral
-  collusion defeats it regardless"*. The theory therefore carries
-  `Participant_Sign_Without_Meeting` — a legitimate principal signing a body
-  it never met for, its own key, no compromise. Attributability is what
-  survives that, and it is what makes the design's *"attack cost rather than
-  an absolute primitive"* bite: a fabricated record is a signed lie by named
-  parties.
+  and §7 that proof of presence is *"a cost, not an unforgeable primitive"*,
+  which *"bilateral collusion defeats … regardless"*. The theory therefore
+  carries `Participant_Sign_Without_Meeting` — a legitimate principal signing a
+  body it never met for, its own key, no compromise. Attributability is what
+  survives that, and it is what makes presence *"a cost imposed on acquiring
+  edges into territory the attacker does not already control"* bite: a
+  fabricated record is a signed lie by named parties.
 
 ---
 
