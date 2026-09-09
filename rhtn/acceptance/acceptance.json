@@ -420,6 +420,772 @@
   "interpretation": null
  },
  {
+  "id": "CER-01",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Obtain the strongest proximity channel the hardware supports and record which was achieved",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §7.6.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Obtain the strongest proximity channel the hardware supports"
+   },
+   {
+    "where": "design §7.6.3",
+    "text": "record which channel it got"
+   }
+  ],
+  "given": "Two clients on a harness whose device layer offers NFC and optical channels and no UWB.",
+  "when": "They run a presence ceremony to completion.",
+  "then": "The finalized record's proximity channels carry an NFC entry as the strongest achieved, and no UWB entry.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-02",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Never present a weaker channel as a stronger one",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §7.6.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Never present a weaker channel as a stronger one"
+   },
+   {
+    "where": "design §7.6.3",
+    "text": "No implementation should treat any single channel as proof that a counterparty's key is physically present."
+   }
+  ],
+  "given": "Two clients on a harness whose device layer offers only the optical channel.",
+  "when": "They run a presence ceremony to completion.",
+  "then": "The record's proximity channels carry optical and nothing ranked above it; no NFC or UWB entry appears.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-03",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Run the guided capture with randomised prompts, three to five images over ten to fifteen seconds",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §7.5"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Randomised prompts, 3-5 images over 10-15 seconds"
+   },
+   {
+    "where": "design §7.5",
+    "text": "The gain comes from diversity, not count."
+   }
+  ],
+  "given": "A client capturing its counterparty on the harness, run twice with independent randomness. The figures are chosen values (design §21).",
+  "when": "Each capture sequence runs.",
+  "then": "Each sealed capture holds between three and five frames whose timestamps span between ten and fifteen seconds, and the two runs' prompt sequences differ.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-04",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Derive the capture key exactly as specified",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2.6"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.6",
+    "text": "The derivation is HKDF-SHA-256, exactly"
+   },
+   {
+    "where": "design §7.5.2.6",
+    "text": "salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture` followed by the raw 32-byte subject and holder keyhashes and the raw 32-byte ceremony pre-commitment, output length 32"
+   }
+  ],
+  "given": "A fixed seed, subject keyhash, holder keyhash and ceremony pre-commitment.",
+  "when": "The client derives k_capture.",
+  "then": "The 32 bytes equal HKDF-SHA-256 computed independently with empty salt, the seed as IKM and the stated info; a different holder or ceremony_id yields a different key.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "CER-05",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Compute the ceremony pre-commitment contributorily, in ascending keyhash order",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2.6"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.6",
+    "text": "the pre-commitment is the SHA-256 of the ASCII tag `rhtn/1:ceremony` followed by the two contributions in ascending participant-keyhash order"
+   },
+   {
+    "where": "design §7.5.2.6",
+    "text": "neither party can force a repeat"
+   }
+  ],
+  "given": "Two clients each contributing 16 fixed random bytes over the direct channel, with participant keyhashes in known order.",
+  "when": "Both compute the pre-commitment.",
+  "then": "Both produce the same 32 bytes, equal to SHA-256 of the tag followed by the contributions ordered by ascending participant keyhash, and changing either contribution changes the value.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "CER-06",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Hold no decryptable likeness and no sealing key once the capture is sealed",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §7.5.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Seal captures under the capture key the subject supplied, discard it once the capture is sealed, and never retain a key released later"
+   },
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "A compliant client holds no decryptable likeness of another person"
+   }
+  ],
+  "given": "Client B has completed a ceremony with A and sealed its captures of A. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "when": "The test inspects B's persistent storage and asks B to open A's capture without a grant.",
+  "then": "Storage holds the sealed capture and A's seed for B's own captures only; no plaintext frame, no plaintext template and no k_capture for A's capture is present, and the open attempt fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-07",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Retain no released key after answering",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "wire-format.md §5.5"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "never retain a key released later"
+   },
+   {
+    "where": "wire-format.md §5.5",
+    "text": "An absent capture key is `unavailable`, not `inconclusive`"
+   }
+  ],
+  "given": "Verifier B answered a consented query about A using a KeyGrant A sent.",
+  "when": "A second consented query about the same record arrives with no new grant, and the test inspects B's storage.",
+  "then": "The released key is absent from storage and the second query is answered `unavailable`.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-08",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Open only the capture the grant names and keep the others sealed",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.3",
+   "design §7.5.2.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.3",
+    "text": "the grant names the one to open"
+   },
+   {
+    "where": "design §7.5.2.8",
+    "text": "A ceremony seals a new capture; it does not replace an earlier one."
+   }
+  ],
+  "given": "Verifier B holds two sealed captures of A from records R1 and R2, each under its own seed.",
+  "when": "A consented query arrives with a KeyGrant whose field 1 is R2's txid.",
+  "then": "B answers from R2's capture; R1's capture is still sealed afterwards and R1's key was never derived.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-09",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Grant against the most recent eligible capture by default",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2.8",
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.8",
+    "text": "Querying prefers the most recent eligible capture"
+   },
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "prefer the most recent eligible one when answering"
+   }
+  ],
+  "given": "Subject A has met verifier B twice, in records R1 then R2, both eligible, and has set no preference.",
+  "when": "A's client releases a capture key for a query directed at B.",
+  "then": "The KeyGrant's field 1 is R2's txid.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-10",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Treat a grant unattached to a countersigned query as malformed",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "wire-format.md §7.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "A grant arriving unattached to a query the subject countersigned is an unsolicited key release; treat one as malformed rather than opening your store."
+   },
+   {
+    "where": "wire-format.md §7.3",
+    "text": "Field 2 binds the grant to a query."
+   }
+  ],
+  "given": "Verifier B holds a sealed capture of A. No query about A has arrived, and the buffering bound is the test's parameter since the wire leaves it local.",
+  "when": "A KeyGrant from A naming that record and a query_id B has not seen arrives, and the bound elapses.",
+  "then": "B opens nothing, answers nothing, and the grant is discarded when the bound elapses.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-11",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Reject a grant from anyone but the subject, and let the first authenticated grant stand",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.3",
+    "text": "The authenticated sender MUST be the subject"
+   },
+   {
+    "where": "wire-format.md §7.3",
+    "text": "Duplicates are ignored, and so is a differing second grant for a query already satisfied"
+   }
+  ],
+  "given": "Verifier B holds a consented query about A. A grant for it arrives from C, then a valid grant from A, then a differing grant from A for the same query.",
+  "when": "B processes the three in order.",
+  "then": "The grant from C is rejected and opens nothing; the first grant from A is used to answer; the third changes nothing and B's answer is not revised.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-12",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Answer `unavailable` for a grant naming a record you do not hold",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.3",
+    "text": "A grant naming a record the holder does not hold yields `unavailable`"
+   }
+  ],
+  "given": "Verifier B holds no sealed capture for record R, and a consented query about A names R in its grant.",
+  "when": "The grant and query arrive.",
+  "then": "B's signed response carries result `unavailable`.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-13",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Reject a query without consent, or not addressed to you, by closing the stream",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §5.6",
+   "design §7.4.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §5.6",
+    "text": "a query arriving without consent is rejected"
+   },
+   {
+    "where": "wire-format.md §5.6",
+    "text": "a receiving verifier rejects a query not addressed to it before any processing"
+   },
+   {
+    "where": "design §7.4.2",
+    "text": "No verifier may answer an identity-comparison request unless the subject of that request has signed it."
+   }
+  ],
+  "given": "Verifier B receives, on separate type-4 streams, a query with no consent beside it, a query whose consent does not verify under the subject, and a query whose field 7 names another verifier.",
+  "when": "B processes each.",
+  "then": "Each stream is closed with no VerifierResponse sent, and no comparison is run for any of them.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-14",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Deliver a copy of your signed response to the subject",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §5.6",
+   "design §7.4.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §5.6",
+    "text": "A response about a subject is also delivered to that subject"
+   },
+   {
+    "where": "design §7.4.2",
+    "text": "a verifier answering a query about subject S sends a copy of its signed response to S as well as to the querier"
+   }
+  ],
+  "given": "Verifier B answers a consented query from C about subject A.",
+  "when": "B sends its response.",
+  "then": "The signed VerifierResponse reaches C, and a copy with identical bytes reaches A over the association the grant established.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-15",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Report a failed decryption as `inconclusive`, never as `no-match`",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §5.5",
+   "light-client-requirements.md §1.3",
+   "design §7.5.2.7"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §5.5",
+    "text": "`inconclusive` covers a failure to decrypt, and `no-match` never does."
+   },
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Report a decryption failure as `inconclusive`, never as `no-match`."
+   },
+   {
+    "where": "design §7.5.2.7",
+    "text": "Truncated or unauthenticated ciphertext is a decryption failure"
+   }
+  ],
+  "given": "Verifier B's sealed capture of A has been truncated on disk, and a consented query with a valid grant arrives. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "when": "B attempts to open and compare.",
+  "then": "B's signed response carries `inconclusive` with basis 0 and the query's template version, and never `no-match`.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-16",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Reject a second, different profile within one ceremony",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §7.4.1",
+   "design §7.4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §7.4.1",
+    "text": "one profile per ceremony, or the verifier rejects"
+   },
+   {
+    "where": "design §7.4.2",
+    "text": "can require that all queries from one ceremony carry the identical profile"
+   }
+  ],
+  "given": "Verifier B has answered a consented query bound to ceremony pre-commitment P carrying profile F1.",
+  "when": "A second consented query bound to P arrives carrying a different profile F2.",
+  "then": "B rejects it and sends no second response for that ceremony.",
+  "oracle": "behaviour",
+  "interpretation": "Whether the subject's client also refuses to countersign a differing second profile is stated as a capability rather than a rule, so only the verifier side is asserted."
+ },
+ {
+  "id": "CER-17",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Query verifiers and answer queries without asking the operator",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.4",
+   "design Appendix A.3",
+   "design §7.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.4",
+    "text": "Query verifiers automatically."
+   },
+   {
+    "where": "design Appendix A.3",
+    "text": "the witness's client observes a ceremony, tests the evidence and signs without pausing for its operator's approval"
+   },
+   {
+    "where": "design §7.3",
+    "text": "A's operator is not asked and is not told"
+   }
+  ],
+  "given": "A ceremony on the harness with a prompt hook that records every operator interaction on every client, including the verifiers'.",
+  "when": "The ceremony runs and its queries are answered.",
+  "then": "Queries are issued and answered, and the hook records no prompt to any operator for querying, witnessing or answering; the verifier's operator receives no notification.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-18",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Withhold disclosable fields by default, and let the digests travel",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §8.1.1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Withhold a presence record's disclosable fields by default"
+   },
+   {
+    "where": "design §8.1.1.3",
+    "text": "The digest count and labels always travel, so a recipient knows a field exists and was withheld."
+   }
+  ],
+  "given": "Client A holds a finalized record with all seven disclosable fields, and has given no instruction to reveal.",
+  "when": "A presents the record to a party that is not a prospective patron.",
+  "then": "The presentation reveals none of the seven fields and carries every field's digest and label, and the envelope signature verifies over it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-19",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Withhold your envelope signature from a body omitting a response you hold",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.4",
+   "wire-format.md §5.6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.4",
+    "text": "Withhold your envelope signature from a proposed body omitting a verifier response you hold"
+   },
+   {
+    "where": "wire-format.md §5.6",
+    "text": "a subject holding a response withholds its envelope signature from a proposed body that omits it"
+   }
+  ],
+  "given": "Subject A holds a copy of verifier B's response about A, delivered by B; the counterparty proposes a final body without it.",
+  "when": "A's client is asked to sign the proposed body.",
+  "then": "No envelope signature by A is produced for that body; a body that includes B's response is signed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-20",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Refuse to sign a record attributing to you a witness you did not nominate",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "Refuse to sign a record attributing to you a witness you did not nominate"
+   }
+  ],
+  "given": "Participant A nominated witnesses W1 and W2; the proposed body attributes W3 to A.",
+  "when": "A's client is asked to sign.",
+  "then": "No envelope signature by A is produced; the same body with W3 attributed to the counterparty is signed.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "CER-21",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Tell the user when your own nominees are absent or outnumbered",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "Check the `nominated_by` split before you sign, and tell the user when your own nominees are absent or outnumbered."
+   }
+  ],
+  "given": "Participant A nominated two witnesses; the proposed body carries five witnesses of which one is A's, with a notification hook on A's client.",
+  "when": "A's client checks the split before signing.",
+  "then": "The hook records a notice to the user that A's nominees are outnumbered, before any signature is produced.",
+  "oracle": "behaviour",
+  "interpretation": "The form of the notice is not specified; the test asserts that one is raised before signing."
+ },
+ {
+  "id": "CER-22",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Decline to witness a ceremony whose claimed start is far from your clock",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.2",
+    "text": "Decline to witness a ceremony whose claimed `started_at` is far from the time you observe."
+   }
+  ],
+  "given": "Witness W with tolerance T, chosen by the test since the requirement leaves it to the witness, is nominated for a ceremony whose started_at is more than T from W's clock.",
+  "when": "W's client is asked to sign.",
+  "then": "No witness signature by W is produced; the same ceremony with started_at within T is signed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-23",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Strip metadata from captured images before sealing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Strip metadata from captured images before storing them, and do not rely on camera-pipeline defaults."
+   }
+  ],
+  "given": "The harness camera returns frames carrying EXIF location, timestamp and device identifiers. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "when": "Client B captures and seals, and the test opens the capture with the subject's key.",
+  "then": "No frame in the opened capture carries EXIF or other metadata.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-24",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Send the capture key directly to the selected verifier",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3",
+   "design §7.5.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Send the capture key directly to a selected verifier"
+   },
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "bypassing the counterparty running the ceremony and every witness"
+   }
+  ],
+  "given": "Subject A in a ceremony run by C, with witnesses observing; C selects B as a verifier for A.",
+  "when": "A's client releases the capture key.",
+  "then": "The KeyGrant is observed only on A's end-to-end path to B; no grant bytes appear on any path to C or to a witness.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-25",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Keep the anti-oracle aggregate as a lock, not a log",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.4",
+   "design §7.4.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.4",
+    "text": "A counter per requester and per ceremony window, discarded when the window closes"
+   },
+   {
+    "where": "design §7.4.1",
+    "text": "The aggregate is a lock, not a log."
+   }
+  ],
+  "given": "Subject A, with the ceremony window W chosen by the test.",
+  "when": "During W a requester exceeds the per-requester limit; after W closes the test inspects A's storage.",
+  "then": "The excess query receives no grant, and after W no record of the requester or of the count remains.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-26",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Disclose at capture time what the record will contain and who can read it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.5",
+   "design §19.6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.5",
+    "text": "Tell participants what the record will contain and who will be able to read it"
+   },
+   {
+    "where": "design §19.6",
+    "text": "The reference client must disclose to a verifier or witness, at the moment they are asked, that their identity and relationship will be permanently recorded in a third party's evidence and readable by future evaluators."
+   }
+  ],
+  "given": "A ceremony on the harness with a notification hook on the participants', witnesses' and verifiers' clients.",
+  "when": "The ceremony reaches capture and the witnesses and verifiers are asked.",
+  "then": "The hook records a disclosure to each participant before capture, and to each witness and verifier at the moment it is asked.",
+  "oracle": "behaviour",
+  "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing."
+ },
+ {
+  "id": "CER-27",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Count qualifying bundle records once by txid when computing n",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.4"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.4",
+    "text": "count qualifying ones once by txid"
+   },
+   {
+    "where": "light-client-requirements.md §1.4",
+    "text": "Compute n over the bundle handed to you, and treat it as your counterparty's claim"
+   }
+  ],
+  "given": "A bundle handed to the selector containing four qualifying records, two of them the same record twice.",
+  "when": "The selector computes n.",
+  "then": "n is 3, and the required response count follows from 3.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "CER-28",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Answer `unavailable` to a claimed `met` your own records refute",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §5.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §5.6",
+    "text": "A claimed `met` the verifier's own records refute is answered `unavailable`"
+   }
+  ],
+  "given": "Verifier B holds no record of ever having met selector C, and a consented query from C arrives with selection basis 0.",
+  "when": "B processes the query.",
+  "then": "B's signed response carries `unavailable` and no comparison is run.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-29",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Keep a late response beside its record, never inside it, and discard it with the record",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.4",
+    "text": "It does not amend the record it names."
+   },
+   {
+    "where": "wire-format.md §7.4",
+    "text": "The response must carry a `query_id` the subject countersigned for that ceremony"
+   },
+   {
+    "where": "wire-format.md §7.4",
+    "text": "Retention follows the record it supplements."
+   }
+  ],
+  "given": "A holder keeps record R; a LateResponse naming R with a countersigned query_id arrives, then one with an unconsented query_id.",
+  "when": "The holder processes both, then later discards R.",
+  "then": "R's bytes and txid are unchanged; the first LateResponse is held beside R and the second is rejected; after R is discarded the LateResponse is gone too.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "CUR-01",
   "area": "currency",
   "gap": "currency",
