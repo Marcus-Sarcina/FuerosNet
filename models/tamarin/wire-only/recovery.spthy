@@ -515,7 +515,20 @@ rule Patron_Accept_Recovery:
         malformed, and the block needs at least one `match`.  Two responses
         are enough to exercise all three.  A validator that checked the first
         and stopped would satisfy a one-response model; it does not satisfy
-        this one.                                                          */
+        this one.
+
+        AND THREE PER-COLLECTION RULES ARE NOT HERE, said so that "every
+        response is validated" is read at its true width.  `result` is a free
+        term, where the wire's field 4 is a four-value enumeration and an
+        unknown value is malformed: a signed response carrying any result is
+        admitted, which gives the attacker MORE than a decoder would and so
+        strengthens every all-traces lemma rather than weakening one -- the
+        reason it is left free.  `basis` and `template_version`, whose
+        presence the result and basis values require or forbid, are absent
+        from the projection.  And the two slots carry no order, where the
+        wire sorts responses by verifier keyhash.  A decoder that accepts an
+        unknown result, a mis-paired basis or a non-canonical order is
+        outside this theory.  A cross-family review asked for the list.    */
   --[ Eq(h(kmOld), khOld), Eq(h(kmV), khV), Eq(h(kmV2), khV2)  // BOUND FIRST
     , Eq(respNew2, adoptNew)           // EVERY response names the new node
     , Distinct($V, $V2)                // duplicate verifier responses are

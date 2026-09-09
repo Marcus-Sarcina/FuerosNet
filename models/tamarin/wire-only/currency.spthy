@@ -312,6 +312,13 @@ restriction Equality:
 // issuance draws a CURRENT epoch when nothing enforced it.  The acceptance
 // restriction below does not cover this: it blocks accepting an expired
 // attestation, not minting one.
+// WHAT PERSISTENCE ALSO PERMITS, and why that is not the rule's concern: the
+// same current (iat, exp) pair stamped twice.  That is two attestations over
+// one window, equivalent to one, and the wire's rule is about EXTENSION --
+// "there is no 'extend' operation and no field for one" (`wire-format.md`
+// Section 7) -- not about issue times being distinct.  A cross-family review
+// raised the stricter reading and did not count it; recorded here so the next
+// one need not.
 /*  "ISSUE FRESH; NEVER EXTEND STALE" IS A CONFORMING ISSUER'S BEHAVIOUR, and
     this restriction now says only that.  It used to quantify over `Issued`,
     which BOTH issuance rules emit, so it also made a dishonest keyholder

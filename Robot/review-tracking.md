@@ -7417,3 +7417,46 @@ added sentence does.
 Not a register entry: not a weakness. Model unchanged; gate not re-run.
 References 2044 / 0 flags (six new, all in the sentence); model citations
 193 / 0.
+
+## Tamarin wire-only review 2 (2026-09-08)
+
+Static review of the four wire-only theories against the wire document alone;
+no Tamarin in the reviewer's environment. Two findings, MEDIUM and LOW, both
+MODEL GAP, both verified on the wire, **both disposed in the claim rather than
+the model**, and one conditional question answered on the wire's own words. No
+system flaw.
+
+**F1 (MEDIUM) -- "every response is validated" read wider than the theory.**
+`result` is a free term in `vresp`; the wire's field 4 is a four-value
+enumeration and §1 makes an unknown value in a known enumeration malformed.
+Fields 5 and 6 (`basis`, `template_version`) are required or forbidden by the
+result and basis values and are absent from the projection. So a block whose
+second response carries `'bogus'` is admitted here and rejected by a decoder,
+and the README's sentence claimed the decoder's checks. Verified. **Not
+modelled, deliberately**: a free result gives the attacker more traces than a
+decoder would, which strengthens every all-traces lemma rather than weakening
+one, and a restriction pinning the enumeration would be a decoder's
+precondition restated as an axiom -- the shape this suite removes. The README
+now says each response receives "the checks this theory represents", lists
+them, and lists what a decoder rejects and the theory does not; the theory's
+collection comment carries the same list.
+
+**F2 (LOW) -- response ordering is not represented.** The Recovery block sorts
+responses by verifier keyhash, ties by subject keyhash, "one set, one
+encoding". Two symbolic slots carry no order. Verified; added to the same
+boundary statement. Modelling lexicographic SHA-256 order symbolically would
+be machinery for a claim this theory does not make.
+
+**The currency question.** `!Epoch` is persistent, so a current (iat, exp)
+pair can be stamped twice; the reviewer asked whether "issue fresh" forbids
+that and did not count it. The wire answers: "attestations are issued fresh,
+never extended stale. There is no 'extend' operation and no field for one."
+Two attestations over one window are equivalent to one and extend nothing.
+Recorded in the theory's comment so the next reviewer need not ask.
+
+**Discipline note.** I first cited the wire's "no extend operation" sentence
+as §4.7; §4 ends at 4.6. Both new citations were re-derived from the headings
+that actually contain the cited lines before the checker ran.
+
+Model unchanged in substance; both edited theories parse well-formed. Gate not
+re-run. Model citations 194 / 0 flags (one new); references unchanged.
