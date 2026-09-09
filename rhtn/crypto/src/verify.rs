@@ -81,7 +81,7 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
 /// A verifier response (§4.5): subject consent over the raw `query_id`
 /// (classical), and the verifier's signature over the map minus field 9,
 /// classical in a presence record and hybrid inside a `Recovery` block.
-pub fn response(ids: &dyn Lookup, resp: &[u8], hybrid: bool) -> Result<(), String> {
+pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Result<(), String> {
     let Item::Map(rm) = parse_all(resp).map_err(|_| "response cbor")? else {
         return Err("response not map".into());
     };
@@ -115,7 +115,7 @@ pub fn response(ids: &dyn Lookup, resp: &[u8], hybrid: bool) -> Result<(), Strin
 /// A complete transaction envelope: structure, every entry under both
 /// algorithms, and the embedded evidence (§4.1's Recovery block, §4.5's
 /// responses).
-pub fn envelope(ids: &dyn Lookup, b: &[u8]) -> Result<envelope::Envelope, String> {
+pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envelope, String> {
     let env = envelope::parse(b).map_err(|e| format!("structure: {e}"))?;
     let body = &b[env.body.clone()];
     let mut seen = std::collections::BTreeMap::<Vec<u8>, [bool; 2]>::new();
@@ -168,7 +168,7 @@ pub fn envelope(ids: &dyn Lookup, b: &[u8]) -> Result<envelope::Envelope, String
 
 /// A standalone `COSE_Sign1` record under its named signer: the signature
 /// slot, role tag and signer field per kind (§7).
-pub fn record(ids: &dyn Lookup, kind: &str, raw: &[u8]) -> Result<bool, String> {
+pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<bool, String> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let Item::Map(m) = parse_all(raw).map_err(|_| "cbor")? else { return Err("not map".into()) };
     let signer = match map_get(&m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
@@ -188,7 +188,7 @@ const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention"
 /// A partial presentation (§4.5.1): the embedded envelope verified wholesale,
 /// then the seven slots' digests recomputed over the exact received
 /// encodings and checked against the body's committed root.
-pub fn presentation(ids: &dyn Lookup, pres: &[u8]) -> Result<(), String> {
+pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), String> {
     let Item::Array(outer) = parse_all(pres).map_err(|e| format!("cbor: {e}"))? else {
         return Err("presentation not array".into());
     };
