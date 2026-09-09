@@ -420,6 +420,352 @@
   "interpretation": null
  },
  {
+  "id": "CUR-01",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Issue a fresh patron attestation for a subordinate, signed under the currency tag",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §3",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §3",
+    "text": "Issue currency attestations for subordinates"
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "~10 h default; hours, not days"
+   }
+  ],
+  "given": "Infra node P has adopted S, whose current key is k. The attestation lifetime L is chosen by the test, since design §21.1 leaves its value unset.",
+  "when": "S requests currency from P.",
+  "then": "A CurrencyReply with code 0 carries an attestation whose field 1 is S, field 2 is k, field 5 is 0, field 6 is P, whose field 4 minus field 3 equals L, and whose COSE_Sign1 verifies under P's classical key with external_aad rhtn/1:currency.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-02",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Refresh by issuing anew, never by extending",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §3",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §3",
+    "text": "Issue fresh, never extend stale."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "There is no \"extend\" operation and no field for one, deliberately."
+   }
+  ],
+  "given": "S holds an attestation A from P, issued at t0.",
+  "when": "S requests currency from P again at t1 > t0.",
+  "then": "The reply's attestation has field 3 later than A's field 3 and a signature different from A's. No message from P carries A's fields 1 to 3 with a later field 4.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-03",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Issue nothing for a key you have superseded",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §3",
+   "design §9.0.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §3",
+    "text": "Issue only for the key you currently record."
+   },
+   {
+    "where": "infra-client-requirements.md §3",
+    "text": "after it you have nothing to issue for the old key and MUST NOT"
+   }
+  ],
+  "given": "P recorded S under k1, then received and verified a recovery adoption binding S to k2.",
+  "when": "A CurrencyRequest naming S arrives at P.",
+  "then": "Every attestation P issues for S afterwards carries k2 in field 2; none carries k1.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-04",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Answer a request you cannot issue for with code 1, not with an invented attestation and not with silence",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.1",
+    "text": "So the answers are: an attestation, or nothing."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "Code 1 says the responder cannot issue rather than inventing one"
+   }
+  ],
+  "given": "Node P holds no record of subject X.",
+  "when": "A CurrencyRequest naming X with nonce n arrives on an authenticated session.",
+  "then": "A CurrencyReply is observed with field 1 equal to n, field 2 equal to 1 and field 3 absent.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-05",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Fail closed on a trust-bearing operation while the counterparty's staple is expired or missing",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §12.6.5",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "Fail closed. Current control of the acting credential must be established first"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "falls back to a lookup (§9.0.2) only if the staple is absent or expired"
+   }
+  ],
+  "given": "Node N is introduced to X with a staple whose field 4 is in N's past, and N's clock is authoritative for the test.",
+  "when": "X proposes an adoption with N.",
+  "then": "N emits no countersigned adoption while the staple is expired. A CurrencyRequest naming X is observed leaving N, and only after a CurrencyReply with code 0 carrying an unexpired attestation does the adoption proceed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-06",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Fail open for routine payload when the staple is expired",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "Fail open. Proceed"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "a user offline for a day arrives with a stale staple, can still receive messages, and cannot spend accumulated standing until they refresh"
+   }
+  ],
+  "given": "Client S attaches to its serving node holding only an expired staple.",
+  "when": "Queued payload for S is available for delivery.",
+  "then": "Delivery proceeds. An implementation that withholds routine payload until currency is refreshed fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-07",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Serve nothing under a binding you hold supersession evidence for, whatever the staple says",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "Fail-open is for ignorance, never for knowledge"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "MUST NOT continue serving it"
+   }
+  ],
+  "given": "Node N holds a verified reissue chain that supersedes S's key k1, and is then presented with an unexpired, validly signed attestation naming S under k1.",
+  "when": "S attempts to attach under k1 and requests delivery.",
+  "then": "No session is served under k1 and nothing is delivered under it; the unexpired staple does not restore service.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-08",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Issue secondhand as a sibling from replicated state when the patron is unreachable",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5.1",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5.1",
+    "text": "Sibling issuance from replicated state, marked secondhand and weighted slightly lower"
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "1 sibling (secondhand)"
+   }
+  ],
+  "given": "P adopted S; P's sibling P' holds P's replicated adoption record; P is unreachable.",
+  "when": "S requests currency from P'.",
+  "then": "A CurrencyReply with code 0 carries an attestation whose field 5 is 1, field 6 is P', and whose field 3 is fresh, signed by P'.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-09",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Issue as grandpatron when the patron and its siblings are unreachable",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5.1",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5.1",
+    "text": "Grandpatron issuance. It holds the adoption record anyway"
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "2 grandpatron"
+   }
+  ],
+  "given": "P adopted S; P's patron G holds the adoption record; P and every sibling of P are unreachable.",
+  "when": "S requests currency from G.",
+  "then": "A CurrencyReply with code 0 carries an attestation whose field 5 is 2 and field 6 is G, signed by G.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-10",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Stay frozen for trust-bearing operations when every issuer is unreachable, and recover by adopting elsewhere",
+  "milestone": 4,
+  "kind": "liveness",
+  "spec": [
+   "design §12.6.5.1",
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5.1",
+    "text": "no issuance path exists, and affected nodes are frozen for trust-bearing operations until recovery or re-adoption elsewhere"
+   },
+   {
+    "where": "design §12.6.5.1",
+    "text": "Adopt at a new patron (§6.2). The designed remedy for a bad patron works identically for a dead one"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "An operation is trust-bearing if it would create, transfer or spend social standing"
+   }
+  ],
+  "given": "S's patron, the patron's siblings and the grandpatron are all unreachable and S's staple has expired.",
+  "when": "S attempts a peering, then adopts at a reachable patron P2 and obtains an attestation from P2, then attempts the peering again.",
+  "then": "The first attempt produces no peering transaction. After adoption at P2 and a code-0 CurrencyReply from P2, the peering transaction is produced.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-11",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Ask the introducer for a fresher staple before querying the subject's patron",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "a caller with a stale staple should ask its introducer first"
+   }
+  ],
+  "given": "Client N, introduced to X by I, holds a stale staple for X and has sessions reaching both I and X's patron.",
+  "when": "N needs current control of X's credential for a trust-bearing operation.",
+  "then": "N's first CurrencyRequest naming X is observed on its session toward I, and none toward X's patron unless I answers with code 1 or not at all.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-12",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Retain nothing from a currency request after answering it",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.1",
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.1",
+    "text": "Nothing is retained on either side."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "It is not archived"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "answered and discarded, and never archived (§10)"
+   }
+  ],
+  "given": "Node P answers a CurrencyRequest naming S from an authenticated peer Q.",
+  "when": "The test inspects P's archive and persistent storage after the reply.",
+  "then": "No record of the request, of Q, or of the reply is present.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-13",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Decide expiry against your own clock",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "Expiry is decided against the relying party's own clock"
+   }
+  ],
+  "given": "Node N holds an attestation for X with field 4 equal to T. The issuer's clock plays no part in the test.",
+  "when": "N evaluates the staple with its clock set before T, then with its clock set after T.",
+  "then": "The staple is treated as current in the first case and as expired in the second, so a trust-bearing operation proceeds only in the first.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "DEC-01",
   "area": "decoder",
   "gap": "decoder",
@@ -898,6 +1244,615 @@
   "then": "For every entry the emitted bytes equal the input bytes exactly, unknown keys, their positions and their encoded values included. No entry is emitted with an unknown key dropped, reordered, or re-encoded.",
   "oracle": "fixture",
   "interpretation": "§1.2 states preservation for re-serialisation for signature verification; this entry asserts the same for every re-serialisation the implementation performs, on the reading that a key dropped on any other path yields a different object, and a different txid, at the next holder."
+ },
+ {
+  "id": "MET-01",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Rank candidates by available flow, then path length, then consideration order",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.4"
+  ],
+  "rule": [
+   {
+    "where": "design §16.4",
+    "text": "ranks candidates explicitly, by available flow first, then path length, then consideration order"
+   },
+   {
+    "where": "design §16.4",
+    "text": "Available flow ranks first"
+   }
+  ],
+  "given": "A fixed reference graph in which a saturated cut cannot admit every candidate: A carries more flow than B and C; B and C carry equal flow but B is fewer hops from the observer; D and E are equal on both and D was considered first.",
+  "when": "The reference metric allocates.",
+  "then": "The allocation admits A before B, B before C, and D before E, and the reported per-candidate flow values match the fixture's expected values.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "MET-02",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Let no adjacency order decide an equal-path tie",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "design §16.4"
+  ],
+  "rule": [
+   {
+    "where": "design §16.4",
+    "text": "at equal path length the winner is then decided by the order edges happen to occupy in the implementation's own adjacency structure"
+   },
+   {
+    "where": "design §16.4",
+    "text": "Consideration order breaks true ties only"
+   }
+  ],
+  "given": "The graph of MET-01 built twice, with its edges inserted in two different orders, and the same consideration order supplied to both.",
+  "when": "The reference metric allocates over each.",
+  "then": "Both allocations are identical.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "MET-03",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Weigh only the intersection with identities you already know",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.1"
+  ],
+  "rule": [
+   {
+    "where": "design §16.1",
+    "text": "A patron following it weighs the intersection and nothing else"
+   },
+   {
+    "where": "design §16.1",
+    "text": "records naming unknown identities are not weighed less, they are not weighed"
+   }
+  ],
+  "given": "The reference policy at patron P, and a presented archive naming three identities P knows and one thousand it does not.",
+  "when": "P evaluates the archive.",
+  "then": "The standing P computes equals the standing computed from the three records naming known identities alone, and appending further records naming only unknown identities leaves it unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "MET-04",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Substitute a policy without changing anything the protocol does",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.1",
+   "design §16.4"
+  ],
+  "rule": [
+   {
+    "where": "design §16.1",
+    "text": "Each node computes its own trust for every known node from the transactions it observes, using the reference algorithm or a variant tuned to its application or group norms."
+   },
+   {
+    "where": "design §16.4",
+    "text": "No pass is promoted to a protocol rule"
+   }
+  ],
+  "given": "The reference metric and a trivial alternative policy that scores every known node equally, both supplied through the implementation's policy interface.",
+  "when": "The same observed transactions are fed to a node running each in turn.",
+  "then": "The two nodes store and forward the same objects and produce the same wire traffic; only their computed standings differ.",
+  "oracle": "behaviour",
+  "interpretation": "What the policy interface must expose is not stated; the test asserts that a substitute policy changes computed standing and nothing on the wire."
+ },
+ {
+  "id": "MET-05",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Report a policy's resistance bound from the conformance test",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.4",
+   "design §17.3"
+  ],
+  "rule": [
+   {
+    "where": "design §16.4",
+    "text": "provide a conformance test that reports a policy's resistance bound so anyone tuning their own can see what they have given up"
+   },
+   {
+    "where": "design §17.3",
+    "text": "Flow-limited trust bounds what any single-entry region can claim regardless of its size (§16.2)"
+   }
+  ],
+  "given": "The conformance test's fake-region topology, entered beyond the observer's horizon, grown across the population sizes the simulation uses, and two policies: the reference metric and a distance-decay policy.",
+  "when": "The conformance test runs each policy.",
+  "then": "For the reference metric the report states a bound equal to the region's cut and the best score never exceeds it at any size. For the decay policy the report states that the score grows with region size.",
+  "oracle": "model",
+  "interpretation": "The form of the reported bound is not specified; the test asserts a finite cut-equal bound for the reference and growth for the decay policy."
+ },
+ {
+  "id": "MET-06",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Collapse parallel edges between one pair to one capacity",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.2.1"
+  ],
+  "rule": [
+   {
+    "where": "design §16.2.1",
+    "text": "capacity belongs to the pair, not to the count of relationships between them"
+   }
+  ],
+  "given": "A pair joined by an adoption and two later presence records.",
+  "when": "The reference metric builds its graph.",
+  "then": "The pair carries one edge's capacity; summing the three would give a larger flow, and the computed flow equals the single-edge value.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "MET-07",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Bound the aggregate a set can draw by the cut, per computation",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §16.4",
+   "design §17.3"
+  ],
+  "rule": [
+   {
+    "where": "design §16.4",
+    "text": "the aggregate a set can draw is bounded by the cut (§16.2)"
+   },
+   {
+    "where": "design §17.3",
+    "text": "where the entry lies beyond the observer's horizon"
+   }
+  ],
+  "given": "The simulation's conserving topology: a region behind one acquired peering edge beyond the observer's horizon, at the population sizes the simulation uses.",
+  "when": "The reference metric computes joint flow to the region and the sum of independent per-target flows.",
+  "then": "The joint flow saturates at the cut at every size while the independent sum grows with population; the figures match the simulation's committed results.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "MET-08",
+  "area": "metric",
+  "gap": "metric",
+  "title": "Treat the branching condition as necessary and not sufficient",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "design §16.4"
+  ],
+  "rule": [
+   {
+    "where": "design §16.4",
+    "text": "it bounds the hierarchy's fanout and not §16.2.1's unbounded acquaintance degree, so it is necessary and not sufficient"
+   }
+  ],
+  "given": "Two graphs at the same fanout and the same decay parameter satisfying the condition: one whose acquaintance degree is bounded and one whose acquaintance degree grows with depth.",
+  "when": "A distance-decay policy is scored on each.",
+  "then": "The first converges and the second does not, and the conformance report says which; an implementation that reports the condition as sufficient fails.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-01",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Forward a stored topology transaction on every adjacent session except the one it arrived from",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1.1",
+   "design §15"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "a node forwards a stored transaction to every adjacent node except the one it arrived from"
+   },
+   {
+    "where": "design §15",
+    "text": "forward if and only if you stored it, duplicate-suppressed by `txid`, with no hop count and no acknowledgement"
+   }
+  ],
+  "given": "Node N holds authenticated sessions with its patron P, subordinates S1 and S2, a peer Q and an attached client C. An adoption whose subject lies within N's own h_store, signed by keys N holds, arrives on the session from P.",
+  "when": "N receives the TopologyPush carrying it.",
+  "then": "N stores the transaction, and one TopologyPush frame carrying the object byte-for-byte is observed on each of the sessions to S1, S2, Q and C, and none on the session to P.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-02",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Forward nothing whose subject lies outside your own h_store",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.1.1",
+   "design §15.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "A node stores a topology-class transaction when its subject falls within that node's own `h_store`"
+   },
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "There is no hop count, no TTL and no reach field."
+   },
+   {
+    "where": "design §15.1",
+    "text": "A horizon is every node within a two-edge walk of you"
+   }
+  ],
+  "given": "Node N as in PRP-01. An adoption arrives from P whose subject is three adoption edges from N and whose signatures verify.",
+  "when": "N receives the TopologyPush.",
+  "then": "N's store does not gain the transaction and no TopologyPush follows on any of N's sessions. Nothing in the frame told N how far to forward; the decision came from N's own store.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-03",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Neither store nor forward an object you already hold",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "A node that already holds an object does not store it again and does not forward it."
+   }
+  ],
+  "given": "Node N holds a transaction with txid T, received from P and already forwarded.",
+  "when": "The same object arrives again on the session from Q.",
+  "then": "N's store is unchanged and no TopologyPush carrying T is observed on any session after the second arrival.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-04",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Hold a transaction whose signer key you lack, and forward it once it verifies",
+  "milestone": 4,
+  "kind": "liveness",
+  "spec": [
+   "wire-format.md §10.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "Stored means verified."
+   },
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "hold it, fetch the key, and let it enter storage and propagation when it verifies"
+   }
+  ],
+  "given": "Node N as in PRP-01. An adoption arrives whose subject is within h_store but one of whose signers' KeyMaterial N does not hold.",
+  "when": "N receives the TopologyPush, and the missing KeyMaterial is later supplied through the path N uses to fetch it.",
+  "then": "No TopologyPush carrying the object is observed on any session before the key arrives. After the key arrives and every signature verifies, the object is in N's store and a TopologyPush carrying it is observed on the sessions PRP-01 names.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-05",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Relay a stored object you are not a party to",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1",
+    "text": "This governs origination, not relaying."
+   },
+   {
+    "where": "wire-format.md §10.1",
+    "text": "a relay changes nothing"
+   }
+  ],
+  "given": "Node N is neither the patron nor the subject of an adoption that lies within its h_store; it arrived from P.",
+  "when": "N receives the TopologyPush.",
+  "then": "N forwards it as PRP-01 describes. An implementation that applies the who-may-push rule to relays, forwarding only objects it is a party to, stops the flood here and fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-06",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Carry a pushed object byte-for-byte with a body-kind tag and nothing else",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1",
+    "text": "carrying the object byte-for-byte with a body-kind tag and nothing else"
+   },
+   {
+    "where": "wire-format.md §10.1",
+    "text": "That is the only wrapper field permitted."
+   }
+  ],
+  "given": "Node N receives a TopologyPush from P whose object bytes are recorded by the test.",
+  "when": "N forwards it to S1.",
+  "then": "The frame observed on the session to S1 carries an object whose bytes equal the recorded bytes exactly, and a wrapper carrying the body-kind tag and no other field.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-07",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Let a later EndpointRecord supersede the held one and a lower or equal seqno die as a duplicate",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1.2",
+   "wire-format.md §2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "An `EndpointRecord` therefore supersedes rather than accumulating"
+   },
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "the held `seqno` is greater than or equal (§2.3)"
+   }
+  ],
+  "given": "Node N holds subject X's EndpointRecord at seqno 5 in the series it has proved current.",
+  "when": "A record for X at seqno 4, then an identical record at seqno 5, then a validly signed record at seqno 6 in the same series arrive in turn.",
+  "then": "After the first two arrivals N's current record for X is still the seqno 5 record and no TopologyPush follows. After the third, N's current record for X is the seqno 6 record and one TopologyPush carrying it is observed on each adjacent session except the one it arrived from.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-08",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Retain neither of two different signed contents at one seqno, forward nothing for that pair, and re-resolve",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.1.2",
+   "wire-format.md §7.7"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "Equal `seqno` with different signed contents is malformed"
+   },
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "a holder retains neither as current and forwards nothing further for that `(subject, seqno)`"
+   },
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "it repairs by re-resolving (§7.7)"
+   }
+  ],
+  "given": "Node N holds X's EndpointRecord at seqno 5 with contents A, already forwarded.",
+  "when": "A validly signed EndpointRecord for X at seqno 5 with different contents B arrives.",
+  "then": "N holds no current record for X, no TopologyPush carrying either record is observed after the conflict, and a resolution for X is observed leaving N.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-09",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Drop a memo whose anchor is not your subnet's",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.2",
+   "design §15.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2",
+    "text": "So a memo whose anchor is not your subnet's is dropped, not forwarded"
+   },
+   {
+    "where": "wire-format.md §10.2",
+    "text": "neither applied to a table nor passed on"
+   },
+   {
+    "where": "design §15.2",
+    "text": "A memo never leaves its subnet."
+   }
+  ],
+  "given": "Node N sits in the subnet anchored at A, with patron P, and keeps a memo table.",
+  "when": "A TopologyMemo whose anchor is B arrives from a subordinate.",
+  "then": "No TopologyMemo is observed on N's session to P and N's memo table is unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-10",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Forward a memo unchanged to your patron, and stop at the root",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2",
+    "text": "A receiving node forwards the memo to its own patron, unchanged except that nothing is added"
+   },
+   {
+    "where": "wire-format.md §10.2",
+    "text": "A root has no patron and forwarding stops there."
+   }
+  ],
+  "given": "Node N with patron P, and root R with no patron, each receive a memo from a subordinate about a slot neither holds.",
+  "when": "Each processes the memo.",
+  "then": "On N's session to P a TopologyMemo is observed whose bytes equal the received memo's. R sends no TopologyMemo on any session.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-11",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Forward no memo about a slot you hold at or after its timestamp",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2",
+    "text": "A node holding that slot at or after the memo's timestamp does not forward it."
+   }
+  ],
+  "given": "Node N with patron P holds subordinate slot k with an occupant and a timestamp t.",
+  "when": "A memo naming N in field 1 and slot k, with field 4 at or before t, arrives from below.",
+  "then": "No TopologyMemo is observed on N's session to P.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-12",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Treat a memo naming you as a cycle, confirm it against your own row, and disavow the subordinate that forwarded it",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.2.1",
+   "wire-format.md §10.2.4",
+   "design §15.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2.1",
+    "text": "If field 1 is you, a memo you originated has come back to you from below"
+   },
+   {
+    "where": "wire-format.md §10.2.1",
+    "text": "It fires at any depth, on the memo alone, and terminates the memo there."
+   },
+   {
+    "where": "wire-format.md §10.2.4",
+    "text": "It disavows the direct subordinate that forwarded the memo to it"
+   },
+   {
+    "where": "wire-format.md §10.2.4",
+    "text": "Reason code 5, without prejudice"
+   }
+  ],
+  "given": "Node N holds subordinate S in slot k and a row matching that. A cycle below S has formed, so a memo N originated for slot k returns to N on the session from S.",
+  "when": "N receives the memo.",
+  "then": "No TopologyMemo is forwarded further. A disavowal transaction by N naming S with reason code 5 is observed, and N's slot k is empty afterwards.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-13",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Act on no memo your own records do not confirm",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2.3",
+    "text": "No node acts on a memo alone."
+   },
+   {
+    "where": "wire-format.md §10.2.3",
+    "text": "A fabricated memo fails both, at no traffic cost."
+   }
+  ],
+  "given": "Node N holds subordinate S in slot k. An attacker below S injects a memo naming N in field 1 and slot k but naming an occupant N's row does not hold.",
+  "when": "N receives the memo from S.",
+  "then": "No disavowal is emitted, no archive fetch is issued, the memo is not forwarded, and N's rows are unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-14",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Send a memo to the nearest infrastructure node when the patron holds no session",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.2",
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2",
+    "text": "Where no session with the patron exists, the memo goes to the nearest infrastructure node on the patron chain instead"
+   }
+  ],
+  "given": "Node N's patron L is a light client that holds no sessions; N's serving node I is the nearest infrastructure node on the patron chain.",
+  "when": "N adopts a subordinate and originates the corresponding memo.",
+  "then": "The TopologyMemo is observed on N's session to I, and nothing is attempted toward L.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-15",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Repair a missed object by reconciliation that replays the same frame",
+  "milestone": 4,
+  "kind": "liveness",
+  "spec": [
+   "wire-format.md §10.1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.3",
+    "text": "reconciliation is a replay of the same frames rather than a distinct mechanism"
+   },
+   {
+    "where": "wire-format.md §10.1.3",
+    "text": "Loss is detected at the receiver, which is the party that can act."
+   }
+  ],
+  "given": "An adoption within N's h_store was lost in flight, so N holds neither it nor a later object that back-points to it. The test triggers reconciliation between N and its patron, since when it runs is local.",
+  "when": "N reconciles.",
+  "then": "The missing object arrives at N as a TopologyPush frame of the same shape as the original, N stores it, and forwards it as PRP-01 describes.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "QUE-01",
