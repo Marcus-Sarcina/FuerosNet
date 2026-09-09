@@ -49,12 +49,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 
 ## 2. Queue
 
-- **Hold ciphertext for offline clients** (design §14.1.4).
+- **Hold ciphertext for offline clients** (design §14.1.4, design §14.1.6).
 - **Queue indefinitely, bounded by a per-subordinate storage cap** (design
   §14.1.6). No time limit: a message survives an absence of any length.
 - **Do not replicate queue state to siblings.** Failover covers sessions, not
-  mailboxes, a client attached to a sibling collects from its own patron when that
-  patron returns.
+  mailboxes, a client attached to a sibling collects from its own serving node when
+  that node returns.
 - **At the cap, refuse the newest message and tell the sender** (design §14.1.6).
   Never drop the oldest: it destroys a message the sender believes was accepted, and
   it lets anyone who can reach the queue flush what is already in it.
@@ -145,10 +145,9 @@ guarantee, which is a floor rather than a ceiling.
 
 - **Remove a child on departure or disavowal.** A stale entry refers requesters to
   a node that will not answer for that path.
-- **Replace an endpoint set when you receive a locator with a strictly greater
-  `seqno`** for a node you hold (`wire-format.md` §2.3).
-- **Collapse forwarding chains at the source**: follow the chain and return the
-  terminal record, not the next hop (design §12.3).
+- **Replace an endpoint set when you receive an endpoint record with a strictly
+  greater `seqno`** for a node you hold (`wire-format.md` §7.6, ordered as
+  `wire-format.md` §2.3 orders every series).
 - **Keep the topology store across a restart — it is your seen-set.** Forwarding is
   *forward if and only if you stored it* (`wire-format.md` §10.1), so duplicate
   suppression is a property of the store rather than of a separate cache. A node

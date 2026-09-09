@@ -9183,3 +9183,39 @@ established: a carve-out satisfied by half a compromise, a property dischargeabl
 by a coincident trace fact, a collision manufactured by an abstraction and then
 cited as evidence about bytes. The design's own scope statements held up better
 than the descriptions of the models did.
+
+## 2026-09-09
+
+**Consistency fixes surfaced by drafting the acceptance catalogue**, each
+derivable from the documents and applied without a design change; the four
+that need a decision stay in `Robot/review-tracking.md`.
+
+**The serving node is the mailbox.** §14.1.2 opens by making attachment the
+answer to *where do my messages queue*, and §12.6.3 has the recipient's
+serving node hold ciphertext; §14.1.6 nonetheless said *the direct patron*,
+which cannot hold a queue when that patron is a light client that serves no
+sessions. §14.1.6 now names the serving node, with the patron as the case
+where the two coincide, and its heading, the P4 row, the failover sentence
+and `infra-client-requirements.md` §2 follow. §14.1.2 item 3 no longer says a
+node *begins queuing* on a missed heartbeat: `wire-format.md` §8.2 has queuing
+continuous and reachability a hint about when to deliver, and the item now
+says so and names the serving node as the actor.
+
+**Smaller alignments.** `wire-format.md` §9.2's stream-0 line names the
+topology frames §8.0 places there. §8.1.1 says *one* greased parameter in
+both sentences, the fixed shape having settled it; the heading stands, since
+tolerance is the MUST and sending is expected client behaviour. §14.1.2 says
+the heartbeat interval is unset within the units and range §21.1 fixes.
+§10.0's table and `light-client-requirements.md` §2 cite §10.1 for the
+730-day pruning floor, where it is stated. `wire-format.md` §3.1's
+back-pointer sentence has its verb back. §12.6.5's attestation sketch carries
+the issuer role and issuer identity `wire-format.md` §7.1 carries and
+§12.6.5.1 depends on. `light-client-requirements.md` §1.3 has the subject's
+grant choose which sealed capture opens, as `wire-format.md` §7.3 and
+§7.5.2.8 already do. `infra-client-requirements.md` §4.3 replaces an endpoint
+set on an endpoint record rather than a locator, and its forwarding-chain
+bullet is gone with the forwarding it described. `wire-format.md` §7.7.3's
+failure codes are for field 4, as its schema says. §12.3's steps run 6, 7, 8;
+§12.7's opening parenthesis closes; one referral bound spells ≥ the same way
+in comment and prose. The generator's TR9 and TR10 traces cite §8.2 for the
+refusal close code; the vectors are not regenerated here.

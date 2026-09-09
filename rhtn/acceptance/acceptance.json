@@ -651,7 +651,7 @@
    },
    {
     "where": "light-client-requirements.md §1.3",
-    "text": "prefer the most recent eligible one when answering"
+    "text": "when you are the subject releasing a key, the most recent eligible capture is the default"
    }
   ],
   "given": "Subject A has met verifier B twice, in records R1 then R2, both eligible, and has set no preference.",
@@ -3257,7 +3257,7 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+    "text": "Undelivered messages queue indefinitely at the recipient's serving node"
    },
    {
     "where": "wire-format.md §8.2",
@@ -3487,7 +3487,7 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+    "text": "Undelivered messages queue indefinitely at the recipient's serving node"
    },
    {
     "where": "infra-client-requirements.md §2",
@@ -3515,7 +3515,7 @@
   "rule": [
    {
     "where": "design §14.1.2",
-    "text": "the patron marks the client unreachable and begins queuing."
+    "text": "the serving node marks the client unreachable; material for it queues as it always did, and delivery waits for its return."
    },
    {
     "where": "infra-client-requirements.md §2",
@@ -3546,7 +3546,7 @@
   "rule": [
    {
     "where": "design §14.1.2",
-    "text": "§7.4.3's queue mechanism depends on the patron distinguishing \"offline\" from \"no record\"."
+    "text": "§7.4.3's queue mechanism depends on the node distinguishing \"offline\" from \"no record\""
    },
    {
     "where": "design §7.4.3",
@@ -3605,11 +3605,11 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "a client attached to a sibling still collects from its own patron once that patron returns. The message waits; it is not lost."
+    "text": "a client attached to a sibling still collects from its own serving node once that node returns"
    },
    {
     "where": "infra-client-requirements.md §2",
-    "text": "a client attached to a sibling collects from its own patron when that patron returns."
+    "text": "a client attached to a sibling collects from its own serving node when that node returns"
    }
   ],
   "given": "k messages are queued at N for C; N went dark and C holds a degraded session on sibling S.",
@@ -5875,7 +5875,7 @@
   "rule": [
    {
     "where": "design §14.1.2",
-    "text": "the patron marks the client unreachable and begins queuing."
+    "text": "the serving node marks the client unreachable; material for it queues as it always did, and delivery waits for its return."
    },
    {
     "where": "wire-format.md §8.2",
@@ -6524,7 +6524,7 @@
    },
    {
     "where": "wire-format.md §9.2",
-    "text": "Stream 0: session control (attach, heartbeat, sibling updates)"
+    "text": "the control frames of §8.0 — session control (attach, heartbeat, sibling updates) and topology propagation (push, memo)"
    }
   ],
   "given": "The implementation attaches as client with the identity, attestation and named capabilities of the corpus's Attach fixture, and answers as serving node with the inputs of the corpus's AttachAck fixture; the heartbeat interval in the ack is a test-chosen value in 1..=3600 seconds, since design §21.1 leaves it unset.",

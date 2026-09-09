@@ -558,8 +558,8 @@ back-pointer unsatisfied and is detectable. The archive is therefore properly a
 recovered, the structure proves that no intermediate record is missing, which
 requires reachability rather than sequence.
 
-A decoder MUST accept lists of **any length from 1 to 8.** The bound in §1 — and
-MUST verify every back-pointer present, not merely the first.
+A decoder MUST accept lists of **any length from 1 to 8** — the bound §1.3 sets —
+and MUST verify every back-pointer present, not merely the first.
 
 ### 3.2 Structural rules for presence records
 
@@ -2860,7 +2860,7 @@ Referral = {
   3: uint,                   ; path indices this referral advances past, counted
                              ;   INCREMENTALLY from the referring node's own
                              ;   position, not as an offset from the anchor.
-                             ;   MUST be >= 1: a referral that advances nothing
+                             ;   MUST be ≥ 1: a referral that advances nothing
                              ;   is a loop, and a node with nothing to add
                              ;   reports failure instead
   4: ? KeyMaterial           ; so a requester with nothing pinned CAN authenticate
@@ -2929,7 +2929,7 @@ authenticates the endpoint it reaches by ordinary means at contact time (design
 §8.1, the anchor table is an index, not a credential store). A wrong or hostile
 reply causes a failed connection, not a false identity.
 
-**Failure codes** for field 5, with the disposition each implies — stated
+**Failure codes** for field 4, with the disposition each implies — stated
 because "distinguishes retry from re-resolve" without a mapping lets two resolvers
 disagree about the same reply:
 
@@ -3219,7 +3219,7 @@ greased parameter is not itself distinguishable by its size.
 
 **Sending is not a MUST, because nothing could check it.** An unassigned id is
 indistinguishable from one the receiver simply does not know, so "did you grease?"
-has no answer from the wire. **The reference implementation sends at least one
+has no answer from the wire. **The reference implementation sends one
 randomly-chosen 64-bit id with a random value per session**, and a session either
 visibly contains such a parameter or does not — presence is the evidence, not a
 declaration.
@@ -3536,7 +3536,8 @@ nothing weaker to fall back to.
 - **Default port 7431/udp**, overridable per endpoint. `NetworkPoint` carried no
   port at all, so a client could not turn a sibling reference into a socket
   address
-- Stream 0: session control (attach, heartbeat, sibling updates)
+- Stream 0: the control frames of §8.0 — session control (attach, heartbeat,
+  sibling updates) and topology propagation (push, memo)
 **Every bidirectional stream opens with a request-type tag.**
 Resolution, archive fetch, prekey fetch, resource requests, catalog queries and
 verifier queries all share the same ALPN and the same stream class, and **nothing

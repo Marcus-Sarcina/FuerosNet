@@ -101,8 +101,10 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   to offer that evidence. **Both are legitimate**, and the same series is what P21
   turns into a behavioural record, so the user is choosing between being checkable and
   being trackable rather than between honest and evasive.
-- **Keep one sealed capture per presence record**, ageing each independently, and
-  prefer the most recent eligible one when answering (design §7.5.2).
+- **Keep one sealed capture per presence record**, ageing each independently. A
+  grant names which one opens (`wire-format.md` §7.3); when you are the subject
+  releasing a key, the most recent eligible capture is the default (design
+  §7.5.2).
 - **Report a decryption failure as `inconclusive`, never as `no-match`.** Truncated or
   unauthenticated ciphertext says nothing about the subject, and reporting it as
   evidence would let a corrupted store become an adverse result (design §7.5.2).
@@ -234,7 +236,7 @@ job.
   the path is unchanged, but it is the boundary beyond which you may prune — and
   pruning is irreversible. **Never prune inside the 730-day window**: those records are
   what verifier selection counts, and discarding them lowers your own verification
-  threshold, which is a thing an evaluator can see you did (design §10.2).
+  threshold, which is a thing an evaluator can see you did (design §10.1).
 
 
 - **Merge automatically on noticing divergence.** A user has no reason to want

@@ -144,7 +144,7 @@ fn cer_08_open_only_the_capture_the_grant_names_and_keep_t() {
 /// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
 ///
 /// Rule (design §7.5.2.8): "Querying prefers the most recent eligible capture"
-/// Rule (light-client-requirements.md §1.3): "prefer the most recent eligible one when answering"
+/// Rule (light-client-requirements.md §1.3): "when you are the subject releasing a key, the most recent eligible capture is the default"
 ///
 /// Given: Subject A has met verifier B twice, in records R1 then R2, both eligible, and has set no preference.
 /// When: A's client releases a capture key for a query directed at B.

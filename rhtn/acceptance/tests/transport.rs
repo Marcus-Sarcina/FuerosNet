@@ -95,7 +95,7 @@ fn trn_05_negotiate_the_application_protocol_rhtn_1() {
 ///
 /// Rule (wire-format.md §8.0): "Stream 0 carries length-delimited, type-tagged frames."
 /// Rule (wire-format.md §8.0): "frame = u32-be length || deterministic CBOR of [ uint frame_type, body ]"
-/// Rule (wire-format.md §9.2): "Stream 0: session control (attach, heartbeat, sibling updates)"
+/// Rule (wire-format.md §9.2): "the control frames of §8.0 — session control (attach, heartbeat, sibling updates) and topology propagation (push, memo)"
 ///
 /// Given: The implementation attaches as client with the identity, attestation and named capabilities of the corpus's Attach fixture, and answers as serving node with the inputs of the corpus's AttachAck fixture; the heartbeat interval in the ack is a test-chosen value in 1..=3600 seconds, since design §21.1 leaves it unset.
 /// When: The client attaches.

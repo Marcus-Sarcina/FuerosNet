@@ -3112,7 +3112,7 @@ what they establish, who governs them, and whether they are evidence at all.
 
 | Kind | What it is | What it establishes | Governance and retention |
 |---|---|---|---|
-| **Transaction archive** | Each signer's own hash chain over the topology and presence transactions it signed | The history presented at an adoption. **Continuity is proven by the chain** | The node's own. Prunable at a checkpoint, floored at the 730-day window (§10.2) |
+| **Transaction archive** | Each signer's own hash chain over the topology and presence transactions it signed | The history presented at an adoption. **Continuity is proven by the chain** | The node's own. Prunable at a checkpoint, floored at the 730-day window (§10.1) |
 | **PoP records** | The signed artifact of a face-to-face ceremony (§8.1) | That two people met, and the **witnesses and verifiers available for a later ceremony with anyone**. Potent under any sequence and in any subtree | **Not patron-countersigned** (§6.4). A PoP **is** a transaction and enters the archive like any other — but the chain does not govern its *use*: identifying validators for a later ceremony does not depend on the archive's continuity, and a counterparty is **handed a bundle rather than walking the archive** (§8.1.2). They survive pruning of the chain that carried them |
 | **Sequence number** (`counter`) | Freshness for asynchronously updated routing information (`wire-format.md` §2.3) | Which of two locators for one node is current | **Not history, and not an enforcement mechanism.** Neither the archive nor its chain |
 | **Seqno series** | A grouping of sequence numbers, generally though not necessarily bound to one subnet or to a run of subnet memberships | That one user has several routing-table entries locating them in different subnets. The series follows the subnet, and address updates use the counter in that same series | Not history. Advanced only by a reissue |
@@ -4168,7 +4168,7 @@ thereafter.
    where the design puts discovery anyway.
 
 **Case 3 — Alice's anchor is no longer usable to Bob.**
-9. Either the anchor's subtree shrank below Bob's caching threshold, or Bob's
+8. Either the anchor's subtree shrank below Bob's caching threshold, or Bob's
    policy changed, so Bob no longer holds it. He re-resolves using a higher
    ancestor Alice can name. **Merging does not cause this.** Anchor-relative
    paths are merge-stable (§12.6.2), which is exactly why §12.2 abandoned the
@@ -4427,7 +4427,10 @@ CurrencyAttestation {
   current_key: keyhash        # which key is live
   issued_at  : timestamp
   expires_at : timestamp      # ~10 h default (§21); hours, not days
-  signature  : COSE_Sign1     # BY THE PATRON
+  issuer_role: uint           # patron, sibling (secondhand), grandpatron,
+                              #   down-line — the ladder of §12.6.5.1
+  issuer     : keyhash        # the party whose signature follows
+  signature  : COSE_Sign1     # BY THE ISSUER (`wire-format.md` §7.1)
 }
 ```
 
@@ -4608,7 +4611,7 @@ worth having.
 
 A node may be patronless by disavowal (§6.2.2), by patron loss, or because it
 never had one (§3.1 makes roots emergent and ordinary, so this is a normal
-state rather than an error.
+state rather than an error).
 
 #### 12.7.1 Genesis identities: currency is vacuous, not missing
 
@@ -5043,14 +5046,14 @@ same (`wire-format.md` §11.1).
    permits this) walks up until it reaches infrastructure. Serving and
    countersigning are separate roles: a light-client patron still countersigns
    subnet-scoped transactions, it simply does not serve sessions.
-2. Periodic heartbeat keeps the connection alive. **Interval unset.** A
-   performance parameter to tune under load, traded off between battery cost and
-   failover detection latency. QUIC 0-RTT resumption (§14.1.3) makes reattachment
+2. Periodic heartbeat keeps the connection alive. **Interval unset**, within the
+   units and range §21.1 fixes. A performance parameter to tune under load,
+   traded off between battery cost and failover detection latency. QUIC 0-RTT resumption (§14.1.3) makes reattachment
    cheap enough to favour a lazy interval.
-3. **Client heartbeat fails (server side):** the patron **marks the client
-   unreachable and begins queuing.** It does not simply do nothing, because
-   §7.4.3's queue mechanism depends on the patron distinguishing "offline"
-   from "no record". **This state replicates to siblings**, or a sibling
+3. **Client heartbeat fails (server side):** the serving node **marks the client
+   unreachable; material for it queues as it always did, and delivery waits
+   for its return.** It does not simply do nothing, because §7.4.3's queue
+   mechanism depends on the node distinguishing "offline" from "no record". **This state replicates to siblings**, or a sibling
    answering during failover has no idea of the client's status.
 4. **Server heartbeat fails (client side):** after **3 consecutive missed
    intervals**, the client attaches to another party in the same replication set
@@ -5143,9 +5146,10 @@ linkage on top of what §12.6.3 already grants. Note it is **stable while valid,
 not permanent**: Apple documents that device tokens change periodically and must
 not be cached as immutable identifiers.
 
-#### 14.1.6 The patron as mailbox
+#### 14.1.6 The serving node as mailbox
 
-**Undelivered messages queue indefinitely at the direct patron, bounded by a
+**Undelivered messages queue indefinitely at the recipient's serving node — its
+direct patron, where that patron is infrastructure (§14.1.2) — bounded by a
 per-subordinate storage cap.** No time limit; a space limit.
 
 **Two reasons, and the second is the stronger one.**
@@ -5165,8 +5169,8 @@ verification quietly less reliable for exactly the users the design exists to
 include.
 
 **Siblings do not hold queue state.** Failover covers *sessions*, not
-mailboxes: a client attached to a sibling still collects from its own patron once
-that patron returns. **The message waits; it is not lost.** This removes the
+mailboxes: a client attached to a sibling still collects from its own serving
+node once that node returns. **The message waits; it is not lost.** This removes the
 metadata-spreading question entirely. Who has mail waiting, from whom, and for how
 long is known to one node rather than to a replica set.
 
@@ -7003,7 +7007,7 @@ and a citation to a missing number resolves there.
 | P1 | Presence-record composition — durable correlatable tuple of identity, time, social graph and geography | **Medium, reduced** | **Graph position is gone**: the participant locator is removed (§8.1), so records no longer trace a trajectory. **Geography is withholdable** from ten of eleven exchanges (§8.1.1). **Identity, time and the social graph remain by construction** — `kid` is on the envelope and signer role is inferred from body fields, so no field-level measure reaches them. See P2 and C2 |
 | P2 | Verifier/witness graph leakage | High | §19.2 — open, genuine tension |
 | P3 | **A single-identity client** correlates across subnets: anyone present in two of a user's subnets links them | High for such a client, **absent for a multi-identity one** | **Not a protocol limitation.** The protocol permits multiple identities already (§13.7); v1 clients omit the key management and interface work, so this ships as a **client** scope decision rather than a design defect. No wire change separates the two cases |
-| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the direct patron, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
+| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the serving node, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§13.7, §13.7.1). The device is the global correlation point the network architecture otherwise avoids |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
 | **P12** | **End-to-end payload encryption is specified but not yet implemented.** An implementation shipping hop encryption alone leaks payload to both serving nodes | **Critical until built** | §14.2.4 adopts PQXDH and the Triple Ratchet; five integration decisions remain. The patron was accepted as a metadata chokepoint, never a content one |

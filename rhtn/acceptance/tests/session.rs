@@ -215,7 +215,7 @@ fn ses_12_try_the_actual_serving_node_first_on_the_next_fr() {
 /// Spec: design §14.1.2; wire-format.md §8.2; infra-client-requirements.md §1
 /// Milestone: 2.  Kind: positive.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.2): "the patron marks the client unreachable and begins queuing."
+/// Rule (design §14.1.2): "the serving node marks the client unreachable; material for it queues as it always did, and delivery waits for its return."
 /// Rule (wire-format.md §8.2): "Liveness rule: a peer is considered failed after 3 consecutive missed intervals"
 /// Rule (infra-client-requirements.md §1): "Store the resulting reachability state, not the update history"
 ///

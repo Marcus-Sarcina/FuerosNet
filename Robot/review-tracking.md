@@ -7665,3 +7665,19 @@ locator; payload, the shape of a rate-limited reply, the exhaustion notice's
 carrier and the demultiplexing scheme; ceremony, the subject-side profile
 refusal and the form of the client's notices; resources, a second request on
 one stream. The drafting-notes files carry each with its entry id.
+
+**Dispositions (2026-09-09).** Author: greasing is expected client behaviour
+and not an enforceable part of the wire (1, heading kept, the two sentences
+now agree on one parameter); add the frames to §9.2 (2, applied); clear up
+the rest where the documents settle it. Applied from the documents: 3 and 4
+(the serving node holds the queue, per design §14.1.2's opening and design
+§12.6.3; marking unreachable starts nothing, per `wire-format.md` §8.2), 5,
+6 (infra §2 cites both sections), 7, 10, 12, 13, 14, 15, 16, 17. The
+generator's TR9 and TR10 citations are corrected in `generate.py`; the
+vectors are not regenerated — the pins were already stale at HEAD for the
+design and the wire, and the generator's dependency is absent on this
+machine. **Still the author's:** 8 (one chain per key or per binding), 9
+(ordering a disavowal within a relationship), 11 (design §3.4's floor says
+messages replicate to siblings; design §14.1.6 and infra §2 say siblings hold
+no queue state). Nine catalogue quotes were re-pointed at the edited text and
+verify; the whole set is at 0 flags. `change-log.md` carries the reasoning.

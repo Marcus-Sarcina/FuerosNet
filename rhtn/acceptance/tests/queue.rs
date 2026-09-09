@@ -7,7 +7,7 @@
 /// Spec: design §14.1.6; wire-format.md §8.2; infra-client-requirements.md §2
 /// Milestone: 3.  Kind: positive.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.6): "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+/// Rule (design §14.1.6): "Undelivered messages queue indefinitely at the recipient's serving node"
 /// Rule (wire-format.md §8.2): "messages queued for this client AT THE RESPONDING NODE"
 /// Rule (infra-client-requirements.md §2): "Hold ciphertext for offline clients"
 ///
@@ -152,7 +152,7 @@ fn que_08_keep_a_queued_message_across_an_absence_of_any_l() {
 /// Spec: design §14.1.6; infra-client-requirements.md §2
 /// Milestone: 3.  Kind: positive.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.6): "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+/// Rule (design §14.1.6): "Undelivered messages queue indefinitely at the recipient's serving node"
 /// Rule (infra-client-requirements.md §2): "Queue indefinitely, bounded by a per-subordinate storage cap"
 ///
 /// Given: The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. N serves C1 and C2, neither attached; C1's queue holds k messages and is at its cap.
@@ -169,7 +169,7 @@ fn que_09_apply_the_cap_per_subordinate_so_one_full_queue() {
 /// Spec: design §14.1.2; infra-client-requirements.md §2; design §14.1.6
 /// Milestone: 4.  Kind: positive.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.2): "the patron marks the client unreachable and begins queuing."
+/// Rule (design §14.1.2): "the serving node marks the client unreachable; material for it queues as it always did, and delivery waits for its return."
 /// Rule (infra-client-requirements.md §2): "Hold ciphertext for offline clients"
 /// Rule (design §14.1.6): "The message waits; it is not lost."
 ///
@@ -189,7 +189,7 @@ fn que_10_queue_for_a_client_the_node_has_marked_unreachab() {
 /// Spec: design §14.1.2; design §7.4.3
 /// Milestone: 4.  Kind: negative.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.2): "§7.4.3's queue mechanism depends on the patron distinguishing "offline" from "no record"."
+/// Rule (design §14.1.2): "§7.4.3's queue mechanism depends on the node distinguishing "offline" from "no record""
 /// Rule (design §7.4.3): "Queries to an offline light client queue at its patron, resolving when the client next connects"
 ///
 /// Given: N serves C, who is not attached, and holds no record of keyhash Z, which belongs to no node in N's topology.
@@ -226,8 +226,8 @@ fn que_12_report_no_queued_messages_from_a_failover_siblin() {
 /// Spec: design §14.1.6; infra-client-requirements.md §2
 /// Milestone: 4.  Kind: liveness.  Oracle: behaviour.
 ///
-/// Rule (design §14.1.6): "a client attached to a sibling still collects from its own patron once that patron returns. The message waits; it is not lost."
-/// Rule (infra-client-requirements.md §2): "a client attached to a sibling collects from its own patron when that patron returns."
+/// Rule (design §14.1.6): "a client attached to a sibling still collects from its own serving node once that node returns"
+/// Rule (infra-client-requirements.md §2): "a client attached to a sibling collects from its own serving node when that node returns"
 ///
 /// Given: k messages are queued at N for C; N went dark and C holds a degraded session on sibling S.
 /// When: N returns; C's session on S ends and C performs a fresh attach.
