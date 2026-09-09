@@ -9187,8 +9187,8 @@ than the descriptions of the models did.
 ## 2026-09-09
 
 **Consistency fixes surfaced by drafting the acceptance catalogue**, each
-derivable from the documents and applied without a design change; the four
-that need a decision stay in `Robot/review-tracking.md`.
+derivable from the documents and applied without a design change; the three
+that need a decision remain open questions for the author.
 
 **The serving node is the mailbox.** §14.1.2 opens by making attachment the
 answer to *where do my messages queue*, and §12.6.3 has the recipient's
