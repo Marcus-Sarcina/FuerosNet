@@ -7586,3 +7586,82 @@ cores against the 32-core figures committed (recovery 290 s from 307,
 ceremony 160 s from 186, the two slow recovery mutants 371 s and 293 s
 from 409 and 329). The compliant tree is 90 s of the total; the bounded
 attach companion is 73 s of that and stays in the gate.
+
+## Acceptance suite (2026-09-09)
+
+`rhtn/` is now in the tree as the workspace `Robot/implementation-plan.md`
+lays out, with one member: the acceptance catalogue, its checker and the
+stubs generated from it. `rhtn/acceptance/acceptance.json` holds 253 entries
+across the sixteen gap rows of the plan's section 8.2 (decoder 16, transport
+16, session 15, queue 16, archive 16, topology 16, resolution 16,
+replication-peering 15, propagation 15, currency 13, metric 8, ceremony 29,
+recovery 14, payload 15, resources 24, product 9). Every citation names a
+heading and every rule quote is found verbatim in its section; 51 entries
+carry an interpretation, each a reading the specification does not state
+and therefore a question for the author. `rhtn/check.sh` passes: catalogue
+0 flags, stubs in sync, 253 ignored stubs compiled. One duplicate dropped at
+assembly (the session fragment's replay entry, asserted by TRN-16).
+
+Drafting was five parallel passes, then single-thread after two usage-limit
+cutoffs. Each pass's list of thin bases, inconsistencies and author
+questions is in `Robot/acceptance-drafting-notes/`; the items below are the
+ones that touch the specification's text and want a disposition.
+
+**Inconsistencies found while drafting, none applied:**
+
+1. `wire-format.md` §8.1.1's heading says greasing is required; its body and
+   design §14.1.1 say sending is not a MUST. The same section says "one" and
+   then "at least one" greased parameter.
+2. `wire-format.md` §9.2's stream-0 list omits the topology frames §8.0 puts
+   there.
+3. design §14.1.2 "marks the client unreachable and begins queuing" against
+   `wire-format.md` §8.2 "Queuing is continuous — there is no 'begin queuing'
+   signal".
+4. The mailbox is "the direct patron" in design §14.1.6 and infra §2, and the
+   serving node in design §14.1.2 item 1 and item 3; they differ when the
+   patron is a light client.
+5. design §14.1.2 says the heartbeat interval is unset without the bounds
+   §21.1 and `wire-format.md` §8.2 fix.
+6. infra §2 and design §12.6.3 cite §14.1.4 for queuing rules that live in
+   §14.1.6.
+7. design §10.0 and `light-client-requirements.md` §2 cite §10.2 for the
+   730-day pruning floor, which is stated in §10.1. The heading exists, so
+   `refcheck.py` cannot see it.
+8. design §10.1 leaves archive scope across bindings unstated while
+   `wire-format.md` §7.9 addresses one chain per key.
+9. A disavowal carries no subject counter, so its order against later records
+   in the same relationship is decided nowhere.
+10. `wire-format.md` §3.1: "The bound in §1 — and MUST verify every
+    back-pointer present" has lost its verb.
+11. design §3.4's replication floor says messages replicate to siblings;
+    design §14.1.6 and infra §2 say siblings hold no queue state.
+12. infra §4.3 "Replace an endpoint set when you receive a locator": a locator
+    carries no endpoints (`wire-format.md` §2.3, §7.6).
+13. infra §4.3 "Collapse forwarding chains" survives the withdrawal of
+    forwarding (infra §4.2, `wire-format.md` §7.7.3, design §12.3).
+14. `wire-format.md` §7.7.3 says "Failure codes for field 5" where the schema
+    puts them in field 4.
+15. design §12.6.5's inline attestation sketch lacks the issuer role and
+    issuer identity `wire-format.md` §7.1 carries and §12.6.5.1 depends on.
+16. `light-client-requirements.md` §1.3 has the verifier prefer the most recent
+    capture "when answering"; design §7.5.2.8 and `wire-format.md` §7.3 have
+    the subject's grant choose.
+17. Cosmetic: design §12.3's steps run 6, 7, 9; design §12.7 opens a
+    parenthesis it does not close; `wire-format.md` §7.7.3 spells one bound
+    ">= 1" and "≥ 1".
+
+**Questions the entries carry as interpretations, by area:** decoder, a
+nesting-depth ceiling and whether unknown keys count per map or per object;
+transport, what a field-1 mismatch and an over-bound frame look like on the
+wire, and whether "until handshake completion" names the carrying
+connection's handshake; session and queue, whether a successor collects its
+predecessor's queued mail, whether marking unreachable ends the session,
+whether offline-versus-no-record reaches the sender, the cap's unit, and what
+carries reachability state between siblings; archive and topology, one chain
+per key or per binding, over-capacity adoptions in the table, and what a
+failed presence-reference evaluation does to a binding; resolution, the code
+after child removal and the handling of an unranked different-series
+locator; payload, the shape of a rate-limited reply, the exhaustion notice's
+carrier and the demultiplexing scheme; ceremony, the subject-side profile
+refusal and the form of the client's notices; resources, a second request on
+one stream. The drafting-notes files carry each with its entry id.

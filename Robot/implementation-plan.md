@@ -205,6 +205,11 @@ is stable.
 
 ## 8. Coverage: what is established, and what acceptance tests still owe
 
+**The catalogue is `rhtn/acceptance/acceptance.json`**, one entry per acceptance
+test, each quoting the sentence that justifies its expectation; `rhtn/check.sh`
+verifies every citation and quote against the specification and reports coverage of
+the rows below.
+
 **Established today** means a model or fixture in the tree asserts it and the gate
 re-derives it. An acceptance test for such a function only has to show the
 implementation agrees with the fixture or model. **Owed** means nothing in the tree
@@ -235,7 +240,7 @@ checks it and the implementation's test suite is the first check.
 | Transport profile as executed: only the named group offered; raw-public-key mutual authentication; ALPN; refusal as a close code; capability tolerance and greasing; control-frame framing; connection migration | `wire-format.md` §8.0, §8.1, §8.2, §9.1, §9.2; design §14.1.3 | 2 |
 | Session lifecycle: heartbeat; three missed intervals then a degraded session on a sibling; the next fresh attach returns to the actual patron; unreachable marking; resumption | design §14.1.2; `light-client-requirements.md` §4 | 2, 4 |
 | Queue as executed: cap, crash copies, metadata minimum, enqueue for an offline client, offline versus no record | design §14.1.6, §7.4.3; `infra-client-requirements.md` §2 | 3, 4 |
-| Archive chain as executed: genesis form, ordinals, prefix verification, timestamps and monotonicity, archive fetch, evaluating a presented archive, fork detection at the inquirer | design §10, §9.0.2; `wire-format.md` §3.1, §3.3, §7.9; `infra-client-requirements.md` §5 | 3 |
+| Archive chain as executed: genesis form, ordinals, prefix verification, timestamps and monotonicity, archive fetch, the reference policy's evaluation of a presented archive, fork detection at the inquirer | design §10, §9.0.2; `wire-format.md` §3.1, §3.3, §7.9; `infra-client-requirements.md` §5 | 3 |
 | Local topology table: adoption, departure and disavowal effects; bindings as a set per relationship; subtree acknowledgement; formation and lifecycle | design §6.2.1, §11.2.1, §13; `wire-format.md` §7.5 | 3 |
 | Resolution as executed: anchor table entries and budget; locator series and counter acceptance; the resolution sequence; unsigned replies verified by the handshake; endpoint records; learning an infra child's endpoints; maintenance; what a query discloses | design §12.2, §12.3; `wire-format.md` §2.3, §7.2, §7.6, §7.7; `infra-client-requirements.md` §4 | 4 |
 | Propagation as executed: the push forwarding rule; the horizon boundary; loss and replay; memo generation and rootward routing | design §15; `wire-format.md` §10.1, §10.2 | 4 |
