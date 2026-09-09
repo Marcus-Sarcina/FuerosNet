@@ -2,90 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Report primary mode to a client attaching to its own serving node.
-///
-/// Spec: design §14.1.2; infra-client-requirements.md §1
-/// Milestone: 2.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §1): "Determine the attachment mode from local topology. A client not in this node's subtree is in failover, and report it."
-/// Rule (design §14.1.2): "Light client dials out to its serving infra node. The nearest infrastructure node on its patron chain, which is not necessarily its patron"
-///
-/// Given: Infra node N holds an adoption of light client C directly under it, so N is C's nearest infrastructure ancestor. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.
-/// When: C dials N and sends Attach with field 1 equal to its own keyhash.
-/// Then: N answers with AttachAck whose field 1 (mode) is 0 and whose field 3 is I.
-#[test]
-#[ignore = "acceptance SES-01: owed at milestone 2"]
-fn ses_01_report_primary_mode_to_a_client_attaching_to_its() {
-    todo!("SES-01: Report primary mode to a client attaching to its own serving node.")
-}
-
-/// Accept a client whose patron is a light client, on the walk-up to infrastructure.
-///
-/// Spec: design §14.1.2; infra-client-requirements.md §1
-/// Milestone: 2.  Kind: must-accept.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §1): "Accept attachment from any node whose nearest infrastructure ancestor is this node, and from siblings' clients in failover"
-/// Rule (design §14.1.2): "A light client whose patron is itself a light client (§3.3 permits this) walks up until it reaches infrastructure."
-///
-/// Given: Infra node N has adopted light client P; P has adopted light client C. C's nearest infrastructure ancestor is therefore N, which is not its patron. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.
-/// When: C dials N and sends Attach.
-/// Then: N does not close the connection with application close code 1; it answers with AttachAck whose field 1 (mode) is 0.
-#[test]
-#[ignore = "acceptance SES-02: owed at milestone 2"]
-fn ses_02_accept_a_client_whose_patron_is_a_light_client_o() {
-    todo!("SES-02: Accept a client whose patron is a light client, on the walk-up to infrastructure.")
-}
-
-/// Send the first heartbeat after one full interval, counter 0, then one per interval.
-///
-/// Spec: wire-format.md §8.2
-/// Milestone: 2.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §8.2): "Both sides send one Heartbeat per advertised interval, so liveness is bidirectional and the interval is the serving node's to set."
-/// Rule (wire-format.md §8.2): "counter 0 is sent after one interval, not immediately"
-///
-/// Given: A session between C and N is established (AttachAck received). The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3. Stream 0 is observed in both directions from the moment AttachAck is sent.
-/// When: Three intervals of I seconds elapse with no other traffic.
-/// Then: Each side's first Heartbeat carries counter 0 and is sent no earlier than I seconds after AttachAck; each side's next two carry counters 1 and 2, one per interval.
-#[test]
-#[ignore = "acceptance SES-03: owed at milestone 2"]
-fn ses_03_send_the_first_heartbeat_after_one_full_interval() {
-    todo!("SES-03: Send the first heartbeat after one full interval, counter 0, then one per interval.")
-}
-
-/// Reset liveness on any valid beat with an unseen counter, so one lost beat does not fail over.
-///
-/// Spec: wire-format.md §8.2
-/// Milestone: 2.  Kind: robustness.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §8.2): "valid beat carrying a counter not yet seen resets"
-/// Rule (wire-format.md §8.2): "Liveness rule: a peer is considered failed after 3 consecutive missed intervals"
-///
-/// Given: A session between C and N with interval I; the harness sits on the path and can drop individual frames. C holds a sibling list from AttachAck.
-/// When: The harness drops N's Heartbeat with counter 1 and delivers counters 2, 3, 4 and onward on time, for at least six intervals.
-/// Then: C stays in the session on N: it opens no connection to any sibling and continues sending its own Heartbeats to N throughout.
-#[test]
-#[ignore = "acceptance SES-04: owed at milestone 2"]
-fn ses_04_reset_liveness_on_any_valid_beat_with_an_unseen() {
-    todo!("SES-04: Reset liveness on any valid beat with an unseen counter, so one lost beat does not fail over.")
-}
-
-/// Count a malformed heartbeat as absence: no immediate close, three misses still govern.
-///
-/// Spec: wire-format.md §8.2
-/// Milestone: 2.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §8.2): "A malformed heartbeat counts as absence, not as a fault. It does not reset the detector and does not itself close the session; three missed intervals still govern."
-///
-/// Given: A session between C and N with interval I. The harness replaces every Heartbeat from C with a malformed frame carrying the Heartbeat frame type.
-/// When: Three full intervals elapse with only malformed frames arriving from C.
-/// Then: N does not close the session on receiving a malformed frame; after three full intervals N's inspectable reachability state for C reads unreachable, not before.
-#[test]
-#[ignore = "acceptance SES-05: owed at milestone 2"]
-fn ses_05_count_a_malformed_heartbeat_as_absence_no_immedi() {
-    todo!("SES-05: Count a malformed heartbeat as absence: no immediate close, three misses still govern.")
-}
-
 /// Fail over when only payload traffic arrives, since payload does not reset the detector.
 ///
 /// Spec: wire-format.md §8.2; design §14.1.2
@@ -208,24 +124,6 @@ fn ses_11_stay_on_the_sibling_while_the_degraded_session_l() {
 #[ignore = "acceptance SES-12: owed at milestone 4"]
 fn ses_12_try_the_actual_serving_node_first_on_the_next_fr() {
     todo!("SES-12: Try the actual serving node first on the next fresh attach after a degraded session.")
-}
-
-/// Mark a client unreachable when its heartbeats stop.
-///
-/// Spec: design §14.1.2; wire-format.md §8.2; infra-client-requirements.md §1
-/// Milestone: 2.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (design §14.1.2): "the serving node marks the client unreachable; material for it queues as it always did, and delivery waits for its return."
-/// Rule (wire-format.md §8.2): "Liveness rule: a peer is considered failed after 3 consecutive missed intervals"
-/// Rule (infra-client-requirements.md §1): "Store the resulting reachability state, not the update history"
-///
-/// Given: C is attached to N with interval I; N exposes its reachability state per client to the test.
-/// When: The harness blackholes all packets from C to N for three full intervals.
-/// Then: N's reachability state for C reads unreachable after the third full interval, and read reachable at every inspection before it.
-#[test]
-#[ignore = "acceptance SES-13: owed at milestone 2"]
-fn ses_13_mark_a_client_unreachable_when_its_heartbeats_st() {
-    todo!("SES-13: Mark a client unreachable when its heartbeats stop.")
 }
 
 /// Replicate a client's unreachable state to the serving node's siblings.
