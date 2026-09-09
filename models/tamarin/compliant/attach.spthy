@@ -61,42 +61,66 @@ rule Client_Credential:
   --[ Credential($C, ~k) ]->
     [ !Cred($C, ~k) ]
 
-/*  THE ROLE TRAVELS WITH THE SESSION, not with the (node, client) pair.  A
-    node can hold a primary session for one client and stand in as a sibling
-    for another, and design 14.1.2 makes the mode a property of the topology
-    read AT ATTACH TIME.  Carrying it in the `Session` fact is what stops a
-    node that is primary somewhere from borrowing that authority here.     */
-/*  ONE SERVING STATE PER BINDING, and supersession consumes it.
+/*  TWO FACTS, BECAUSE THE DESIGN HAS TWO THINGS.  The node's RECORD of the
+    binding -- one per (node, client, credential), entered once and retired
+    once by supersession -- and the SESSIONS opened under it, as many as the
+    client cares to open, each with its own role read from topology at attach
+    time (design 14.1.2), each ending when it ends.  Service needs both: the
+    session it runs on and the record that says the binding is still this
+    node's to serve.  Supersession retires the record, so every session under
+    it is inert at once -- "SESSIONS under the superseded credential
+    terminate", plural (design 12.6.5) -- and no attach can follow, because an
+    attach needs the record too.  A rule cannot forget to check a fact it
+    needs to fire, which is why this is stronger than a flag and is the
+    modelling of "enforced by replacement rather than by a check".
 
-    The first version gave each session its own `Session` fact, and all three
-    obligations falsified: a node could open two sessions under one
-    credential, supersession ended one, and the other kept serving.  That is
-    not a defect in the design -- design 12.6.5 says "SESSIONS under the
-    superseded credential terminate", plural, and the node's duty is to the
-    BINDING rather than to whichever session happened to be consumed.
+    TWO EARLIER SHAPES, AND WHAT EACH GOT WRONG.  The first gave each session
+    its own fact and nothing else: supersession ended one session and the
+    other kept serving.  The second collapsed everything into one serving
+    fact per binding and added a restriction that a binding is OPENED once in
+    the trace's whole history -- which did end every session at once, and
+    also forbade the ordinary lifecycle outright.  design 14.1.2 has a client
+    stay "on the sibling until that session ends, and the next fresh attach
+    tries its actual" patron: reconnection is normal, and that model could
+    not write it down.  Worse, it made the property under test true by fiat:
+    a node that terminated every session and then FORGOT the credential was
+    superseded would serve a reconnect, and no trace could show it because
+    no reconnect was allowed.  A cross-family review found it.  Now the
+    record is what the node remembers, `Session_Ends` and a fresh `Opened`
+    are the reconnect, and `no_attach_after_supersession` is the claim --
+    with a mutation in which supersession terminates the sessions and keeps
+    the record, which is that forgetful node.
 
-    So the serving capability is one fact per (node, client, credential).
-    Every serving rule consumes and restores it; supersession consumes it and
-    puts nothing back.  A rule cannot forget to check a fact it needs to fire,
-    which is why this is stronger than a flag and is the modelling of
-    "enforced by replacement rather than by a check".
-
-    THE ROLE TRAVELS WITH IT, because design 14.1.2 fixes the mode from the
-    node's topology read at attach time.  A node that is primary for one
-    client and a stand-in for another cannot borrow the first role for the
-    second.                                                                */
-rule Attach_Primary:
+    THE RECORD IS ENTERED ONCE, by restriction, and that is not the property
+    under test restated: it says a node enters a credential into its record
+    once, which `currency.spthy` proves of its own record as a lemma
+    (`a_key_enters_a_record_once`) and design 9.0.2's overwrite implies.  What
+    keeps a superseded binding from being served is the linear record being
+    gone, not this restriction; the mutation shows the difference.        */
+rule Node_Records_Binding:
     [ !Cred($C, k) ]
-  --[ Opened($N, $C, k), ServingAs($N, $C, k, 'primary') ]->
-    [ Serving($N, $C, k, 'primary') ]
+  --[ Recorded($N, $C, k) ]->
+    [ Binding($N, $C, k) ]
+
+restriction OneRecordPerBinding:
+  "All N C k #i #j. Recorded(N, C, k) @ #i & Recorded(N, C, k) @ #j ==> #i = #j"
+
+rule Attach_Primary:
+    [ Binding($N, $C, k), Fr(~s) ]
+  --[ Opened($N, $C, k, ~s), ServingAs($N, $C, k, 'primary', ~s) ]->
+    [ Binding($N, $C, k), Session($N, $C, k, 'primary', ~s) ]
 
 rule Attach_Sibling:
-    [ !Cred($C, k) ]
-  --[ Opened($N, $C, k), ServingAs($N, $C, k, 'sibling') ]->
-    [ Serving($N, $C, k, 'sibling') ]
+    [ Binding($N, $C, k), Fr(~s) ]
+  --[ Opened($N, $C, k, ~s), ServingAs($N, $C, k, 'sibling', ~s) ]->
+    [ Binding($N, $C, k), Session($N, $C, k, 'sibling', ~s) ]
 
-restriction OneServingStatePerBinding:
-  "All N C k #i #j. Opened(N, C, k) @ #i & Opened(N, C, k) @ #j ==> #i = #j"
+/*  A session ends -- the client goes away, the transport drops -- and the
+    binding is untouched.  The next attach is a fresh session.              */
+rule Session_Ends:
+    [ Session($N, $C, k, role, s) ]
+  --[ Ended($N, $C, k, s) ]->
+    [ ]
 
 /*  Material arrives for a client and waits.  design 14.1.4: the node holds
     ciphertext for an offline client.  THE QUEUE ENTRY NAMES THE CREDENTIAL:
@@ -121,21 +145,24 @@ rule Enqueue:
 */
 
 rule Deliver:
-    [ Serving($N, $C, k, role), Queued($N, $C, k, m) ]   // SAME k: the serving
-                                                        //   credential is the
-                                                        //   one the item was
-                                                        //   queued for
-  --[ Delivered($N, $C, k, m), ServedUnder($N, $C, k), ServedAs($N, $C, k, role) ]->
-    [ Serving($N, $C, k, role) ]
+    [ Session($N, $C, k, role, s), Binding($N, $C, k)   // the session, and the
+                                                        //   record that says this
+                                                        //   binding is still
+                                                        //   this node's to serve
+    , Queued($N, $C, k, m) ]                            // SAME k: the item was
+                                                        //   queued for this
+                                                        //   credential
+  --[ Delivered($N, $C, k, m), ServedUnder($N, $C, k), ServedAs($N, $C, k, role, s) ]->
+    [ Session($N, $C, k, role, s), Binding($N, $C, k) ]
 
 /*  A TRUST-BEARING operation -- a patron countersignature, the thing a
     sibling cannot do.  The guard is the serving state's own role, which is
     what `light-client-requirements.md` describes from the other end: "on a
     sibling, trust-bearing operations are unavailable".                     */
 rule Trust_Bearing_Operation:
-    [ Serving($N, $C, k, 'primary') ]
-  --[ TrustBearing($N, $C, k), ServedUnder($N, $C, k), ServedAs($N, $C, k, 'primary') ]->
-    [ Serving($N, $C, k, 'primary') ]
+    [ Session($N, $C, k, 'primary', s), Binding($N, $C, k) ]
+  --[ TrustBearing($N, $C, k, s), ServedUnder($N, $C, k), ServedAs($N, $C, k, 'primary', s) ]->
+    [ Session($N, $C, k, 'primary', s), Binding($N, $C, k) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -148,9 +175,16 @@ rule Trust_Bearing_Operation:
 */
 
 rule Supersession_Arrives:
-    [ Serving($N, $C, k, role) ]
+    [ Binding($N, $C, k) ]             // the RECORD goes, whether or not a
+                                       //   session is open; every session
+                                       //   under it is inert from here, and
+                                       //   no attach can follow
   --[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->
-    [ ]
+    [ ]                                // MUTATION (run-all.sh 3c): restore
+                                       //   `Binding` here -- the node that
+                                       //   ends the sessions and forgets --
+                                       //   and no_attach_after_supersession
+                                       //   falsifies
 
 /*
 ================================================================================
@@ -180,15 +214,17 @@ rule Supersession_Arrives:
     a lemma the gate never proves must not sit in the file looking proven.
 
     WHY, and it is the same cause as `compliant/currency.spthy`'s open
-    obligation: `Deliver` and `Trust_Bearing_Operation` consume `Serving` and
-    restore it, which is faithful -- serving does not end the binding -- but
-    the backward search for the origin of `Serving($N,$C,k,role)` then
-    regresses through unboundedly many prior services.  Neither lemma was
-    FALSIFIED; there is no counterexample, only no proof inside 420 seconds.
+    obligation: `Deliver` and `Trust_Bearing_Operation` consume the binding
+    record and the session and restore both, which is faithful -- serving
+    ends neither -- but the backward search for the origin of
+    `Binding($N,$C,k)` then regresses through unboundedly many prior
+    services.  Neither lemma was FALSIFIED; there is no counterexample, only
+    no proof inside 420 seconds.
 
     WHAT IS ESTABLISHED, and it is more than belief.  `attach.bounded`
-    appends a bound -- at most one supersession, at most two services -- and
-    over that finite space BOTH obligations verify, in 84 and 46 steps.
+    appends a bound -- at most one supersession, two services, two attaches
+    -- and over that finite space the obligations verify (see the fragment
+    for the current list and counts).
     `run-all.sh` builds that file by appending the fragment to THIS one, so
     the rules have a single source and the bounded result follows any change
     to them.  Keeping the bound in a fragment rather than in this file is also
@@ -216,8 +252,8 @@ rule Supersession_Arrives:
     the regress.                                                            */
 lemma service_follows_an_attach [reuse, use_induction]:
   all-traces
-  "All N C k role #j. ServedAs(N, C, k, role) @ #j
-      ==> Ex #i. ServingAs(N, C, k, role) @ #i & #i < #j"
+  "All N C k role s #j. ServedAs(N, C, k, role, s) @ #j
+      ==> Ex #i. ServingAs(N, C, k, role, s) @ #i & #i < #j"
 
 /*  THE QUEUE FOLLOWS ITS CREDENTIAL, NOT ITS CLIENT.  Delivered under k means
     queued for k.  Unbounded, because `Queued` has exactly one origin and is
@@ -236,9 +272,40 @@ lemma delivery_is_to_the_credential_it_was_queued_for:
     operation.                                                              */
 lemma no_trust_bearing_operation_on_a_sibling:
   all-traces
-  "All N C k #i #j.
-      ServingAs(N, C, k, 'sibling') @ #i & TrustBearing(N, C, k) @ #j
+  "All N C k s #i #j.
+      ServingAs(N, C, k, 'sibling', s) @ #i & TrustBearing(N, C, k, s) @ #j
         ==> F"
+
+/*  THE LIFECYCLE THE EARLIER RESTRICTION FORBADE: a session under a binding
+    ends, and a fresh one opens under the same binding.  design 14.1.2.  If
+    this ever falsifies the model has gone back to one attach per binding
+    and no_attach_after_supersession holds by fiat again.                  */
+lemma reconnection_is_reachable:
+  exists-trace
+  "Ex N C k s1 s2 #i #e #j.
+      Opened(N, C, k, s1) @ #i & Ended(N, C, k, s1) @ #e
+    & Opened(N, C, k, s2) @ #j & #i < #e & #e < #j & not(s1 = s2)"
+
+/*  THE OBLIGATION THE RESTRICTION USED TO ASSUME AWAY.  Once this node holds
+    supersession evidence for a binding, no attach under it follows: the
+    record is gone, and an attach needs it.  This is the node REMEMBERING,
+    which is what "stop serving a binding you have verified superseded" asks
+    of it beyond ending the sessions it has.
+
+    STATED IN `attach.bounded`, NOT HERE, for the cause the note above gives:
+    an attach consumes the binding record and restores it, so the search for
+    where the record came from regresses through unboundedly many prior
+    attaches, and `[use_induction]` did not close it inside 300 seconds.  The
+    bounded companion proves it over at most two attaches, one supersession
+    and two services -- which is the shape of the failure it guards against,
+    attach, supersede, attach -- and the mutation that keeps the record at
+    supersession falsifies it there.
+
+      lemma no_attach_after_supersession:
+        all-traces
+        "All N C k s #i #j.
+            EvidenceHeld(N, C, k) @ #i & Opened(N, C, k, s) @ #j
+              ==> #j < #i"                                                  */
 
 /*  ANTI-VACUITY, and the reason the obligations above are not satisfied by a
     node that simply never serves anyone.                                   */
@@ -248,7 +315,7 @@ lemma delivery_is_reachable:
 
 lemma trust_bearing_operation_is_reachable:
   exists-trace
-  "Ex N C k #i. TrustBearing(N, C, k) @ #i"
+  "Ex N C k s #i. TrustBearing(N, C, k, s) @ #i"
 
 /*  THE IGNORANCE WITNESS.  design 12.6.5: "Outside the horizon there is no
     supersession to know ... those parties hold the old key until its
@@ -367,15 +434,27 @@ lemma a_conforming_binding_is_reachable:
     wrong reason.                                                           */
 lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
   exists-trace
-  "Ex N C conn a #i #j.
-      Bound(N, C, conn, a) @ #i & Bound(N, C, conn, a) @ #j & not(#i = #j)
-    & ProcessedEarlyData(N) @ #i"
+  "Ex N C conn1 conn2 a #s #r #i #j.
+      SentEarly(N, C, conn1, a) @ #s
+    & Replayed(N, C, conn2, a) @ #r & not(conn1 = conn2)
+    & Bound(N, C, conn1, a) @ #i
+    & Bound(N, C, conn2, a) @ #j & ProcessedEarlyData(N) @ #j"
 
 lemma a_server_that_processes_early_data_binds_a_connection_that_never_completes:
   exists-trace
-  "Ex N C conn a #i.
-      Bound(N, C, conn, a) @ #i & ProcessedEarlyData(N) @ #i
-    & not(Ex #h. HandshakeDone(N, C, conn) @ #h)"
+  "Ex N C conn1 conn2 a #s #r #j.
+      SentEarly(N, C, conn1, a) @ #s
+    & Replayed(N, C, conn2, a) @ #r & not(conn1 = conn2)
+    & Bound(N, C, conn2, a) @ #j & ProcessedEarlyData(N) @ #j
+    & not(Ex #h. HandshakeDone(N, C, conn2) @ #h)"
+
+/*  BOTH WITNESSES NAME THE REPLAY.  A first version asked only for two binds
+    on one connection, which the persistent `!EarlyData` supplies without
+    `Replay` ever firing -- so a mutation that lost the replay transition
+    would have left both controls green and the cross-connection hazard the
+    wire describes unrepresented.  A cross-family review found it.  Now the
+    witness is: sent on conn1, replayed onto conn2, bound on conn2 by a
+    server that processes early data.                                      */
 
 
 end

@@ -8,8 +8,18 @@
     keeping the bound in a separate fragment is what preserves that.  A file
     that simply carried the restrictions would have quietly demoted it.
 
-    WHAT THIS BUYS: no counterexample to either supersession obligation in
-    any trace with at most one supersession and two services.               */
+    WHAT THIS BUYS: no counterexample to any supersession obligation below in
+    any trace with at most one supersession, two services and two attaches.
+    Attaches are bounded too, since 2026-09-09: an attach consumes the binding
+    record and restores it just as a service does, and the obligation that no
+    attach follows supersession regresses through them the same way.  Two is
+    the shape of the failure guarded against -- attach, supersede, attach. */
+
+restriction AtMostTwoAttaches:
+  "All N1 C1 k1 s1 N2 C2 k2 s2 N3 C3 k3 s3 #a #b #c.
+      Opened(N1, C1, k1, s1) @ #a & Opened(N2, C2, k2, s2) @ #b
+      & Opened(N3, C3, k3, s3) @ #c
+        ==> #a = #b | #a = #c | #b = #c"
 
 restriction AtMostOneSupersession:
   "All N1 C1 k1 N2 C2 k2 #a #b.
@@ -39,6 +49,18 @@ lemma nothing_delivered_after_supersession:
     reasons that this lemma states together -- delivery under k2 means queued
     for k2 (the unbounded provenance lemma), and delivery under k1 after k1's
     supersession is the lemma above.                                        */
+/*  THE NODE REMEMBERS.  Once it holds supersession evidence for a binding
+    no attach under that binding follows -- the record is gone and an attach
+    needs it.  Stated here and not in the base theory because the record's
+    restore chain regresses the unbounded search; see the base theory's
+    note.  MUTATION (run-all.sh 3c): supersession keeps the record, and this
+    falsifies with attach, supersede, attach.                               */
+lemma no_attach_after_supersession:
+  all-traces
+  "All N C k s #i #j.
+      EvidenceHeld(N, C, k) @ #i & Opened(N, C, k, s) @ #j
+        ==> #j < #i"
+
 lemma a_queue_does_not_follow_the_successor_credential:
   all-traces
   "All N C k1 k2 m #e #s #d.

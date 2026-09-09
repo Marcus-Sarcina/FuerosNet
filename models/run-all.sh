@@ -17,6 +17,20 @@ TLA_JAR="${TLA_JAR:-$HOME/tools/tla2tools.jar}"
 TAMARIN="${TAMARIN:-$HOME/tools/tamarin-prover}"
 MAUDE_DIR="${MAUDE_DIR:-$HOME/tools}"     # Maude must be on PATH for Tamarin
 
+# THE FENCE ON THE PROVER.  Tamarin's runtime defaults to every core and no
+# heap ceiling.  On 2026-09-08 two non-terminating searches, run side by side
+# during a diagnosis, exhausted 94 GB in ten minutes and locked the machine
+# before either reached its 900 s timeout -- a runaway search fills memory
+# faster than it spends wall clock, so a timeout alone is no protection.
+#   -N8   costs nothing measurable: the bounded attach companion took 76.5 s
+#         on 8 cores and 76.6 s on 32.
+#   -M64g is thirteen times the largest terminating footprint measured
+#         (4.9 GB, the same companion) and turns a runaway into a "Heap
+#         exhausted" exit within seconds, which the no-verdict branches
+#         below report as a failure.
+# nice keeps the desktop usable while the wire-only recovery family runs.
+TAMARIN_RTS="${TAMARIN_RTS:-+RTS -N8 -M64g -RTS}"
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RESULTS="$HERE/results"
 mkdir -p "$RESULTS"
@@ -137,7 +151,7 @@ for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/cer
   # currency model on 2026-09-05.  A proof needing longer than this needs a
   # hint, not a longer wall clock.
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --derivcheck-timeout=60 --prove "$HERE/tamarin/$spec.spthy" > "$out" 2>&1
+      nice -n 19 "$TAMARIN" $TAMARIN_RTS --derivcheck-timeout=60 --prove "$HERE/tamarin/$spec.spthy" > "$out" 2>&1
   if [ $? -eq 124 ]; then
     echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"
     fail=1; continue
@@ -186,7 +200,7 @@ for spec in compliant/currency compliant/attach; do
        for(i=1;i<=NR;i++) if(i!=last) print lines[i]}' "$HERE/tamarin/$spec.spthy" > "$tmp"
   cat "$frag" >> "$tmp"; echo "" >> "$tmp"; echo "end" >> "$tmp"
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --derivcheck-timeout=60 --prove "$tmp" > "$out" 2>&1
+      nice -n 19 "$TAMARIN" $TAMARIN_RTS --derivcheck-timeout=60 --prove "$tmp" > "$out" 2>&1
   if [ $? -eq 124 ]; then
     echo "  $t: TIMED OUT after ${TAMARIN_TIMEOUT:-600}s (see results/$t.txt)"; fail=1; continue
   fi
@@ -222,35 +236,54 @@ done
 #   compliant/attach, queue   -- delivery ignores which credential an item was
 #                                queued for, so an item queued under a
 #                                superseded key goes out under its successor.
+#   compliant/attach, memory  -- supersession ends the sessions and KEEPS the
+#                                binding record: the node that terminates and
+#                                forgets, then serves a reconnect.  Proved
+#                                against the bounded companion (fifth field),
+#                                since the lemma regresses unbounded.
+#   compliant/ceremony, roster -- the signer checks the first attributed
+#                                witness twice and the second never: validate
+#                                one element, authorise the collection.
+# A fifth field "bounded" splices the theory's .bounded fragment into the
+# mutant before proving, for a lemma that only discharges under the bound.
+# The substitution's from/to fields may carry \n for a line break.
 MUTATIONS=(
   'wire-only/recovery|successor_statement_binds_the_patron|Eq(stmtPat, $P)|Eq($P, $P)'
   'wire-only/recovery|recognition_binds_the_successor|Eq(respNew1, adoptNew)|Eq(adoptNew, adoptNew)'
   'wire-only/recovery|transfer_statement_binds_the_destination|Eq(stmtNew, $New)|Eq($New, $New)'
   'compliant/attach|a_conforming_server_binds_only_after_the_handshake|Handshaken($N, $C, conn), !EarlyData($N, $C, conn, a)|Handshaken($N, $C, connT), !EarlyData($N, $C, conn, a)'
   'compliant/attach|delivery_is_to_the_credential_it_was_queued_for|Queued($N, $C, k, m) ]|Queued($N, $C, kq, m) ]'
+  'compliant/attach|no_attach_after_supersession|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ ]|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ Binding($N, $C, k) ]|bounded'
+  'compliant/ceremony|no_signature_over_a_misattributed_nominee|, !Nomination($P, $Other, $W2) ]|, !Nomination($P, $Other, $W1) ]'
 )
 
 echo "=== 3c. Theory mutations: each must FALSIFY ==="
 for m in "${MUTATIONS[@]}"; do
-  IFS='|' read -r spec lem from to <<< "$m"
+  IFS='|' read -r spec lem from to bounded <<< "$m"
   t="${spec%%/*}-${spec##*/}"
   src="$HERE/tamarin/$spec.spthy"
+  frag="$HERE/tamarin/$spec.bounded"
   mfile="$RESULTS/mutant-${t}-${lem}.spthy"
   mout="$RESULTS/mutant-${t}-${lem}.txt"
   # The substitution is literal and MUST land: a mutation that matched nothing
   # would prove the unmutated theory and report a clean pass.
   if ! python3 -c '
 import sys
-src, dst, frm, to = sys.argv[1:5]
+src, dst, frm, to, bounded, frag = sys.argv[1:7]
+frm = frm.replace("\\n", "\n"); to = to.replace("\\n", "\n")
 s = open(src).read()
 if frm not in s:
     sys.exit("pattern absent: " + frm)
-open(dst, "w").write(s.replace(frm, to))
-' "$src" "$mfile" "$from" "$to"; then
+s = s.replace(frm, to)
+if bounded == "bounded":
+    lines = s.split("\n"); last = max(i for i, l in enumerate(lines) if l == "end")
+    s = "\n".join(lines[:last]) + "\n" + open(frag).read() + "\nend\n"
+open(dst, "w").write(s)
+' "$src" "$mfile" "$from" "$to" "${bounded:-}" "$frag"; then
     echo "  ${lem}: MUTATION DID NOT APPLY (pattern absent)"; fail=1; continue
   fi
   PATH="$MAUDE_DIR:$PATH" timeout "${TAMARIN_TIMEOUT:-600}" \
-      "$TAMARIN" --derivcheck-timeout=60 --prove="$lem" "$mfile" > "$mout" 2>&1
+      nice -n 19 "$TAMARIN" $TAMARIN_RTS --derivcheck-timeout=60 --prove="$lem" "$mfile" > "$mout" 2>&1
   if [ $? -eq 124 ]; then
     echo "  ${lem}: TIMED OUT (see results/$(basename "$mout"))"; fail=1; continue
   fi

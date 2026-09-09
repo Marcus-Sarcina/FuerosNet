@@ -22,30 +22,42 @@ rule (modulo E) Client_Credential:
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Attach_Primary:
-   [ !Cred( $C, k ) ]
-  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'primary' ) ]->
-   [ Serving( $N, $C, k, 'primary' ) ]
+rule (modulo E) Node_Records_Binding:
+   [ !Cred( $C, k ) ] --[ Recorded( $N, $C, k ) ]-> [ Binding( $N, $C, k ) ]
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Attach_Sibling:
-   [ !Cred( $C, k ) ]
-  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'sibling' ) ]->
-   [ Serving( $N, $C, k, 'sibling' ) ]
-
-  /* has exactly the trivial AC variant */
-
-restriction OneServingStatePerBinding:
+restriction OneRecordPerBinding:
   "∀ N C k #i #j.
-    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+    ((Recorded( N, C, k ) @ #i) ∧ (Recorded( N, C, k ) @ #j)) ⇒ (#i = #j)"
   // safety formula
 
   /*
   expanded formula:
   "∀ N C k #i #j.
-    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+    ((Recorded( N, C, k ) @ #i) ∧ (Recorded( N, C, k ) @ #j)) ⇒ (#i = #j)"
   */
+
+rule (modulo E) Attach_Primary:
+   [ Binding( $N, $C, k ), Fr( ~s ) ]
+  --[ Opened( $N, $C, k, ~s ), ServingAs( $N, $C, k, 'primary', ~s ) ]->
+   [ Binding( $N, $C, k ), Session( $N, $C, k, 'primary', ~s ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attach_Sibling:
+   [ Binding( $N, $C, k ), Fr( ~s ) ]
+  --[ Opened( $N, $C, k, ~s ), ServingAs( $N, $C, k, 'sibling', ~s ) ]->
+   [ Binding( $N, $C, k ), Session( $N, $C, k, 'sibling', ~s ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Session_Ends:
+   [ Session( $N, $C, k, role, s ) ] --[ Ended( $N, $C, k, s ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
 
 rule (modulo E) Enqueue:
    [ Fr( ~m ), !Cred( $C, k ) ]
@@ -55,29 +67,32 @@ rule (modulo E) Enqueue:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Deliver:
-   [ Serving( $N, $C, k, role ), Queued( $N, $C, k, m ) ]
+   [
+   Session( $N, $C, k, role, s ), Binding( $N, $C, k ),
+   Queued( $N, $C, k, m )
+   ]
   --[
   Delivered( $N, $C, k, m ), ServedUnder( $N, $C, k ),
-  ServedAs( $N, $C, k, role )
+  ServedAs( $N, $C, k, role, s )
   ]->
-   [ Serving( $N, $C, k, role ) ]
+   [ Session( $N, $C, k, role, s ), Binding( $N, $C, k ) ]
 
-  // loop breaker: [0]
+  // loop breakers: [1,0]
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Trust_Bearing_Operation:
-   [ Serving( $N, $C, k, 'primary' ) ]
+   [ Session( $N, $C, k, 'primary', s ), Binding( $N, $C, k ) ]
   --[
-  TrustBearing( $N, $C, k ), ServedUnder( $N, $C, k ),
-  ServedAs( $N, $C, k, 'primary' )
+  TrustBearing( $N, $C, k, s ), ServedUnder( $N, $C, k ),
+  ServedAs( $N, $C, k, 'primary', s )
   ]->
-   [ Serving( $N, $C, k, 'primary' ) ]
+   [ Session( $N, $C, k, 'primary', s ), Binding( $N, $C, k ) ]
 
-  // loop breaker: [0]
+  // loop breakers: [1,0]
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Supersession_Arrives:
-   [ Serving( $N, $C, k, role ) ]
+   [ Binding( $N, $C, k ) ]
   --[ EvidenceHeld( $N, $C, k ), Terminated( $N, $C, k ) ]->
    [ ]
 
@@ -85,15 +100,15 @@ rule (modulo E) Supersession_Arrives:
 
 lemma service_follows_an_attach [reuse, use_induction]:
   all-traces
-  "∀ N C k role #j.
-    (ServedAs( N, C, k, role ) @ #j) ⇒
-    (∃ #i. (ServingAs( N, C, k, role ) @ #i) ∧ (#i < #j))"
+  "∀ N C k role s #j.
+    (ServedAs( N, C, k, role, s ) @ #j) ⇒
+    (∃ #i. (ServingAs( N, C, k, role, s ) @ #i) ∧ (#i < #j))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ N C k role #j.
-  (ServedAs( N, C, k, role ) @ #j)
+"∃ N C k role s #j.
+  (ServedAs( N, C, k, role, s ) @ #j)
  ∧
-  ∀ #i. (ServingAs( N, C, k, role ) @ #i) ⇒ ¬(#i < #j)"
+  ∀ #i. (ServingAs( N, C, k, role, s ) @ #i) ⇒ ¬(#i < #j)"
 */
 induction
   case empty_trace
@@ -101,13 +116,14 @@ induction
 next
   case non_empty_trace
   solve( (last(#j))  ∥
-         (∃ #i. (ServingAs( N, C, k, role ) @ #i) ∧ (¬(last(#i))) ∧ (#i < #j)) )
+         (∃ #i.
+           (ServingAs( N, C, k, role, s ) @ #i) ∧ (¬(last(#i))) ∧ (#i < #j)) )
     case case_1
-    solve( ServedAs( N, C, k, role ) @ #j )
+    solve( ServedAs( N, C, k, role, s ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, k, m ) ▶₁ #j )
+      solve( Queued( $N, $C, k, m ) ▶₂ #j )
         case Enqueue
-        solve( Serving( $N, $C, ~k, role ) ▶₀ #j )
+        solve( Session( $N, $C, ~k, role, s ) ▶₀ #j )
           case Attach_Primary
           by contradiction /* from formulas */
         next
@@ -123,7 +139,7 @@ next
       qed
     next
       case Trust_Bearing_Operation
-      solve( Serving( $N, $C, k, 'primary' ) ▶₀ #j )
+      solve( Session( $N, $C, k, 'primary', s ) ▶₀ #j )
         case Attach_Primary
         by contradiction /* from formulas */
       next
@@ -153,28 +169,64 @@ guarded formula characterizing all counter-examples:
   ∀ #e. (Enqueued( N, C, k, m ) @ #e) ⇒ ¬(#e < #j)"
 */
 simplify
-solve( Queued( $N, $C, k, m ) ▶₁ #j )
+solve( Queued( $N, $C, k, m ) ▶₂ #j )
   case Enqueue
   by contradiction /* from formulas */
 qed
 
 lemma no_trust_bearing_operation_on_a_sibling:
   all-traces
-  "∀ N C k #i #j.
-    ((ServingAs( N, C, k, 'sibling' ) @ #i) ∧
-     (TrustBearing( N, C, k ) @ #j)) ⇒
+  "∀ N C k s #i #j.
+    ((ServingAs( N, C, k, 'sibling', s ) @ #i) ∧
+     (TrustBearing( N, C, k, s ) @ #j)) ⇒
     (⊥)"
 /*
 guarded formula characterizing all counter-examples:
-"∃ N C k #i #j.
-  (ServingAs( N, C, k, 'sibling' ) @ #i) ∧ (TrustBearing( N, C, k ) @ #j)"
+"∃ N C k s #i #j.
+  (ServingAs( N, C, k, 'sibling', s ) @ #i) ∧
+  (TrustBearing( N, C, k, s ) @ #j)"
 */
 simplify
-solve( ServingAs( $N, $C, k, 'sibling' ) @ #i.1 )
+solve( ServingAs( $N, $C, k, 'sibling', s ) @ #i.1 )
   case Attach_Sibling
-  solve( !Cred( $C, k ) ▶₀ #i )
-    case Client_Credential
-    by solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+  by solve( ServingAs( $N, $C, k, 'primary', ~s ) @ #i.1 )
+qed
+
+lemma reconnection_is_reachable:
+  exists-trace
+  "∃ N C k s1 s2 #i #e #j.
+    (((((Opened( N, C, k, s1 ) @ #i) ∧ (Ended( N, C, k, s1 ) @ #e)) ∧
+       (Opened( N, C, k, s2 ) @ #j)) ∧
+      (#i < #e)) ∧
+     (#e < #j)) ∧
+    (¬(s1 = s2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C k s1 s2 #i #e #j.
+  (Opened( N, C, k, s1 ) @ #i) ∧
+  (Ended( N, C, k, s1 ) @ #e) ∧
+  (Opened( N, C, k, s2 ) @ #j)
+ ∧
+  (#i < #e) ∧ (#e < #j) ∧ (¬(s1 = s2))"
+*/
+simplify
+solve( Session( $N, $C, k, role, s1 ) ▶₀ #e )
+  case Attach_Primary
+  solve( Opened( $N, $C, k, ~s ) @ #i )
+    case Attach_Primary
+    solve( Opened( $N, $C, k, s2 ) @ #j )
+      case Attach_Primary
+      solve( Binding( $N, $C, k ) ▶₀ #i )
+        case Node_Records_Binding
+        solve( Binding( $N, $C, ~k ) ▶₀ #j )
+          case Attach_Primary
+          solve( Binding( $N, $C, ~k ) ▶₀ #vr.2 )
+            case Node_Records_Binding
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
   qed
 qed
 
@@ -185,34 +237,49 @@ guarded formula characterizing all satisfying traces:
 "∃ N C k m #i. (Delivered( N, C, k, m ) @ #i)"
 */
 simplify
-solve( Queued( $N, $C, k, m ) ▶₁ #i )
+solve( Queued( $N, $C, k, m ) ▶₂ #i )
   case Enqueue
-  solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
+  solve( ServingAs( $N, $C, ~k, role, s ) @ #i.1 )
     case Attach_Primary
-    solve( !Cred( $C, ~k ) ▶₀ #i.1 )
-      case Client_Credential
-      solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #i )
+    solve( Session( $N, $C, ~k, 'primary', ~s ) ▶₀ #i )
+      case Attach_Primary
+      solve( Binding( $N, $C, ~k ) ▶₁ #i )
         case Attach_Primary
-        SOLVED // trace found
+        solve( Binding( $N, $C, ~k ) ▶₀ #i.1 )
+          case Node_Records_Binding
+          solve( Binding( $N, $C, ~k ) ▶₀ #vr.2 )
+            case Node_Records_Binding
+            SOLVED // trace found
+          qed
+        qed
       qed
     qed
   qed
 qed
 
 lemma trust_bearing_operation_is_reachable:
-  exists-trace "∃ N C k #i. TrustBearing( N, C, k ) @ #i"
+  exists-trace "∃ N C k s #i. TrustBearing( N, C, k, s ) @ #i"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C k #i. (TrustBearing( N, C, k ) @ #i)"
+"∃ N C k s #i. (TrustBearing( N, C, k, s ) @ #i)"
 */
 simplify
-solve( ServingAs( $N, $C, k, 'primary' ) @ #i.1 )
+solve( ServingAs( $N, $C, k, 'primary', s ) @ #i.1 )
   case Attach_Primary
-  solve( !Cred( $C, k ) ▶₀ #i.1 )
-    case Client_Credential
-    solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #i )
+  solve( Session( $N, $C, k, 'primary', ~s ) ▶₀ #i )
+    case Attach_Primary
+    solve( Binding( $N, $C, k ) ▶₁ #i )
       case Attach_Primary
-      SOLVED // trace found
+      solve( Binding( $N, $C, k ) ▶₀ #i.1 )
+        case Node_Records_Binding
+        solve( Binding( $N, $C, ~k ) ▶₀ #vr )
+          case Attach_Primary
+          solve( Binding( $N, $C, ~k ) ▶₀ #vr.3 )
+            case Node_Records_Binding
+            SOLVED // trace found
+          qed
+        qed
+      qed
     qed
   qed
 qed
@@ -231,17 +298,44 @@ guarded formula characterizing all satisfying traces:
   (#a < #b) ∧ (¬(N1 = N2))"
 */
 simplify
-solve( Serving( $N, $C, k, role ) ▶₀ #a )
+solve( Binding( $N, $C, k ) ▶₀ #a )
   case Attach_Primary
-  solve( Queued( $N.1, $C, ~k, m ) ▶₁ #b )
+  solve( Queued( $N.1, $C, k, m ) ▶₂ #b )
     case Enqueue
-    solve( ServingAs( $N.1, $C, ~k, role ) @ #i )
+    solve( ServingAs( $N.1, $C, ~k, role, s ) @ #i )
       case Attach_Primary
-      solve( !Cred( $C, ~k ) ▶₀ #i )
-        case Client_Credential
-        solve( Serving( $N.1, $C, ~k, 'primary' ) ▶₀ #b )
+      solve( Session( $N.1, $C, ~k, 'primary', ~s ) ▶₀ #b )
+        case Attach_Primary
+        solve( Binding( $N.1, $C, ~k ) ▶₁ #b )
           case Attach_Primary
-          SOLVED // trace found
+          solve( Binding( $N, $C, ~k ) ▶₀ #vr )
+            case Attach_Primary
+            solve( Binding( $N.1, $C, ~k ) ▶₀ #i )
+              case Attach_Primary
+              solve( Binding( $N.1, $C, ~k ) ▶₀ #vr.3 )
+                case Attach_Primary
+                solve( Binding( $N, $C, ~k ) ▶₀ #vr.4 )
+                  case Attach_Primary
+                  solve( Binding( $N.1, $C, ~k ) ▶₀ #vr.5 )
+                    case Attach_Primary
+                    solve( Binding( $N.1, $C, ~k ) ▶₀ #vr.6 )
+                      case Attach_Primary
+                      solve( Binding( $N, $C, ~k ) ▶₀ #vr.7 )
+                        case Node_Records_Binding
+                        solve( Binding( $N.1, $C, ~k ) ▶₀ #vr.8 )
+                          case Node_Records_Binding
+                          solve( Binding( $N.1, $C, ~k ) ▶₀ #vr.9 )
+                            case Node_Records_Binding
+                            SOLVED // trace found
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
         qed
       qed
     qed
@@ -333,31 +427,36 @@ qed
 
 lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
   exists-trace
-  "∃ N C conn a #i #j.
-    (((Bound( N, C, conn, a ) @ #i) ∧ (Bound( N, C, conn, a ) @ #j)) ∧
-     (¬(#i = #j))) ∧
-    (ProcessedEarlyData( N ) @ #i)"
+  "∃ N C conn1 conn2 a #s #r #i #j.
+    (((((SentEarly( N, C, conn1, a ) @ #s) ∧
+        (Replayed( N, C, conn2, a ) @ #r)) ∧
+       (¬(conn1 = conn2))) ∧
+      (Bound( N, C, conn1, a ) @ #i)) ∧
+     (Bound( N, C, conn2, a ) @ #j)) ∧
+    (ProcessedEarlyData( N ) @ #j)"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C conn a #i #j.
-  (Bound( N, C, conn, a ) @ #i) ∧
-  (Bound( N, C, conn, a ) @ #j) ∧
-  (ProcessedEarlyData( N ) @ #i)
+"∃ N C conn1 conn2 a #s #r #i #j.
+  (SentEarly( N, C, conn1, a ) @ #s) ∧
+  (Replayed( N, C, conn2, a ) @ #r) ∧
+  (Bound( N, C, conn1, a ) @ #i) ∧
+  (Bound( N, C, conn2, a ) @ #j) ∧
+  (ProcessedEarlyData( N ) @ #j)
  ∧
-  ¬(#i = #j)"
+  ¬(conn1 = conn2)"
 */
 simplify
-solve( (#i < #j)  ∥ (#j < #i) )
-  case case_1
-  solve( !EarlyData( $N, $C, conn, a ) ▶₀ #i )
-    case Client_Sends_Attach_Early
-    solve( Bound( $N, C.1, conn.2, a.2 ) @ #i )
-      case Bind_From_Early_Data
-      solve( Bound( $N, $C, ~conn, ~a ) @ #j )
-        case Bind_After_Handshake
-        solve( Handshaken( $N, $C, ~conn ) ▶₀ #j )
-          case Handshake_Completes
-          solve( !EarlyData( $N, $C, ~conn, ~a ) ▶₁ #j )
+solve( !EarlyData( $N, $C.1, conn.2, a.1 ) ▶₀ #j )
+  case Replay
+  solve( Bound( $N, $C.1, ~conn.1, ~a.1 ) @ #i )
+    case Bind_After_Handshake
+    solve( Handshaken( $N, $C, ~conn ) ▶₀ #i )
+      case Handshake_Completes
+      solve( !EarlyData( $N, $C, ~conn, ~a ) ▶₁ #i )
+        case Client_Sends_Attach_Early
+        solve( Bound( $N, $C, ~conn2.1, ~a ) @ #j )
+          case Bind_From_Early_Data
+          solve( !EarlyData( $N, $C, conn.1, ~a ) ▶₀ #r )
             case Client_Sends_Attach_Early
             SOLVED // trace found
           qed
@@ -369,22 +468,32 @@ qed
 
 lemma a_server_that_processes_early_data_binds_a_connection_that_never_completes:
   exists-trace
-  "∃ N C conn a #i.
-    ((Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)) ∧
-    (¬(∃ #h. HandshakeDone( N, C, conn ) @ #h))"
+  "∃ N C conn1 conn2 a #s #r #j.
+    (((((SentEarly( N, C, conn1, a ) @ #s) ∧
+        (Replayed( N, C, conn2, a ) @ #r)) ∧
+       (¬(conn1 = conn2))) ∧
+      (Bound( N, C, conn2, a ) @ #j)) ∧
+     (ProcessedEarlyData( N ) @ #j)) ∧
+    (¬(∃ #h. HandshakeDone( N, C, conn2 ) @ #h))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C conn a #i.
-  (Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)
+"∃ N C conn1 conn2 a #s #r #j.
+  (SentEarly( N, C, conn1, a ) @ #s) ∧
+  (Replayed( N, C, conn2, a ) @ #r) ∧
+  (Bound( N, C, conn2, a ) @ #j) ∧
+  (ProcessedEarlyData( N ) @ #j)
  ∧
-  ∀ #h. (HandshakeDone( N, C, conn ) @ #h) ⇒ ⊥"
+  (¬(conn1 = conn2)) ∧ (∀ #h. (HandshakeDone( N, C, conn2 ) @ #h) ⇒ ⊥)"
 */
 simplify
-solve( !EarlyData( $N, $C, conn, a ) ▶₀ #i )
-  case Client_Sends_Attach_Early
-  solve( Bound( $N, C.1, conn.2, a.2 ) @ #i )
+solve( !EarlyData( $N, $C.1, conn.2, a.1 ) ▶₀ #j )
+  case Replay
+  solve( Bound( $N, $C.1, ~conn2.1, ~a.1 ) @ #j )
     case Bind_From_Early_Data
-    SOLVED // trace found
+    solve( !EarlyData( $N, $C, conn, ~a ) ▶₀ #r )
+      case Client_Sends_Attach_Early
+      SOLVED // trace found
+    qed
   qed
 qed
 
@@ -405,17 +514,18 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/attach.spthy
 
-  processing time: 0.78s
+  processing time: 5.78s
   
   service_follows_an_attach (all-traces): verified (15 steps)
   delivery_is_to_the_credential_it_was_queued_for (all-traces): verified (3 steps)
-  no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)
-  delivery_is_reachable (exists-trace): verified (6 steps)
-  trust_bearing_operation_is_reachable (exists-trace): verified (5 steps)
-  serving_without_evidence_is_reachable (exists-trace): verified (7 steps)
+  no_trust_bearing_operation_on_a_sibling (all-traces): verified (3 steps)
+  reconnection_is_reachable (exists-trace): verified (8 steps)
+  delivery_is_reachable (exists-trace): verified (8 steps)
+  trust_bearing_operation_is_reachable (exists-trace): verified (8 steps)
+  serving_without_evidence_is_reachable (exists-trace): verified (16 steps)
   a_conforming_server_binds_only_after_the_handshake (all-traces): verified (5 steps)
   a_conforming_binding_is_reachable (exists-trace): verified (4 steps)
   a_replayed_attach_rebinds_on_a_server_that_processes_early_data (exists-trace): verified (8 steps)
-  a_server_that_processes_early_data_binds_a_connection_that_never_completes (exists-trace): verified (4 steps)
+  a_server_that_processes_early_data_binds_a_connection_that_never_completes (exists-trace): verified (5 steps)
 
 ==============================================================================

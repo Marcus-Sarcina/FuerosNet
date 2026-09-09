@@ -7460,3 +7460,129 @@ that actually contain the cited lines before the checker ran.
 
 Model unchanged in substance; both edited theories parse well-formed. Gate not
 re-run. Model citations 194 / 0 flags (one new); references unchanged.
+
+## Tamarin compliant review 2 (2026-09-08, closed 2026-09-09)
+
+Static review of the four compliant-tree theories; no Tamarin in the reviewer's
+environment. Six findings -- one HIGH, four MEDIUM, one LOW-MEDIUM -- **all six
+verified on the theories and the design, all six applied, no specification
+change**, plus three unspecified questions, two answered on the documents and
+one recorded as not established. No system flaw. `currency` unchanged in
+substance; one of its comments corrected.
+
+**F1 (HIGH) -- one attach per binding, for ever.** `OneServingStatePerBinding`
+said two `Opened(N, C, k)` events are the same event: not one serving state
+at a time but one attach in the trace's whole history. design 14.1.2 has a
+client stay "on the sibling until that session ends, and the next fresh
+attach tries its actual" patron, so reconnection is the ordinary lifecycle
+and the model forbade it outright. Worse, it made the property under test
+true by fiat: a node that ended every session and then FORGOT the credential
+was superseded would serve a reconnect, and no trace could show it because no
+reconnect was allowed. Rebuilt with two facts, because the design has two
+things: the node's RECORD of the binding, entered once and retired by
+supersession, and the SESSIONS under it, as many as the client opens, each
+with its own role and its own end. Service needs both; supersession retires
+the record, so every session is inert at once and no attach can follow. The
+record is entered once by restriction, and that is not the property restated:
+`currency` proves the same of its record as a lemma, and what keeps a
+superseded binding from being served is the linear record being gone, which
+the mutation shows -- supersession that keeps the record is the forgetful
+node, and `no_attach_after_supersession` falsifies against it in 7 steps.
+The role gate is now per session, the reconnection is a reachable witness,
+and the two prior mutations (0-RTT `connT`, queue `kq`) still apply to the
+rebuilt rules.
+
+**Found while fixing.** `no_attach_after_supersession` does not discharge
+unbounded: an attach consumes the record and restores it, so the search
+regresses through prior attaches exactly as the two supersession obligations
+regress through services, and `[use_induction]` did not close it in 300 s.
+It lives in `attach.bounded` beside them, and the fragment now bounds attaches
+at two -- the shape of the failure guarded against, attach, supersede, attach.
+Diagnosed per lemma after the whole-theory run timed out at 900 s with nothing
+reported: the source lemma verifies in 15 steps and the reconnection witness
+in 8, so the hang was isolated before anything was moved.
+
+**F2 (MEDIUM) -- the directional nomination rule was an axiom.** `Nominate`
+checked only the counterparty's neighbourhood and asserted `NotInOwn`; the
+restriction forbade the own-neighbourhood case anywhere in the trace; the
+lemma restated the restriction. Verified: with the restriction removed, a
+three-step counterexample. Non-membership cannot be a premise, so the check
+is now the semantics of the conforming rule's action -- no neighbour record
+EXISTED AT THE TIME, time-scoped, which answers U3 -- with a
+`Nominate_Without_Checking` twin, the lemma carved out by name like the
+others in the tree, and an exists-trace showing the own-neighbour nominee
+reachable without the check. The obligation IS a check and nothing deeper,
+and the file now says so rather than dressing the check as a theorem.
+
+**F3 (MEDIUM) -- the replay witnesses did not require the replay.** Both
+0-RTT harm lemmas were satisfiable by binding the persistent early data twice
+on the ORIGINAL connection, so losing the `Replay` transition would have left
+them green. Both now name `SentEarly` on one connection and `Replayed` on
+another, distinct, and bind on the replayed one. 8 and 5 steps.
+
+**F4 (MEDIUM) -- "reissue first, seal later" had no later.** `Reissue_Then_
+Seal` consumed the open line and left nothing to seal, so the witness showed
+reissue-then-never-seal, weaker than the requirement's "before", which is
+about a race. The line now stays open after an out-of-order reissue,
+`Seal_After_Reissue` closes it at the maximum, and the witness names all
+three in order: reissue, thief supersedes, seal arrives too late. 6 steps.
+
+**F5 (MEDIUM) -- one witness cannot show partial roster validation.** The
+record carried one witness attributed to the signer, so a signer that
+validated one element and authorised the collection was indistinguishable
+from one that validated all. Two witnesses now, distinct by restriction,
+both attributed to the signer; the conforming rule checks both; the gate
+mutation checks the first twice and the lemma falsifies for the second in
+6 steps. The record remains a projection: the counterparty's own
+attributions are not carried.
+
+**F6 (LOW-MEDIUM) -- negative controls without the wire's inequalities.** The
+collusion witness allowed one party in both chairs; the lying-verifier
+witness allowed the subject to verify itself. Both now carry the wire's
+distinctness (participants differ; verifier and patron differ from the
+subject), so each witness is a record or recovery the design would accept.
+
+**U1 -- key freshness was justified by the wrong rule.** `currency` mints the
+successor fresh and its comment leaned on the series rule, which is about
+series identifiers and leaves the keyhash untouched (wire 4.6). The ground
+is design 9.1 step 3, the rotation binding the old identity "to a new
+keypair"; the restriction is renamed for what it is and the README lists it
+as a labelled assumption. **U2** -- whether a node must refuse to enqueue for
+a known-superseded binding -- is not stated in the requirements and is now
+listed as not established. **U3** answered by F2's time-scoping.
+
+Figures: attach 11/11 unbounded; ceremony 9/9 (one new witness); recovery
+8/8; currency 5/5. Bounded attach 15/15, the four obligations at 4,316,
+2,573, 1,696 and 2,574 steps -- up from double digits, since attaches are
+now bounded rather than forbidden and sessions are their own facts.
+Mutations: memory 7 steps, roster 6 steps, both against well-formed
+mutants. Model citations 195 / 0 flags (two new).
+
+## Gate run and prover fence (2026-09-09)
+
+The gate launched at 00:08 on 2026-09-09 after compliant review 2 never
+completed: it was killed two seconds in, when the session that launched it
+was closed, and left `results/PartitionMerge.txt` truncated mid-run. The
+several-minute lock-up that preceded the restart was not the gate. Between
+23:44 and 00:00 two non-terminating searches ran side by side -- the
+unbounded attach theory and its bounded companion, before
+`no_attach_after_supersession` was moved into the fragment -- each on the
+prover's default of every core with no heap ceiling. The journal shows
+memory pressure at 23:54 and journald killed at 00:00:07; both searches
+reached their 900 s timeouts afterwards. A runaway search fills memory
+faster than it spends wall clock, so the timeout was no protection.
+
+`run-all.sh` now fences every prover call: `+RTS -N8 -M64g -RTS` under
+`nice -n 19`, overridable through `TAMARIN_RTS`. Measured before applying:
+8 cores cost nothing (bounded attach 76.5 s against 76.6 s on 32; peak
+footprint 4.9 GB), and a 300 MB cap turned the same run into a clean
+"Heap exhausted" exit in 19 s, which the no-verdict branches report.
+
+Gate re-run clean at 00:27, 1,299 s end to end, rc 0: 5 TLC models and
+the four-node instance, 5 TLC mutations violated, 8 Tamarin theories
+(wire-only 7/7/14/6, compliant 5/11/9/8), bounded currency 6, bounded
+attach 15, 7 theory mutations falsified. Every wire-only time fell on 8
+cores against the 32-core figures committed (recovery 290 s from 307,
+ceremony 160 s from 186, the two slow recovery mutants 371 s and 293 s
+from 409 and 329). The compliant tree is 90 s of the total; the bounded
+attach companion is 73 s of that and stays in the gate.

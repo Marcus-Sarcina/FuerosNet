@@ -71,24 +71,24 @@ restriction Inequality:
   "∀ x y #i. (NotEqual( x, y ) @ #i) ⇒ (¬(x = y))"
   */
 
-rule (modulo E) Adoption_Arrives_Into_An_Abandoned_Line:
+rule (modulo E) Adoption_Arrives_With_A_Reused_Successor:
    [ Record( $I, $S, kOld ), In( kNew ) ]
   --[
   AdoptionArrived( $I, $S, kOld, kNew ), Superseded( $I, $S, kOld ),
-  SeriesCheckSkipped( $S ), NotEqual( kOld, kNew )
+  SuccessorReused( $S ), NotEqual( kOld, kNew )
   ]->
    [ Record( $I, $S, kNew ) ]
 
   // loop breaker: [0]
   /* has exactly the trivial AC variant */
 
-restriction TheSubjectDoesNotReturnToAnAbandonedLine:
-  "∀ S #i. (SeriesCheckSkipped( S ) @ #i) ⇒ (⊥)"
+restriction TheSuccessorIsANewKeypair:
+  "∀ S #i. (SuccessorReused( S ) @ #i) ⇒ (⊥)"
   // safety formula
 
   /*
   expanded formula:
-  "∀ S #i. (SeriesCheckSkipped( S ) @ #i) ⇒ (⊥)"
+  "∀ S #i. (SuccessorReused( S ) @ #i) ⇒ (⊥)"
   */
 
 lemma a_key_enters_a_record_once [reuse]:
@@ -384,7 +384,7 @@ next
           qed
         qed
       next
-        case Adoption_Arrives_Into_An_Abandoned_Line
+        case Adoption_Arrives_With_A_Reused_Successor
         by contradiction /* from formulas */
       qed
     qed
@@ -419,7 +419,7 @@ next
         qed
       qed
     next
-      case Adoption_Arrives_Into_An_Abandoned_Line
+      case Adoption_Arrives_With_A_Reused_Successor
       by contradiction /* from formulas */
     qed
   qed
@@ -442,7 +442,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/bounded-currency.spthy
 
-  processing time: 0.72s
+  processing time: 0.65s
   
   a_key_enters_a_record_once (all-traces): verified (16 steps)
   a_record_key_entered_by_one_of_two_doors (all-traces): verified (11 steps)

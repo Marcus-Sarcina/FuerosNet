@@ -36,10 +36,30 @@ begin
 --------------------------------------------------------------------------------
   design 7.1's rule is directional: you nominate from the OTHER party's
   neighbourhood.  A witness drawn from your own is the failure mode the split
-  exists to prevent, so `Nominate` requires membership of the counterparty's
-  neighbourhood and non-membership of the nominator's.  Overlap is possible in
-  the real graph -- horizons intersect -- and the rule resolves it the strict
-  way: "never from your own" is not weakened by the node also being in theirs.
+  exists to prevent.  Overlap is possible in the real graph -- horizons
+  intersect -- and the rule resolves it the strict way: "never from your own"
+  is not weakened by the node also being in theirs.
+
+  WHAT THE CONFORMING RULE CHECKS, AND HOW.  Membership of the counterparty's
+  neighbourhood is a fact the rule consumes.  Non-membership of the
+  nominator's own cannot be a premise -- Tamarin has no negative premises --
+  so it is the semantics of the check the client runs against its own
+  neighbour list, as a restriction on the action that says the check ran:
+  no neighbour record for that witness EXISTED AT THE TIME.  Time-scoped,
+  because a reconfigurable topology can put the witness in the nominator's
+  neighbourhood later, and the obligation is about eligibility when the
+  nomination was made.  An earlier version read "never in the trace", which
+  is a different and stronger claim than the client can make.
+
+  WHAT THIS IS NOT.  It is not the theorem smuggled in as an axiom, and an
+  earlier version was exactly that: the conforming rule checked only the
+  counterparty's side, the restriction forbade the own-neighbourhood case
+  outright, and the lemma restated the restriction.  A cross-family review
+  found it.  The obligation here IS a check and nothing deeper, so the lemma
+  is the check's contract; what makes the pair say something is
+  `Nominate_Without_Checking`, the client that does not run it, from which
+  an own-neighbour nominee is reachable -- so the lemma holds because of the
+  check and not because the model cannot write the failure down.
 */
 
 rule Neighbour:
@@ -50,11 +70,20 @@ rule Neighbour:
 rule Nominate:
     [ !InNeighbourhood($Other, $W) ]
   --[ Nominated($P, $Other, $W)
-    , NotInOwn($P, $W) ]->
+    , CheckedOwnNeighbourhood($P, $W) ]->
     [ !Nomination($P, $Other, $W) ]
 
-restriction NeverFromYourOwnNeighbourhood:
-  "All P W #i. NotInOwn(P, W) @ #i ==> not(Ex #j. IsNeighbour(P, W) @ #j)"
+restriction CheckedOwnNeighbourhood:
+  "All P W #i. CheckedOwnNeighbourhood(P, W) @ #i
+      ==> not(Ex #j. IsNeighbour(P, W) @ #j & #j < #i)"
+
+/*  The client that skips the directional check and nominates from wherever
+    it likes.  Well formed on the wire, which has no way to tell.          */
+rule Nominate_Without_Checking:
+    [ !InNeighbourhood($Other, $W) ]
+  --[ Nominated($P, $Other, $W)
+    , SkippedTheNeighbourhoodCheck($P) ]->
+    [ !Nomination($P, $Other, $W) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -72,17 +101,37 @@ restriction NeverFromYourOwnNeighbourhood:
   nominations is not consumed by consulting it.
 */
 
+/*  TWO WITNESSES ATTRIBUTED TO $P, not one.  The wire allows sixteen per
+    record and requires them distinct; one is enough to state the obligation
+    and not enough to represent the way it is usually broken -- check the
+    first attribution, sign the whole body.  With one witness there is no
+    unchecked second attribution for a checked first one to sit beside, so a
+    signer that validated one element and authorised the collection was
+    indistinguishable here from one that validated all of them.  A
+    cross-family review asked for two.  The record is still a projection:
+    the counterparty's own attributions are not carried, only the two the
+    body says are $P's.                                                    */
 rule Propose_Record:
-    [ Fr(~rec), In(<$W, $P, $Other>) ]
-  --[ Proposed(~rec, $W, $P, $Other) ]->
-    [ !Record(~rec, $W, $P, $Other) ]
+    [ Fr(~rec), In(<$W1, $W2, $P, $Other>) ]
+  --[ Proposed(~rec, $W1, $W2, $P, $Other), Neq($W1, $W2) ]->
+    [ !Record(~rec, $W1, $W2, $P, $Other) ]
+
+restriction Inequality:
+  "All x #i. Neq(x, x) @ #i ==> F"
 
 /*  THE OBLIGATION AS A GUARD.  Signing consumes nothing and asserts one
-    thing: a nomination of $W by $P really happened.  A record attributing a
-    witness to $P that $P never nominated cannot reach this rule.          */
+    thing per attribution: a nomination of that witness by $P really
+    happened.  BOTH premises, because the check is per attributed witness;
+    a record attributing to $P any witness $P never nominated cannot reach
+    this rule.  MUTATION (run-all.sh 3c): make the second premise check $W1
+    again -- the signer that validates one element and authorises the body
+    -- and no_signature_over_a_misattributed_nominee falsifies for $W2.   */
 rule Sign_Record:
-    [ !Record(rec, $W, $P, $Other), !Nomination($P, $Other, $W) ]
-  --[ Signed(rec, $P), SignedAttributing(rec, $P, $W) ]->
+    [ !Record(rec, $W1, $W2, $P, $Other)
+    , !Nomination($P, $Other, $W1)
+    , !Nomination($P, $Other, $W2) ]
+  --[ Signed(rec, $P)
+    , SignedAttributing(rec, $P, $W1), SignedAttributing(rec, $P, $W2) ]->
     [ Out(<'signed', rec, $P>) ]
 
 /*  The dishonest alternative, present so the property is not true merely
@@ -92,8 +141,9 @@ rule Sign_Record:
     which is the honest way to state a compliance property: it holds of a
     node that follows the rule, and says nothing about one that does not.  */
 rule Sign_Without_Checking:
-    [ !Record(rec, $W, $P, $Other) ]
-  --[ Signed(rec, $P), SignedAttributing(rec, $P, $W)
+    [ !Record(rec, $W1, $W2, $P, $Other) ]
+  --[ Signed(rec, $P)
+    , SignedAttributing(rec, $P, $W1), SignedAttributing(rec, $P, $W2)
     , SkippedTheCheck($P) ]->
     [ Out(<'signed', rec, $P>) ]
 
@@ -114,14 +164,28 @@ lemma no_signature_over_a_misattributed_nominee:
       & not(Ex #s. SkippedTheCheck(P) @ #s)
         ==> Ex Other #n. Nominated(P, Other, W) @ #n & #n < #i"
 
-/*  THE DIRECTIONAL RULE.  No witness a compliant participant nominated is
-    drawn from its own neighbourhood -- design 7.1's "never from your own",
-    which is what makes the split mean anything.                           */
+/*  THE DIRECTIONAL RULE.  No witness a participant that ran the check
+    nominated was in its own neighbourhood when it nominated -- design 7.1's
+    "never from your own", which is what makes the split mean anything.
+    The carve-out names the participant, as the other lemmas here do, and
+    the time order says WHEN: a witness that joins the nominator's
+    neighbourhood afterwards does not break a nomination already made.    */
 lemma no_nominee_from_the_nominators_own_neighbourhood:
   all-traces
   "All P Other W #i #j.
-      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j
+      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j & #j < #i
+      & not(Ex #s. SkippedTheNeighbourhoodCheck(P) @ #s)
         ==> F"
+
+/*  AND THE WITNESS THAT THE CHECK IS WHAT HOLDS IT.  Skip it and an
+    own-neighbour nominee is reachable.  If this ever falsifies, the rule
+    above is true because the model cannot express the failure, which is
+    where this file started.                                               */
+lemma an_own_neighbour_is_nominated_without_the_check:
+  exists-trace
+  "Ex P Other W #i #j.
+      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j & #j < #i
+    & SkippedTheNeighbourhoodCheck(P) @ #i"
 
 /*  ANTI-VACUITY.  An honest participant signs a record.                   */
 lemma an_honest_signature_is_reachable:
@@ -250,6 +314,10 @@ lemma collusion_produces_a_record_without_a_meeting:
   exists-trace
   "Ex P1 P2 cid #i.
       PresenceAccepted(P1, P2, cid) @ #i
+    & not(P1 = P2)                     // wire: the two participant identities
+                                       //   MUST differ -- a witness with one
+                                       //   party in both slots would not be
+                                       //   the record the design accepts
     & not(Ex #m. MeetHappened(P1, P2, cid) @ #m)"
 
 

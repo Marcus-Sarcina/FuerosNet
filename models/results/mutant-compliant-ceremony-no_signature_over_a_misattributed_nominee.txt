@@ -68,7 +68,7 @@ restriction Inequality:
 rule (modulo E) Sign_Record:
    [
    !Record( rec, $W1, $W2, $P, $Other ), !Nomination( $P, $Other, $W1 ),
-   !Nomination( $P, $Other, $W2 )
+   !Nomination( $P, $Other, $W1 )
    ]
   --[
   Signed( rec, $P ), SignedAttributing( rec, $P, $W1 ),
@@ -104,47 +104,17 @@ guarded formula characterizing all counter-examples:
 */
 simplify
 solve( SignedAttributing( rec, P, W ) @ #i )
-  case Sign_Record_case_1
-  solve( !Record( rec, $W1, $W2, $P, $Other ) ▶₀ #i )
-    case Propose_Record
-    solve( !Nomination( $P, $Other, $W1 ) ▶₁ #i )
-      case Nominate
-      by contradiction /* from formulas */
-    next
-      case Nominate_Without_Checking
-      by contradiction /* from formulas */
-    qed
-  qed
-next
   case Sign_Record_case_2
   solve( !Record( rec, $W1, $W2, $P, $Other ) ▶₀ #i )
     case Propose_Record
     solve( !Nomination( $P, $Other, $W1 ) ▶₁ #i )
       case Nominate
-      solve( !Nomination( $P, $Other, $W2 ) ▶₂ #i )
+      solve( !Nomination( $P, $Other, $W1 ) ▶₂ #i )
         case Nominate
-        by contradiction /* from formulas */
-      next
-        case Nominate_Without_Checking
-        by contradiction /* from formulas */
-      qed
-    next
-      case Nominate_Without_Checking
-      solve( !Nomination( $P, $Other, $W2 ) ▶₂ #i )
-        case Nominate
-        by contradiction /* from formulas */
-      next
-        case Nominate_Without_Checking
-        by contradiction /* from formulas */
+        SOLVED // trace found
       qed
     qed
   qed
-next
-  case Sign_Without_Checking_case_1
-  by contradiction /* from formulas */
-next
-  case Sign_Without_Checking_case_2
-  by contradiction /* from formulas */
 qed
 
 lemma no_nominee_from_the_nominators_own_neighbourhood:
@@ -161,14 +131,7 @@ guarded formula characterizing all counter-examples:
  ∧
   (#j < #i) ∧ (∀ #s. (SkippedTheNeighbourhoodCheck( P ) @ #s) ⇒ ⊥)"
 */
-simplify
-solve( Nominated( $X, Other, $W ) @ #i )
-  case Nominate
-  by contradiction /* from formulas */
-next
-  case Nominate_Without_Checking
-  by contradiction /* from formulas */
-qed
+by sorry
 
 lemma an_own_neighbour_is_nominated_without_the_check:
   exists-trace
@@ -185,14 +148,7 @@ guarded formula characterizing all satisfying traces:
  ∧
   #j < #i"
 */
-simplify
-solve( !InNeighbourhood( $Other, $W ) ▶₀ #i )
-  case Neighbour
-  solve( Nominated( $P, Other.1, $W.1 ) @ #i )
-    case Nominate_Without_Checking
-    SOLVED // trace found
-  qed
-qed
+by sorry
 
 lemma an_honest_signature_is_reachable:
   exists-trace
@@ -206,20 +162,7 @@ guarded formula characterizing all satisfying traces:
  ∧
   ∀ #s. (SkippedTheCheck( P ) @ #s) ⇒ ⊥"
 */
-simplify
-solve( SignedAttributing( rec, P, W ) @ #i )
-  case Sign_Record_case_1
-  solve( !Record( rec, $W1, $W2, $P, $Other ) ▶₀ #i )
-    case Propose_Record
-    solve( !Nomination( $P, $Other, $W1 ) ▶₁ #i )
-      case Nominate
-      solve( !Nomination( $P, $Other, $W2 ) ▶₂ #i )
-        case Nominate
-        SOLVED // trace found
-      qed
-    qed
-  qed
-qed
+by sorry
 
 lemma misattribution_is_possible_without_the_check:
   exists-trace
@@ -233,14 +176,7 @@ guarded formula characterizing all satisfying traces:
  ∧
   ∀ Other #n. (Nominated( P, Other, W ) @ #n) ⇒ ⊥"
 */
-simplify
-solve( !Record( rec, $W1, $W2, $P, $Other ) ▶₀ #i )
-  case Propose_Record
-  solve( SignedAttributing( rec.2, $P, W ) @ #i )
-    case Sign_Without_Checking_case_1
-    SOLVED // trace found
-  qed
-qed
+by sorry
 
 rule (modulo E) Party:
    [ ] --[ IsParty( $P ) ]-> [ !Party( $P ) ]
@@ -293,17 +229,7 @@ guarded formula characterizing all counter-examples:
   (∀ #s. (SkippedTheMeeting( P2 ) @ #s) ⇒ ⊥) ∧
   (∀ #m. (MeetHappened( P1, P2, cid ) @ #m) ⇒ ¬(#m < #i))"
 */
-simplify
-solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
-  case Sign_Presence_Compliant_case_1
-  by contradiction /* from formulas */
-next
-  case Sign_Presence_Compliant_case_2
-  by contradiction /* from formulas */
-next
-  case Sign_Presence_Without_Meeting
-  by contradiction /* from formulas */
-qed
+by sorry
 
 lemma a_conforming_signature_binds_one_roster:
   all-traces
@@ -327,80 +253,7 @@ guarded formula characterizing all counter-examples:
   (∀ #s. (SkippedTheMeeting( Q2 ) @ #s) ⇒ ⊥) ∧
   (((¬(P1 = Q1)) ∨ (¬(P2 = Q2))))"
 */
-simplify
-solve( (¬($P1 = $P1.1))  ∥ (¬($P2 = $P2.1)) )
-  case case_1
-  solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
-    case Sign_Presence_Compliant_case_1
-    solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
-      case Sign_Presence_Compliant
-      solve( Sig( $P1.1, $P1.1, $P2.1, ~cid ) ▶₀ #j )
-        case Sign_Presence_Compliant
-        by contradiction /* from formulas */
-      next
-        case Sign_Presence_Without_Meeting
-        by contradiction /* from formulas */
-      qed
-    next
-      case Sign_Presence_Without_Meeting
-      by contradiction /* from formulas */
-    qed
-  next
-    case Sign_Presence_Compliant_case_2
-    solve( Sig( $P1, $P1, $P1, ~cid ) ▶₁ #i )
-      case Sign_Presence_Compliant
-      solve( Sig( $P1.1, $P1.1, $P2, ~cid ) ▶₀ #j )
-        case Sign_Presence_Compliant
-        by contradiction /* from formulas */
-      next
-        case Sign_Presence_Without_Meeting
-        by contradiction /* from formulas */
-      qed
-    next
-      case Sign_Presence_Without_Meeting
-      by contradiction /* from formulas */
-    qed
-  next
-    case Sign_Presence_Without_Meeting
-    by contradiction /* from formulas */
-  qed
-next
-  case case_2
-  solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
-    case Sign_Presence_Compliant_case_1
-    solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
-      case Sign_Presence_Compliant
-      solve( Sig( $P1.1, $P1.1, $P2.1, ~cid ) ▶₀ #j )
-        case Sign_Presence_Compliant
-        by contradiction /* from formulas */
-      next
-        case Sign_Presence_Without_Meeting
-        by contradiction /* from formulas */
-      qed
-    next
-      case Sign_Presence_Without_Meeting
-      by contradiction /* from formulas */
-    qed
-  next
-    case Sign_Presence_Compliant_case_2
-    solve( Sig( $P1, $P1, $P1, ~cid ) ▶₁ #i )
-      case Sign_Presence_Compliant
-      solve( Sig( $P1.1, $P1.1, $P2, ~cid ) ▶₀ #j )
-        case Sign_Presence_Compliant
-        by contradiction /* from formulas */
-      next
-        case Sign_Presence_Without_Meeting
-        by contradiction /* from formulas */
-      qed
-    next
-      case Sign_Presence_Without_Meeting
-      by contradiction /* from formulas */
-    qed
-  next
-    case Sign_Presence_Without_Meeting
-    by contradiction /* from formulas */
-  qed
-qed
+by sorry
 
 lemma a_conforming_record_is_reachable:
   exists-trace
@@ -416,14 +269,7 @@ guarded formula characterizing all satisfying traces:
   (∀ #s. (SkippedTheMeeting( P1 ) @ #s) ⇒ ⊥) ∧
   (∀ #s. (SkippedTheMeeting( P2 ) @ #s) ⇒ ⊥)"
 */
-simplify
-solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
-  case Sign_Presence_Compliant_case_1
-  solve( Sig( $P2, $P1, $P2, ~cid ) ▶₁ #i )
-    case Sign_Presence_Compliant
-    SOLVED // trace found
-  qed
-qed
+by sorry
 
 lemma collusion_produces_a_record_without_a_meeting:
   exists-trace
@@ -437,14 +283,7 @@ guarded formula characterizing all satisfying traces:
  ∧
   (¬(P1 = P2)) ∧ (∀ #m. (MeetHappened( P1, P2, cid ) @ #m) ⇒ ⊥)"
 */
-simplify
-solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
-  case Sign_Presence_Without_Meeting
-  solve( Sig( $P2, $P1, $P2, cid ) ▶₁ #i )
-    case Sign_Presence_Without_Meeting
-    SOLVED // trace found
-  qed
-qed
+by sorry
 
 /* All wellformedness checks were successful. */
 
@@ -461,18 +300,18 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/ceremony.spthy
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-ceremony-no_signature_over_a_misattributed_nominee.spthy
 
-  processing time: 0.64s
+  processing time: 0.44s
   
-  no_signature_over_a_misattributed_nominee (all-traces): verified (16 steps)
-  no_nominee_from_the_nominators_own_neighbourhood (all-traces): verified (4 steps)
-  an_own_neighbour_is_nominated_without_the_check (exists-trace): verified (4 steps)
-  an_honest_signature_is_reachable (exists-trace): verified (6 steps)
-  misattribution_is_possible_without_the_check (exists-trace): verified (4 steps)
-  a_record_between_conforming_participants_implies_a_meeting (all-traces): verified (5 steps)
-  a_conforming_signature_binds_one_roster (all-traces): verified (26 steps)
-  a_conforming_record_is_reachable (exists-trace): verified (4 steps)
-  collusion_produces_a_record_without_a_meeting (exists-trace): verified (4 steps)
+  no_signature_over_a_misattributed_nominee (all-traces): falsified - found trace (6 steps)
+  no_nominee_from_the_nominators_own_neighbourhood (all-traces): analysis incomplete (1 steps)
+  an_own_neighbour_is_nominated_without_the_check (exists-trace): analysis incomplete (1 steps)
+  an_honest_signature_is_reachable (exists-trace): analysis incomplete (1 steps)
+  misattribution_is_possible_without_the_check (exists-trace): analysis incomplete (1 steps)
+  a_record_between_conforming_participants_implies_a_meeting (all-traces): analysis incomplete (1 steps)
+  a_conforming_signature_binds_one_roster (all-traces): analysis incomplete (1 steps)
+  a_conforming_record_is_reachable (exists-trace): analysis incomplete (1 steps)
+  collusion_produces_a_record_without_a_meeting (exists-trace): analysis incomplete (1 steps)
 
 ==============================================================================

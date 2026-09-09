@@ -96,11 +96,25 @@ rule Reissue_After_Sealing:
 /*  THE OTHER ORDER, present because the property is about which one holds.
     The client reissues while the old line is still open, and seals later --
     or not at all.  The line's last record is then whatever counter it had
-    reached, not the maximum.                                               */
+    reached, not the maximum, and the line stays open for the late seal.
+
+    THE LATE SEAL IS A RULE, not an absence.  An earlier version consumed
+    the line here and left nothing to seal, so the "reissue first" witness
+    showed reissue-then-never-seal, which is a weaker thing than the
+    requirement's "before": that word is about a RACE, the seal arriving
+    after the thief has already superseded.  A cross-family review found the
+    witness did not order what it claimed to.  `Seal_After_Reissue` closes
+    the line at the maximum -- late -- and `reissuing_first_leaves_a_window`
+    now names all three events in order.                                   */
 rule Reissue_Then_Seal:
     [ Line($S, ln, 'open'), Fr(~c) ]
   --[ Reissued($S, ln), ReissuedOutOfOrder($S, ln) ]->
-    [ !LastRecord($S, ln, ~c) ]
+    [ Line($S, ln, 'reissued'), !LastRecord($S, ln, ~c) ]
+
+rule Seal_After_Reissue:
+    [ Line($S, ln, 'reissued') ]
+  --[ Sealed($S, ln, 'max'), SealedAfterReissue($S, ln) ]->
+    [ !LastRecord($S, ln, 'max') ]
 
 /*
 --------------------------------------------------------------------------------
@@ -177,10 +191,11 @@ lemma sealing_first_leaves_nothing_to_supersede:
     orders and the lemma above would hold for the wrong reason.             */
 lemma reissuing_first_leaves_a_window:
   exists-trace
-  "Ex S ln c #i #j.
+  "Ex S ln c #i #j #k.
       ReissuedOutOfOrder(S, ln) @ #i
     & ThiefSuperseded(S, ln, c) @ #j
-    & #i < #j"
+    & SealedAfterReissue(S, ln) @ #k
+    & #i < #j & #j < #k"
 
 /*  ANTI-VACUITY: the compliant path completes.                             */
 lemma the_compliant_order_completes:
@@ -312,9 +327,14 @@ lemma a_conforming_recovery_completes:
     which it became unreachable would claim more than the design does.     */
 lemma a_lying_verifier_completes_a_recovery_without_a_meeting:
   exists-trace
-  "Ex P S nk #i.
-      RecoveryAccepted(P, S, nk) @ #i
-    & not(Ex V #m. MeetingHappened(V, S, nk) @ #m)"
+  "Ex P V S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i & ReliedOn(P, V, S) @ #i
+    & not(V = S) & not(P = S)          // wire 4.1: the verifier differs from
+                                       //   the subject, the patron from the
+                                       //   node -- a witness with the subject
+                                       //   in two chairs is not a recovery
+                                       //   the design accepts
+    & not(Ex V2 #m. MeetingHappened(V2, S, nk) @ #m)"
 
 
 end

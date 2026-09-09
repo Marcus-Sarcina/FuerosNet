@@ -69,7 +69,7 @@ rule (modulo E) Enqueue:
 rule (modulo E) Deliver:
    [
    Session( $N, $C, k, role, s ), Binding( $N, $C, k ),
-   Queued( $N, $C, kq, m )
+   Queued( $N, $C, k, m )
    ]
   --[
   Delivered( $N, $C, k, m ), ServedUnder( $N, $C, k ),
@@ -94,8 +94,9 @@ rule (modulo E) Trust_Bearing_Operation:
 rule (modulo E) Supersession_Arrives:
    [ Binding( $N, $C, k ) ]
   --[ EvidenceHeld( $N, $C, k ), Terminated( $N, $C, k ) ]->
-   [ ]
+   [ Binding( $N, $C, k ) ]
 
+  // loop breaker: [0]
   /* has exactly the trivial AC variant */
 
 lemma service_follows_an_attach [reuse, use_induction]:
@@ -124,26 +125,7 @@ guarded formula characterizing all counter-examples:
  ∧
   ∀ #e. (Enqueued( N, C, k, m ) @ #e) ⇒ ¬(#e < #j)"
 */
-simplify
-solve( Queued( $N, $C, kq, m ) ▶₂ #j )
-  case Enqueue
-  solve( ServingAs( $N, $C, k, role, s ) @ #i )
-    case Attach_Primary
-    solve( Session( $N, $C, k, 'primary', ~s ) ▶₀ #j )
-      case Attach_Primary
-      solve( Binding( $N, $C, k ) ▶₁ #j )
-        case Attach_Primary
-        solve( Binding( $N, $C, k ) ▶₀ #i )
-          case Node_Records_Binding
-          solve( Binding( $N, $C, ~k ) ▶₀ #vr.2 )
-            case Node_Records_Binding
-            SOLVED // trace found
-          qed
-        qed
-      qed
-    qed
-  qed
-qed
+by sorry
 
 lemma no_trust_bearing_operation_on_a_sibling:
   all-traces
@@ -318,6 +300,125 @@ guarded formula characterizing all satisfying traces:
 */
 by sorry
 
+restriction AtMostTwoAttaches:
+  "∀ N1 C1 k1 s1 N2 C2 k2 s2 N3 C3 k3 s3 #a #b #c.
+    (((Opened( N1, C1, k1, s1 ) @ #a) ∧ (Opened( N2, C2, k2, s2 ) @ #b)) ∧
+     (Opened( N3, C3, k3, s3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ N1 C1 k1 s1 N2 C2 k2 s2 N3 C3 k3 s3 #a #b #c.
+    (((Opened( N1, C1, k1, s1 ) @ #a) ∧ (Opened( N2, C2, k2, s2 ) @ #b)) ∧
+     (Opened( N3, C3, k3, s3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  */
+
+restriction AtMostOneSupersession:
+  "∀ N1 C1 k1 N2 C2 k2 #a #b.
+    ((EvidenceHeld( N1, C1, k1 ) @ #a) ∧ (EvidenceHeld( N2, C2, k2 ) @ #b)) ⇒
+    (#a = #b)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ N1 C1 k1 N2 C2 k2 #a #b.
+    ((EvidenceHeld( N1, C1, k1 ) @ #a) ∧ (EvidenceHeld( N2, C2, k2 ) @ #b)) ⇒
+    (#a = #b)"
+  */
+
+restriction AtMostTwoServices:
+  "∀ N1 C1 k1 N2 C2 k2 N3 C3 k3 #a #b #c.
+    (((ServedUnder( N1, C1, k1 ) @ #a) ∧ (ServedUnder( N2, C2, k2 ) @ #b)) ∧
+     (ServedUnder( N3, C3, k3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ N1 C1 k1 N2 C2 k2 N3 C3 k3 #a #b #c.
+    (((ServedUnder( N1, C1, k1 ) @ #a) ∧ (ServedUnder( N2, C2, k2 ) @ #b)) ∧
+     (ServedUnder( N3, C3, k3 ) @ #c)) ⇒
+    (((#a = #b) ∨ (#a = #c)) ∨ (#b = #c))"
+  */
+
+lemma nothing_served_under_a_credential_this_node_superseded:
+  all-traces
+  "∀ N C k #i #j.
+    ((EvidenceHeld( N, C, k ) @ #i) ∧ (ServedUnder( N, C, k ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k #i #j.
+  (EvidenceHeld( N, C, k ) @ #i) ∧ (ServedUnder( N, C, k ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+by sorry
+
+lemma nothing_delivered_after_supersession:
+  all-traces
+  "∀ N C k m #i #j.
+    ((EvidenceHeld( N, C, k ) @ #i) ∧ (Delivered( N, C, k, m ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k m #i #j.
+  (EvidenceHeld( N, C, k ) @ #i) ∧ (Delivered( N, C, k, m ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+by sorry
+
+lemma no_attach_after_supersession:
+  all-traces
+  "∀ N C k s #i #j.
+    ((EvidenceHeld( N, C, k ) @ #i) ∧ (Opened( N, C, k, s ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k s #i #j.
+  (EvidenceHeld( N, C, k ) @ #i) ∧ (Opened( N, C, k, s ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+simplify
+solve( (#j = #i)  ∥ (#i < #j) )
+  case case_2
+  solve( Opened( $N, $C, k, s ) @ #j )
+    case Attach_Primary
+    solve( Binding( $N, $C, k ) ▶₀ #i )
+      case Attach_Primary
+      solve( Binding( $N, $C, k ) ▶₀ #j )
+        case Supersession_Arrives
+        solve( Binding( $N, $C, k ) ▶₀ #vr )
+          case Node_Records_Binding
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_queue_does_not_follow_the_successor_credential:
+  all-traces
+  "∀ N C k1 k2 m #e #s #d.
+    ((((Enqueued( N, C, k1, m ) @ #e) ∧ (EvidenceHeld( N, C, k1 ) @ #s)) ∧
+      (Delivered( N, C, k2, m ) @ #d)) ∧
+     (#s < #d)) ⇒
+    (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k1 k2 m #e #s #d.
+  (Enqueued( N, C, k1, m ) @ #e) ∧
+  (EvidenceHeld( N, C, k1 ) @ #s) ∧
+  (Delivered( N, C, k2, m ) @ #d)
+ ∧
+  #s < #d"
+*/
+by sorry
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -333,12 +434,12 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-attach-delivery_is_to_the_credential_it_was_queued_for.spthy
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-attach-no_attach_after_supersession.spthy
 
   processing time: 1.13s
   
   service_follows_an_attach (all-traces): analysis incomplete (1 steps)
-  delivery_is_to_the_credential_it_was_queued_for (all-traces): falsified - found trace (8 steps)
+  delivery_is_to_the_credential_it_was_queued_for (all-traces): analysis incomplete (1 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): analysis incomplete (1 steps)
   reconnection_is_reachable (exists-trace): analysis incomplete (1 steps)
   delivery_is_reachable (exists-trace): analysis incomplete (1 steps)
@@ -348,5 +449,9 @@ analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-complia
   a_conforming_binding_is_reachable (exists-trace): analysis incomplete (1 steps)
   a_replayed_attach_rebinds_on_a_server_that_processes_early_data (exists-trace): analysis incomplete (1 steps)
   a_server_that_processes_early_data_binds_a_connection_that_never_completes (exists-trace): analysis incomplete (1 steps)
+  nothing_served_under_a_credential_this_node_superseded (all-traces): analysis incomplete (1 steps)
+  nothing_delivered_after_supersession (all-traces): analysis incomplete (1 steps)
+  no_attach_after_supersession (all-traces): falsified - found trace (7 steps)
+  a_queue_does_not_follow_the_successor_credential (all-traces): analysis incomplete (1 steps)
 
 ==============================================================================

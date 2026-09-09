@@ -57,7 +57,14 @@ rule (modulo E) Reissue_After_Sealing:
 rule (modulo E) Reissue_Then_Seal:
    [ Line( $S, ln, 'open' ), Fr( ~c ) ]
   --[ Reissued( $S, ln ), ReissuedOutOfOrder( $S, ln ) ]->
-   [ !LastRecord( $S, ln, ~c ) ]
+   [ Line( $S, ln, 'reissued' ), !LastRecord( $S, ln, ~c ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Seal_After_Reissue:
+   [ Line( $S, ln, 'reissued' ) ]
+  --[ Sealed( $S, ln, 'max' ), SealedAfterReissue( $S, ln ) ]->
+   [ !LastRecord( $S, ln, 'max' ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -115,25 +122,32 @@ qed
 
 lemma reissuing_first_leaves_a_window:
   exists-trace
-  "∃ S ln c #i #j.
-    ((ReissuedOutOfOrder( S, ln ) @ #i) ∧
-     (ThiefSuperseded( S, ln, c ) @ #j)) ∧
-    (#i < #j)"
+  "∃ S ln c #i #j #k.
+    ((((ReissuedOutOfOrder( S, ln ) @ #i) ∧
+       (ThiefSuperseded( S, ln, c ) @ #j)) ∧
+      (SealedAfterReissue( S, ln ) @ #k)) ∧
+     (#i < #j)) ∧
+    (#j < #k)"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ S ln c #i #j.
-  (ReissuedOutOfOrder( S, ln ) @ #i) ∧ (ThiefSuperseded( S, ln, c ) @ #j)
+"∃ S ln c #i #j #k.
+  (ReissuedOutOfOrder( S, ln ) @ #i) ∧
+  (ThiefSuperseded( S, ln, c ) @ #j) ∧
+  (SealedAfterReissue( S, ln ) @ #k)
  ∧
-  #i < #j"
+  (#i < #j) ∧ (#j < #k)"
 */
 simplify
 solve( Line( $S, ln, 'open' ) ▶₀ #i )
   case Suspects_Compromise
   solve( !ThiefRecord( $S, ~ln, c.1 ) ▶₀ #j )
-    case Thief_Signs
+    case Thief_Signs_case_1
     solve( !LastRecord( $S, ~ln, c.2 ) ▶₁ #j )
       case Reissue_Then_Seal
-      SOLVED // trace found
+      solve( Line( $S, ~ln, 'reissued' ) ▶₀ #k )
+        case Reissue_Then_Seal
+        SOLVED // trace found
+      qed
     qed
   qed
 qed
@@ -304,15 +318,19 @@ qed
 
 lemma a_lying_verifier_completes_a_recovery_without_a_meeting:
   exists-trace
-  "∃ P S nk #i.
-    (RecoveryAccepted( P, S, nk ) @ #i) ∧
-    (¬(∃ V #m. MeetingHappened( V, S, nk ) @ #m))"
+  "∃ P V S nk #i.
+    ((((RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)) ∧
+      (¬(V = S))) ∧
+     (¬(P = S))) ∧
+    (¬(∃ V2 #m. MeetingHappened( V2, S, nk ) @ #m))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ P S nk #i.
-  (RecoveryAccepted( P, S, nk ) @ #i)
+"∃ P V S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)
  ∧
-  ∀ V #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ⊥"
+  (¬(V = S)) ∧
+  (¬(P = S)) ∧
+  (∀ V2 #m. (MeetingHappened( V2, S, nk ) @ #m) ⇒ ⊥)"
 */
 simplify
 solve( Proof( $S, nk, $P ) ▶₀ #i )
@@ -340,10 +358,10 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/recovery.spthy
 
-  processing time: 0.68s
+  processing time: 0.62s
   
   sealing_first_leaves_nothing_to_supersede (all-traces): verified (5 steps)
-  reissuing_first_leaves_a_window (exists-trace): verified (5 steps)
+  reissuing_first_leaves_a_window (exists-trace): verified (6 steps)
   the_compliant_order_completes (exists-trace): verified (4 steps)
   thief_wins_against_a_chainless_counterparty (exists-trace): verified (5 steps)
   recovery_between_conforming_parties_requires_a_meeting (all-traces): verified (5 steps)

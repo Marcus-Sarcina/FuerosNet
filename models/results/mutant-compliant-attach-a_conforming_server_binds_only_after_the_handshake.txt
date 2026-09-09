@@ -22,30 +22,42 @@ rule (modulo E) Client_Credential:
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Attach_Primary:
-   [ !Cred( $C, k ) ]
-  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'primary' ) ]->
-   [ Serving( $N, $C, k, 'primary' ) ]
+rule (modulo E) Node_Records_Binding:
+   [ !Cred( $C, k ) ] --[ Recorded( $N, $C, k ) ]-> [ Binding( $N, $C, k ) ]
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Attach_Sibling:
-   [ !Cred( $C, k ) ]
-  --[ Opened( $N, $C, k ), ServingAs( $N, $C, k, 'sibling' ) ]->
-   [ Serving( $N, $C, k, 'sibling' ) ]
-
-  /* has exactly the trivial AC variant */
-
-restriction OneServingStatePerBinding:
+restriction OneRecordPerBinding:
   "∀ N C k #i #j.
-    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+    ((Recorded( N, C, k ) @ #i) ∧ (Recorded( N, C, k ) @ #j)) ⇒ (#i = #j)"
   // safety formula
 
   /*
   expanded formula:
   "∀ N C k #i #j.
-    ((Opened( N, C, k ) @ #i) ∧ (Opened( N, C, k ) @ #j)) ⇒ (#i = #j)"
+    ((Recorded( N, C, k ) @ #i) ∧ (Recorded( N, C, k ) @ #j)) ⇒ (#i = #j)"
   */
+
+rule (modulo E) Attach_Primary:
+   [ Binding( $N, $C, k ), Fr( ~s ) ]
+  --[ Opened( $N, $C, k, ~s ), ServingAs( $N, $C, k, 'primary', ~s ) ]->
+   [ Binding( $N, $C, k ), Session( $N, $C, k, 'primary', ~s ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attach_Sibling:
+   [ Binding( $N, $C, k ), Fr( ~s ) ]
+  --[ Opened( $N, $C, k, ~s ), ServingAs( $N, $C, k, 'sibling', ~s ) ]->
+   [ Binding( $N, $C, k ), Session( $N, $C, k, 'sibling', ~s ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Session_Ends:
+   [ Session( $N, $C, k, role, s ) ] --[ Ended( $N, $C, k, s ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
 
 rule (modulo E) Enqueue:
    [ Fr( ~m ), !Cred( $C, k ) ]
@@ -55,29 +67,32 @@ rule (modulo E) Enqueue:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Deliver:
-   [ Serving( $N, $C, k, role ), Queued( $N, $C, k, m ) ]
+   [
+   Session( $N, $C, k, role, s ), Binding( $N, $C, k ),
+   Queued( $N, $C, k, m )
+   ]
   --[
   Delivered( $N, $C, k, m ), ServedUnder( $N, $C, k ),
-  ServedAs( $N, $C, k, role )
+  ServedAs( $N, $C, k, role, s )
   ]->
-   [ Serving( $N, $C, k, role ) ]
+   [ Session( $N, $C, k, role, s ), Binding( $N, $C, k ) ]
 
-  // loop breaker: [0]
+  // loop breakers: [1,0]
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Trust_Bearing_Operation:
-   [ Serving( $N, $C, k, 'primary' ) ]
+   [ Session( $N, $C, k, 'primary', s ), Binding( $N, $C, k ) ]
   --[
-  TrustBearing( $N, $C, k ), ServedUnder( $N, $C, k ),
-  ServedAs( $N, $C, k, 'primary' )
+  TrustBearing( $N, $C, k, s ), ServedUnder( $N, $C, k ),
+  ServedAs( $N, $C, k, 'primary', s )
   ]->
-   [ Serving( $N, $C, k, 'primary' ) ]
+   [ Session( $N, $C, k, 'primary', s ), Binding( $N, $C, k ) ]
 
-  // loop breaker: [0]
+  // loop breakers: [1,0]
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Supersession_Arrives:
-   [ Serving( $N, $C, k, role ) ]
+   [ Binding( $N, $C, k ) ]
   --[ EvidenceHeld( $N, $C, k ), Terminated( $N, $C, k ) ]->
    [ ]
 
@@ -85,15 +100,15 @@ rule (modulo E) Supersession_Arrives:
 
 lemma service_follows_an_attach [reuse, use_induction]:
   all-traces
-  "∀ N C k role #j.
-    (ServedAs( N, C, k, role ) @ #j) ⇒
-    (∃ #i. (ServingAs( N, C, k, role ) @ #i) ∧ (#i < #j))"
+  "∀ N C k role s #j.
+    (ServedAs( N, C, k, role, s ) @ #j) ⇒
+    (∃ #i. (ServingAs( N, C, k, role, s ) @ #i) ∧ (#i < #j))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ N C k role #j.
-  (ServedAs( N, C, k, role ) @ #j)
+"∃ N C k role s #j.
+  (ServedAs( N, C, k, role, s ) @ #j)
  ∧
-  ∀ #i. (ServingAs( N, C, k, role ) @ #i) ⇒ ¬(#i < #j)"
+  ∀ #i. (ServingAs( N, C, k, role, s ) @ #i) ⇒ ¬(#i < #j)"
 */
 by sorry
 
@@ -113,14 +128,34 @@ by sorry
 
 lemma no_trust_bearing_operation_on_a_sibling:
   all-traces
-  "∀ N C k #i #j.
-    ((ServingAs( N, C, k, 'sibling' ) @ #i) ∧
-     (TrustBearing( N, C, k ) @ #j)) ⇒
+  "∀ N C k s #i #j.
+    ((ServingAs( N, C, k, 'sibling', s ) @ #i) ∧
+     (TrustBearing( N, C, k, s ) @ #j)) ⇒
     (⊥)"
 /*
 guarded formula characterizing all counter-examples:
-"∃ N C k #i #j.
-  (ServingAs( N, C, k, 'sibling' ) @ #i) ∧ (TrustBearing( N, C, k ) @ #j)"
+"∃ N C k s #i #j.
+  (ServingAs( N, C, k, 'sibling', s ) @ #i) ∧
+  (TrustBearing( N, C, k, s ) @ #j)"
+*/
+by sorry
+
+lemma reconnection_is_reachable:
+  exists-trace
+  "∃ N C k s1 s2 #i #e #j.
+    (((((Opened( N, C, k, s1 ) @ #i) ∧ (Ended( N, C, k, s1 ) @ #e)) ∧
+       (Opened( N, C, k, s2 ) @ #j)) ∧
+      (#i < #e)) ∧
+     (#e < #j)) ∧
+    (¬(s1 = s2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C k s1 s2 #i #e #j.
+  (Opened( N, C, k, s1 ) @ #i) ∧
+  (Ended( N, C, k, s1 ) @ #e) ∧
+  (Opened( N, C, k, s2 ) @ #j)
+ ∧
+  (#i < #e) ∧ (#e < #j) ∧ (¬(s1 = s2))"
 */
 by sorry
 
@@ -133,10 +168,10 @@ guarded formula characterizing all satisfying traces:
 by sorry
 
 lemma trust_bearing_operation_is_reachable:
-  exists-trace "∃ N C k #i. TrustBearing( N, C, k ) @ #i"
+  exists-trace "∃ N C k s #i. TrustBearing( N, C, k, s ) @ #i"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C k #i. (TrustBearing( N, C, k ) @ #i)"
+"∃ N C k s #i. (TrustBearing( N, C, k, s ) @ #i)"
 */
 by sorry
 
@@ -233,32 +268,44 @@ by sorry
 
 lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
   exists-trace
-  "∃ N C conn a #i #j.
-    (((Bound( N, C, conn, a ) @ #i) ∧ (Bound( N, C, conn, a ) @ #j)) ∧
-     (¬(#i = #j))) ∧
-    (ProcessedEarlyData( N ) @ #i)"
+  "∃ N C conn1 conn2 a #s #r #i #j.
+    (((((SentEarly( N, C, conn1, a ) @ #s) ∧
+        (Replayed( N, C, conn2, a ) @ #r)) ∧
+       (¬(conn1 = conn2))) ∧
+      (Bound( N, C, conn1, a ) @ #i)) ∧
+     (Bound( N, C, conn2, a ) @ #j)) ∧
+    (ProcessedEarlyData( N ) @ #j)"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C conn a #i #j.
-  (Bound( N, C, conn, a ) @ #i) ∧
-  (Bound( N, C, conn, a ) @ #j) ∧
-  (ProcessedEarlyData( N ) @ #i)
+"∃ N C conn1 conn2 a #s #r #i #j.
+  (SentEarly( N, C, conn1, a ) @ #s) ∧
+  (Replayed( N, C, conn2, a ) @ #r) ∧
+  (Bound( N, C, conn1, a ) @ #i) ∧
+  (Bound( N, C, conn2, a ) @ #j) ∧
+  (ProcessedEarlyData( N ) @ #j)
  ∧
-  ¬(#i = #j)"
+  ¬(conn1 = conn2)"
 */
 by sorry
 
 lemma a_server_that_processes_early_data_binds_a_connection_that_never_completes:
   exists-trace
-  "∃ N C conn a #i.
-    ((Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)) ∧
-    (¬(∃ #h. HandshakeDone( N, C, conn ) @ #h))"
+  "∃ N C conn1 conn2 a #s #r #j.
+    (((((SentEarly( N, C, conn1, a ) @ #s) ∧
+        (Replayed( N, C, conn2, a ) @ #r)) ∧
+       (¬(conn1 = conn2))) ∧
+      (Bound( N, C, conn2, a ) @ #j)) ∧
+     (ProcessedEarlyData( N ) @ #j)) ∧
+    (¬(∃ #h. HandshakeDone( N, C, conn2 ) @ #h))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C conn a #i.
-  (Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)
+"∃ N C conn1 conn2 a #s #r #j.
+  (SentEarly( N, C, conn1, a ) @ #s) ∧
+  (Replayed( N, C, conn2, a ) @ #r) ∧
+  (Bound( N, C, conn2, a ) @ #j) ∧
+  (ProcessedEarlyData( N ) @ #j)
  ∧
-  ∀ #h. (HandshakeDone( N, C, conn ) @ #h) ⇒ ⊥"
+  (¬(conn1 = conn2)) ∧ (∀ #h. (HandshakeDone( N, C, conn2 ) @ #h) ⇒ ⊥)"
 */
 by sorry
 
@@ -279,11 +326,12 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-attach-a_conforming_server_binds_only_after_the_handshake.spthy
 
-  processing time: 0.82s
+  processing time: 0.80s
   
   service_follows_an_attach (all-traces): analysis incomplete (1 steps)
   delivery_is_to_the_credential_it_was_queued_for (all-traces): analysis incomplete (1 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): analysis incomplete (1 steps)
+  reconnection_is_reachable (exists-trace): analysis incomplete (1 steps)
   delivery_is_reachable (exists-trace): analysis incomplete (1 steps)
   trust_bearing_operation_is_reachable (exists-trace): analysis incomplete (1 steps)
   serving_without_evidence_is_reachable (exists-trace): analysis incomplete (1 steps)

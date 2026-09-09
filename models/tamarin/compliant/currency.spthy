@@ -149,16 +149,22 @@ restriction Inequality:
       issues for k1 in full compliance with "issue only for the key you
       currently record" -- because it is once again the key it records.
 
-    What forbids the walk-back is written in a DIFFERENT DOCUMENT, binding a
-    DIFFERENT PARTY.  `light-client-requirements.md`: "Never take a series
-    reissue into a series you have occupied before ... a counterparty holding
-    that chain will reject a reissue that repeats a series in it."  The
-    subject must not walk back, and a counterparty holding the chain can
-    refuse -- so this half is not purely a commitment, which is why the infra
-    node's obligation can lean on it.
+    What forbids the walk-back is a rule on a DIFFERENT PARTY.  design 9.1,
+    step 3: the counterparty "co-signs the key rotation binding the old
+    identity to a NEW KEYPAIR" -- a recovery's successor is a key the subject
+    has just generated, never one it has held before.  That is the subject's
+    commitment, and a key walked back onto is not a new keypair.  (An
+    earlier version of this comment cited the light client's series rule --
+    "never take a series reissue into a series you have occupied before" --
+    which is the same discipline one level down and a different namespace:
+    a series reissue changes the series and leaves the keyhash untouched
+    (`wire-format.md` 4.6), so it says nothing about keys.  A cross-family
+    review caught the mismatch.)  Whether a counterparty can CHECK the
+    successor's freshness is not established here: it would need the
+    subject's history, and this theory carries none.
 
     So the currency rule is coherent only in company.  Read alone it permits
-    the trace above; read beside the light client's rule it does not.  That is
+    the trace above; read beside the subject's rule it does not.  That is
     what this tree is for, and it is invisible to `wire-only/`: an attestation
     issued after a walk-back is perfectly well formed, and no relying party
     can see the history.
@@ -167,29 +173,28 @@ restriction Inequality:
     comment.  It is the non-compliant path, carved out by name in the lemmas.
     Deleting it would make the main obligation true for a reason the documents
     do not supply on their own.                                             */
-rule Adoption_Arrives_Into_An_Abandoned_Line:
+rule Adoption_Arrives_With_A_Reused_Successor:
     [ Record($I, $S, kOld), In(kNew) ]
   --[ AdoptionArrived($I, $S, kOld, kNew)
     , Superseded($I, $S, kOld)
-    , SeriesCheckSkipped($S)
+    , SuccessorReused($S)
     , NotEqual(kOld, kNew) ]->
     [ Record($I, $S, kNew) ]
 
 /*  AND THE OTHER PARTY'S PROMISE, STATED AS AN AXIOM.  The restriction below
-    removes every trace in which the subject walks back into a line it has
-    occupied.  That is not this node's rule to keep -- it belongs to the
-    light client, and a counterparty holding the chain can enforce it -- so
-    the honest way to carry it is as a labelled assumption rather than as
-    something this theory proves.  The same shape as
-    `wire-only/currency.spthy`'s `NotExpiredBeforeAccept`.
+    removes every trace in which the subject presents as successor a key it
+    has held before.  That is not this node's rule to keep -- it is the
+    subject's, design 9.1's new keypair -- so the honest way to carry it is
+    as a labelled assumption rather than as something this theory proves.
+    The same shape as `wire-only/currency.spthy`'s `NotExpiredBeforeAccept`.
 
     MUTATION TEST, and the reason the rule above is kept rather than deleted:
     comment out this restriction and
     `no_issuance_for_a_key_this_issuer_superseded` FALSIFIES, with the k1 ->
     k2 -> k1 trace described above.  The obligation is therefore not
     self-supporting, and the file records which other document holds it up. */
-restriction TheSubjectDoesNotReturnToAnAbandonedLine:
-  "All S #i. SeriesCheckSkipped(S) @ #i ==> F"
+restriction TheSuccessorIsANewKeypair:
+  "All S #i. SuccessorReused(S) @ #i ==> F"
 
 /*
 ================================================================================
