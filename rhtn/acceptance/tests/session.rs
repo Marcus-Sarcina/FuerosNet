@@ -234,7 +234,7 @@ fn ses_13_mark_a_client_unreachable_when_its_heartbeats_st() {
 /// Milestone: 4.  Kind: positive.  Oracle: behaviour.
 ///
 /// Rule (design §14.1.2): "This state replicates to siblings, or a sibling answering during failover has no idea of the client's status."
-/// Rule (design §3.4): "Siblings replicate each other's traffic (up to f−1 = 9)."
+/// Rule (design §3.4): "Siblings replicate each other's topology and trust-bearing transaction history (up to f−1 = 9)."
 ///
 /// Given: N and S are siblings; C is attached to N with interval I; both nodes expose their reachability state per client to the test. Replication between N and S is running.
 /// When: The harness blackholes all packets from C to N for three full intervals, and replication is allowed to proceed.

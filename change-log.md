@@ -9187,8 +9187,8 @@ than the descriptions of the models did.
 ## 2026-09-09
 
 **Consistency fixes surfaced by drafting the acceptance catalogue**, each
-derivable from the documents and applied without a design change; the three
-that need a decision remain open questions for the author.
+derivable from the documents and applied without a design change, and three
+the author decided on the same day, below.
 
 **The serving node is the mailbox.** §14.1.2 opens by making attachment the
 answer to *where do my messages queue*, and §12.6.3 has the recipient's
@@ -9219,3 +9219,20 @@ failure codes are for field 4, as its schema says. §12.3's steps run 6, 7, 8;
 §12.7's opening parenthesis closes; one referral bound spells ≥ the same way
 in comment and prose. The generator's TR9 and TR10 traces cite §8.2 for the
 refusal close code; the vectors are not regenerated here.
+
+**Three decided the same day.** §10.1's statement that the archive's scope
+across bindings was unstated predated seqno series; it now says one chain per
+key spans every binding, partitioned by one series per patron relationship,
+with the reissue as the checkpoint — which is what `wire-format.md` §2.3 and
+§7.9 already encode. A disavowal carries no subject counter and needs none:
+§6.2.2 now says the patron orders its own slot by its own clock, the one case
+where a timestamp orders reliably, with the encoding note in `wire-format.md`
+§4.3; ordering against records other parties sign stays as §18.5 prices it.
+And §3.4's replication floor said messages replicate to siblings while §14.1.6
+said siblings hold no queue state: siblings replicate topology and
+trust-bearing transaction history, payload queues do not replicate, and the
+mailbox is one node. A synchronised queue across siblings would be shared
+state among parties that share a patron and often a provider, and the
+availability it would buy is what §12.6.5.1's escalation ladder already
+supplies for the one thing that must survive a patron outage.
+

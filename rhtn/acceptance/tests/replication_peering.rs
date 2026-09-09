@@ -8,7 +8,7 @@
 /// Milestone: 4.  Kind: positive.  Oracle: behaviour.
 ///
 /// Rule (design §14.1.2): "This state replicates to siblings, or a sibling answering during failover has no idea of the client's status."
-/// Rule (design §3.4): "Siblings replicate each other's traffic (up to f−1 = 9). Authorised implicitly by the patron's adoption transaction, with no separate agreement."
+/// Rule (design §3.4): "Siblings replicate each other's topology and trust-bearing transaction history (up to f−1 = 9)."
 ///
 /// Given: Infra nodes S and T are siblings under one patron; light client L is attached to S. No separate replication agreement exists between S and T beyond the patron's adoption transactions.
 /// When: L's heartbeat fails at S, S marks L unreachable, and L is then attached to T in failover.
@@ -260,4 +260,22 @@ fn rep_14_honour_a_user_override_of_the_direct_path_defaul() {
 #[ignore = "acceptance REP-15: owed at milestone 4"]
 fn rep_15_push_the_serving_node_s_siblings_not_the_patron() {
     todo!("REP-15: Push the serving node's siblings, not the patron's, as the replication set")
+}
+
+/// Replicate topology and trust-bearing history to siblings, and no queue state
+///
+/// Spec: design §3.4; design §14.1.6
+/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (design §3.4): "every user's topology and trust-bearing transaction history replicates on their nearest infra node and that node's siblings"
+/// Rule (design §3.4): "Payload queues do not replicate"
+/// Rule (design §14.1.6): "Siblings do not hold queue state."
+///
+/// Given: Infra node N with sibling N', an attached client C with an adoption and a presence record in N's store, and a message queued for C at N.
+/// When: Replication runs and the test inspects N'.
+/// Then: N' holds C's adoption and presence record; N' holds no queued message for C and no record that one is waiting.
+#[test]
+#[ignore = "acceptance REP-16: owed at milestone 4"]
+fn rep_16_replicate_topology_and_trust_bearing_history_to() {
+    todo!("REP-16: Replicate topology and trust-bearing history to siblings, and no queue state")
 }

@@ -1210,6 +1210,10 @@ even though they matter to no protocol rule.
 
 Single signature.
 
+**Field 3 orders the disavowal within the patron's own slot** (design §6.2.2):
+the adoption that filled the slot and this record were written by the same
+party from one clock. It orders nothing another party signed.
+
 **There is no notice period.** A disavowal takes effect when signed — an
 effective-at date could not work, since a disavowal is the issuer's own signed
 statement and nothing stops them signing it whenever they choose: the date would be

@@ -420,6 +420,38 @@
   "interpretation": null
  },
  {
+  "id": "ARC-17",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Advance one chain per key across every binding, partitioned by series",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §10.1",
+   "wire-format.md §2.3",
+   "wire-format.md §7.9"
+  ],
+  "rule": [
+   {
+    "where": "design §10.1",
+    "text": "One chain per key, spanning every binding."
+   },
+   {
+    "where": "design §10.1",
+    "text": "one series per patron relationship"
+   },
+   {
+    "where": "wire-format.md §7.9",
+    "text": "subject whose archive is wanted"
+   }
+  ],
+  "given": "Subject S adopted under patron P1 and then under P2, and has signed a presence record in each relationship.",
+  "when": "A holder fetches S's archive with an ArchiveRequest naming S and no head.",
+  "then": "One chain is returned whose records back-point across both relationships in signing order; the records under P1 carry one series and those under P2 another, each opened at counter 0 by its adoption.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "CER-01",
   "area": "ceremony",
   "gap": "ceremony",
@@ -4097,7 +4129,7 @@
    },
    {
     "where": "design §3.4",
-    "text": "Siblings replicate each other's traffic (up to f−1 = 9). Authorised implicitly by the patron's adoption transaction, with no separate agreement."
+    "text": "Siblings replicate each other's topology and trust-bearing transaction history (up to f−1 = 9)."
    }
   ],
   "given": "Infra nodes S and T are siblings under one patron; light client L is attached to S. No separate replication agreement exists between S and T beyond the patron's adoption transactions.",
@@ -4467,6 +4499,37 @@
   "given": "Light client L's patron P is a light client under infra node S; S has infra siblings T1 and T2; P has light-client sibling Q.",
   "when": "L attaches to S.",
   "then": "The AttachAck's SiblingRef list names T1 and T2 with their endpoints, and does not name Q.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-16",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Replicate topology and trust-bearing history to siblings, and no queue state",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §3.4",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "design §3.4",
+    "text": "every user's topology and trust-bearing transaction history replicates on their nearest infra node and that node's siblings"
+   },
+   {
+    "where": "design §3.4",
+    "text": "Payload queues do not replicate"
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "Siblings do not hold queue state."
+   }
+  ],
+  "given": "Infra node N with sibling N', an attached client C with an adoption and a presence record in N's store, and a message queued for C at N.",
+  "when": "Replication runs and the test inspects N'.",
+  "then": "N' holds C's adoption and presence record; N' holds no queued message for C and no record that one is waiting.",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -5910,7 +5973,7 @@
    },
    {
     "where": "design §3.4",
-    "text": "Siblings replicate each other's traffic (up to f−1 = 9)."
+    "text": "Siblings replicate each other's topology and trust-bearing transaction history (up to f−1 = 9)."
    }
   ],
   "given": "N and S are siblings; C is attached to N with interval I; both nodes expose their reachability state per client to the test. Replication between N and S is running.",
@@ -6365,6 +6428,33 @@
   "then": "O's table holds exactly one current key for the identity, K_a when O prefers P_a and K_b otherwise, the same one in both orders; both K_a and K_b are present as nodes under their own patrons.",
   "oracle": "behaviour",
   "interpretation": "Independence from arrival order follows from resolving by patron trust rather than by arrival; no sentence states it."
+ },
+ {
+  "id": "TOP-17",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Order a disavowal within the patron's own slot by the patron's timestamp",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §6.2.2",
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §6.2.2",
+    "text": "A disavowal is ordered by the patron's own clock."
+   },
+   {
+    "where": "wire-format.md §4.3",
+    "text": "Field 3 orders the disavowal within the patron's own slot"
+   }
+  ],
+  "given": "Patron P's table holds N in slot k from an adoption stamped t1; P signs a disavowal of N stamped t2 > t1, then re-adopts N with an adoption stamped t3 > t2 that opens a fresh series.",
+  "when": "P's records are read after the three, in any arrival order.",
+  "then": "P's slot k shows N present from t1, empty from t2, and N present again from t3 under the new series; the relationship's status at any time is decided from P's own timestamps and nothing another party signed.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "TRN-01",

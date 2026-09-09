@@ -274,3 +274,20 @@ fn top_15_replace_the_old_key_with_the_successor_on_a_reco() {
 fn top_16_hold_one_current_key_per_identity_when_two_recov() {
     todo!("TOP-16: Hold one current key per identity when two recovery adoptions compete for the same prior key")
 }
+
+/// Order a disavowal within the patron's own slot by the patron's timestamp
+///
+/// Spec: design §6.2.2; wire-format.md §4.3
+/// Milestone: 3.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (design §6.2.2): "A disavowal is ordered by the patron's own clock."
+/// Rule (wire-format.md §4.3): "Field 3 orders the disavowal within the patron's own slot"
+///
+/// Given: Patron P's table holds N in slot k from an adoption stamped t1; P signs a disavowal of N stamped t2 > t1, then re-adopts N with an adoption stamped t3 > t2 that opens a fresh series.
+/// When: P's records are read after the three, in any arrival order.
+/// Then: P's slot k shows N present from t1, empty from t2, and N present again from t3 under the new series; the relationship's status at any time is decided from P's own timestamps and nothing another party signed.
+#[test]
+#[ignore = "acceptance TOP-17: owed at milestone 3"]
+fn top_17_order_a_disavowal_within_the_patron_s_own_slot_b() {
+    todo!("TOP-17: Order a disavowal within the patron's own slot by the patron's timestamp")
+}

@@ -613,8 +613,9 @@ payload, so apex load scales with churn and introductions, not with usage.
 >   people more willing to invest their best efforts and resources to obtain entry.
 
 ### 3.4 Replication
-- **Siblings** replicate each other's traffic (up to f−1 = 9). Authorised
-  implicitly by the patron's adoption transaction, with no separate agreement.
+- **Siblings** replicate each other's topology and trust-bearing transaction
+  history (up to f−1 = 9). Authorised implicitly by the patron's adoption
+  transaction, with no separate agreement.
 - Sibling replication provides **locality and latency, not fault independence**.
   Every replica set contained within a subtree has a vertex cut of 1 (the
   subtree root). Cousins share a grandparent; same problem one level up.
@@ -640,8 +641,10 @@ payload, so apex load scales with churn and introductions, not with usage.
   and one legal order (§17.3). The check finds concentration it can see; it does not
   establish independence.
 - Replication depth (how far up/down metadata propagates) should be computed
-  from expected traffic. Floor: every user's messages replicate on their nearest
-  infra node and that node's siblings.
+  from expected traffic. Floor: every user's topology and trust-bearing
+  transaction history replicates on their nearest infra node and that node's
+  siblings. **Payload queues do not replicate**: the mailbox is one node
+  (§14.1.6), and siblings hold no queue state.
 
 ---
 
@@ -1009,6 +1012,16 @@ fraudster genuinely accumulated, and burning it is a one-time move.
 
 **The reason code is information for the next patron**, not a broadcast to the
 network. That is what determines whether re-adoption elsewhere is unremarkable.
+
+**A disavowal is ordered by the patron's own clock.** It carries no subject
+counter (`wire-format.md` §4.3) and needs none: it is the patron's statement about
+its own subordinate slot, and every record of that slot — the adoption that filled
+it and the disavowal that empties it — was written by the patron from one clock,
+which is the one case where a timestamp orders reliably (`wire-format.md`
+§10.2.2). The patron's own record of the relationship's status is what it
+consults, and a re-adoption of the same node opens a fresh series in the same
+way (`wire-format.md` §4.1). Against records other parties sign there is no
+order, and §18.5 prices what that costs.
 
 **There is no notice period.** A disavowal takes effect when it is signed. A
 notice period could not be enforced: a disavowal is the issuer's own signed
@@ -3225,9 +3238,14 @@ and costs nothing anyone wants: beyond it, a record can no longer appear in any
 bundle, so the storage saving and the elision of early history concern records
 the candidate set has already aged out.
 
-**The archive's scope across bindings is left unstated**, and no claim is made
-that one chain spans them. Seqno series (§10.0) postdate the question, and no reader
-is given a way to enumerate a subject's archive uninvited in any case. Where a
+**One chain per key, spanning every binding.** A subject's transactions in every
+patron relationship advance the same archive — each signer carries one chain, and
+`wire-format.md` §7.9 addresses it by the subject's keyhash, with no binding to
+select. What partitions
+it by subnet is the seqno series (§10.0): one series per patron relationship
+(`wire-format.md` §2.3), opened by the adoption and continued by reissue, and a
+reissue is the checkpoint a presentation may root at. No reader is given a way to
+enumerate a subject's archive uninvited in any case. Where a
 presented history names counterparties a reader cannot reach, a reviewing patron
 **ignores them** (§16.7): an unfamiliar counterparty is an opaque entry rather than
 an intelligible one, contributing length and nothing else.

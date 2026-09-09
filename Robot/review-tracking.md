@@ -7681,3 +7681,15 @@ machine. **Still the author's:** 8 (one chain per key or per binding), 9
 messages replicate to siblings; design §14.1.6 and infra §2 say siblings hold
 no queue state). Nine catalogue quotes were re-pointed at the edited text and
 verify; the whole set is at 0 flags. `change-log.md` carries the reasoning.
+
+**Dispositions, second round (2026-09-09, author).** 8: design §10.1 had not
+been updated for seqno series and reissues; it now states one chain per key
+spanning every binding, partitioned by one series per patron relationship,
+with the reissue as checkpoint. 9: the patron orders its own slot by its own
+clock and keeps its own record of the relationship's status; stated in design
+§6.2.2 with the encoding note in `wire-format.md` §4.3, and §18.5's
+cross-signer case is unchanged. 11: siblings replicate topology and
+trust-bearing transaction history and never queue state; design §3.4's bullet
+and floor now say so, and §14.1.6 stands. Three catalogue entries added
+(ARC-17, TOP-17, REP-16); two quotes re-pointed; 256 entries, 0 flags.
+

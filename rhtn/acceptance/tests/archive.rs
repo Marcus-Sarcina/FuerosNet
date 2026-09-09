@@ -275,3 +275,21 @@ fn arc_15_report_a_fork_and_notify_both_patrons_when_curre() {
 fn arc_16_keep_presence_records_sealed_captures_and_seeds() {
     todo!("ARC-16: Keep presence records, sealed captures and seeds when the chain is pruned at a checkpoint")
 }
+
+/// Advance one chain per key across every binding, partitioned by series
+///
+/// Spec: design §10.1; wire-format.md §2.3; wire-format.md §7.9
+/// Milestone: 3.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (design §10.1): "One chain per key, spanning every binding."
+/// Rule (design §10.1): "one series per patron relationship"
+/// Rule (wire-format.md §7.9): "subject whose archive is wanted"
+///
+/// Given: Subject S adopted under patron P1 and then under P2, and has signed a presence record in each relationship.
+/// When: A holder fetches S's archive with an ArchiveRequest naming S and no head.
+/// Then: One chain is returned whose records back-point across both relationships in signing order; the records under P1 carry one series and those under P2 another, each opened at counter 0 by its adoption.
+#[test]
+#[ignore = "acceptance ARC-17: owed at milestone 3"]
+fn arc_17_advance_one_chain_per_key_across_every_binding_p() {
+    todo!("ARC-17: Advance one chain per key across every binding, partitioned by series")
+}
