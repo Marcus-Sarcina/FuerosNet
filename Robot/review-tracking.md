@@ -7289,3 +7289,79 @@ answered no, and the wire-only README now says so rather than leaving it to
 inference. The already-declared limitations they list (multi-witness, body
 projection, query_id and consent, elapsed time, TLS agreement, current issuer
 authorisation) are unchanged.
+
+## Tamarin compliant review (2026-09-08)
+
+Clean-room review of the four compliant-tree theories. No Tamarin available to
+the reviewer; static comparison against the requirements and the design. Four
+findings -- two HIGH, two MEDIUM -- **all four verified on the text, all four
+applied, no specification change.** No new defect in `currency`. The reviewer
+also noted they were not sent `run-all.sh` and so could not see how the
+`.bounded` fragments are spliced; the compliant README now says.
+
+**F1 (HIGH) -- 0-RTT deferral was not bound to the connection.** wire 9.1
+says defer the `Attach` "until handshake completion", and the handshake meant
+is the one on the connection carrying the early data -- that is what makes
+deferral a replay defence, since a replayed first flight opens a new
+connection its replayer cannot complete. The model's `Handshaken(N, C)` token
+carried no connection and was minted by a rule with no premises, so a
+conforming server could bind early data off any completed handshake with that
+client, one from before the data existed included. The linear token limited
+it to one binding per handshake: one per EVENT, where the rule is one per
+CONNECTION. Now a connection is a fresh `~conn` the client opens; early data
+travels on it; the handshake completes on it or never; the conforming server
+binds only with that connection's own token; and a `Replay` rule puts the
+same early data on a connection nobody opened, so no handshake ever completes
+there. Two harm witnesses stay reachable for the non-conforming server: the
+double bind, and a bind off a connection that never completes. The carve-out
+is scoped to N (F3).
+
+**F2 (HIGH) -- the queue had lost the credential it was queued for.** design
+14.1.6: "Queue metadata is the minimum: ciphertext, recipient keyhash,
+arrival time" -- the recipient keyhash is one of the three things a queued
+item IS. infra-client: "deliver nothing further to it, its queue included",
+and "it" is the credential. The model's `Queued(N, C, m)` carried no
+credential, and `Deliver` combined an entry with whichever credential was
+serving that client: queued under k1, k1 superseded, k2 attached, delivered
+labelled k2 -- which the supersession lemma, asking about k1, never saw. The
+queue now carries the credential and `Deliver` requires the match. A new
+unbounded lemma, delivered under k means queued for k (3 steps -- `Queued`
+has one origin and no restore, so no regress), and a bounded regression
+naming the reviewer's exact retag (47 steps).
+
+**F3 (MEDIUM) -- "conforming" was universal over the trace.** The carve-outs
+read `not(Ex P #s. SkippedTheMeeting(P) @ #s)`: nobody anywhere ever skipped.
+So an unrelated party fabricating a record elsewhere made the theorem say
+nothing about P1 and P2's record, and one lying verifier in an unrelated
+recovery silenced the theorem about this one. That proves "if every actor
+conforms then ...", where the requirements are commitments each client makes
+for itself and the README already said "among participants who keep" and "a
+server that defers". Scoped to the principals each property names --
+ceremony's two participants (four, for the roster lemma), the verifier the
+patron relied on via `ReliedOn`, the server N -- which is the STRONGER
+statement, and every one of them still verifies. The nomination lemma had this
+shape from the start, as the reviewer noticed.
+
+**F4 (MEDIUM) -- the thief regression was vacuous.** `thief_wins_against_a_
+chainless_counterparty` asked only that some seal and some chainless
+acceptance both occurred -- no shared line, no order, and the accepted record
+was any `<'record', S, c>` off the network. Verified the reviewer's claim
+directly: with `Thief_Signs` deleted the old form would still be satisfiable.
+Now the thief's record is a fact with the thief's provenance, the chainless
+counterparty has two rules (the subject's record or the thief's, whichever
+reaches it), and the regression says: sealed first, thief signed in that line
+afterwards, chainless party took the thief's. **Negative control run**: delete
+`Thief_Signs` and the lemma reports no trace found, the only wellformedness
+warning being that `!ThiefRecord` then has no producer, which is the point.
+
+**Mutations.** Two more in the gate's section 3c, now "theory mutations"
+rather than wire-only: the conforming server binds off any of C's handshakes
+(`connT`), and delivery ignores the queued credential (`kq`). Both falsify
+against well-formed mutants, in 5 and 6 steps.
+
+Figures: ceremony 8/8, recovery 8/8, attach 10/10 unbounded, bounded attach
+13/13 with the two original supersession lemmas at 84 and 46 steps. The
+thief regression verifies in 5 steps; deleting its producer, no trace.
+Gate: 15 artifacts pass, 5 TLA+ mutations violate, 5 theory mutations
+falsify, ALL MODELS PASS. Model citations 193 / 0 flags (one new);
+references 2038 / 0.

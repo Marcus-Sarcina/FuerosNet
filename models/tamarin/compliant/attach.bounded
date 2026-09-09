@@ -32,3 +32,16 @@ lemma nothing_delivered_after_supersession:
   "All N C k m #i #j.
       EvidenceHeld(N, C, k) @ #i & Delivered(N, C, k, m) @ #j
         ==> #j < #i"
+
+/*  THE RETAG, the case a cross-family review found the queue could not see
+    while it carried no credential: an item queued under k1, k1 superseded,
+    k2 attached, the item delivered under k2.  Now unrepresentable for two
+    reasons that this lemma states together -- delivery under k2 means queued
+    for k2 (the unbounded provenance lemma), and delivery under k1 after k1's
+    supersession is the lemma above.                                        */
+lemma a_queue_does_not_follow_the_successor_credential:
+  all-traces
+  "All N C k1 k2 m #e #s #d.
+      Enqueued(N, C, k1, m) @ #e & EvidenceHeld(N, C, k1) @ #s
+      & Delivered(N, C, k2, m) @ #d & #s < #d
+        ==> F"

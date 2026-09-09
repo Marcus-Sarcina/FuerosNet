@@ -48,12 +48,14 @@ restriction OneServingStatePerBinding:
   */
 
 rule (modulo E) Enqueue:
-   [ Fr( ~m ) ] --[ Enqueued( $N, $C, ~m ) ]-> [ Queued( $N, $C, ~m ) ]
+   [ Fr( ~m ), !Cred( $C, k ) ]
+  --[ Enqueued( $N, $C, k, ~m ) ]->
+   [ Queued( $N, $C, k, ~m ) ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Deliver:
-   [ Serving( $N, $C, k, role ), Queued( $N, $C, m ) ]
+   [ Serving( $N, $C, k, role ), Queued( $N, $C, k, m ) ]
   --[
   Delivered( $N, $C, k, m ), ServedUnder( $N, $C, k ),
   ServedAs( $N, $C, k, role )
@@ -103,9 +105,9 @@ next
     case case_1
     solve( ServedAs( N, C, k, role ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, m ) ▶₁ #j )
+      solve( Queued( $N, $C, k, m ) ▶₁ #j )
         case Enqueue
-        solve( Serving( $N, $C, k, role ) ▶₀ #j )
+        solve( Serving( $N, $C, ~k, role ) ▶₀ #j )
           case Attach_Primary
           by contradiction /* from formulas */
         next
@@ -138,6 +140,24 @@ next
   qed
 qed
 
+lemma delivery_is_to_the_credential_it_was_queued_for:
+  all-traces
+  "∀ N C k m #j.
+    (Delivered( N, C, k, m ) @ #j) ⇒
+    (∃ #e. (Enqueued( N, C, k, m ) @ #e) ∧ (#e < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k m #j.
+  (Delivered( N, C, k, m ) @ #j)
+ ∧
+  ∀ #e. (Enqueued( N, C, k, m ) @ #e) ⇒ ¬(#e < #j)"
+*/
+simplify
+solve( Queued( $N, $C, k, m ) ▶₁ #j )
+  case Enqueue
+  by contradiction /* from formulas */
+qed
+
 lemma no_trust_bearing_operation_on_a_sibling:
   all-traces
   "∀ N C k #i #j.
@@ -165,11 +185,11 @@ guarded formula characterizing all satisfying traces:
 "∃ N C k m #i. (Delivered( N, C, k, m ) @ #i)"
 */
 simplify
-solve( Queued( $N, $C, m ) ▶₁ #i )
+solve( Queued( $N, $C, k, m ) ▶₁ #i )
   case Enqueue
-  solve( ServingAs( $N, $C, k, role ) @ #i.1 )
+  solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
     case Attach_Primary
-    solve( !Cred( $C, k ) ▶₀ #i.1 )
+    solve( !Cred( $C, ~k ) ▶₀ #i.1 )
       case Client_Credential
       solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #i )
         case Attach_Primary
@@ -213,7 +233,7 @@ guarded formula characterizing all satisfying traces:
 simplify
 solve( Serving( $N, $C, k, role ) ▶₀ #a )
   case Attach_Primary
-  solve( Queued( $N.1, $C, m ) ▶₁ #b )
+  solve( Queued( $N.1, $C, ~k, m ) ▶₁ #b )
     case Enqueue
     solve( ServingAs( $N.1, $C, ~k, role ) @ #i )
       case Attach_Primary
@@ -229,46 +249,59 @@ solve( Serving( $N, $C, k, role ) ▶₀ #a )
 qed
 
 rule (modulo E) Client_Sends_Attach_Early:
-   [ Fr( ~a ) ] --[ SentEarly( $C, ~a ) ]-> [ !EarlyData( $C, ~a ) ]
+   [ Fr( ~a ), Fr( ~conn ) ]
+  --[ SentEarly( $N, $C, ~conn, ~a ) ]->
+   [ !EarlyData( $N, $C, ~conn, ~a ), Conn( $N, $C, ~conn ) ]
 
   /* has exactly the trivial AC variant */
 
+rule (modulo E) Replay:
+   [ !EarlyData( $N, $C, conn, a ), Fr( ~conn2 ) ]
+  --[ Replayed( $N, $C, ~conn2, a ) ]->
+   [ !EarlyData( $N, $C, ~conn2, a ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
 rule (modulo E) Handshake_Completes:
-   [ ] --[ HandshakeDone( $N, $C ) ]-> [ Handshaken( $N, $C ) ]
+   [ Conn( $N, $C, conn ) ]
+  --[ HandshakeDone( $N, $C, conn ) ]->
+   [ Handshaken( $N, $C, conn ) ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Bind_After_Handshake:
-   [ Handshaken( $N, $C ), !EarlyData( $C, a ) ]
-  --[ Bound( $N, $C, a ), BoundAfterHandshake( $N, $C, a ) ]->
+   [ Handshaken( $N, $C, conn ), !EarlyData( $N, $C, conn, a ) ]
+  --[ Bound( $N, $C, conn, a ), BoundAfterHandshake( $N, $C, conn, a ) ]->
    [ ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Bind_From_Early_Data:
-   [ !EarlyData( $C, a ) ]
-  --[ Bound( $N, $C, a ), ProcessedEarlyData( $N ) ]->
+   [ !EarlyData( $N, $C, conn, a ) ]
+  --[ Bound( $N, $C, conn, a ), ProcessedEarlyData( $N ) ]->
    [ ]
 
   /* has exactly the trivial AC variant */
 
 lemma a_conforming_server_binds_only_after_the_handshake:
   all-traces
-  "∀ N C a #i.
-    ((Bound( N, C, a ) @ #i) ∧ (¬(∃ X #s. ProcessedEarlyData( X ) @ #s))) ⇒
-    (∃ #h. (HandshakeDone( N, C ) @ #h) ∧ (#h < #i))"
+  "∀ N C conn a #i.
+    ((Bound( N, C, conn, a ) @ #i) ∧
+     (¬(∃ #s. ProcessedEarlyData( N ) @ #s))) ⇒
+    (∃ #h. (HandshakeDone( N, C, conn ) @ #h) ∧ (#h < #i))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ N C a #i.
-  (Bound( N, C, a ) @ #i)
+"∃ N C conn a #i.
+  (Bound( N, C, conn, a ) @ #i)
  ∧
-  (∀ X #s. (ProcessedEarlyData( X ) @ #s) ⇒ ⊥) ∧
-  (∀ #h. (HandshakeDone( N, C ) @ #h) ⇒ ¬(#h < #i))"
+  (∀ #s. (ProcessedEarlyData( N ) @ #s) ⇒ ⊥) ∧
+  (∀ #h. (HandshakeDone( N, C, conn ) @ #h) ⇒ ¬(#h < #i))"
 */
 simplify
-solve( Bound( N, C, a ) @ #i )
+solve( Bound( N, C, conn, a ) @ #i )
   case Bind_After_Handshake
-  solve( Handshaken( $N, $C ) ▶₀ #i )
+  solve( Handshaken( $N, $C, conn ) ▶₀ #i )
     case Handshake_Completes
     by contradiction /* from formulas */
   qed
@@ -279,20 +312,20 @@ qed
 
 lemma a_conforming_binding_is_reachable:
   exists-trace
-  "∃ N C a #i.
-    (BoundAfterHandshake( N, C, a ) @ #i) ∧
-    (¬(∃ X #s. ProcessedEarlyData( X ) @ #s))"
+  "∃ N C conn a #i.
+    (BoundAfterHandshake( N, C, conn, a ) @ #i) ∧
+    (¬(∃ #s. ProcessedEarlyData( N ) @ #s))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C a #i.
-  (BoundAfterHandshake( N, C, a ) @ #i)
+"∃ N C conn a #i.
+  (BoundAfterHandshake( N, C, conn, a ) @ #i)
  ∧
-  ∀ X #s. (ProcessedEarlyData( X ) @ #s) ⇒ ⊥"
+  ∀ #s. (ProcessedEarlyData( N ) @ #s) ⇒ ⊥"
 */
 simplify
-solve( Handshaken( $N, $C ) ▶₀ #i )
+solve( Handshaken( $N, $C, conn ) ▶₀ #i )
   case Handshake_Completes
-  solve( !EarlyData( $C, a ) ▶₁ #i )
+  solve( !EarlyData( $N, $C, ~conn, a ) ▶₁ #i )
     case Client_Sends_Attach_Early
     SOLVED // trace found
   qed
@@ -300,14 +333,15 @@ qed
 
 lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
   exists-trace
-  "∃ N C a #i #j.
-    (((Bound( N, C, a ) @ #i) ∧ (Bound( N, C, a ) @ #j)) ∧ (¬(#i = #j))) ∧
+  "∃ N C conn a #i #j.
+    (((Bound( N, C, conn, a ) @ #i) ∧ (Bound( N, C, conn, a ) @ #j)) ∧
+     (¬(#i = #j))) ∧
     (ProcessedEarlyData( N ) @ #i)"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ N C a #i #j.
-  (Bound( N, C, a ) @ #i) ∧
-  (Bound( N, C, a ) @ #j) ∧
+"∃ N C conn a #i #j.
+  (Bound( N, C, conn, a ) @ #i) ∧
+  (Bound( N, C, conn, a ) @ #j) ∧
   (ProcessedEarlyData( N ) @ #i)
  ∧
   ¬(#i = #j)"
@@ -315,21 +349,42 @@ guarded formula characterizing all satisfying traces:
 simplify
 solve( (#i < #j)  ∥ (#j < #i) )
   case case_1
-  solve( !EarlyData( $C, a ) ▶₀ #i )
+  solve( !EarlyData( $N, $C, conn, a ) ▶₀ #i )
     case Client_Sends_Attach_Early
-    solve( Bound( $N, C.1, a.2 ) @ #i )
+    solve( Bound( $N, C.1, conn.2, a.2 ) @ #i )
       case Bind_From_Early_Data
-      solve( Bound( $N, $C, ~a ) @ #j )
+      solve( Bound( $N, $C, ~conn, ~a ) @ #j )
         case Bind_After_Handshake
-        solve( Handshaken( $N, $C ) ▶₀ #j )
+        solve( Handshaken( $N, $C, ~conn ) ▶₀ #j )
           case Handshake_Completes
-          solve( !EarlyData( $C, ~a ) ▶₁ #j )
+          solve( !EarlyData( $N, $C, ~conn, ~a ) ▶₁ #j )
             case Client_Sends_Attach_Early
             SOLVED // trace found
           qed
         qed
       qed
     qed
+  qed
+qed
+
+lemma a_server_that_processes_early_data_binds_a_connection_that_never_completes:
+  exists-trace
+  "∃ N C conn a #i.
+    ((Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)) ∧
+    (¬(∃ #h. HandshakeDone( N, C, conn ) @ #h))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ N C conn a #i.
+  (Bound( N, C, conn, a ) @ #i) ∧ (ProcessedEarlyData( N ) @ #i)
+ ∧
+  ∀ #h. (HandshakeDone( N, C, conn ) @ #h) ⇒ ⊥"
+*/
+simplify
+solve( !EarlyData( $N, $C, conn, a ) ▶₀ #i )
+  case Client_Sends_Attach_Early
+  solve( Bound( $N, C.1, conn.2, a.2 ) @ #i )
+    case Bind_From_Early_Data
+    SOLVED // trace found
   qed
 qed
 
@@ -384,7 +439,7 @@ solve( (#j = #i)  ∥ (#i < #j) )
     by solve( ServedUnder( $N, $C, ~k ) @ #i )
   next
     case Deliver
-    by solve( ServedUnder( $N, $C, k ) @ #i )
+    by solve( ServedUnder( $N, $C, ~k ) @ #i )
   next
     case Trust_Bearing_Operation
     by solve( ServedUnder( $N, $C, k ) @ #i )
@@ -395,7 +450,7 @@ next
     case Attach_Primary
     solve( ServedUnder( $N, $C, ~k ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, m ) ▶₁ #j )
+      solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
         case Enqueue
         solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
           case Attach_Primary
@@ -461,7 +516,7 @@ next
     case Attach_Sibling
     solve( ServedUnder( $N, $C, ~k ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, m ) ▶₁ #j )
+      solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
         case Enqueue
         solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
           case Attach_Sibling
@@ -483,13 +538,13 @@ next
     qed
   next
     case Deliver
-    solve( ServedUnder( $N, $C, k ) @ #j )
+    solve( ServedUnder( $N, $C, ~k ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, m ) ▶₁ #j )
+      solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
         case Enqueue
-        solve( ServingAs( $N, $C, k, role ) @ #i.1 )
+        solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
           case Attach_Primary
-          solve( !Cred( $C, k ) ▶₀ #i.1 )
+          solve( !Cred( $C, ~k ) ▶₀ #i.1 )
             case Client_Credential
             solve( ServingAs( $N, $C, ~k, role ) @ #i.2 )
               case Attach_Primary
@@ -513,7 +568,7 @@ next
           qed
         next
           case Attach_Sibling
-          solve( !Cred( $C, k ) ▶₀ #i.1 )
+          solve( !Cred( $C, ~k ) ▶₀ #i.1 )
             case Client_Credential
             solve( ServingAs( $N, $C, ~k, role ) @ #i.2 )
               case Attach_Sibling
@@ -533,9 +588,9 @@ next
       qed
     next
       case Trust_Bearing_Operation
-      solve( ServingAs( $N, $C, k, role ) @ #i.1 )
+      solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
         case Attach_Primary
-        solve( !Cred( $C, k ) ▶₀ #i.1 )
+        solve( !Cred( $C, ~k ) ▶₀ #i.1 )
           case Client_Credential
           solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.2 )
             case Attach_Primary
@@ -556,7 +611,7 @@ next
         qed
       next
         case Attach_Sibling
-        solve( !Cred( $C, k ) ▶₀ #i.1 )
+        solve( !Cred( $C, ~k ) ▶₀ #i.1 )
           case Client_Credential
           by solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.2 )
         qed
@@ -566,11 +621,11 @@ next
     case Trust_Bearing_Operation
     solve( ServedUnder( $N, $C, k ) @ #j )
       case Deliver
-      solve( Queued( $N, $C, m ) ▶₁ #j )
+      solve( Queued( $N, $C, k, m ) ▶₁ #j )
         case Enqueue
-        solve( ServingAs( $N, $C, k, 'primary' ) @ #i.1 )
+        solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
           case Attach_Primary
-          solve( !Cred( $C, k ) ▶₀ #i.1 )
+          solve( !Cred( $C, ~k ) ▶₀ #i.1 )
             case Client_Credential
             solve( ServingAs( $N, $C, ~k, role ) @ #i.2 )
               case Attach_Primary
@@ -637,7 +692,7 @@ guarded formula characterizing all counter-examples:
 simplify
 solve( Serving( $N, $C, k, role ) ▶₀ #i )
   case Attach_Primary
-  solve( Queued( $N, $C, m ) ▶₁ #j )
+  solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
     case Enqueue
     solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
       case Attach_Primary
@@ -670,7 +725,7 @@ solve( Serving( $N, $C, k, role ) ▶₀ #i )
   qed
 next
   case Attach_Sibling
-  solve( Queued( $N, $C, m ) ▶₁ #j )
+  solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
     case Enqueue
     solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
       case Attach_Sibling
@@ -688,11 +743,11 @@ next
   qed
 next
   case Deliver
-  solve( Queued( $N, $C, m ) ▶₁ #j )
+  solve( Queued( $N, $C, ~k, m ) ▶₁ #j )
     case Enqueue
-    solve( ServingAs( $N, $C, k, role.1 ) @ #i.1 )
+    solve( ServingAs( $N, $C, ~k, role.1 ) @ #i.1 )
       case Attach_Primary
-      solve( !Cred( $C, k ) ▶₀ #i.1 )
+      solve( !Cred( $C, ~k ) ▶₀ #i.1 )
         case Client_Credential
         solve( ServingAs( $N, $C, ~k, role ) @ #i.2 )
           case Attach_Primary
@@ -716,7 +771,7 @@ next
       qed
     next
       case Attach_Sibling
-      solve( !Cred( $C, k ) ▶₀ #i.1 )
+      solve( !Cred( $C, ~k ) ▶₀ #i.1 )
         case Client_Credential
         solve( ServingAs( $N, $C, ~k, role ) @ #i.2 )
           case Attach_Sibling
@@ -736,11 +791,11 @@ next
   qed
 next
   case Trust_Bearing_Operation
-  solve( Queued( $N, $C, m ) ▶₁ #j )
+  solve( Queued( $N, $C, k, m ) ▶₁ #j )
     case Enqueue
-    solve( ServingAs( $N, $C, k, role ) @ #i.1 )
+    solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
       case Attach_Primary
-      solve( !Cred( $C, k ) ▶₀ #i.1 )
+      solve( !Cred( $C, ~k ) ▶₀ #i.1 )
         case Client_Credential
         solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.2 )
           case Attach_Primary
@@ -761,9 +816,163 @@ next
       qed
     next
       case Attach_Sibling
-      solve( !Cred( $C, k ) ▶₀ #i.1 )
+      solve( !Cred( $C, ~k ) ▶₀ #i.1 )
         case Client_Credential
         by solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.2 )
+      qed
+    qed
+  qed
+qed
+
+lemma a_queue_does_not_follow_the_successor_credential:
+  all-traces
+  "∀ N C k1 k2 m #e #s #d.
+    ((((Enqueued( N, C, k1, m ) @ #e) ∧ (EvidenceHeld( N, C, k1 ) @ #s)) ∧
+      (Delivered( N, C, k2, m ) @ #d)) ∧
+     (#s < #d)) ⇒
+    (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ N C k1 k2 m #e #s #d.
+  (Enqueued( N, C, k1, m ) @ #e) ∧
+  (EvidenceHeld( N, C, k1 ) @ #s) ∧
+  (Delivered( N, C, k2, m ) @ #d)
+ ∧
+  #s < #d"
+*/
+simplify
+solve( !Cred( $C, k1 ) ▶₁ #e )
+  case Client_Credential
+  solve( Serving( $N, $C, ~k, role.1 ) ▶₀ #s )
+    case Attach_Primary
+    solve( Queued( $N, $C, k2, ~m ) ▶₁ #d )
+      case Enqueue
+      solve( ServingAs( $N, $C, ~k, role ) @ #i )
+        case Attach_Primary
+        solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #d )
+          case Deliver
+          solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+            case Attach_Primary
+            solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #vr.1 )
+              case Deliver
+              by contradiction /* from formulas */
+            next
+              case Trust_Bearing_Operation
+              by contradiction /* from formulas */
+            qed
+          qed
+        next
+          case Trust_Bearing_Operation
+          solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+            case Attach_Primary
+            solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #vr.1 )
+              case Deliver
+              by contradiction /* from formulas */
+            next
+              case Trust_Bearing_Operation
+              by contradiction /* from formulas */
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Attach_Sibling
+    solve( Queued( $N, $C, k2, ~m ) ▶₁ #d )
+      case Enqueue
+      solve( ServingAs( $N, $C, ~k, role ) @ #i )
+        case Attach_Sibling
+        solve( Serving( $N, $C, ~k, 'sibling' ) ▶₀ #d )
+          case Deliver
+          solve( ServingAs( $N, $C, ~k, 'sibling' ) @ #i.1 )
+            case Attach_Sibling
+            solve( Serving( $N, $C, ~k, 'sibling' ) ▶₀ #vr.1 )
+              case Deliver
+              by contradiction /* from formulas */
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Deliver
+    solve( Queued( $N, $C, k2, ~m ) ▶₁ #d )
+      case Enqueue
+      solve( ServingAs( $N, $C, ~k, role ) @ #i )
+        case Attach_Primary
+        solve( !Cred( $C, ~k ) ▶₀ #i )
+          case Client_Credential
+          solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
+            case Attach_Primary
+            solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #d )
+              case Attach_Primary
+              solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #vr.1 )
+                case Attach_Primary
+                by contradiction /* cyclic */
+              next
+                case Deliver
+                by contradiction /* from formulas */
+              next
+                case Trust_Bearing_Operation
+                by contradiction /* from formulas */
+              qed
+            next
+              case Trust_Bearing_Operation
+              by contradiction /* from formulas */
+            qed
+          qed
+        qed
+      next
+        case Attach_Sibling
+        solve( !Cred( $C, ~k ) ▶₀ #i )
+          case Client_Credential
+          solve( ServingAs( $N, $C, ~k, role ) @ #i.1 )
+            case Attach_Sibling
+            solve( Serving( $N, $C, ~k, 'sibling' ) ▶₀ #d )
+              case Attach_Sibling
+              solve( Serving( $N, $C, ~k, 'sibling' ) ▶₀ #vr.1 )
+                case Attach_Sibling
+                by contradiction /* cyclic */
+              next
+                case Deliver
+                by contradiction /* from formulas */
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Trust_Bearing_Operation
+    solve( Queued( $N, $C, k2, ~m ) ▶₁ #d )
+      case Enqueue
+      solve( ServingAs( $N, $C, ~k, role ) @ #i )
+        case Attach_Primary
+        solve( !Cred( $C, ~k ) ▶₀ #i )
+          case Client_Credential
+          solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+            case Attach_Primary
+            solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #d )
+              case Attach_Primary
+              solve( Serving( $N, $C, ~k, 'primary' ) ▶₀ #vr.1 )
+                case Deliver
+                by contradiction /* from formulas */
+              next
+                case Trust_Bearing_Operation
+                by contradiction /* from formulas */
+              qed
+            next
+              case Deliver
+              by contradiction /* from formulas */
+            qed
+          qed
+        qed
+      next
+        case Attach_Sibling
+        solve( !Cred( $C, ~k ) ▶₀ #i )
+          case Client_Credential
+          by solve( ServingAs( $N, $C, ~k, 'primary' ) @ #i.1 )
+        qed
       qed
     qed
   qed
@@ -786,9 +995,10 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/bounded-attach.spthy
 
-  processing time: 1.41s
+  processing time: 1.58s
   
   service_follows_an_attach (all-traces): verified (15 steps)
+  delivery_is_to_the_credential_it_was_queued_for (all-traces): verified (3 steps)
   no_trust_bearing_operation_on_a_sibling (all-traces): verified (4 steps)
   delivery_is_reachable (exists-trace): verified (6 steps)
   trust_bearing_operation_is_reachable (exists-trace): verified (5 steps)
@@ -796,7 +1006,9 @@ analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/bounded-attach
   a_conforming_server_binds_only_after_the_handshake (all-traces): verified (5 steps)
   a_conforming_binding_is_reachable (exists-trace): verified (4 steps)
   a_replayed_attach_rebinds_on_a_server_that_processes_early_data (exists-trace): verified (8 steps)
+  a_server_that_processes_early_data_binds_a_connection_that_never_completes (exists-trace): verified (4 steps)
   nothing_served_under_a_credential_this_node_superseded (all-traces): verified (84 steps)
   nothing_delivered_after_supersession (all-traces): verified (46 steps)
+  a_queue_does_not_follow_the_successor_credential (all-traces): verified (47 steps)
 
 ==============================================================================

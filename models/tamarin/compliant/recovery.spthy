@@ -111,8 +111,23 @@ rule Reissue_Then_Seal:
   STRICTLY GREATER counter, which is where the two restrictions above bite.
 */
 
-rule Thief_Supersedes:
+/*  THE THIEF SIGNS A RECORD IN THE LINE.  It holds the old key, so it can
+    sign at any counter it likes, at any time -- sealing sets the SUBJECT's
+    counter to the maximum in the records that carry the seal, and does
+    nothing to the key.  The record is a fact with the thief's provenance on
+    it, because that is what the two rules below need to be about: what a
+    party holding the last record makes of it, and what a party holding
+    nothing makes of it.                                                    */
+rule Thief_Signs:
     [ !LastRecord($S, ln, c), In(c2) ]
+  --[ ThiefSigned($S, ln, c2) ]->
+    [ !ThiefRecord($S, ln, c2) ]
+
+/*  AT A PARTY HOLDING THE LAST RECORD, the thief's record supersedes it only
+    with a STRICTLY GREATER counter, which is where the two restrictions
+    above bite.                                                             */
+rule Thief_Supersedes:
+    [ !ThiefRecord($S, ln, c2), !LastRecord($S, ln, c) ]
   --[ ThiefSuperseded($S, ln, c2)
     , StrictlyGreater(c2, c) ]->
     [ ]
@@ -120,10 +135,25 @@ rule Thief_Supersedes:
 /*  A counterparty that HOLDS THE CHAIN rejects the abandoned series outright
     -- `wire-format.md` 4.6: it "knows which series was abandoned and MUST
     reject records in it whatever their counter".  A counterparty holding no
-    chain has no basis to rank and takes what reaches it first.             */
-rule Chainless_Counterparty_Accepts:
-    [ In(<'record', $S, c>) ]
-  --[ AcceptedWithoutAChain($S, c) ]->
+    chain has no basis to rank and takes what reaches it first -- the
+    subject's own record or the thief's, whichever arrives.
+
+    PROVENANCE, AND WHY IT IS HERE.  Until 2026-09-08 this rule took any
+    `<'record', S, c>` off the network and the regression below asked only
+    that SOME seal and SOME chainless acceptance both occurred -- no shared
+    line, no order, nothing tying the accepted record to the old key.  A
+    cross-family review showed it satisfiable with `Thief_Supersedes`
+    deleted.  Now the thief's record is the fact this rule consumes, its
+    acceptance is its own action, and the regression names the line and the
+    order.                                                                  */
+rule Chainless_Counterparty_Accepts_The_Thiefs:
+    [ !ThiefRecord($S, ln, c) ]
+  --[ AcceptedWithoutAChain($S, ln, c), AcceptedTheThiefs($S, ln, c) ]->
+    [ ]
+
+rule Chainless_Counterparty_Accepts_The_Subjects:
+    [ !LastRecord($S, ln, c) ]
+  --[ AcceptedWithoutAChain($S, ln, c) ]->
     [ ]
 
 /*
@@ -164,11 +194,20 @@ lemma the_compliant_order_completes:
     records.  One holding no chain cannot, and "the thief wins it by reaching
     them first."  Keeping this reachable is what stops the theory from
     reading as though sealing were a complete defence.                      */
+/*  THE RESIDUAL, KEPT REACHABLE.  `wire-format.md` 4.6: a seal "reaches as
+    far as it is carried and no further ... parties never contacted and
+    subnets never entered never see it, and the key is not dead to them".
+    So: the subject sealed FIRST, the thief signed in that line AFTERWARDS,
+    and a party holding no chain took the thief's record.  Same line, in that
+    order, the thief's record and not some record.  Delete `Thief_Signs` and
+    this is unsatisfiable, which is what a negative control is for.         */
 lemma thief_wins_against_a_chainless_counterparty:
   exists-trace
-  "Ex S ln c #i #j.
+  "Ex S ln c #i #j #k.
       SealedBeforeReissue(S, ln) @ #i
-    & AcceptedWithoutAChain(S, c) @ #j"
+    & ThiefSigned(S, ln, c) @ #j
+    & AcceptedTheThiefs(S, ln, c) @ #k
+    & #i < #j & #j < #k"
 
 
 /*
@@ -237,12 +276,19 @@ rule Patron_Accept_Recovery:
 /*  THE CONFORMANCE THEOREM.  Where verifiers keep the discipline, an accepted
     recovery implies a meeting.  The honest form of what
     `recovery_requires_a_meeting` was reaching for.                         */
+/*  THE CARVE-OUT IS THE VERIFIER'S, NOT THE TRACE'S.  Until 2026-09-08 this
+    read `not(Ex V #s. SkippedTheMeeting(V) @ #s)` -- no verifier anywhere
+    ever lied -- so one liar in an unrelated recovery made the theorem say
+    nothing about this one.  The obligation is each verifier's own, so the
+    carve-out names the verifier THIS patron relied on, and the claim holds
+    for that verifier beside any number of liars.  See ceremony.spthy for
+    the same correction and the review that prompted it.                    */
 lemma recovery_between_conforming_parties_requires_a_meeting:
   all-traces
-  "All P S nk #i.
-      RecoveryAccepted(P, S, nk) @ #i
-      & not(Ex V #s. SkippedTheMeeting(V) @ #s)
-        ==> Ex V #m. MeetingHappened(V, S, nk) @ #m & #m < #i"
+  "All P V S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i & ReliedOn(P, V, S) @ #i
+      & not(Ex #s. SkippedTheMeeting(V) @ #s)
+        ==> Ex #m. MeetingHappened(V, S, nk) @ #m & #m < #i"
 
 /*  And that a conforming recognition names the key THAT meeting exchanged --
     not one supplied to the verifier some other way.                        */
@@ -250,15 +296,15 @@ lemma a_conforming_recognition_names_the_meeting_key:
   all-traces
   "All V S nk #b.
       RecognisedFor(V, S, nk) @ #b
-      & not(Ex X #s. SkippedTheMeeting(X) @ #s)
+      & not(Ex #s. SkippedTheMeeting(V) @ #s)
         ==> Ex #m. MeetingHappened(V, S, nk) @ #m & #m < #b"
 
 /*  ANTI-VACUITY: a conforming recovery completes.                          */
 lemma a_conforming_recovery_completes:
   exists-trace
-  "Ex P S nk #i.
-      RecoveryAccepted(P, S, nk) @ #i
-    & not(Ex V #s. SkippedTheMeeting(V) @ #s)"
+  "Ex P V S nk #i.
+      RecoveryAccepted(P, S, nk) @ #i & ReliedOn(P, V, S) @ #i
+    & not(Ex #s. SkippedTheMeeting(V) @ #s)"
 
 /*  THE RESIDUAL, KEPT REACHABLE.  A thief with the old key plus one prior
     counterparty willing to lie completes a recovery with no meeting behind

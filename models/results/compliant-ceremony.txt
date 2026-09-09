@@ -186,15 +186,17 @@ rule (modulo E) Accept_Presence:
 lemma a_record_between_conforming_participants_implies_a_meeting:
   all-traces
   "∀ P1 P2 cid #i.
-    ((PresenceAccepted( P1, P2, cid ) @ #i) ∧
-     (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))) ⇒
+    (((PresenceAccepted( P1, P2, cid ) @ #i) ∧
+      (¬(∃ #s. SkippedTheMeeting( P1 ) @ #s))) ∧
+     (¬(∃ #s. SkippedTheMeeting( P2 ) @ #s))) ⇒
     (∃ #m. (MeetHappened( P1, P2, cid ) @ #m) ∧ (#m < #i))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ P1 P2 cid #i.
   (PresenceAccepted( P1, P2, cid ) @ #i)
  ∧
-  (∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( P1 ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( P2 ) @ #s) ⇒ ⊥) ∧
   (∀ #m. (MeetHappened( P1, P2, cid ) @ #m) ⇒ ¬(#m < #i))"
 */
 simplify
@@ -212,9 +214,12 @@ qed
 lemma a_conforming_signature_binds_one_roster:
   all-traces
   "∀ P1 P2 cid Q1 Q2 #i #j.
-    (((PresenceAccepted( P1, P2, cid ) @ #i) ∧
-      (PresenceAccepted( Q1, Q2, cid ) @ #j)) ∧
-     (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))) ⇒
+    ((((((PresenceAccepted( P1, P2, cid ) @ #i) ∧
+         (PresenceAccepted( Q1, Q2, cid ) @ #j)) ∧
+        (¬(∃ #s. SkippedTheMeeting( P1 ) @ #s))) ∧
+       (¬(∃ #s. SkippedTheMeeting( P2 ) @ #s))) ∧
+      (¬(∃ #s. SkippedTheMeeting( Q1 ) @ #s))) ∧
+     (¬(∃ #s. SkippedTheMeeting( Q2 ) @ #s))) ⇒
     ((P1 = Q1) ∧ (P2 = Q2))"
 /*
 guarded formula characterizing all counter-examples:
@@ -222,7 +227,10 @@ guarded formula characterizing all counter-examples:
   (PresenceAccepted( P1, P2, cid ) @ #i) ∧
   (PresenceAccepted( Q1, Q2, cid ) @ #j)
  ∧
-  (∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( P1 ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( P2 ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( Q1 ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( Q2 ) @ #s) ⇒ ⊥) ∧
   (((¬(P1 = Q1)) ∨ (¬(P2 = Q2))))"
 */
 simplify
@@ -303,14 +311,16 @@ qed
 lemma a_conforming_record_is_reachable:
   exists-trace
   "∃ P1 P2 cid #i.
-    (PresenceAccepted( P1, P2, cid ) @ #i) ∧
-    (¬(∃ P #s. SkippedTheMeeting( P ) @ #s))"
+    ((PresenceAccepted( P1, P2, cid ) @ #i) ∧
+     (¬(∃ #s. SkippedTheMeeting( P1 ) @ #s))) ∧
+    (¬(∃ #s. SkippedTheMeeting( P2 ) @ #s))"
 /*
 guarded formula characterizing all satisfying traces:
 "∃ P1 P2 cid #i.
   (PresenceAccepted( P1, P2, cid ) @ #i)
  ∧
-  ∀ P #s. (SkippedTheMeeting( P ) @ #s) ⇒ ⊥"
+  (∀ #s. (SkippedTheMeeting( P1 ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( P2 ) @ #s) ⇒ ⊥)"
 */
 simplify
 solve( Sig( $P1, $P1, $P2, cid ) ▶₀ #i )
@@ -359,7 +369,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/ceremony.spthy
 
-  processing time: 0.61s
+  processing time: 0.68s
   
   no_signature_over_a_misattributed_nominee (all-traces): verified (6 steps)
   no_nominee_from_the_nominators_own_neighbourhood (all-traces): verified (2 steps)

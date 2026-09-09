@@ -8567,7 +8567,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-wire-only-recovery-transfer_statement_binds_the_destination.spthy
 
-  processing time: 70.34s
+  processing time: 68.68s
   
   forging_a_recognition_needs_both_verifier_halves (all-traces): analysis incomplete (1 steps)
   no_relied_on_verifier_is_the_subject (all-traces): analysis incomplete (1 steps)

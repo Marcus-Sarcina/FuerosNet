@@ -61,15 +61,32 @@ rule (modulo E) Reissue_Then_Seal:
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Thief_Supersedes:
+rule (modulo E) Thief_Signs:
    [ !LastRecord( $S, ln, c ), In( c2 ) ]
+  --[ ThiefSigned( $S, ln, c2 ) ]->
+   [ !ThiefRecord( $S, ln, c2 ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Thief_Supersedes:
+   [ !ThiefRecord( $S, ln, c2 ), !LastRecord( $S, ln, c ) ]
   --[ ThiefSuperseded( $S, ln, c2 ), StrictlyGreater( c2, c ) ]->
    [ ]
 
   /* has exactly the trivial AC variant */
 
-rule (modulo E) Chainless_Counterparty_Accepts:
-   [ In( <'record', $S, c> ) ] --[ AcceptedWithoutAChain( $S, c ) ]-> [ ]
+rule (modulo E) Chainless_Counterparty_Accepts_The_Thiefs:
+   [ !ThiefRecord( $S, ln, c ) ]
+  --[ AcceptedWithoutAChain( $S, ln, c ), AcceptedTheThiefs( $S, ln, c )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Chainless_Counterparty_Accepts_The_Subjects:
+   [ !LastRecord( $S, ln, c ) ]
+  --[ AcceptedWithoutAChain( $S, ln, c ) ]->
+   [ ]
 
   /* has exactly the trivial AC variant */
 
@@ -87,9 +104,12 @@ guarded formula characterizing all counter-examples:
 simplify
 solve( Line( $S, ln, 'open' ) ▶₀ #i )
   case Suspects_Compromise
-  solve( !LastRecord( $S, ~ln, c ) ▶₀ #j )
-    case Seal_Then_Reissue
-    by contradiction /* from formulas */
+  solve( !ThiefRecord( $S, ~ln, c ) ▶₀ #j )
+    case Thief_Signs
+    solve( !LastRecord( $S, ~ln, c.1 ) ▶₁ #j )
+      case Seal_Then_Reissue
+      by contradiction /* from formulas */
+    qed
   qed
 qed
 
@@ -109,9 +129,12 @@ guarded formula characterizing all satisfying traces:
 simplify
 solve( Line( $S, ln, 'open' ) ▶₀ #i )
   case Suspects_Compromise
-  solve( !LastRecord( $S, ~ln, c.1 ) ▶₀ #j )
-    case Reissue_Then_Seal
-    SOLVED // trace found
+  solve( !ThiefRecord( $S, ~ln, c.1 ) ▶₀ #j )
+    case Thief_Signs
+    solve( !LastRecord( $S, ~ln, c.2 ) ▶₁ #j )
+      case Reissue_Then_Seal
+      SOLVED // trace found
+    qed
   qed
 qed
 
@@ -138,19 +161,31 @@ qed
 
 lemma thief_wins_against_a_chainless_counterparty:
   exists-trace
-  "∃ S ln c #i #j.
-    (SealedBeforeReissue( S, ln ) @ #i) ∧
-    (AcceptedWithoutAChain( S, c ) @ #j)"
+  "∃ S ln c #i #j #k.
+    ((((SealedBeforeReissue( S, ln ) @ #i) ∧
+       (ThiefSigned( S, ln, c ) @ #j)) ∧
+      (AcceptedTheThiefs( S, ln, c ) @ #k)) ∧
+     (#i < #j)) ∧
+    (#j < #k)"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ S ln c #i #j.
+"∃ S ln c #i #j #k.
   (SealedBeforeReissue( S, ln ) @ #i) ∧
-  (AcceptedWithoutAChain( S, c ) @ #j)"
+  (ThiefSigned( S, ln, c ) @ #j) ∧
+  (AcceptedTheThiefs( S, ln, c ) @ #k)
+ ∧
+  (#i < #j) ∧ (#j < #k)"
 */
 simplify
 solve( Line( $S, ln, 'open' ) ▶₀ #i )
   case Suspects_Compromise
-  SOLVED // trace found
+  solve( !LastRecord( $S, ~ln, c ) ▶₀ #j )
+    case Seal_Then_Reissue
+    solve( !ThiefRecord( $S, ~ln, c ) ▶₀ #k )
+      case Thief_Signs
+      SOLVED // trace found
+    qed
+  qed
 qed
 
 rule (modulo E) Prior_Counterparty:
@@ -193,17 +228,17 @@ rule (modulo E) Patron_Accept_Recovery:
 
 lemma recovery_between_conforming_parties_requires_a_meeting:
   all-traces
-  "∀ P S nk #i.
-    ((RecoveryAccepted( P, S, nk ) @ #i) ∧
-     (¬(∃ V #s. SkippedTheMeeting( V ) @ #s))) ⇒
-    (∃ V #m. (MeetingHappened( V, S, nk ) @ #m) ∧ (#m < #i))"
+  "∀ P V S nk #i.
+    (((RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)) ∧
+     (¬(∃ #s. SkippedTheMeeting( V ) @ #s))) ⇒
+    (∃ #m. (MeetingHappened( V, S, nk ) @ #m) ∧ (#m < #i))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ P S nk #i.
-  (RecoveryAccepted( P, S, nk ) @ #i)
+"∃ P V S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)
  ∧
-  (∀ V #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥) ∧
-  (∀ V #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ¬(#m < #i))"
+  (∀ #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥) ∧
+  (∀ #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ¬(#m < #i))"
 */
 simplify
 solve( Proof( $S, nk, $P ) ▶₀ #i )
@@ -221,14 +256,14 @@ lemma a_conforming_recognition_names_the_meeting_key:
   all-traces
   "∀ V S nk #b.
     ((RecognisedFor( V, S, nk ) @ #b) ∧
-     (¬(∃ X #s. SkippedTheMeeting( X ) @ #s))) ⇒
+     (¬(∃ #s. SkippedTheMeeting( V ) @ #s))) ⇒
     (∃ #m. (MeetingHappened( V, S, nk ) @ #m) ∧ (#m < #b))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ V S nk #b.
   (RecognisedFor( V, S, nk ) @ #b)
  ∧
-  (∀ X #s. (SkippedTheMeeting( X ) @ #s) ⇒ ⊥) ∧
+  (∀ #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥) ∧
   (∀ #m. (MeetingHappened( V, S, nk ) @ #m) ⇒ ¬(#m < #b))"
 */
 simplify
@@ -245,15 +280,15 @@ qed
 
 lemma a_conforming_recovery_completes:
   exists-trace
-  "∃ P S nk #i.
-    (RecoveryAccepted( P, S, nk ) @ #i) ∧
-    (¬(∃ V #s. SkippedTheMeeting( V ) @ #s))"
+  "∃ P V S nk #i.
+    ((RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)) ∧
+    (¬(∃ #s. SkippedTheMeeting( V ) @ #s))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ P S nk #i.
-  (RecoveryAccepted( P, S, nk ) @ #i)
+"∃ P V S nk #i.
+  (RecoveryAccepted( P, S, nk ) @ #i) ∧ (ReliedOn( P, V, S ) @ #i)
  ∧
-  ∀ V #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥"
+  ∀ #s. (SkippedTheMeeting( V ) @ #s) ⇒ ⊥"
 */
 simplify
 solve( Proof( $S, nk, $P ) ▶₀ #i )
@@ -305,12 +340,12 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/recovery.spthy
 
-  processing time: 0.60s
+  processing time: 0.68s
   
-  sealing_first_leaves_nothing_to_supersede (all-traces): verified (4 steps)
-  reissuing_first_leaves_a_window (exists-trace): verified (4 steps)
+  sealing_first_leaves_nothing_to_supersede (all-traces): verified (5 steps)
+  reissuing_first_leaves_a_window (exists-trace): verified (5 steps)
   the_compliant_order_completes (exists-trace): verified (4 steps)
-  thief_wins_against_a_chainless_counterparty (exists-trace): verified (3 steps)
+  thief_wins_against_a_chainless_counterparty (exists-trace): verified (5 steps)
   recovery_between_conforming_parties_requires_a_meeting (all-traces): verified (5 steps)
   a_conforming_recognition_names_the_meeting_key (all-traces): verified (5 steps)
   a_conforming_recovery_completes (exists-trace): verified (5 steps)

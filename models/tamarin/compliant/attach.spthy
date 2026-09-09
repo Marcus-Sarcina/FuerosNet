@@ -98,12 +98,21 @@ rule Attach_Sibling:
 restriction OneServingStatePerBinding:
   "All N C k #i #j. Opened(N, C, k) @ #i & Opened(N, C, k) @ #j ==> #i = #j"
 
-// Material arrives for a client and waits.  design 14.1.4: the node holds
-// ciphertext for an offline client.
+/*  Material arrives for a client and waits.  design 14.1.4: the node holds
+    ciphertext for an offline client.  THE QUEUE ENTRY NAMES THE CREDENTIAL:
+    design 14.1.6, "Queue metadata is the minimum: ciphertext, recipient
+    keyhash, arrival time" -- the recipient keyhash is one of the three things
+    a queued item IS.  Until 2026-09-08 the queue here was per client, with no
+    credential, and delivery combined an entry with whichever credential
+    happened to be serving that client: an item queued under k1, k1
+    superseded, k2 attached, and the item went out labelled k2 -- which the
+    supersession lemma, asking about k1, never saw.  A cross-family review
+    found it.  The infra requirement is "deliver nothing further to it, its
+    queue included", and "it" is the credential.                            */
 rule Enqueue:
-    [ Fr(~m) ]
-  --[ Enqueued($N, $C, ~m) ]->
-    [ Queued($N, $C, ~m) ]
+    [ Fr(~m), !Cred($C, k) ]
+  --[ Enqueued($N, $C, k, ~m) ]->
+    [ Queued($N, $C, k, ~m) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -112,7 +121,10 @@ rule Enqueue:
 */
 
 rule Deliver:
-    [ Serving($N, $C, k, role), Queued($N, $C, m) ]
+    [ Serving($N, $C, k, role), Queued($N, $C, k, m) ]   // SAME k: the serving
+                                                        //   credential is the
+                                                        //   one the item was
+                                                        //   queued for
   --[ Delivered($N, $C, k, m), ServedUnder($N, $C, k), ServedAs($N, $C, k, role) ]->
     [ Serving($N, $C, k, role) ]
 
@@ -207,6 +219,19 @@ lemma service_follows_an_attach [reuse, use_induction]:
   "All N C k role #j. ServedAs(N, C, k, role) @ #j
       ==> Ex #i. ServingAs(N, C, k, role) @ #i & #i < #j"
 
+/*  THE QUEUE FOLLOWS ITS CREDENTIAL, NOT ITS CLIENT.  Delivered under k means
+    queued for k.  Unbounded, because `Queued` has exactly one origin and is
+    consumed once -- no restore, no regress.  With this in hand, the bounded
+    companion's "nothing delivered after supersession" covers the retag: an
+    item queued under a superseded key cannot go out under its successor,
+    because going out under k2 means it was queued for k2.  Deleting the
+    credential match in `Deliver` falsifies this, which the gate runs.      */
+lemma delivery_is_to_the_credential_it_was_queued_for:
+  all-traces
+  "All N C k m #j.
+      Delivered(N, C, k, m) @ #j
+        ==> Ex #e. Enqueued(N, C, k, m) @ #e & #e < #j"
+
 /*  THE ROLE GATE.  A session opened in failover performs no trust-bearing
     operation.                                                              */
 lemma no_trust_bearing_operation_on_a_sibling:
@@ -257,65 +282,100 @@ lemma serving_without_evidence_is_reachable:
   server deferred early data or acted on it, so this is a conformance
   obligation and not a wire property.
 
-  REPLAYABILITY IS MODELLED AS PERSISTENCE.  `!EarlyData` is a persistent
-  fact, so it can be consumed any number of times -- which is exactly what
-  "early data is replayable" means and is the only property of 0-RTT this
-  needs.  A conforming server consumes a LINEAR `Handshaken` token instead,
-  so one completed handshake admits one binding.
+  THE RULE IS CONNECTION-LOCAL, and until 2026-09-08 this model was not.
+  "Defer it until handshake completion" means the handshake of the
+  connection that carried the early data -- that is what makes deferral a
+  replay defence: a replayed first flight opens a NEW connection, and the
+  replayer cannot complete its handshake.  The earlier model had a
+  `Handshaken(N, C)` token with no connection on it, minted by a rule with no
+  premises, and a conforming server could bind early data off ANY completed
+  handshake with that client, including one from before the data existed.
+  The linear token did limit it to one binding per handshake -- one per
+  EVENT, when the rule is one per CONNECTION.  A cross-family review found
+  it.  Now a connection is a fresh `~conn`: the client opens it and sends
+  its early data on it, the handshake completes on it or never, and the
+  conforming server binds only with that connection's own token.
+
+  REPLAYABILITY IS MODELLED AS PERSISTENCE, PLUS A REPLAY.  `!EarlyData` is
+  persistent, so it can be consumed any number of times, and `Replay` puts
+  the same early data on a new connection on which no handshake will ever
+  complete -- there is no `Conn` for it, because no client opened it.  A
+  conforming server therefore never binds the replay; the server that
+  processes early data does.
 */
 
 rule Client_Sends_Attach_Early:
-    [ Fr(~a) ]
-  --[ SentEarly($C, ~a) ]->
-    [ !EarlyData($C, ~a) ]
+    [ Fr(~a), Fr(~conn) ]
+  --[ SentEarly($N, $C, ~conn, ~a) ]->
+    [ !EarlyData($N, $C, ~conn, ~a), Conn($N, $C, ~conn) ]
 
+/*  The attacker replays the first flight: the same early data, a new
+    connection, and nobody on the client side to finish it.               */
+rule Replay:
+    [ !EarlyData($N, $C, conn, a), Fr(~conn2) ]
+  --[ Replayed($N, $C, ~conn2, a) ]->
+    [ !EarlyData($N, $C, ~conn2, a) ]
+
+/*  The handshake completes on a connection the client opened, once.       */
 rule Handshake_Completes:
-    [ ]
-  --[ HandshakeDone($N, $C) ]->
-    [ Handshaken($N, $C) ]
+    [ Conn($N, $C, conn) ]
+  --[ HandshakeDone($N, $C, conn) ]->
+    [ Handshaken($N, $C, conn) ]
 
 /*  THE CONFORMING SERVER.  It has the early data -- it cannot un-receive it
-    -- and binds only once the handshake has completed, consuming the token
-    that completion produced.                                               */
+    -- and binds only once THAT connection's handshake has completed,
+    consuming the token that completion produced.                          */
 rule Bind_After_Handshake:
-    [ Handshaken($N, $C), !EarlyData($C, a) ]
-  --[ Bound($N, $C, a), BoundAfterHandshake($N, $C, a) ]->
+    [ Handshaken($N, $C, conn), !EarlyData($N, $C, conn, a) ]
+  --[ Bound($N, $C, conn, a), BoundAfterHandshake($N, $C, conn, a) ]->
     [ ]
 
 /*  AND THE SERVER THAT PROCESSES EARLY DATA.  No handshake token consumed,
-    so nothing limits how often it fires -- which is the re-binding the rule
-    exists to prevent.                                                      */
+    so nothing limits how often it fires or on which connection -- which is
+    the re-binding the rule exists to prevent.                              */
 rule Bind_From_Early_Data:
-    [ !EarlyData($C, a) ]
-  --[ Bound($N, $C, a), ProcessedEarlyData($N) ]->
+    [ !EarlyData($N, $C, conn, a) ]
+  --[ Bound($N, $C, conn, a), ProcessedEarlyData($N) ]->
     [ ]
 
 /*  THE OBLIGATION.  On a server that defers early data, every binding
-    follows a completed handshake.                                          */
+    follows the completed handshake OF THE CONNECTION THAT CARRIED IT.  The
+    carve-out is this server's own: a server elsewhere that processes early
+    data says nothing about N (the same scoping correction as in
+    ceremony.spthy).  Letting any of C's handshakes serve -- `connT` in the
+    token -- falsifies this, which the gate runs.                          */
 lemma a_conforming_server_binds_only_after_the_handshake:
   all-traces
-  "All N C a #i.
-      Bound(N, C, a) @ #i
-      & not(Ex X #s. ProcessedEarlyData(X) @ #s)
-        ==> Ex #h. HandshakeDone(N, C) @ #h & #h < #i"
+  "All N C conn a #i.
+      Bound(N, C, conn, a) @ #i
+      & not(Ex #s. ProcessedEarlyData(N) @ #s)
+        ==> Ex #h. HandshakeDone(N, C, conn) @ #h & #h < #i"
 
 /*  ANTI-VACUITY: a conforming server does bind.                            */
 lemma a_conforming_binding_is_reachable:
   exists-trace
-  "Ex N C a #i.
-      BoundAfterHandshake(N, C, a) @ #i
-    & not(Ex X #s. ProcessedEarlyData(X) @ #s)"
+  "Ex N C conn a #i.
+      BoundAfterHandshake(N, C, conn, a) @ #i
+    & not(Ex #s. ProcessedEarlyData(N) @ #s)"
 
-/*  THE HARM, KEPT REACHABLE.  A server that acts on early data binds the
-    same `Attach` twice off one replayable message and with no second
-    handshake -- "a replayed `Attach` re-binds session state".  If this ever
-    stops being reachable the model has stopped representing replayability
-    and the obligation above would hold for the wrong reason.               */
+/*  THE HARM, KEPT REACHABLE, in both its forms.  A server that acts on early
+    data binds the same `Attach` twice off one replayable message with no
+    second handshake -- "a replayed `Attach` re-binds session state" -- and
+    binds it off a connection whose handshake never completes, which is the
+    replayed one.  If either stops being reachable the model has stopped
+    representing replayability and the obligation above would hold for the
+    wrong reason.                                                           */
 lemma a_replayed_attach_rebinds_on_a_server_that_processes_early_data:
   exists-trace
-  "Ex N C a #i #j.
-      Bound(N, C, a) @ #i & Bound(N, C, a) @ #j & not(#i = #j)
+  "Ex N C conn a #i #j.
+      Bound(N, C, conn, a) @ #i & Bound(N, C, conn, a) @ #j & not(#i = #j)
     & ProcessedEarlyData(N) @ #i"
+
+lemma a_server_that_processes_early_data_binds_a_connection_that_never_completes:
+  exists-trace
+  "Ex N C conn a #i.
+      Bound(N, C, conn, a) @ #i & ProcessedEarlyData(N) @ #i
+    & not(Ex #h. HandshakeDone(N, C, conn) @ #h)"
 
 
 end

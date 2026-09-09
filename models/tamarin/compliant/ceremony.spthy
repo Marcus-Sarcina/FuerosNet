@@ -202,11 +202,21 @@ rule Accept_Presence:
 /*  THE CONFORMANCE THEOREM.  Among participants who kept the discipline, an
     accepted record implies the meeting happened.  This is the honest form of
     what `presence_requires_copresence` was reaching for.                   */
+/*  THE CARVE-OUT IS THE PARTICIPANTS', NOT THE TRACE'S.  Until 2026-09-08 it
+    read `not(Ex P #s. SkippedTheMeeting(P) @ #s)` -- nobody anywhere ever
+    skipped -- so an unrelated party fabricating a record elsewhere made the
+    theorem say nothing about P1 and P2's.  A cross-family review put it
+    exactly: that proves "if every actor conforms then ...", where the
+    requirement is a commitment each client makes for itself.  Scoped to the
+    two parties the record names, it is the stronger statement and it holds:
+    a conforming P1 and P2 keep their obligation beside any number of liars.
+    The nomination lemma above had this shape from the start.              */
 lemma a_record_between_conforming_participants_implies_a_meeting:
   all-traces
   "All P1 P2 cid #i.
       PresenceAccepted(P1, P2, cid) @ #i
-      & not(Ex P #s. SkippedTheMeeting(P) @ #s)
+      & not(Ex #s. SkippedTheMeeting(P1) @ #s)
+      & not(Ex #s. SkippedTheMeeting(P2) @ #s)
         ==> Ex #m. MeetHappened(P1, P2, cid) @ #m & #m < #i"
 
 /*  ONE MEETING, ONE ROSTER: a conforming participant's signature cannot be
@@ -217,7 +227,10 @@ lemma a_conforming_signature_binds_one_roster:
   all-traces
   "All P1 P2 cid Q1 Q2 #i #j.
       PresenceAccepted(P1, P2, cid) @ #i & PresenceAccepted(Q1, Q2, cid) @ #j
-      & not(Ex P #s. SkippedTheMeeting(P) @ #s)
+      & not(Ex #s. SkippedTheMeeting(P1) @ #s)
+      & not(Ex #s. SkippedTheMeeting(P2) @ #s)
+      & not(Ex #s. SkippedTheMeeting(Q1) @ #s)
+      & not(Ex #s. SkippedTheMeeting(Q2) @ #s)
         ==> P1 = Q1 & P2 = Q2"
 
 /*  ANTI-VACUITY: conforming participants do produce records.               */
@@ -225,7 +238,8 @@ lemma a_conforming_record_is_reachable:
   exists-trace
   "Ex P1 P2 cid #i.
       PresenceAccepted(P1, P2, cid) @ #i
-    & not(Ex P #s. SkippedTheMeeting(P) @ #s)"
+    & not(Ex #s. SkippedTheMeeting(P1) @ #s)
+    & not(Ex #s. SkippedTheMeeting(P2) @ #s)"
 
 /*  THE RESIDUAL, KEPT REACHABLE.  Two parties who simply lie produce an
     accepted record with no meeting behind it, using nothing but their own

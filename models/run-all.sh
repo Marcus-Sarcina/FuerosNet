@@ -203,7 +203,7 @@ for spec in compliant/currency compliant/attach; do
 done
 
 # ---------------------------------------------------------------------------
-# 3c. WIRE-ONLY MUTATIONS, and each must FALSIFY.  `wire-format.md` writes
+# 3c. THEORY MUTATIONS, and each must FALSIFY.  `wire-format.md` writes
 # several bindings as a comparison the validator MUST make -- "an unchecked
 # binding is the same as no binding" -- and until 2026-09-08 this suite got
 # those bindings by naming one variable in both places, so no mutation could
@@ -215,13 +215,22 @@ done
 # Replacing rather than deleting the line is deliberate: an earlier mutation
 # script left a dangling comma and Tamarin rejected the theory, which reads
 # from the outside exactly like a mutation that worked.
+#   compliant/attach, 0-RTT   -- the conforming server binds early data off
+#                                ANY completed handshake with that client,
+#                                not the one on the connection that carried
+#                                it: the association wire 9.1 exists for.
+#   compliant/attach, queue   -- delivery ignores which credential an item was
+#                                queued for, so an item queued under a
+#                                superseded key goes out under its successor.
 MUTATIONS=(
   'wire-only/recovery|successor_statement_binds_the_patron|Eq(stmtPat, $P)|Eq($P, $P)'
   'wire-only/recovery|recognition_binds_the_successor|Eq(respNew1, adoptNew)|Eq(adoptNew, adoptNew)'
   'wire-only/recovery|transfer_statement_binds_the_destination|Eq(stmtNew, $New)|Eq($New, $New)'
+  'compliant/attach|a_conforming_server_binds_only_after_the_handshake|Handshaken($N, $C, conn), !EarlyData($N, $C, conn, a)|Handshaken($N, $C, connT), !EarlyData($N, $C, conn, a)'
+  'compliant/attach|delivery_is_to_the_credential_it_was_queued_for|Queued($N, $C, k, m) ]|Queued($N, $C, kq, m) ]'
 )
 
-echo "=== 3c. Wire-only mutations: each must FALSIFY ==="
+echo "=== 3c. Theory mutations: each must FALSIFY ==="
 for m in "${MUTATIONS[@]}"; do
   IFS='|' read -r spec lem from to <<< "$m"
   t="${spec%%/*}-${spec##*/}"
