@@ -166,6 +166,22 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
             let pid = ids.identity(&prior).ok_or("prior identity")?;
             verify_sign_block(pid, &b[r3], aad::SUCCESSOR, &stmt).map_err(|e| format!("successor proof: {e}"))?;
         }
+        // field 9: the former patron's transfer statement over
+        // [node, former, new patron] (§4.1), by the party field 9.1 names
+        if let Some(r9) = value_slice_at(b, env.body.start, 9) {
+            let former = value_slice_at(b, r9.start, 1).map(|r| b[r.start + 2..r.end].to_vec()).ok_or("former patron")?;
+            let bs = |it: &Item| match it { Item::Bytes(r) => b[r.clone()].to_vec(), _ => Vec::new() };
+            let node = bs(map_get(bm, 1).ok_or("node")?);
+            let patron = bs(map_get(bm, 2).ok_or("patron")?);
+            let mut stmt = Vec::new();
+            emit_array_head(&mut stmt, 3);
+            emit_bstr(&mut stmt, &node);
+            emit_bstr(&mut stmt, &former);
+            emit_bstr(&mut stmt, &patron);
+            let r2 = value_slice_at(b, r9.start, 2).ok_or("transfer block")?;
+            let fid = ids.identity(&former).ok_or("former patron identity")?;
+            verify_sign_block(fid, &b[r2], aad::TRANSFER, &stmt).map_err(|e| format!("transfer statement: {e}"))?;
+        }
     }
     Ok(env)
 }

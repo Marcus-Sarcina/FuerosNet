@@ -555,6 +555,17 @@ name = "rhtn-acceptance"
 version = "0.1.0"
 
 [[package]]
+name = "rhtn-archive"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rhtn-codec",
+ "rhtn-crypto",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "rhtn-codec"
 version = "0.1.0"
 dependencies = [

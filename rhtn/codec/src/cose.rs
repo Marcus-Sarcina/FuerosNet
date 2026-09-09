@@ -54,6 +54,16 @@ pub fn protected_header(alg: i64, kid: &[u8]) -> Vec<u8> {
     out
 }
 
+/// A protected header `{1: alg}` with no `kid`, for a signature whose
+/// surrounding structure already names the signer (§3.5).
+pub fn protected_alg(alg: i64) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 1);
+    emit_uint(&mut out, 1);
+    emit_neg(&mut out, alg);
+    out
+}
+
 /// `KeyMaterial = [ COSE_Key(OKP, Ed25519), COSE_Key(AKP, ML-DSA-65) ]` (§2.2),
 /// labels in the bytewise order the profile requires.
 pub fn key_material(ed_pub: &[u8; 32], pq_pub: &[u8]) -> Vec<u8> {

@@ -74,10 +74,20 @@ impl SigningIdentity {
     /// One logical signer's two `COSE_Signature` entries over a `COSE_Sign`
     /// payload: classical then post-quantum, each `[protected, {}, sig]`.
     pub fn sign_entries(&self, aad: &[u8], payload: &[u8]) -> Vec<u8> {
+        self.entries(aad, payload, true)
+    }
+
+    /// The same two entries without a `kid`: for an embedded `COSE_Sign`
+    /// whose enclosing structure names the signer (§3.5).
+    pub fn sign_entries_unnamed(&self, aad: &[u8], payload: &[u8]) -> Vec<u8> {
+        self.entries(aad, payload, false)
+    }
+
+    fn entries(&self, aad: &[u8], payload: &[u8], named: bool) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
         for alg in [cose::ALG_EDDSA, cose::ALG_ML_DSA_65] {
-            let prot = cose::protected_header(alg, &self.public.keyhash);
+            let prot = if named { cose::protected_header(alg, &self.public.keyhash) } else { cose::protected_alg(alg) };
             let tbs = cose::sig_structure_sign(&prot, aad, payload);
             let sig = if alg == cose::ALG_EDDSA { self.sign_ed(&tbs) } else { self.sign_pq(&tbs) };
             emit_array_head(&mut out, 3);
@@ -90,8 +100,18 @@ impl SigningIdentity {
 
     /// A classical `COSE_Sign1` `[protected, {}, null, sig]` over `payload`.
     pub fn sign1_ed(&self, aad: &[u8], payload: &[u8]) -> Vec<u8> {
+        self.sign1(aad, payload, true)
+    }
+
+    /// A classical `COSE_Sign1` without a `kid`: for an embedded or
+    /// standalone object that names its signer in a field (§3.5).
+    pub fn sign1_ed_unnamed(&self, aad: &[u8], payload: &[u8]) -> Vec<u8> {
+        self.sign1(aad, payload, false)
+    }
+
+    fn sign1(&self, aad: &[u8], payload: &[u8], named: bool) -> Vec<u8> {
         use rhtn_codec::encode::*;
-        let prot = cose::protected_header(cose::ALG_EDDSA, &self.public.keyhash);
+        let prot = if named { cose::protected_header(cose::ALG_EDDSA, &self.public.keyhash) } else { cose::protected_alg(cose::ALG_EDDSA) };
         let tbs = cose::sig_structure_sign1(&prot, aad, payload);
         let sig = self.sign_ed(&tbs);
         let mut out = Vec::new();
