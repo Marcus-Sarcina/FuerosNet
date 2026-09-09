@@ -2215,6 +2215,407 @@
   "interpretation": null
  },
  {
+  "id": "PAY-01",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Publish a signed prekey bundle and keep the one-time pool stocked",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §3",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Publish a prekey bundle and keep it stocked."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "The bundle is opaque to this protocol"
+   }
+  ],
+  "given": "Client S attaches to serving node N. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
+  "when": "S completes its attach.",
+  "then": "N holds a PrekeyBundle for S with field 2 equal to 1 and a signature by S under the prekey tag over fields 1 to 4, and a non-empty one-time pool for S.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-02",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Never serve or use a one-time prekey twice",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §3",
+   "infra-client-requirements.md §6",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "never reuse a one-time prekey"
+   },
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Consume one-time keys on serving them, and only when one is requested."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "Only the one-time key is consumed on serving."
+   }
+  ],
+  "given": "N holds a pool of one-time keys for S.",
+  "when": "Two requesters each send a PrekeyRequest for S with field 2 equal to 1.",
+  "then": "The two replies carry different one-time keys, the pool shrinks by two, and neither key is ever served again.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-03",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Replenish the one-time pool before it is exhausted",
+  "milestone": "after-5",
+  "kind": "liveness",
+  "spec": [
+   "light-client-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Replenish well before exhaustion"
+   },
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Rotate the signed prekey on a policy interval"
+   }
+  ],
+  "given": "Client S with a replenishment threshold and a signed-prekey interval chosen by the test, since both are policy.",
+  "when": "Requesters draw one-time keys until the pool falls below the threshold, and the interval elapses.",
+  "then": "S uploads further one-time keys before the pool reaches zero, and publishes a new bundle with a later field 4 after the interval.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-04",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Serve reusable material freely and consume nothing unless a one-time key is requested",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §6",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Serve reusable material freely."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "The reusable material may be returned any number of times to anyone."
+   }
+  ],
+  "given": "N holds S's bundle and pool.",
+  "when": "Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.",
+  "then": "Both replies carry S's bundle, neither carries field 3, and the pool is unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-05",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Rate-limit one-time key issuance per requester per subject",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §6",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Rate-limit one-time key issuance per requester per subject."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "rate-limits one-time key issuance per requester per subject"
+   }
+  ],
+  "given": "N with a limit L per requester per subject per window, chosen by the test.",
+  "when": "One requester sends L plus one PrekeyRequests for S with field 2 equal to 1 within the window, and one for another subject T.",
+  "then": "The first L replies carry one-time keys; the excess request for S is served no one-time key; the request for T is served one.",
+  "oracle": "behaviour",
+  "interpretation": "Whether the refused request is answered with the bundle and no field 3, or with failure code 1, is not stated; the test asserts only that no one-time key is served."
+ },
+ {
+  "id": "PAY-06",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Tell the subject when its one-time pool is exhausted",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Tell the subject when their one-time pool is exhausted."
+   }
+  ],
+  "given": "S's pool at N is drained by requesters.",
+  "when": "The last one-time key is served.",
+  "then": "S's client learns of the exhaustion and replenishes; the test observes the notice through S's client and the subsequent upload.",
+  "oracle": "behaviour",
+  "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter."
+ },
+ {
+  "id": "PAY-07",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Prefetch reusable material for the whole Dunbar Org as one sweep",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §3",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Prefetch reusable prekey material for the whole Dunbar Org as a batch request"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "the population swept, in ascending keyhash order"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "A `PrekeyBatchRequest` naming a population is visibly a sweep"
+   }
+  ],
+  "given": "Client S attaches with a horizon of known population.",
+  "when": "S refreshes its prekey material.",
+  "then": "A PrekeyBatchRequest naming the population in ascending keyhash order is observed, and no single-subject PrekeyRequest with field 2 equal to 0 for any of them.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-08",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Request a one-time key only when opening a session, and never in a prefetch",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Never prefetch one-time keys."
+   },
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Request a one-time key only when actually opening a session."
+   }
+  ],
+  "given": "Client S has prefetched reusable material for its org and has no session with T.",
+  "when": "S idles, then sends its first message to T.",
+  "then": "No PrekeyRequest with field 2 equal to 1 is observed while idle; exactly one, naming T, is observed immediately before the first message.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-09",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Keep no record of who asked for whose bundle",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "keep no record of who asked for whose bundle"
+   }
+  ],
+  "given": "N serves several PrekeyRequests and a PrekeyBatchRequest.",
+  "when": "The test inspects N's persistent storage afterwards.",
+  "then": "No record of the requesters or of which subjects they asked for is present.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-10",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Store and serve a bundle without interpreting its contents",
+  "milestone": "after-5",
+  "kind": "must-accept",
+  "spec": [
+   "infra-client-requirements.md §6",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "The bundle is opaque."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "The bundle is opaque to this protocol"
+   }
+  ],
+  "given": "A PrekeyBundle for S whose field 3 is an arbitrary byte string, correctly signed by S.",
+  "when": "S uploads it and a requester fetches it.",
+  "then": "N stores and serves it unchanged. An implementation that parses field 3 and rejects it fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-11",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Use the asynchronous construction only leaf to leaf",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §3",
+   "design §14.2.4.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Only leaf-to-leaf needs this."
+   },
+   {
+    "where": "design §14.2.4.1",
+    "text": "Leaf → patron | Nothing new."
+   }
+  ],
+  "given": "Client S with a session to its patron P and a first message for leaf T.",
+  "when": "S sends to P and then to T.",
+  "then": "No prekey request names P and the message to P rides the transport session; a one-time key request names T and the message to T is encrypted under the payload construction.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-12",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Open a session on reusable material alone when no one-time key remains",
+  "milestone": "after-5",
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.8",
+    "text": "when none remain, field 3 is simply absent and the session proceeds on reusable material alone"
+   }
+  ],
+  "given": "T's one-time pool at N is empty.",
+  "when": "S requests a one-time key for T and then sends its first message.",
+  "then": "The PrekeyReply carries field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-13",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.2.4.2",
+   "design §14.2.4.3",
+   "design §14.2.4"
+  ],
+  "rule": [
+   {
+    "where": "design §14.2.4.2",
+    "text": "this profile instantiates it with X25519 and ML-KEM-768"
+   },
+   {
+    "where": "design §14.2.4.3",
+    "text": "Signal's Triple Ratchet."
+   },
+   {
+    "where": "design §14.2.4",
+    "text": "The requirement below is to adopt it, not to design a replacement."
+   }
+  ],
+  "given": "Two clients with fixed key material and the adopted library's published test vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
+  "when": "They establish a session and exchange messages.",
+  "then": "The key agreement and ratchet outputs match the adopted specifications' vectors for the same inputs, and a message decrypts only at its recipient.",
+  "oracle": "fixture",
+  "interpretation": "How the session is bound to the hybrid identity is open; the test parameterises the binding and asserts agreement with the adopted construction's vectors."
+ },
+ {
+  "id": "PAY-14",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Dispatch protocol objects and application payload on the end-to-end channel to the right handler",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.3",
+   "design §14.2.4.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.3",
+    "text": "Carried as payload, never as a record."
+   },
+   {
+    "where": "design §14.2.4.6",
+    "text": "Payload-type demultiplexing."
+   }
+  ],
+  "given": "Subject A sends verifier B a KeyGrant and an application message over the same end-to-end session. The demultiplexing scheme is an open decision (design §22.2) supplied as a parameter.",
+  "when": "B receives both.",
+  "then": "The KeyGrant reaches B's grant handler and opens the named capture; the application message reaches the application; neither is delivered to the other.",
+  "oracle": "behaviour",
+  "interpretation": "The demultiplexing scheme is undecided; the test asserts correct dispatch under whichever scheme is supplied."
+ },
+ {
+  "id": "PAY-15",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Deliver payload over the serving node when no direct path exists",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.1",
+    "text": "The relay path is not vestigial and must be maintained as a first-class route."
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "falls back to the serving node when it fails"
+   }
+  ],
+  "given": "Two leaves whose NATs, emulated by the harness, defeat hole punching.",
+  "when": "One sends the other a message.",
+  "then": "The direct candidates fail and the message is delivered through the serving node's relay; the recipient decrypts it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "PRP-01",
   "area": "propagation",
   "gap": "propagation",
@@ -3076,6 +3477,386 @@
   "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery carries any of the k ciphertexts.",
   "oracle": "model",
   "interpretation": "That delivery is keyed by the queued recipient keyhash is the model's reading (tamarin/compliant/attach); the specification says nothing further goes to the superseded credential and does not say whether a successor collects material queued for its predecessor."
+ },
+ {
+  "id": "REC-01",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Assemble a recovery adoption carrying both halves and no other evidence field",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A recovery requires both, always: the old key and a present human."
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "EXACTLY ONE of fields 6, 8 and 9 is present"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "with `external_aad = \"rhtn/1:successor\"`"
+   }
+  ],
+  "given": "Subject S holds prior key k1 and new key k2, meets prior counterparty V who recognises S, and is re-adopted by patron P.",
+  "when": "S's client assembles the adoption.",
+  "then": "The adoption carries field 6 and neither field 8 nor field 9; field 6's responses are sorted ascending by verifier keyhash and include a `match`; field 6's field 3 is a hybrid COSE_Sign by k1 over the successor statement naming k1, k2 and P under the successor tag, and the corpus validator accepts the envelope.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "REC-02",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Reject a recovery whose successor statement names a different successor or patron",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A verifier MUST check `new_key` and `patron_key` against adoption fields 1 and 2 and reject on mismatch."
+   }
+  ],
+  "given": "Patron P receives a recovery adoption whose field 3 successor statement was lifted from another recovery and names a different new key, then one naming a different patron.",
+  "when": "P evaluates each.",
+  "then": "P countersigns neither and records no binding for either.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REC-03",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Sign a recovery verifier response with both components, and the consent classically",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A verifier's authentication inside a `Recovery` block is HYBRID"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "Field 7 stays classical"
+   }
+  ],
+  "given": "Verifier V answering in a recovery ceremony for subject S.",
+  "when": "V's client signs its response.",
+  "then": "The response's field 9 is a detached COSE_Sign with one Ed25519 and one ML-DSA-65 entry that both verify under V, and field 7 is a single classical COSE_Sign1 by S's new key.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "REC-04",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Run the recovery meeting as a ceremony in which the verifier is its own querier",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.1",
+   "design §9.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "The querier is the verifier"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "`selection_basis` MUST be 0 (met) in every response here"
+   },
+   {
+    "where": "design §9.1",
+    "text": "the counterparty is its own querier"
+   }
+  ],
+  "given": "Subject S stands before prior counterparty V with S's new key on the harness.",
+  "when": "The recovery ceremony runs.",
+  "then": "V's client generates the VerificationQuery with field 2 naming V and the meeting's own pre-commitment, S's new key countersigns it, and V's response carries selection basis 0 and field 8 equal to S's prior key.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REC-05",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Seal every old line as the old key's last act before publishing a rotation",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §9.0",
+   "light-client-requirements.md §2",
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "design §9.0",
+    "text": "Seal the old line as the old key's last act."
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "as the last thing the old key does"
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "sets the counter it is leaving to the maximum, then reissues naming that value"
+   }
+  ],
+  "given": "Subject S with prior key k1 holds series in two patron relationships and rotates to k2.",
+  "when": "S's client performs the rotation.",
+  "then": "Before the adoption under k2 is pushed, a self-signed SignedLocator by k1 at the maximum counter is produced for each of the two series, and nothing signed by k1 follows them.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REC-06",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "On suspected compromise, seal, then reissue naming the sealed counter, for every relationship",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §2",
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "On suspected key compromise, seal before you take a series reissue."
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "Seal, then reissue, then repeat for every other patron relationship whose line is worth securing."
+   }
+  ],
+  "given": "Subject S holds two patron relationships and marks its key as suspected compromised.",
+  "when": "S's client acts on the suspicion.",
+  "then": "For each relationship, in order, a self-signed locator at the maximum counter is produced, then a type-7 reissue whose field 3 equals that maximum and whose field 4 is a fresh series at counter 0, countersigned by that patron.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REC-07",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Never reissue into a series you have occupied",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §2",
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Never take a series reissue into a series you have occupied before."
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "The new series MUST NOT be one the node has previously occupied."
+   }
+  ],
+  "given": "Subject S has occupied series s1 then s2 and is now in s3.",
+  "when": "S's client is asked to produce a reissue whose field 4 names s1 or s2.",
+  "then": "No such reissue is produced; a reissue into an unused series is.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REC-08",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Reject a reissue naming a series already in the chain you hold",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.6",
+   "wire-format.md §4.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.6",
+    "text": "who MUST reject a reissue naming a series already in it"
+   },
+   {
+    "where": "wire-format.md §4.6.1",
+    "text": "Chain length is the order."
+   }
+  ],
+  "given": "Holder H has the chain for S: adoption into s1, reissue to s2.",
+  "when": "A patron-countersigned reissue for S with field 4 equal to s1 arrives, then one into an unused s3.",
+  "then": "The first is rejected and H's chain is unchanged; the second extends H's chain to length three.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REC-09",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Reject records in an abandoned series whatever their counter",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.6",
+    "text": "MUST reject records in it whatever their counter"
+   }
+  ],
+  "given": "Holder H has S's chain showing s1 left for s2.",
+  "when": "A validly signed locator for S in s1 at a counter above every s1 record H holds arrives, then a locator in s2 at counter 1.",
+  "then": "The s1 locator is rejected; the s2 locator is installed.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REC-10",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Present the chain when asked to rank, and never propagate it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §2",
+   "wire-format.md §4.6.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Keep the chain that proves your current series"
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "It is presented, never propagated"
+   },
+   {
+    "where": "wire-format.md §4.6.1",
+    "text": "Presentation, not propagation, and not a history scan."
+   }
+  ],
+  "given": "Subject S holds its adoption and one reissue; a counterparty asks S to prove its series.",
+  "when": "S answers, and the test watches S's sessions for a period afterwards.",
+  "then": "The adoption and the reissue are presented to the counterparty; no TopologyPush carrying either leaves S in response.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REC-11",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Let a thief's seal freeze a chainless holder's entry, and never move it afterwards",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.6",
+    "text": "against them it is a race the thief can win by reaching a reader first"
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "What a recipient ends up holding is an address that can never be updated."
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "So a thief who seals first burns a line rather than capturing one."
+   }
+  ],
+  "given": "Holder H has a cached locator for S in series s at counter 5 and no chain. A thief holding S's key produces a locator in s at the maximum counter.",
+  "when": "The thief's locator reaches H first; S's locator in s at counter 6 arrives later.",
+  "then": "H installs the thief's locator, rejects S's counter-6 locator, and no further record in s changes H's entry.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REC-12",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Resolve two competing recoveries for one prior key to one current binding, by trusted patron",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §9.0.2"
+  ],
+  "rule": [
+   {
+    "where": "design §9.0.2",
+    "text": "it resolves to one, by which patron it trusts"
+   },
+   {
+    "where": "design §9.0.2",
+    "text": "Both successors remain valid nodes network-wide"
+   }
+  ],
+  "given": "Observer O within the horizon receives two recovery adoptions for prior key k1: successor kX under patron X and successor kY under patron Y, with O's policy set by the test to prefer X.",
+  "when": "O processes both.",
+  "then": "O's binding for the identity is kX alone; kY is held as a distinct valid node and not as the continuation.",
+  "oracle": "behaviour",
+  "interpretation": "Which patron an observer trusts is policy; the test fixes it and asserts that exactly one continuation results."
+ },
+ {
+  "id": "REC-13",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Carry nothing in a plain rotation",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1",
+   "design §9.0"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A plain rotation carries nothing"
+   },
+   {
+    "where": "design §9.0",
+    "text": "A plain rotation carries nothing"
+   }
+  ],
+  "given": "Subject S rotates from k1 to k2 without claiming k1's history.",
+  "when": "S's client performs the rotation and the memo for the adoption travels rootward.",
+  "then": "The adoption carries no field 6, no field naming k1 anywhere, and the memo carries no prior key.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REC-14",
+  "area": "recovery",
+  "gap": "recovery",
+  "title": "Reject a transfer whose statement disagrees with the enclosing adoption",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A verifier MUST check all three against the enclosing adoption"
+   }
+  ],
+  "given": "Patron P receives a transfer adoption whose TransferStatement names a different node, then one naming a different new patron, then one naming a different former patron than the Transfer map's field 1.",
+  "when": "P evaluates each.",
+  "then": "P countersigns none of them.",
+  "oracle": "model",
+  "interpretation": null
  },
  {
   "id": "REP-01",
