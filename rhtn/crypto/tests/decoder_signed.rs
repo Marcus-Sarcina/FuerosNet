@@ -1,0 +1,267 @@
+//! The two decoder entries that need constructed objects with real
+//! signatures: the derived envelope ceiling (DEC-05) and three objects at a
+//! §1.3 ceiling no fixture reaches (DEC-06).  Identities come from the
+//! test-vector keygen recipe; extra verifiers are minted under fresh names.
+
+mod common;
+use common::*;
+use rhtn_codec::bounds;
+use rhtn_codec::cbor::*;
+use rhtn_codec::cose::{self, aad};
+use rhtn_codec::encode::*;
+use rhtn_codec::envelope;
+use rhtn_crypto::identity::testkit::test_identity;
+use rhtn_crypto::{verify, Identity, SigningIdentity};
+
+fn signers() -> Vec<SigningIdentity> {
+    let mut v: Vec<SigningIdentity> = NAMES.iter().map(|n| test_identity(n)).collect();
+    for i in 1..=32 {
+        v.push(test_identity(&format!("v{i:02}")));
+    }
+    v
+}
+
+fn publics(s: &[SigningIdentity]) -> Vec<Identity> {
+    s.iter().map(|x| x.public.clone()).collect()
+}
+
+fn by_name<'a>(s: &'a [SigningIdentity], name: &str) -> &'a SigningIdentity {
+    let kh = test_identity(name).public.keyhash;
+    s.iter().find(|x| x.public.keyhash == kh).unwrap()
+}
+
+fn by_keyhash<'a>(s: &'a [SigningIdentity], kh: &[u8]) -> &'a SigningIdentity {
+    s.iter().find(|x| x.public.keyhash == kh).expect("a test identity")
+}
+
+/// `{1: 1, 2: type, 3: body, 4: [h'', {}, null, [entries]]}`.
+fn build_envelope(tx_type: u64, body: &[u8], signers: &[&SigningIdentity]) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 4);
+    emit_uint(&mut out, 1);
+    emit_uint(&mut out, 1);
+    emit_uint(&mut out, 2);
+    emit_uint(&mut out, tx_type);
+    emit_uint(&mut out, 3);
+    out.extend_from_slice(body);
+    emit_uint(&mut out, 4);
+    emit_array_head(&mut out, 4);
+    emit_bstr(&mut out, b"");
+    emit_map_head(&mut out, 0);
+    emit_null(&mut out);
+    emit_array_head(&mut out, signers.len() * 2);
+    for s in signers {
+        out.extend_from_slice(&s.sign_entries(aad::ENVELOPE, body));
+    }
+    out
+}
+
+fn kh_entry(out: &mut Vec<u8>, key: u64, kh: &[u8; 32]) {
+    emit_uint(out, key);
+    emit_bstr(out, kh);
+}
+
+/// A verifier response about `subject` by `verifier`: consent by the subject
+/// over the query id, the verifier's signature over the map minus field 9,
+/// classical or hybrid as the enclosing object requires.
+fn build_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32], prior: Option<&[u8; 32]>, hybrid: bool) -> Vec<u8> {
+    let consent = subject.sign1_ed(aad::CONSENT, qid);
+    let mut payload = Vec::new();
+    emit_map_head(&mut payload, if prior.is_some() { 8 } else { 7 });
+    kh_entry(&mut payload, 1, &verifier.public.keyhash);
+    kh_entry(&mut payload, 2, &subject.public.keyhash);
+    kh_entry(&mut payload, 3, qid);
+    emit_uint(&mut payload, 4);
+    emit_uint(&mut payload, 0);
+    emit_uint(&mut payload, 5);
+    emit_uint(&mut payload, 1);
+    emit_uint(&mut payload, 7);
+    payload.extend_from_slice(&consent);
+    if let Some(p) = prior {
+        kh_entry(&mut payload, 8, p);
+    }
+    emit_uint(&mut payload, 10);
+    emit_uint(&mut payload, 0);
+    let sig9 = if hybrid {
+        let mut s = Vec::new();
+        emit_array_head(&mut s, 4);
+        emit_bstr(&mut s, b"");
+        emit_map_head(&mut s, 0);
+        emit_null(&mut s);
+        emit_array_head(&mut s, 2);
+        s.extend_from_slice(&verifier.sign_entries(aad::VERIFIER, &payload));
+        s
+    } else {
+        verifier.sign1_ed(aad::VERIFIER, &payload)
+    };
+    // insert field 9 before field 10, bumping the head count
+    let r10 = value_slice(&payload, 10).unwrap();
+    let key10_at = r10.start - 1;
+    let mut out = Vec::new();
+    emit_map_head(&mut out, if prior.is_some() { 9 } else { 8 });
+    let (_, _, adv) = (Parser { b: &payload }).head(0).unwrap();
+    out.extend_from_slice(&payload[adv..key10_at]);
+    emit_uint(&mut out, 9);
+    out.extend_from_slice(&sig9);
+    out.extend_from_slice(&payload[key10_at..]);
+    out
+}
+
+/// A normal presence record body: back-pointer lists per signer, the
+/// fixture's timestamps and root, the given participants, witnesses and
+/// responses.
+fn presence_body(fixture_body: &[u8], participants: [&SigningIdentity; 2], witnesses: &[(&SigningIdentity, &SigningIdentity)], responses: &[Vec<u8>]) -> Vec<u8> {
+    let r0 = value_slice(fixture_body, 0).unwrap();
+    let first_list = fixture_body[array_item_ranges(fixture_body, r0.start).unwrap()[0].clone()].to_vec();
+    let val = |k: u64| fixture_body[value_slice(fixture_body, k).unwrap()].to_vec();
+    let mut b = Vec::new();
+    emit_map_head(&mut b, if responses.is_empty() { 7 } else { 8 });
+    emit_uint(&mut b, 0);
+    emit_array_head(&mut b, 2 + witnesses.len());
+    for _ in 0..2 + witnesses.len() {
+        b.extend_from_slice(&first_list);
+    }
+    emit_uint(&mut b, 1);
+    b.extend_from_slice(&val(1));
+    emit_uint(&mut b, 2);
+    b.extend_from_slice(&val(2));
+    emit_uint(&mut b, 3);
+    emit_array_head(&mut b, 2);
+    for p in participants {
+        emit_map_head(&mut b, 1);
+        kh_entry(&mut b, 1, &p.public.keyhash);
+    }
+    emit_uint(&mut b, 4);
+    emit_array_head(&mut b, witnesses.len());
+    for (w, nominated_by) in witnesses {
+        emit_map_head(&mut b, 3);
+        kh_entry(&mut b, 1, &w.public.keyhash);
+        kh_entry(&mut b, 2, &nominated_by.public.keyhash);
+        emit_uint(&mut b, 3);
+        emit_uint(&mut b, 7);
+    }
+    if !responses.is_empty() {
+        emit_uint(&mut b, 5);
+        emit_array_head(&mut b, responses.len());
+        for r in responses {
+            b.extend_from_slice(r);
+        }
+    }
+    emit_uint(&mut b, 6);
+    emit_uint(&mut b, 0);
+    emit_uint(&mut b, 8);
+    b.extend_from_slice(&val(8));
+    b
+}
+
+fn sort_responses(mut rs: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let key = |r: &[u8]| {
+        let v = value_slice(r, 1).unwrap();
+        let s = value_slice(r, 2).unwrap();
+        (r[v].to_vec(), r[s].to_vec())
+    };
+    rs.sort_by_key(|r| key(r));
+    rs
+}
+
+// acceptance: DEC-05
+#[test]
+fn dec_05_presence_record_at_the_derived_ceiling_of_36_entries_is_accepted() {
+    let s = signers();
+    let ids = publics(&s);
+    let alice = by_name(&s, "alice");
+    let bob = by_name(&s, "bob");
+    let ws: Vec<&SigningIdentity> = (1..=16).map(|i| by_name(&s, &format!("w{i}"))).collect();
+    let witnesses: Vec<(&SigningIdentity, &SigningIdentity)> = ws.iter().enumerate().map(|(i, w)| (*w, if i % 2 == 0 { alice } else { bob })).collect();
+    let fixture_body = body_of(&fixture("P-alice-c1-record").bytes);
+    let body = presence_body(&fixture_body, [alice, bob], &witnesses, &[]);
+    let mut all: Vec<&SigningIdentity> = vec![alice, bob];
+    all.extend(ws.iter().copied());
+    let env = build_envelope(5, &body, &all);
+    let parsed = verify::envelope(&ids, &env).expect("36-entry envelope verifies");
+    assert_eq!(parsed.entries.len(), 36);
+    assert_eq!(bounds::envelope_entry_ceiling(5), Some(36));
+    assert_eq!(parsed.signers.len(), 18);
+    // one more witness would exceed the derived ceiling, at the body first
+    let w17 = test_identity("v01");
+    let mut more = witnesses.clone();
+    more.push((&w17, alice));
+    let body17 = presence_body(&fixture_body, [alice, bob], &more, &[]);
+    assert!(rhtn_codec::schema::check_body(&body17, &parse_all(&body17).unwrap()).is_err());
+    let mut all17 = all.clone();
+    all17.push(&w17);
+    assert!(envelope::parse(&build_envelope(5, &body17, &all17)).is_err());
+}
+
+// acceptance: DEC-06
+#[test]
+fn dec_06_objects_exactly_at_a_ceiling_no_fixture_reaches_are_accepted() {
+    let s = signers();
+    let ids = publics(&s);
+
+    // (a) a Capabilities value of exactly 1024 bytes in an Attach
+    let payload = fixture("P-frame-01").bytes[4..].to_vec();
+    let body_at = array_item_ranges(&payload, 0).unwrap()[1].start;
+    let caps = |n: usize| {
+        let mut c = Vec::new();
+        emit_map_head(&mut c, 1);
+        emit_uint(&mut c, 0x2dfe_1d3f_8c17_a01f);
+        emit_bstr(&mut c, &vec![0u8; n]);
+        c
+    };
+    assert!(parse_frame(&framed(&replace_value(&payload, body_at, 3, &caps(1024)))).is_ok(), "1024-byte value");
+    assert!(parse_frame(&framed(&replace_value(&payload, body_at, 3, &caps(1025)))).is_err(), "1025-byte value");
+
+    // (b) a presence record with 32 responses, 16 per subject
+    let alice = by_name(&s, "alice");
+    let bob = by_name(&s, "bob");
+    let w1 = by_name(&s, "w1");
+    let verifiers: Vec<&SigningIdentity> = (1..=32).map(|i| by_name(&s, &format!("v{i:02}"))).collect();
+    let qid = |label: &str| cose::sha256(label.as_bytes());
+    let mut rs = Vec::new();
+    for (i, v) in verifiers.iter().enumerate() {
+        let subject = if i < 16 { alice } else { bob };
+        rs.push(build_response(v, subject, &qid(&format!("q{i}")), None, false));
+    }
+    let rs = sort_responses(rs);
+    let fixture_body = body_of(&fixture("P-alice-c1-record").bytes);
+    let body = presence_body(&fixture_body, [alice, bob], &[(w1, alice)], &rs);
+    let env = build_envelope(5, &body, &[alice, bob, w1]);
+    verify::envelope(&ids, &env).expect("32 responses verify");
+    let mut rs33 = rs.clone();
+    rs33.push(build_response(by_name(&s, "carol"), alice, &qid("q33"), None, false));
+    let body33 = presence_body(&fixture_body, [alice, bob], &[(w1, alice)], &sort_responses(rs33));
+    assert!(rhtn_codec::schema::check_body(&body33, &parse_all(&body33).unwrap()).is_err(), "33 responses");
+
+    // (c) a recovery adoption with 32 hybrid responses
+    let rec = fixture("P-recovery-adoption").bytes;
+    let body = body_of(&rec);
+    let kh = |r: std::ops::Range<usize>| -> [u8; 32] { body[r.start + 2..r.end].try_into().unwrap() };
+    let new_key = by_keyhash(&s, &kh(value_slice(&body, 1).unwrap()));
+    let patron = by_keyhash(&s, &kh(value_slice(&body, 2).unwrap()));
+    let r6 = value_slice(&body, 6).unwrap();
+    let prior_kh = kh(value_slice_at(&body, r6.start, 1).unwrap());
+    let mut hs = Vec::new();
+    for (i, v) in verifiers.iter().enumerate() {
+        hs.push(build_response(v, new_key, &qid(&format!("r{i}")), Some(&prior_kh), true));
+    }
+    let hs = sort_responses(hs);
+    let mut arr = Vec::new();
+    emit_array_head(&mut arr, hs.len());
+    for r in &hs {
+        arr.extend_from_slice(r);
+    }
+    let recovery = replace_value(&body[r6.clone()], 0, 2, &arr);
+    let body32 = replace_value(&body, 0, 6, &recovery);
+    let env32 = build_envelope(1, &body32, &[new_key, patron]);
+    verify::envelope(&ids, &env32).expect("recovery with 32 hybrid responses verifies");
+    let mut hs33 = hs.clone();
+    hs33.push(build_response(by_name(&s, "carol"), new_key, &qid("r33"), Some(&prior_kh), true));
+    let mut arr33 = Vec::new();
+    emit_array_head(&mut arr33, 33);
+    for r in sort_responses(hs33) {
+        arr33.extend_from_slice(&r);
+    }
+    let body33 = replace_value(&body, 0, 6, &replace_value(&body[r6.clone()], 0, 2, &arr33));
+    assert!(rhtn_codec::schema::check_body(&body33, &parse_all(&body33).unwrap()).is_err(), "33 recovery responses");
+}

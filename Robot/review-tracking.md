@@ -7699,3 +7699,36 @@ grandpatron and above queue, behind a second queue partition for non-local
 traffic — and the reason a mail queue is rejected. Implementation proceeds;
 the author expects classes of issue that only building will show.
 
+
+## Milestone 1: codec and crypto (2026-09-09)
+
+`rhtn-codec` and `rhtn-crypto` are in the workspace, seeded from the
+conformance runner. The corpus test agrees on 153 bytes-class fixtures and
+the two cross-entry bindings, against the runner's 149: frames and replies
+are now validated by family, with key tables extracted from the wire's own
+schema blocks, rather than skipped. All sixteen decoder entries are
+implemented and marked; the catalogue reports 16 of 256 implemented, 0
+flags, and the code gate passes. DEC-05's 18-signer record and DEC-06's three
+at-ceiling objects are constructed with real hybrid signatures from the
+test-vector recipe, so the derived 36-entry ceiling and the two 32-response
+bounds are exercised on both sides.
+
+**Design choices worth knowing.** The parser is iterative with an explicit
+stack, so nesting is bounded by input length and never by the machine stack;
+a 1024-deep extension value is accepted and a hostile 64 KB of nesting
+cannot end the process. Every declared length is checked before use and no
+allocation follows a declared size, which is how DEC-03 returns at once. The
+envelope map admits no unknown keys, since it sits outside every signature
+(DEC-09's reading, applied). Extension bounds are counted per map for the
+body and an adoption's Locator; other nested signed maps are not yet
+counted.
+
+**Not done, deliberately.** `cargo-fuzz` needs a nightly toolchain that is
+not installed; the seeded mutation runs are in the gate and a timed harness
+(`RHTN_FUZZ_SECONDS`) covers the hours-long exercise. The EndpointRecord and
+SignedLocator fixtures carry signatures the corpus itself marks stale by
+design, so those kinds are checked structurally in the corpus test; the
+verification path for them exists in `rhtn-crypto` and is unexercised by a
+fixture. Entry order within a `COSE_Sign` array is not checked. The
+per-fixture reply families are assigned by fixture id in the test driver,
+because the corpus does not say which family a `reply` entry belongs to.

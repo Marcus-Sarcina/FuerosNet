@@ -18,3 +18,11 @@ first.  Each one implements catalogue entries and marks them
 stubs match it, and builds and tests the workspace.  It is separate from
 `models/run-all.sh`, which runs on a different cadence, and it fences cargo the
 same way that script fences the prover.
+
+**Robustness.** The gate runs DEC-01 and DEC-02: every proper prefix of every
+accepted fixture, and 48 seeded mutations per fixture. The hours-long run is
+`RHTN_FUZZ_SECONDS=3600 cargo test -p rhtn-crypto --test fuzz -- --nocapture`,
+which stacks mutations and prints its seed. `cargo-fuzz` needs a nightly
+toolchain this machine does not have; adding it is a follow-up, not a
+replacement for the seeded runs, which are what the entries specify.
+
