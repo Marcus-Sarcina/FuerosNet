@@ -52,6 +52,12 @@ impl SigningIdentity {
         SigningIdentity { public, ed_sk, pq_sk }
     }
 
+    /// The classical signing key, for a transport that presents it as a raw
+    /// public key (`wire-format.md` §9.1).
+    pub fn ed_signing_key(&self) -> &ed25519_dalek::SigningKey {
+        &self.ed_sk
+    }
+
     pub fn sign_ed(&self, tbs: &[u8]) -> Vec<u8> {
         self.ed_sk.sign(tbs).to_bytes().to_vec()
     }

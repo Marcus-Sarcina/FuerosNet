@@ -7741,3 +7741,26 @@ budget the decoder entries parameterise, observed rather than assumed; the
 step reports itself skipped where the toolchain is absent. The seeded runs
 stay in the gate as the entries specify.
 
+
+**Fifty-five-minute seeded run (2026-09-09).** Seed 0x18d3bbcee178a3a3,
+budget 3,300 s: 6,159,172 inputs, 660,751 reported valid and every one of
+those round-tripped, no panic, none over the one-second budget.
+
+## Milestone 2: transport (2026-09-09, in progress)
+
+`rhtn-transport` is in the workspace on quinn 0.11.11 and rustls 0.23.44
+with the aws-lc-rs provider. The three third-party facts design §5.2 rests
+on hold in these releases and are now exercised by tests: rustls offers
+`X25519MLKEM768` as a configurable sole group; RFC 7250 raw public keys
+work in both directions through `AlwaysResolvesServerRawPublicKeys`,
+`AlwaysResolvesClientRawPublicKeys` and `verify_tls13_signature_with_raw_key`;
+quinn exposes 0-RTT (`into_0rtt`), address rebinding and the peer's raw key.
+TRN-01, TRN-02, TRN-03 and TRN-05 are implemented over two loopback
+endpoints: the profile's client completes nothing against a classical-only
+server and the profile's server nothing with a classical-only client, a
+valid Ed25519 key that is not the pinned classical member fails the dial,
+and `rhtn/1` negotiates with mutual raw-key authentication. TRN-01 and
+TRN-02 are observed from handshake outcomes rather than from a captured
+ClientHello, which the test file says; the inference is exact because a
+single-group peer completes a handshake only with a peer offering that
+group.

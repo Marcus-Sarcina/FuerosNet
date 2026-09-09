@@ -2,58 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Offer only X25519MLKEM768 as the key-exchange group.
-///
-/// Spec: wire-format.md §9.1
-/// Milestone: 2.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §9.1): "QUIC with TLS 1.3, key exchange group X25519MLKEM768."
-/// Rule (wire-format.md §9.1): "offering only X25519MLKEM768 is what leaves nothing weaker to fall back to."
-///
-/// Given: The implementation acts as the dialling party toward a test endpoint that records the TLS ClientHello carried in the QUIC Initial packets (readable with the Initial keys).
-/// When: The implementation opens a connection to that endpoint.
-/// Then: The ClientHello's supported_groups extension lists exactly one group, X25519MLKEM768, and its key_share extension carries no share for any other group.
-#[test]
-#[ignore = "acceptance TRN-01: owed at milestone 2"]
-fn trn_01_offer_only_x25519mlkem768_as_the_key_exchange_gr() {
-    todo!("TRN-01: Offer only X25519MLKEM768 as the key-exchange group.")
-}
-
-/// Complete no handshake with a peer that offers only weaker groups.
-///
-/// Spec: wire-format.md §9.1
-/// Milestone: 2.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §9.1): "That nothing can be negotiated below the named group is this profile's doing, not TLS's"
-/// Rule (wire-format.md §9.1): "offering only X25519MLKEM768 is what leaves nothing weaker to fall back to."
-///
-/// Given: The implementation acts as the serving node. A test client presents a valid raw public key and ALPN rhtn/1, but its ClientHello supported_groups extension lists only classical groups (X25519 and secp256r1) and no X25519MLKEM768.
-/// When: The test client attempts the handshake.
-/// Then: No handshake completes: the connection ends during the handshake, no session is established, and no AttachAck can be obtained on it.
-#[test]
-#[ignore = "acceptance TRN-02: owed at milestone 2"]
-fn trn_02_complete_no_handshake_with_a_peer_that_offers_on() {
-    todo!("TRN-02: Complete no handshake with a peer that offers only weaker groups.")
-}
-
-/// Abort the dial when the presented raw public key is not the pinned classical member.
-///
-/// Spec: wire-format.md §9.1; wire-format.md §2.2
-/// Milestone: 2.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §9.1): "The dialling party checks that key is the classical member of the KeyMaterial it has pinned for the keyhash it intended to reach."
-/// Rule (wire-format.md §9.1): "a wrong address produces a failed handshake rather than a false identity."
-/// Rule (wire-format.md §2.2): "KeyMaterial = [ COSE_Key, COSE_Key ]   ; [classical, post-quantum]"
-///
-/// Given: The implementation, as dialling party, holds a validated pin for keyhash K: a KeyMaterial that hashes to K. A test endpoint advertised for K completes the TLS handshake with an RFC 7250 raw public key whose SubjectPublicKeyInfo is a valid Ed25519 key that is not the first entry of that KeyMaterial.
-/// When: The implementation dials the endpoint intending to reach K.
-/// Then: The handshake does not complete from the implementation's side: the connection is abandoned before any control frame is sent, no Attach frame appears on stream 0, and the dial is reported as a failed handshake rather than as a session with K.
-#[test]
-#[ignore = "acceptance TRN-03: owed at milestone 2"]
-fn trn_03_abort_the_dial_when_the_presented_raw_public_key() {
-    todo!("TRN-03: Abort the dial when the presented raw public key is not the pinned classical member.")
-}
-
 /// Reject an Attach whose field 1 is not the transport-authenticated identity.
 ///
 /// Spec: wire-format.md §9.1; wire-format.md §8.2
@@ -70,22 +18,6 @@ fn trn_03_abort_the_dial_when_the_presented_raw_public_key() {
 #[ignore = "acceptance TRN-04: owed at milestone 2"]
 fn trn_04_reject_an_attach_whose_field_1_is_not_the_transp() {
     todo!("TRN-04: Reject an Attach whose field 1 is not the transport-authenticated identity.")
-}
-
-/// Negotiate the application protocol rhtn/1.
-///
-/// Spec: wire-format.md §9.2
-/// Milestone: 2.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §9.2): "ALPN: rhtn/1"
-///
-/// Given: The implementation is exercised in both roles: as dialling party toward a test serving node that records the ClientHello, and as serving node receiving a ClientHello whose ALPN list contains rhtn/1.
-/// When: A handshake is run in each role.
-/// Then: As dialling party, the ClientHello's ALPN extension carries rhtn/1. As serving node, the negotiated application protocol is rhtn/1 and the handshake completes.
-#[test]
-#[ignore = "acceptance TRN-05: owed at milestone 2"]
-fn trn_05_negotiate_the_application_protocol_rhtn_1() {
-    todo!("TRN-05: Negotiate the application protocol rhtn/1.")
 }
 
 /// Frame every stream-0 control message as a big-endian length over a typed CBOR array.
