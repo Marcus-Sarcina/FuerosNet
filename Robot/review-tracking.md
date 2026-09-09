@@ -7693,3 +7693,9 @@ trust-bearing transaction history and never queue state; design §3.4's bullet
 and floor now say so, and §14.1.6 stands. Three catalogue entries added
 (ARC-17, TOP-17, REP-16); two quotes re-pointed; 256 entries, 0 flags.
 
+**Upline queuing** (2026-09-09, author): not v1. Recorded at design §23.1 with
+the intended shape — probe siblings under the same grandpatron or let the
+grandpatron and above queue, behind a second queue partition for non-local
+traffic — and the reason a mail queue is rejected. Implementation proceeds;
+the author expects classes of issue that only building will show.
+

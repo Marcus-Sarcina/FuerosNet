@@ -9236,3 +9236,12 @@ state among parties that share a patron and often a provider, and the
 availability it would buy is what §12.6.5.1's escalation ladder already
 supplies for the one thing that must survive a patron outage.
 
+**Upline queuing deferred to a later release** (§23.1). Queuing for an
+unreachable section of the tree — siblings under the same grandpatron, or the
+grandpatron and above — with a second queue partition for non-local traffic
+so the holder is not a denial-of-service surface against its own subordinates,
+is the shape if it is ever built. Adding it now would need a re-review of most
+of §14, and a hosted mail queue was rejected outright: operators would place
+it in the same cloud and zone as the node, or converge on one provider, buying
+cost and complexity for a correlated availability dependency.
+

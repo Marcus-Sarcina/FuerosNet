@@ -7618,6 +7618,16 @@ line here says *this is not being built yet*.
   notice that was never specified, is unenforceable, and costs a post-departure
   pointer. Revisiting it means specifying the notice and accepting the linkability
   window.
+- **Upline queuing for an unreachable section of the tree** (§14.1.6). Not in
+  v1: the mailbox is one node and siblings hold no queue state. If it is built,
+  the shape is that a sender whose target's serving node is unreachable probes
+  the siblings under the same grandpatron, or the grandpatron queues, and so on
+  upward — and the queue gains **a second partition for non-local traffic**, so
+  a higher-tier node holding for an unreachable section of its subtree does not
+  become a denial-of-service surface against its own subordinates' traffic. A
+  synchronised queue across siblings, or a hosted mail queue beside the node,
+  would add cost and a correlated availability dependency for what it buys.
+  Revisiting it means re-reviewing most of §14.
 
 ---
 
