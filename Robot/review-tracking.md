@@ -7777,3 +7777,24 @@ that moves the body out rather than cloning it, and a regression test at
 artifact replays clean. The commit that added the session layer went out
 with the gate red because its commit chain tested the wrong exit status;
 this commit's chain tests the gate's verdict.
+
+**Milestone 2 closed (2026-09-09).** The stream-0 session is implemented in
+`rhtn-transport` and 22 of the milestone's 23 entries pass over loopback:
+TRN-01 to TRN-15 and SES-01 to SES-05, SES-13 and SES-15; 38 of 256 in all.
+SES-15 shows a reattach whose Attach rode 0-RTT early data, accepted by the
+server, acknowledged only after that connection's handshake completed; the
+node reads nothing before the handshake, so the deferral holds by
+construction. TRN-15 shows a client rebinding to a new socket mid-session
+with heartbeats continuing both ways, an item enqueued after the move
+delivered on the same connection, and no second Attach. TRN-16 stays owed:
+its replay half needs early-data packets captured and replayed onto a
+second connection whose handshake never completes, which the loopback
+harness cannot do; the deferral half is SES-15. Two readings the code
+takes, both recorded in it: an Attach whose field 1 is not the
+authenticated identity is closed with the refusal code 1 and no frame,
+since the wire assigns no other code (the open question from the transport
+notes); and a known control frame before Attach on the node side is
+answered the same way. The corpus derives its named capability id from the
+bare name `max-archive-batch` where `wire-format.md` §8.1's example is
+namespaced; the id rule is what is normative, and the generator's name is
+noted here rather than changed.

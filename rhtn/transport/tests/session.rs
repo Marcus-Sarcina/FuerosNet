@@ -47,6 +47,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        tls: Arc::new(Mutex::new(Default::default())),
     }
 }
 
@@ -552,3 +553,58 @@ async fn ses_13_unreachable_after_three_full_intervals_of_silence() {
     sleep(Duration::from_millis(1100)).await;
     assert_eq!(node.reachability(&alice), Some(Reachability::Unreachable), "unreachable after the third full interval");
 }
+
+fn instant_of(log: &Log, pred: impl Fn(&Event) -> bool) -> Option<Instant> {
+    log.events().into_iter().find(|(_, e)| pred(e)).map(|(t, _)| t)
+}
+
+// acceptance: SES-15
+#[tokio::test]
+async fn ses_15_a_0rtt_reattach_is_acknowledged_only_after_its_own_handshake() {
+    let (node, addr) = spawn_node(node_cfg("bob", 30));
+    let cfg = client_cfg("alice");
+    let ep = client_ep();
+    let target = test_identity("bob").public.keyhash;
+    // an earlier completed session leaves a resumption ticket in the shared store
+    let AttachOutcome::Attached(first) = attach(&cfg, &ep, target, addr, false).await else { panic!() };
+    first.conn.close(quinn::VarInt::from_u32(0), b"");
+    sleep(Duration::from_millis(300)).await;
+    let AttachOutcome::Attached(s) = attach(&cfg, &ep, target, addr, true).await else { panic!("reattached") };
+    sleep(Duration::from_millis(300)).await;
+    assert!(s.log.count(|e| matches!(e, Event::EarlyDataSent)) == 1, "the Attach went as early data; otherwise this test proves nothing");
+    let done = instant_of(&s.log, |e| matches!(e, Event::HandshakeDone { .. })).expect("handshake completion observed");
+    assert!(s.log.count(|e| matches!(e, Event::HandshakeDone { early_accepted: true })) == 1, "the server accepted the early data");
+    let acked = instant_of(&s.log, |e| matches!(e, Event::Received { frame_type: 2 })).expect("an AttachAck arrived");
+    assert!(acked >= done, "no AttachAck before this connection's handshake completed");
+    assert_eq!(s.ack.mode, 0);
+    assert_eq!(node.log.count(|e| matches!(e, Event::Attached { .. })), 2);
+}
+
+// acceptance: TRN-15
+#[tokio::test]
+async fn trn_15_the_session_survives_a_client_address_change_without_a_new_attach() {
+    let (node, addr) = spawn_node(node_cfg("bob", 1));
+    let cfg = client_cfg("alice");
+    let ep = client_ep();
+    let alice = test_identity("alice").public.keyhash;
+    let AttachOutcome::Attached(mut s) = attach(&cfg, &ep, test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let before = node.remote_address(&alice).expect("session up");
+    sleep(Duration::from_millis(1200)).await;
+    // the client moves to a new local socket and continues the same connection
+    ep.rebind(std::net::UdpSocket::bind("127.0.0.1:0").unwrap()).unwrap();
+    let moved_at = Instant::now();
+    sleep(Duration::from_millis(2500)).await;
+    let after = node.remote_address(&alice).expect("session still up");
+    assert_ne!(before, after, "the node sees the new address");
+    assert!(s.conn.close_reason().is_none());
+    let beats_after = |log: &Log| log.events().into_iter().filter(|(t, e)| *t > moved_at && matches!(e, Event::Received { frame_type: 3 })).count();
+    assert!(beats_after(&s.log) >= 2, "client keeps receiving beats after the move: {}", beats_after(&s.log));
+    assert!(beats_after(&node.log) >= 2, "node keeps receiving beats after the move: {}", beats_after(&node.log));
+    node.enqueue(alice, b"after the move".to_vec());
+    let item = tokio::time::timeout(Duration::from_secs(3), s.deliveries.recv()).await.expect("delivered").unwrap();
+    assert_eq!(item, b"after the move");
+    assert_eq!(s.log.count(|e| matches!(e, Event::Sent { frame_type: 1, .. })), 1, "no new Attach");
+    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: 1 })), 1, "no new Attach received");
+    assert_eq!(node.log.count(|e| matches!(e, Event::Sent { frame_type: 2, .. })), 1, "no new AttachAck");
+}
+

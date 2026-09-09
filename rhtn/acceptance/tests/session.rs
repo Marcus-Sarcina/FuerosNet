@@ -144,20 +144,3 @@ fn ses_12_try_the_actual_serving_node_first_on_the_next_fr() {
 fn ses_14_replicate_a_client_s_unreachable_state_to_the_se() {
     todo!("SES-14: Replicate a client's unreachable state to the serving node's siblings.")
 }
-
-/// Bind a 0-RTT reattach only after the handshake completes, and still complete it.
-///
-/// Spec: wire-format.md §8.2; design §14.1.3
-/// Milestone: 2.  Kind: positive.  Oracle: model.
-///
-/// Rule (wire-format.md §8.2): "A server MUST NOT process an Attach received in TLS 1.3 0-RTT early data — reject it or defer it until handshake completion."
-/// Rule (design §14.1.3): "0-RTT resumption makes frequent reattachment cheap, which permits a lazy heartbeat and saves battery."
-///
-/// Given: C completed an earlier session with N and holds a TLS 1.3 resumption ticket from it. The harness observes the connection and knows when its handshake completes.
-/// When: C reconnects with 0-RTT and sends Attach in early data.
-/// Then: No AttachAck is sent before the handshake of that connection completes; after completion an AttachAck arrives, either for the deferred early Attach or for an Attach C sends after the handshake if the early one was rejected.
-#[test]
-#[ignore = "acceptance SES-15: owed at milestone 2"]
-fn ses_15_bind_a_0_rtt_reattach_only_after_the_handshake_c() {
-    todo!("SES-15: Bind a 0-RTT reattach only after the handshake completes, and still complete it.")
-}

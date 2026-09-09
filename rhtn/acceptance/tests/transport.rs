@@ -2,25 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Keep the session across a client address change without a new attach.
-///
-/// Spec: wire-format.md §9.2; design §14.1.3
-/// Milestone: 2.  Kind: liveness.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §9.2): "Connection migration relied upon for mobile IP change"
-/// Rule (design §14.1.3): "Mobile clients change IP constantly, and QUIC's connection migration survives that natively where ordinary single-path TCP does not"
-///
-/// Given: An attached session between the implementation as client C and the implementation as serving node S, with a test-chosen heartbeat interval in 1..=3600 seconds (design §21.1 leaves it unset). The test can enqueue an item at S for C.
-/// When: C's UDP source address and port change mid-session (a new local socket, or a simulated NAT rebinding) and C continues the same QUIC connection from the new address; the test then enqueues an item for C.
-/// Then: No new Attach or AttachAck is exchanged, heartbeats continue in both directions on the same connection from the new address, and the item enqueued after the change is delivered to C over that same connection.
-///
-/// Interpretation: The serving node is taken to permit client-initiated migration, which RFC 9000 lets a server disable; the documents state that migration is relied upon and place no obligation on the operator in infra-client-requirements.md §7.
-#[test]
-#[ignore = "acceptance TRN-15: owed at milestone 2"]
-fn trn_15_keep_the_session_across_a_client_address_change() {
-    todo!("TRN-15: Keep the session across a client address change without a new attach.")
-}
-
 /// Process an Attach carried in 0-RTT early data only after that connection's handshake completes.
 ///
 /// Spec: wire-format.md §8.2; wire-format.md §9.2

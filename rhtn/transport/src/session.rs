@@ -317,6 +317,11 @@ pub enum Event {
     PeerUnreachable,
     Failover { to: [u8; 32] },
     Delivered { bytes: Vec<u8> },
+    /// The Attach went as 0-RTT early data on this connection.
+    EarlyDataSent,
+    /// This connection's own handshake completed; `early_accepted` says
+    /// whether the server took the early data.
+    HandshakeDone { early_accepted: bool },
     Closed,
 }
 
@@ -491,6 +496,11 @@ impl Node {
         self.state.lock().unwrap().sessions.contains_key(keyhash)
     }
 
+    /// The address the client's session currently comes from.
+    pub fn remote_address(&self, keyhash: &[u8; 32]) -> Option<std::net::SocketAddr> {
+        self.state.lock().unwrap().sessions.get(keyhash).map(|c| c.remote_address())
+    }
+
     /// Accept connections forever.
     pub async fn serve(self: Arc<Self>, endpoint: quinn::Endpoint) {
         while let Some(incoming) = endpoint.accept().await {
@@ -629,6 +639,21 @@ pub struct ClientConfig {
     pub sibling_cache: Arc<Mutex<Vec<SiblingRef>>>,
     /// Endpoints to dial for a keyhash during failover; the test's address book.
     pub addresses: Arc<Mutex<HashMap<[u8; 32], Vec<std::net::SocketAddr>>>>,
+    /// One TLS configuration per target, kept so its resumption store is
+    /// shared across dials and 0-RTT reattachment is possible (§9.2).
+    pub tls: Arc<Mutex<HashMap<[u8; 32], rustls::ClientConfig>>>,
+}
+
+impl ClientConfig {
+    fn tls_for(&self, target: &[u8; 32]) -> Option<rustls::ClientConfig> {
+        let mut map = self.tls.lock().unwrap();
+        if let Some(c) = map.get(target) {
+            return Some(c.clone());
+        }
+        let c = tls::client_config(&self.identity, &self.pins, target)?;
+        map.insert(*target, c.clone());
+        Some(c)
+    }
 }
 
 pub struct Session {
@@ -665,29 +690,44 @@ fn close_code(e: &quinn::ConnectionError) -> Option<u64> {
 /// rides 0-RTT early data when a resumption ticket is held; the node acts on
 /// it only after the handshake (§8.2).
 pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8; 32], addr: std::net::SocketAddr, early: bool) -> AttachOutcome {
-    let connecting = match tls::dial(endpoint, &cfg.identity, &cfg.pins, &target, addr) {
+    let Some(tls_cfg) = cfg.tls_for(&target) else { return AttachOutcome::EndpointFailure("NotPinned".into()) };
+    let connecting = match tls::dial_with(endpoint, tls_cfg, addr) {
         Ok(c) => c,
         Err(e) => return AttachOutcome::EndpointFailure(format!("{e:?}")),
     };
+    let log = Log::default();
     let conn = if early {
         match connecting.into_0rtt() {
-            Ok((conn, _accepted)) => conn,
+            Ok((conn, accepted)) => {
+                log.push(Event::EarlyDataSent);
+                let hlog = log.clone();
+                tokio::spawn(async move {
+                    let ok = accepted.await;
+                    hlog.push(Event::HandshakeDone { early_accepted: ok });
+                });
+                conn
+            }
             Err(connecting) => match connecting.await {
-                Ok(c) => c,
+                Ok(c) => {
+                    log.push(Event::HandshakeDone { early_accepted: false });
+                    c
+                }
                 Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
             },
         }
     } else {
         match connecting.await {
-            Ok(c) => c,
+            Ok(c) => {
+                log.push(Event::HandshakeDone { early_accepted: false });
+                c
+            }
             Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
         }
     };
-    attach_on(cfg, conn).await
+    attach_on(cfg, conn, log).await
 }
 
-async fn attach_on(cfg: &ClientConfig, conn: Connection) -> AttachOutcome {
-    let log = Log::default();
+async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutcome {
     let (send, mut recv) = match conn.open_bi().await {
         Ok(s) => s,
         Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
