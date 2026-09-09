@@ -138,14 +138,16 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 normal_qid = q[r6.start + 2..r6.end].to_vec();
                 assert_eq!(cose::sha256(&map_without_key(q, 6).unwrap()).to_vec(), normal_qid, "frame-13 query_id");
                 let c = &p[triple[1].clone()];
-                let Item::Array(ca) = parse_all(c).unwrap() else { panic!() };
+                let __ca_item = parse_all(c).unwrap();
+                let Item::Array(ca) = &__ca_item else { panic!() };
                 let gp = |it: &Item| match it { Item::Bytes(r) => c[r.clone()].to_vec(), _ => Vec::new() };
                 let alice = test_identity("alice").public;
                 assert!(alice.verify_ed(&gp(&ca[3]), &cose::sig_structure_sign1(&gp(&ca[0]), aad::CONSENT, &normal_qid)), "frame-13 consent");
             }
             "P-frame-06" => {
                 let p = &raw[4..];
-                let Item::Array(fa) = parse_all(p).unwrap() else { panic!() };
+                let __fa_item = parse_all(p).unwrap();
+                let Item::Array(fa) = &__fa_item else { panic!() };
                 if let Item::Map(fm) = &fa[1] {
                     if let Some(Item::Bytes(pr)) = map_get(fm, 2) {
                         push_payload = p[pr.clone()].to_vec();
@@ -162,7 +164,8 @@ fn every_bytes_entry_agrees_with_its_expectation() {
         }
     }
     assert_eq!(push_payload, adopt_min, "TopologyPush payload is P-adopt-min");
-    let Item::Map(kg) = parse_all(&keygrant).unwrap() else { panic!() };
+    let __kg_item = parse_all(&keygrant).unwrap();
+    let Item::Map(kg) = &__kg_item else { panic!() };
     let gb = |k: u64| match map_get(&kg, k) { Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(), _ => Vec::new() };
     assert_eq!(gb(1), pc1_txid, "KeyGrant names the prior record");
     assert_eq!(gb(2), normal_qid, "KeyGrant names the current query");

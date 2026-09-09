@@ -71,15 +71,18 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
 /// reported here as `family: None` with the body left unvalidated; an unknown
 /// request type is the stream's failure (§9.2).
 pub fn parse_payload(stream: Stream, p: &[u8]) -> Result<Frame, Error> {
-    let item = parse_all(p)?;
-    let Item::Array(a) = &item else { return Err(Error("frame not array")) };
-    if a.len() != 2 {
-        return Err(Error("frame arity"));
-    }
-    let frame_type = as_uint(&a[0]).ok_or(Error("frame type not uint"))?;
+    let mut item = parse_all(p)?;
+    // move the body out rather than cloning it: a clone recurses per nesting level
+    let (frame_type, body_item) = match &mut item {
+        Item::Array(a) if a.len() == 2 => {
+            let frame_type = as_uint(&a[0]).ok_or(Error("frame type not uint"))?;
+            (frame_type, a.pop().unwrap())
+        }
+        Item::Array(_) => return Err(Error("frame arity")),
+        _ => return Err(Error("frame not array")),
+    };
     let ranges = array_item_ranges(p, 0).ok_or(Error("frame walk"))?;
     let body = ranges[1].clone();
-    let body_item = a[1].clone();
     let family = family_of(stream, frame_type);
     match family {
         None if stream == Stream::Request => return Err(Error("unknown request type")),

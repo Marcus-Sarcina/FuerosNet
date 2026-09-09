@@ -7764,3 +7764,16 @@ TRN-02 are observed from handshake outcomes rather than from a captured
 ClientHello, which the test file says; the inference is exact because a
 single-group peer completes a handshake only with a peer offering that
 group.
+
+**The fuzzer's first finding (2026-09-09).** The coverage-guided smoke on
+the raw-CBOR target caught a stack overflow on a 56 KB input of nested
+one-element arrays. The parser is iterative, but the derived destructor for
+the item tree recursed once per nesting level, and the frame layer cloned
+the body item recursively as well; DEC-12's 1024-deep case was too shallow
+to show it and the seeded mutator never built the shape. Fixed with an
+iterative destructor that drains children into a worklist, a frame parser
+that moves the body out rather than cloning it, and a regression test at
+100,000 levels through both the parser and the frame layer. The crash
+artifact replays clean. The commit that added the session layer went out
+with the gate red because its commit chain tested the wrong exit status;
+this commit's chain tests the gate's verdict.

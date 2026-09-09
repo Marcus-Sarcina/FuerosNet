@@ -64,7 +64,8 @@ impl Pins {
 /// label -2.
 pub fn classical_member(key_material: &[u8]) -> Option<[u8; 32]> {
     use rhtn_codec::cbor::*;
-    let Item::Array(a) = parse_all(key_material).ok()? else { return None };
+    let __km = parse_all(key_material).ok()?;
+    let Item::Array(a) = &__km else { return None };
     let Item::Map(m) = a.first()? else { return None };
     m.iter().find_map(|(k, v)| match (k, v) {
         (Item::Neg(-2), Item::Bytes(r)) if r.len() == 32 => key_material[r.clone()].try_into().ok(),

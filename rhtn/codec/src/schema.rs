@@ -187,24 +187,24 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             bs(b, &v).ok_or(Error("not bstr"))?;
         }
         Tstr(max) => match v {
-            Item::Text(r) if !r.is_empty() && r.len() <= max => {}
+             Item::Text(ref r) if !r.is_empty() && r.len() <= max => {}
             _ => return Err(Error("tstr shape")),
         },
         Any => {}
         Locator => check_map(b, at, LOCATOR)?,
         Path => {
             check_map(b, at, PATH)?;
-            let Item::Map(m) = v else { unreachable!() };
+             let Item::Map(ref m) = v else { unreachable!() };
             if map_get(&m, 2).and_then(as_uint).unwrap_or(0) > PATH_NIBBLES {
                 return Err(Error("path over 24 nibbles"));
             }
         }
         Capabilities => {
-            let Item::Map(m) = v else { return Err(Error("capabilities not map")) };
+             let Item::Map(ref m) = v else { return Err(Error("capabilities not map")) };
             if m.len() > CAPABILITIES_ENTRIES {
                 return Err(Error("over 64 capability entries"));
             }
-            for (k, val) in &m {
+            for (k, val) in m {
                 as_uint(k).ok_or(Error("capability id not uint"))?;
                 let Some(s) = bs(b, val) else { return Err(Error("capability value not bstr")) };
                 if s.len() > CAPABILITIES_VALUE_BYTES {
@@ -228,7 +228,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             }
             for r in pts {
                 check_map(b, r.start, NETWORK_POINT)?;
-                let (Item::Map(m), _) = p.item(r.start)? else { unreachable!() };
+                 let (Item::Map(ref m), _) = p.item(r.start)? else { unreachable!() };
                 if bs(b, map_get(&m, 1).unwrap()).map(|s| s.len()) != Some(4) {
                     return Err(Error("address width"));
                 }
@@ -242,7 +242,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         ServingInfra => check_map(b, at, SERVING_INFRA)?,
         Referral => {
             check_map(b, at, REFERRAL)?;
-            let Item::Map(m) = v else { unreachable!() };
+             let Item::Map(ref m) = v else { unreachable!() };
             if map_get(&m, 3).and_then(as_uint) == Some(0) {
                 return Err(Error("referral advances nothing"));
             }
@@ -258,18 +258,18 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             }
         }
         Envelopes => {
-            let Item::Array(a) = v else { return Err(Error("envelopes not array")) };
+             let Item::Array(ref a) = v else { return Err(Error("envelopes not array")) };
             if a.len() > ARCHIVE_SUBSET_REFS {
                 return Err(Error("archive reply over 256"));
             }
         }
         Keyhashes => {
-            let Item::Array(a) = v else { return Err(Error("population not array")) };
+             let Item::Array(ref a) = v else { return Err(Error("population not array")) };
             if a.len() < 2 || a.len() > 256 {
                 return Err(Error("population out of range"));
             }
             let mut prev: Option<&[u8]> = None;
-            for k in &a {
+            for k in a {
                 let Some(s) = bs(b, k) else { return Err(Error("population entry")) };
                 if s.len() != 32 {
                     return Err(Error("keyhash width"));
@@ -294,7 +294,7 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
     let p = Parser { b };
     match f {
         Family::PrekeyRequestOrBatch => {
-            let (Item::Map(m), _) = p.item(at)? else { return Err(Error("not a map")) };
+             let (Item::Map(ref m), _) = p.item(at)? else { return Err(Error("not a map")) };
             let schema = if matches!(map_get(&m, 1), Some(Item::Array(_))) { PREKEY_BATCH_REQUEST } else { PREKEY_REQUEST };
             check_map(b, at, schema)?;
             if schema.len() == 3 && map_get(&m, 2).and_then(as_uint).unwrap_or(0) > 1 {
@@ -318,7 +318,7 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
         _ => {
             let schema = fields(f).unwrap();
             check_map(b, at, schema)?;
-            let (Item::Map(m), _) = p.item(at)? else { unreachable!() };
+             let (Item::Map(ref m), _) = p.item(at)? else { unreachable!() };
             let m = &m;
             match f {
                 Family::ArchiveRequest => {

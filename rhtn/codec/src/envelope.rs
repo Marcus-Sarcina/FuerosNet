@@ -126,7 +126,7 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
         };
         let _ = parts;
         let prot = &b[pr.clone()];
-        let Item::Map(pm) = parse_all(prot)? else { return Err(Error("protected not map")) };
+         let Item::Map(ref pm) = parse_all(prot)? else { return Err(Error("protected not map")) };
         let alg = pm
             .iter()
             .find_map(|(k, v)| match (k, v) {

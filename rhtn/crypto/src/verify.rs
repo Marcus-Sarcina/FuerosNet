@@ -24,7 +24,8 @@ impl Lookup for Vec<Identity> {
 }
 
 fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
-    let Item::Array(a) = parse_all(slice).ok()? else { return None };
+    let __a_item = parse_all(slice).ok()?;
+    let Item::Array(a) = &__a_item else { return None };
     if a.len() != 4 {
         return None;
     }
@@ -39,7 +40,8 @@ fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
 /// enclosing structure names the signer, so `kid` is optional and must match
 /// when present; both algorithms must be present and verify.
 fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &[u8]) -> Result<(), String> {
-    let Item::Array(cs) = parse_all(block).map_err(|e| format!("cose: {e}"))? else {
+    let __cs_item = parse_all(block).map_err(|e| format!("cose: {e}"))?;
+    let Item::Array(cs) = &__cs_item else {
         return Err("cose not array".into());
     };
     if cs.len() != 4 {
@@ -54,7 +56,8 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
         };
         let prot = &block[pr.clone()];
         let sig = &block[sr.clone()];
-        let Item::Map(pm) = parse_all(prot).map_err(|_| "protected cbor")? else {
+        let __pm_item = parse_all(prot).map_err(|_| "protected cbor")?;
+        let Item::Map(pm) = &__pm_item else {
             return Err("protected not map".into());
         };
         let alg = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(1), Item::Neg(a)) => Some(*a), _ => None }).ok_or("no alg")?;
@@ -82,7 +85,8 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
 /// (classical), and the verifier's signature over the map minus field 9,
 /// classical in a presence record and hybrid inside a `Recovery` block.
 pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Result<(), String> {
-    let Item::Map(rm) = parse_all(resp).map_err(|_| "response cbor")? else {
+    let __rm_item = parse_all(resp).map_err(|_| "response cbor")?;
+    let Item::Map(rm) = &__rm_item else {
         return Err("response not map".into());
     };
     let get_b = |k: u64| match map_get(&rm, k) { Some(Item::Bytes(r)) => Some(resp[r.clone()].to_vec()), _ => None };
@@ -170,7 +174,8 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
 /// slot, role tag and signer field per kind (§7).
 pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<bool, String> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
-    let Item::Map(m) = parse_all(raw).map_err(|_| "cbor")? else { return Err("not map".into()) };
+    let __m_item = parse_all(raw).map_err(|_| "cbor")?;
+    let Item::Map(m) = &__m_item else { return Err("not map".into()) };
     let signer = match map_get(&m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
     let id = ids.identity(&signer).ok_or("unknown signer identity")?;
     let Some(Item::Array(cs)) = map_get(&m, slot) else { return Err("sig slot".into()) };
@@ -189,7 +194,8 @@ const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention"
 /// then the seven slots' digests recomputed over the exact received
 /// encodings and checked against the body's committed root.
 pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), String> {
-    let Item::Array(outer) = parse_all(pres).map_err(|e| format!("cbor: {e}"))? else {
+    let __outer_item = parse_all(pres).map_err(|e| format!("cbor: {e}"))?;
+    let Item::Array(outer) = &__outer_item else {
         return Err("presentation not array".into());
     };
     if outer.len() != 2 {

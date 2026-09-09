@@ -151,7 +151,8 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let payload = &attach_fx[4..];
     let parts = array_item_ranges(payload, 0).unwrap();
     let body_fx = &payload[parts[1].clone()];
-    let Item::Map(bm) = parse_all(body_fx).unwrap() else { panic!() };
+    let __bm_item = parse_all(body_fx).unwrap();
+    let Item::Map(bm) = &__bm_item else { panic!() };
     let kh: [u8; 32] = match map_get(&bm, 1) { Some(Item::Bytes(r)) => body_fx[r.clone()].try_into().unwrap(), _ => panic!() };
     let attestation = body_fx[value_slice(body_fx, 2).unwrap()].to_vec();
     let caps_fx = decode_capabilities(body_fx, map_get(&bm, 3).unwrap());
@@ -179,10 +180,12 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let first = &sent[0];
     let n = u32::from_be_bytes(first[..4].try_into().unwrap()) as usize;
     assert_eq!(n, first.len() - 4);
-    let Item::Array(a) = parse_all(&first[4..]).unwrap() else { panic!("typed array") };
+    let __a_item = parse_all(&first[4..]).unwrap();
+    let Item::Array(a) = &__a_item else { panic!("typed array") };
     assert_eq!(as_uint(&a[0]), Some(1));
     let strip_grease = |body: &[u8]| -> Vec<u8> {
-        let Item::Map(m) = parse_all(body).unwrap() else { panic!() };
+        let __m_item = parse_all(body).unwrap();
+        let Item::Map(m) = &__m_item else { panic!() };
         let caps = decode_capabilities(body, map_get(&m, 3).unwrap());
         let kept: BTreeMap<u64, Vec<u8>> = caps.into_iter().filter(|(k, _)| *k == named).collect();
         let r3 = value_slice(body, 3).unwrap();
@@ -197,7 +200,8 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     sleep(Duration::from_millis(200)).await;
     let acks = sent_frames(&node.log, FRAME_ATTACH_ACK);
     let ack = &acks[0];
-    let Item::Array(a) = parse_all(&ack[4..]).unwrap() else { panic!() };
+    let __a_item = parse_all(&ack[4..]).unwrap();
+    let Item::Array(a) = &__a_item else { panic!() };
     assert_eq!(as_uint(&a[0]), Some(2));
     let aranges = array_item_ranges(&ack[4..], 0).unwrap();
     let strip_ack = |body: &[u8]| -> Vec<u8> {
@@ -259,7 +263,8 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
     rs.write_all(&fr).await.unwrap();
     rs.finish().unwrap();
     let FrameRead::Payload(reply) = read_frame(&mut rr, 262_144).await else { panic!("request answered after the unknown frame") };
-    let Item::Map(m) = parse_all(&reply).unwrap() else { panic!() };
+    let __m_item = parse_all(&reply).unwrap();
+    let Item::Map(m) = &__m_item else { panic!() };
     assert_eq!(map_get(&m, 2).and_then(as_uint), Some(1));
     // the request path is independent of stream 0, so the unknown frame may still be in flight
     for _ in 0..40 {

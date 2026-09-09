@@ -23,6 +23,39 @@ pub enum Item {
     Null,
 }
 
+/// Dropping is iterative for the same reason parsing is: the derived
+/// destructor would recurse once per nesting level, and a 56 KB input of
+/// nested one-element arrays overflowed the stack that way under the fuzzer.
+/// Children are drained into a worklist first, so each item is shallow when
+/// its own destructor runs.
+impl Drop for Item {
+    fn drop(&mut self) {
+        let mut work: Vec<Item> = Vec::new();
+        match self {
+            Item::Array(items) => work.append(items),
+            Item::Map(pairs) => {
+                for (k, v) in pairs.drain(..) {
+                    work.push(k);
+                    work.push(v);
+                }
+            }
+            _ => {}
+        }
+        while let Some(mut it) = work.pop() {
+            match &mut it {
+                Item::Array(items) => work.append(items),
+                Item::Map(pairs) => {
+                    for (k, v) in pairs.drain(..) {
+                        work.push(k);
+                        work.push(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Why an input is malformed.  The message names the first rule broken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Error(pub &'static str);
@@ -352,4 +385,27 @@ pub fn reencode(item: &Item, src: &[u8]) -> Vec<u8> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod deep {
+    use super::*;
+
+    /// A hundred thousand nested one-element arrays: parsed, re-encoded and
+    /// dropped without recursion.  The fuzzer found a 56 KB input of this
+    /// shape overflowing the stack in the derived destructor.
+    #[test]
+    fn deep_nesting_parses_round_trips_and_drops_iteratively() {
+        let mut deep = vec![0x81u8; 100_000];
+        deep.push(0x80);
+        let item = parse_all(&deep).expect("parses");
+        assert_eq!(reencode(&item, &deep), deep);
+        drop(item);
+        // and through the frame layer, which moves the body rather than cloning it
+        let mut payload = vec![0x82, 0x18, 0x63];
+        payload.extend_from_slice(&deep);
+        let f = crate::frame::parse_payload(crate::frame::Stream::Control, &payload).expect("unknown type, deep body");
+        assert_eq!(f.frame_type, 99);
+        drop(f);
+    }
 }
