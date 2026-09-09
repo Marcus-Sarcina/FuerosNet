@@ -153,6 +153,10 @@ criterion that is a tool's verdict.
 3. **Archive and topology** (design §24 step 2). Adoption, departure, disavowal,
    the chain from the first transaction, the local topology table. Exit:
    `wire-format.md` §3.1 chain rules and the supersession invariants pass as tests.
+   Done: `rhtn-archive` carries the chain, the walk and the table, and the
+   queue with its supersession discipline sits in `rhtn-transport`'s node until
+   `rhtn-node` has a second reason to exist; the 46 ARC, TOP and QUE entries at
+   this milestone pass.
 4. **Gossip, resolution, replication, peering** (design §24 steps 3 and 4).
    `rhtn-sim` with partition-and-merge convergence as its first scripted scenario,
    built on a datagram-level path harness that can drop, delay, replay and

@@ -9,7 +9,9 @@
 //! on the path: dropping a beat, replacing one with a malformed frame, or
 //! blackholing a direction.
 
+use crate::queue::{self, QueueStore, Queued};
 use crate::tls::{self, Pins};
+use rhtn_archive::topology::Supersession;
 use quinn::{Connection, RecvStream, SendStream, VarInt};
 use rhtn_codec::bounds;
 use rhtn_codec::cbor::*;
@@ -17,7 +19,7 @@ use rhtn_codec::encode::*;
 use rhtn_codec::frame::{self, Stream};
 use rhtn_codec::schema::Family;
 use rhtn_crypto::SigningIdentity;
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant, sleep_until};
@@ -323,6 +325,9 @@ pub enum Event {
     /// whether the server took the early data.
     HandshakeDone { early_accepted: bool },
     Closed,
+    /// An attach under a credential this node has verified superseded: no
+    /// AttachAck, nothing delivered (design §12.6.5).
+    Superseded,
 }
 
 #[derive(Default, Clone)]
@@ -446,13 +451,41 @@ pub struct NodeConfig {
     /// The node's own topology: true means the client is in this node's subtree (mode 0).
     pub in_subtree: Predicate,
     pub filter: Option<OutboundFilter>,
+    /// The mailbox (design §14.1.6).
+    pub queue: Arc<dyn QueueStore>,
+    /// Per-subordinate storage cap in bytes; unset by design §21.1, the
+    /// operator's.  None is unbounded.
+    pub queue_cap: Option<usize>,
+    /// The node's clock, for arrival times.
+    pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+}
+
+impl NodeConfig {
+    /// A configuration with an in-memory queue, no cap and the system clock.
+    pub fn defaults(identity: Arc<SigningIdentity>, pins: Pins, interval_secs: u64) -> Self {
+        NodeConfig {
+            identity,
+            pins,
+            interval_secs,
+            siblings: Vec::new(),
+            capabilities: BTreeMap::new(),
+            policy: Arc::new(|_| true),
+            in_subtree: Arc::new(|_| true),
+            filter: None,
+            queue: Arc::new(queue::MemoryStore::default()),
+            queue_cap: None,
+            clock: Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)),
+        }
+    }
 }
 
 #[derive(Default)]
 struct NodeState {
-    queues: HashMap<[u8; 32], VecDeque<Vec<u8>>>,
     reach: HashMap<[u8; 32], Arc<Mutex<Reachability>>>,
     sessions: HashMap<[u8; 32], Connection>,
+    /// Credentials this node holds supersession evidence for, and their
+    /// successors (a reissue names the same key).
+    superseded: HashMap<[u8; 32], [u8; 32]>,
 }
 
 pub struct Node {
@@ -466,26 +499,61 @@ impl Node {
         Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), log: Log::default() })
     }
 
-    /// Queue material for a client; delivered now on a unidirectional stream
-    /// if a session is up, otherwise held.
-    pub fn enqueue(&self, keyhash: [u8; 32], bytes: Vec<u8>) {
+    /// Accept material for a client: delivered now on a unidirectional
+    /// stream if a session is up, otherwise queued — unless the recipient's
+    /// queue is at its cap, when the newest is refused and the sender told
+    /// (design §14.1.6), or the credential is one this node has verified
+    /// superseded (design §12.6.5).
+    pub fn enqueue(&self, keyhash: [u8; 32], bytes: Vec<u8>) -> Result<(), queue::Refusal> {
         let conn = {
-            let mut st = self.state.lock().unwrap();
-            match st.sessions.get(&keyhash).cloned() {
-                Some(c) => Some(c),
-                None => {
-                    st.queues.entry(keyhash).or_default().push_back(bytes.clone());
-                    None
-                }
+            let st = self.state.lock().unwrap();
+            if st.superseded.get(&keyhash).is_some_and(|s| *s != keyhash) {
+                return Err(queue::Refusal::Superseded);
             }
+            st.sessions.get(&keyhash).cloned()
         };
         if let Some(conn) = conn {
             tokio::spawn(async move { deliver(&conn, bytes).await });
+            return Ok(());
         }
+        if let Some(cap) = self.cfg.queue_cap {
+            if self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
+                return Err(queue::Refusal::AtCap);
+            }
+        }
+        self.cfg.queue.push(Queued { ciphertext: bytes, recipient: keyhash, arrival: (self.cfg.clock)() });
+        Ok(())
     }
 
     pub fn queued(&self, keyhash: &[u8; 32]) -> usize {
-        self.state.lock().unwrap().queues.get(keyhash).map_or(0, |q| q.len())
+        self.cfg.queue.count(keyhash)
+    }
+
+    /// The node's record of what waits for `keyhash`, as it holds it.
+    pub fn queue_records(&self, keyhash: &[u8; 32]) -> Vec<Queued> {
+        self.cfg.queue.list(keyhash)
+    }
+
+    /// Take authenticated supersession evidence for a binding
+    /// (`infra-client-requirements.md` §2): its sessions end, an attach
+    /// under it gets no AttachAck, and nothing queued for it is delivered
+    /// to it or handed to its successor.
+    pub fn supersede(&self, s: Supersession) {
+        let conn = {
+            let mut st = self.state.lock().unwrap();
+            st.superseded.insert(s.superseded, s.successor);
+            st.sessions.remove(&s.superseded)
+        };
+        if s.successor != s.superseded {
+            self.cfg.queue.drop_all(&s.superseded);
+        }
+        if let Some(c) = conn {
+            c.close(VarInt::from_u32(CLOSE_REFUSED), b"superseded");
+        }
+    }
+
+    pub fn is_superseded(&self, keyhash: &[u8; 32]) -> bool {
+        self.state.lock().unwrap().superseded.get(keyhash).is_some_and(|s| s != keyhash)
     }
 
     pub fn reachability(&self, keyhash: &[u8; 32]) -> Option<Reachability> {
@@ -553,6 +621,11 @@ impl Node {
             conn.close(VarInt::from_u32(CLOSE_REFUSED), b"identity mismatch");
             return Err("attach identity mismatch".into());
         }
+        if self.is_superseded(&claimed) {
+            self.log.push(Event::Superseded);
+            conn.close(VarInt::from_u32(CLOSE_REFUSED), b"superseded");
+            return Err("superseded".into());
+        }
         if !(self.cfg.policy)(&claimed) {
             self.log.push(Event::Refused);
             conn.close(VarInt::from_u32(CLOSE_REFUSED), b"");
@@ -568,14 +641,15 @@ impl Node {
         sender.frame(FRAME_ATTACH_ACK, &ack.encode()).await.map_err(|e| e.to_string())?;
         self.log.push(Event::Attached { mode });
         let reach = Arc::new(Mutex::new(Reachability::Reachable));
-        let pending: Vec<Vec<u8>> = {
+        {
             let mut st = self.state.lock().unwrap();
             st.sessions.insert(claimed, conn.clone());
             st.reach.insert(claimed, reach.clone());
-            st.queues.remove(&claimed).map(|q| q.into_iter().collect()).unwrap_or_default()
-        };
-        for item in pending {
-            deliver(&conn, item).await;
+        }
+        // drain: each item leaves the store as it goes out, and no copy
+        // outlives its delivery (design §14.1.6)
+        for item in self.cfg.queue.take_all(&claimed) {
+            deliver(&conn, item.ciphertext).await;
         }
         // requests on bidirectional streams, answered for as long as the session lives
         let req_conn = conn.clone();

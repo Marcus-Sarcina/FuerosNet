@@ -26,16 +26,9 @@ fn pins_for(names: &[&str]) -> Pins {
 }
 
 fn node_cfg(name: &str, interval: u64) -> NodeConfig {
-    NodeConfig {
-        identity: Arc::new(test_identity(name)),
-        pins: pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]),
-        interval_secs: interval,
-        siblings: Vec::new(),
-        capabilities: BTreeMap::from([(capability_id("rhtn/core:max-archive-batch"), vec![0x01, 0x00])]),
-        policy: Arc::new(|_| true),
-        in_subtree: Arc::new(|_| true),
-        filter: None,
-    }
+    let mut cfg = NodeConfig::defaults(Arc::new(test_identity(name)), pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]), interval);
+    cfg.capabilities = BTreeMap::from([(capability_id("rhtn/core:max-archive-batch"), vec![0x01, 0x00])]);
+    cfg
 }
 
 fn client_cfg(name: &str) -> ClientConfig {
@@ -126,7 +119,7 @@ async fn ses_02_accepts_a_client_whose_patron_is_a_light_client() {
 async fn trn_04_attach_naming_another_identity_gets_no_ack_and_no_delivery() {
     let (node, addr) = spawn_node(node_cfg("bob", 5));
     let b = test_identity("carol").public.keyhash;
-    node.enqueue(b, b"for carol".to_vec());
+    node.enqueue(b, b"for carol".to_vec()).unwrap();
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     let body = encode_attach(&b, None, &BTreeMap::new());
     send.write_all(&control_frame(FRAME_ATTACH, &body)).await.unwrap();
@@ -600,7 +593,7 @@ async fn trn_15_the_session_survives_a_client_address_change_without_a_new_attac
     let beats_after = |log: &Log| log.events().into_iter().filter(|(t, e)| *t > moved_at && matches!(e, Event::Received { frame_type: 3 })).count();
     assert!(beats_after(&s.log) >= 2, "client keeps receiving beats after the move: {}", beats_after(&s.log));
     assert!(beats_after(&node.log) >= 2, "node keeps receiving beats after the move: {}", beats_after(&node.log));
-    node.enqueue(alice, b"after the move".to_vec());
+    node.enqueue(alice, b"after the move".to_vec()).unwrap();
     let item = tokio::time::timeout(Duration::from_secs(3), s.deliveries.recv()).await.expect("delivered").unwrap();
     assert_eq!(item, b"after the move");
     assert_eq!(s.log.count(|e| matches!(e, Event::Sent { frame_type: 1, .. })), 1, "no new Attach");

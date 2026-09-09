@@ -7813,3 +7813,71 @@ decrypted. The session layer's deferral (SES-15) is the second line behind
 that, and the only line if a deployment switches to stateless tickets. The
 plan's milestone 4 and its risk list now say so.
 
+
+**Milestone 3 closed (2026-09-09).** `rhtn-archive` is new: transaction
+builders with their back-pointers, one key's archive as a Merkle DAG with
+heads, merges, serving in batches and pruning at a checkpoint, the backward
+walk with its five verdicts, batch verification, the local topology table,
+subtree acknowledgements, recovery replacement, the patron's archive
+evaluation and the inquirer's fork report. The queue lives in
+`rhtn-transport`'s node for now (`queue.rs`: an in-memory store and a
+directory store, a per-subordinate byte cap, supersession), not in the
+`rhtn-node` crate the plan's table names; the split is deferred until
+there is a second consumer. All 46 milestone-3 entries pass: ARC-01 to
+ARC-17, TOP-01 to TOP-17, QUE-01 to QUE-09 and QUE-14 to QUE-16; 84 of 256
+in all, in 15 chain tests, 18 topology tests and 13 queue tests. Two codec
+defects surfaced: the body rules counted `wire-format.md` §4.1's field 9 as
+an extension, so a transfer adoption failed the 1024-byte extension bound,
+and the archive's first draft fed the body check envelope bytes rather than
+body bytes, which made the recovery block fail the same bound; both fixed,
+the corpus unchanged at 153 agreements. `rhtn-crypto` gained kid-less
+signing variants for embedded and standalone signatures, which
+`wire-format.md` §3.5 requires and the fixtures already show, and
+`verify::envelope` now checks the former patron's transfer statement.
+
+Readings the milestone's code takes, for the author to confirm or reverse:
+
+- **Batch continuation overlaps by one record.** `wire-format.md` §7.9's
+  field 4 names the oldest record returned and the next request names it in
+  field 2, so the next reply begins with that record again; the repeat is
+  the continuity check ARC-08 and ARC-10 both describe. "Each returned
+  record's back-pointers must match the record that follows it" is read as
+  reachability — every record after the first must be one an earlier
+  record's back-pointers name — since a merge has two followers
+  (`wire-format.md` §3.1). Pointers unsatisfied at the batch's end are the
+  continuation, or a checkpoint when the naming record is a series reissue.
+- **A reissue is a checkpoint in a walk** when its predecessor is not
+  served (ARC-13's interpretation); an ordinary unserved predecessor is
+  reported as unfetched, distinctly. Pruning takes a reissue beyond the
+  730-day window and releases the chain before it; the evidence store is
+  keyed by txid and untouched (design §10.0).
+- **Supersession evidence is a value** (`Supersession`) built from a
+  verified recovery adoption (prior key to node) or a verified reissue (the
+  same key). The node ends the credential's session — close code 1 with
+  reason `superseded`, since no code is assigned — refuses its attach with
+  no AttachAck, and **drops what was queued for a key whose successor is a
+  different key**: nothing further may be delivered to it and its successor
+  collects nothing of it (the model's reading in QUE-16), so holding the
+  ciphertext would be retention without a recipient. On a reissue the key
+  stays, so only the session ends and the queue is kept.
+- **QUE-04's restart is in-process**: the node and its endpoint are dropped
+  and a new node starts from the queue directory. The directory store keeps
+  the recipient and arrival time in the path and the ciphertext as the
+  content; delivery unlinks the file before the item goes out on its stream.
+- **A recovery ends every open binding the prior key holds in the
+  observer's table**, not only the one under the adopting patron, on design
+  §9.0.2's "remove it from their records and overwrite it with the new
+  one"; competing recoveries resolve by the table's patron preference and
+  the loser's successor stays a node under its own patron. Rotation being
+  per-subnet (design §13.6) may argue for ending only the binding in the
+  subnet the recovery names; the code takes the broader reading and the
+  author should say.
+- **A failed evidence evaluation keeps an adoption out of the table**
+  (TOP-12's interpretation), and a disavowal that arrives before the
+  adoption it ends is held and settled when that adoption arrives, so the
+  slot reads the same in every arrival order (TOP-17).
+- **Open for a decoder pass**: `verify_sign_block` still accepts an
+  embedded signature that carries a `kid` when it matches the enclosing
+  structure's signer; `wire-format.md` §3.5's "nothing else appears in
+  either header" makes that arguably malformed. The builders no longer emit
+  one; the decoder's tolerance is recorded rather than tightened here.

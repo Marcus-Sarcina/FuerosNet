@@ -593,6 +593,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "quinn",
+ "rhtn-archive",
  "rhtn-codec",
  "rhtn-crypto",
  "rustls",
