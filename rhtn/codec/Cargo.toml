@@ -1,0 +1,12 @@
+[package]
+name = "rhtn-codec"
+version = "0.1.0"
+edition = "2024"
+description = "RHTN wire format: deterministic CBOR, primitives, envelopes, frames and messages, validated on the received bytes"
+
+[dependencies]
+sha2 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true }

@@ -1,3 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["acceptance"]
+members = ["acceptance", "codec", "crypto"]
+
+[workspace.dependencies]
+sha2 = "0.11.0"
+hex = "0.4.3"
+serde_json = "1.0.151"
+ed25519-dalek = "3.0.0"
+ml-dsa = "0.1.1"

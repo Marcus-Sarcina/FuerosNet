@@ -1,0 +1,15 @@
+[package]
+name = "rhtn-crypto"
+version = "0.1.0"
+edition = "2024"
+description = "RHTN identities and signatures: hybrid Ed25519 + ML-DSA-65 over the structures rhtn-codec parses"
+
+[dependencies]
+rhtn-codec = { path = "../codec" }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+ml-dsa = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true }
