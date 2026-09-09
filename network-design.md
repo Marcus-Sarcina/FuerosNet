@@ -5844,6 +5844,17 @@ entitlement, so there is no allocation carried from one evaluation to the next.
 The bound holds for the set an evaluation scores, which is the only set whose
 standing is simultaneously usable.
 
+**And it is inherited only by a consumer that scores identities past a cut, in
+one computation** [author, 2026-09-08]. §11.4's role table scores Dunbar Org
+members and nobody else — `resource-requirements.md` §7.1.1 makes membership the
+gate every predicate sits behind — and inside the horizon there is nothing for
+a flow bound to ration (§16.2.1). So its materialised rows, re-scored one member
+at a time, spend no cut, and the table neither inherits this bound nor needs
+it. What turns an identity outside the horizon into a member is adoption, which
+§6.1.1 prices in presence per identity (§17.3), not in flow; a consumer that
+did retain standing scored past a cut would be one whose policy does not
+respect the bound, which is §16.4's attack surface and not this rule's.
+
 #### 16.2.1 What counts as an edge in the reference graph
 
 **Stated because a metric is only as good as the graph it runs on**

@@ -9125,8 +9125,9 @@ another's body.
 ## 2026-09-08
 
 ### 2026-09-08 (formal models: a review series, and one rule it produced)
-Twelve external review passes over the symbolic and distributed-systems models,
-run on other model families and applied here. **One changed a root document**;
+Twenty-odd external review passes over the symbolic, distributed-systems and
+flow-metric models, run on other model families and applied here. **One
+produced a rule and four produced scope statements**, all in root documents;
 the rest changed the models or what is claimed of them.
 
 **The rule.** `wire-format.md` §4.1's Recovery consistency list gains **every
@@ -9140,11 +9141,25 @@ recovery's factors by controlling a single new identity, the successor
 attesting to its own continuity. The model stated the property, it falsified,
 and the rule follows.
 
-**The suite is now fourteen artifacts**: one trust-metric simulation, five TLA+
-models, and eight Tamarin theories in two trees. 63 lemmas verify unbounded,
-16 more under a stated bound, and two TLA+ mutations must fail on every run —
-each removes a rule the invariant beside it depends on, so a clean run there is
-a gate failure.
+**The four scope statements**, each a sentence the models showed was missing
+rather than a change of mechanism [author, 2026-09-08]. §16.2: λ < 1/f is
+necessary and not sufficient, since §16.2.1's acquaintance degree is not
+bounded by f — the simulation diverges at branching 11 with the criterion
+satisfied. §16.2: setwise conservation is a property of one computation, and
+nothing is a retained entitlement. §16.3.1 and §17.3: an acquired edge is
+visible to every observer whose horizon contains it and helps those whose
+evaluation it changes — visibility bounds coverage and is not it, which the
+simulation measures. And §16.2: the aggregate bound is inherited only by a
+consumer that scores identities past a cut in one computation; §11.4's role
+table scores Dunbar Org members inside the horizon, where the metric does not
+ration, and neither inherits the bound nor needs it.
+
+**The suite is now fifteen artifacts**: one trust-metric simulation, five TLA+
+models in six instances, and eight Tamarin theories in two trees. 65 lemmas
+verify unbounded, 19 more under a stated bound, and ten mutations must fail on
+every run — five TLA+ configurations and five theory substitutions, each
+removing a rule or a comparison the property beside it depends on, so a clean
+run there is a gate failure.
 
 **The two trees are the structural change.** `wire-only/` proves what a third
 party concludes from bytes; `compliant/` proves that an honest node's own

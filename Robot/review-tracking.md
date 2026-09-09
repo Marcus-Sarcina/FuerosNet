@@ -7365,3 +7365,55 @@ thief regression verifies in 5 steps; deleting its producer, no trace.
 Gate: 15 artifacts pass, 5 TLA+ mutations violate, 5 theory mutations
 falsify, ALL MODELS PASS. Model citations 193 / 0 flags (one new);
 references 2038 / 0.
+
+## Flow-metric review 7 (2026-09-08) -- regression run
+
+Executed review: seeds 1-10, all assertions passing, the 8 + 8 regression
+reproduced. One finding, HIGH, the lifecycle question of review 3 returning
+with a named consumer: the resource role table materialises rows, re-scores a
+changed member alone, and retains the result, which the reviewer read as the
+consumer that spends one cut repeatedly and as a contradiction of the 16.2
+ruling that nothing is a retained entitlement. **Verified against the
+documents; does not hold against the consumer named. Disposed by ruling,
+with one sentence added to the design.**
+
+**Why it does not hold.** The table is "one row per Dunbar Org member per
+resource" (resource-requirements 7.2.1, infra 10.2); resource 7.1.1 makes
+membership "the gate every other predicate sits behind. No grant of any kind
+reaches outside it"; design 11.4, "No scope reaches outside the owner's
+Dunbar Org". The Dunbar Org is the horizon, and 16.2.1 says inside it "there
+is nothing for a flow bound to ration". So the reviewer's step 1 -- a region
+behind a cut of 8, scored by this evaluator -- is excluded three times over:
+an identity behind a cut is outside the horizon and has no row. The retained
+rows are real and the shape is the 8 + 8 shape, and there is no cut for them
+to spend. Nor does the table consume the bounded quantity at all: the metric
+"reaches past the horizon rather than grading inside it", so "my ten most
+trusted" ranks by 16.1's per-node computation. Swept the rest for any retained
+consequence of standing scored past a cut: membership is the only thing that
+turns outside into inside, and 6.1.1 prices it in presence per identity, which
+17.3 calls the one resource an attacker cannot parallelise. 16.4 already names
+a consumer whose policy ignores the bound as the attack surface, deliberately.
+
+**Ruling: state the scope** [author, 2026-09-08], the reviewer's own third
+option made precise. 16.2 now says the bound is inherited only by a consumer
+that scores identities past a cut in one computation; that 11.4's table scores
+Org members inside the horizon and neither inherits nor needs it; that
+membership is priced in presence, not flow; and that a consumer retaining
+standing scored past a cut would be 16.4's attack surface, not this rule's.
+The simulation README's lifecycle limitation now points at that sentence, so
+the next reader of the regression does not take the role table for the policy
+it exhibits. The reviewer's other two options -- whole-table conserving
+refresh, persistent residual accounting -- were put to the author and not
+taken: both build a mechanism for a population the metric does not ration.
+
+**Why review 3's ruling stands.** It said standing is computed on demand and
+nothing is retained between evaluations. The table retains authorisation
+decisions, not standing, and inside the horizon those decisions do not draw on
+the bounded quantity. The reviewer's point about the 16.2 sentence was fair as
+read -- it did not say which consumers it spoke of, and after review 3
+removed the 11.4 pointer nothing connected the two -- and that is what the
+added sentence does.
+
+Not a register entry: not a weakness. Model unchanged; gate not re-run.
+References 2044 / 0 flags (six new, all in the sentence); model citations
+193 / 0.
