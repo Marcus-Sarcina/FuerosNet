@@ -7798,3 +7798,18 @@ answered the same way. The corpus derives its named capability id from the
 bare name `max-archive-batch` where `wire-format.md` §8.1's example is
 namespaced; the id rule is what is normative, and the generator's name is
 noted here rather than changed.
+
+**TRN-16 and the replay harness (2026-09-09, author agreed).** The entry's
+replay half moves to milestone 4, where `rhtn-sim` gets a datagram-level
+path harness for loss, delay, replay and blackholing; that harness captures a
+client's 0-RTT first flight and replays it as a second connection, closes
+TRN-16, and replaces the frame filters the session tests currently stand on
+the path with. Recorded as a third-party fact the design now leans on:
+rustls 0.23.44's TLS 1.3 resumption calls `take` on the server session
+store, whose contract is that a taken ticket is deleted, so tickets are
+single-use and a replayed first flight presents a consumed ticket, fails
+the PSK lookup and falls back to a full handshake with its early data never
+decrypted. The session layer's deferral (SES-15) is the second line behind
+that, and the only line if a deployment switches to stateless tickets. The
+plan's milestone 4 and its risk list now say so.
+

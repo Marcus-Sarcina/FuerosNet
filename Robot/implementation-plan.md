@@ -64,7 +64,7 @@ document cites `rhtn/`; the code cites the documents.
 | `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling | `light-client-requirements.md` §1 to §8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
 | `rhtn-policy` | The reference flow metric; the conformance test; the policy interface | design §16, §17; `models/simulation/flow_metric.py` | The four regression cases carried across; fixed-graph expected scores |
 | `rhtn-resources` (later) | Catalog registration, query and lifecycle; request evaluation order and refusal; sandbox with no network bindings; packaging; gateways | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
-| `rhtn-sim` | In-process multi-node harness over localhost QUIC; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code |
+| `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
 | `rhtnd`, `rhtn` | The node daemon and the developer CLI | | Smoke tests |
 
 **The runner is absorbed, then retired.** `rhtn-codec` grows from the runner's
@@ -154,8 +154,12 @@ criterion that is a tool's verdict.
    the chain from the first transaction, the local topology table. Exit:
    `wire-format.md` §3.1 chain rules and the supersession invariants pass as tests.
 4. **Gossip, resolution, replication, peering** (design §24 steps 3 and 4).
-   `rhtn-sim` with partition-and-merge convergence as its first scripted scenario.
-   Exit: the `tla/PartitionMerge` invariants hold over the running code.
+   `rhtn-sim` with partition-and-merge convergence as its first scripted scenario,
+   built on a datagram-level path harness that can drop, delay, replay and
+   blackhole packets. The harness closes TRN-16 by capturing a client's 0-RTT
+   first flight and replaying it as a second connection, and it replaces the
+   frame filters the session tests stand on the path with. Exit: the
+   `tla/PartitionMerge` invariants hold over the running code, and TRN-16 passes.
 5. **Reference metric** (design §24 step 5). Exit: the four regression cases and
    the fixed-graph conformance test pass.
 
@@ -174,8 +178,12 @@ is stable.
 
 1. **The transport profile's third-party facts** (design §5.2): that rustls exposes
    `X25519MLKEM768` and RFC 7250 raw public keys, and that quinn's 0-RTT behaves as
-   `wire-format.md` §9.1 assumes. Milestone 2 tests this before anything is built
-   on it. If any of it is false, the profile changes, not the code.
+   `wire-format.md` §9.1 assumes. Milestone 2 tested these and they hold. One more
+   emerged there: rustls's stateful session store hands out single-use resumption
+   tickets, so a replayed 0-RTT first flight fails at the TLS layer before the
+   session layer's deferral is reached. That is a property of the stateful store,
+   not of TLS; a deployment moving to stateless tickets would rest on the deferral
+   alone. Milestone 4's replay test is what turns this from a citation into a test.
 2. **Post-quantum crate maturity** (design §5.2). Unaudited. Isolated behind
    `rhtn-crypto`'s provider trait so a swap touches one crate.
 3. **The canonical biometric profile** (design §22.2). Cross-client verification
