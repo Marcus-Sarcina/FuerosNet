@@ -606,8 +606,9 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
         }
     }
     // extension bounds: the body map, and the Locator map of an adoption or
-    // peering, each counted on its own (§1.3: per map)
-    extension_bounds(b, 0, |k| k <= 8)?;
+    // peering, each counted on its own (§1.3: per map).  Bodies name keys
+    // 0 through 9 (§4.1's Transfer is 9).
+    extension_bounds(b, 0, |k| k <= 9)?;
     let f3 = map_get(m, 3);
     if let Some(Item::Map(_)) = f3 {
         if let Some(r3) = value_slice(b, 3) {

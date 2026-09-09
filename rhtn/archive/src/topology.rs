@@ -420,6 +420,38 @@ impl Table {
     }
 }
 
+/// Authenticated supersession evidence for a credential (design §12.6.5,
+/// `infra-client-requirements.md` §2): a validated recovery names the
+/// successor key; a verified reissue keeps the key and moves its series.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Supersession {
+    pub superseded: Keyhash,
+    pub successor: Keyhash,
+    pub evidence: Txid,
+}
+
+impl Supersession {
+    /// From a verified recovery adoption or series reissue; anything else,
+    /// or a failing signature, is no evidence.
+    pub fn from_record<L: Lookup + ?Sized>(rec: &Record, ids: &L) -> Result<Self, String> {
+        if rec.check_signatures(ids) != SigStatus::Verified {
+            return Err("not verified".into());
+        }
+        match rec.tx_type {
+            TYPE_ADOPTION => {
+                let prior = rec.prior_key().ok_or("not a recovery adoption")?;
+                let successor = rec.field_hash(1).ok_or("node")?;
+                Ok(Supersession { superseded: prior, successor, evidence: rec.txid })
+            }
+            TYPE_REISSUE => {
+                let node = rec.field_hash(1).ok_or("node")?;
+                Ok(Supersession { superseded: node, successor: node, evidence: rec.txid })
+            }
+            _ => Err("neither a recovery nor a reissue".into()),
+        }
+    }
+}
+
 /// What a patron derives from a presented archive (design §16.7,
 /// `infra-client-requirements.md` §5): the transactions with counterparties
 /// it already knows, by counterparty.  Nothing is totalled; records naming

@@ -157,7 +157,7 @@ fn a_grandpatron_acknowledges_under_standing_policy() {
     for r in [&f, &a, &pop] {
         apply(&mut t, &w, r);
     }
-    let issuer = AckIssuer { identity: Arc::new(w.id("alice").clone()), policy: Arc::new(|_patron, _node| true), now: w.clock + 1 };
+    let issuer = AckIssuer { identity: Arc::new(rhtn_crypto::identity::testkit::test_identity("alice")), policy: Arc::new(|_patron, _node| true), now: w.clock + 1 };
     let adoption = w.adopt("carol", "bob", pop.txid, 2);
     // verification and emission in one call: nothing asks anyone anything
     let out = t.apply(&adoption, &w.lookup(), &w, Some(&issuer)).unwrap();
@@ -220,7 +220,8 @@ fn an_acknowledgement_alone_creates_no_binding() {
     apply(&mut h, &w, &f);
     apply(&mut h, &w, &a);
     let unknown_adoption: Txid = rhtn_codec::cose::sha256(b"an adoption H never saw");
-    let ack = subtree_ack(w.id("alice"), &unknown_adoption, &w.kh("carol"), w.tick());
+    let now = w.tick();
+    let ack = subtree_ack(w.id("alice"), &unknown_adoption, &w.kh("carol"), now);
     assert_eq!(verify::record(&w.lookup(), "SubtreeAck", &ack), Ok(true), "the signature verifies");
     assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(false));
     assert_eq!(h.patrons(&w.kh("carol")), set(&[]));
