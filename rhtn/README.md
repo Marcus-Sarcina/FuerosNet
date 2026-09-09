@@ -22,7 +22,11 @@ same way that script fences the prover.
 **Robustness.** The gate runs DEC-01 and DEC-02: every proper prefix of every
 accepted fixture, and 48 seeded mutations per fixture. The hours-long run is
 `RHTN_FUZZ_SECONDS=3600 cargo test -p rhtn-crypto --test fuzz -- --nocapture`,
-which stacks mutations and prints its seed. `cargo-fuzz` needs a nightly
-toolchain this machine does not have; adding it is a follow-up, not a
-replacement for the seeded runs, which are what the entries specify.
+which stacks mutations and prints its seed. Coverage-guided fuzzing runs
+beside it: `codec/fuzz/` holds five libFuzzer targets, one per decoder layer,
+seeded from the accepted fixtures by `codec/fuzz/seed.py`; the gate runs each
+for a bounded time with a memory cap when a nightly toolchain and `cargo-fuzz`
+are present, and the long run is `cargo +nightly fuzz run <target>` in
+`codec/`. Neither replaces the seeded runs, which are what the entries
+specify; the guided search adds coverage on top.
 

@@ -7723,12 +7723,21 @@ envelope map admits no unknown keys, since it sits outside every signature
 body and an adoption's Locator; other nested signed maps are not yet
 counted.
 
-**Not done, deliberately.** `cargo-fuzz` needs a nightly toolchain that is
-not installed; the seeded mutation runs are in the gate and a timed harness
-(`RHTN_FUZZ_SECONDS`) covers the hours-long exercise. The EndpointRecord and
+**Not done, deliberately.** The EndpointRecord and
 SignedLocator fixtures carry signatures the corpus itself marks stale by
 design, so those kinds are checked structurally in the corpus test; the
 verification path for them exists in `rhtn-crypto` and is unexercised by a
 fixture. Entry order within a `COSE_Sign` array is not checked. The
 per-fixture reply families are assigned by fixture id in the test driver,
 because the corpus does not say which family a `reply` entry belongs to.
+
+**Coverage-guided fuzzing added (2026-09-09, author's go-ahead).** A minimal
+nightly toolchain and `cargo-fuzz` 0.13.2 are installed; `codec/fuzz/` carries
+five libFuzzer targets (CBOR, body, envelope, control frame, request frame),
+each asserting the DEC-02 property that anything accepted re-encodes to
+itself, seeded from the 171 accepted fixture spans. The code gate runs each
+target for a bounded time under a 512 MB memory cap, which is the memory
+budget the decoder entries parameterise, observed rather than assumed; the
+step reports itself skipped where the toolchain is absent. The seeded runs
+stay in the gate as the entries specify.
+

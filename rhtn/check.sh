@@ -37,6 +37,27 @@ else
   echo "  cargo test: FAILED"; fail=1
 fi
 
+echo "=== 4. Coverage-guided smoke (cargo-fuzz on nightly; skipped where absent) ==="
+# Each decoder layer for a bounded time under libFuzzer with a memory cap:
+# the memory budget the decoder entries parameterise, observed rather than
+# assumed.  The long run is manual: cargo +nightly fuzz run <target> in
+# codec/.  Absence of the toolchain is reported, not failed, so the gate
+# still runs on a machine without it.
+if cargo +nightly --version > /dev/null 2>&1 && cargo fuzz --version > /dev/null 2>&1; then
+  python3 "$HERE/codec/fuzz/seed.py" > /dev/null
+  for t in parse_all body envelope frame_control frame_request; do
+    out="$HERE/codec/fuzz/smoke-$t.log"
+    if (cd "$HERE/codec" && nice -n 19 cargo +nightly fuzz run "$t" -- \
+          -max_total_time="${FUZZ_SMOKE_SECONDS:-20}" -rss_limit_mb=512 -timeout=1) > "$out" 2>&1; then
+      echo "  $t: $(grep -oE 'Done [0-9]+ runs' "$out" | tail -1 | tr -d '\n'), no crash"
+    else
+      echo "  $t: CRASH or error (see codec/fuzz/smoke-$t.log)"; fail=1
+    fi
+  done
+else
+  echo "  nightly toolchain or cargo-fuzz absent: smoke skipped (seeded runs above still ran)"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then echo "CODE GATE PASSES"; else echo "CODE GATE FAILED"; fi
 exit "$fail"

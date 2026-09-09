@@ -1,0 +1,49 @@
+[package]
+name = "rhtn-codec-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rhtn-codec = { path = ".." }
+
+[[bin]]
+name = "parse_all"
+path = "fuzz_targets/parse_all.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "body"
+path = "fuzz_targets/body.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "envelope"
+path = "fuzz_targets/envelope.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "frame_control"
+path = "fuzz_targets/frame_control.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "frame_request"
+path = "fuzz_targets/frame_request.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
