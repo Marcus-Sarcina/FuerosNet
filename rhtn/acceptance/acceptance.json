@@ -2616,6 +2616,227 @@
   "interpretation": null
  },
  {
+  "id": "PRD-01",
+  "area": "product",
+  "gap": "product",
+  "title": "Let the user override direct versus relayed payload in both directions, with each disclosure stated",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §5"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §5",
+    "text": "Direct versus relayed payload must be overridable"
+   }
+  ],
+  "given": "A release build of the light client.",
+  "when": "A reviewer opens the payload path setting.",
+  "then": "Both overrides exist, and the setting states that direct reveals the user's IP to a peer inside the horizon and relayed reveals the communication graph to the serving node.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-02",
+  "area": "product",
+  "gap": "product",
+  "title": "Warn before an authority change that revokes resource access, and list upward-reaching policies on a new patron",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §6",
+    "text": "warn if the resulting topology change will revoke access to resources the user currently uses"
+   },
+   {
+    "where": "light-client-requirements.md §6",
+    "text": "When accepting a new patron, list any resources whose policy reaches upward."
+   }
+  ],
+  "given": "A release build with the user holding access to resources under the current patron.",
+  "when": "A reviewer initiates a departure, then accepts a new patron.",
+  "then": "The departure flow warns and names the resources that will be lost before confirmation; the adoption flow lists resources whose predicates reach upward.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-03",
+  "area": "product",
+  "gap": "product",
+  "title": "Warn that an unlinked identity path abandons standing, and that a linked one loses unlinkability",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §6",
+    "text": "warn that prior standing will be abandoned"
+   }
+  ],
+  "given": "A release build.",
+  "when": "A reviewer starts a plain rotation, then a recovery.",
+  "then": "The plain rotation warns that prior standing is abandoned; the recovery states that the link to the prior identity will be published within the horizon.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-04",
+  "area": "product",
+  "gap": "product",
+  "title": "Encourage a second independent adoption early",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §6",
+    "text": "Encourage a second independent adoption early"
+   }
+  ],
+  "given": "A release build with a user holding one adoption.",
+  "when": "A reviewer uses the client through its first sessions.",
+  "then": "The client prompts, unobtrusively and before any eclipse condition, that a second independent adoption protects against a single patron.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-05",
+  "area": "product",
+  "gap": "product",
+  "title": "Resolve simultaneous opposite adoptions by asking the two to choose a direction",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §7"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §7",
+    "text": "ask them to choose one direction rather than reporting a protocol failure"
+   }
+  ],
+  "given": "Two release-build clients in one ceremony each proposing to adopt the other.",
+  "when": "A reviewer triggers the conflict.",
+  "then": "Both clients present a choice of direction and neither reports a protocol error.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-06",
+  "area": "product",
+  "gap": "product",
+  "title": "Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "infra-client-requirements.md §8",
+   "infra-client-requirements.md §10.6",
+   "infra-client-requirements.md §10.7"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §8",
+    "text": "Tell an operator plainly what their subordinates are exposed to"
+   },
+   {
+    "where": "infra-client-requirements.md §10.6",
+    "text": "Display whether a resource is hosted here or brokered to an external service."
+   },
+   {
+    "where": "infra-client-requirements.md §10.7",
+    "text": "The roles they hold on each resource."
+   }
+  ],
+  "given": "A release build of the infra client with one hosted and one brokered resource.",
+  "when": "A reviewer binds each resource and views a member's access.",
+  "then": "The binding view shows hosted against brokered; the operator view states the exposure the configuration creates; the accessing user's view shows the roles held and not the predicates.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-07",
+  "area": "product",
+  "gap": "product",
+  "title": "Encrypt backups under a key kept apart, say what losing the device costs, and scan imports for expired retention",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "design §13.7.1",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §13.7.1",
+    "text": "Encrypt under a key not stored alongside it."
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Maintain backups, and make the consequence visible to the user."
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Scan any imported backup for expired retention"
+   }
+  ],
+  "given": "A release build.",
+  "when": "A reviewer creates a backup, reads the backup screen, and imports a backup containing captures past their window.",
+  "then": "The backup is encrypted under a passphrase-derived key not stored with it; the screen states what device loss costs; the import deletes the expired captures and says so.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-08",
+  "area": "product",
+  "gap": "product",
+  "title": "Tell the user on first brokered use that ending membership does not end the vendor's session",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §8",
+    "text": "Tell the user, when they first use a brokered resource, that ending their membership will not end that vendor's session."
+   }
+  ],
+  "given": "A release build with a brokered resource available.",
+  "when": "A reviewer opens the brokered resource for the first time.",
+  "then": "A notice states that the vendor's session outlives membership, shown once, before traffic is routed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRD-09",
+  "area": "product",
+  "gap": "product",
+  "title": "Present a restored archive as recovered on trust, never as verified-complete",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "never present a restored archive as verified-complete"
+   }
+  ],
+  "given": "A release build on a device that lost its archive.",
+  "when": "A reviewer restores from a holder.",
+  "then": "The interface states that the restored history is complete only as far as the holder claims and was not verified complete.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "PRP-01",
   "area": "propagation",
   "gap": "propagation",
@@ -4666,6 +4887,658 @@
   "then": "No record pairs Q with X: neither the request nonce, nor the (requester, subject) pair, nor a query-log entry survives the answer.",
   "oracle": "behaviour",
   "interpretation": "The obligation is a commitment the protocol cannot enforce (design §1.1); the test checks the reference implementation's own storage and treats any retained pairing as a failure."
+ },
+ {
+  "id": "RSC-01",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Accept a registration only over the owner's own session",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §6.2",
+   "infra-client-requirements.md §11"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.2",
+    "text": "The authenticated peer MUST be the owner named in the entry."
+   },
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Accept registrations only from the owner's own session"
+   }
+  ],
+  "given": "Owner O has signed a CatalogEntry naming O; O and another client P both hold sessions with host H.",
+  "when": "O submits the entry over O's session; P submits the same bytes over P's session.",
+  "then": "O's submission is answered with code 0 and the entry is served; P's is answered with code 1 and the served entry is unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-02",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Refuse a registration for a keyhash already served under a different owner",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §6.7",
+   "infra-client-requirements.md §11"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.7",
+    "text": "A host refuses a registration for a keyhash it already serves under a different owner"
+   },
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Refuse a registration for a keyhash you already serve under a different owner."
+   }
+  ],
+  "given": "Host H serves resource keyhash R registered by owner O1.",
+  "when": "Owner O2 submits a valid entry naming R over O2's session.",
+  "then": "The reply carries code 1 and H still serves O1's entry for R.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-03",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Replace on re-registration, retain nothing superseded, archive nothing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §11",
+   "wire-format.md §6.5"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Re-registering by the same owner replaces the entry, and the old one is gone."
+   },
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Do not retain superseded registrations"
+   },
+   {
+    "where": "wire-format.md §6.5",
+    "text": "A registration is not archived"
+   }
+  ],
+  "given": "Owner O has an entry E1 for R served by H.",
+  "when": "O submits a new entry E2 for R, and the test inspects H's storage and archive.",
+  "then": "Queries return E2 and never E1, E1 is absent from H's storage, and H's archive did not advance.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-04",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Default a first registration's discover scope to self",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §6.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.2",
+    "text": "with no existing rule, the default is ; `self`, the least-disclosing scope"
+   }
+  ],
+  "given": "Owner O registers R with H for the first time with field 2 absent.",
+  "when": "O queries H, and another horizon member M queries H.",
+  "then": "O's reply carries R's entry; M's does not.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-05",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Withdraw by re-registering with scope self, and propagate nothing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §6.5",
+   "infra-client-requirements.md §11"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.5",
+    "text": "It re-registers the resource with a requested `discover_scope` of self, which no asker but the owner satisfies"
+   },
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Withdrawal is not a propagated message."
+   }
+  ],
+  "given": "Owner O's entry for R is visible to horizon member M at host H.",
+  "when": "O re-registers R requesting scope self, then M queries.",
+  "then": "M's reply omits R, and no TopologyPush or other frame carrying the entry leaves H.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-06",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Refuse an asker outside your horizon by closing the stream",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §6.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.4",
+    "text": "An asker outside the answering node's horizon is refused before the application reply."
+   },
+   {
+    "where": "wire-format.md §6.4",
+    "text": "Close the stream; do not return an empty `CatalogReply`."
+   }
+  ],
+  "given": "A node X outside H's horizon holds a session with H.",
+  "when": "X sends a CatalogQuery.",
+  "then": "The stream is closed and no CatalogReply, empty or otherwise, is sent.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-07",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Order entries by resource then owner keyhash, return 111, and name the first withheld type",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §6.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.4",
+    "text": "orders qualifying entries by resource keyhash, then by owner keyhash, and returns the first 111"
+   },
+   {
+    "where": "wire-format.md §6.4",
+    "text": "the continuation names the type of the first entry it withheld"
+   }
+  ],
+  "given": "H holds 113 entries visible to asker M.",
+  "when": "M sends an unfiltered CatalogQuery.",
+  "then": "The reply's field 2 holds the first 111 entries in ascending resource-then-owner keyhash order and field 3 names the service type of the 112th.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-08",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Return the owner's signature unchanged and add none",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §11",
+   "wire-format.md §6.5"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §11",
+    "text": "Return the owner's signature unchanged, and add none of your own."
+   },
+   {
+    "where": "wire-format.md §6.5",
+    "text": "An entry is signed once, at registration, and that signature is reused for every answer."
+   }
+  ],
+  "given": "Owner O registered entry E with H; the test recorded E's bytes.",
+  "when": "Two different askers query H.",
+  "then": "Each reply carries E byte-for-byte, with O's signature and no signature by H.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-09",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Store an entry whose scope you cannot compute, and grant nothing from it",
+  "milestone": "after-5",
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §6.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.8",
+    "text": "A scope the evaluator cannot compute is structurally valid and ineffective."
+   },
+   {
+    "where": "wire-format.md §6.8",
+    "text": "A decoder MUST NOT reject it."
+   }
+  ],
+  "given": "An entry whose connect_scope names a position H cannot resolve, submitted by its owner over the owner's session.",
+  "when": "H processes it and a member requests the resource.",
+  "then": "The registration is answered code 0 and the entry is served; the scope grants nothing, so the request is decided by the role row alone. An implementation that rejects the entry fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-10",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Retain and surface an unknown data_practice value",
+  "milestone": "after-5",
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.1",
+    "text": "Unknown values are retained and surfaced, not rejected"
+   }
+  ],
+  "given": "An entry whose field 9 carries a value outside the four defined, correctly signed, and a client with a display hook.",
+  "when": "The owner registers it and a member's client fetches it.",
+  "then": "Registration is accepted, the reply carries field 9 unchanged, and the client's hook records that a declaration exists and is unrecognised. An implementation that rejects the entry fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-11",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Never process a resource request from early data, and carry one request per stream",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §11",
+   "resource-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11",
+    "text": "a `ResourceRequest` stream is never processed in early data, whatever the method inside"
+   },
+   {
+    "where": "wire-format.md §11",
+    "text": "one request per stream"
+   },
+   {
+    "where": "resource-requirements.md §3",
+    "text": "A `ResourceRequest` on a new bidirectional stream"
+   }
+  ],
+  "given": "Client C resumes a session with H using 0-RTT and holds connect on resource R.",
+  "when": "C sends a ResourceRequest for R on a new bidirectional stream in early data, and later two requests on one stream.",
+  "then": "No ResourceResponse and no backend traffic for the early-data request are observed before the handshake completes; on the shared stream only the first request is answered.",
+  "oracle": "behaviour",
+  "interpretation": "What happens to a second request on one stream is not stated; the test asserts only that it is not answered as a second exchange."
+ },
+ {
+  "id": "RSC-12",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Evaluate a resource request in the normative order and answer with the one code that step yields",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §11",
+   "infra-client-requirements.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11",
+    "text": "Evaluation order is normative"
+   },
+   {
+    "where": "wire-format.md §11",
+    "text": "Availability is checked last, so a role-holder learns the service is down and a non-role-holder never does."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "Evaluate in the order `wire-format.md` §11 gives"
+   }
+  ],
+  "given": "Host H with resource R owned by O and a stopped package, and six requesters: a stranger; a member lacking a SubtreeAck; a member with an ack and no connect; a member with connect sending malformed HTTP; a member with connect sending a well-formed request; the same with the package running.",
+  "when": "Each sends a ResourceRequest for R.",
+  "then": "The six responses carry codes 1, 4, 5, 3, 2 and 0 respectively, and only the last reaches the backend.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-13",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Answer a non-member with refused for everything, existing keyhash or not",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §10.1",
+   "wire-format.md §11"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "A non-member gets `refused` for everything"
+   },
+   {
+    "where": "wire-format.md §11",
+    "text": "a keyhash naming nothing returns the same code"
+   }
+  ],
+  "given": "A stranger S with a session to H, which serves R and nothing named Q.",
+  "when": "S requests R, then Q.",
+  "then": "Both responses carry code 1 and nothing else, and no backend traffic follows.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-14",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Decide a request from the materialised row, and refuse to materialise a row wider than 64 roles",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "Authorisation at request time is a lookup, never a predicate evaluation"
+   },
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "refuse to materialise one wider"
+   }
+  ],
+  "given": "A predicate whose evaluation would now exclude member M, unevaluated since M's row granted connect; and an operator configuring a row of 65 roles.",
+  "when": "M requests the resource; the operator saves the configuration.",
+  "then": "M's request is delivered on the strength of the row; the 65-role row is refused at configuration and no request ever yields a code for it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-15",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Strip caller rhtn headers, insert your own, and mint one session identifier per resource",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "resource-requirements.md §3.1",
+   "resource-requirements.md §3",
+   "infra-client-requirements.md §10.2"
+  ],
+  "rule": [
+   {
+    "where": "resource-requirements.md §3.1",
+    "text": "the node strips inbound `rhtn-*` headers"
+   },
+   {
+    "where": "resource-requirements.md §3",
+    "text": "It is also per resource."
+   },
+   {
+    "where": "resource-requirements.md §3",
+    "text": "`rhtn-roles` may be empty, and that is not an error."
+   },
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "Mint the session identifier per resource, not per connection."
+   }
+  ],
+  "given": "Member M with connect and no application roles on hosted resources R1 and R2, sending requests that carry a forged rhtn-roles header.",
+  "when": "M requests R1 and R2 over one session.",
+  "then": "Each backend receives rhtn-principal, rhtn-audience naming itself, rhtn-session and an empty rhtn-roles, with the forged value absent; the two session identifiers differ.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-16",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Parse and re-serialise, reject the ambiguous, and emit exactly one message",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §11.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Emit exactly one message per `ResourceRequest`."
+   },
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Reject rather than normalise anything ambiguous"
+   },
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Reject anything asking for an exchange other than one request and one response"
+   }
+  ],
+  "given": "A member with connect sends, in turn, a request with conflicting Content-Length and Transfer-Encoding headers, one whose body encodes a second request line, and a CONNECT request.",
+  "when": "H processes each.",
+  "then": "Each is answered code 3 and nothing reaches the backend.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-17",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Never retry a failed handoff on your own",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §11"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11",
+    "text": "the gateway NEVER retries on its own"
+   }
+  ],
+  "given": "The backend for R accepts a connection and fails mid-request.",
+  "when": "A member with connect sends a request.",
+  "then": "Exactly one attempt reaches the backend and the response carries code 2.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-18",
+  "area": "resources",
+  "gap": "resources",
+  "title": "End the resource-facing session on a role change, and leave the transport session alone",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.5",
+   "infra-client-requirements.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.5",
+    "text": "the session dropped is the resource-facing one"
+   },
+   {
+    "where": "infra-client-requirements.md §10.5",
+    "text": "The transport session is untouched"
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "An in-flight request completes under the state it started with."
+   }
+  ],
+  "given": "Member M holds connect on R with a long-running request in flight.",
+  "when": "The operator revokes M's grant during the request, then M sends another.",
+  "then": "The in-flight request completes and its response is delivered; the next request is answered code 5; M's QUIC session to H stays open throughout.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-19",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Expose no network primitive to a hosted package",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9.2",
+    "text": "the hooks do not exist"
+   },
+   {
+    "where": "infra-client-requirements.md §9.2",
+    "text": "no topology, no liveness state, no queue contents, no prekey requests, no role-evaluation inputs"
+   }
+  ],
+  "given": "A package whose manifest imports a binding for topology, queue contents, prekeys or role inputs, on a host using the expected component-model sandbox.",
+  "when": "The host instantiates it.",
+  "then": "Instantiation fails for want of the import, and the host's export list contains no such binding.",
+  "oracle": "behaviour",
+  "interpretation": "The sandbox mechanism is an implementation choice the requirement calls expected rather than mandated; the test assumes a capability-based component host."
+ },
+ {
+  "id": "RSC-20",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Acknowledge a subtree automatically under policy, without prompting, and treat it as lapsed when the relationship ends",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "Issue it automatically, under a policy the operator set beforehand."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "Do not prompt per adoption."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "Treat it as lapsed when the relationship it describes ends"
+   }
+  ],
+  "given": "Host H with policy set to acknowledge every position, a prompt hook, and subordinate S who adopts a grand-subordinate G.",
+  "when": "G's adoption reaches H; later S departs.",
+  "then": "A SubtreeAck for G is issued with no prompt recorded; after S's departure G's request for H's resource is answered code 4.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-21",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Accept a brokered registration with no local backend",
+  "milestone": "after-5",
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §6.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.2",
+    "text": "A host refusing every entry that lacks a locally installed package refuses valid brokered registrations."
+   }
+  ],
+  "given": "Owner O submits an entry whose field 5 names an external endpoint and for which H hosts no package.",
+  "when": "H processes it.",
+  "then": "The reply carries code 0. An implementation requiring a local package fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-22",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Store an abuse report only from the resource it names, and carry it nowhere",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §6.3",
+    "text": "The signing key's ; keyhash MUST equal field 1"
+   },
+   {
+    "where": "wire-format.md §6.3",
+    "text": "An abuse report has no carriage, and needs none."
+   }
+  ],
+  "given": "Resource R hosted at owner O's node produces a report signed by R, and a forged one signed by another key naming R.",
+  "when": "O's node processes both and the test watches its sessions.",
+  "then": "The first is stored for O; the second is rejected; no report bytes leave the node.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-23",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Treat a repeated continuation as truncation, not another page",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §8",
+   "wire-format.md §6.4"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §8",
+    "text": "A repeated continuation means truncation, not another page."
+   },
+   {
+    "where": "wire-format.md §6.4",
+    "text": "MUST NOT loop"
+   }
+  ],
+  "given": "A client sweeping H, which returns a full page with a continuation naming a type the client has already filtered on.",
+  "when": "The client follows the sweep.",
+  "then": "The client asks H for that type at most once more, marks H's portion of its view truncated, and stops.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-24",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Route to a brokered service only when it matches the signed entry",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §8",
+    "text": "Confirm a brokered service matches the signed `CatalogEntry`"
+   },
+   {
+    "where": "light-client-requirements.md §8",
+    "text": "Do not present resources the user cannot use."
+   }
+  ],
+  "given": "A client holding a signed entry for brokered resource R whose field 5 names endpoint X, and a broker presenting endpoint Y.",
+  "when": "The user opens R.",
+  "then": "The client routes no traffic to Y, and shows the owner named in the entry; a resource the catalog page filtered out is not shown.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "SES-01",
