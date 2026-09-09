@@ -1,0 +1,3450 @@
+[
+ {
+  "id": "ARC-01",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Emit the genesis value as the back-pointer of a key's first transaction",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §3.1",
+   "design §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.1",
+    "text": "A signer with no prior transaction uses the genesis value, SHA-256(the signer's keyhash) — over the 32 keyhash bytes themselves, not over a CBOR encoding of them — derivable by any verifier"
+   }
+  ],
+  "given": "A key K generated for the test with no transaction in its archive, and a counterparty P with an existing chain and a proof-of-presence record between K and P.",
+  "when": "K signs its first transaction through the archive component: an adoption of K under P, K in field 1, field 8 naming that record.",
+  "then": "The adoption's key 0 list for K is exactly one 32-byte value equal to SHA-256 over the 32 bytes of K's keyhash. A verifier recomputing that value from K's keyhash reports K's chain as rooted at genesis at this record.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-02",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Advance both signers' chains by an adoption, one back-pointer list per signer in signer order",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §3.1",
+   "design §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.1",
+    "text": "One back-pointer LIST per required signer, since each signer has their own independent archive. An adoption advances both the node's archive and the patron's."
+   },
+   {
+    "where": "wire-format.md §3.1",
+    "text": "Signer order is the order the type's own schema introduces its required signers"
+   }
+  ],
+  "given": "Node N whose archive head is h_N and patron P whose archive head is h_P, each the txid of an earlier transaction; a proof-of-presence record between them.",
+  "when": "N and P sign an adoption of N under P; afterwards N signs a departure from P and P signs a disavowal of another subordinate.",
+  "then": "The adoption's key 0 is [[h_N], [h_P]] in that order, node then patron. N's departure carries key 0 [[txid(adoption)]] and P's disavowal carries key 0 [[txid(adoption)]]: each signer's next record back-points to the adoption.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-03",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Report a chain that does not reach back when a signer's back-pointer names another signer's record",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.1",
+   "wire-format.md §3.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.1",
+    "text": "Getting this wrong is silent. Every hash and signature still verifies while each predecessor is attributed to the wrong signer, so a mismatch surfaces only when someone walks a chain and finds it does not reach back."
+   }
+  ],
+  "given": "N (head h_N) and P (head h_P) as in ARC-02, and an adoption of N under P whose key 0 is [[h_P], [h_N]], the two lists swapped, signed by both parties.",
+  "when": "The adoption is verified structurally, then a walker follows N's chain backward from the adoption, fetching each named predecessor.",
+  "then": "Structural verification does not report the adoption malformed. The walk of N's chain fetches h_P, finds that N is not a signer of that record, and reports N's chain as not reaching back past the adoption; it reports no complete prefix for N from that head.",
+  "oracle": "behaviour",
+  "interpretation": "The section names the symptom, a walked chain that does not reach back, and no verdict word; the test reads a fetched predecessor that the named signer did not sign as that symptom, reported distinctly from malformed."
+ },
+ {
+  "id": "ARC-04",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Open a relationship's series at counter 0 on adoption and advance it strictly on departure",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.3",
+   "wire-format.md §4.2",
+   "design §6.2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "a new adoption establishes its relationship's series, countersigned by the same party a reissue would need"
+   },
+   {
+    "where": "wire-format.md §4.2",
+    "text": "counter incremented within the current series"
+   },
+   {
+    "where": "wire-format.md §2.3",
+    "text": "Within one series a new counter must be strictly greater than the last one the verifier holds"
+   }
+  ],
+  "given": "Node N adopted under patron P, the adoption's field 3 locator carrying seqno {s, 0}; an observer O holding that adoption and nothing else in series s.",
+  "when": "N signs a departure from P and O verifies it.",
+  "then": "The departure's field 3 is {s, c} with the same series s and c strictly greater than 0; O accepts it as newer than the adoption within series s. A second departure from N carrying {s, c} again, with different contents, is not accepted as newer.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-05",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Accept a departure whose counter skips values in its series, and one in a series with no prior state",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §2.3",
+   "design §6.2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "not exactly previous+1, since a verifier may legitimately have missed intervening transactions and requiring contiguity would reject valid updates. Absence of prior state is not a failure."
+   }
+  ],
+  "given": "Observer O holds N's adoption under P at seqno {s, 0} and nothing else in series s, and holds no record at all in series s2.",
+  "when": "O verifies a departure of N from P carrying seqno {s, 7}, and separately a departure carrying seqno {s2, 5}.",
+  "then": "Both are accepted: the gap from 0 to 7 within s is not reported as an error, and the record in s2 is not rejected for O holding no prior state in that series or ranked against the record in s.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-06",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Accept a record timed at its predecessor's effective time or far ahead of the verifier's clock",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §3.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.3",
+    "text": "It is a floor, and not a rate limit. Everything at or after the predecessor's effective time is admissible, including days in the future"
+   },
+   {
+    "where": "wire-format.md §3.3",
+    "text": "Timestamps are not checked against a local clock at structural verification."
+   }
+  ],
+  "given": "Node N whose archive head is a transaction with timestamp t0, and a verifier whose local clock reads t_now, with t0 not later than t_now.",
+  "when": "N signs two departures back-pointing to that head, one with timestamp exactly t0 and one with timestamp t_now plus thirty days; the verifier checks each.",
+  "then": "Both verify as structurally valid; neither is reported malformed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-07",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Carry both branch heads in the next ordinary transaction after the archive forks",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §3.1",
+   "design §10.3",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.1",
+    "text": "A signer whose archive has forked — typically from concurrent use of two devices — reunites it by supplying both branch heads in the next ordinary transaction."
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Merge automatically on noticing divergence."
+   }
+  ],
+  "given": "A client for N holding two heads of its own archive, h_a and h_b, neither reachable from the other: two records each back-pointing to the same earlier record of N.",
+  "when": "The client signs its next ordinary transaction, a departure.",
+  "then": "The departure's key 0 list for N contains exactly h_a and h_b, sorted ascending bytewise; a walker from the departure reaches both branches and reports no unsatisfied back-pointer; no separate merge object is emitted.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-08",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Serve an archive fetch head-first in batches that continue from the previous reply's oldest record",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.9",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.9",
+    "text": "Paginate by re-requesting with field 2 set to the previous reply's field 4."
+   },
+   {
+    "where": "wire-format.md §7.9",
+    "text": "records in reverse chain order, head first"
+   }
+  ],
+  "given": "Subject S holding an unbroken chain of R records rooted at genesis and serving its own archive; the requester asks for max_records m, 1 to 256, with R greater than m so that more than one batch is needed.",
+  "when": "A requester sends ArchiveRequest {1: S, 2: S's head, 3: m, 5: nonce}, then re-requests with field 2 set to each reply's field 4 until a reply's field 3 is false.",
+  "then": "Every reply's field 1 equals its request's nonce. The first reply's first envelope has txid equal to the requested head. Within each reply, each record's back-pointer list for S names the record that follows it. Each non-final reply's field 4 is the txid of its oldest record. The batches concatenated are the whole chain, and only the last reply's field 3 is false.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-09",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Reject an archive batch whose back-pointers do not match the records that follow",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.9",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.9",
+    "text": "The requester verifies the chain itself. Each returned record's back-pointers must match the record that follows it in the batch, and the first must match the requested head."
+   }
+  ],
+  "given": "A holder answering for subject S, and a requester asking with field 2 set to S's head.",
+  "when": "The holder returns a batch in which one middle record has been replaced by another record of S that the preceding record's back-pointer does not name; in a second run the batch's first record is not the requested head.",
+  "then": "In the first run the requester reports the batch as failing chain verification at the first mismatching record, and the records from that point on are not reported as a verified prefix. In the second run it fails at record one.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-10",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Treat a short archive reply as no evidence about the archive's length",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §7.9",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.9",
+    "text": "A holder may refuse a request or return fewer records than asked for; a short reply is not evidence of a short archive, and a patron must not treat it as truncation."
+   }
+  ],
+  "given": "A requester holding S's head and asking for max_records m; a holder that returns k records, k less than m, whose oldest record's back-pointer names a record not in the batch, once with field 3 true and once with field 3 false.",
+  "when": "The requester processes each reply.",
+  "then": "In both runs the requester's result marks the verified range as ending at an unfetched predecessor and does not record S's archive as beginning at the oldest returned record or as rooted at genesis; when the test continues, the requester's next request names the oldest returned record in field 2.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-11",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Mark an archive restored without a requested head as internally verified but not verified-complete",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.9",
+   "light-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.9",
+    "text": "Where field 2 was absent, there is no requested head to match: the chain still verifies internally, but its newestness is the holder's claim and nothing the requester holds can check it"
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "never present a restored archive as verified-complete"
+   }
+  ],
+  "given": "A client for S that has lost its archive and holds no head; a holder serving S's chain from a record the holder claims as newest.",
+  "when": "The client sends ArchiveRequest with field 2 absent and fetches the chain to its end.",
+  "then": "The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a head-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-12",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Verify a history presented from an earlier head as an unbroken prefix",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "design §10.1",
+   "light-client-requirements.md §2",
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "design §10.1",
+    "text": "Any presented sequence is provably unbroken across the range shown, even though the archive is built and held by the subject."
+   },
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Presenting less history means presenting an earlier head; there is no other way to truncate, and none is needed."
+   }
+  ],
+  "given": "Subject S with a chain of R records rooted at genesis whose newest record is r_R; a patron evaluating an adoption of S.",
+  "when": "S presents adoption field 7 = txid(r_j) for some j less than R, and the patron walks back from it, fetching from S.",
+  "then": "The walk reports the range r_j back to genesis as unbroken and rooted at genesis. The records after r_j are neither fetched nor reported missing, and the presentation is not rejected for naming a head that is not S's newest record.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-13",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Stop a backward walk at a series reissue and report it as the presented range's root",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §10.1",
+   "design §10.0",
+   "wire-format.md §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §10.1",
+    "text": "supplies that root, asserting that history existed across the boundary without carrying what it contained, so the chain before it need not be retained or presented"
+   },
+   {
+    "where": "design §10.1",
+    "text": "That range is rooted at identity genesis, or at a checkpoint attesting that history existed before it"
+   }
+  ],
+  "given": "Subject S whose chain contains a patron-countersigned series reissue r_c, and whose records before r_c S no longer holds; a patron walking back from S's head.",
+  "when": "The walk reaches r_c and requests its predecessor, which S does not serve.",
+  "then": "The result names the range from the head to r_c as unbroken and r_c as the range's root, a checkpoint distinguished from genesis; the unfetched record before r_c is reported as lying beyond the checkpoint, and no record is reported malformed.",
+  "oracle": "behaviour",
+  "interpretation": "The design says a checkpoint supplies a root and wire-format.md §3.4 says an unfetchable predecessor is incomplete rather than malformed; the test reads a stop at a countersigned reissue as a result distinct from a stop at an ordinary unfetchable record, which no sentence states."
+ },
+ {
+  "id": "ARC-14",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Evaluate a presented archive by the counterparties the patron already knows and nothing else",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §5",
+   "design §16.7"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §5",
+    "text": "Records naming identities you have never heard of are not weak evidence; they are no evidence"
+   },
+   {
+    "where": "infra-client-requirements.md §5",
+    "text": "Do not compute a total."
+   }
+  ],
+  "given": "The reference patron policy on infra node P, whose known identities are the set K; two unbroken presented chains for subject S: chain A whose counterparties are all in K, and chain B equal to A plus many records whose counterparties are all outside K. Weighing an archive is policy per infra-client-requirements.md §5; the test binds the reference policy only.",
+  "when": "P evaluates each chain at adoption.",
+  "then": "The initial trust state P derives for S is identical for A and B. The result carries no field for archive length, record count or counterparty count.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-15",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Report a fork and notify both patrons when currency assertions for one identity diverge",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §9.0.2",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "design §9.0.2",
+    "text": "A conforming inquirer who receives divergent assertions notifies both patrons."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "What a caller can learn is a fork: two patrons attesting competing claims is visible-but-unresolved, and that is the point"
+   }
+  ],
+  "given": "An inquirer I outside the horizon of identity X, holding two introductions for X whose locators name patrons P1 and P2 respectively; P1 and P2 each answer a currency query for X with an attestation whose field 2, the current key, differs from the other's.",
+  "when": "I issues the currency query to both and receives both attestations.",
+  "then": "I's result for X reports a fork: both attestations are retained and neither is silently chosen as X's current key. I sends a notification to P1 and a notification to P2.",
+  "oracle": "behaviour",
+  "interpretation": "The notice is unspecified (design §22.3 item 3 records it as open); the test observes that a message is sent to each patron and checks neither its content nor its encoding."
+ },
+ {
+  "id": "ARC-16",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Keep presence records, sealed captures and seeds when the chain is pruned at a checkpoint",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §2",
+   "design §10.1",
+   "design §10.0"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §2",
+    "text": "Pruning the chain must not delete presence records, sealed captures or capture seeds."
+   },
+   {
+    "where": "design §10.1",
+    "text": "Pruning is therefore permitted only beyond the window"
+   }
+  ],
+  "given": "A client for S whose chain holds a patron-countersigned series reissue r_c dated more than 730 days ago, with presence records before r_c, each with a sealed capture and a capture seed in the local store.",
+  "when": "The user prunes the chain at r_c through the client's deliberate retention control.",
+  "then": "A backward walk from S's head now stops at r_c and the chain records before it are no longer served. Every presence record, sealed capture and capture seed dated before r_c is still present in the local store and returned by lookup by txid.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-01",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Return malformed for every proper prefix of a valid object without crashing",
+  "milestone": 1,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §1",
+   "wire-format.md §1.2",
+   "wire-format.md §1.3",
+   "design §21.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1",
+    "text": "CBOR (RFC 8949) with deterministic encoding, RFC 8949 §4.2."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Definite-length encoding only. No indefinite-length arrays, maps or strings."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+   }
+  ],
+  "given": "The accept set: every corpus.json entry of class `bytes` whose expect.outcome is `accept` (162 byte-class entries in the current corpus, the accept subset among them). For each entry, every proper prefix of its bytes, lengths 0 to n−1, and memory budget M and per-input time budget T, which no document sets (design §21.1 places buffer bounds with the component and lists none).",
+  "when": "Each prefix is presented to the decoder as a complete input, at whichever layer the entry's expect.kind names (body, envelope, frame, reply, record).",
+  "then": "Every prefix yields structural = malformed. The decoder returns a verdict for every prefix; the process neither terminates abnormally nor hangs beyond T nor exceeds M on any of them.",
+  "oracle": "fixture",
+  "interpretation": "An incomplete CBOR data item is not well-formed under RFC 8949; the profile adopts RFC 8949 without restating well-formedness, so the malformed verdict on a truncated item rests on the RFC rather than on a sentence of the profile."
+ },
+ {
+  "id": "DEC-02",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Return a verdict for every seeded mutation of a valid object without crashing",
+  "milestone": 1,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §1.3",
+   "design §21.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "They are conservative ceilings chosen to bound a decoder's exposure to a hostile peer, set well above any use anyone has articulated."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Validate the bytes as received; do not decode and re-encode to compare."
+   }
+  ],
+  "given": "The accept set as in DEC-01. For each entry, N variants produced by a seeded mutator — single-byte substitution, byte insertion, byte deletion, and splicing a run of another entry's bytes into it — with the seed S and N recorded so the run is reproducible; memory budget M and per-input time budget T, which no document sets (design §21.1 places buffer bounds with the component and lists none).",
+  "when": "Each variant is presented to the decoder as a complete input at the entry's layer.",
+  "then": "Every variant yields exactly one of structural = valid or structural = malformed. No variant terminates the process abnormally, runs beyond T, or drives memory above M. Any variant reported valid is re-checked by re-serialisation: its emitted bytes equal the variant's bytes.",
+  "oracle": "behaviour",
+  "interpretation": "Crash-freedom and a time bound are not stated in any document; §1.3 states only that the bounds exist to stop memory exhaustion by a hostile peer. The test parameterises M and T and records them with the run."
+ },
+ {
+  "id": "DEC-03",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a header that declares more content than the input carries, within the memory budget",
+  "milestone": 1,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §1.3",
+   "design §21.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Arrays arriving from strangers are a resource attack surface, so each is given an explicit maximum below; exceeding it is malformed, not merely unusual."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Definite-length encoding only. No indefinite-length arrays, maps or strings."
+   }
+  ],
+  "given": "Three inputs derived from the accepted adoption P-adopt-min: (a) the keyhash in field 1 replaced by a byte-string header `5b ffffffffffffffff` (2^64−1 declared bytes) followed by 32 bytes; (b) the merge back-pointer list in field 0 replaced by an array header `9a ffffffff` (2^32−1 declared elements) followed by one element; (c) the body's map header replaced by `ba ffffffff` followed by the original entries. memory budget M and per-input time budget T, which no document sets (design §21.1 places buffer bounds with the component and lists none).",
+  "when": "Each input is presented to the decoder as a complete body.",
+  "then": "structural = malformed for all three. Peak memory during each decode stays within M, which is set far below the declared sizes; the decoder returns rather than waiting for the declared content.",
+  "oracle": "behaviour",
+  "interpretation": "The specification bounds memory through the array ceilings and says bounds exist to stop exhaustion; that a declared length beyond the input or beyond any ceiling is rejected on sight, without reserving the declared size, is implied by that purpose rather than stated."
+ },
+ {
+  "id": "DEC-04",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a self-describe CBOR tag prefixed to a message",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1",
+   "wire-format.md §1.2",
+   "wire-format.md §3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1",
+    "text": "Nested COSE objects are UNTAGGED. RFC 9052 permits either, and libraries expose both serialisations, so a profile that does not choose gets two byte encodings for one object"
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Validate the bytes as received; do not decode and re-encode to compare."
+   },
+   {
+    "where": "wire-format.md §3",
+    "text": "Signature coverage is the body map only. Never the envelope, or signatures would not survive the addition of a signer."
+   }
+  ],
+  "given": "The accepted adoption envelope P-adopt-min with the bytes `d9 d9 f7` (CBOR tag 55799, self-describe) prefixed to the envelope; separately, the same envelope's body with the same prefix; separately, the accepted Attach frame P-frame-01 with the prefix inserted after the u32 length prefix (length adjusted).",
+  "when": "Each tagged form is presented to the decoder at its layer.",
+  "then": "structural = malformed for all three; none is accepted as the untagged object it wraps. The untagged originals remain accepted.",
+  "oracle": "behaviour",
+  "interpretation": "No document names tag 55799. The expectation rests on the schema's top-level item being a map (§3's Envelope, §8.0's frame array) and a tag being a different major type, so a library that strips the tag silently would give one object two accepted encodings — the outcome §1 forbids for nested COSE tags."
+ },
+ {
+  "id": "DEC-05",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Accept a presence record at the derived envelope ceiling of 36 signature entries",
+  "milestone": 1,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §1.3",
+   "wire-format.md §3.5",
+   "design §5.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "The envelope bound MUST be derived, never asserted independently, and derived in two steps."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Sum the transaction type's per-role bounds to get the logical signer ceiling, then double it for the COSE_Signature array, since each logical signer contributes one classical and one post-quantum entry (§3.5)."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "For a presence record: 2 participants + 16 witnesses = 18."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Twice the logical-signer bound, since each contributes one classical and one PQ entry (§3.5). For a presence record, 36"
+   },
+   {
+    "where": "wire-format.md §3.5",
+    "text": "Each logical signer contributes exactly two COSE_Signature entries: one under its classical component (alg = -8) and one under its post-quantum component (alg = -49)."
+   }
+  ],
+  "given": "Eighteen synthetic identities generated by the test-vectors keygen recipe (test-vectors/README.md; the shipped corpus holds fewer than 18, which is why B-witnesses-17 has no 16-witness accept companion at the envelope layer). A normal presence record whose body names 2 participants and 16 witnesses, with a full envelope of 18 logical signers — 36 COSE_Signature entries, sorted by kid then classical before post-quantum — every signature real over the body under `rhtn/1:envelope`.",
+  "when": "The envelope is presented to the decoder and verifier.",
+  "then": "structural = valid and signatures[signer, alg] = verified for all 36 entries. An implementation carrying an independently asserted envelope ceiling below 36 entries or below 18 logical signers reports malformed here and fails conformance.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-06",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Accept an array or value exactly at a §1.3 ceiling that no corpus fixture reaches",
+  "milestone": 1,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Arrays arriving from strangers are a resource attack surface, so each is given an explicit maximum below; exceeding it is malformed, not merely unusual."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Capabilities value, bytes | 1024"
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Verifier responses per presence record | 32 — two subjects × a per-subject threshold capped at 10, with headroom."
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Verifier responses per recovery | 32"
+   }
+  ],
+  "given": "Three at-ceiling objects for rows whose corpus coverage is a rejection only: (a) a Capabilities map carrying one value of exactly 1024 encoded bytes (B-caps-value-1025 is the rejection; no 1024 accept exists); (b) a normal presence record carrying 32 verifier responses from 32 distinct synthetic verifiers, 16 per subject, sorted as §4.5 requires (U-responses-33 is the unit-recipe rejection); (c) a recovery adoption carrying 32 verifier responses (U-recovery-responses-33 is the rejection). Identities from the keygen recipe.",
+  "when": "Each object is presented to the decoder at its layer.",
+  "then": "structural = valid for all three. An implementation whose ceiling is off by one on the low side — 1023 bytes, or 31 responses — rejects one of these and fails conformance.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-07",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a CatalogReply carrying 112 entries",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.3",
+   "wire-format.md §6.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "CatalogReply entries | 111 — an answering node answers for itself plus the ≤110 users it serves"
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Arrays arriving from strangers are a resource attack surface, so each is given an explicit maximum below; exceeding it is malformed, not merely unusual."
+   }
+  ],
+  "given": "The conforming truncated reply P-catalog-reply-truncated, which carries exactly 111 entries in field 2 and a continuation in field 3. A variant appends the withheld 112th entry to field 2, once with field 3 retained and once with field 3 removed. The reply is an unsigned message.",
+  "when": "Each variant is presented to the decoder as a CatalogReply.",
+  "then": "structural = malformed for both variants. The 111-entry original remains accepted.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-08",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject an unknown map key on every unsigned message family",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §6.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Unsigned messages reject unknown map keys — every message outside a signature's coverage, in every family."
+   },
+   {
+    "where": "wire-format.md §6.4",
+    "text": "Unsigned session messages reject unknown map keys (§1's global rule) — CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse and the control frames of §8.0 alike, and equally every unsigned family this chapter does not name: resolution, prekey and archive requests, grants and wrappers."
+   }
+  ],
+  "given": "For every unsigned family that has an accepted vector in test-vectors/messages.md — control frames on stream 0, requests, and replies, including CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse, the resolution, prekey and archive messages, grants and wrappers — the vector's top-level map with one added entry `99: h'c0ffee'`, inserted in ascending key position so the map stays canonical; where the message is a frame, the u32 length prefix adjusted.",
+  "when": "Each modified message is presented to the decoder at its layer.",
+  "then": "Each is rejected as malformed; none is accepted with the key preserved, and none is accepted with the key ignored. The unmodified vectors remain accepted.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-09",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject an unknown key in the transaction envelope map",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Unsigned messages reject unknown map keys — every message outside a signature's coverage, in every family."
+   },
+   {
+    "where": "wire-format.md §3",
+    "text": "Signature coverage is the body map only. Never the envelope, or signatures would not survive the addition of a signer."
+   }
+  ],
+  "given": "The accepted adoption envelope P-adopt-min with one entry `5: h'c0ffee'` appended to the Envelope map after key 4 (map header `a4` becomes `a5`); the body in field 3 and all four signatures unchanged.",
+  "when": "The envelope is presented to the decoder and verifier.",
+  "then": "structural = malformed, even though all four body signatures verify over the unchanged body; the object is not accepted with the envelope-level key preserved.",
+  "oracle": "behaviour",
+  "interpretation": "The Envelope map's own keys (version, type, signatures) sit outside every signature's coverage, so §1.2's rule for keys outside a signature's coverage is read as reaching the envelope map; §3 does not say so in as many words, and D2's preservation rule is read as scoped to the signed body."
+ },
+ {
+  "id": "DEC-10",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a duplicated unknown extension key",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "No duplicate map keys; a decoder MUST reject them rather than take the last."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Duplicate map keys MUST be rejected before the map is materialised."
+   }
+  ],
+  "given": "The accepted extended adoption body P-adopt-extensions (unknown key 99 at the top level and inside the Locator) with the top-level entry `99: h'c0ffee'` repeated once immediately after itself (body map header `a7` becomes `a8`), in two variants: the second value identical, and the second value `h'c0ffef'`.",
+  "when": "Each variant body is presented to the decoder.",
+  "then": "structural = malformed for both variants. The single-key original remains accepted. An implementation that collects unknown keys into a list rather than a keyed structure, and so never sees the collision, accepts these and fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-11",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject an unknown extension value that is not deterministically encoded",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Any deterministically encoded CBOR item is admissible — the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Definite-length encoding only. No indefinite-length arrays, maps or strings."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Shortest-form integers."
+   }
+  ],
+  "given": "P-adopt-extensions with its top-level key-99 value replaced by, in turn: (a) the indefinite-length array `9f 05 ff`; (b) the non-shortest integer `18 0a`; (c) a byte string with a non-shortest length header `58 03 c0ffee`. Each slice is within the 1024-byte ceiling and the map stays otherwise canonical.",
+  "when": "Each variant body is presented to the decoder.",
+  "then": "structural = malformed for all three. An implementation that skips an unknown value by walking its framing without checking the profile's encoding rules inside the slice accepts these and fails.",
+  "oracle": "behaviour",
+  "interpretation": "'The profile's encoding rules govern the slice's framing' is read as requiring the whole slice, not only its outermost header, to be deterministically encoded; whether the protocol-map key rules (unsigned-integer keys, ascending) also reach a map nested inside the slice is a question for the author and is not tested here."
+ },
+ {
+  "id": "DEC-12",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Accept a 1024-byte extension value nested 1024 levels deep",
+  "milestone": 1,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Any deterministically encoded CBOR item is admissible — the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "1024 bytes of encoded CBOR — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work."
+   }
+  ],
+  "given": "P-adopt-extensions with its top-level key-99 value replaced by 1023 bytes of `81` followed by `80` — a deterministic encoding of one-element arrays nested 1024 deep, occupying exactly the 1024-byte extension-value ceiling. memory budget M and per-input time budget T, which no document sets (design §21.1 places buffer bounds with the component and lists none).",
+  "when": "The body is presented to the decoder.",
+  "then": "structural = valid; the decoder returns within T and within M; the unknown key's slice is preserved, so the body re-serialises to bytes identical to the input. An implementation with a recursion limit below 1024 reports malformed or terminates abnormally here and fails.",
+  "oracle": "behaviour",
+  "interpretation": "§1.3 sets no nesting-depth ceiling; depth is bounded only through the 1024-byte encoded-slice bound, so a decoder that caps depth lower is over-strict under the text as written. Whether the author wants a depth ceiling is raised in the notes."
+ },
+ {
+  "id": "DEC-13",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Accept sixteen unknown keys in each of two maps of one body",
+  "milestone": 1,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Unknown extension keys per map | 16"
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Unknown map keys MUST be preserved when re-serializing for signature verification, and MUST NOT be silently dropped."
+   }
+  ],
+  "given": "P-adopt-extensions' pattern extended: 16 unknown keys (99 through 114, each `h'c0ffee'`) at the body's top level and 16 unknown keys (the same numbers) inside the Locator map in field 3 — 32 unknown keys in one body, 16 per map, both maps canonical (B-ext-keys-16 exercises one map only).",
+  "when": "The body is presented to the decoder.",
+  "then": "structural = valid, and the body re-serialises to bytes identical to the input with all 32 keys present. An implementation counting unknown keys per object rather than per map reports malformed here and fails.",
+  "oracle": "behaviour",
+  "interpretation": "'Per map' is read as each map counted independently, so 32 unknown keys across two maps are within bound; the specification does not say whether the count is per map or per object in any other words."
+ },
+ {
+  "id": "DEC-14",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Accept an Attach whose required Capabilities map is empty",
+  "milestone": 1,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §8.1",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "A required map with no entries is encoded as an empty map — `Capabilities` in `Attach` and `AttachAck` is the case in point, since a peer advertising nothing must still send the field."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "This does not apply to required fields."
+   }
+  ],
+  "given": "The accepted Attach frame P-frame-01 (two capability parameters, one greased) with field 3 replaced by the empty map `a0`, fields 1 and 2 unchanged, and the u32 length prefix adjusted.",
+  "when": "The frame is presented to the decoder as a stream-0 control frame.",
+  "then": "The frame is accepted: structural = valid with an empty capability set. An implementation that applies the omit-if-empty rule to a required field, or requires at least one capability parameter, rejects this and fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-15",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject an Attach that omits its required Capabilities map",
+  "milestone": 1,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.2",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "This does not apply to required fields."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "A required map with no entries is encoded as an empty map — `Capabilities` in `Attach` and `AttachAck` is the case in point, since a peer advertising nothing must still send the field."
+   }
+  ],
+  "given": "P-frame-01 with field 3 removed entirely (Attach map header `a3` becomes `a2`), fields 1 and 2 unchanged, length prefix adjusted. N-shape-attach-missing-identity covers field 1; no fixture covers field 3.",
+  "when": "The frame is presented to the decoder as a stream-0 control frame.",
+  "then": "structural = malformed. An implementation that reads the omit-if-empty rule as licensing omission of a required map accepts this and fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-16",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Re-serialise every accepted object to bytes identical to the input",
+  "milestone": 1,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §1",
+   "wire-format.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Unknown map keys MUST be preserved when re-serializing for signature verification, and MUST NOT be silently dropped."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Keep the received bytes and derive typed views from them."
+   },
+   {
+    "where": "wire-format.md §1",
+    "text": "A signature covers every retained field of the object it signs, except the signature field itself, including unknown extension keys."
+   }
+  ],
+  "given": "The accept set: every corpus.json entry of class `bytes` whose expect.outcome is `accept` (162 byte-class entries in the current corpus, the accept subset among them), including P-adopt-extensions (unknown keys top-level and nested), the extended EndpointRecord of records.md (D8) and the SignedLocator carrying unknown key 4 (D9).",
+  "when": "Each entry is decoded and then emitted again by the implementation's encoder — the same path it uses to reconstruct a signed payload, to store an object, or to hand it onward.",
+  "then": "For every entry the emitted bytes equal the input bytes exactly, unknown keys, their positions and their encoded values included. No entry is emitted with an unknown key dropped, reordered, or re-encoded.",
+  "oracle": "fixture",
+  "interpretation": "§1.2 states preservation for re-serialisation for signature verification; this entry asserts the same for every re-serialisation the implementation performs, on the reading that a key dropped on any other path yields a different object, and a different txid, at the next holder."
+ },
+ {
+  "id": "QUE-01",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Queue messages for a client that is not attached, and report the count at its next attach.",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "wire-format.md §8.2",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "messages queued for this client AT THE RESPONDING NODE"
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Hold ciphertext for offline clients"
+   }
+  ],
+  "given": "N is patron and serving node of light client C; C is not attached. Sender X submits k ciphertext messages addressed to C's keyhash to N, and N accepts each.",
+  "when": "C attaches to N.",
+  "then": "N's AttachAck carries field 4 equal to k.",
+  "oracle": "behaviour",
+  "interpretation": "The payload submission path by which a sender hands a message for C to N has no wire encoding (design §14.2.4's integration decisions are open); the test uses the implementation's own and observes the queue through AttachAck field 4 and the drain streams."
+ },
+ {
+  "id": "QUE-02",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Deliver queued ciphertext, unchanged, when the client returns.",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "wire-format.md §9.2",
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "The message waits; it is not lost."
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Unidirectional streams: payload delivery, queue drain"
+   },
+   {
+    "where": "design §12.6.3",
+    "text": "The recipient's serving node holds ciphertext until reconnect"
+   }
+  ],
+  "given": "k messages are queued at N for C, each a distinct ciphertext the harness recorded at submission.",
+  "when": "C attaches to N and reads its unidirectional streams.",
+  "then": "C receives k drain deliveries, and the set of ciphertexts received equals the set submitted, byte for byte.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-03",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Delete on delivery: a second attach finds nothing and redelivers nothing.",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "No copy outlives delivery. Deletion on delivery is immediate and leaves nothing recoverable — no journal, no tombstone."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Delete on delivery, immediately, leaving nothing recoverable."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "messages queued for this client AT THE RESPONDING NODE"
+   }
+  ],
+  "given": "k messages were queued at N for C; C attached and received all k on drain streams, then closed the session.",
+  "when": "C attaches to N again.",
+  "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery follows; N's inspectable queue store holds no copy of any of the k ciphertexts.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-04",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Keep no crash-recovery copy that outlives a delivery.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "No journal, no tombstone, no crash-recovery copy that outlives the delete. Durable storage for your own crash recovery is your backup problem and must not extend a message's life."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "No copy outlives delivery."
+   }
+  ],
+  "given": "k messages were queued at N for C; C attached and received all k, then closed the session.",
+  "when": "N's process is killed without warning and restarted from whatever it persisted; C attaches to N again.",
+  "then": "N's AttachAck carries field 4 equal to 0, no drain delivery follows, and none of the k ciphertexts is present in N's storage after the restart.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-05",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Hold only ciphertext, recipient keyhash and arrival time while a message waits.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Hold the minimum while a message waits: ciphertext, recipient keyhash, arrival time. Nothing further."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time."
+   }
+  ],
+  "given": "Sender X submitted one message addressed to C to N while C was not attached, and N accepted it; N exposes its queue store to the test.",
+  "when": "The test inspects N's record of the waiting message.",
+  "then": "The record consists of the ciphertext, C's keyhash and an arrival time, and carries nothing further: in particular no identity or address of X.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-06",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Refuse the newest message at the cap and tell the sender; keep what is queued.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "At the ceiling: refuse the newest message and tell the sender. Never drop the oldest."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "At the cap, refuse the newest message and tell the sender"
+   }
+  ],
+  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; X has submitted k messages for C and N accepted each.",
+  "when": "X submits a (k+1)th message addressed to C.",
+  "then": "X receives a refusal for the (k+1)th message, distinguishable from acceptance; at C's next attach field 4 equals k and the k earlier ciphertexts are all delivered.",
+  "oracle": "behaviour",
+  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that X receives a refusal for that message that differs from the acceptance the earlier k received."
+ },
+ {
+  "id": "QUE-07",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Let no flood displace what is already queued.",
+  "milestone": 3,
+  "kind": "robustness",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Never drop the oldest: it destroys a message the sender believes was accepted, and it lets anyone who can reach the queue flush what is already in it."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "Refuse-newest bounds an attacker to denying new delivery, which the sender sees."
+   }
+  ],
+  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; k legitimate messages for C are queued and N is at C's cap.",
+  "when": "An attacker A submits several times k further messages addressed to C in quick succession, then C attaches.",
+  "then": "Every one of A's messages is refused to A; C's AttachAck carries field 4 equal to k and the k legitimate ciphertexts are all delivered, none replaced by A's.",
+  "oracle": "behaviour",
+  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that A receives a refusal for each message."
+ },
+ {
+  "id": "QUE-08",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Keep a queued message across an absence of any length.",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "No time limit: a message survives an absence of any length."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "No time limit; a space limit."
+   }
+  ],
+  "given": "One message is queued at N for C, who is not attached. The absence length is a test parameter: the harness advances N's clock by a chosen long duration D and lets N run on.",
+  "when": "After D, C attaches to N.",
+  "then": "N's AttachAck carries field 4 equal to 1 and the message is delivered on a drain stream.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-09",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Apply the cap per subordinate, so one full queue does not refuse another's mail.",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "Undelivered messages queue indefinitely at the direct patron, bounded by a per-subordinate storage cap."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Queue indefinitely, bounded by a per-subordinate storage cap"
+   }
+  ],
+  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. N serves C1 and C2, neither attached; C1's queue holds k messages and is at its cap.",
+  "when": "X submits one message addressed to C2, then C2 attaches.",
+  "then": "N accepts the message for C2, and C2's AttachAck carries field 4 equal to 1 with the message delivered on a drain stream.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-10",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Queue for a client the node has marked unreachable, and deliver at its fresh attach.",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "the patron marks the client unreachable and begins queuing."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Hold ciphertext for offline clients"
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "The message waits; it is not lost."
+   }
+  ],
+  "given": "C is attached to N with a heartbeat interval I (unset, design §21.1; a test parameter). The harness blackholes all packets between C and N for three full intervals so that N marks C unreachable.",
+  "when": "X submits one message addressed to C; the blackhole is lifted and C performs a fresh attach to N.",
+  "then": "N's AttachAck carries field 4 equal to 1 and the message is delivered on a drain stream.",
+  "oracle": "behaviour",
+  "interpretation": "Whether N ends the old session on marking C unreachable is not stated; the test has C attach afresh and does not depend on the old session's fate."
+ },
+ {
+  "id": "QUE-11",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Distinguish an offline subordinate from a keyhash with no record.",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.2",
+   "design §7.4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "§7.4.3's queue mechanism depends on the patron distinguishing \"offline\" from \"no record\"."
+   },
+   {
+    "where": "design §7.4.3",
+    "text": "Queries to an offline light client queue at its patron, resolving when the client next connects"
+   }
+  ],
+  "given": "N serves C, who is not attached, and holds no record of keyhash Z, which belongs to no node in N's topology.",
+  "when": "X submits one message addressed to C and one addressed to Z.",
+  "then": "The message for C is queued (C's next AttachAck carries field 4 equal to 1); nothing is queued for Z in N's inspectable store, and the answer X receives for Z differs from the one it received for C.",
+  "oracle": "behaviour",
+  "interpretation": "Neither the acceptance nor the no-record answer to the sender has a wire encoding; the test checks only that the two answers are distinguishable to X."
+ },
+ {
+  "id": "QUE-12",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Report no queued messages from a failover sibling, which holds no queue state.",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Do not replicate queue state to siblings."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "Siblings do not hold queue state."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "messages queued for this client AT THE RESPONDING NODE"
+   }
+  ],
+  "given": "N and S are siblings; k messages are queued at N for C; nothing addressed to C was ever submitted to S. C is attached to N with interval I (a test parameter) and holds S's SiblingRef with KeyMaterial.",
+  "when": "N goes dark; after three missed intervals C attaches to S.",
+  "then": "S's AttachAck carries field 1 equal to 1 and field 4 equal to 0, and S delivers nothing on drain streams.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-13",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Collect from the patron, in full, once it returns after a failover.",
+  "milestone": 4,
+  "kind": "liveness",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "a client attached to a sibling still collects from its own patron once that patron returns. The message waits; it is not lost."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "a client attached to a sibling collects from its own patron when that patron returns."
+   }
+  ],
+  "given": "k messages are queued at N for C; N went dark and C holds a degraded session on sibling S.",
+  "when": "N returns; C's session on S ends and C performs a fresh attach.",
+  "then": "C attaches to N, N's AttachAck carries field 4 equal to k, and all k ciphertexts are delivered on drain streams.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-14",
+  "area": "queue",
+  "gap": "queue",
+  "title": "End a running session once the node holds supersession evidence for its credential.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "design §12.6.5",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "sessions under the superseded credential terminate, and nothing further is delivered to it, queued material and capture-key grants included."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Terminate its sessions and deliver nothing further to it, its queue included."
+   }
+  ],
+  "given": "C is attached to N under keyhash K_old with a live session.",
+  "when": "N takes authenticated supersession evidence for C's binding: a verified reissue chain onto a new series, or a recovery it has validated.",
+  "then": "N closes C's connection, and no payload or drain delivery reaches that session after the evidence was taken.",
+  "oracle": "model",
+  "interpretation": "No close code is assigned for ending a session on supersession; the test checks that the connection is closed by N and not which code it carries."
+ },
+ {
+  "id": "QUE-15",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Deliver nothing queued to a credential the node has verified superseded.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "design §12.6.5",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "sessions under the superseded credential terminate, and nothing further is delivered to it, queued material and capture-key grants included."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Stop serving a binding you have verified superseded"
+   }
+  ],
+  "given": "k messages are queued at N for keyhash K_old; N has since taken authenticated supersession evidence for that binding (a verified reissue chain onto a new series, or a validated recovery).",
+  "when": "A client presenting K_old dials N and sends Attach.",
+  "then": "N sends no AttachAck and no drain delivery on that connection.",
+  "oracle": "model",
+  "interpretation": "Whether the attach is closed with application close code 1 or otherwise is not assigned; the test checks only that no AttachAck and no delivery follow."
+ },
+ {
+  "id": "QUE-16",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Hand nothing queued for a superseded keyhash to its successor.",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.6",
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time."
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "nothing further is delivered to it, queued material and capture-key grants included."
+   }
+  ],
+  "given": "k messages are queued at N for keyhash K_old; N has taken authenticated supersession evidence moving that binding to K_new, and nothing addressed to K_new has been submitted.",
+  "when": "A client presenting K_new attaches to N.",
+  "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery carries any of the k ciphertexts.",
+  "oracle": "model",
+  "interpretation": "That delivery is keyed by the queued recipient keyhash is the model's reading (tamarin/compliant/attach); the specification says nothing further goes to the superseded credential and does not say whether a successor collects material queued for its predecessor."
+ },
+ {
+  "id": "REP-01",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Replicate a client's unreachable marking to the serving node's siblings",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "This state replicates to siblings, or a sibling answering during failover has no idea of the client's status."
+   },
+   {
+    "where": "design §3.4",
+    "text": "Siblings replicate each other's traffic (up to f−1 = 9). Authorised implicitly by the patron's adoption transaction, with no separate agreement."
+   }
+  ],
+  "given": "Infra nodes S and T are siblings under one patron; light client L is attached to S. No separate replication agreement exists between S and T beyond the patron's adoption transactions.",
+  "when": "L's heartbeat fails at S, S marks L unreachable, and L is then attached to T in failover.",
+  "then": "T's reachability state for L shows L as unreachable-and-queuing rather than as unknown; T does not answer for L as if it held no record of L.",
+  "oracle": "behaviour",
+  "interpretation": "No wire frame is specified as the carrier of this replicated state; the test observes T's resulting state only and leaves the carrier to the implementation."
+ },
+ {
+  "id": "REP-02",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Do not replicate queue state to siblings",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Do not replicate queue state to siblings."
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "Siblings do not hold queue state."
+   }
+  ],
+  "given": "Sibling infra nodes S and T; light client L attached to S is marked unreachable at S, and three messages for L are queued at S.",
+  "when": "L attaches to T in failover and collects.",
+  "then": "T delivers none of the three messages, T's store holds no queued ciphertext for L, and T's AttachAck field 4 does not count S's mailbox.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-03",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Issue secondhand from replicated state while the patron is dark",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5.1",
+   "wire-format.md §7.1",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5.1",
+    "text": "A sibling issues a fresh attestation reflecting whatever rotation reached the replicated state."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "a consumer must be able to weight a secondhand attestation lower"
+   }
+  ],
+  "given": "Infra patron P adopted L; sibling T holds P's replicated adoption records for L. P then countersigns a rotation for L that has not yet reached T. P becomes unreachable.",
+  "when": "A currency request for L is sent to T.",
+  "then": "T returns a CurrencyAttestation whose field 5 is 1 and whose field 2 is the key T's replicated state holds for L; the reply carries no indication that P's state differs, so the lag is visible only as the secondhand role.",
+  "oracle": "behaviour",
+  "interpretation": "The spec does not name replication lag; the test reads 'whatever rotation reached the replicated state' as: the sibling attests what it holds and neither fetches from the dark patron nor marks its state as behind."
+ },
+ {
+  "id": "REP-04",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Accept a move within the replication horizon without archive presentation",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §4.2.1",
+   "design §6.2.3",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.2.1",
+    "text": "Implementations MUST NOT force re-verification in this case."
+   },
+   {
+    "where": "wire-format.md §4.2.1",
+    "text": "it already holds the node's history through sibling replication (§4.4), so no archive presentation or re-verification is needed and trust history is preserved"
+   }
+  ],
+  "given": "Light client L is adopted under infra node P; T is P's sibling and holds L's history through sibling replication.",
+  "when": "L presents T an adoption carrying P's countersignature (a lateral shift) with no archive presentation.",
+  "then": "T completes the adoption; no archive-fetch request and no presence ceremony are required of L.",
+  "oracle": "behaviour",
+  "interpretation": "'No archive presentation or re-verification' is observed as the absence of an archive-fetch request and of a presence-ceremony requirement; the spec names no other observable."
+ },
+ {
+  "id": "REP-05",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Accept a peering record whose self-asserted ASN is not validated against its address",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §4.4",
+   "design §17.3",
+   "design §6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.4",
+    "text": "The field is optional and self-asserted besides — no IP-to-ASN validation is specified anywhere."
+   }
+  ],
+  "given": "A well-formed peering transaction between infra nodes A and B, each NetworkPoint carrying an ASN that does not correspond to its IPv4 address in any public routing data.",
+  "when": "A node in A's horizon receives the record by topology push.",
+  "then": "The record is accepted and stored, and the ASN values it exposes are exactly those asserted; no validation failure is reported.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-06",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Expose both peers' addresses and ASNs from a stored peering record",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §6.3",
+   "design §3.4",
+   "wire-format.md §4.4"
+  ],
+  "rule": [
+   {
+    "where": "design §6.3",
+    "text": "The record carries each endpoint's network point. Address, and where available the ASN, so concentration is observable rather than asserted"
+   },
+   {
+    "where": "design §3.4",
+    "text": "The peering record carries the ASN for both endpoints"
+   }
+  ],
+  "given": "Infra nodes A and B, in different subtrees and both carrying ASNs, have peered; observer O is in A's horizon and has stored the peering record.",
+  "when": "O's client reads A's peering relationships.",
+  "then": "The stored record yields A's and B's keyhashes, both IPv4 addresses and both ASNs as decoded from the record's NetworkPoints, with nothing withheld or derived.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-07",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Leave the trust metric's output unchanged by ASN concentration",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.4",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.4",
+    "text": "Concentration is a visible signal, not a trust input — nothing in the metric consumes it."
+   }
+  ],
+  "given": "Two otherwise identical fixed graphs, differing only in that in one every peering NetworkPoint carries the same ASN and in the other every ASN differs.",
+  "when": "The reference metric scores the same target from the same observer in each graph.",
+  "then": "The two scores are identical.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "REP-08",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Generate no rootward memo for a peering record",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.2",
+   "design §12.7.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2",
+    "text": "Peering is topology class and is excluded from rootward travel"
+   }
+  ],
+  "given": "Infra node A, with patron P, grandpatron G and root R above it, peers with infra node B in another subtree.",
+  "when": "A pushes the peering record into its horizon.",
+  "then": "No TopologyMemo derived from the peering is sent to P, and neither G's nor R's memo table gains an entry naming B's NetworkPoint or ASN.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-09",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Make an infra node's peerlessness observable from held topology",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.7.5",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §12.7.5",
+    "text": "Peering transactions are public, so this is observable"
+   },
+   {
+    "where": "design §12.7.5",
+    "text": "trust policies should discount peerless infra nodes, and the reference client should tell an operator plainly what their subordinates are exposed to"
+   }
+  ],
+  "given": "Observer O's horizon contains infra nodes I and J; J has one peering record stored at O and I has none.",
+  "when": "O's client enumerates cross-tree peers for I and for J.",
+  "then": "I is reported with zero peers and J with one, both derived from O's own topology store, and I's zero is surfaced to the user rather than omitted.",
+  "oracle": "behaviour",
+  "interpretation": "'Should tell an operator plainly' is a reference-client commitment; the test asserts only that the count is derivable and displayed, and leaves any policy discount unspecified."
+ },
+ {
+  "id": "REP-10",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Adopt with zero peers",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "design §12.7.5",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §12.7.5",
+    "text": "a disconnected node must be able to adopt or be adopted before it has any peers"
+   },
+   {
+    "where": "design §3.4",
+    "text": "zero peers is a supported configuration"
+   }
+  ],
+  "given": "Infra node I is a root with no peering records and no patron; node N holds a proof of presence with I.",
+  "when": "I adopts N.",
+  "then": "The adoption completes and is stored; no step refuses or defers it for want of a peering record.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-11",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Take the direct payload path inside the horizon",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.3",
+   "design §15.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "Direct | Peer is inside the horizon (§15.1), both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect"
+   },
+   {
+    "where": "design §12.6.3",
+    "text": "\"Is this peer in my h=2 topology store?\" is the entire check."
+   }
+  ],
+  "given": "Light clients L1 and L2 are siblings (distance 1, inside each other's h=2 horizon), both online and attached, with a NAT traversal that succeeds; no user override is set.",
+  "when": "L1 sends payload to L2.",
+  "then": "L2 receives the payload directly from L1's address; neither serving node carries the payload bytes.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-12",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Relay, never connect directly, to a peer outside the horizon",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §12.6.3",
+   "design §15.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "Direct connection is limited to the horizon, because a direct path reveals each peer's IP to the other (P17)."
+   },
+   {
+    "where": "design §12.6.3",
+    "text": "Relayed | Peer is outside the horizon, or traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext"
+   }
+  ],
+  "given": "Light clients L1 (serving node S1) and L2 (serving node S2) sit in different subtrees, outside each other's h=2 horizon; both online; no user override.",
+  "when": "L1 sends payload to L2.",
+  "then": "The payload passes through S1 and S2 as ciphertext; L1 opens no connection to L2's address, and L2 learns no address for L1.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-13",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Do not count a peering edge toward the horizon for the direct path",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §6.3",
+   "design §15.1",
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "design §6.3",
+    "text": "It confers no scope, and does not extend the horizon."
+   },
+   {
+    "where": "design §15.1",
+    "text": "Peering edges do not count (§6.3): a peering edge is ungoverned and carries none of the subnet's authority, so it contributes flow without conferring scope."
+   }
+  ],
+  "given": "Infra nodes A and B, in different subtrees, have peered. Light client L attaches to A and light client M to B; without the peering edge they are outside each other's horizon; both online; no override.",
+  "when": "L sends payload to M.",
+  "then": "The payload is relayed through A and B; M is absent from L's h=2 topology store and no direct connection is attempted.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "REP-14",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Honour a user override of the direct-path default",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "both defaults must therefore be overridable — relay-with-a-patron's-sibling and direct-with-a-distant-trusted-party are both reasonable user choices (P17)"
+   }
+  ],
+  "given": "As REP-12 (L1 and L2 outside each other's horizon), except that L1's user has chosen direct connection for L2 and L2's user has chosen it for L1; traversal succeeds.",
+  "when": "L1 sends payload to L2.",
+  "then": "L2 receives the payload directly from L1's address and neither serving node carries it.",
+  "oracle": "behaviour",
+  "interpretation": "The spec makes the default overridable and does not say whether one side's choice suffices; the test sets the override on both sides."
+ },
+ {
+  "id": "REP-15",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Push the serving node's siblings, not the patron's, as the replication set",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "wire-format.md §8.2",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "siblings of the serving node, not of the patron, where those differ"
+   }
+  ],
+  "given": "Light client L's patron P is a light client under infra node S; S has infra siblings T1 and T2; P has light-client sibling Q.",
+  "when": "L attaches to S.",
+  "then": "The AttachAck's SiblingRef list names T1 and T2 with their endpoints, and does not name Q.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-01",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Use a gossiped anchor entry as a starting point without authenticating the anchor",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.2",
+   "design §12.2",
+   "design §12.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.2",
+    "text": "Full keys are not fetched during resolution — they arrive from attaching, from a transaction naming the node, or not at all"
+   },
+   {
+    "where": "wire-format.md §7.2",
+    "text": "an anchor that refers you onward is never pinned at all"
+   }
+  ],
+  "given": "The node's anchor table holds an AnchorEntry for anchor A received by gossip: A's keyhash, one to eight NetworkPoints, subtree size, seqno and A's self-signature. The node holds no KeyMaterial for A and has never contacted A.",
+  "when": "The node resolves a SignedLocator whose anchor is A and whose path leads to a subject beneath A.",
+  "then": "A ResolveRequest is sent to an endpoint taken from the entry; the ResolveReply's Referral is followed to the next hop; at no point is A's key material fetched or a pin for A created, and the resolution still completes at the serving node.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-02",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Retain anchor entries only at or above the node's own caching threshold",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §12.7.3",
+   "design §12.2",
+   "wire-format.md §7.2"
+  ],
+  "rule": [
+   {
+    "where": "design §12.7.3",
+    "text": "each node sets its own threshold for which roots it caches. For example, ignoring roots with fewer than n subordinates"
+   },
+   {
+    "where": "wire-format.md §7.2",
+    "text": "Which anchors a node caches is per-node policy, never a protocol constant."
+   }
+  ],
+  "given": "The anchor caching threshold n is a parameter of the test, since design §21.1 leaves it unset; the node under test is configured with a chosen n. Two well-formed AnchorEntry objects arrive by gossip for roots R1 and R2, with subtree sizes n−1 and n.",
+  "when": "The node ingests both entries.",
+  "then": "R2's entry is present in the anchor table and R1's is not; a locator anchored at R1 is reported unresolvable by this node while one anchored at R2 proceeds to a ResolveRequest.",
+  "oracle": "behaviour",
+  "interpretation": "The quantity compared against n is AnchorEntry field 3 (subtree size), which the test reads as design §12.7.3's count of subordinates."
+ },
+ {
+  "id": "RES-03",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Send no request for a locator whose anchor is absent from the table",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.7.3",
+   "design §12.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "A locator whose anchor is absent from the local table is not resolvable by this node. That is a caller-side condition, not a wire failure: no request is sent, because there is nowhere to send it."
+   }
+  ],
+  "given": "The node's anchor table holds no entry for anchor A, and no other source (an introduction, a cached entry, a peer's referral) has supplied an address for A.",
+  "when": "The node is asked to resolve a valid SignedLocator anchored at A.",
+  "then": "No ResolveRequest is emitted on any connection; the resolution result is reported as a caller-side condition distinct from every wire failure code.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-04",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Accept a same-series counter jump as a valid supersession",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §2.3",
+   "design §12.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "Within one series a new counter must be strictly greater than the last one the verifier holds — not exactly previous+1, since a verifier may legitimately have missed intervening transactions"
+   }
+  ],
+  "given": "The holder has installed the primitives.md SignedLocator for alice with seqno [5, 42] as her current locator.",
+  "when": "The primitives.md 'Same-series counter jump' SignedLocator for alice, seqno [5, 100], is presented.",
+  "then": "The [5, 100] locator is accepted and becomes the held locator for alice; the [5, 42] locator is no longer reported as current.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "RES-05",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Retain neither locator when equal seqnos carry different contents",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.7.3",
+   "wire-format.md §2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "malformed names the pair, the holder retains neither as current and re-resolves — kept-because-it-arrived-first is not a freshness rule"
+   }
+  ],
+  "given": "The holder has installed alice's [5, 100] counter-jump SignedLocator from primitives.md. Its conflict partner (V12), same subject, same [5, 100], different path, is validly signed.",
+  "when": "The conflict partner is presented and the holder is then asked to reach alice.",
+  "then": "Neither locator is reported as alice's current locator, and the attempt to reach her produces a re-resolution rather than a dial to either path.",
+  "oracle": "behaviour",
+  "interpretation": "'Re-resolves' is observed as the holder declining to dial either path and signalling that a fresh locator is required; the spec places the fresh locator's source in design §12.3 Case 3 or §12.4, outside this test."
+ },
+ {
+  "id": "RES-06",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Do not rank two locators for one subject that lie in different series",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2.3",
+   "wire-format.md §7.7.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "Across series there is no order, and a reader MUST NOT invent one."
+   },
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "Two locators in different series do not rank, and a reader holding both has learned nothing about which is current — it either holds a §4.6 chain that says, or it re-resolves"
+   }
+  ],
+  "given": "The holder has alice's [5, 100] SignedLocator installed and holds no series-reissue chain for her.",
+  "when": "A validly signed SignedLocator for alice with seqno [9, 3] and a different path is presented.",
+  "then": "The [9, 3] locator is not installed as fresher and the [5, 100] locator is not marked stale; the holder reports that it cannot determine which is current.",
+  "oracle": "behaviour",
+  "interpretation": "The spec says the reader 'has learned nothing'; the test reads this as the held locator left unchanged, the newcomer not installed, and the reader signalling indeterminacy rather than choosing."
+ },
+ {
+  "id": "RES-07",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Route a light client's resolution through its serving node",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.7.1",
+   "design §12.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.1",
+    "text": "A light client sends ResolveRequest to its serving infra node, not to the anchor."
+   },
+   {
+    "where": "wire-format.md §7.7.1",
+    "text": "The serving node resolves on the client's behalf and returns the result."
+   }
+  ],
+  "given": "Light client L is attached to serving node S. L holds a SignedLocator for subject X anchored at A; S holds an anchor entry for A and L holds none.",
+  "when": "L resolves X.",
+  "then": "L's only ResolveRequest is sent on its session with S; S sends a ResolveRequest to an endpoint of A and follows any referrals; L receives X's serving node and residual path from S and opens no connection to A.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-08",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Answer authoritatively with the residual suffix for a client attached past a light-client patron",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.7.2",
+   "infra-client-requirements.md §4.1",
+   "design §12.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.2",
+    "text": "The remaining path suffix is returned rather than traversed. The serving node uses it to identify which of its attached clients is meant."
+   },
+   {
+    "where": "infra-client-requirements.md §4.1",
+    "text": "You resolve their paths yourself; nothing routes through an intermediate light-client patron."
+   }
+  ],
+  "given": "Infra node S has light-client subordinate P, and P has adopted light client L, so L attaches to S at depth two beneath it.",
+  "when": "S receives a ResolveRequest naming L, with the anchor and full anchor-relative path to L.",
+  "then": "The reply has field 2 = 0 and a ServingInfra whose field 1 is S's keyhash and whose path field is the non-empty suffix identifying L beneath S; no request is forwarded to P.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-09",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Resolve a root's self-anchored locator to an empty residual path",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "design §12.6.1",
+   "design §12.1",
+   "wire-format.md §7.7.3"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.1",
+    "text": "empty means the addressed party is the node itself, non-empty means the last hop forwards to an attached client"
+   },
+   {
+    "where": "design §12.1",
+    "text": "a root names itself, with an empty path"
+   }
+  ],
+  "given": "Root R is an infra node; the requester holds an anchor entry for R and R's self-anchored SignedLocator from primitives.md (anchor = R, empty path).",
+  "when": "The requester sends R a ResolveRequest with subject R, anchor R and the empty path.",
+  "then": "The reply has field 2 = 0 and a ServingInfra naming R with an empty path field, and the requester treats R itself as the addressed party.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "RES-10",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Refer from an infra child's endpoint record before ever contacting the child",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.4",
+   "infra-client-requirements.md §4.2",
+   "wire-format.md §7.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.4",
+    "text": "Unverified does not mean unusable: refer from it."
+   },
+   {
+    "where": "infra-client-requirements.md §4.2",
+    "text": "Refer when it does not: the next hop's keyhash, its endpoints, and its KeyMaterial where the requester may lack it."
+   }
+  ],
+  "given": "Infra node S adopted infra node C. S has received C's EndpointRecord by topology push, holds no KeyMaterial for C and has never dialled C.",
+  "when": "S receives a ResolveRequest whose path leads into C's subtree.",
+  "then": "The reply has field 2 = 2 and a Referral whose field 1 is C's keyhash, whose field 2 is the endpoint list from C's record, and whose field 3 is at least 1; S opens no connection to C before replying.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-11",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Reject a referral that advances nothing",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.7.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "advances MUST be ≥ 1, and a referral advancing past the path's end is malformed"
+   }
+  ],
+  "given": "A requester is mid-resolution, having sent a ResolveRequest with a three-index path to node N.",
+  "when": "N replies with field 2 = 2 and a Referral whose field 3 is 0.",
+  "then": "The named next hop is not dialled and the reply is rejected as malformed.",
+  "oracle": "behaviour",
+  "interpretation": "What the requester does after rejecting a malformed reply (retry at another endpoint of N, or report failure) is not stated; the test asserts only that the loop is not followed."
+ },
+ {
+  "id": "RES-12",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Fail the handshake, not the identity, when an unsigned reply gives a wrong address",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.1",
+   "wire-format.md §7.7.3",
+   "design §12.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "The reply is not signed."
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "The dialling party checks that key is the classical member of the KeyMaterial it has pinned for the keyhash it intended to reach."
+   },
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "A wrong or hostile reply causes a failed connection, not a false identity."
+   }
+  ],
+  "given": "The requester intends to reach subject X, whose serving node is S, and holds S's KeyMaterial pinned. A ResolveReply names S's keyhash in ServingInfra but lists the endpoint of a different node Y, which presents Y's own key.",
+  "when": "The requester dials the listed endpoint.",
+  "then": "The handshake fails because the presented key is not the classical member of S's pinned KeyMaterial; no session, Attach or payload follows, and the result is reported as a failed contact with S, never as having reached S.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-13",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Try the remaining serving endpoints when the first fails",
+  "milestone": 4,
+  "kind": "liveness",
+  "spec": [
+   "wire-format.md §7.7.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.3",
+    "text": "an implementation MUST treat the list as ; alternatives and try others on failure, or a ; single unreachable first entry becomes a ; permanent outage for that peer"
+   }
+  ],
+  "given": "A ServingInfra reply lists two NetworkPoints for serving node S in preference order; the first does not respond, the second is live and presents S's key.",
+  "when": "The requester contacts S.",
+  "then": "After the first endpoint fails the second is dialled, the handshake completes against S's pinned key, and the contact is reported as successful.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-14",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Remove a departed infra child and fail, never redirect, for its old path",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "infra-client-requirements.md §4.2",
+   "wire-format.md §7.7.3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Remove a child on departure or disavowal. A stale entry refers requesters to a node that will not answer for that path."
+   },
+   {
+    "where": "infra-client-requirements.md §4.2",
+    "text": "Keep nothing for a node that has left your subtree, and do not redirect on its behalf."
+   }
+  ],
+  "given": "Infra node S holds a child-table entry for infra child C at index i. C then departs (a departure transaction S stores) and is adopted by an unrelated patron, whose position S also learns from topology.",
+  "when": "S receives a ResolveRequest whose path passes through index i beneath S.",
+  "then": "The reply has field 2 = 1 with failure code 0 or 1; no Referral naming C or C's new position is returned, and S's child table no longer lists C.",
+  "oracle": "behaviour",
+  "interpretation": "The spec requires failure rather than referral and names codes 0 and 1 as the stale-locator outcomes; which of the two S returns is the test's reading, and either is accepted."
+ },
+ {
+  "id": "RES-15",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Replace an infra child's endpoint list on a strictly greater counter, reordering included",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.6",
+   "infra-client-requirements.md §4.4",
+   "wire-format.md §2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Publishing a changed endpoint list advances the counter — and the list is ordered, so reordering alone is a change"
+   },
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Freshness by seqno, strictly greater counter to replace within a series"
+   }
+  ],
+  "given": "Infra node S holds infra child C's EndpointRecord with seqno [s, c] listing endpoints [E1, E2].",
+  "when": "C publishes a record with seqno [s, c+1] listing [E2, E1], and S then receives a ResolveRequest into C's subtree.",
+  "then": "The Referral lists C's endpoints as [E2, E1], in the new record's order.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-16",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Keep no record of who asked about whom after answering a resolution",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.5",
+   "infra-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.5",
+    "text": "answer the request, keep no record of who asked about whom"
+   }
+  ],
+  "given": "Infra node S has answered a ResolveRequest from authenticated requester Q about subject X, and the session with Q has closed.",
+  "when": "S's persistent state and logs are inspected.",
+  "then": "No record pairs Q with X: neither the request nonce, nor the (requester, subject) pair, nor a query-log entry survives the answer.",
+  "oracle": "behaviour",
+  "interpretation": "The obligation is a commitment the protocol cannot enforce (design §1.1); the test checks the reference implementation's own storage and treats any retained pairing as a failure."
+ },
+ {
+  "id": "SES-01",
+  "area": "session",
+  "gap": "session",
+  "title": "Report primary mode to a client attaching to its own serving node.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "infra-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Determine the attachment mode from local topology. A client not in this node's subtree is in failover, and report it."
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "Light client dials out to its serving infra node. The nearest infrastructure node on its patron chain, which is not necessarily its patron"
+   }
+  ],
+  "given": "Infra node N holds an adoption of light client C directly under it, so N is C's nearest infrastructure ancestor. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
+  "when": "C dials N and sends Attach with field 1 equal to its own keyhash.",
+  "then": "N answers with AttachAck whose field 1 (mode) is 0 and whose field 3 is I.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-02",
+  "area": "session",
+  "gap": "session",
+  "title": "Accept a client whose patron is a light client, on the walk-up to infrastructure.",
+  "milestone": 2,
+  "kind": "must-accept",
+  "spec": [
+   "design §14.1.2",
+   "infra-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Accept attachment from any node whose nearest infrastructure ancestor is this node, and from siblings' clients in failover"
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "A light client whose patron is itself a light client (§3.3 permits this) walks up until it reaches infrastructure."
+   }
+  ],
+  "given": "Infra node N has adopted light client P; P has adopted light client C. C's nearest infrastructure ancestor is therefore N, which is not its patron. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
+  "when": "C dials N and sends Attach.",
+  "then": "N does not close the connection with application close code 1; it answers with AttachAck whose field 1 (mode) is 0.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-03",
+  "area": "session",
+  "gap": "session",
+  "title": "Send the first heartbeat after one full interval, counter 0, then one per interval.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Both sides send one Heartbeat per advertised interval, so liveness is bidirectional and the interval is the serving node's to set."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "counter 0 is sent after one interval, not immediately"
+   }
+  ],
+  "given": "A session between C and N is established (AttachAck received). The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3. Stream 0 is observed in both directions from the moment AttachAck is sent.",
+  "when": "Three intervals of I seconds elapse with no other traffic.",
+  "then": "Each side's first Heartbeat carries counter 0 and is sent no earlier than I seconds after AttachAck; each side's next two carry counters 1 and 2, one per interval.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-04",
+  "area": "session",
+  "gap": "session",
+  "title": "Reset liveness on any valid beat with an unseen counter, so one lost beat does not fail over.",
+  "milestone": 2,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "valid beat carrying a counter not yet seen resets"
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Liveness rule: a peer is considered failed after 3 consecutive missed intervals"
+   }
+  ],
+  "given": "A session between C and N with interval I; the harness sits on the path and can drop individual frames. C holds a sibling list from AttachAck.",
+  "when": "The harness drops N's Heartbeat with counter 1 and delivers counters 2, 3, 4 and onward on time, for at least six intervals.",
+  "then": "C stays in the session on N: it opens no connection to any sibling and continues sending its own Heartbeats to N throughout.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-05",
+  "area": "session",
+  "gap": "session",
+  "title": "Count a malformed heartbeat as absence: no immediate close, three misses still govern.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A malformed heartbeat counts as absence, not as a fault. It does not reset the detector and does not itself close the session; three missed intervals still govern."
+   }
+  ],
+  "given": "A session between C and N with interval I. The harness replaces every Heartbeat from C with a malformed frame carrying the Heartbeat frame type.",
+  "when": "Three full intervals elapse with only malformed frames arriving from C.",
+  "then": "N does not close the session on receiving a malformed frame; after three full intervals N's inspectable reachability state for C reads unreachable, not before.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-06",
+  "area": "session",
+  "gap": "session",
+  "title": "Fail over when only payload traffic arrives, since payload does not reset the detector.",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §8.2",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Unrelated payload or application traffic must not, since it would let incidental activity conceal failure of the very path the detector tests. Present encoding: only a Heartbeat resets the counter."
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "after 3 consecutive missed intervals, the client attaches to another party in the same replication set as its serving node"
+   }
+  ],
+  "given": "C is in a session on N with interval I and holds sibling S's SiblingRef with KeyMaterial from AttachAck. N is scripted to keep sending payload frames on unidirectional streams while sending no Heartbeat.",
+  "when": "Three full intervals elapse in which N sends payload but no Heartbeat.",
+  "then": "C dials S and receives an AttachAck from S with field 1 (mode) equal to 1.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-07",
+  "area": "session",
+  "gap": "session",
+  "title": "Count intervals that elapsed during a suspension on waking, not timer callbacks.",
+  "milestone": 4,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Misses are counted by elapsed full intervals on a local monotonic clock, not by delivered timer callbacks."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A mobile runtime suspended for three intervals has missed three on waking"
+   }
+  ],
+  "given": "C is in a session on N with interval I and holds sibling S's SiblingRef with KeyMaterial. N is stopped.",
+  "when": "C's process is suspended for longer than three intervals and then resumed.",
+  "then": "On resuming, C dials S before another full interval elapses, and receives an AttachAck from S with field 1 equal to 1.",
+  "oracle": "behaviour",
+  "interpretation": "'Has missed three on waking' is read as failover beginning on waking; the one-interval bound is the test's, since wire-format.md §8.2 leaves timeout and backoff to local policy."
+ },
+ {
+  "id": "SES-08",
+  "area": "session",
+  "gap": "session",
+  "title": "Attach to a sibling of the serving node after three missed intervals, and be told the session is degraded.",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "after 3 consecutive missed intervals, the client attaches to another party in the same replication set as its serving node, and the resulting session is degraded."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "The serving node determines the mode; the client is told."
+   }
+  ],
+  "given": "Infra nodes N and S are siblings (design §3.4); C is adopted under N and attached to N with interval I; N's AttachAck listed S with KeyMaterial.",
+  "when": "N stops sending Heartbeats and all other frames for three full intervals.",
+  "then": "C dials S; S answers with AttachAck whose field 1 (mode) is 1.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-09",
+  "area": "session",
+  "gap": "session",
+  "title": "Accept a sibling's client that fails over from its persisted list when its serving node is unreachable at attach time.",
+  "milestone": 4,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §8.2",
+   "light-client-requirements.md §4",
+   "infra-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "a client whose serving node is unreachable at attach time uses its cached sibling list immediately."
+   },
+   {
+    "where": "light-client-requirements.md §4",
+    "text": "Persist the cached sibling list across restarts."
+   },
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Accept attachment from any node whose nearest infrastructure ancestor is this node, and from siblings' clients in failover"
+   }
+  ],
+  "given": "C previously attached to N and received an AttachAck listing sibling S with KeyMaterial; C's process has since exited. N is unreachable (no route) at the time of the next attach.",
+  "when": "C starts and performs a fresh attach.",
+  "then": "C dials S without first waiting three heartbeat intervals, and S accepts: it does not close with application close code 1 and returns AttachAck with field 1 equal to 1.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-10",
+  "area": "session",
+  "gap": "session",
+  "title": "Produce no countersignature in a degraded session.",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "That party holds the replicated state but not the authority to countersign."
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "Payload flows; trust-bearing operations do not"
+   }
+  ],
+  "given": "N is both patron and serving node of C; N is dark and C holds a degraded session on N's sibling S (AttachAck field 1 equal to 1).",
+  "when": "C submits a subnet-scoped transaction that requires its patron's countersignature on the degraded session, and also sends ordinary payload.",
+  "then": "No transaction countersigned by S comes into existence, at S or at C; the payload is carried.",
+  "oracle": "model",
+  "interpretation": "How a countersignature request travels on a session and how its non-performance is signalled are not encoded; the test observes only the absence of a countersignature by S."
+ },
+ {
+  "id": "SES-11",
+  "area": "session",
+  "gap": "session",
+  "title": "Stay on the sibling while the degraded session lasts, even after the serving node returns.",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §8.2",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A client on a sibling stays there until that session ends; the next fresh attach tries its actual serving node first."
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "No automatic failback: the client stays on the sibling until that session ends, and the next fresh attach tries its actual serving node first."
+   }
+  ],
+  "given": "C holds a degraded session on S with interval I after N went dark.",
+  "when": "N becomes reachable again and stays reachable for at least six intervals while the degraded session continues.",
+  "then": "C opens no connection to N during that time and keeps exchanging Heartbeats with S.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-12",
+  "area": "session",
+  "gap": "session",
+  "title": "Try the actual serving node first on the next fresh attach after a degraded session.",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A client on a sibling stays there until that session ends; the next fresh attach tries its actual serving node first."
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "the next fresh attach tries its actual serving node first"
+   }
+  ],
+  "given": "C holds a degraded session on S; N has since become reachable again.",
+  "when": "C's session on S ends (C closes it) and C performs a fresh attach.",
+  "then": "C's first dial is to N, and N answers with AttachAck whose field 1 (mode) is 0.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-13",
+  "area": "session",
+  "gap": "session",
+  "title": "Mark a client unreachable when its heartbeats stop.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "wire-format.md §8.2",
+   "infra-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "the patron marks the client unreachable and begins queuing."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Liveness rule: a peer is considered failed after 3 consecutive missed intervals"
+   },
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Store the resulting reachability state, not the update history"
+   }
+  ],
+  "given": "C is attached to N with interval I; N exposes its reachability state per client to the test.",
+  "when": "The harness blackholes all packets from C to N for three full intervals.",
+  "then": "N's reachability state for C reads unreachable after the third full interval, and read reachable at every inspection before it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SES-14",
+  "area": "session",
+  "gap": "session",
+  "title": "Replicate a client's unreachable state to the serving node's siblings.",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "design §14.1.2",
+   "design §3.4"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.2",
+    "text": "This state replicates to siblings, or a sibling answering during failover has no idea of the client's status."
+   },
+   {
+    "where": "design §3.4",
+    "text": "Siblings replicate each other's traffic (up to f−1 = 9)."
+   }
+  ],
+  "given": "N and S are siblings; C is attached to N with interval I; both nodes expose their reachability state per client to the test. Replication between N and S is running.",
+  "when": "The harness blackholes all packets from C to N for three full intervals, and replication is allowed to proceed.",
+  "then": "S's reachability state for C reads unreachable.",
+  "oracle": "behaviour",
+  "interpretation": "No wire object carrying the replicated reachability state is specified; the test observes S's state and does not check what carried it or how soon it arrived."
+ },
+ {
+  "id": "SES-15",
+  "area": "session",
+  "gap": "session",
+  "title": "Bind a 0-RTT reattach only after the handshake completes, and still complete it.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2",
+   "design §14.1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A server MUST NOT process an Attach received in TLS 1.3 0-RTT early data — reject it or defer it until handshake completion."
+   },
+   {
+    "where": "design §14.1.3",
+    "text": "0-RTT resumption makes frequent reattachment cheap, which permits a lazy heartbeat and saves battery."
+   }
+  ],
+  "given": "C completed an earlier session with N and holds a TLS 1.3 resumption ticket from it. The harness observes the connection and knows when its handshake completes.",
+  "when": "C reconnects with 0-RTT and sends Attach in early data.",
+  "then": "No AttachAck is sent before the handshake of that connection completes; after completion an AttachAck arrives, either for the deferred early Attach or for an Attach C sends after the handshake if the early one was rejected.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-01",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Add a subordinate and its sibling relationships to the table on a verified adoption",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §6.1",
+   "design §3.4",
+   "design §3.1"
+  ],
+  "rule": [
+   {
+    "where": "design §6.1",
+    "text": "Patron accepts a new subordinate. Also implicitly authorises sibling peering among that patron's children."
+   },
+   {
+    "where": "design §3.4",
+    "text": "Authorised implicitly by the patron's adoption transaction, with no separate agreement."
+   }
+  ],
+  "given": "Observer O's table, fed verified transactions directly since propagation is out of scope, holding patron P with one subordinate C; a proof-of-presence record between P and N.",
+  "when": "O verifies an adoption of N under P whose field 8 names that record.",
+  "then": "O's table answers: N's patrons include P; P's subordinates are {C, N}; C's siblings include N and N's siblings include C.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-02",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Hold a second adoption beside the first: adopting elsewhere leaves the old binding in view",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "design §6.2.1",
+   "design §6.2",
+   "wire-format.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §6.2.1",
+    "text": "Without it, a node that adopts elsewhere remains in the old subtree's view indefinitely, since adoption says nothing about existing bindings."
+   },
+   {
+    "where": "design §6.2",
+    "text": "the protocol has no concept of a node's set of patrons"
+   }
+  ],
+  "given": "O's table holding N adopted under P1, series s1. An adoption of N under P2 carrying either P1's countersignature as former patron or a proof of presence between N and P2, opening series s2.",
+  "when": "O verifies the second adoption, with no departure from P1 signed.",
+  "then": "O's table answers N's patrons = {P1, P2}; N remains among P1's subordinates; the second adoption is accepted rather than rejected as a duplicate binding, and it does not replace the first.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-03",
+  "area": "topology",
+  "gap": "topology",
+  "title": "End only the named relationship on a departure",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.2",
+   "design §6.2",
+   "design §6.2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.2",
+    "text": "Single signature: the departing node."
+   },
+   {
+    "where": "design §6.2",
+    "text": "Moving between patrons remains adopt at the destination, depart the origin, in either order, with no requirement to do both"
+   }
+  ],
+  "given": "O's table holding N under P1 and under P2, as TOP-02 leaves it.",
+  "when": "O verifies a departure signed by N alone with field 2 = P1.",
+  "then": "O's table answers N's patrons = {P2}; N is no longer among P1's subordinates and no longer a sibling of P1's other children; N's binding under P2 is unchanged.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-04",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Leave a departed node in the table as a root when it has no other binding",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §6.2.1",
+   "design §3.1",
+   "wire-format.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §6.2.1",
+    "text": "Required for a node to become a root by its own action."
+   },
+   {
+    "where": "design §3.1",
+    "text": "Roots have none, which is an ordinary state rather than an error"
+   }
+  ],
+  "given": "O's table holding N under P and under nobody else.",
+  "when": "O verifies N's departure from P.",
+  "then": "O's table answers N's patrons = {} and still lists N as a node; N is removed from P's subordinates; no error is raised for a patronless node.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-05",
+  "area": "topology",
+  "gap": "topology",
+  "title": "End one relationship and nothing else on a disavowal",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §6.2.2",
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §6.2.2",
+    "text": "Disavowal is positional: it ends one patron-subordinate relationship and nothing else. The node remains in the tree and may be adopted elsewhere within the same subnet"
+   }
+  ],
+  "given": "O's table holding N under P and under Q, and M under N.",
+  "when": "O verifies a disavowal signed by P alone with field 2 = N and reason code 0.",
+  "then": "O's table answers N's patrons = {Q}; N is removed from P's subordinates; M's patrons still include N; N remains a node in the table.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-06",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Apply a disavowal on verification regardless of its timestamp",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §4.3",
+   "design §6.2.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "There is no notice period. A disavowal takes effect when signed"
+   },
+   {
+    "where": "design §6.2.2",
+    "text": "A disavowal takes effect when it is signed."
+   }
+  ],
+  "given": "O's table holding N under P; O's clock reads t_now.",
+  "when": "O verifies a disavowal of N by P whose timestamp is t_now plus seven days and not earlier than the effective time of P's predecessor record.",
+  "then": "O's table removes N from P's subordinates on verification; the relationship is not held open until the timestamp, and the record is not rejected for its timestamp.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-07",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Issue a subtree acknowledgement under standing policy without operator interaction",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.5",
+   "infra-client-requirements.md §10.1",
+   "design §11.2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.5",
+    "text": "Issued by the grandpatron's node, not by its operator."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "Issue it automatically, under a policy the operator set beforehand."
+   }
+  ],
+  "given": "Infra node G with subordinate P and an acknowledgement policy, set beforehand, that acknowledges every adoption under P; no operator session is open.",
+  "when": "G's node verifies an adoption of N under P with txid a.",
+  "then": "G's node emits a SubtreeAck with field 1 = a, field 2 = G, field 3 = N, and field 5 a signature by G that verifies over fields 1 to 4 with external_aad rhtn/1:subtree-ack; no prompt and no operator input occurs between verification and emission.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-08",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Enter an adoption in the table whether or not the grandpatron acknowledges it",
+  "milestone": 3,
+  "kind": "must-accept",
+  "spec": [
+   "design §11.2.1",
+   "wire-format.md §7.5"
+  ],
+  "rule": [
+   {
+    "where": "design §11.2.1",
+    "text": "It does not gate the adoption. The adoption is complete and valid with the node and patron signatures (wire-format.md §4.1); it is signed and propagated whether or not the grandpatron acknowledges it."
+   }
+  ],
+  "given": "Tables at P and at P's sibling S holding P under G; G's node is offline, or its policy acknowledges nobody.",
+  "when": "P and N sign an adoption of N under P and S verifies it, with no SubtreeAck ever arriving.",
+  "then": "S's table answers N's patrons = {P} and lists N under P; S holds no acknowledgement for N; the adoption is neither held pending nor rejected for the missing acknowledgement.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-09",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Discard a subtree acknowledgement when the relationship it describes ends",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.5",
+   "infra-client-requirements.md §10.1",
+   "design §11.2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.5",
+    "text": "It lapses when the acknowledged relationship ends. If the grandpatron disavows the patron, or the patron departs, the acknowledgement describes a subtree the node is no longer in and confers nothing."
+   },
+   {
+    "where": "wire-format.md §7.5",
+    "text": "Discard it when it lapses"
+   }
+  ],
+  "given": "A holder H, G's sibling, whose table holds P under G and N under P, and who holds G's SubtreeAck for N.",
+  "when": "H verifies P's departure from G; in a second run, G's disavowal of P.",
+  "then": "In both runs H's list of held acknowledgements no longer contains the acknowledgement for N, no revocation object having been received; N's binding under P is still in H's table.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-10",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Create no binding from a subtree acknowledgement whose adoption is not held",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.5",
+   "infra-client-requirements.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.5",
+    "text": "It attests membership of a subtree, not identity. The adoption's own signatures carry identity."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "It says nothing about identity. The adoption's signatures carry that. Do not let a SubtreeAck stand in for evidence about who someone is."
+   }
+  ],
+  "given": "A holder H whose table holds P under G and no adoption of N, and who holds G's key material.",
+  "when": "H receives a well-formed SubtreeAck signed by G naming an adoption txid a and node N, with a not held by H.",
+  "then": "H's table answers N's patrons = {} and does not list N under P; the acknowledgement's signature verifies, and no table entry for N results from it.",
+  "oracle": "behaviour",
+  "interpretation": "The sections quoted say an acknowledgement carries no identity evidence; the test reads that as an acknowledgement alone never creating a binding, which no sentence states directly."
+ },
+ {
+  "id": "TOP-11",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Form a subnet from two Genesis identities: a formation record, then one adopts the other as first root",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §13.1",
+   "design §12.7.1",
+   "wire-format.md §3.2"
+  ],
+  "rule": [
+   {
+    "where": "design §13.1",
+    "text": "One adopts the other and becomes the subnet's first root."
+   },
+   {
+    "where": "design §13.1",
+    "text": "They perform a proof-of-presence ceremony with no witnesses and no verifiers."
+   }
+  ],
+  "given": "Two fresh keys A and B with empty archives and empty tables; A runs an infra instance, its static address outside the test's scope.",
+  "when": "A and B sign a formation presence record, subtype 1 with no witnesses, no verifier responses and genesis back-pointers, then an adoption of B under A whose field 8 names that record; both tables verify both.",
+  "then": "Both tables answer: A's patrons = {}, A's subordinates = {B}, B's patrons = {A}. Each archive holds the formation record as its first transaction and the adoption as its second, the adoption's back-pointer for each signer naming the formation record.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-12",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Do not apply an adoption whose named presence record is not between these two parties",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.4",
+   "design §6.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.4",
+    "text": "The check is that the record exists and names these two parties, both of which are body fields."
+   },
+   {
+    "where": "wire-format.md §3.4",
+    "text": "That is an evaluation step, not a structural one"
+   }
+  ],
+  "given": "O's table holding P; a presence record between P and a third party Z held by O; a structurally valid adoption of N under P whose field 8 names that record.",
+  "when": "O verifies the adoption structurally, then evaluates it, dereferencing field 8, before applying it to the table.",
+  "then": "Structural verification reports valid. Evaluation reports the presence reference unsatisfied, the record naming P and Z rather than P and N, and O's table does not gain N under P.",
+  "oracle": "behaviour",
+  "interpretation": "Whether a failed evaluation keeps the adoption out of the table is not stated; wire-format.md §3.4 makes taking effect a separate question from validity, and the test reads the evaluation step as the gate on applying the binding."
+ },
+ {
+  "id": "TOP-13",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Serve a light client whose patron is a light client: it attaches to the nearest infrastructure ancestor as primary",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.1",
+   "infra-client-requirements.md §1",
+   "design §14.1.2",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.1",
+    "text": "Every light client beneath you attaches to you — not only your direct subordinates, since design §14.1.2 has a client walk up past light-client patrons to the nearest infrastructure."
+   },
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Accept attachment from any node whose nearest infrastructure ancestor is this node"
+   }
+  ],
+  "given": "Infra node I whose table holds light client A under I and light client B under A; B's client holds the same topology.",
+  "when": "B dials its serving node and attaches.",
+  "then": "B's dial goes to I, not to A; I accepts and its AttachAck field 1 is 0, primary; I's table lists B among its attached light clients by path, beneath A.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-14",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Refuse a proposed patron only when the table places it in the node's own down-line",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "design §6.2.5",
+   "design §3.1"
+  ],
+  "rule": [
+   {
+    "where": "design §6.2.5",
+    "text": "Rejection is on positive knowledge only: reject where local topology establishes that the proposed patron is at or below the node, and never for absence of knowledge."
+   }
+  ],
+  "given": "Node N's table holding M under N and M2 under M, and holding nothing about a node X.",
+  "when": "N's client is asked to adopt under M2, and separately to adopt under X, ceremony evidence being supplied in both cases.",
+  "then": "The proposal to adopt under M2 is refused by the local check, which reports that M2 lies below N, and no adoption is signed. The proposal to adopt under X is not refused by the check, and an adoption of N under X is signed.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-15",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Replace the old key with the successor on a recovery adoption inside the horizon",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §9.0.2",
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "design §9.0.2",
+    "text": "members holding the old key remove it from their records and overwrite it with the new one"
+   }
+  ],
+  "given": "O's table holding identity K_old under P. A recovery adoption of K_new under P carrying a Recovery block with prior_key = K_old, structurally valid and passing the evidence gate; the evidence is supplied by fixture, its generation being out of scope.",
+  "when": "O verifies and applies the recovery adoption.",
+  "then": "O's table answers K_new's patrons = {P}; K_old is no longer listed under P and is not a current key in O's table; O holds exactly one current key for the identity.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-16",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Hold one current key per identity when two recovery adoptions compete for the same prior key",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "design §9.0.2"
+  ],
+  "rule": [
+   {
+    "where": "design §9.0.2",
+    "text": "a member receiving two competing recovery adoptions for the same prior_key does not hold both as current — it resolves to one, by which patron it trusts"
+   }
+  ],
+  "given": "O's table holding K_old under P; two recovery adoptions, K_a under P_a and K_b under P_b, each with prior_key = K_old and each passing the evidence gate; which of P_a and P_b O trusts more is O's own policy, fixed by no document, and the test sets it as a parameter.",
+  "when": "O verifies and applies both adoptions, in each of the two orders.",
+  "then": "O's table holds exactly one current key for the identity, K_a when O prefers P_a and K_b otherwise, the same one in both orders; both K_a and K_b are present as nodes under their own patrons.",
+  "oracle": "behaviour",
+  "interpretation": "Independence from arrival order follows from resolving by patron trust rather than by arrival; no sentence states it."
+ },
+ {
+  "id": "TRN-01",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Offer only X25519MLKEM768 as the key-exchange group.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §9.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.1",
+    "text": "QUIC with TLS 1.3, key exchange group X25519MLKEM768."
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "offering only X25519MLKEM768 is what leaves nothing weaker to fall back to."
+   }
+  ],
+  "given": "The implementation acts as the dialling party toward a test endpoint that records the TLS ClientHello carried in the QUIC Initial packets (readable with the Initial keys).",
+  "when": "The implementation opens a connection to that endpoint.",
+  "then": "The ClientHello's supported_groups extension lists exactly one group, X25519MLKEM768, and its key_share extension carries no share for any other group.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-02",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Complete no handshake with a peer that offers only weaker groups.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.1",
+    "text": "That nothing can be negotiated below the named group is this profile's doing, not TLS's"
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "offering only X25519MLKEM768 is what leaves nothing weaker to fall back to."
+   }
+  ],
+  "given": "The implementation acts as the serving node. A test client presents a valid raw public key and ALPN rhtn/1, but its ClientHello supported_groups extension lists only classical groups (X25519 and secp256r1) and no X25519MLKEM768.",
+  "when": "The test client attempts the handshake.",
+  "then": "No handshake completes: the connection ends during the handshake, no session is established, and no AttachAck can be obtained on it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-03",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Abort the dial when the presented raw public key is not the pinned classical member.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.1",
+   "wire-format.md §2.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.1",
+    "text": "The dialling party checks that key is the classical member of the KeyMaterial it has pinned for the keyhash it intended to reach."
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "a wrong address produces a failed handshake rather than a false identity."
+   },
+   {
+    "where": "wire-format.md §2.2",
+    "text": "KeyMaterial = [ COSE_Key, COSE_Key ]   ; [classical, post-quantum]"
+   }
+  ],
+  "given": "The implementation, as dialling party, holds a validated pin for keyhash K: a KeyMaterial that hashes to K. A test endpoint advertised for K completes the TLS handshake with an RFC 7250 raw public key whose SubjectPublicKeyInfo is a valid Ed25519 key that is not the first entry of that KeyMaterial.",
+  "when": "The implementation dials the endpoint intending to reach K.",
+  "then": "The handshake does not complete from the implementation's side: the connection is abandoned before any control frame is sent, no Attach frame appears on stream 0, and the dial is reported as a failed handshake rather than as a session with K.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-04",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Reject an Attach whose field 1 is not the transport-authenticated identity.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.1",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.1",
+    "text": "Authentication is mutual. The serving node authenticates the client the same way, and MUST bind the identity for which session state and queued data are requested to the identity the transport authenticated, rejecting any mismatch."
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "Present encoding: Attach field 1 must equal the connection-authenticated identity."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "There is no AttachNack, and refusal is carried as a QUIC close code."
+   }
+  ],
+  "given": "The implementation acts as serving node S and holds queued items for keyhash B, inspectable by the test. A test client holding keypair A completes a mutual raw-public-key handshake presenting A's classical component, so the connection-authenticated identity is A.",
+  "when": "The test client sends a well-formed Attach whose field 1 is B, with a Capabilities map in field 3.",
+  "then": "No AttachAck is issued on the connection, nothing queued for B is delivered on it, and S's queue for B is unchanged. No AttachNack or other refusal frame appears on stream 0.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-05",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Negotiate the application protocol rhtn/1.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "ALPN: rhtn/1"
+   }
+  ],
+  "given": "The implementation is exercised in both roles: as dialling party toward a test serving node that records the ClientHello, and as serving node receiving a ClientHello whose ALPN list contains rhtn/1.",
+  "when": "A handshake is run in each role.",
+  "then": "As dialling party, the ClientHello's ALPN extension carries rhtn/1. As serving node, the negotiated application protocol is rhtn/1 and the handshake completes.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-06",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Frame every stream-0 control message as a big-endian length over a typed CBOR array.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.0",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.0",
+    "text": "Stream 0 carries length-delimited, type-tagged frames."
+   },
+   {
+    "where": "wire-format.md §8.0",
+    "text": "frame = u32-be length || deterministic CBOR of [ uint frame_type, body ]"
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Stream 0: session control (attach, heartbeat, sibling updates)"
+   }
+  ],
+  "given": "The implementation attaches as client with the identity, attestation and named capabilities of the corpus's Attach fixture, and answers as serving node with the inputs of the corpus's AttachAck fixture; the heartbeat interval in the ack is a test-chosen value in 1..=3600 seconds, since design §21.1 leaves it unset.",
+  "when": "The client attaches.",
+  "then": "The first bytes the client sends on stream 0 are a 4-byte big-endian length N followed by exactly N bytes of deterministic CBOR decoding to a two-element array [1, Attach], whose body with any greased capability entry removed equals the corpus fixture body. The serving node's reply on stream 0 is likewise a length prefix followed by CBOR decoding to [2, AttachAck]. Neither frame appears on any other stream.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-07",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Skip an unknown control frame sized at the bound, even before the AttachAck.",
+  "milestone": 2,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §8.0",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.0",
+    "text": "Unknown frame types MUST be skipped, not rejected."
+   },
+   {
+    "where": "wire-format.md §8.0",
+    "text": "length counts the CBOR bytes that follow it, and is bounded at 64 KB — exactly 65,536 bytes"
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Unknown control frames may precede AttachAck and are skipped as always"
+   }
+  ],
+  "given": "The implementation, as client, has completed the handshake and sent Attach to a test serving node. Separately, the implementation as serving node has an attached session with a test client. The AttachAck's heartbeat interval is a test-chosen value in 1..=3600 seconds (design §21.1 leaves it unset).",
+  "when": "The test serving node sends on stream 0 a frame whose type is 99 and whose CBOR payload [99, bstr] is exactly 65,536 bytes, so the length prefix reads 65,536, followed by a valid AttachAck. In the other role, the test client sends the same 65,536-byte unknown frame mid-session.",
+  "then": "In neither role is the connection closed. As client, the AttachAck that follows is accepted and the session is attached in the mode the ack states. As serving node, a request opened on a bidirectional stream after the unknown frame is answered.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-08",
+  "area": "transport",
+  "gap": "transport",
+  "title": "End the session on a declared control-frame length above 65,536.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §8.0"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.0",
+    "text": "A declared length above the bound is a protocol error, and it ends the session"
+   }
+  ],
+  "given": "An attached session between the implementation and a test peer, exercised with the implementation in each role.",
+  "when": "The test peer sends on stream 0 a 4-byte length prefix reading 65,537, followed by bytes.",
+  "then": "The implementation closes the connection: a CONNECTION_CLOSE is observed, and no frame sent on that session after the oversized prefix is acted on. The close code is not stated by the profile and is not checked.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-09",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Discard a malformed control frame of a known type whole and keep the session.",
+  "milestone": 2,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §8.0",
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.0",
+    "text": "A malformed control frame of a known type is discarded whole, and the session survives"
+   },
+   {
+    "where": "wire-format.md §8.0",
+    "text": "a malformed SiblingUpdate is ignored whole with the previous list standing"
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "replaces the client's cached list ENTIRELY."
+   }
+  ],
+  "given": "The implementation, as client, is attached to a test serving node and holds cached sibling list L from the AttachAck; the ack's heartbeat interval is a test-chosen value in 1..=3600 seconds (design §21.1 leaves it unset).",
+  "when": "The test serving node sends on stream 0 a frame [4, body] within the length bound whose body is not a well-formed SiblingUpdate (a text string), then a valid SiblingUpdate carrying list L2.",
+  "then": "After the malformed frame the connection remains open and the cached sibling list is still L. After the valid update the cached sibling list is L2.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-10",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Tolerate a capability parameter whose id is not recognised.",
+  "milestone": 2,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §8.1",
+   "wire-format.md §8.1.1",
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.1.1",
+    "text": "Every implementation MUST tolerate receiving parameters whose ids it does not recognise. That is checkable by anyone: send one and observe whether the session continues."
+   },
+   {
+    "where": "wire-format.md §8.1",
+    "text": "Unknown parameters MUST be ignored, never rejected."
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "Tolerating unknown parameters is mandatory and checkable; sending greased ones is self-interested rather than obligatory."
+   }
+  ],
+  "given": "A test peer builds a Capabilities map holding one entry whose id is a random 64-bit value derived from no name the implementation knows, with an 8-byte value. As serving node the implementation receives it in Attach field 3; as client it receives it in AttachAck field 5, with a test-chosen heartbeat interval in 1..=3600 seconds (design §21.1 leaves it unset).",
+  "when": "The frame carrying the unrecognised parameter arrives.",
+  "then": "The session continues in both roles: the serving node answers with an AttachAck, the client attaches on the ack it receives, and no close and no error frame follows the unrecognised parameter.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-11",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Attach when the peer advertises no capabilities and greases nothing.",
+  "milestone": 2,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §8.1",
+   "wire-format.md §8.1.1",
+   "wire-format.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.1",
+    "text": "Absence of a capability is never a connection failure. Parameters set limits; they do not gate the session."
+   },
+   {
+    "where": "wire-format.md §8.1.1",
+    "text": "Sending is not a MUST, because nothing could check it."
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "A required map with no entries is encoded as an empty map — Capabilities in Attach and AttachAck is the case in point, since a peer advertising nothing must still send the field."
+   }
+  ],
+  "given": "A test peer sends a Capabilities map with no entries, the empty map: it advertises none of the capabilities the implementation itself supports and carries no greased parameter. As serving node the implementation receives it in Attach; as client, in an AttachAck whose heartbeat interval is a test-chosen value in 1..=3600 seconds (design §21.1 leaves it unset).",
+  "when": "The frame carrying the empty Capabilities map arrives.",
+  "then": "The session is established in both roles: the serving node sends an AttachAck, the client attaches on the ack, and the connection is not closed. No absent capability and no absent greased parameter is reported as an error.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-12",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Send a greased capability parameter in every session.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.1.1",
+    "text": "The reference implementation sends one greased parameter per session: a random 64-bit id and a value of 8 random bytes."
+   }
+  ],
+  "given": "The reference implementation, in both roles, with the list of capability names it publishes and the ids derived from them.",
+  "when": "Two sessions are opened, and the Attach it sends as client and the AttachAck it sends as serving node are captured in each.",
+  "then": "Each captured Capabilities map contains an entry whose id is the id of no published name and whose value is 8 bytes long, and the id of that entry differs between the two sessions.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-13",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Refuse an attach with application close code 1 and no frame in reply.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "There is no AttachNack, and refusal is carried as a QUIC close code."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A node refusing an attach by policy closes the connection with application close code 1 (refused) in CONNECTION_CLOSE."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Code 0 is not used for refusal, since it is the conventional no-error close."
+   }
+  ],
+  "given": "The implementation acts as serving node S with a local attach policy that refuses client C; the policy itself is local and unspecified by the design, so the test supplies one. C completes a mutual raw-public-key handshake.",
+  "when": "C sends a well-formed Attach whose field 1 is C.",
+  "then": "S closes the connection with a CONNECTION_CLOSE carrying application close code 1, not 0, and sends no frame of any type on stream 0 in reply: no AttachAck and no refusal frame.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-14",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Treat close code 1 as the node's answer, not the endpoint's.",
+  "milestone": 2,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2",
+   "light-client-requirements.md §4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A client seeing it MUST treat the refusal as that node's answer, not that endpoint's — its other addresses will say the same"
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "a primary's refusal does not open sibling failover"
+   },
+   {
+    "where": "light-client-requirements.md §4",
+    "text": "treat a policy refusal as that node's answer rather than that endpoint's — trying its other addresses will not change it."
+   }
+  ],
+  "given": "The implementation, as client C, knows its serving node S by two NetworkPoints and holds a cached sibling list from an earlier session. Retry timing and backoff are local policy and are parameterised by the test.",
+  "when": "C dials S's first endpoint, completes the handshake, sends Attach, and receives a CONNECTION_CLOSE with application close code 1.",
+  "then": "Within the test's observation window C makes no connection attempt to S's second endpoint and dials no cached sibling; the attach attempt ends as refused.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-15",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Keep the session across a client address change without a new attach.",
+  "milestone": 2,
+  "kind": "liveness",
+  "spec": [
+   "wire-format.md §9.2",
+   "design §14.1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Connection migration relied upon for mobile IP change"
+   },
+   {
+    "where": "design §14.1.3",
+    "text": "Mobile clients change IP constantly, and QUIC's connection migration survives that natively where ordinary single-path TCP does not"
+   }
+  ],
+  "given": "An attached session between the implementation as client C and the implementation as serving node S, with a test-chosen heartbeat interval in 1..=3600 seconds (design §21.1 leaves it unset). The test can enqueue an item at S for C.",
+  "when": "C's UDP source address and port change mid-session (a new local socket, or a simulated NAT rebinding) and C continues the same QUIC connection from the new address; the test then enqueues an item for C.",
+  "then": "No new Attach or AttachAck is exchanged, heartbeats continue in both directions on the same connection from the new address, and the item enqueued after the change is delivered to C over that same connection.",
+  "oracle": "behaviour",
+  "interpretation": "The serving node is taken to permit client-initiated migration, which RFC 9000 lets a server disable; the documents state that migration is relied upon and place no obligation on the operator in infra-client-requirements.md §7."
+ },
+ {
+  "id": "TRN-16",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Process an Attach carried in 0-RTT early data only after that connection's handshake completes.",
+  "milestone": 2,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §8.2",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "A server MUST NOT process an Attach received in TLS 1.3 0-RTT early data — reject it or defer it until handshake completion."
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "Early data is replayable, and a replayed Attach re-binds session state"
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "§8.2's rule for Attach is this rule's other instance, on the other stream class."
+   }
+  ],
+  "given": "Client C holds a resumption ticket from a completed session with the implementation as serving node S, and S holds a queued item for C. The AttachAck's heartbeat interval is a test-chosen value in 1..=3600 seconds (design §21.1 leaves it unset).",
+  "when": "C opens connection A and sends Attach with field 1 = C as 0-RTT early data. The test captures A's early-data packets and replays them as a second connection B whose handshake it never completes. A's handshake then completes.",
+  "then": "On A, no AttachAck and no queued delivery is observed before A's handshake completes; afterwards either an AttachAck follows or none is ever sent for that Attach. On B, no AttachAck is ever sent and the queued item is not delivered: it remains queued at S or is delivered on A alone.",
+  "oracle": "model",
+  "interpretation": "Handshake completion is read as completion of the handshake of the connection that carried the early data, as the compliant Tamarin theory states it; the wire says only 'until handshake completion', and a completed handshake on A is taken not to admit B's replay."
+ }
+]
