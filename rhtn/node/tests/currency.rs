@@ -125,9 +125,9 @@ fn a_responder_that_cannot_issue_says_so_rather_than_inventing_one() {
     assert_eq!(CurrencyReply::decode(&encoded).unwrap(), reply);
 }
 
-// acceptance: CUR-05
+// acceptance: CUR-14
 #[test]
-fn a_trust_bearing_operation_waits_on_an_expired_staple() {
+fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     let mut w = World::new();
     let table = table_with(kh("alice"), &w, &[], &["alice"]);
     let mut n = view("alice", table, "alice", &[]);
@@ -135,33 +135,20 @@ fn a_trust_bearing_operation_waits_on_an_expired_staple() {
     let x = kh("bob");
     let patron = kh("carol");
     let fab = Fabric::with(&[patron, kh("w1")]);
-    // the introduction named X's patron and carried a staple, expired
-    // against N's own clock
-    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now - 40_000, n.now - 3600, ROLE_PATRON);
-    assert_eq!(n.take_staple(&ids(), &x, &stale, &[patron]), Staple::Expired);
-    // X proposes an adoption: N establishes current control first, and
-    // that is the node asking, not the test
     let pop = w.formation("alice", "bob");
-    let asked = match n.require_currency(&*fab, &ids(), &x, None, Some(patron)) {
-        Requirement::Asked(ask) => ask,
-        Requirement::Settled(g) => panic!("no request went out: {g:?}"),
-    };
-    let sent: Vec<_> = fab.frames().into_iter().filter(|f| f.frame_type == REQUEST_CURRENCY).collect();
-    assert_eq!(sent.len(), 1, "a CurrencyRequest naming X leaves N");
-    assert_eq!(CurrencyRequest::decode(&sent[0].body).unwrap().subject, x);
-    let refused = n.propose_adoption(&x, n.staple_for(&ids(), &x, &[patron]), Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]);
-    assert!(matches!(refused, Err(Gate::Refuse(_))), "no countersigned adoption while the staple is expired");
-    // only after a code-0 reply with an unexpired attestation does it proceed
-    let fresh = tx::currency_attestation(&id("carol"), &x, &x, n.now, n.now + 36_000, ROLE_PATRON);
-    let mut ask = asked;
-    let reply = CurrencyReply::Attestation { nonce: ask.nonce, bytes: fresh };
-    let step = n.on_currency_reply(&*fab, &ids(), &mut ask, &reply);
-    assert_eq!(step, AskStep::Current);
-    assert_eq!(n.require_currency(&*fab, &ids(), &x, None, Some(patron)), Requirement::Settled(Gate::Proceed));
-    let body = n.propose_adoption(&x, n.staple_for(&ids(), &x, &[patron]), Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]).expect("proceeds");
+    // X hands over no staple at all
+    assert_eq!(n.staple_for(&ids(), &x, &[patron]), Staple::Absent);
+    let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]).expect("produced with no staple");
     let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
+    // then a staple expired against N's own clock
+    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now - 40_000, n.now - 3600, ROLE_PATRON);
+    assert_eq!(n.take_staple(&ids(), &x, &stale, &[patron]), Staple::Expired);
+    let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 6, &[rhtn_archive::genesis(&x)]).expect("produced with an expired staple");
+    let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.signers, vec![x, kh("alice")]);
+    // and nothing about X's currency was asked of anyone first
+    assert_eq!(fab.count(REQUEST_CURRENCY), 0);
 }
 
 // acceptance: CUR-06
@@ -171,11 +158,10 @@ fn routine_payload_fails_open_on_an_expired_staple() {
     // S arrives holding only an expired staple from its patron
     let stale = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("bob"), n.now - 40_000, n.now - 1, ROLE_PATRON);
     assert_eq!(n.take_staple(&ids(), &kh("bob"), &stale, &[]), Staple::Expired);
-    let state = n.staple_for(&ids(), &kh("bob"), &[]);
-    assert_eq!(gate(Operation::Routine, state, n.is_superseded(&kh("bob"))), Gate::Proceed, "delivery proceeds");
-    assert_eq!(gate(Operation::Routine, Staple::Absent, false), Gate::Proceed);
-    // and the trust-bearing half of the same table does not
-    assert!(matches!(gate(Operation::TrustBearing, state, false), Gate::Refuse(_)));
+    assert_eq!(n.staple_for(&ids(), &kh("bob"), &[]), Staple::Expired);
+    assert_eq!(gate(n.is_superseded(&kh("bob"))), Gate::Proceed, "delivery proceeds");
+    // nothing waits on a staple: an absent one proceeds too
+    assert_eq!(gate(false), Gate::Proceed);
 }
 
 // acceptance: CUR-07
@@ -195,7 +181,7 @@ fn an_unexpired_staple_does_not_restore_a_superseded_binding() {
     // reading of the binding decides, and the staple restores nothing
     let fab = Fabric::with(&[]);
     assert!(matches!(n.require_currency(&*fab, &ids(), &k1, None, None), Requirement::Settled(Gate::Refuse(_))), "no session is served under k1");
-    assert!(matches!(gate(Operation::Routine, state, n.is_superseded(&k1)), Gate::Refuse(_)), "nothing is delivered under k1");
+    assert!(matches!(gate(n.is_superseded(&k1)), Gate::Refuse(_)), "nothing is delivered under k1");
 }
 
 /// P (bob) adopted S (carol); P' (w1) is P's sibling and G (alice) is P's
@@ -244,9 +230,9 @@ fn the_grandpatron_issues_once_the_patron_and_its_siblings_are_dark() {
     assert_eq!(ladder_view("w1").read_staple(&ids(), &a.bytes, &kh("carol"), &[]).1, Staple::Current);
 }
 
-// acceptance: CUR-10
+// acceptance: CUR-15
 #[test]
-fn a_whole_neighbourhood_outage_freezes_and_re_adoption_thaws() {
+fn a_peering_is_proposed_with_no_staple_however_many_issuers_are_dark() {
     let mut cur = CurrencyState::default();
     let mut s = ladder_view("carol");
     // S publishes an endpoint of its own, as a peering party must
@@ -264,21 +250,13 @@ fn a_whole_neighbourhood_outage_freezes_and_re_adoption_thaws() {
     let pop = rhtn_codec::cose::sha256(b"pop between carol and w5");
     let other_point = point(5, 7005);
     let other_back = [rhtn_archive::genesis(&kh("w5"))];
-    let frozen = s.propose_peering(s.staple_for(&ids(), &kh("carol"), &[]), &kh("w5"), &other_point, &pop, &other_back);
-    assert!(matches!(frozen, Err(Gate::Refuse(_))), "the first attempt produces no peering transaction");
-    // S adopts at a reachable patron P2 and obtains an attestation from it
-    let mut w2 = World::new();
-    let (a, _) = w2.adopt("carol", "w2", 9);
-    let mut p2 = view("w2", table_with(kh("w2"), &w2, &[&a], &["w2"]), "w2", &[]);
-    p2.now = s.now;
-    let reply = p2.answer_currency(&CurrencyState::default(), &CurrencyRequest { subject: kh("carol"), nonce: nonce(10) });
-    let CurrencyReply::Attestation { bytes, .. } = &reply else { panic!("code 0 expected") };
-    // S holds its new binding, so it can place P2 as its patron
-    s.table.apply(&a, &ids(), &w2.store, None).unwrap();
-    assert_eq!(s.take_staple(&ids(), &kh("carol"), bytes, &[]), Staple::Current);
-    let body = s.propose_peering(s.staple_for(&ids(), &kh("carol"), &[]), &kh("w5"), &other_point, &pop, &other_back).expect("the peering transaction is produced");
-    let rec = Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&id("carol"), &id("w5")])).unwrap();
+    let first = s.propose_peering(&kh("w5"), &other_point, &pop, &other_back).expect("the peering transaction is produced");
+    let rec = Record::parse(&tx::envelope(tx::TYPE_PEERING, &first, &[&id("carol"), &id("w5")])).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_PEERING);
+    // and again, with nobody any more reachable than before
+    let second = s.propose_peering(&kh("w5"), &other_point, &pop, &other_back).expect("and again");
+    assert!(!second.is_empty());
+    assert_eq!(fab.count(REQUEST_CURRENCY), 0, "nothing about S's currency was asked of anyone");
 }
 
 // acceptance: CUR-11
@@ -305,7 +283,7 @@ fn a_caller_with_a_stale_staple_asks_its_introducer_first() {
     let step = n.on_currency_reply(&*fab, &ids(), &mut ask, &cannot);
     assert_eq!(step, AskStep::AskedNext(patron));
     assert_eq!(fab.to(&patron, REQUEST_CURRENCY).len(), 1);
-    // and the patron's code 1 exhausts the ask: the caller fails closed
+    // and the patron's code 1 exhausts the ask: the caller concludes nothing
     assert_eq!(n.on_currency_reply(&*fab, &ids(), &mut ask, &cannot), AskStep::Exhausted);
     // where I holds no session at all, the patron is asked at once
     fab.clear();
@@ -337,12 +315,16 @@ fn expiry_is_decided_against_the_relying_partys_own_clock() {
     let (_w, mut n, _cur) = patron_and_subordinate();
     let t = 1_900_000_000u64;
     let staple = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("bob"), t - 36_000, t, ROLE_PATRON);
+    let fab = Fabric::with(&[kh("w1")]);
     n.now = t - 1;
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Current);
-    assert_eq!(gate(Operation::TrustBearing, Staple::Current, false), Gate::Proceed);
+    n.take_staple(&ids(), &kh("bob"), &staple, &[]);
+    assert_eq!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Settled(Gate::Proceed), "current: nothing to ask");
+    assert_eq!(fab.count(REQUEST_CURRENCY), 0);
     n.now = t + 1;
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Expired);
-    assert!(matches!(gate(Operation::TrustBearing, Staple::Expired, false), Gate::Refuse(_)));
+    assert!(matches!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Asked(_)), "expired: the fallback query is sent");
+    assert_eq!(fab.count(REQUEST_CURRENCY), 1);
 }
 
 /// Not a catalogue entry: the relying party places the issuer.  A staple
@@ -370,5 +352,4 @@ fn a_staple_from_an_issuer_the_relying_party_cannot_place_is_not_current() {
     // unless the introduction named the patron
     let by_patron = tx::currency_attestation(&id("bob"), &subject, &subject, t, t + 36_000, ROLE_PATRON);
     assert_eq!(blank.read_staple(&ids(), &by_patron, &subject, &[kh("bob")]).1, Staple::Current);
-    assert!(matches!(gate(Operation::TrustBearing, Staple::UnknownIssuer, false), Gate::Refuse(_)));
 }

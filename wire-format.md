@@ -2523,8 +2523,10 @@ address that stopped working, **with no explanation offered**.
 
 **So the answers are: an attestation, or nothing.** Code 1 says the responder
 cannot issue rather than inventing one, silence says the responder was not reached,
-and a caller receiving neither **fails closed** — which is design §9.0.2's
-requirement that the two be distinguishable, and design §12.6.5's soft-fail argument.
+and a caller receiving neither **concludes nothing** — silence is not attestation,
+which is design §9.0.2's requirement that the two be distinguishable. No operation
+waits on the answer (design §12.6.5): the staple decides which key a caller
+addresses, never what it may do.
 **What a caller can learn is a fork**: two patrons attesting competing claims is
 visible-but-unresolved, and that is the point (design §9.0.2).
 
@@ -3265,8 +3267,8 @@ Attach = {
   2: ? CurrencyAttestation,
                        ; an attestation that fails validation — bad signature,
                        ; wrong subject, expired — is treated as ABSENT, not as
-                       ; an authentication failure. Currency
-                       ; gates trust-bearing operations (§7.1), never
+                       ; an authentication failure. Currency decides
+                       ; which key a caller addresses (§7.1), never
                        ; connectivity; the transport authenticated the client
                        ; already, and refusing the session would strand a
                        ; client whose patron is the party that can refresh it

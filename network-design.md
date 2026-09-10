@@ -4436,6 +4436,19 @@ patron or siblings" be distinguishable from "answer attests currency": if
 unreachable silently means proceed, a thief who can disrupt the legitimate
 patron's reachability keeps the stolen key working indefinitely.
 
+**That argument motivates no gate here, and none exists** [author,
+2026-09-10]. Stapling supports routing operations only: a staple tells a party
+which key to address for an identity, and no trust transaction or user
+operation waits on it (below). What answers the thief is supersession inside
+the horizon — a recovery adoption replaces the binding in every member's
+records (§9.0.2), and a party holding that knowledge serves nothing under the
+old key — and, beyond the horizon, where the adoption never arrives, nothing
+stronger than the staple's own expiry: parties there go on holding the old and
+new keys as separate entities, learn on contact whether either is attested,
+and a stale staple attests nothing. The distinguishability §9.0.2 requires is
+about what a caller concludes — silence is not attestation — not about what it
+may do.
+
 **Adopt stapling.** Rather than the recipient querying, the introducing node
 **staples a recent patron-signed currency attestation to its introduction**:
 
@@ -4496,9 +4509,9 @@ between neighbours rather than a round trip to a remote CA.
 
 **What would derive it:** the lifetime should be at most the expected time for a
 legitimate holder to notice a compromise and begin recovery, since that is
-exactly the window in which a thief holding a captured staple retains the
-key's full trust-bearing capability (routine use is bounded by supersession
-knowledge, not by expiry — the rule below the fail-open table). **That detection latency is unmeasured**, so the current value is
+exactly the window in which a thief holding a captured staple is still
+addressed as the current key by parties beyond the horizon (inside it, use is
+bounded by supersession knowledge, not by expiry — the rule below). **That detection latency is unmeasured**, so the current value is
 *chosen*, not derived (§21).
 
 Concrete anchor for the choice: MIT Kerberos documents a ten-hour default ticket
@@ -4506,23 +4519,29 @@ lifetime on many systems — right order of magnitude, and a sanity check rather
 than a derivation. **It is not a working-day approximation.** That reading is
 tempting and unsourced.
 
-**Grade the failure mode by stakes — something the web PKI cannot do.**
-Soft-fail was chosen for availability because a browser cannot distinguish a
-bank from a blog. This design can:
+**Nothing waits on a staple** [author, 2026-09-10]. The web PKI's soft-fail was
+chosen for availability because a browser cannot distinguish a bank from a
+blog; this design needs no such distinction, because a staple is not a
+permission. Stapling supports routing operations only — which key to address
+for an identity — and no trust transaction or user operation is gated on it.
+Adoption, peering and the presence ceremony are each declared beyond any
+patron's reach (§18.5, §6.3, §6.4), and a staple is the patron's signature, so
+a staple that gated them would hand the patron the veto those sections deny;
+and a subject's first staple comes from the patron that adopts it, so an
+adoption gated on one could never be the first. An identity is adopted, peers
+and meets with a current staple, an expired one or none, and as often as it
+likes.
 
-**An operation is trust-bearing** if it would create, transfer or spend social
-standing, establish a new trust relationship, or produce evidence that other
-parties may later rely upon. That definition governs; the examples below
-illustrate it and are not the rule.
-
-| Operation | On expired or missing staple |
+| What a relying party holds | What it does |
 |---|---|
-| Receiving messages, routine payload — nothing relied upon by others | **Fail open.** Proceed |
-| Any trust-bearing operation per the definition above (presently: adoption, peering, presence ceremony) | **Fail closed.** Current control of the acting credential must be established first |
+| A current staple | Addresses the key it names |
+| A staple absent or expired | Falls back to the query (§9.0.2, `wire-format.md` §7.1) and addresses the key it holds meanwhile, knowing it unattested |
+| Neither an attestation nor a code-1 answer | Concludes nothing: silence is not attestation (§9.0.2) |
+| Authenticated supersession evidence | Serves nothing under the superseded key — the rule below |
 
-This also handles the intermittently-connected light client: a user offline for
-a day arrives with a stale staple, can still receive messages, and cannot spend
-accumulated standing until they refresh.
+A light client offline for a day arrives with a stale staple, receives its
+messages and transacts; what it cannot do until it refreshes is be confirmed
+current by parties beyond its horizon.
 
 **Expiry is decided against the relying party's own clock** (A33), which is
 ordinary: **a node's internal timing is unconstrained**, and other mechanisms
@@ -4536,7 +4555,7 @@ choose. A party has no second source to check its clock against, so neither
 direction is detectable from inside the protocol.
 
 **Fail-open is for ignorance, never for knowledge** [author, 2026-09-03]. The
-table above governs a party that cannot establish currentness. A party holding
+rows above govern a party that cannot establish currentness. A party holding
 **authenticated supersession evidence** for a binding — a verified reissue
 chain onto a new series (`wire-format.md` §4.6), a recovery it has validated
 (§9.1) — MUST NOT continue
@@ -4553,19 +4572,19 @@ attestation expires, which is the ignorance the table above is for and not a
 violation of this rule. The two halves therefore never overlap: a party either
 received the adoption, in which case the binding is gone, or did not, in which
 case expiry is the only bound it has.
-Expiry bounds what a stolen credential can *spend*; supersession, once known,
-is what retires it from *use* — and conflating the two would leave the
-fail-open row reading as licence to keep serving a binding the server knows is
-dead.
+Expiry bounds how long a stolen credential is *addressed* as current beyond
+the horizon; supersession, once known, is what retires it from *use* — and
+conflating the two would leave the ignorance rows reading as licence to keep
+serving a binding the server knows is dead.
 
 ##### 12.6.5.1 Long-duration patron outage
 
-**The cascade.** A node whose patron is unreachable cannot refresh, and after
-the attestation lifetime its countersignatures (§6.4) are degraded — which
-degrades its subordinates' transactions, and theirs. **A single infra node
-outage propagates downward through its whole subtree**, reintroducing exactly
-the tree fragility §3.4 was written to eliminate. This must be handled, not
-tolerated.
+**The outage.** A node whose patron is unreachable cannot refresh, and after
+the attestation lifetime no party beyond its horizon can confirm which of its
+keys is current. Its own subordinates refresh from it and are untouched, so
+**what a dark patron silences is every identity it issues for**, at once and
+for as long as it is dark — which is the state §3.4's replication to siblings
+holds a copy of. This must be handled, not tolerated.
 
 **Escalation path.** Siblings already replicate the patron's data (§3.4),
 including its adoption records, so:
@@ -4619,9 +4638,9 @@ patron.
 **Honest limit.** If the patron, its siblings *and* the grandpatron are all
 unreachable — a whole-neighbourhood outage — **meaning the escalation above is
 exhausted, not merely that the patron is down** — no issuance path exists, and
-affected nodes are frozen for trust-bearing operations until recovery or
-re-adoption elsewhere. Not fixable without weakening what makes fail-closed
-worth having.
+affected nodes cannot be confirmed current beyond their horizons until the
+outage ends or they are adopted elsewhere (§6.2). Nothing they do waits on it
+(§12.6.5).
 
 ---
 
@@ -4643,27 +4662,20 @@ constructible, so **self-attestation is complete**. If the key is lost, creating
 a new identity is cheaper than recovery — recovery only becomes worth having
 once there is something to recover.
 
-This is consistent with the stake-graded failure table (§12.6.5): a Genesis user
-cannot perform trust-bearing operations because there is no trust to bear, so
-failing closed on them costs nothing.
-
-**Except one.** The first presence ceremony *is* trust-bearing, and requiring a
-fresh staple would make it impossible to ever perform. The rule must therefore
-be: **a staple is required when a record claims prior standing, not when an
-identity claims nothing.** The counterparty in a Genesis user's first ceremony is
-relying entirely on the in-person meeting, which is precisely the bootstrap
-problem of §13 (bootstrap). The asymmetry is sound — absence of a claim is absence of
-standing, and nobody is asked to prove a negative.
+**Nothing a Genesis user does waits on a staple, as nothing anyone does**
+(§12.6.5). Its first presence ceremony proceeds on the in-person meeting alone,
+which is precisely the bootstrap problem of §13, and so does every ceremony,
+adoption or peering after it. What the counterparty relies on is the meeting:
+absence of a claim is absence of standing, and nobody is asked to prove a
+negative.
 
 #### 12.7.2 A root's constituency can attest it, and nothing requires that it does
 
 Currency attestations come from the patron (§12.6.5), so a patronless node has
 no issuer. **A root with no subordinates propagates regardless** [author,
 2026-09-10]: propagation never consults currency, a root's transactions being
-stored and forwarded by the same rule as anyone's (§15.1), and what a staple
-gates is a trust-bearing operation (§12.6.5's table). §12.7.1 already says when
-one is owed: when a record claims prior standing, not when an identity claims
-nothing.
+stored and forwarded by the same rule as anyone's (§15.1), and no staple gates
+any transaction (§12.6.5).
 
 **A root with subordinates has a constituency that can attest its current
 key.** The shape is §9.2's social revocation inverted: a threshold of the
@@ -4674,22 +4686,13 @@ choosing which roots to cache may weigh such an attestation as it weighs
 subtree size; a root that presents none is cached, or not, under the same
 policy, and nothing else in the protocol asks for one.
 
-**What the attestation does not reach is unchanged by its being optional.** The
-dismissal in §12.7.1 holds for a Genesis user, who claims nothing and whose currency
-nobody has occasion to check. It fails for a **disavowed leaf**: it has
-history, §12.7.1's rule makes a staple required precisely because it *claims prior
-standing*, and it has no down-line to attest from below and no patron to attest from
-above. **Adoption is itself trust-bearing** (§12.6.5's table), so the operation that
-would restore an issuer is gated on already having one.
-
-**A patron can therefore manufacture this state deliberately**, which is what
-distinguishes it from the availability gap Appendix B records: one disavowal freezes
-a leaf's trust-bearing operations once its last staple expires. The escapes are a
-second binding established beforehand, an evaluator willing to proceed without
-currency, or returning as a Genesis identity and **abandoning the accumulated
-history** — which converts denial of service into destruction of portable standing.
-**"Re-adoption is available" is therefore not a general answer to patron abuse**, and
-§18.5 should not be read as offering one.
+**What the attestation does not reach, it does not need to.** A disavowed leaf
+has history and no issuer, so parties beyond its horizon cannot confirm its key
+until it is adopted again — and nothing waits on that (§12.6.5). It is adopted,
+peers and meets as any identity does, its history is worth what each
+evaluator's own graph says it is (§16.1), and the disavowal is visible to
+whoever holds it. One disavowal costs a leaf its issuer and nothing else, and
+§18.5's escape hatch is as open to it as to anyone.
 
 #### 12.7.3 Anchor caching is a per-node policy, not a protocol constant
 
@@ -7365,7 +7368,7 @@ targets for simulation.
 | **A30** | **A remote evaluator cannot distinguish a synthesised subnet from a real one** | The same property, and §1.2.2's claim that the discount falls hardest on the classes least able to defeat it | Follows from A29 plus the absence of cold lookup. Untested against an evaluator applying statistical structure analysis rather than key-checking |
 | **A31** | **To an attacker accountable to no evidentiary standard, cryptographic attestation adds nothing** | §1.2.2's three-class taxonomy, and the conclusion that on-device encryption is the whole defence against that class | A claim about how such parties actually decide, asserted rather than observed. If signed evidence does shift their behaviour, the archive's non-repudiability costs more than recorded |
 | **A32** | **A compromised resource leaks its own data, not the owner's archive** | The credential gateway instead of a scoped archive-read API (§11, `resource-requirements.md` §1) | Also §20.1. A confinement conclusion over every interface and side channel; if false, the read-surface question §11 claims to dissolve returns [author, 2026-09-02] |
-| **A33** | **A relying party's clock is good enough to decide whether a staple has expired** | Every fail-closed row of §12.6.5's table, and with it the claim that short credential lifetimes do revocation's work. Local timing is unconstrained and other mechanisms use it too — §8.1.2's witness declines a ceremony dated far from its own clock — so what singles this one out is not that it consults a clock but that a **security** decision turns on the answer | An adversary who can skew a victim's clock backwards extends a stolen credential's life at will, and expiry stops doing revocation's work for that victim. The error is asymmetric: skew forward costs only availability, so the dangerous direction is the one an attacker prefers, and a party has no second source to check its clock against |
+| **A33** | **A relying party's clock is good enough to decide whether a staple has expired** | Which key a relying party addresses as current under §12.6.5, and with it the claim that short credential lifetimes do revocation's work beyond the horizon. Local timing is unconstrained and other mechanisms use it too — §8.1.2's witness declines a ceremony dated far from its own clock — so what singles this one out is not that it consults a clock but that a **security** decision turns on the answer | An adversary who can skew a victim's clock backwards extends a stolen credential's life at will, and expiry stops doing revocation's work for that victim. The error is asymmetric: skew forward costs only availability, so the dangerous direction is the one an attacker prefers, and a party has no second source to check its clock against |
 
 **§20.1 and §20.2 are orthogonal registers.**
 §20.1 records what is **unsourced**; §20.2 records what is **load-bearing**. A

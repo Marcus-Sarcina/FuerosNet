@@ -1,7 +1,7 @@
 //! Peering, the direct payload path, and sibling replication (design §3.4,
 //! §6.3, §12.6.3, §12.7.5; `wire-format.md` §4.4).
 
-use crate::currency::{Gate, Operation, Staple, gate};
+use crate::currency::{Gate, gate};
 use crate::resolution::NetworkPoint;
 use crate::store::subjects;
 use crate::view::NodeView;
@@ -148,13 +148,13 @@ impl NodeView {
         self.store.transactions().filter(|r| r.tx_type == TYPE_PEERING).filter_map(|r| Peering::from_record(r).ok()).collect()
     }
 
-    /// The body of a peering this node proposes to `other`, gated on this
-    /// node's own currency (design §12.6.5: peering is trust-bearing).
-    /// The counterparty's network point is its own claim and the presence
-    /// record is a real one between the two; nothing is produced while the
-    /// gate refuses.
-    pub fn propose_peering(&self, staple: Staple, other: &Keyhash, other_point: &NetworkPoint, pop: &[u8; 32], other_back: &[[u8; 32]]) -> Result<Vec<u8>, Gate> {
-        match gate(Operation::TrustBearing, staple, self.is_superseded(&self.me())) {
+    /// The body of a peering this node proposes to `other`.  No staple
+    /// gates it, this node's own included (design §12.6.5, §6.3); a node
+    /// that knows its own key superseded proposes nothing, which is
+    /// knowledge.  The counterparty's network point is its own claim and
+    /// the presence record is a real one between the two.
+    pub fn propose_peering(&self, other: &Keyhash, other_point: &NetworkPoint, pop: &[u8; 32], other_back: &[[u8; 32]]) -> Result<Vec<u8>, Gate> {
+        match gate(self.is_superseded(&self.me())) {
             Gate::Proceed => {}
             refusal => return Err(refusal),
         }

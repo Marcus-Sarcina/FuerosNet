@@ -26,7 +26,7 @@ PREFIX = {"DEC": "decoder", "TRN": "transport", "SES": "session", "QUE": "queue"
           "RSC": "resources", "PRD": "product"}
 GAPS = list(dict.fromkeys(PREFIX.values()))
 MILESTONES = {1, 2, 3, 4, 5, "after-5", "manual"}
-KINDS = {"positive", "negative", "must-accept", "liveness", "robustness", "manual"}
+KINDS = {"positive", "negative", "must-accept", "liveness", "robustness", "manual", "withdrawn"}
 ORACLES = {"fixture", "model", "behaviour"}
 FIELDS = ["id", "area", "gap", "title", "milestone", "kind", "spec", "rule",
           "given", "when", "then", "oracle", "interpretation"]

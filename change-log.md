@@ -9261,3 +9261,28 @@ input to a node's anchor-caching rule (§12.7.3) and not as a currency
 requirement; §12.7.3 names it as one input such a rule may take, and
 `wire-format.md` §7.1's issuer role 3 says the same. The disavowed-leaf residual
 is unchanged. §19's veto row no longer calls small and Genesis roots an open gap.
+
+### 2026-09-10 (nothing waits on a staple)
+
+**§12.6.5 no longer gates any operation on currency** [author]. The section
+graded failure by stakes and failed closed on "any trust-bearing operation",
+naming adoption, peering and the presence ceremony; the author ruled that none
+of them may depend on currency — a subject's first staple comes from the patron
+that adopts it, and §6.3, §6.4 and §18.5 already put peering, presence and
+adoption elsewhere beyond any patron's reach — and that nothing remains fail
+closed on an absent or expired staple: stapling supports routing operations
+only, which key to address, and no trust transaction or user operation waits on
+it. The table is replaced by what a relying party does with what it holds; the
+knowledge rule beneath it is unchanged. The OCSP soft-fail argument at the
+section's head is answered where it now stands: supersession inside the
+horizon, and beyond it nothing stronger than the staple's own expiry. The
+lifetime derivation and A33 now describe the window in which a stolen key is
+addressed as current, not what it can spend. §12.6.5.1's cascade is gone —
+subordinates refresh from their own patron, so a dark patron silences the
+identities it issues for and no generation below — and its honest limit no
+longer freezes anyone. §12.7.1 loses the first-ceremony exception and the rule
+that a staple is required when a record claims prior standing; §12.7.2's
+disavowed-leaf residual dissolves, since re-adoption waits on nothing.
+`wire-format.md` §7.1's caller receiving neither answer concludes nothing
+rather than failing closed, and §8's Attach comment says currency decides which
+key a caller addresses.

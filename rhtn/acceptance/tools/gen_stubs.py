@@ -28,7 +28,7 @@ def doc(lines):
 
 files = {}
 for e in entries:
-    if e["id"] in impl:
+    if e["id"] in impl or e["kind"] == "withdrawn":
         continue
     area = e["area"].replace("-", "_")
     name = f"{e['id'].lower().replace('-', '_')}_{slug(e['title'])}"

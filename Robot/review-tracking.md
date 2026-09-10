@@ -8208,3 +8208,63 @@ with a patron and an expired staple, not a Genesis one, so no entry catches
 it. What "claims nothing" is in a form the code can test — no back-pointer
 beyond genesis, no presented head — is a reading the author should confirm
 before it is built.
+
+**Currency gates nothing (2026-09-10).** Asked what trust-bearing operations
+the node refused for a naked root, the author ruled, verbatim: *"Neither of
+these cases should depend on currency. You need to be adopted to establish
+currency in the first place, and peering, PoP, and adoptions are explicitly
+declared to be independent of any possible patron restriction."* Verified:
+design §6.4 says no party can block another's client and calls proof of
+presence ungated; §6.3 calls peering ungoverned, requiring nobody's authority;
+§18.5 names departure plus adoption elsewhere as the escape hatch. Asked
+whether anything remained fail closed on an absent or expired staple: *"No,
+stapling supports routing operations only, not any of the trust transactions
+or user operations."* And to the soft-fail argument being answered by
+supersession inside the horizon and by expiry beyond it: *"Yes, go ahead."*
+The gate and its examples entered on 2026-08-13 with §12.6.5, before the
+baseline, attributed to nobody.
+
+Applied, 20 places. Design: §12.6.5's soft-fail paragraph gains the author's
+answer; the lifetime derivation, the stakes table and its light-client
+sentence, the knowledge rule's two references to the table, and the closing
+spend-versus-use sentence are rewritten; §12.6.5.1's cascade and honest
+limit; §12.7.1's third and fourth paragraphs; §12.7.2's first paragraph and
+residual; A33's dependency cell. Wire: §7.1's "fails closed" and §8's Attach
+comment. Catalogue: CUR-05 and CUR-10 withdrawn as tombstones — a new kind
+`withdrawn` keeps the number, cites nothing, carries its reason, generates no
+stub and counts as nothing owed; CUR-06's two quotes and CUR-13's outcome
+reworded; CUR-14 (an adoption countersigned with no staple and with an
+expired one, nothing asked first) and CUR-15 (a peering proposed with every
+issuer dark, and again) added. Code: the operation enum and the staple cases
+of the gate removed, the one refusal being supersession knowledge; the
+adoption and peering proposals take no staple; the ask machine settles on
+proceed where nobody can be asked; four tests rewritten and two replaced.
+Counts: 258 entries, 2 withdrawn, 165 of 256 implemented, 0 flags;
+references 2074 / 0 flags.
+
+Consequences drawn rather than ruled, for the author to confirm:
+
+- **The cascade is gone.** §12.6.5.1 said a dark patron degraded its
+  subordinates' countersignatures and so their subordinates' transactions,
+  down the subtree. Countersignatures do not depend on staples, and a
+  subordinate refreshes from its own patron, so what a dark patron silences
+  is the identities it issues for and nothing below them. The ladder's
+  motivation is narrower than it was and still real; the sentence now says
+  so.
+- **The disavowed leaf is not frozen.** The residual in §12.7.2, which came
+  from a reviewer's leaf-case finding, rested on adoption being gated; it now
+  says a disavowal costs a leaf its issuer and nothing else, and that §18.5's
+  escape hatch is as open to it as to anyone. §18.5 itself was unchanged.
+- **What "routing" covers is stated as which key to address**, on the
+  author's words; the table lists addressing the named key, falling back to
+  the query, concluding nothing from silence, and serving nothing under a
+  known-superseded key. The Attach comment follows.
+
+Not touched, and now describing the withdrawn gate: `models/README.md` says
+`wire-only/currency` establishes that a trust-bearing acceptance of a key as
+current requires an unexpired staple, and `CurrencyEscalation.tla`'s comments
+call re-adoption an escape from a frozen state. Both belong to the next model
+pass; the theorems themselves state issuance and the ladder, which stand.
+Still open from milestone 5: the detector and the ladder joined by hand; the
+memo table kept unconditionally and never read by occupant; the emptied-slot
+cycle memo unconfirmed.

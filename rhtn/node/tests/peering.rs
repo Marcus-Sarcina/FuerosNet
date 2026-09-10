@@ -117,7 +117,7 @@ fn a_root_with_no_peers_can_still_adopt() {
     assert_eq!(i.peers_of(&kh("alice")), BTreeSet::new(), "no peering records");
     let pop = w.formation("alice", "bob");
     let body = i
-        .propose_adoption(&kh("bob"), rhtn_node::currency::Staple::Current, tx::Evidence::Presence(pop.txid), 3, &[rhtn_archive::genesis(&kh("bob"))])
+        .propose_adoption(&kh("bob"), tx::Evidence::Presence(pop.txid), 3, &[rhtn_archive::genesis(&kh("bob"))])
         .expect("no step refuses or defers it for want of a peering record");
     let rec = i.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);

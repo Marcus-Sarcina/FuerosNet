@@ -8,7 +8,9 @@
     verbatim (after markdown normalisation) inside that section's text -- an
     expectation that cannot quote its sentence is an interpretation, and the
     catalogue must say so;
-  * every gap row of the plan's section 8.2 has at least one entry.
+  * every gap row of the plan's section 8.2 has at least one entry;
+  * a withdrawn entry is a tombstone: it keeps its number, cites nothing,
+    carries its reason, and is neither owed nor implemented.
 
 Numbers are reported, not states: entries per area, per milestone, per kind,
 interpretations, implemented against owed.
@@ -40,6 +42,14 @@ for e in entries:
         flags.append(f"{eid}: kind {e.get('kind')!r}")
     if e.get("oracle") not in ORACLES:
         flags.append(f"{eid}: oracle {e.get('oracle')!r}")
+    if e.get("kind") == "withdrawn":
+        # a tombstone: the number is never reused, a citation resolves to
+        # withdrawn, and the interpretation says why and what replaced it
+        if not str(e.get("interpretation") or "").strip():
+            flags.append(f"{eid}: withdrawn without a reason")
+        if e.get("id") in implemented_ids():
+            flags.append(f"{eid}: withdrawn but marked implemented")
+        continue
     cited = set()
     for c in e.get("spec", []):
         t = cite_target(c)
@@ -88,7 +98,9 @@ table(by_gap, "per gap")
 table(collections.Counter(str(e.get("milestone")) for e in entries), "per milestone")
 table(collections.Counter(e.get("kind") for e in entries), "per kind")
 print(f"interpretations: {sum(1 for e in entries if e.get('interpretation'))}")
-print(f"implemented: {sum(1 for e in entries if e.get('id') in impl)} of {len(entries)}")
+withdrawn = sum(1 for e in entries if e.get("kind") == "withdrawn")
+print(f"withdrawn: {withdrawn}")
+print(f"implemented: {sum(1 for e in entries if e.get('id') in impl)} of {len(entries) - withdrawn}")
 print(f"flags: {len(flags)}")
 for f in flags:
     print("  " + f)

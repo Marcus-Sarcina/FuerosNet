@@ -1328,28 +1328,16 @@
   "id": "CUR-05",
   "area": "currency",
   "gap": "currency",
-  "title": "Fail closed on a trust-bearing operation while the counterparty's staple is expired or missing",
+  "title": "Withdrawn: fail closed on a trust-bearing operation while the counterparty's staple is expired or missing",
   "milestone": 4,
-  "kind": "negative",
-  "spec": [
-   "design §12.6.5",
-   "wire-format.md §7.1"
-  ],
-  "rule": [
-   {
-    "where": "design §12.6.5",
-    "text": "Fail closed. Current control of the acting credential must be established first"
-   },
-   {
-    "where": "design §12.6.5",
-    "text": "falls back to a lookup (§9.0.2) only if the staple is absent or expired"
-   }
-  ],
-  "given": "Node N is introduced to X with a staple whose field 4 is in N's past, and N's clock is authoritative for the test.",
-  "when": "X proposes an adoption with N.",
-  "then": "N emits no countersigned adoption while the staple is expired. A CurrencyRequest naming X is observed leaving N, and only after a CurrencyReply with code 0 carrying an unexpired attestation does the adoption proceed.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "Withdrawn 2026-09-10. No staple gates any operation (design §12.6.5, author ruling of that date): stapling supports routing only, and the adoption this entry withheld proceeds. Replaced by CUR-14."
  },
  {
   "id": "CUR-06",
@@ -1364,11 +1352,11 @@
   "rule": [
    {
     "where": "design §12.6.5",
-    "text": "Fail open. Proceed"
+    "text": "Nothing waits on a staple"
    },
    {
     "where": "design §12.6.5",
-    "text": "a user offline for a day arrives with a stale staple, can still receive messages, and cannot spend accumulated standing until they refresh"
+    "text": "A light client offline for a day arrives with a stale staple, receives its messages and transacts"
    }
   ],
   "given": "Client S attaches to its serving node holding only an expired staple.",
@@ -1461,32 +1449,16 @@
   "id": "CUR-10",
   "area": "currency",
   "gap": "currency",
-  "title": "Stay frozen for trust-bearing operations when every issuer is unreachable, and recover by adopting elsewhere",
+  "title": "Withdrawn: stay frozen for trust-bearing operations when every issuer is unreachable, and recover by adopting elsewhere",
   "milestone": 4,
-  "kind": "liveness",
-  "spec": [
-   "design §12.6.5.1",
-   "design §12.6.5"
-  ],
-  "rule": [
-   {
-    "where": "design §12.6.5.1",
-    "text": "no issuance path exists, and affected nodes are frozen for trust-bearing operations until recovery or re-adoption elsewhere"
-   },
-   {
-    "where": "design §12.6.5.1",
-    "text": "Adopt at a new patron (§6.2). The designed remedy for a bad patron works identically for a dead one"
-   },
-   {
-    "where": "design §12.6.5",
-    "text": "An operation is trust-bearing if it would create, transfer or spend social standing"
-   }
-  ],
-  "given": "S's patron, the patron's siblings and the grandpatron are all unreachable and S's staple has expired.",
-  "when": "S attempts a peering, then adopts at a reachable patron P2 and obtains an attestation from P2, then attempts the peering again.",
-  "then": "The first attempt produces no peering transaction. After adoption at P2 and a code-0 CurrencyReply from P2, the peering transaction is produced.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "Withdrawn 2026-09-10. No staple gates any operation (design §12.6.5, author ruling of that date): the peering this entry froze proceeds, and re-adoption thaws nothing because nothing was frozen. Replaced by CUR-15."
  },
  {
   "id": "CUR-11",
@@ -1559,7 +1531,61 @@
   ],
   "given": "Node N holds an attestation for X with field 4 equal to T. The issuer's clock plays no part in the test.",
   "when": "N evaluates the staple with its clock set before T, then with its clock set after T.",
-  "then": "The staple is treated as current in the first case and as expired in the second, so a trust-bearing operation proceeds only in the first.",
+  "then": "The staple is treated as current in the first case and as expired in the second, so the fallback query is sent only in the second.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-14",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Countersign an adoption whatever the subject's staple says",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5",
+   "design §18.5"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "no trust transaction or user operation is gated on it"
+   },
+   {
+    "where": "design §18.5",
+    "text": "Unilateral departure plus adoption elsewhere is the escape hatch"
+   }
+  ],
+  "given": "Node N is asked to countersign an adoption of X. X hands over no staple; then a staple whose field 4 is in N's past, N's clock being authoritative for the test.",
+  "when": "N proposes the adoption in each case.",
+  "then": "The adoption body is produced in both cases, and no CurrencyRequest naming X precedes it. An implementation that withholds the adoption until a fresh staple arrives fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CUR-15",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Peer with no staple of your own, however many issuers are dark, and again",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5",
+   "design §6.3"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5",
+    "text": "An identity is adopted, peers and meets with a current staple, an expired one or none, and as often as it likes."
+   },
+   {
+    "where": "design §6.3",
+    "text": "requiring nobody's authority"
+   }
+  ],
+  "given": "S's patron, the patron's siblings and the grandpatron are all unreachable, and S's own staple has expired.",
+  "when": "S proposes a peering, and then a second one.",
+  "then": "Both peering transactions are produced, and nothing about S's currency is asked of anyone first.",
   "oracle": "behaviour",
   "interpretation": null
  },

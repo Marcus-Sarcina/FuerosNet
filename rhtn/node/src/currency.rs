@@ -3,9 +3,9 @@
 //! and its own topology (design §12.6.5, §12.6.5.1; `wire-format.md` §7.1).
 //!
 //! Two halves of one rule, in different hands.  Issuing: issue only for the
-//! key you currently record, fresh and never extended.  Relying: fail open
-//! for what nobody else relies upon, fail closed for anything trust-bearing,
-//! and never fail open on knowledge you hold.
+//! key you currently record, fresh and never extended.  Relying: nothing
+//! waits on a staple, which says only which key to address, and never fail
+//! open on knowledge you hold.
 
 use crate::view::NodeView;
 use crate::{Adjacency, Keyhash};
@@ -70,7 +70,7 @@ impl CurrencyRequest {
 
 /// The answers are an attestation, or nothing.  Code 1 says the responder
 /// cannot issue rather than inventing one; silence says the responder was
-/// not reached, and a caller receiving neither fails closed
+/// not reached, and a caller receiving neither concludes nothing
 /// (`wire-format.md` §7.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CurrencyReply {
@@ -144,43 +144,23 @@ pub enum Staple {
     UnknownIssuer,
 }
 
-/// Whether an operation is one others may later rely upon (design §12.6.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operation {
-    /// Receiving messages, routine payload: nothing relied upon by others.
-    Routine,
-    /// Creates, transfers or spends social standing, establishes a new trust
-    /// relationship, or produces evidence others may rely on.
-    TrustBearing,
-}
-
-/// What a relying party does.
+/// What a relying party does about a binding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
-    /// Proceed.
+    /// Proceed: nothing waits on a staple (design §12.6.5).
     Proceed,
-    /// Fail closed: current control of the acting credential must be
-    /// established first.
+    /// Serve nothing under the binding: this party holds authenticated
+    /// supersession evidence for it.
     Refuse(&'static str),
 }
 
-/// The fail-open / fail-closed table, plus the rule above it: fail-open is
-/// for ignorance, never for knowledge (design §12.6.5).
-pub fn gate(op: Operation, staple: Staple, superseded: bool) -> Gate {
-    if superseded {
-        // authenticated supersession evidence: nothing is served under the
-        // old credential, whatever the staple says
-        return Gate::Refuse("the binding is verified superseded");
-    }
-    match (op, staple) {
-        (Operation::Routine, _) => Gate::Proceed,
-        (Operation::TrustBearing, Staple::Current) => Gate::Proceed,
-        (Operation::TrustBearing, Staple::Expired) => Gate::Refuse("the staple is expired"),
-        (Operation::TrustBearing, Staple::Absent) => Gate::Refuse("no staple"),
-        (Operation::TrustBearing, Staple::WrongSubject) => Gate::Refuse("the staple names another subject"),
-        (Operation::TrustBearing, Staple::WrongIssuer) => Gate::Refuse("the issuer does not stand where it claims"),
-        (Operation::TrustBearing, Staple::UnknownIssuer) => Gate::Refuse("the issuer cannot be placed"),
-    }
+/// Nothing waits on a staple (design §12.6.5): stapling supports routing —
+/// which key to address — and no trust transaction or user operation is
+/// gated on it, current, expired or absent.  The one refusal is knowledge:
+/// a party holding authenticated supersession evidence serves nothing under
+/// the superseded key.  Fail-open is for ignorance, never for knowledge.
+pub fn gate(superseded: bool) -> Gate {
+    if superseded { Gate::Refuse("the binding is verified superseded") } else { Gate::Proceed }
 }
 
 /// Read a staple against `now`, the relying party's own clock, and against
@@ -268,7 +248,8 @@ pub enum AskStep {
     NotCurrent(Staple),
     /// The responder could not issue and the next party was asked.
     AskedNext(Keyhash),
-    /// Nobody left to ask: the caller fails closed.
+    /// Nobody left to ask: the caller concludes nothing and addresses what
+    /// it holds.
     Exhausted,
     WrongNonce,
 }
@@ -376,13 +357,14 @@ impl NodeView {
         state
     }
 
-    /// Establish current control of `subject`'s credential before a
-    /// trust-bearing operation (design §12.6.5): the held staple where it is
-    /// current; otherwise the fallback query, sent to the introducer first
-    /// where one is known, so the patron learns nothing it did not know.
+    /// Learn which key is current for `subject` before addressing it
+    /// (design §12.6.5): the held staple where it is current; otherwise the
+    /// fallback query, sent to the introducer first where one is known, so
+    /// the patron learns nothing it did not know.  Nothing waits on the
+    /// answer; a party holding supersession evidence refuses instead.
     pub fn require_currency<L: Lookup + ?Sized>(&self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Requirement {
         if self.is_superseded(subject) {
-            return Requirement::Settled(gate(Operation::TrustBearing, Staple::Current, true));
+            return Requirement::Settled(gate(true));
         }
         let hint: Vec<Keyhash> = patron.into_iter().collect();
         let state = self.staple_for(ids, subject, &hint);
@@ -392,7 +374,8 @@ impl NodeView {
         let nonce = rhtn_transport::tls::random_bytes();
         match self.ask_currency(adj, *subject, introducer, patron, nonce) {
             Some(ask) => Requirement::Asked(ask),
-            None => Requirement::Settled(gate(Operation::TrustBearing, state, false)),
+            // nobody to ask: address what is held, knowing it unattested
+            None => Requirement::Settled(Gate::Proceed),
         }
     }
 
@@ -407,7 +390,7 @@ impl NodeView {
 
     /// Take the reply to an outstanding ask.  Code 1 from the introducer
     /// moves the question to the patron; code 1 from the patron exhausts
-    /// it, and the caller fails closed.
+    /// it, and the caller concludes nothing.
     pub fn on_currency_reply<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, ask: &mut CurrencyAsk, reply: &CurrencyReply) -> AskStep {
         if reply.nonce() != ask.nonce {
             return AskStep::WrongNonce;
@@ -436,14 +419,15 @@ impl NodeView {
 }
 
 impl NodeView {
-    /// The body of an adoption this node would countersign for `subject`,
-    /// gated on the subject's currency (design §12.6.5).  The body is fixed
+    /// The body of an adoption this node would countersign for `subject`.
+    /// No staple gates it (design §12.6.5); a subject whose key this node
+    /// knows superseded is refused, which is knowledge.  The body is fixed
     /// before either party signs, so the subject's own back-pointers are
     /// the subject's to supply (`wire-format.md` §3.1, §3.4); the child
     /// index is the lowest free slot under this node's position, and the
     /// slot is written when the signed adoption is applied.
-    pub fn propose_adoption(&self, subject: &Keyhash, staple: Staple, evidence: rhtn_archive::tx::Evidence, series: u32, subject_back: &[rhtn_archive::Txid]) -> Result<Vec<u8>, Gate> {
-        match gate(Operation::TrustBearing, staple, self.is_superseded(subject)) {
+    pub fn propose_adoption(&self, subject: &Keyhash, evidence: rhtn_archive::tx::Evidence, series: u32, subject_back: &[rhtn_archive::Txid]) -> Result<Vec<u8>, Gate> {
+        match gate(self.is_superseded(subject)) {
             Gate::Proceed => {}
             refusal => return Err(refusal),
         }
