@@ -7881,3 +7881,92 @@ Readings the milestone's code takes, for the author to confirm or reverse:
   structure's signer; `wire-format.md` §3.5's "nothing else appears in
   either header" makes that arguably malformed. The builders no longer emit
   one; the decoder's tolerance is recorded rather than tightened here.
+
+**Milestone 4 closed (2026-09-10).** Two crates are new. `rhtn-node` carries
+what a node decides above the session: the topology store and the
+forwarding rule, the rootward memo, the anchor table and resolution,
+currency issuance with its escalation ladder, peering records and the
+direct payload path. `rhtn-sim` carries a datagram-level path — a UDP relay
+below QUIC that can drop, delay, blackhole, capture and replay — and a mesh
+of node views with severable links. 71 of the milestone's 72 entries pass,
+plus TRN-16 from milestone 2: PRP-01 to PRP-15, RES-01 to RES-16, CUR-01 to
+CUR-13, REP-01 to REP-06 and REP-08 to REP-16, SES-06 to SES-12, SES-14,
+QUE-10 to QUE-13. 156 of 256 in all, in 15 propagation tests, 14 resolution
+tests, 2 contact tests, 13 currency tests, 12 peering tests, 13 session
+tests, 3 partition-merge tests and 2 replay tests.
+
+**The exit criterion is met.** `models/tla/PartitionMerge`'s two safety
+invariants and its convergence property are restated over the running code
+in `rhtn-sim`'s mesh: three nodes seeded, partitioned so one side signs a
+departure the other cannot see, then healed and reconciled, with both
+invariants checked at every step and every pair agreeing about every
+subject afterwards. A companion asserts the negative — a partition that
+never heals does not converge — because a convergence test that never sees
+divergence proves nothing. TRN-16 passes with its premise asserted rather
+than assumed: a separate test shows the second dial really does carry its
+Attach as 0-RTT early data and the server really does accept it, so the
+replay test is exercising early data and not an ordinary first flight.
+
+**REP-07 is deferred to milestone 5**, where the reference metric exists.
+The entry asks that two graphs differing only in peering ASN score
+identically, which needs `rhtn-policy`. Nothing else in the milestone is
+owed.
+
+Readings the milestone's code takes, for the author to confirm or reverse:
+
+- **The storage rule reads the position a transaction establishes, not the
+  subject's current one.** `wire-format.md` §10.1.1 says a node stores a
+  transaction when its subject falls in that node's own `h_store`, and a
+  new member's adoption would never flood under a literal reading, since
+  before the adoption nobody holds the subject at all. The code stores when
+  the subject is within h, **or** the counterparty the transaction names is
+  within h-1, which is the same ball read forward. A peering is in range if
+  either endpoint is, as the section says.
+- **PRP-11 as drafted names the receiving node in field 1**, which also
+  fires §10.2.1's cycle check. The test asserts what the entry asserts —
+  nothing forwarded to the patron — and covers the timestamp rule
+  separately, against a memo about another patron's slot the node's memo
+  table already holds at a later timestamp.
+- **A memo naming an attached client is neither acted on nor forwarded by
+  the serving node**: §10.2 says the hit is handed to that client at
+  contact and that the records answering it are the client's. The code
+  reports it and stops; handing it over is client work and belongs with
+  `rhtn-client`.
+- **A currency attestation's field 1 is the identity as the querier named
+  it and field 2 is the key the issuer currently records.** After a
+  recovery a distant caller still holds the old keyhash, so a query naming
+  it is answered with the successor in field 2 and never with the old key,
+  which is what `infra-client-requirements.md` §3 forbids. CUR-03 as
+  drafted reads as though both fields move.
+- **CUR-07's evidence is a validated recovery, not a reissue chain.** The
+  entry says a reissue chain supersedes "S's key k1", and a reissue changes
+  the series and keeps the key; the Attach frame carries no series, so a
+  node cannot refuse an attach on a reissue without refusing the legitimate
+  holder's reattachment too. §12.6.5 names both forms as authenticated
+  supersession evidence and the test uses the one the wire can act on.
+- **A client marked unreachable is queued for, not delivered to**, even
+  while a session object survives: design §14.1.2 says material queues as
+  it always did and delivery waits for its return, and a connection whose
+  packets are being blackholed outlives the detector's verdict by the idle
+  timeout. The detector decides.
+- **Reachability replication has no wire object.** design §14.1.2 requires
+  the state to reach the siblings and specifies nothing that carries it.
+  The node calls a configured hook; the tests observe the sibling's state
+  and check neither the carrier nor the latency, which is what SES-14's own
+  interpretation allows.
+- **The client's dial timeout is the client's own number.** `wire-format.md`
+  §7.7.3 makes selection and retry local policy, so a dial that does not
+  answer is abandoned after a configured interval and the next endpoint
+  tried. Without one a blackholed path holds a fresh attach for the whole
+  idle timeout.
+- **SES-07 needs the session to be running before the suspension.** A task
+  spawned and never polled takes its monotonic start when it first runs, so
+  a test that blocks the runtime before the control loop has started is
+  measuring the wrong interval. The test exchanges heartbeats first, which
+  is what "is in a session" means.
+- **PRP/RES/CUR/REP run over an in-process fabric rather than loopback
+  QUIC.** The frames are the wire's own bytes, encoded and decoded by the
+  codec; what the fabric stands in for is the session, not the encoding.
+  The entries that turn on real packets — the failover detector, the
+  mailbox across an absence, a wrong address, a dead first endpoint, the
+  replay — run over loopback with the path harness.

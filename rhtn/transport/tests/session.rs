@@ -41,6 +41,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
         tls: Arc::new(Mutex::new(Default::default())),
+        connect_timeout: std::time::Duration::from_millis(1500),
     }
 }
 

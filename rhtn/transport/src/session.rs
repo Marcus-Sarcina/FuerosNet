@@ -382,6 +382,7 @@ async fn control_loop(
     log: Log,
     reach: Arc<Mutex<Reachability>>,
     mut on_frame: impl FnMut(Family, &[u8], &Item) -> bool,
+    on_change: Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
 ) -> Option<quinn::ConnectionError> {
     let start = Instant::now();
     let mut next_send = start + interval;
@@ -396,6 +397,10 @@ async fn control_loop(
             if *r != Reachability::Unreachable {
                 *r = Reachability::Unreachable;
                 log.push(Event::PeerUnreachable);
+                drop(r);
+                if let Some(f) = &on_change {
+                    f(Reachability::Unreachable);
+                }
             }
         }
         tokio::select! {
@@ -418,7 +423,12 @@ async fn control_loop(
                             if let Some(c) = map_get(m, 1).and_then(as_uint) {
                                 if seen.insert(c) {
                                     last_valid = Instant::now();
-                                    *reach.lock().unwrap() = Reachability::Reachable;
+                                    let was = std::mem::replace(&mut *reach.lock().unwrap(), Reachability::Reachable);
+                                    if was == Reachability::Unreachable {
+                                        if let Some(f) = &on_change {
+                                            f(Reachability::Reachable);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -458,6 +468,14 @@ pub struct NodeConfig {
     pub queue_cap: Option<usize>,
     /// The node's clock, for arrival times.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+    /// Whether this node holds a record of a keyhash at all.  A message for
+    /// a subordinate it serves queues; one for a keyhash it has no record of
+    /// is a different answer (design §14.1.2, §7.4.3).
+    pub serves: Predicate,
+    /// Replicate a client's reachability to this node's siblings, so a
+    /// sibling answering in failover knows the client's status
+    /// (design §14.1.2).  The wire assigns no frame for this.
+    pub replicate: Option<Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>>,
 }
 
 impl NodeConfig {
@@ -472,6 +490,8 @@ impl NodeConfig {
             policy: Arc::new(|_| true),
             in_subtree: Arc::new(|_| true),
             filter: None,
+            serves: Arc::new(|_| true),
+            replicate: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
             clock: Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)),
@@ -486,6 +506,9 @@ struct NodeState {
     /// Credentials this node holds supersession evidence for, and their
     /// successors (a reissue names the same key).
     superseded: HashMap<[u8; 32], [u8; 32]>,
+    /// The reachability this node has settled on per client, which outlives
+    /// the session it was learned in and is what replicates (design §14.1.2).
+    marked: HashMap<[u8; 32], Reachability>,
 }
 
 pub struct Node {
@@ -505,12 +528,24 @@ impl Node {
     /// (design §14.1.6), or the credential is one this node has verified
     /// superseded (design §12.6.5).
     pub fn enqueue(&self, keyhash: [u8; 32], bytes: Vec<u8>) -> Result<(), queue::Refusal> {
+        if !(self.cfg.serves)(&keyhash) {
+            return Err(queue::Refusal::NoRecord);
+        }
         let conn = {
             let st = self.state.lock().unwrap();
             if st.superseded.get(&keyhash).is_some_and(|s| *s != keyhash) {
                 return Err(queue::Refusal::Superseded);
             }
-            st.sessions.get(&keyhash).cloned()
+            // a client this node has marked unreachable is queued for, not
+            // delivered to: the material waits for its return (design
+            // §14.1.2).  A session object outlives the reachability the
+            // detector settled on, and the detector is what decides.
+            let live = st.reach.get(&keyhash).map(|r| *r.lock().unwrap()).or_else(|| st.marked.get(&keyhash).copied());
+            if live == Some(Reachability::Unreachable) {
+                None
+            } else {
+                st.sessions.get(&keyhash).cloned()
+            }
         };
         if let Some(conn) = conn {
             tokio::spawn(async move { deliver(&conn, bytes).await });
@@ -557,7 +592,20 @@ impl Node {
     }
 
     pub fn reachability(&self, keyhash: &[u8; 32]) -> Option<Reachability> {
-        self.state.lock().unwrap().reach.get(keyhash).map(|r| *r.lock().unwrap())
+        let st = self.state.lock().unwrap();
+        st.reach.get(keyhash).map(|r| *r.lock().unwrap()).or_else(|| st.marked.get(keyhash).copied())
+    }
+
+    /// Take a sibling's replicated reachability for a client this node does
+    /// not serve.  A sibling answering in failover needs the client's
+    /// status and has no session of its own to learn it from.
+    pub fn note_reachability(&self, keyhash: [u8; 32], r: Reachability) {
+        self.state.lock().unwrap().marked.insert(keyhash, r);
+    }
+
+    /// Whether this node holds any record of `keyhash`.
+    pub fn serves(&self, keyhash: &[u8; 32]) -> bool {
+        (self.cfg.serves)(keyhash)
     }
 
     pub fn has_session(&self, keyhash: &[u8; 32]) -> bool {
@@ -660,7 +708,14 @@ impl Node {
         });
         let interval = Duration::from_secs(self.cfg.interval_secs);
         let log = self.log.clone();
-        let _ = control_loop(sender, recv, interval, log, reach, |fam, _, _| !matches!(fam, Family::Attach | Family::AttachAck)).await;
+        let node = self.clone();
+        let on_change: Arc<dyn Fn(Reachability) + Send + Sync> = Arc::new(move |r| {
+            node.state.lock().unwrap().marked.insert(claimed, r);
+            if let Some(f) = &node.cfg.replicate {
+                f(claimed, r);
+            }
+        });
+        let _ = control_loop(sender, recv, interval, log, reach, |fam, _, _| !matches!(fam, Family::Attach | Family::AttachAck), Some(on_change)).await;
         requests.abort();
         self.state.lock().unwrap().sessions.remove(&claimed);
         self.log.push(Event::Closed);
@@ -716,6 +771,10 @@ pub struct ClientConfig {
     /// One TLS configuration per target, kept so its resumption store is
     /// shared across dials and 0-RTT reattachment is possible (§9.2).
     pub tls: Arc<Mutex<HashMap<[u8; 32], rustls::ClientConfig>>>,
+    /// How long one dial may take before the next endpoint is tried.
+    /// Selection and retry are local policy (`wire-format.md` §7.7.3), so
+    /// this is the client's own number and no part of the wire.
+    pub connect_timeout: Duration,
 }
 
 impl ClientConfig {
@@ -781,21 +840,23 @@ pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8;
                 });
                 conn
             }
-            Err(connecting) => match connecting.await {
-                Ok(c) => {
+            Err(connecting) => match tokio::time::timeout(cfg.connect_timeout, connecting).await {
+                Ok(Ok(c)) => {
                     log.push(Event::HandshakeDone { early_accepted: false });
                     c
                 }
-                Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
+                Ok(Err(e)) => return AttachOutcome::EndpointFailure(e.to_string()),
+                Err(_) => return AttachOutcome::EndpointFailure("dial timed out".into()),
             },
         }
     } else {
-        match connecting.await {
-            Ok(c) => {
+        match tokio::time::timeout(cfg.connect_timeout, connecting).await {
+            Ok(Ok(c)) => {
                 log.push(Event::HandshakeDone { early_accepted: false });
                 c
             }
-            Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
+            Ok(Err(e)) => return AttachOutcome::EndpointFailure(e.to_string()),
+            Err(_) => return AttachOutcome::EndpointFailure("dial timed out".into()),
         }
     };
     attach_on(cfg, conn, log).await
@@ -872,7 +933,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
             }
             Family::Attach | Family::AttachAck => false,
             _ => true,
-        })
+        }, None)
         .await;
         task_conn.close(VarInt::from_u32(0), b"");
         task_log.push(Event::Closed);
@@ -893,6 +954,46 @@ pub async fn attach_any(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: 
         }
     }
     last
+}
+
+/// A fresh attach: the client's actual serving node first, and its cached
+/// sibling list immediately where that node is unreachable at attach time
+/// (`wire-format.md` §8.2, design §14.1.2).  No wait of three intervals
+/// applies here — the three-interval rule governs a *running* session.
+pub async fn fresh_attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, serving: [u8; 32], early: bool) -> AttachOutcome {
+    let addrs = cfg.addresses.lock().unwrap().get(&serving).cloned().unwrap_or_default();
+    match attach_any(cfg, endpoint, serving, &addrs, early).await {
+        AttachOutcome::Attached(s) => return AttachOutcome::Attached(s),
+        AttachOutcome::Refused => return AttachOutcome::Refused,
+        _ => {}
+    }
+    let siblings = cfg.sibling_cache.lock().unwrap().clone();
+    let mut last = AttachOutcome::EndpointFailure("serving node unreachable and no cached sibling answered".into());
+    for sib in siblings {
+        if let Some(km) = &sib.key_material {
+            let _ = cfg.pins.pin(sib.keyhash, km);
+        }
+        let addrs = cfg.addresses.lock().unwrap().get(&sib.keyhash).cloned().unwrap_or_default();
+        match attach_any(cfg, endpoint, sib.keyhash, &addrs, early).await {
+            AttachOutcome::Attached(s) => return AttachOutcome::Attached(s),
+            other => last = other,
+        }
+    }
+    last
+}
+
+impl Session {
+    /// A degraded session holds the replicated state but not the authority
+    /// to countersign (design §14.1.2).  Payload flows; trust-bearing
+    /// operations do not.
+    pub fn may_countersign(&self) -> bool {
+        self.ack.mode == 0
+    }
+
+    /// Whether this session is the degraded kind.
+    pub fn degraded(&self) -> bool {
+        self.ack.mode == 1
+    }
 }
 
 /// §8.2: a list naming the receiver or holding duplicates is malformed.

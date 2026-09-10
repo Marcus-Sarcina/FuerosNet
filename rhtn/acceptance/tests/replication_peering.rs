@@ -2,42 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Replicate a client's unreachable marking to the serving node's siblings
-///
-/// Spec: design §14.1.2; design §3.4
-/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (design §14.1.2): "This state replicates to siblings, or a sibling answering during failover has no idea of the client's status."
-/// Rule (design §3.4): "Siblings replicate each other's topology and trust-bearing transaction history (up to f−1 = 9)."
-///
-/// Given: Infra nodes S and T are siblings under one patron; light client L is attached to S. No separate replication agreement exists between S and T beyond the patron's adoption transactions.
-/// When: L's heartbeat fails at S, S marks L unreachable, and L is then attached to T in failover.
-/// Then: T's reachability state for L shows L as unreachable-and-queuing rather than as unknown; T does not answer for L as if it held no record of L.
-///
-/// Interpretation: No wire frame is specified as the carrier of this replicated state; the test observes T's resulting state only and leaves the carrier to the implementation.
-#[test]
-#[ignore = "acceptance REP-01: owed at milestone 4"]
-fn rep_01_replicate_a_client_s_unreachable_marking_to_the() {
-    todo!("REP-01: Replicate a client's unreachable marking to the serving node's siblings")
-}
-
-/// Do not replicate queue state to siblings
-///
-/// Spec: infra-client-requirements.md §2; design §14.1.6; wire-format.md §8.2
-/// Milestone: 4.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §2): "Do not replicate queue state to siblings."
-/// Rule (design §14.1.6): "Siblings do not hold queue state."
-///
-/// Given: Sibling infra nodes S and T; light client L attached to S is marked unreachable at S, and three messages for L are queued at S.
-/// When: L attaches to T in failover and collects.
-/// Then: T delivers none of the three messages, T's store holds no queued ciphertext for L, and T's AttachAck field 4 does not count S's mailbox.
-#[test]
-#[ignore = "acceptance REP-02: owed at milestone 4"]
-fn rep_02_do_not_replicate_queue_state_to_siblings() {
-    todo!("REP-02: Do not replicate queue state to siblings")
-}
-
 /// Leave the trust metric's output unchanged by ASN concentration
 ///
 /// Spec: wire-format.md §4.4; design §3.4
@@ -52,20 +16,4 @@ fn rep_02_do_not_replicate_queue_state_to_siblings() {
 #[ignore = "acceptance REP-07: owed at milestone 4"]
 fn rep_07_leave_the_trust_metric_s_output_unchanged_by_asn() {
     todo!("REP-07: Leave the trust metric's output unchanged by ASN concentration")
-}
-
-/// Push the serving node's siblings, not the patron's, as the replication set
-///
-/// Spec: design §14.1.2; wire-format.md §8.2; design §3.4
-/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (design §14.1.2): "siblings of the serving node, not of the patron, where those differ"
-///
-/// Given: Light client L's patron P is a light client under infra node S; S has infra siblings T1 and T2; P has light-client sibling Q.
-/// When: L attaches to S.
-/// Then: The AttachAck's SiblingRef list names T1 and T2 with their endpoints, and does not name Q.
-#[test]
-#[ignore = "acceptance REP-15: owed at milestone 4"]
-fn rep_15_push_the_serving_node_s_siblings_not_the_patron() {
-    todo!("REP-15: Push the serving node's siblings, not the patron's, as the replication set")
 }

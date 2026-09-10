@@ -24,6 +24,9 @@ pub enum Refusal {
     AtCap,
     /// The node has verified this credential superseded (design §12.6.5).
     Superseded,
+    /// This node holds no record of the recipient at all, which is a
+    /// different answer from "offline" (design §14.1.2, §7.4.3).
+    NoRecord,
 }
 
 pub trait QueueStore: Send + Sync {

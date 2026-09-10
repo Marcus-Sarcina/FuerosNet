@@ -21,6 +21,7 @@ struct Tree {
     a: NodeView,
     c: NodeView,
     afab: Arc<Fabric>,
+    #[allow(dead_code)]
     cfab: Arc<Fabric>,
     c_record: Vec<u8>,
     a_entry: Vec<u8>,
