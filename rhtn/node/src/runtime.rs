@@ -65,6 +65,36 @@ impl Adjacency for SessionAdjacency {
     }
 }
 
+/// Requests per requester per window (`wire-format.md` §7.1: rate-limit
+/// per requester as with any other query).  Over the limit a request
+/// stream fails; the values are the operator's.
+pub struct RateLimit {
+    pub per_window: u32,
+    pub window: Duration,
+    buckets: Mutex<HashMap<Keyhash, (tokio::time::Instant, u32)>>,
+}
+
+impl RateLimit {
+    pub fn new(per_window: u32, window: Duration) -> Self {
+        RateLimit { per_window, window, buckets: Mutex::new(HashMap::new()) }
+    }
+
+    /// Whether one more request from `peer` is within its allowance now.
+    pub fn allow(&self, peer: &Keyhash) -> bool {
+        let now = tokio::time::Instant::now();
+        let mut b = self.buckets.lock().unwrap();
+        let e = b.entry(*peer).or_insert((now, 0));
+        if now.duration_since(e.0) >= self.window {
+            *e = (now, 0);
+        }
+        if e.1 >= self.per_window {
+            return false;
+        }
+        e.1 += 1;
+        true
+    }
+}
+
 /// A running node: transport, view, and the state the request handlers
 /// read.
 pub struct LiveNode {
@@ -81,12 +111,19 @@ pub struct LiveNode {
     pub client_ep: quinn::Endpoint,
     /// How long one dial may take on a proxied resolution.
     pub dial_timeout: Duration,
+    pub limits: Arc<RateLimit>,
 }
 
 impl LiveNode {
     /// Start a node on loopback.  The hooks are installed on `cfg` before
     /// the transport node is built, so the first session already carries.
-    pub fn start(mut cfg: NodeConfig, view: NodeView, ids: Vec<Identity>, anchors: AnchorTable) -> Arc<LiveNode> {
+    pub fn start(cfg: NodeConfig, view: NodeView, ids: Vec<Identity>, anchors: AnchorTable) -> Arc<LiveNode> {
+        Self::start_with(cfg, view, ids, anchors, RateLimit::new(120, Duration::from_secs(60)))
+    }
+
+    /// `start`, with the request allowance the operator chose.
+    pub fn start_with(mut cfg: NodeConfig, view: NodeView, ids: Vec<Identity>, anchors: AnchorTable, limits: RateLimit) -> Arc<LiveNode> {
+        let limits = Arc::new(limits);
         let view = Arc::new(Mutex::new(view));
         let currency = Arc::new(Mutex::new(CurrencyState::default()));
         let anchors = Arc::new(Mutex::new(anchors));
@@ -116,9 +153,15 @@ impl LiveNode {
         let identity = cfg.identity.clone();
         let client_ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).expect("client endpoint");
         let dial_ep = client_ep.clone();
-        let on_request: RequestHandler = Arc::new(move |_peer, family, body| {
-            let (v, c, an, s, identity, dial_ep) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone());
+        let lim = limits.clone();
+        let on_request: RequestHandler = Arc::new(move |peer, family, body| {
+            let (v, c, an, s, identity, dial_ep, lim) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone());
             Box::pin(async move {
+                // over the requester's allowance the stream fails, and nothing
+                // about the request is kept
+                if !lim.allow(&peer) {
+                    return None;
+                }
                 match family {
                     Family::CurrencyRequest => {
                         let req = CurrencyRequest::decode(&body).ok()?;
@@ -162,7 +205,7 @@ impl LiveNode {
         let node = Node::new(cfg);
         *slot.lock().unwrap() = Some(node.clone());
         tokio::spawn(node.clone().serve(endpoint.clone()));
-        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3) })
+        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits })
     }
 
     pub fn me(&self) -> Keyhash {

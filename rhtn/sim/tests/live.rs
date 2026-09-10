@@ -221,3 +221,34 @@ async fn a_running_node_replicates_its_store_and_never_its_mailbox() {
     assert_eq!(t.n.node.queued(&kh("carol")), 1, "which still waits at N alone");
     drop(t.upstream);
 }
+
+/// Request streams are rate-limited per requester (`wire-format.md` §7.1):
+/// past the allowance a request fails, and the allowance is the
+/// operator's.
+#[tokio::test]
+async fn requests_past_the_allowance_fail_the_stream() {
+    let mut s = Signers::new();
+    let a_c = s.adopt("carol", "bob", "bob", &[2], 2);
+    let mut n_view = view_of("bob", table_of("bob", &s, &[&a_c], &["bob"]), "bob", &[], s.clock);
+    n_view.attached.insert(kh("carol"));
+    let n = LiveNode::start_with(node_cfg("bob", I), n_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip), rhtn_node::runtime::RateLimit::new(3, Duration::from_secs(60)));
+    let ccfg = client_cfg("carol");
+    know(&ccfg, "bob", n.addr);
+    let c = match attach(&ccfg, &client_ep(), kh("bob"), n.addr, false).await {
+        AttachOutcome::Attached(x) => x,
+        other => panic!("{other:?}"),
+    };
+    let mut answered = 0;
+    let mut failed = 0;
+    for i in 0..6u8 {
+        match c.request(REQUEST_CURRENCY, &CurrencyRequest { subject: kh("carol"), nonce: [i; 16] }.encode()).await {
+            Ok(bytes) => {
+                assert!(matches!(CurrencyReply::decode(&bytes).unwrap(), CurrencyReply::Attestation { .. }));
+                answered += 1;
+            }
+            Err(_) => failed += 1,
+        }
+    }
+    assert_eq!((answered, failed), (3, 3), "three within the allowance, three past it");
+    assert_eq!(n.limits.per_window, 3);
+}

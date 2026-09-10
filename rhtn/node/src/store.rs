@@ -353,6 +353,93 @@ impl TopologyStore {
 
 }
 
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn unhex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+}
+
+impl TopologyStore {
+    /// Write the store to a directory: one file per object, and the series
+    /// proved and pairs retired beside them.  A node keeps its topology
+    /// store across a restart because it is the seen-set: forgetting it
+    /// replays a forwarding wave into every cycle in the horizon
+    /// (`infra-client-requirements.md` §4.3).
+    pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
+        for sub in ["tx", "ep", "presence"] {
+            std::fs::create_dir_all(dir.join(sub))?;
+        }
+        for (t, r) in &self.transactions {
+            std::fs::write(dir.join("tx").join(hex(t)), &r.bytes)?;
+        }
+        for ((subject, series), h) in &self.endpoints {
+            std::fs::write(dir.join("ep").join(format!("{}-{series}", hex(subject))), &h.record.bytes)?;
+        }
+        for (t, b) in &self.presence {
+            std::fs::write(dir.join("presence").join(hex(t)), b)?;
+        }
+        let proved: Vec<String> = self.proved_series.iter().map(|(s, ser)| format!("{} {ser}", hex(s))).collect();
+        std::fs::write(dir.join("proved"), proved.join("\n"))?;
+        let conflicts: Vec<String> = self.conflicts.iter().map(|(s, ser, c)| format!("{} {ser} {c}", hex(s))).collect();
+        std::fs::write(dir.join("conflicts"), conflicts.join("\n"))?;
+        Ok(())
+    }
+
+    /// Read a store back.  Objects that no longer parse are skipped rather
+    /// than failing the load; the pending list is not kept, since what it
+    /// held was waiting on a prerequisite the restart may have lost too.
+    pub fn load(dir: &std::path::Path) -> std::io::Result<TopologyStore> {
+        let mut st = TopologyStore::new();
+        if let Ok(rd) = std::fs::read_dir(dir.join("tx")) {
+            for e in rd.flatten() {
+                if let Ok(rec) = Record::parse(&std::fs::read(e.path())?) {
+                    st.transactions.insert(rec.txid, rec);
+                }
+            }
+        }
+        if let Ok(rd) = std::fs::read_dir(dir.join("ep")) {
+            for e in rd.flatten() {
+                if let Ok(er) = EndpointRecord::parse(&std::fs::read(e.path())?) {
+                    st.endpoints.insert((er.node, er.seqno.series), HeldEndpoint { record: er });
+                }
+            }
+        }
+        if let Ok(rd) = std::fs::read_dir(dir.join("presence")) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if let Some(t) = unhex(&name).and_then(|v| <[u8; 32]>::try_from(v).ok()) {
+                    st.presence.insert(t, std::fs::read(e.path())?);
+                }
+            }
+        }
+        if let Ok(text) = std::fs::read_to_string(dir.join("proved")) {
+            for line in text.lines() {
+                let mut it = line.split(' ');
+                if let (Some(s), Some(ser)) = (it.next().and_then(unhex).and_then(|v| <[u8; 32]>::try_from(v).ok()), it.next().and_then(|x| x.parse().ok())) {
+                    st.proved_series.insert((s, ser));
+                }
+            }
+        }
+        if let Ok(text) = std::fs::read_to_string(dir.join("conflicts")) {
+            for line in text.lines() {
+                let mut it = line.split(' ');
+                let s = it.next().and_then(unhex).and_then(|v| <[u8; 32]>::try_from(v).ok());
+                let ser = it.next().and_then(|x| x.parse().ok());
+                let c = it.next().and_then(|x| x.parse().ok());
+                if let (Some(s), Some(ser), Some(c)) = (s, ser, c) {
+                    st.conflicts.insert((s, ser, c));
+                }
+            }
+        }
+        Ok(st)
+    }
+}
+
 /// The store answers a txid with the transaction or presence record it
 /// holds, which is what an adoption's evaluation dereferences.
 impl rhtn_archive::walk::Fetch for TopologyStore {
