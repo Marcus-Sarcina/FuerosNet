@@ -46,8 +46,12 @@ pub struct NodeView {
     /// `(patron, slot) -> occupant`: the memo table, optional by
     /// `wire-format.md` §10.2.2 and kept here.
     pub memo_table: BTreeMap<(Keyhash, u64), Slot>,
-    /// Whether this node keeps a memo table at all.
+    /// Whether this node keeps a memo table at all (`wire-format.md`
+    /// §10.2.2: optional, and detection degrades gracefully without one).
     pub keeps_memo_table: bool,
+    /// The position each patron in the memo table last gave for itself:
+    /// what a downward memo descends by (`wire-format.md` §10.2.4).
+    pub memo_positions: BTreeMap<Keyhash, Locator>,
     /// Light clients attached to this node (design §14.1.2).
     pub attached: BTreeSet<Keyhash>,
     /// Peering edges (design §6.3): adjacency for the flood, and no part of
@@ -81,6 +85,7 @@ impl NodeView {
             slots: BTreeMap::new(),
             memo_table: BTreeMap::new(),
             keeps_memo_table: true,
+            memo_positions: BTreeMap::new(),
             attached: BTreeSet::new(),
             peers: BTreeSet::new(),
             serving_node: None,

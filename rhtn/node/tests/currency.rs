@@ -203,7 +203,11 @@ fn a_sibling_issues_secondhand_while_the_patron_is_dark() {
     let mut cur = CurrencyState::default();
     let p2 = ladder_view("w1");
     assert_eq!(p2.rung_for(&cur, &kh("carol")), None, "not while the patron answers");
-    cur.unreachable.insert(kh("bob"));
+    // dark for an hour: within the attestation lifetime nothing is needed
+    cur.dark(kh("bob"), p2.now - 3600);
+    assert_eq!(p2.rung_for(&cur, &kh("carol")), None, "the staple still stands");
+    // dark for the lifetime: the sibling rung opens
+    cur.unreachable.insert(kh("bob"), p2.now - cur.sibling_after);
     assert_eq!(p2.rung_for(&cur, &kh("carol")), Some(Rung::Sibling));
     let a = att(&p2.issue_currency(&cur, &kh("carol")).unwrap());
     assert_eq!(a.role, ROLE_SIBLING, "marked secondhand");
@@ -220,9 +224,12 @@ fn a_sibling_issues_secondhand_while_the_patron_is_dark() {
 fn the_grandpatron_issues_once_the_patron_and_its_siblings_are_dark() {
     let mut cur = CurrencyState::default();
     let g = ladder_view("alice");
-    cur.unreachable.insert(kh("bob"));
+    cur.unreachable.insert(kh("bob"), g.now - cur.grandpatron_after);
     assert_eq!(g.rung_for(&cur, &kh("carol")), None, "P' can still answer");
-    cur.unreachable.insert(kh("w1"));
+    // the sibling dark for an hour: hours are the sibling's rung, not days
+    cur.unreachable.insert(kh("w1"), g.now - 3600);
+    assert_eq!(g.rung_for(&cur, &kh("carol")), None, "not until every sibling has been dark for days");
+    cur.unreachable.insert(kh("w1"), g.now - cur.grandpatron_after);
     assert_eq!(g.rung_for(&cur, &kh("carol")), Some(Rung::Grandpatron));
     let a = att(&g.issue_currency(&cur, &kh("carol")).unwrap());
     assert_eq!(a.role, ROLE_GRANDPATRON);
@@ -239,11 +246,13 @@ fn a_peering_is_proposed_with_no_staple_however_many_issuers_are_dark() {
     let er = rhtn_node::resolution::endpoint_record(&id("carol"), &[point(3, 7003)], Seqno { series: 3, counter: 1 });
     let fab = Fabric::with(&[]);
     s.take_object(&*fab, &kh("carol"), rhtn_node::store::KIND_ENDPOINT_RECORD, &er, &ids());
-    cur.unreachable.extend([kh("bob"), kh("w1"), kh("alice")]);
+    for who in ["bob", "w1", "alice"] {
+        cur.dark(kh(who), s.now - 3 * 86_400);
+    }
     // every rung is unreachable: nobody can issue for S
     for issuer in ["bob", "w1", "alice"] {
         let v = ladder_view(issuer);
-        assert!(v.rung_for(&cur, &kh("carol")).is_none() || cur.unreachable.contains(&kh(issuer)));
+        assert!(v.rung_for(&cur, &kh("carol")).is_none() || cur.unreachable.contains_key(&kh(issuer)));
     }
     let stale = tx::currency_attestation(&id("bob"), &kh("carol"), &kh("carol"), s.now - 40_000, s.now - 1, ROLE_PATRON);
     assert_eq!(s.take_staple(&ids(), &kh("carol"), &stale, &[]), Staple::Expired);

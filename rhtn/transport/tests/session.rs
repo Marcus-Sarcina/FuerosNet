@@ -42,6 +42,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         addresses: Arc::new(Mutex::new(Default::default())),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
+        on_reachability: None,
     }
 }
 

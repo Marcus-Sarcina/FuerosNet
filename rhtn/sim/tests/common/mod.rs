@@ -56,6 +56,7 @@ pub fn client_cfg(name: &str) -> ClientConfig {
         addresses: Arc::new(Mutex::new(Default::default())),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
+        on_reachability: None,
     }
 }
 
@@ -191,4 +192,16 @@ pub fn view_of(me: &str, table: Table, anchor: &str, path: &[u8], now: u64) -> r
     v.table = table;
     v.now = now;
     v
+}
+
+/// Poll `done` until it holds or `ms` elapse.
+pub async fn until(ms: u64, mut done: impl FnMut() -> bool) -> bool {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(ms);
+    while tokio::time::Instant::now() < deadline {
+        if done() {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    done()
 }

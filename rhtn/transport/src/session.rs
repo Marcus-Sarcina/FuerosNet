@@ -868,6 +868,7 @@ async fn answer_request(mut send: SendStream, mut recv: RecvStream, peer: [u8; 3
 
 // ------------------------------------------------------------ the client
 
+#[derive(Clone)]
 pub struct ClientConfig {
     pub identity: Arc<SigningIdentity>,
     pub pins: Pins,
@@ -885,6 +886,10 @@ pub struct ClientConfig {
     /// Selection and retry are local policy (`wire-format.md` §7.7.3), so
     /// this is the client's own number and no part of the wire.
     pub connect_timeout: Duration,
+    /// Where this session's reachability verdicts go when the detector
+    /// settles them: a node feeding its currency ladder from what its own
+    /// sessions tell it (design §12.6.5.1), or nobody.
+    pub on_reachability: Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
 }
 
 impl ClientConfig {
@@ -1034,6 +1039,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     let me = cfg.identity.public.keyhash;
     let loop_log = log.clone();
     let loop_reach = reach.clone();
+    let on_reachability = cfg.on_reachability.clone();
     let task_log = log.clone();
     let task_conn = conn.clone();
     let (ftx, frx) = mpsc::unbounded_channel();
@@ -1042,7 +1048,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
         let _ = control_loop(
             sender,
             recv,
-            LoopIo { interval, log: loop_log.clone(), reach: loop_reach.clone(), on_change: None, outbound: orx },
+            LoopIo { interval, log: loop_log.clone(), reach: loop_reach.clone(), on_change: on_reachability, outbound: orx },
             move |fam, b, body, it| match fam {
                 Family::SiblingUpdate => {
                     let Item::Map(m) = it else { return true };

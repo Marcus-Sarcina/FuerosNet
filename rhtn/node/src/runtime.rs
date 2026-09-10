@@ -154,6 +154,22 @@ impl LiveNode {
         // request streams: resolution and currency, answered from the view
         let (v, c, an, s) = (view.clone(), currency.clone(), anchors.clone(), slot.clone());
         let identity = cfg.identity.clone();
+        // the detector's verdicts on the sessions this node serves feed the
+        // ladder, stamped with the node's own clock (design §12.6.5.1), and
+        // then go wherever the operator sent them
+        let (ladder, clock, prev) = (currency.clone(), view.clone(), cfg.replicate.clone());
+        cfg.replicate = Some(Arc::new(move |kh, r| {
+            let now = clock.lock().unwrap().now;
+            let mut cur = ladder.lock().unwrap();
+            match r {
+                rhtn_transport::session::Reachability::Unreachable => cur.dark(kh, now),
+                rhtn_transport::session::Reachability::Reachable => cur.back(&kh),
+            }
+            drop(cur);
+            if let Some(f) = &prev {
+                f(kh, r);
+            }
+        }));
         let client_ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).expect("client endpoint");
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
@@ -219,7 +235,19 @@ impl LiveNode {
     /// what arrives on that session into the decision layer.  The session
     /// is returned for the caller to hold.
     pub async fn attach_upstream(&self, cfg: &ClientConfig, serving: Keyhash) -> AttachOutcome {
-        match fresh_attach(cfg, &self.client_ep, serving, false).await {
+        // what the detector settles about the party upstream feeds the
+        // ladder too: a patron gone dark is what opens the next rung
+        let mut cfg = cfg.clone();
+        let (c, v) = (self.currency.clone(), self.view.clone());
+        cfg.on_reachability = Some(Arc::new(move |r| {
+            let now = v.lock().unwrap().now;
+            let mut cur = c.lock().unwrap();
+            match r {
+                rhtn_transport::session::Reachability::Unreachable => cur.dark(serving, now),
+                rhtn_transport::session::Reachability::Reachable => cur.back(&serving),
+            }
+        }));
+        match fresh_attach(&cfg, &self.client_ep, serving, false).await {
             AttachOutcome::Attached(mut session) => {
                 self.adjacency.upstream.lock().unwrap().insert(serving, session.outbound.clone());
                 let (_, dummy) = mpsc::unbounded_channel();
@@ -280,6 +308,7 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
         addresses: Arc::new(Mutex::new(HashMap::new())),
         tls: Arc::new(Mutex::new(HashMap::new())),
         connect_timeout: per_endpoint,
+        on_reachability: None,
     };
     let mut last: Option<ResolveReply> = None;
     for _ in 0..16 {

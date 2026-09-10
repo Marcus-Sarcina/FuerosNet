@@ -1590,6 +1590,37 @@
   "interpretation": null
  },
  {
+  "id": "CUR-16",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Feed the ladder from the detector, and open its rungs by outage duration",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §12.6.5.1",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.5.1",
+    "text": "Sibling issuance from replicated state, marked secondhand and weighted slightly lower"
+   },
+   {
+    "where": "design §12.6.5.1",
+    "text": "Grandpatron issuance. It holds the adoption record anyway"
+   },
+   {
+    "where": "design §12.6.5.1",
+    "text": "Nothing; staple still valid"
+   }
+  ],
+  "given": "Grandpatron G holds sessions with patron P and P's sibling P', whose heartbeats stop; S, P's subordinate, holds a session upstream to P, whose heartbeats toward S stop too. The intervals before each rung opens are the node's own numbers.",
+  "when": "The detectors settle, and a caller asks G for S's currency before and after the grandpatron's interval has elapsed on G's clock.",
+  "then": "G's currency state holds P and P' dark since G's own clock, and S's holds P dark. G answers code 1 before the interval and issues a grandpatron attestation after it. A sibling issues only after its interval, and nobody issues for an outage shorter than the attestation lifetime.",
+  "oracle": "behaviour",
+  "interpretation": "The design keys the table on outage duration in words, hours to days and days; the intervals are taken as the operator's numbers, the reference node using the attestation lifetime and two days."
+ },
+ {
   "id": "DEC-01",
   "area": "decoder",
   "gap": "decoder",
@@ -3297,6 +3328,90 @@
   "given": "An adoption within N's h_store was lost in flight, so N holds neither it nor a later object that back-points to it. The test triggers reconciliation between N and its patron, since when it runs is local.",
   "when": "N reconciles.",
   "then": "The missing object arrives at N as a TopologyPush frame of the same shape as the original, N stores it, and forwards it as PRP-01 describes.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-16",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Send a memo down the branch holding the slot the arriving memo did not name",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.2.4",
+   "wire-format.md §10.2.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2.4",
+    "text": "sends a memo down the branch holding the slot the arriving memo did not name"
+   },
+   {
+    "where": "wire-format.md §10.2.4",
+    "text": "Nothing compels the receiving patron to act."
+   },
+   {
+    "where": "wire-format.md §10.2.2",
+    "text": "a node appearing in two slots is held in two places"
+   }
+  ],
+  "given": "Node N keeps a memo table holding occupant O under patron S1's slot from an earlier memo. A memo from S2, another subordinate of N, places O in S2's slot at a later timestamp.",
+  "when": "N receives S2's memo, and S1 then receives what N sent it.",
+  "then": "N forwards the memo rootward and sends the same frame down the branch toward S1, not back toward S2. S1 reports the occupant held elsewhere, keeps its own row, and sends nothing on. A node handed the memo from above with the earlier row in its table walks it down and does not turn it round.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-17",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Keep no memo table, and still forward every memo",
+  "milestone": 5,
+  "kind": "must-accept",
+  "spec": [
+   "wire-format.md §10.2.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2.2",
+    "text": "The table is optional, and detection degrades gracefully rather than failing."
+   },
+   {
+    "where": "wire-format.md §10.2.2",
+    "text": "No tier is load-bearing."
+   }
+  ],
+  "given": "Node N keeps no memo table. Two memos from two subordinates place the same occupant in two slots.",
+  "when": "N receives both.",
+  "then": "Both are forwarded rootward unchanged, no downward memo is sent, and the same memo arriving from above finds nothing to walk down. An implementation that requires the table fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PRP-18",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Confirm a cycle memo about an emptied slot by the empty row",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.2.2",
+   "wire-format.md §10.2.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.2.2",
+    "text": "An empty slot is a row, not a deletion."
+   },
+   {
+    "where": "wire-format.md §10.2.4",
+    "text": "once the memo is confirmed against its own records"
+   }
+  ],
+  "given": "Node N emptied its slot k at time t. N's own memo for slot k, with no occupant, returns from a subordinate.",
+  "when": "N receives it.",
+  "then": "N confirms the cycle against its empty row and disavows the forwarding subordinate with reason code 5. A memo about a slot N never held a row for is not confirmed and nothing is sent.",
   "oracle": "behaviour",
   "interpretation": null
  },

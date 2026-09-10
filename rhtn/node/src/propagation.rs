@@ -6,6 +6,7 @@
 //! Nothing in a frame tells a node how far to forward, and nothing here
 //! reads one.
 
+use crate::resolution::Path;
 use crate::store::{Decision, Horizon, KIND_TRANSACTION};
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash};
@@ -125,8 +126,13 @@ pub enum MemoOutcome {
     ForeignSubnet,
     /// Applied where a table is kept, and forwarded rootward.
     Forwarded { to: Keyhash },
+    /// Forwarded rootward, and sent down the branch holding the other slot
+    /// this node's table shows the occupant in (§10.2.4).
+    ForwardedAndDescended { to: Keyhash, down: Keyhash },
     /// Applied where a table is kept; this node is the root.
     StoppedAtRoot,
+    /// This node is the root, and the memo went down the other branch.
+    StoppedAtRootAndDescended { down: Keyhash },
     /// This node holds that slot at or after the memo's timestamp.
     AlreadyPassed,
     /// Field 1 is this node and its own row confirms the memo: a cycle.
@@ -137,6 +143,17 @@ pub enum MemoOutcome {
     /// client: the hit is handed to the client at contact, and the records
     /// that answer it are theirs (§10.2).
     ForAttachedClient { client: Keyhash },
+    /// The occupant sits in one of this node's own slots and the memo
+    /// places it under another patron: this node is the patron who has not
+    /// just spoken, its own records decide, and nothing compels it to act
+    /// (§10.2.4).  `forwarded` says where the memo went on rootward.
+    HeldElsewhere { patron: Keyhash, slot: u64, timestamp: u64, mine: u64, forwarded: Option<Keyhash> },
+    /// A downward memo, passed on toward the patron whose slot it did not
+    /// name; this node's table was updated on the way past.
+    Descended { to: Keyhash },
+    /// A downward memo this node can take no further: no table, no other
+    /// slot, or no session down that branch.
+    DescentEnded,
     /// This node has a patron but no session toward it and no serving node
     /// to stand in: nowhere to send.
     Unroutable,
@@ -312,7 +329,11 @@ impl NodeView {
         self.send_memo(adj, &memo)
     }
 
-    /// Receive a memo from below.
+    /// Receive a memo.  From below it travels rootward, checked for a
+    /// cycle and, where a table is kept, for re-parenting; from above it is
+    /// a downward memo on its way to the patron who has not just spoken
+    /// (`wire-format.md` §10.2, §10.2.1, §10.2.4).  Direction is implied by
+    /// where it came from, never by a field.
     pub fn receive_memo(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8]) -> MemoOutcome {
         let memo = match Memo::decode(body) {
             Ok(m) => m,
@@ -337,6 +358,12 @@ impl NodeView {
         if self.attached.contains(&memo.patron) && *from != memo.patron && self.table.downline_contains(&memo.patron, from) {
             return MemoOutcome::ForAttachedClient { client: memo.patron };
         }
+        // from the patron, or the serving node standing in for it, the memo
+        // is descending
+        let from_above = self.patron_in(&memo.position.anchor) == Some(*from) || (self.serving_node == Some(*from) && !self.table.downline_contains(&me, from));
+        if from_above {
+            return self.receive_downward(adj, &memo, body);
+        }
         // a node holding that slot at or after the memo's timestamp does not
         // forward it (§10.2)
         let key = (memo.patron, memo.slot);
@@ -344,13 +371,75 @@ impl NodeView {
             && held.timestamp >= memo.timestamp {
                 return MemoOutcome::AlreadyPassed;
             }
-        if self.keeps_memo_table {
-            self.memo_table.insert(key, Slot { occupant: memo.occupant, timestamp: memo.timestamp });
+        // the re-parenting check needs a table (§10.2.1): the same occupant
+        // already held in another slot of this subtree
+        let other = if self.keeps_memo_table { self.other_slot_of(&memo) } else { None };
+        self.note_memo(&memo);
+        let down = other.and_then(|(p, _)| self.hop_toward(&p)).filter(|c| adj.has_session(c));
+        if let Some(c) = &down {
+            adj.send(c, FRAME_TOPOLOGY_MEMO, body);
         }
-        match self.send_memo(adj, &memo) {
-            Some(to) => MemoOutcome::Forwarded { to },
-            None if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRoot,
-            None => MemoOutcome::Unroutable,
+        let up = self.send_memo(adj, &memo);
+        // the occupant in one of this node's own slots, placed under another
+        // patron: this node's own records decide, and the memo travels on
+        if let Some(mine) = memo.occupant.and_then(|o| self.slot_of(&o)) {
+            return MemoOutcome::HeldElsewhere { patron: memo.patron, slot: memo.slot, timestamp: memo.timestamp, mine, forwarded: up };
+        }
+        match (up, down) {
+            (Some(to), Some(down)) => MemoOutcome::ForwardedAndDescended { to, down },
+            (Some(to), None) => MemoOutcome::Forwarded { to },
+            (None, Some(down)) if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRootAndDescended { down },
+            (None, None) if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRoot,
+            (None, _) => MemoOutcome::Unroutable,
+        }
+    }
+
+    /// Write the memo's row and the patron's position, where a table is
+    /// kept: the table, not the update history (§10.2.2).
+    fn note_memo(&mut self, memo: &Memo) {
+        if self.keeps_memo_table {
+            self.memo_table.insert((memo.patron, memo.slot), Slot { occupant: memo.occupant, timestamp: memo.timestamp });
+            self.memo_positions.insert(memo.patron, memo.position.clone());
+        }
+    }
+
+    /// The other slot this node's table holds the memo's occupant in, if
+    /// any: read the other way, by occupant, the table answers the
+    /// re-parenting question (§10.2.2).
+    fn other_slot_of(&self, memo: &Memo) -> Option<(Keyhash, u64)> {
+        let o = memo.occupant?;
+        self.memo_table.iter().find(|((p, s), row)| row.occupant == Some(o) && (*p, *s) != (memo.patron, memo.slot)).map(|((p, s), _)| (*p, *s))
+    }
+
+    /// This node's subordinate on the way down to `patron`, by anchor and
+    /// path as resolution descends (§7.7.2): the child at the next index of
+    /// that patron's position after this node's own.
+    fn hop_toward(&self, patron: &Keyhash) -> Option<Keyhash> {
+        let pos = self.memo_positions.get(patron)?;
+        let mine = Path { bytes: self.position.path.clone(), nibbles: self.position.nibbles }.indices();
+        let theirs = Path { bytes: pos.path.clone(), nibbles: pos.nibbles }.indices();
+        if theirs.len() <= mine.len() || theirs[..mine.len()] != mine[..] {
+            return None;
+        }
+        self.child_at(theirs[mine.len()])
+    }
+
+    /// A downward memo (§10.2.4): the intervening nodes are updated on the
+    /// way past, and it walks the tree toward the patron whose slot the
+    /// memo did not name.  At that patron it stops: its own records say
+    /// whether it still holds the subordinate, and nothing compels it.
+    fn receive_downward(&mut self, adj: &dyn Adjacency, memo: &Memo, body: &[u8]) -> MemoOutcome {
+        let other = if self.keeps_memo_table { self.other_slot_of(memo) } else { None };
+        self.note_memo(memo);
+        if let Some(mine) = memo.occupant.and_then(|o| self.slot_of(&o)) {
+            return MemoOutcome::HeldElsewhere { patron: memo.patron, slot: memo.slot, timestamp: memo.timestamp, mine, forwarded: None };
+        }
+        match other.and_then(|(p, _)| self.hop_toward(&p)) {
+            Some(c) if adj.has_session(&c) => {
+                adj.send(&c, FRAME_TOPOLOGY_MEMO, body);
+                MemoOutcome::Descended { to: c }
+            }
+            _ => MemoOutcome::DescentEnded,
         }
     }
 
@@ -358,8 +447,10 @@ impl NodeView {
     /// this node's own row before acting; a fabricated memo fails here at no
     /// traffic cost (`wire-format.md` §10.2.3).
     fn cycle_check(&mut self, adj: &dyn Adjacency, from: &Keyhash, memo: &Memo) -> MemoOutcome {
+        // an empty slot is a row, not a deletion (§10.2.2): a memo about a
+        // slot this node emptied is confirmed by the empty row it kept
         let row = self.slots.get(&memo.slot).copied();
-        let confirmed = row.is_some_and(|r| r.occupant == memo.occupant && memo.occupant.is_some());
+        let confirmed = row.is_some_and(|r| r.occupant == memo.occupant);
         if !confirmed {
             // no disavowal, no fetch, no forward, rows unchanged
             return MemoOutcome::Unconfirmed;

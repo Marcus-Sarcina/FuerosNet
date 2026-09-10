@@ -15,7 +15,7 @@ use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
 use rhtn_crypto::verify::Lookup;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// `issuer_role` (`wire-format.md` §7.1): the rungs of §12.6.5.1's ladder.
 pub const ROLE_PATRON: u64 = 0;
@@ -204,18 +204,48 @@ impl Rung {
     }
 }
 
-/// A node's own currency policy: the lifetime it issues for and the parties
-/// it believes unreachable, which is what opens the ladder's next rung.
-/// Which key a subject currently holds is the table's business, not this.
+/// A node's own currency policy: the lifetime it issues for, the parties it
+/// holds unreachable and since when, and how long an outage must have
+/// lasted before each rung of the ladder opens (design §12.6.5.1's table is
+/// keyed on outage duration).  Which key a subject currently holds is the
+/// table's business, not this.
 pub struct CurrencyState {
     pub lifetime: u64,
-    /// Fed by the transport's reachability detector, or by an operator.
-    pub unreachable: BTreeSet<Keyhash>,
+    /// Fed by the transport's reachability detector on the sessions this
+    /// node holds, or by an operator: who is dark, and since when on this
+    /// node's own clock.
+    pub unreachable: BTreeMap<Keyhash, u64>,
+    /// How long a patron must have been dark before its sibling issues:
+    /// the table's "hours to days".  The reference node's number is the
+    /// attestation lifetime, the point at which staples start expiring.
+    pub sibling_after: u64,
+    /// How long the patron and every sibling must have been dark before the
+    /// grandpatron issues: the table's "days".  The reference node's number
+    /// is two days.  Both are the operator's, not the design's.
+    pub grandpatron_after: u64,
+}
+
+impl CurrencyState {
+    /// The detector settled `who` unreachable at `since`; an earlier mark
+    /// stands, since the outage began when it began.
+    pub fn dark(&mut self, who: Keyhash, since: u64) {
+        self.unreachable.entry(who).or_insert(since);
+    }
+
+    /// The detector settled `who` reachable again.
+    pub fn back(&mut self, who: &Keyhash) {
+        self.unreachable.remove(who);
+    }
+
+    /// How long `who` has been dark at `now`, if it is.
+    pub fn dark_for(&self, who: &Keyhash, now: u64) -> Option<u64> {
+        self.unreachable.get(who).map(|s| now.saturating_sub(*s))
+    }
 }
 
 impl Default for CurrencyState {
     fn default() -> Self {
-        CurrencyState { lifetime: DEFAULT_LIFETIME_SECONDS, unreachable: BTreeSet::new() }
+        CurrencyState { lifetime: DEFAULT_LIFETIME_SECONDS, unreachable: BTreeMap::new(), sibling_after: DEFAULT_LIFETIME_SECONDS, grandpatron_after: 2 * 86_400 }
     }
 }
 
@@ -279,7 +309,10 @@ impl NodeView {
         })
     }
 
-    /// The rung this node stands on for `subject`, if any.
+    /// The rung this node stands on for `subject`, if any, at this node's
+    /// own clock: the patron always; a sibling once the patron has been
+    /// dark for `sibling_after`; the grandpatron once the patron and every
+    /// sibling have been dark for `grandpatron_after` (design §12.6.5.1).
     pub fn rung_for(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Rung> {
         let me = self.me();
         let subject = self.table.current_key(subject);
@@ -288,14 +321,16 @@ impl NodeView {
             return Some(Rung::Patron);
         }
         // a sibling of the patron, holding the record by replication
-        let unreachable_patron = patrons.iter().find(|p| cur.unreachable.contains(*p))?;
+        let unreachable_patron = patrons.iter().find(|p| cur.unreachable.contains_key(*p))?;
+        let outage = cur.dark_for(unreachable_patron, self.now).unwrap_or(0);
         if self.table.siblings(unreachable_patron).contains(&me) {
-            return Some(Rung::Sibling);
+            return if outage >= cur.sibling_after { Some(Rung::Sibling) } else { None };
         }
-        // the grandpatron, once the patron and every sibling is unreachable
-        if self.table.patrons(unreachable_patron).contains(&me) {
+        // the grandpatron, once the patron and every sibling have been dark
+        // for days
+        if self.table.patrons(unreachable_patron).contains(&me) && outage >= cur.grandpatron_after {
             let siblings = self.table.siblings(unreachable_patron);
-            if siblings.iter().all(|s| cur.unreachable.contains(s)) {
+            if siblings.iter().all(|s| cur.dark_for(s, self.now).is_some_and(|d| d >= cur.grandpatron_after)) {
                 return Some(Rung::Grandpatron);
             }
         }

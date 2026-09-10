@@ -8344,3 +8344,46 @@ by the run and differ from the committed ones in their timings only.
 sweep left, the author: *"Take it out."* §11.4's fourth trigger now names
 decay alone as what moves with time; the change-log records it. No entry
 quoted the sentence. References 2074 / 0 flags.
+
+**The readings accepted, provisionally (2026-09-10).** Shown the readings the
+code takes at milestones 2 to 5 and the sweep's two consequences, the author:
+*"I don't necessarily have a full understanding, but these all seem
+reasonable to me. Accept these without recording them as decisions, if
+something comes up later which conflicts this assessment can be overridden."*
+So recorded: none is written into the design as a ruling, the code keeps
+each reading, and any of them yields to a later finding that conflicts.
+
+**Three of the six open items built (2026-09-10).** On the author's "Build all
+and retest":
+
+- **The detector feeds the ladder, by outage duration.** The currency state
+  now holds who is dark and since when on the node's own clock, and how
+  long an outage must have lasted before each rung opens: the sibling's
+  interval defaults to the attestation lifetime, the grandpatron's to two
+  days, both the operator's numbers standing in for the table's "hours to
+  days" and "days". A running node feeds it from both sides: the sessions
+  it serves, through the transport's replication hook, and the session it
+  holds upstream, through a new client-side reachability hook on
+  `ClientConfig`. CUR-08 and CUR-09 now show a rung closed within the
+  interval and open past it; CUR-16, over loopback with one-second
+  heartbeats, shows a grandpatron's state hold a patron and its sibling dark
+  since its own clock, a subordinate's state hold its patron dark, code 1
+  within the interval and a grandpatron attestation two days on. What the
+  join cannot supply: a sibling that holds no session with its sibling
+  learns nothing from the detector, since the transport has no sibling
+  sessions.
+- **The memo table is read by occupant, and the downward memo walks the
+  tree.** A memo from below whose occupant the table already holds in
+  another slot goes down the branch toward the patron who has not just
+  spoken, by that patron's position as the table last saw it, and up as
+  before; a memo from above is a downward memo, written on the way past
+  and walked on, and it stops at the patron whose slot it did not name,
+  who reports it and keeps its row. A node keeping no table forwards every
+  memo and detects nothing, which is the graceful degradation §10.2.2
+  describes. PRP-16 and PRP-17.
+- **A cycle memo about an emptied slot is confirmed by the empty row**, an
+  empty slot being a row and not a deletion. PRP-18.
+
+Four entries added, 262 in all, 169 of 260 implemented, 0 flags; the gate
+passes. The other three items — the queue's move, the decoder's tolerances,
+the corpus's stale fixtures and reply families — follow.

@@ -323,7 +323,7 @@ fn a_sibling_attests_what_its_replicated_state_holds() {
     // T holds P's replicated record for L; P has since countersigned a
     // rotation that has not reached T
     let mut cur = CurrencyState::default();
-    cur.unreachable.insert(kh("bob"));
+    cur.dark(kh("bob"), t.now - cur.sibling_after);
     assert_eq!(t.rung_for(&cur, &kh("carol")), Some(Rung::Sibling));
     let bytes = t.issue_currency(&cur, &kh("carol")).expect("T issues");
     let a = rhtn_archive::currency::parse_attestation(&ids(), &bytes).unwrap();

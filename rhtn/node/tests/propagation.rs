@@ -397,3 +397,93 @@ fn a_second_series_waits_on_a_chain_and_two_unproved_lines_rank_nobody() {
     assert!(matches!(d, Decision::Held(_)));
     assert_eq!(fresh.n.store.endpoint(&kh(x)).unwrap().bytes, in_2, "the one stored line is served while the other waits");
 }
+
+/// A memo from a subordinate about one of its own slots.
+fn memo_at(patron: &str, path: &[u8], slot: u64, t: u64, occupant: Option<&str>) -> Memo {
+    let p = resolution::Path::from_indices(path);
+    Memo { patron: kh(patron), position: rhtn_archive::tx::Locator { anchor: kh("alice"), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series: 1, counter: 0 } }, slot, timestamp: t, occupant: occupant.map(kh) }
+}
+
+// acceptance: PRP-16
+#[test]
+fn an_occupant_seen_in_two_slots_sends_a_memo_down_the_other_branch() {
+    let mut s = scene();
+    let t = s.w.clock;
+    // S1 (carol, at [0,0]) reports w2 in its slot 4; N's table takes the row
+    let first = memo_at("carol", &[0, 0], 4, t, Some("w2"));
+    assert_eq!(s.n.receive_memo(&*s.fab, &kh("carol"), &first.encode()), MemoOutcome::Forwarded { to: kh("alice") });
+    assert_eq!(s.n.memo_table[&(kh("carol"), 4)].occupant, Some(kh("w2")));
+    s.fab.clear();
+    // later, S2 (w1, at [0,1]) reports the same w2 in its slot 2: N's table
+    // shows the occupant held in another slot of its subtree
+    let second = memo_at("w1", &[0, 1], 2, t + 600, Some("w2"));
+    let bytes = second.encode();
+    let out = s.n.receive_memo(&*s.fab, &kh("w1"), &bytes);
+    assert_eq!(out, MemoOutcome::ForwardedAndDescended { to: kh("alice"), down: kh("carol") });
+    // the same frame goes down the branch holding the slot it did not name,
+    // and up as any memo does
+    assert_eq!(s.fab.to(&kh("carol"), FRAME_TOPOLOGY_MEMO), vec![bytes.clone()], "down toward S1, unchanged");
+    assert_eq!(s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO), vec![bytes.clone()], "and up to P");
+    assert!(s.fab.to(&kh("w1"), FRAME_TOPOLOGY_MEMO).is_empty(), "not back to the patron who just spoke");
+    // S1 receives it from its patron: it is the patron who has not just
+    // spoken, holds w2 in slot 4, and nothing compels it to act
+    let mut s1 = view("carol", s.n.table.clone_for(kh("carol")), "alice", &[0, 0]);
+    s1.set_slot(4, Some(kh("w2")), t);
+    let s1fab = Fabric::with(&[kh("bob"), kh("w2")]);
+    let out = s1.receive_memo(&*s1fab, &kh("bob"), &bytes);
+    assert_eq!(out, MemoOutcome::HeldElsewhere { patron: kh("w1"), slot: 2, timestamp: t + 600, mine: 4, forwarded: None });
+    assert_eq!(s1.slots[&4].occupant, Some(kh("w2")), "its row stands: its own records decide");
+    assert_eq!(s1fab.frames().len(), 0, "nothing sent on: the memo stops at the patron it walked to");
+    // an intervening node updated on the way past: N, handed the same
+    // memo from above with the earlier row in its table, walks it down
+    let mut n2 = scene();
+    n2.n.receive_memo(&*n2.fab, &kh("carol"), &first.encode());
+    n2.fab.clear();
+    let out = n2.n.receive_memo(&*n2.fab, &kh("alice"), &bytes);
+    assert_eq!(out, MemoOutcome::Descended { to: kh("carol") });
+    assert_eq!(n2.n.memo_table[&(kh("w1"), 2)].occupant, Some(kh("w2")), "the row was written on the way past");
+    assert_eq!(n2.fab.to(&kh("carol"), FRAME_TOPOLOGY_MEMO), vec![bytes.clone()]);
+    assert!(n2.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO).is_empty(), "a downward memo does not turn round");
+}
+
+// acceptance: PRP-17
+#[test]
+fn a_node_keeping_no_memo_table_still_forwards_and_detects_nothing() {
+    let mut s = scene();
+    s.n.keeps_memo_table = false;
+    let t = s.w.clock;
+    let first = memo_at("carol", &[0, 0], 4, t, Some("w2"));
+    let second = memo_at("w1", &[0, 1], 2, t + 600, Some("w2"));
+    assert_eq!(s.n.receive_memo(&*s.fab, &kh("carol"), &first.encode()), MemoOutcome::Forwarded { to: kh("alice") });
+    s.fab.clear();
+    assert_eq!(s.n.receive_memo(&*s.fab, &kh("w1"), &second.encode()), MemoOutcome::Forwarded { to: kh("alice") }, "the memo continues upward");
+    assert!(s.n.memo_table.is_empty(), "no table");
+    assert!(s.fab.to(&kh("carol"), FRAME_TOPOLOGY_MEMO).is_empty(), "no downward memo: the tier above catches it, at worst the root");
+    assert_eq!(s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO).len(), 1);
+    // and the same memo arriving from above finds nothing to walk down
+    assert_eq!(s.n.receive_memo(&*s.fab, &kh("alice"), &second.encode()), MemoOutcome::DescentEnded);
+}
+
+// acceptance: PRP-18
+#[test]
+fn a_cycle_memo_about_an_emptied_slot_is_confirmed_by_the_empty_row() {
+    let mut s = scene();
+    let t = s.w.clock;
+    // N's slot 0 was emptied at t: an empty slot is a row, not a deletion
+    s.n.set_slot(0, None, t);
+    s.fab.clear();
+    // N's own memo for that slot returns from below
+    let m = memo("bob", "alice", 0, t, None);
+    let out = s.n.receive_memo(&*s.fab, &kh("carol"), &m.encode());
+    assert_eq!(out, MemoOutcome::CycleConfirmed { disavowed: kh("carol") });
+    let pushed: Vec<Vec<u8>> = s.fab.frames().into_iter().filter(|f| f.frame_type == FRAME_TOPOLOGY_PUSH).map(|f| f.body).collect();
+    let (_, obj) = decode_push(&pushed[0]).unwrap();
+    let rec = rhtn_archive::record::Record::parse(&obj).unwrap();
+    assert_eq!((rec.tx_type, rec.field_hash(2), rec.field_uint(4)), (rhtn_archive::tx::TYPE_DISAVOWAL, Some(kh("carol")), Some(5)));
+    // a slot that never held a row confirms nothing
+    let mut s2 = scene();
+    s2.fab.clear();
+    let m = memo("bob", "alice", 7, t, None);
+    assert_eq!(s2.n.receive_memo(&*s2.fab, &kh("carol"), &m.encode()), MemoOutcome::Unconfirmed);
+    assert_eq!(s2.fab.frames().len(), 0);
+}

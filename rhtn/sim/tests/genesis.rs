@@ -18,17 +18,6 @@ use std::time::Duration;
 
 const I: u64 = 30;
 
-async fn until(deadline_ms: u64, mut done: impl FnMut() -> bool) -> bool {
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(deadline_ms);
-    while tokio::time::Instant::now() < deadline {
-        if done() {
-            return true;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    done()
-}
-
 #[tokio::test]
 async fn a_new_root_peers_floods_and_is_reached_over_real_sessions() {
     // an existing subnet: P (alice) root, N (bob) its infra child at index
