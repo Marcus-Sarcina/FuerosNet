@@ -217,6 +217,9 @@ impl NodeView {
                 presence.insert(r.txid, b);
             }
         }
+        for (t, b) in self.store.presence_records() {
+            presence.insert(t, b);
+        }
         let _ = self.table.apply(&rec, ids, &presence, None);
     }
 

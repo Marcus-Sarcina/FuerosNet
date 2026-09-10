@@ -111,6 +111,7 @@ impl Locator {
 
 /// Key 0: one list per required signer, in signer order; a list longer than
 /// one is a merge and is sorted ascending bytewise (`wire-format.md` §3.1).
+#[allow(clippy::needless_range_loop)]
 pub fn emit_back_pointers(out: &mut Vec<u8>, lists: &[Vec<Txid>]) {
     emit_uint(out, 0);
     emit_array_head(out, lists.len());

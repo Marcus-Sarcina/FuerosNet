@@ -229,12 +229,19 @@ impl CurrencyState {
     pub fn recorded_key(&self, subject: &Keyhash) -> Option<Keyhash> {
         self.recorded.get(subject).copied()
     }
-    /// Take supersession evidence: the record moves to the successor and the
-    /// old key has nothing left to issue for.
+    /// Take supersession evidence.  A recovery overwrites this node's record
+    /// of the subject, so every identity whose current key was the old one
+    /// now records the successor, and the old key is never named as current
+    /// again (`infra-client-requirements.md` §3, design §9.0.2).
     pub fn supersede(&mut self, s: Supersession) {
         self.superseded.insert(s.superseded, s.successor);
         if s.successor != s.superseded {
-            self.recorded.remove(&s.superseded);
+            for v in self.recorded.values_mut() {
+                if *v == s.superseded {
+                    *v = s.successor;
+                }
+            }
+            self.recorded.insert(s.superseded, s.successor);
             self.recorded.insert(s.successor, s.successor);
         }
     }
@@ -274,11 +281,8 @@ impl NodeView {
     /// operation and no field for one.
     pub fn issue_currency(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
         let rung = self.rung_for(cur, subject)?;
-        // issue only for the key currently recorded; a superseded key has
-        // nothing to issue for
-        if cur.is_superseded(subject) {
-            return None;
-        }
+        // issue only for the key currently recorded: after a recovery there
+        // is nothing to issue for the old key and this node MUST NOT
         let current = cur.recorded_key(subject)?;
         if cur.is_superseded(&current) {
             return None;
@@ -314,5 +318,47 @@ impl NodeView {
             }
             Err(_) => (None, Staple::Absent),
         }
+    }
+}
+
+impl NodeView {
+    /// A trust-bearing operation gated on the acting credential's currency
+    /// (design §12.6.5): an adoption this node countersigns.  Nothing is
+    /// signed while the gate refuses.
+    pub fn adopt_gated(
+        &mut self,
+        cur: &CurrencyState,
+        subject: &Keyhash,
+        staple: Staple,
+        evidence: rhtn_archive::tx::Evidence,
+        series: u32,
+        subject_signer: &rhtn_crypto::SigningIdentity,
+    ) -> Result<rhtn_archive::record::Record, Gate> {
+        match gate(Operation::TrustBearing, staple, cur.is_superseded(subject)) {
+            Gate::Proceed => {}
+            refusal => return Err(refusal),
+        }
+        let back_self = self.archive.next_back_pointers();
+        let back_subject = vec![rhtn_archive::genesis(subject)];
+        let a = rhtn_archive::tx::Adoption {
+            node: *subject,
+            patron: self.me(),
+            locator: rhtn_archive::tx::Locator {
+                anchor: self.anchor(),
+                path: self.position.path.clone(),
+                nibbles: self.position.nibbles,
+                seqno: rhtn_archive::tx::Seqno { series, counter: 0 },
+            },
+            timestamp: self.now,
+            key_material: None,
+            evidence,
+            presented_head: None,
+            back: [&back_subject, &back_self],
+        };
+        let body = rhtn_archive::tx::adoption_body(&a);
+        let env = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &body, &[subject_signer, &self.identity]);
+        let rec = rhtn_archive::record::Record::parse(&env).map_err(|_| Gate::Refuse("malformed"))?;
+        let _ = self.archive.append(rec.clone());
+        Ok(rec)
     }
 }

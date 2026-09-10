@@ -158,6 +158,8 @@ pub struct TopologyStore {
     pending: Vec<Pending>,
     /// Series this node has been shown a chain for, by subject.
     proved_series: BTreeSet<(Keyhash, u32)>,
+    /// Presence records, which the topology class does not carry.
+    presence: BTreeMap<Txid, Vec<u8>>,
 }
 
 impl TopologyStore {
@@ -210,6 +212,21 @@ impl TopologyStore {
 
     pub fn pending(&self) -> &[Pending] {
         &self.pending
+    }
+
+    /// Presence records the node holds beside the topology class: evidence,
+    /// not topology, and kept because an adoption's evaluation needs it
+    /// (`wire-format.md` §3.4, design §10.0).
+    pub fn keep_presence(&mut self, txid: Txid, bytes: Vec<u8>) {
+        self.presence.insert(txid, bytes);
+    }
+
+    pub fn presence(&self, txid: &Txid) -> Option<&Vec<u8>> {
+        self.presence.get(txid)
+    }
+
+    pub fn presence_records(&self) -> Vec<(Txid, Vec<u8>)> {
+        self.presence.iter().map(|(t, b)| (*t, b.clone())).collect()
     }
 
     /// Every object the store holds, as `(kind, bytes)`: what a

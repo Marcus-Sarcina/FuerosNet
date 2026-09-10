@@ -602,6 +602,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rhtn-sim"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "quinn",
+ "rhtn-archive",
+ "rhtn-codec",
+ "rhtn-crypto",
+ "rhtn-node",
+ "rhtn-transport",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rhtn-transport"
 version = "0.1.0"
 dependencies = [
