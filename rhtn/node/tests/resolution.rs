@@ -58,6 +58,14 @@ fn path_to_x() -> Path {
     Path::from_indices(&[1, 2])
 }
 
+/// A node publishes its own endpoint record before it can answer as a
+/// serving node (`wire-format.md` §7.6).
+fn publish(v: &mut NodeView, name: &str, port: u16) {
+    let record = endpoint_record(&id(name), &[point(9, port)], Seqno { series: 1, counter: 1 });
+    let me = kh(name);
+    v.take_object(&*Fabric::with(&[]), &me, KIND_ENDPOINT_RECORD, &record, &ids());
+}
+
 /// A lookup that records every identity it is asked for, so a test can see
 /// whether a path ever reached for a key.
 struct Recorder {
@@ -229,14 +237,19 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     let ClientResolution::Proxied(mut r) = t.c.resolve_for_client(&anchors, &at_s).unwrap() else { panic!("S is not on W's path") };
     assert_eq!(r.next_hop().0, kh("w7"), "S sends a ResolveRequest to an endpoint of W");
     assert_eq!(r.request.nonce, nonce(7), "under the client's nonce");
-    // W refers to its child w6, which serves X
-    let mut w7 = view("w7", table_with(kh("w7"), &t_world(), &[], &["w7", "w6"]), "w7", &[]);
+    // W refers to its adopted infra child w6, which serves X
+    let mut other = World::new();
+    let (a_w6, _) = other.adopt("w6", "w7", 1);
+    let (a_x, _) = other.adopt("w5", "w6", 2);
+    let mut w7 = view("w7", table_with(kh("w7"), &other, &[&a_w6, &a_x], &["w7", "w6"]), "w7", &[]);
+    publish(&mut w7, "w7", 7107);
     w7.set_slot(4, Some(kh("w6")), 1);
     let w6_record = endpoint_record(&id("w6"), &[point(6, 7006)], Seqno { series: 1, counter: 1 });
-    w7.take_object(&*Fabric::with(&[]), &kh("w6"), KIND_ENDPOINT_RECORD, &w6_record, &ids());
+    assert_eq!(w7.take_object(&*Fabric::with(&[]), &kh("w6"), KIND_ENDPOINT_RECORD, &w6_record, &ids()), rhtn_node::store::Decision::Stored);
     let reply = w7.answer_resolution(&r.request);
-    assert!(matches!(r.take(&reply), Step::Continue(_)), "S follows the referral");
-    let mut w6 = view("w6", table_with(kh("w6"), &t_world(), &[], &["w7", "w6"]), "w7", &[4]);
+    assert!(matches!(r.take(&reply), Step::Continue(_)), "S follows the referral: {reply:?}");
+    let mut w6 = view("w6", table_with(kh("w6"), &other, &[&a_w6, &a_x], &["w7", "w6"]), "w7", &[4]);
+    publish(&mut w6, "w6", 7106);
     w6.set_slot(1, Some(kh("w5")), 1);
     w6.attached.insert(kh("w5"));
     let reply = w6.answer_resolution(&r.request);
@@ -252,9 +265,6 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     }
 }
 
-fn t_world() -> World {
-    World::new()
-}
 
 // acceptance: RES-08
 #[test]
@@ -264,6 +274,7 @@ fn a_client_two_levels_down_is_answered_with_the_residual_suffix() {
     let (a_l, _) = w.adopt("carol", "bob", 2); // L under P
     let table = table_with(kh("alice"), &w, &[&a_p, &a_l], &["alice"]);
     let mut s = view("alice", table, "alice", &[]);
+    publish(&mut s, "alice", 7100);
     s.set_slot(3, Some(kh("bob")), w.clock);
     s.attached.insert(kh("carol"));
     assert!(!s.table.is_infra(&kh("bob")), "P is a light client");
@@ -289,6 +300,7 @@ fn a_roots_self_anchored_locator_resolves_to_an_empty_residual() {
     let (a_sub, _) = w.adopt("carol", "bob", 1);
     let table = table_with(kh("bob"), &w, &[&a_sub], &["bob"]);
     let mut r = view("bob", table, "bob", &[]);
+    publish(&mut r, "bob", 7101);
     r.set_slot(0, Some(kh("carol")), w.clock);
     let req = ResolveRequest { subject: kh("bob"), anchor: kh("bob"), path: sl.locator.path.clone(), nibbles: 0, nonce: nonce(9) };
     let reply = r.answer_resolution(&req);
@@ -427,3 +439,19 @@ fn state_digest(v: &NodeView) -> Vec<u8> {
     out
 }
 
+
+/// Not a catalogue entry: a node with no published endpoint record cannot be
+/// reached past a resolution, and says so rather than emitting a serving
+/// answer the schema rejects.
+#[test]
+fn a_node_with_no_published_endpoints_reports_itself_unavailable() {
+    let mut w = World::new();
+    let (a_sub, _) = w.adopt("carol", "bob", 1);
+    let mut r = view("bob", table_with(kh("bob"), &w, &[&a_sub], &["bob"]), "bob", &[]);
+    r.set_slot(0, Some(kh("carol")), w.clock);
+    let req = ResolveRequest { subject: kh("bob"), anchor: kh("bob"), path: Vec::new(), nibbles: 0, nonce: nonce(17) };
+    assert_eq!(r.answer_resolution(&req), ResolveReply::Failure { nonce: nonce(17), code: FAIL_UNAVAILABLE }, "retry elsewhere, not a malformed reply");
+    assert!(ResolveReply::decode(&r.answer_resolution(&req).encode()).is_ok());
+    publish(&mut r, "bob", 7102);
+    assert!(matches!(r.answer_resolution(&req), ResolveReply::Serving { .. }));
+}

@@ -20,6 +20,7 @@ pub mod currency;
 pub mod peering;
 pub mod propagation;
 pub mod resolution;
+pub mod runtime;
 pub mod store;
 pub mod view;
 

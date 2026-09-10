@@ -237,7 +237,8 @@ impl Replica for Sibling {
     }
 }
 
-// acceptance: REP-16
+/// What the replication payload is built from, at the view level; the
+/// running node's test in `rhtn-sim` is the entry.
 #[test]
 fn siblings_replicate_topology_and_history_and_no_queue_state() {
     let mut w = World::new();

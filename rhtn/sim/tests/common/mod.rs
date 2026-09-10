@@ -89,3 +89,98 @@ pub async fn drain(s: &mut Session, ms: u64) -> Vec<Vec<u8>> {
 pub fn messages(k: usize, tag: &str) -> Vec<Vec<u8>> {
     (0..k).map(|i| format!("{tag}:{i}").into_bytes()).collect()
 }
+
+// ------------------------------------------------------------ live nodes
+
+use rhtn_archive::record::Record;
+use rhtn_archive::topology::Table;
+use rhtn_archive::tx::*;
+use rhtn_archive::{Keyhash, Txid};
+use rhtn_crypto::Identity;
+
+pub fn ids() -> Vec<Identity> {
+    NAMES.iter().map(|n| test_identity(n).public).collect()
+}
+
+/// Signed transactions for a live scenario, archives advancing as they go.
+pub struct Signers {
+    archives: BTreeMap<Keyhash, rhtn_archive::chain::Archive>,
+    pub store: BTreeMap<Txid, Vec<u8>>,
+    pub clock: u64,
+}
+
+impl Default for Signers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Signers {
+    pub fn new() -> Signers {
+        Signers { archives: NAMES.iter().map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n)))).collect(), store: BTreeMap::new(), clock: 1_800_000_000 }
+    }
+    fn tick(&mut self) -> u64 {
+        self.clock += 3600;
+        self.clock
+    }
+    fn back(&self, n: &str) -> Vec<Txid> {
+        self.archives[&kh(n)].next_back_pointers()
+    }
+    fn commit(&mut self, tx_type: u64, body: &[u8], signers: &[&str]) -> Record {
+        let sids: Vec<SigningIdentity> = signers.iter().map(|s| test_identity(s)).collect();
+        let refs: Vec<&SigningIdentity> = sids.iter().collect();
+        let rec = Record::parse(&envelope(tx_type, body, &refs)).expect("well-formed");
+        for s in signers {
+            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+        }
+        self.store.insert(rec.txid, rec.bytes.clone());
+        rec
+    }
+    pub fn formation(&mut self, a: &str, b: &str) -> Record {
+        let t = self.tick();
+        let (ba, bb) = (self.back(a), self.back(b));
+        let root = rhtn_codec::cose::sha256(format!("f:{a}:{b}:{t}").as_bytes());
+        let body = formation_body([&ba, &bb], [&kh(a), &kh(b)], t, t + 600, &root);
+        self.commit(TYPE_PRESENCE, &body, &[a, b])
+    }
+    /// An adoption of `node` under `patron` at `path` in the subnet
+    /// `anchor` names, on a fresh presence record.
+    pub fn adopt(&mut self, node: &str, patron: &str, anchor: &str, path: &[u8], series: u32) -> Record {
+        let pop = self.formation(patron, node);
+        let t = self.tick();
+        let (bn, bp) = (self.back(node), self.back(patron));
+        let p = rhtn_node::resolution::Path::from_indices(path);
+        let a = Adoption {
+            node: kh(node),
+            patron: kh(patron),
+            locator: Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series, counter: 0 } },
+            timestamp: t,
+            key_material: None,
+            evidence: Evidence::Presence(pop.txid),
+            presented_head: None,
+            back: [&bn, &bp],
+        };
+        self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
+    }
+}
+
+/// A table for `me` holding every record, evidence and all.
+pub fn table_of(me: &str, s: &Signers, records: &[&Record], infra: &[&str]) -> Table {
+    let mut t = Table::with_me(kh(me));
+    for n in infra {
+        t.mark_infra(kh(n));
+    }
+    for r in records {
+        t.apply(r, &ids(), &s.store, None).unwrap_or_else(|e| panic!("apply: {e:?}"));
+    }
+    t
+}
+
+/// A node view for `me` at `path` under `anchor`.
+pub fn view_of(me: &str, table: Table, anchor: &str, path: &[u8], now: u64) -> rhtn_node::view::NodeView {
+    let p = rhtn_node::resolution::Path::from_indices(path);
+    let mut v = rhtn_node::view::NodeView::new(Arc::new(id(me)), Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series: 1, counter: 0 } });
+    v.table = table;
+    v.now = now;
+    v
+}

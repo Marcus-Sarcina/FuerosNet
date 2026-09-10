@@ -559,15 +559,18 @@ impl NodeView {
         }
     }
 
+    /// A serving answer names this node's own endpoints, from the record
+    /// it published.  A node with none published cannot be reached past the
+    /// resolution, so it reports itself unavailable rather than emitting an
+    /// answer the schema rejects.
     fn serving_answer(&self, nonce: [u8; 16], residual: Path) -> ResolveReply {
+        let endpoints = self.own_endpoints();
+        if endpoints.is_empty() {
+            return ResolveReply::Failure { nonce, code: FAIL_UNAVAILABLE };
+        }
         ResolveReply::Serving {
             nonce,
-            serving: ServingInfra {
-                node: self.me(),
-                endpoints: self.own_endpoints(),
-                residual,
-                key_material: Some(self.identity.public.key_material()),
-            },
+            serving: ServingInfra { node: self.me(), endpoints, residual, key_material: Some(self.identity.public.key_material()) },
         }
     }
 

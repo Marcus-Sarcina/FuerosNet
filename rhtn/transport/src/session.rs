@@ -131,7 +131,9 @@ fn read_error_connection(e: quinn::ReadExactError) -> Option<quinn::ConnectionEr
 
 /// What a received control payload turned out to be.
 pub enum Control {
-    Known(Family, Vec<u8>, Item),
+    /// A known frame: its family, the whole payload the item's ranges
+    /// index, the body's range within it, and the body item.
+    Known(Family, Vec<u8>, std::ops::Range<usize>, Item),
     /// Unknown type: skipped, session survives (§8.0).
     Unknown(u64),
     /// Malformed body of a known type: discarded whole, session survives (§8.0).
@@ -141,7 +143,7 @@ pub enum Control {
 pub fn classify(payload: &[u8]) -> Control {
     match frame::parse_payload(Stream::Control, payload) {
         Ok(f) => match f.family {
-            Some(fam) => Control::Known(fam, payload.to_vec(), f.body_item),
+            Some(fam) => Control::Known(fam, payload.to_vec(), f.body, f.body_item),
             None => Control::Unknown(f.frame_type),
         },
         Err(_) => Control::Malformed,
@@ -408,8 +410,9 @@ async fn control_loop(
     interval: Duration,
     log: Log,
     reach: Arc<Mutex<Reachability>>,
-    mut on_frame: impl FnMut(Family, &[u8], &Item) -> bool,
+    mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool,
     on_change: Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
+    mut outbound: mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
 ) -> Option<quinn::ConnectionError> {
     let start = Instant::now();
     let mut next_send = start + interval;
@@ -438,13 +441,18 @@ async fn control_loop(
                 next_send += interval;
             }
             _ = sleep_until(deadline), if deadline > Instant::now() => {}
+            out = outbound.recv() => {
+                if let Some((ft, body)) = out {
+                    if sender.frame(ft, &body).await.is_err() { return None; }
+                }
+            }
             r = read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES) => match r {
                 FrameRead::Closed(e) => return e,
                 FrameRead::OverBound(_) => { log.push(Event::OverBound); return None; }
                 FrameRead::Payload(p) => match classify(&p) {
                     Control::Unknown(t) => log.push(Event::Skipped { frame_type: t }),
                     Control::Malformed => log.push(Event::Discarded),
-                    Control::Known(Family::Heartbeat, _, item) => {
+                    Control::Known(Family::Heartbeat, _, _, item) => {
                         log.push(Event::Received { frame_type: FRAME_HEARTBEAT });
                         if let Item::Map(m) = &item {
                             if let Some(c) = map_get(m, 1).and_then(as_uint) {
@@ -460,10 +468,10 @@ async fn control_loop(
                             }
                         }
                     }
-                    Control::Known(fam, bytes, item) => {
+                    Control::Known(fam, bytes, body, item) => {
                         let t = match fam { Family::Attach => 1, Family::AttachAck => 2, Family::SiblingUpdate => 4, Family::TopologyPush => 5, Family::TopologyMemo => 6, _ => 0 };
                         log.push(Event::Received { frame_type: t });
-                        if !on_frame(fam, &bytes, &item) { return None; }
+                        if !on_frame(fam, &bytes, body, &item) { return None; }
                     }
                 }
             }
@@ -474,6 +482,16 @@ async fn control_loop(
 // ------------------------------------------------------------ the serving node
 
 pub type Predicate = Arc<dyn Fn(&[u8; 32]) -> bool + Send + Sync>;
+
+/// What a node does with a known control frame a session delivers beyond
+/// the session's own (`wire-format.md` §8.0): the peer it came from, the
+/// frame type, and the body bytes.
+pub type ControlHandler = Arc<dyn Fn([u8; 32], u64, Vec<u8>) + Send + Sync>;
+
+/// What a node answers on a request stream (`wire-format.md` §9.2): the
+/// authenticated peer, the family, and the body bytes, to a reply body or
+/// `None` to fail the stream.
+pub type RequestHandler = Arc<dyn Fn([u8; 32], Family, Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>> + Send + Sync>;
 
 pub struct NodeConfig {
     pub identity: Arc<SigningIdentity>,
@@ -503,6 +521,12 @@ pub struct NodeConfig {
     /// sibling answering in failover knows the client's status
     /// (design §14.1.2).  The wire assigns no frame for this.
     pub replicate: Option<Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>>,
+    /// The node's own handling of topology frames on stream 0.  Absent, a
+    /// known frame beyond the session's own is logged and dropped.
+    pub on_control: Option<ControlHandler>,
+    /// The node's own answers on request streams.  Absent, a currency
+    /// request is answered "cannot issue" and anything else fails the stream.
+    pub on_request: Option<RequestHandler>,
 }
 
 impl NodeConfig {
@@ -519,6 +543,8 @@ impl NodeConfig {
             filter: None,
             serves: Arc::new(|_| true),
             replicate: None,
+            on_control: None,
+            on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
             clock: Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)),
@@ -536,6 +562,9 @@ struct NodeState {
     /// The reachability this node has settled on per client, which outlives
     /// the session it was learned in and is what replicates (design §14.1.2).
     marked: HashMap<[u8; 32], Reachability>,
+    /// A handle into each live session's control stream, for frames this
+    /// node originates or forwards.
+    outbound: HashMap<[u8; 32], mpsc::UnboundedSender<(u64, Vec<u8>)>>,
 }
 
 pub struct Node {
@@ -639,6 +668,19 @@ impl Node {
         self.state.lock().unwrap().sessions.contains_key(keyhash)
     }
 
+    /// Every peer with a live session on this node.
+    pub fn sessions(&self) -> Vec<[u8; 32]> {
+        self.state.lock().unwrap().sessions.keys().copied().collect()
+    }
+
+    /// Send a control frame on the session with `peer`, where one exists.
+    pub fn send_control(&self, peer: &[u8; 32], frame_type: u64, body: &[u8]) -> bool {
+        match self.state.lock().unwrap().outbound.get(peer) {
+            Some(tx) => tx.send((frame_type, body.to_vec())).is_ok(),
+            None => false,
+        }
+    }
+
     /// The address the client's session currently comes from.
     pub fn remote_address(&self, keyhash: &[u8; 32]) -> Option<std::net::SocketAddr> {
         self.state.lock().unwrap().sessions.get(keyhash).map(|c| c.remote_address())
@@ -673,7 +715,7 @@ impl Node {
                     return Err("over bound".into());
                 }
                 FrameRead::Payload(p) => match classify(&p) {
-                    Control::Known(Family::Attach, b, it) => break (b, it),
+                    Control::Known(Family::Attach, b, _, it) => break (b, it),
                     Control::Unknown(t) => self.log.push(Event::Skipped { frame_type: t }),
                     Control::Malformed => self.log.push(Event::Discarded),
                     Control::Known(..) => {
@@ -716,10 +758,12 @@ impl Node {
         sender.frame(FRAME_ATTACH_ACK, &ack.encode()).await.map_err(|e| e.to_string())?;
         self.log.push(Event::Attached { mode });
         let reach = Arc::new(Mutex::new(Reachability::Reachable));
+        let (otx, orx) = mpsc::unbounded_channel();
         {
             let mut st = self.state.lock().unwrap();
             st.sessions.insert(claimed, conn.clone());
             st.reach.insert(claimed, reach.clone());
+            st.outbound.insert(claimed, otx);
         }
         // drain: each item leaves the store as it goes out, and no copy
         // outlives its delivery (design §14.1.6)
@@ -728,9 +772,10 @@ impl Node {
         }
         // requests on bidirectional streams, answered for as long as the session lives
         let req_conn = conn.clone();
+        let handler = self.cfg.on_request.clone();
         let requests = tokio::spawn(async move {
             while let Ok((send, recv)) = req_conn.accept_bi().await {
-                tokio::spawn(answer_request(send, recv));
+                tokio::spawn(answer_request(send, recv, claimed, handler.clone()));
             }
         });
         let interval = Duration::from_secs(self.cfg.interval_secs);
@@ -742,12 +787,33 @@ impl Node {
                 f(claimed, r);
             }
         });
-        let _ = control_loop(sender, recv, interval, log, reach, |fam, _, _| !matches!(fam, Family::Attach | Family::AttachAck), Some(on_change)).await;
+        let on_control = self.cfg.on_control.clone();
+        let _ = control_loop(
+            sender,
+            recv,
+            interval,
+            log,
+            reach,
+            move |fam, b, body, _| match fam {
+                Family::Attach | Family::AttachAck => false,
+                Family::TopologyPush | Family::TopologyMemo => {
+                    if let Some(h) = &on_control {
+                        h(claimed, if fam == Family::TopologyPush { 5 } else { 6 }, b[body].to_vec());
+                    }
+                    true
+                }
+                _ => true,
+            },
+            Some(on_change),
+            orx,
+        )
+        .await;
         requests.abort();
         {
             let mut st = self.state.lock().unwrap();
             st.sessions.remove(&claimed);
             st.reach.remove(&claimed);
+            st.outbound.remove(&claimed);
         }
         self.log.push(Event::Closed);
         Ok(())
@@ -761,14 +827,30 @@ async fn deliver(conn: &Connection, bytes: Vec<u8>) {
     }
 }
 
-/// The one request this node answers so far: a currency request gets
-/// `cannot issue` (§7.1); anything else fails the stream (§9.2).
-async fn answer_request(mut send: SendStream, mut recv: RecvStream) {
+/// A request stream: the node's own handler answers where one is
+/// installed; otherwise a currency request gets `cannot issue` (§7.1) and
+/// anything else fails the stream (§9.2).
+async fn answer_request(mut send: SendStream, mut recv: RecvStream, peer: [u8; 32], handler: Option<RequestHandler>) {
     let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else { return };
     let Ok(f) = frame::parse_payload(Stream::Request, &p) else {
         let _ = send.reset(VarInt::from_u32(0));
         return;
     };
+    if let (Some(h), Some(fam)) = (handler, f.family) {
+        let body = p[f.body.clone()].to_vec();
+        match h(peer, fam, body).await {
+            Some(reply) => {
+                let mut out = (reply.len() as u32).to_be_bytes().to_vec();
+                out.extend_from_slice(&reply);
+                let _ = send.write_all(&out).await;
+                let _ = send.finish();
+            }
+            None => {
+                let _ = send.reset(VarInt::from_u32(0));
+            }
+        }
+        return;
+    }
     if f.family == Some(Family::CurrencyRequest) {
         let Item::Map(m) = &f.body_item else { return };
         let nonce = match map_get(m, 2) { Some(Item::Bytes(r)) => p[r.clone()].to_vec(), _ => return };
@@ -824,6 +906,11 @@ pub struct Session {
     pub conn: Connection,
     pub ack: AttachAck,
     pub deliveries: mpsc::UnboundedReceiver<Vec<u8>>,
+    /// Known control frames beyond the session's own, as `(type, body)`:
+    /// topology pushes and memos the serving node delivers.
+    pub frames: mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
+    /// Control frames this client sends on stream 0.
+    pub outbound: mpsc::UnboundedSender<(u64, Vec<u8>)>,
     pub log: Log,
     pub reach: Arc<Mutex<Reachability>>,
     pub task: tokio::task::JoinHandle<()>,
@@ -920,7 +1007,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
                 return AttachOutcome::EndpointFailure("over-bound frame".into());
             }
             FrameRead::Payload(p) => match classify(&p) {
-                Control::Known(Family::AttachAck, b, it) => match AttachAck::decode(&b, &it) {
+                Control::Known(Family::AttachAck, b, _, it) => match AttachAck::decode(&b, &it) {
                     Some(a) if (1..=3600).contains(&a.interval) => break a,
                     _ => log.push(Event::Discarded),
                 },
@@ -952,24 +1039,63 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     let loop_reach = reach.clone();
     let task_log = log.clone();
     let task_conn = conn.clone();
+    let (ftx, frx) = mpsc::unbounded_channel();
+    let (otx, orx) = mpsc::unbounded_channel();
     let task = tokio::spawn(async move {
-        let _ = control_loop(sender, recv, interval, loop_log.clone(), loop_reach.clone(), move |fam, b, it| match fam {
-            Family::SiblingUpdate => {
-                let Item::Map(m) = it else { return true };
-                match decode_sibling_list(b, map_get(m, 1)) {
-                    Some(list) if valid_sibling_list(&list, &me) => *cache.lock().unwrap() = list,
-                    _ => loop_log.push(Event::Discarded),
+        let _ = control_loop(
+            sender,
+            recv,
+            interval,
+            loop_log.clone(),
+            loop_reach.clone(),
+            move |fam, b, body, it| match fam {
+                Family::SiblingUpdate => {
+                    let Item::Map(m) = it else { return true };
+                    match decode_sibling_list(b, map_get(m, 1)) {
+                        Some(list) if valid_sibling_list(&list, &me) => *cache.lock().unwrap() = list,
+                        _ => loop_log.push(Event::Discarded),
+                    }
+                    true
                 }
-                true
-            }
-            Family::Attach | Family::AttachAck => false,
-            _ => true,
-        }, None)
+                Family::Attach | Family::AttachAck => false,
+                Family::TopologyPush => {
+                    let _ = ftx.send((5, b[body].to_vec()));
+                    true
+                }
+                Family::TopologyMemo => {
+                    let _ = ftx.send((6, b[body].to_vec()));
+                    true
+                }
+                _ => true,
+            },
+            None,
+            orx,
+        )
         .await;
         task_conn.close(VarInt::from_u32(0), b"");
         task_log.push(Event::Closed);
     });
-    AttachOutcome::Attached(Session { conn, ack, deliveries: drx, log, reach, task })
+    AttachOutcome::Attached(Session { conn, ack, deliveries: drx, frames: frx, outbound: otx, log, reach, task })
+}
+
+impl Session {
+    /// Send a control frame on this session's stream 0.
+    pub fn send_control(&self, frame_type: u64, body: &[u8]) -> bool {
+        self.outbound.send((frame_type, body.to_vec())).is_ok()
+    }
+
+    /// One request on a fresh bidirectional stream (`wire-format.md` §9.2):
+    /// the framed request out, the length-prefixed reply body back.
+    pub async fn request(&self, frame_type: u64, body: &[u8]) -> Result<Vec<u8>, String> {
+        let (mut send, mut recv) = self.conn.open_bi().await.map_err(|e| e.to_string())?;
+        send.write_all(&control_frame(frame_type, body)).await.map_err(|e| e.to_string())?;
+        send.finish().map_err(|e| e.to_string())?;
+        match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
+            FrameRead::Payload(p) => Ok(p),
+            FrameRead::OverBound(n) => Err(format!("reply over bound: {n}")),
+            FrameRead::Closed(e) => Err(format!("stream ended: {e:?}")),
+        }
+    }
 }
 
 /// Try a node's endpoints as alternatives (`light-client-requirements.md`
