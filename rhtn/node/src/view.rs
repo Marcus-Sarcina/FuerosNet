@@ -36,6 +36,8 @@ pub struct NodeView {
     pub store: TopologyStore,
     /// Locators this node holds for other parties (`wire-format.md` §2.3).
     pub locators: LocatorStore,
+    /// Staples handed over with introductions, by subject (design §12.6.5).
+    pub staples: BTreeMap<Keyhash, Vec<u8>>,
     /// This node's own archive, which its disavowals advance.
     pub archive: Archive,
     /// `slot -> occupant`, this node's own subordinate slots.
@@ -69,6 +71,7 @@ impl NodeView {
             table,
             store: TopologyStore::new(),
             locators: LocatorStore::new(),
+            staples: BTreeMap::new(),
             archive: Archive::new(me),
             slots: BTreeMap::new(),
             memo_table: BTreeMap::new(),

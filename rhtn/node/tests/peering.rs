@@ -115,14 +115,10 @@ fn a_root_with_no_peers_can_still_adopt() {
     assert!(i.is_root());
     assert_eq!(i.peers_of(&kh("alice")), BTreeSet::new(), "no peering records");
     let pop = w.formation("alice", "bob");
-    let cur = {
-        let mut c = rhtn_node::currency::CurrencyState::default();
-        c.record(kh("alice"), kh("alice"));
-        c
-    };
-    let rec = i
-        .adopt_gated(&cur, &kh("bob"), rhtn_node::currency::Staple::Current, tx::Evidence::Presence(pop.txid), 3, &id("bob"))
+    let body = i
+        .propose_adoption(&kh("bob"), rhtn_node::currency::Staple::Current, tx::Evidence::Presence(pop.txid), 3, &[rhtn_archive::genesis(&kh("bob"))])
         .expect("no step refuses or defers it for want of a peering record");
+    let rec = i.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
     let fab = Fabric::with(&[kh("bob")]);
     assert_eq!(i.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()), Decision::Stored);
@@ -322,7 +318,6 @@ fn a_sibling_attests_what_its_replicated_state_holds() {
     // T holds P's replicated record for L; P has since countersigned a
     // rotation that has not reached T
     let mut cur = CurrencyState::default();
-    cur.record(kh("carol"), kh("carol"));
     cur.unreachable.insert(kh("bob"));
     assert_eq!(t.rung_for(&cur, &kh("carol")), Some(Rung::Sibling));
     let bytes = t.issue_currency(&cur, &kh("carol")).expect("T issues");

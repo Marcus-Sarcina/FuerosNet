@@ -1,7 +1,7 @@
 //! Peering, the direct payload path, and sibling replication (design §3.4,
 //! §6.3, §12.6.3, §12.7.5; `wire-format.md` §4.4).
 
-use crate::currency::{CurrencyState, Gate, Operation, Staple, gate};
+use crate::currency::{Gate, Operation, Staple, gate};
 use crate::resolution::NetworkPoint;
 use crate::store::subjects;
 use crate::view::NodeView;
@@ -148,21 +148,20 @@ impl NodeView {
         self.store.transactions().filter(|r| r.tx_type == TYPE_PEERING).filter_map(|r| Peering::from_record(r).ok()).collect()
     }
 
-    /// Peering is trust-bearing, so it is gated on the acting credential's
-    /// currency (design §12.6.5).  Returns the body this node is willing to
-    /// sign; nothing is produced while the gate refuses.
-    pub fn peer_gated(&self, cur: &CurrencyState, other: &Keyhash, staple: Staple) -> Result<Vec<u8>, Gate> {
-        match gate(Operation::TrustBearing, staple, cur.is_superseded(&self.me())) {
+    /// The body of a peering this node proposes to `other`, gated on this
+    /// node's own currency (design §12.6.5: peering is trust-bearing).
+    /// The counterparty's network point is its own claim and the presence
+    /// record is a real one between the two; nothing is produced while the
+    /// gate refuses.
+    pub fn propose_peering(&self, staple: Staple, other: &Keyhash, other_point: &NetworkPoint, pop: &[u8; 32], other_back: &[[u8; 32]]) -> Result<Vec<u8>, Gate> {
+        match gate(Operation::TrustBearing, staple, self.is_superseded(&self.me())) {
             Gate::Proceed => {}
             refusal => return Err(refusal),
         }
         let me = self.me();
         let back_me = self.archive.next_back_pointers();
-        let back_other = vec![rhtn_archive::genesis(other)];
-        let mine = self.own_endpoints().first().cloned().unwrap_or(NetworkPoint::new([127, 0, 0, 1], None));
-        let theirs = NetworkPoint::new([127, 0, 0, 2], None);
-        let pop = rhtn_codec::cose::sha256(&[&me[..], &other[..]].concat());
-        Ok(peering_body([&back_me, &back_other], &me, other, &mine, &theirs, self.now, Some(1 << 20), &pop))
+        let mine = self.own_endpoints().first().cloned().ok_or(Gate::Refuse("no published endpoint of our own"))?;
+        Ok(peering_body([&back_me, other_back], &me, other, &mine, other_point, self.now, Some(1 << 20), pop))
     }
 
     /// Which path payload takes to `peer`.  The check is the whole of it:
@@ -233,7 +232,8 @@ impl NodeView {
     /// relayed, this node's serving node is the first carrier.
     pub fn send_payload(&self, peer: &Keyhash, over: PathOverride, online: bool, sink: &dyn PayloadSink, bytes: &[u8]) -> Delivery {
         if !online {
-            let at = self.serving_node.unwrap_or(self.me());
+            // the recipient's serving node holds ciphertext until reconnect
+            let at = self.table.serving_node(peer).unwrap_or(*peer);
             sink.carry(Some(at), peer, bytes);
             return Delivery::Queued { at, to: *peer };
         }
