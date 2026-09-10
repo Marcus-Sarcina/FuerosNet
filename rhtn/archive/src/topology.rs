@@ -20,6 +20,30 @@ pub enum End {
     Superseded(Keyhash),
 }
 
+/// Whether an adoption's evidence has been dereferenced (`wire-format.md`
+/// §3.4): structural verification does not dereference it, and a holder
+/// that cannot may still hold the binding as a position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvidenceStatus {
+    /// The named record was fetched and names these two parties, or the
+    /// evidence is carried in the adoption itself.
+    Satisfied,
+    /// The named record is not held; a position, not yet a weighed edge.
+    Unevaluated,
+}
+
+/// How an adoption's evidence gate is applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evaluation {
+    /// Refuse the adoption when its evidence cannot be dereferenced: what a
+    /// patron does before relying on it.
+    Required,
+    /// Bind on structural verification and record the evidence as
+    /// unevaluated: what a relay's table does, so its horizon follows the
+    /// flood.  A record naming other parties is still refused.
+    Deferred,
+}
+
 /// One patron-subordinate relationship, from the adoption that opened it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binding {
@@ -30,6 +54,9 @@ pub struct Binding {
     /// The adoption's timestamp: the patron's own clock.
     pub from: u64,
     pub end: Option<(Txid, u64, End)>,
+    /// The subnet the adoption's locator names.
+    pub anchor: Option<Keyhash>,
+    pub evidence: EvidenceStatus,
 }
 
 impl Binding {
@@ -320,6 +347,28 @@ impl Table {
     /// an adoption's field 8 may name; `issuer` is this node's standing
     /// acknowledgement policy, if it is a grandpatron.
     pub fn apply<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L, presence: &dyn Fetch, issuer: Option<&AckIssuer>) -> Result<Outcome, Refusal> {
+        self.apply_with(rec, ids, presence, issuer, Evaluation::Required)
+    }
+
+    /// Check the presence record an adoption names against the two parties.
+    fn evidence_status(rec: &Record, node: &Keyhash, patron: &Keyhash, presence: &dyn Fetch, mode: Evaluation) -> Result<EvidenceStatus, Refusal> {
+        let Some(pop) = rec.field_hash(8) else { return Ok(EvidenceStatus::Satisfied) };
+        let Some(bytes) = presence.fetch(&pop) else {
+            return match mode {
+                Evaluation::Required => Err(Refusal::Evidence("presence record not held".into())),
+                Evaluation::Deferred => Ok(EvidenceStatus::Unevaluated),
+            };
+        };
+        let pr = Record::parse(&bytes).map_err(Refusal::Evidence)?;
+        let parts = pr.participants();
+        if pr.tx_type != TYPE_PRESENCE || pr.txid != pop || !(parts.contains(node) && parts.contains(patron)) {
+            return Err(Refusal::Evidence("presence record does not name these two parties".into()));
+        }
+        Ok(EvidenceStatus::Satisfied)
+    }
+
+    /// `apply`, with the evidence gate applied as `mode` says.
+    pub fn apply_with<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L, presence: &dyn Fetch, issuer: Option<&AckIssuer>, mode: Evaluation) -> Result<Outcome, Refusal> {
         match rec.check_signatures(ids) {
             SigStatus::Verified => {}
             s => return Err(Refusal::Signatures(s)),
@@ -330,13 +379,15 @@ impl Table {
                 let node = f(1)?;
                 let patron = f(2)?;
                 let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
-                if let Some(pop) = rec.field_hash(8) {
-                    let bytes = presence.fetch(&pop).ok_or(Refusal::Evidence("presence record not held".into()))?;
-                    let pr = Record::parse(&bytes).map_err(Refusal::Evidence)?;
-                    let parts = pr.participants();
-                    if pr.tx_type != TYPE_PRESENCE || pr.txid != pop || !(parts.contains(&node) && parts.contains(&patron)) {
-                        return Err(Refusal::Evidence("presence record does not name these two parties".into()));
+                let evidence = Self::evidence_status(rec, &node, &patron, presence, mode)?;
+                let anchor = rec.locator().map(|l| l.anchor);
+                // an adoption already held is not bound twice; an unevaluated
+                // one whose evidence has since arrived is upgraded
+                if let Some(b) = self.bindings.iter_mut().find(|b| b.adoption == rec.txid) {
+                    if b.evidence == EvidenceStatus::Unevaluated && evidence == EvidenceStatus::Satisfied {
+                        b.evidence = EvidenceStatus::Satisfied;
                     }
+                    return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
                 }
                 let mut applied = Applied::Adopted;
                 if let Some(prior) = rec.prior_key() {
@@ -353,7 +404,7 @@ impl Table {
                 }
                 self.nodes.insert(node);
                 self.nodes.insert(patron);
-                self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None });
+                self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, evidence });
                 self.settle_pending_disavowals();
                 let mut acks = Vec::new();
                 if let (Some(me), Some(iss)) = (self.me, issuer) {

@@ -76,11 +76,12 @@ fn a_stored_peering_record_yields_both_addresses_and_both_asns() {
 // acceptance: REP-08
 #[test]
 fn a_peering_generates_no_rootward_memo() {
-    let (_w, a, fab) = observer();
+    let (_w, mut a, fab) = observer();
     let rec = peering("carol", "w5", NetworkPoint::new([203, 0, 113, 1], None).with_asn(1), NetworkPoint::new([203, 0, 113, 2], None).with_asn(2));
     fab.clear();
     // A pushes the peering into its horizon
-    a.originate_push(&*fab, KIND_TRANSACTION, &rec.bytes);
+    assert_eq!(a.originate_push(&*fab, KIND_TRANSACTION, &rec.bytes, &ids()), Decision::Stored);
+    assert!(a.store.holds_txid(&rec.txid), "the originator holds what it signed");
     assert!(fab.count(FRAME_TOPOLOGY_PUSH) > 0, "it floods as topology class");
     assert_eq!(fab.count(FRAME_TOPOLOGY_MEMO), 0, "and no memo is sent to P");
     // nothing in the memo table names B's network point

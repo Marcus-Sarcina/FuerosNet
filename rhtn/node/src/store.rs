@@ -8,7 +8,6 @@ use rhtn_archive::record::{Record, SigStatus};
 use rhtn_archive::tx::*;
 use rhtn_archive::{Keyhash, Txid};
 use rhtn_codec::cbor::*;
-use rhtn_codec::cose;
 use rhtn_codec::schema;
 use rhtn_crypto::verify::{self, Lookup};
 use std::collections::{BTreeMap, BTreeSet};
@@ -320,9 +319,7 @@ impl TopologyStore {
             }
             return Decision::Held(p);
         }
-        let node = er.node;
         self.endpoints.insert(key, HeldEndpoint { record: er });
-        let _ = node;
         Decision::Stored
     }
 
@@ -338,9 +335,12 @@ impl TopologyStore {
         ready
     }
 
-    /// The txid a body would carry, for a caller holding only bytes.
-    pub fn txid_of(bytes: &[u8]) -> Option<Txid> {
-        let body = value_slice(bytes, 3)?;
-        Some(cose::txid(&bytes[body]))
+}
+
+/// The store answers a txid with the transaction or presence record it
+/// holds, which is what an adoption's evaluation dereferences.
+impl rhtn_archive::walk::Fetch for TopologyStore {
+    fn fetch(&self, txid: &Txid) -> Option<Vec<u8>> {
+        self.transactions.get(txid).map(|r| r.bytes.clone()).or_else(|| self.presence.get(txid).cloned())
     }
 }

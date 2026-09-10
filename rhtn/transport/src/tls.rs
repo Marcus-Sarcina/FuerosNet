@@ -267,3 +267,11 @@ pub fn negotiated_alpn(conn: &quinn::Connection) -> Option<Vec<u8>> {
     let hd = hd.downcast::<quinn::crypto::rustls::HandshakeData>().ok()?;
     hd.protocol
 }
+
+/// `N` random bytes from the crypto provider the transport already runs on.
+/// One source of randomness for every nonce the node makes.
+pub fn random_bytes<const N: usize>() -> [u8; N] {
+    let mut out = [0u8; N];
+    aws_lc_rs::default_provider().secure_random.fill(&mut out).expect("the provider's random source");
+    out
+}

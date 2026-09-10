@@ -6,11 +6,12 @@
 //! Nothing in a frame tells a node how far to forward, and nothing here
 //! reads one.
 
-use crate::store::{Decision, Horizon, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
+use crate::store::{Decision, Horizon, KIND_TRANSACTION};
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash};
 use rhtn_archive::record::Record;
-use rhtn_archive::tx::{self, Locator};
+use rhtn_archive::topology::Evaluation;
+use rhtn_archive::tx::{self, Locator, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_DISAVOWAL};
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_crypto::verify::Lookup;
@@ -132,20 +133,23 @@ pub enum MemoOutcome {
     CycleConfirmed { disavowed: Keyhash },
     /// Field 1 is this node and its own row does not confirm the memo.
     Unconfirmed,
-    /// Field 1 is an attached client; the hit is handed to that client at
-    /// contact, and the records that answer it are theirs (§10.2).
+    /// Field 1 is an attached client and the memo came from below that
+    /// client: the hit is handed to the client at contact, and the records
+    /// that answer it are theirs (§10.2).
     ForAttachedClient { client: Keyhash },
+    /// This node has a patron but no session toward it and no serving node
+    /// to stand in: nowhere to send.
+    Unroutable,
     Malformed(String),
 }
 
 impl NodeView {
-    /// Originate a push for an object this node is a party to, and forward
-    /// it to every adjacency (`wire-format.md` §10.1).
-    pub fn originate_push(&self, adj: &dyn Adjacency, kind: u64, object: &[u8]) {
-        let body = encode_push(kind, object);
-        for p in self.adjacent(adj, None) {
-            adj.send(&p, FRAME_TOPOLOGY_PUSH, &body);
-        }
+    /// Originate a push for an object this node is a party to: it enters
+    /// this node's own store first, so an echo of it is a duplicate and dies,
+    /// and goes to every adjacency (`wire-format.md` §10.1).
+    pub fn originate_push<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, kind: u64, object: &[u8], ids: &L) -> Decision {
+        let me = self.me();
+        self.take_object(adj, &me, kind, object, ids)
     }
 
     /// The sessions this node holds by virtue of a topology relationship,
@@ -195,7 +199,11 @@ impl NodeView {
                     adj.send(&p, FRAME_TOPOLOGY_PUSH, &push);
                 }
                 if kind == KIND_TRANSACTION {
-                    self.apply_stored(object, ids);
+                    // a change to one of this node's own slots travels rootward
+                    // as a memo (§10.2)
+                    if let Some(slot) = self.apply_stored(object, ids) {
+                        self.originate_memo(adj, slot);
+                    }
                 }
             }
             Decision::Conflict { subject, .. } => {
@@ -207,20 +215,40 @@ impl NodeView {
         decision
     }
 
-    /// Fold a stored transaction into this node's own table, where it can.
-    fn apply_stored<L: Lookup + ?Sized>(&mut self, object: &[u8], ids: &L) {
-        let Ok(rec) = Record::parse(object) else { return };
-        let store_objects: Vec<Vec<u8>> = self.store.objects().into_iter().filter(|(k, _)| *k == KIND_TRANSACTION).map(|(_, b)| b).collect();
-        let mut presence = std::collections::BTreeMap::new();
-        for b in store_objects {
-            if let Ok(r) = Record::parse(&b) {
-                presence.insert(r.txid, b);
+    /// Fold a stored transaction into this node's own table.  A relay's
+    /// table binds on structural verification and records the evidence as
+    /// unevaluated where it cannot dereference it, so its horizon follows
+    /// the flood (`wire-format.md` §3.4's *valid versus effective*).  Where
+    /// the transaction changes one of this node's own subordinate slots, the
+    /// slot is written and returned.
+    fn apply_stored<L: Lookup + ?Sized>(&mut self, object: &[u8], ids: &L) -> Option<u64> {
+        let rec = Record::parse(object).ok()?;
+        let me = self.me();
+        let applied = self.table.apply_with(&rec, ids, &self.store, None, Evaluation::Deferred).is_ok();
+        if !applied {
+            return None;
+        }
+        match rec.tx_type {
+            TYPE_ADOPTION if rec.field_hash(2) == Some(me) => {
+                let node = rec.field_hash(1)?;
+                let slot = rec.locator().and_then(|l| NodeView::slot_from(&l))?;
+                self.set_slot(slot, Some(node), rec.time);
+                Some(slot)
             }
+            TYPE_DEPARTURE if rec.field_hash(2) == Some(me) => {
+                let node = rec.field_hash(1)?;
+                let slot = self.slot_of(&node)?;
+                self.set_slot(slot, None, rec.time);
+                Some(slot)
+            }
+            TYPE_DISAVOWAL if rec.field_hash(1) == Some(me) => {
+                let node = rec.field_hash(2)?;
+                let slot = self.slot_of(&node)?;
+                self.set_slot(slot, None, rec.time);
+                Some(slot)
+            }
+            _ => None,
         }
-        for (t, b) in self.store.presence_records() {
-            presence.insert(t, b);
-        }
-        let _ = self.table.apply(&rec, ids, &presence, None);
     }
 
     /// Re-offer everything whose prerequisite has since arrived
@@ -238,21 +266,25 @@ impl NodeView {
         }
     }
 
-    /// Where a resolution goes when a conflict retires a locator.  The node
-    /// re-resolves the subject from its own position.
-    fn re_resolve(&mut self, adj: &dyn Adjacency, subject: &Keyhash) {
-        let anchor = self.anchor();
+    /// Where a resolution goes when a conflict retires a record: the node
+    /// re-resolves the subject from the locator it holds for that subject,
+    /// with a fresh random nonce (`wire-format.md` §7.7.3).  Holding no
+    /// locator, it has nothing to resolve from and sends nothing.
+    fn re_resolve(&mut self, adj: &dyn Adjacency, subject: &Keyhash) -> Option<crate::resolution::ResolveRequest> {
+        let held = self.locators.all(subject);
+        let loc = held.first()?.locator.clone();
         let req = crate::resolution::ResolveRequest {
             subject: *subject,
-            anchor,
-            path: self.position.path.clone(),
-            nibbles: self.position.nibbles,
-            nonce: rhtn_codec::cose::sha256(&[&subject[..], &self.now.to_be_bytes()[..]].concat())[..16].try_into().unwrap(),
+            anchor: loc.anchor,
+            path: loc.path.clone(),
+            nibbles: loc.nibbles,
+            nonce: rhtn_transport::tls::random_bytes(),
         };
-        let target = self.patron().or(self.serving_node).or_else(|| self.peers.iter().next().copied());
-        if let Some(t) = target {
-            adj.send(&t, crate::resolution::REQUEST_RESOLVE, &req.encode());
-        }
+        // a light client asks its serving node; an infra node asks the
+        // anchor, where a session with it exists
+        let target = self.serving_node.or(Some(loc.anchor)).filter(|t| adj.has_session(t))?;
+        adj.send(&target, crate::resolution::REQUEST_RESOLVE, &req.encode());
+        Some(req)
     }
 
     // ------------------------------------------------------------ the memo
@@ -263,14 +295,13 @@ impl NodeView {
         Some(Memo { patron: self.me(), position: self.position.clone(), slot, timestamp: s.timestamp, occupant: s.occupant })
     }
 
-    /// Send a memo rootward: to the patron where a session exists, and
-    /// otherwise to the nearest infrastructure node on the patron chain
-    /// (`wire-format.md` §10.2).
+    /// Send a memo rootward in its own subnet: to this node's patron there
+    /// where a session exists, and otherwise to the nearest infrastructure
+    /// node on the patron chain (`wire-format.md` §10.2).  `None` means this
+    /// node is the root of that subnet, or has nowhere to send.
     pub fn send_memo(&self, adj: &dyn Adjacency, memo: &Memo) -> Option<Keyhash> {
-        let to = match self.patron() {
-            Some(p) if adj.has_session(&p) => p,
-            Some(_) | None => self.serving_node.filter(|_| self.patron().is_some())?,
-        };
+        let patron = self.patron_in(&memo.position.anchor)?;
+        let to = if adj.has_session(&patron) { patron } else { self.serving_node? };
         adj.send(&to, FRAME_TOPOLOGY_MEMO, &memo.encode());
         Some(to)
     }
@@ -297,9 +328,13 @@ impl NodeView {
         if memo.patron == me {
             return self.cycle_check(adj, from, &memo);
         }
-        // a serving node runs the check for its attached clients as well;
-        // the records that answer it are the client's, not this node's
-        if self.attached.contains(&memo.patron) {
+        // a serving node runs the check for its attached clients as well
+        // (§10.2): a memo naming an attached client that arrives from below
+        // that client is the client's own memo come back, and the records
+        // that answer it are the client's, not this node's.  The client's
+        // own memo on its way up arrives from the client itself, or from a
+        // party outside its subtree, and travels on.
+        if self.attached.contains(&memo.patron) && *from != memo.patron && self.table.downline_contains(&memo.patron, from) {
             return MemoOutcome::ForAttachedClient { client: memo.patron };
         }
         // a node holding that slot at or after the memo's timestamp does not
@@ -315,7 +350,8 @@ impl NodeView {
         }
         match self.send_memo(adj, &memo) {
             Some(to) => MemoOutcome::Forwarded { to },
-            None => MemoOutcome::StoppedAtRoot,
+            None if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRoot,
+            None => MemoOutcome::Unroutable,
         }
     }
 
@@ -330,9 +366,11 @@ impl NodeView {
             return MemoOutcome::Unconfirmed;
         }
         // disavow the direct subordinate that forwarded the memo, reason
-        // code 5, without prejudice (§10.2.4)
+        // code 5, without prejudice (§10.2.4); the disavowal enters this
+        // node's own store and table, empties the slot, and floods
         let Some(dis) = self.disavow(from, Some(5)) else { return MemoOutcome::Unconfirmed };
-        self.originate_push(adj, KIND_TRANSACTION, &dis.bytes);
+        let ids: Vec<rhtn_crypto::Identity> = vec![self.identity.public.clone()];
+        self.originate_push(adj, KIND_TRANSACTION, &dis.bytes, &ids);
         if let Some(slot) = self.slot_of(from) {
             self.set_slot(slot, None, self.now);
         }
@@ -348,9 +386,4 @@ impl NodeView {
         self.archive.append(rec.clone()).ok()?;
         Some(rec)
     }
-}
-
-/// The push a node sends for an endpoint record.
-pub fn endpoint_push(object: &[u8]) -> Vec<u8> {
-    encode_push(KIND_ENDPOINT_RECORD, object)
 }

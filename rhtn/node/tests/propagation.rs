@@ -7,7 +7,7 @@ use common::*;
 use rhtn_archive::topology::Table;
 use rhtn_archive::tx::Seqno;
 use rhtn_node::propagation::*;
-use rhtn_node::resolution::{self, NetworkPoint, REQUEST_RESOLVE, ResolveRequest};
+use rhtn_node::resolution::{self, LocatorOutcome, NetworkPoint, REQUEST_RESOLVE, ResolveRequest};
 use rhtn_node::store::{Decision, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
 use rhtn_node::view::NodeView;
 use rhtn_node::Keyhash;
@@ -31,6 +31,7 @@ fn scene() -> Scene {
     let (a_s3, _) = w.adopt("w2", "carol", 4);
     let table = table_with(kh("bob"), &w, &[&a_n, &a_s1, &a_s2, &a_s3], &["alice", "bob", "carol", "w1", "w3"]);
     let mut n = view("bob", table, "alice", &[0]);
+    n.now = w.clock + 3600;
     n.peers.insert(kh("w3"));
     n.attached.insert(kh("c1"));
     n.set_slot(0, Some(kh("carol")), w.clock);
@@ -180,6 +181,9 @@ fn an_endpoint_record_supersedes_on_a_greater_counter() {
 fn equal_seqnos_with_different_contents_retire_the_pair() {
     let mut s = scene();
     let x = "carol";
+    // N holds X's locator, which is what a re-resolution starts from
+    let loc = rhtn_archive::tx::Locator { anchor: kh("alice"), path: pack_path(&[0, 0]), nibbles: 2, seqno: Seqno { series: 2, counter: 5 } };
+    assert_eq!(s.n.locators.offer(&resolution::signed_locator(&id(x), &loc), &ids()), LocatorOutcome::Installed);
     let a = er(x, &[point(1, 5000)], Seqno { series: 2, counter: 5 });
     let b = er(x, &[point(2, 5001)], Seqno { series: 2, counter: 5 });
     assert_ne!(a, b);
@@ -192,7 +196,10 @@ fn equal_seqnos_with_different_contents_retire_the_pair() {
     // and it repairs by re-resolving
     let resolutions: Vec<Vec<u8>> = s.fab.frames().into_iter().filter(|f| f.frame_type == REQUEST_RESOLVE).map(|f| f.body).collect();
     assert_eq!(resolutions.len(), 1, "a resolution for X leaves N");
-    assert_eq!(ResolveRequest::decode(&resolutions[0]).unwrap().subject, kh(x));
+    let req = ResolveRequest::decode(&resolutions[0]).unwrap();
+    assert_eq!(req.subject, kh(x));
+    assert_eq!((req.anchor, req.path()), (loc.anchor, resolution::Path { bytes: loc.path.clone(), nibbles: loc.nibbles }), "from X's locator, not N's own position");
+    assert_ne!(req.nonce, [0; 16]);
     // a later arrival of either content is still not taken
     assert_eq!(s.n.receive_push(&*s.fab, &kh("w1"), &encode_push(KIND_ENDPOINT_RECORD, &a), &ids()), Decision::Duplicate);
     assert!(s.n.store.endpoint(&kh(x)).is_none());
@@ -250,9 +257,10 @@ fn a_slot_held_at_or_after_the_memos_timestamp_is_not_forwarded() {
     s.fab.clear();
     // field 1 names N and slot 3, timestamp at or before t
     let m = memo("bob", "alice", 3, t - 60, Some("w2"));
-    let out = s.n.receive_memo(&*s.fab, &kh("carol"), &m.encode());
+    let bytes = m.encode();
+    let out = s.n.receive_memo(&*s.fab, &kh("carol"), &bytes);
     assert!(matches!(out, MemoOutcome::CycleConfirmed { .. } | MemoOutcome::AlreadyPassed | MemoOutcome::Unconfirmed), "{out:?}");
-    assert_eq!(s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO).len(), 0, "nothing to P");
+    assert!(!s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO).contains(&bytes), "the memo is not forwarded to P");
     // the same rule against the memo table, for a slot this node relays
     let mut s2 = scene();
     let held = memo("carol", "alice", 5, t, Some("w5"));
@@ -273,9 +281,16 @@ fn a_memo_naming_this_node_and_matching_its_row_is_a_confirmed_cycle() {
     s.fab.clear();
     // a memo N originated for slot 0 returns from S
     let m = memo("bob", "alice", 0, t, Some("carol"));
-    let out = s.n.receive_memo(&*s.fab, &kh("carol"), &m.encode());
+    let bytes = m.encode();
+    let out = s.n.receive_memo(&*s.fab, &kh("carol"), &bytes);
     assert_eq!(out, MemoOutcome::CycleConfirmed { disavowed: kh("carol") });
-    assert_eq!(s.fab.count(FRAME_TOPOLOGY_MEMO), 0, "the memo is not forwarded further");
+    let memos = s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO);
+    assert!(!memos.contains(&bytes), "the memo is not forwarded further");
+    // what does travel rootward is N's own memo for the slot it emptied:
+    // a disavowal produces a memo like any other (§10.2.2)
+    assert_eq!(memos.len(), 1);
+    let emptied = Memo::decode(&memos[0]).unwrap();
+    assert_eq!((emptied.patron, emptied.slot, emptied.occupant), (kh("bob"), 0, None));
     // the disavowal is observed, naming S with reason code 5
     let pushed: Vec<Vec<u8>> = s.fab.frames().into_iter().filter(|f| f.frame_type == FRAME_TOPOLOGY_PUSH).map(|f| f.body).collect();
     assert!(!pushed.is_empty());
@@ -287,6 +302,8 @@ fn a_memo_naming_this_node_and_matching_its_row_is_a_confirmed_cycle() {
     assert_eq!(rec.field_hash(2), Some(kh("carol")));
     assert_eq!(rec.field_uint(4), Some(5), "reason code 5, without prejudice");
     assert_eq!(s.n.slots[&0].occupant, None, "N's slot 0 is empty afterwards");
+    assert!(s.n.store.holds_txid(&rec.txid), "and N holds its own disavowal");
+    assert!(!s.n.table.subordinates(&kh("bob")).contains(&kh("carol")), "and its table ended the binding");
 }
 
 // acceptance: PRP-13

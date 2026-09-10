@@ -164,6 +164,16 @@ impl Record {
         Some(Seqno { series: as_uint(a.first()?)? as u32, counter: as_uint(a.get(1)?)? as u32 })
     }
 
+    /// The locator an adoption or peering carries in field 3.
+    pub fn locator(&self) -> Option<Locator> {
+        if self.tx_type != TYPE_ADOPTION {
+            return None;
+        }
+        let body = &self.bytes[self.body.clone()];
+        let r = value_slice(body, 3)?;
+        Locator::decode(&body[r]).ok()
+    }
+
     /// The two participants of a presence record (field 3).
     pub fn participants(&self) -> Vec<Keyhash> {
         let m = self.body_map();
