@@ -8268,3 +8268,25 @@ pass; the theorems themselves state issuance and the ladder, which stand.
 Still open from milestone 5: the detector and the ladder joined by hand; the
 memo table kept unconditionally and never read by occupant; the emptied-slot
 cycle memo unconfirmed.
+
+**The genesis of a root, tested (2026-09-10).** On the author's instruction
+the models README no longer describes `wire-only/currency` as proving a
+trust-bearing acceptance; it says the relying party takes a key as current on
+an unexpired issuance, which key to address being all a staple decides. Four
+tests exercise a root's genesis, propagation and reachability. Three over the
+fabric: a new root has nothing and needs nothing — self-anchored, empty path,
+a chain at genesis, no staple, nobody to ask, and the currency call settles on
+proceed with no frame sent; its peering with a node of an existing subnet
+floods that subnet up and down and never back, its address travels in the
+peering record, it has standing of 10 at the subnet's root and at a node two
+hops off, and its endpoint record is out of everyone's store, reaching a
+stranger being the anchor table's business; an existing node whose anchor
+policy admits a root of nobody resolves it with an empty path and the root
+answers for itself, while a policy of one subordinate does not cache it and
+an absent entry sends nothing. One over loopback QUIC: the root starts,
+attaches to the existing node, originates its peering, which reaches the
+subnet's root and its client over real sessions; the client resolves the new
+root through the node's anchor table, is answered with the root's real
+endpoint, and attaches to the root directly, which answers a currency request
+with code 1 and a resolution for itself. None carries a catalogue id: no
+entry asks for genesis, and the tests are the author's own addition.

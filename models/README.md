@@ -281,8 +281,10 @@ the honest protocol and so proves every security lemma vacuously.
   `server_authentication` and leaves this one verifying.
 
 - **`wire-only/currency`** (design §12.6.5) — currency attestation + stapling.
-  A trust-bearing acceptance of a key as current requires an unexpired
-  issuance for that exact key, expiry modelled as event order. The attestation
+  A relying party takes a key as current only on an unexpired issuance for
+  that exact key, expiry modelled as event order; which key to address is the
+  only thing a staple decides, and nothing the party then does waits on it
+  (design §12.6.5). The attestation
   **binds its issuer identity and claimed role**, so one issued as a sibling
   cannot be re-presented as a patron's; and **acceptance names an issuer the
   relying party's own records authorise** for that subject in that role.
