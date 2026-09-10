@@ -2473,7 +2473,8 @@ CurrencyAttestation = {
   3: timestamp,        ; issued_at
   4: timestamp,        ; expires_at — ~10 h default; hours, not days (design §12.6.5)
   5: uint,             ; issuer role: 0 patron, 1 sibling (secondhand),
-                       ;   2 grandpatron, 3 down-line threshold (root)
+                       ;   2 grandpatron, 3 down-line threshold (root):
+                       ;   optional, an anchor-caching input (design §12.7.2)
   6: keyhash,          ; ISSUER identity, the signature below is by this party,
                        ; who is not otherwise named
   7: COSE_Sign1        ; BY THE ISSUER over canonical CBOR of fields 1-6;

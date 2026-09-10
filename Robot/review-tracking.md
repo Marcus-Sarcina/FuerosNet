@@ -8177,3 +8177,34 @@ Still open after this milestone: down-line issuance for roots (design
 `unreachable` set joined by hand; the memo table kept unconditionally; a
 cycle-check memo about an emptied slot not treated as confirmed. Nothing
 from milestone 5 is owed.
+
+**Root currency reframed (2026-09-10).** Asked about the milestone 5 open item
+"down-line issuance for roots", the author did not recognise the direction and
+found it inadequate, a root with no subordinates having no process under it.
+Traced: design §12.7.2 and `wire-format.md` §7.1's role 3 entered on
+2026-08-13 with §12.6.5 and §12.6.5.1, attributed to nobody, before the
+repository's baseline; the one later touch was a reviewer's leaf-case finding.
+Ruling, verbatim: *"As long as roots with zero subs can still propagate, leave
+the mechanism for subordinate-attested roots in place and document it as an
+optional input for alternative anchor cacheing rules."* The condition holds in
+the design and in the code: §15.1's storage rule and the flood in
+`rhtn-node` consult no staple, and the currency gate's callers are the
+adoption proposal, the peering proposal and the ask machine only.
+
+Applied: design §12.7.2's heading and first two paragraphs rewritten, the
+residual paragraphs kept with a new lead; one sentence in §12.7.3; §19's veto
+row; the role-3 comment in `wire-format.md` §7.1; a change-log entry; the
+`ROLE_DOWNLINE` comment in `rhtn-node`. The milestone 5 entry's open item
+"down-line issuance for roots" is withdrawn as a currency rung: nothing issues
+or consults role 3, and nothing now says anything should.
+
+One code gap surfaced by the check, for the record and not yet built: the
+node's currency gate refuses a trust-bearing operation on any absent staple,
+with no path for an identity that claims nothing. design §12.7.1 says a staple
+is owed when a record claims prior standing and not when an identity claims
+nothing, so a Genesis identity's first adoption through `propose_adoption` is
+refused where the design says it proceeds. CUR-05's fixture is an identity
+with a patron and an expired staple, not a Genesis one, so no entry catches
+it. What "claims nothing" is in a form the code can test — no back-pointer
+beyond genesis, no presented head — is a reading the author should confirm
+before it is built.

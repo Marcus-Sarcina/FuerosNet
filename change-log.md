@@ -9245,3 +9245,19 @@ of §14, and a hosted mail queue was rejected outright: operators would place
 it in the same cloud and zone as the node, or converge on one provider, buying
 cost and complexity for a correlated availability dependency.
 
+## 2026-09-10
+
+### 2026-09-10 (root currency)
+
+**§12.7.2 no longer presents the down-line threshold as the answer to a
+patronless node's currency** [author]. The section had entered on 2026-08-13
+with the currency work, with no decision behind it, and it covered only the root
+that has a constituency while calling the root that has none "the residual". It
+now states what was already true of the protocol: a root with no subordinates
+propagates regardless, because propagation never consults currency and a staple
+gates only a trust-bearing operation, with §12.7.1 saying when one is owed. The
+subordinate attestation stays, for roots that have a down-line, as an optional
+input to a node's anchor-caching rule (§12.7.3) and not as a currency
+requirement; §12.7.3 names it as one input such a rule may take, and
+`wire-format.md` §7.1's issuer role 3 says the same. The disavowed-leaf residual
+is unchanged. §19's veto row no longer calls small and Genesis roots an open gap.

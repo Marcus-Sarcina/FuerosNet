@@ -4655,19 +4655,28 @@ relying entirely on the in-person meeting, which is precisely the bootstrap
 problem of §13 (bootstrap). The asymmetry is sound — absence of a claim is absence of
 standing, and nobody is asked to prove a negative.
 
-#### 12.7.2 Roots derive currency from below
-Currency attestations come from the patron (§12.6.5), so a patronless node cannot
-staple and would be permanently frozen for trust-bearing operations. **This is a
-hole in §12.6.5, independent of disavowal.**
+#### 12.7.2 A root's constituency can attest it, and nothing requires that it does
 
-Resolution inverts a mechanism already present: §9.2's social revocation uses a
-threshold of the down-line co-signing, and the same threshold attests **"our
-root's current key is K"**. A root with subordinates has a constituency to vouch
-for it.
+Currency attestations come from the patron (§12.6.5), so a patronless node has
+no issuer. **A root with no subordinates propagates regardless** [author,
+2026-09-10]: propagation never consults currency, a root's transactions being
+stored and forwarded by the same rule as anyone's (§15.1), and what a staple
+gates is a trust-bearing operation (§12.6.5's table). §12.7.1 already says when
+one is owed: when a record claims prior standing, not when an identity claims
+nothing.
 
-**A root without one is not always a lone identity, and that is the residual.**
-The dismissal holds for a Genesis user, who claims nothing and whose currency
-nobody has occasion to check (§12.7.1). It fails for a **disavowed leaf**: it has
+**A root with subordinates has a constituency that can attest its current
+key.** The shape is §9.2's social revocation inverted: a threshold of the
+down-line co-signing *"our root's current key is K"*, carried as issuer role 3
+(`wire-format.md` §7.1). **It is an optional input to a node's anchor-caching
+rule (§12.7.3), not a currency requirement** [author, 2026-09-10]. A node
+choosing which roots to cache may weigh such an attestation as it weighs
+subtree size; a root that presents none is cached, or not, under the same
+policy, and nothing else in the protocol asks for one.
+
+**What the attestation does not reach is unchanged by its being optional.** The
+dismissal in §12.7.1 holds for a Genesis user, who claims nothing and whose currency
+nobody has occasion to check. It fails for a **disavowed leaf**: it has
 history, §12.7.1's rule makes a staple required precisely because it *claims prior
 standing*, and it has no down-line to attest from below and no patron to attest from
 above. **Adoption is itself trust-bearing** (§12.6.5's table), so the operation that
@@ -4700,7 +4709,9 @@ explicitly supported outcome (§1) rather than a failure.
 
 **Therefore: each node sets its own threshold for which roots it caches.** For
 example, ignoring roots with fewer than *n* subordinates, with *n* a prudential
-choice based on current network characteristics.
+choice based on current network characteristics. A subordinate attestation of
+the root's current key (§12.7.2) is one input such a rule may take, and none is
+required.
 
 **This must not be a protocol constant.** In the early network — thousands of
 nodes, roots with a dozen to a few hundred subordinates, the anchor concept is
@@ -7869,7 +7880,7 @@ read before re-proposing anything here.
 | **Rotation as a distinct operation from adoption** | Archive ingestion is already optional in adoption, so rotation is just adoption where the presented archive belongs to another key (§9.0) |
 | **An explicit haircut on inherited standing** | Redundant, a rotated key's trust is capped by its attesters' capacity, which is far narrower than the original's accumulated paths (§9.0) |
 | **Delegated verification authority** | Verification is evidence, not authority; a signed "same person" fact is an input to an adoption someone else signs (§9.0) |
-| **A second veto keypair per identity** | Superseded: there is no veto at all (§9.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. Down-line threshold covers roots **that have a sufficient down-line**, with small and Genesis roots an acknowledged open gap (§9.2); departure is self-punishing for a thief |
+| **A second veto keypair per identity** | Superseded: there is no veto at all (§9.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. The down-line threshold survives as an optional input to anchor caching for a root that has a down-line (§12.7.2), and a root without one propagates regardless; departure is self-punishing for a thief |
 | **Biometrics in network state** | Irrevocable, fuzzing does not survive combination with timestamp and location, and it would invert the design's own metadata-resistance property (§7.2) |
 | **A published trust-policy descriptor** | A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts; a bad-news-only variant generated attack surface (policy shopping) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally |
 | **Fuzzy commitments / secure sketches for retained verification capability** | The theoretically correct tool for verifying without retaining the biometric, and face entropy is low enough that their security margins are weak. Would have served §7.5.1's retention problem |

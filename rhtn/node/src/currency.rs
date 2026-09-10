@@ -21,9 +21,9 @@ use std::collections::BTreeSet;
 pub const ROLE_PATRON: u64 = 0;
 pub const ROLE_SIBLING: u64 = 1;
 pub const ROLE_GRANDPATRON: u64 = 2;
-/// A down-line threshold attesting for a root (design §12.7.2).  Declared
-/// because the wire assigns it; not issued here, since it is a multi-signer
-/// object this milestone does not build.
+/// A down-line threshold attesting a root's current key (design §12.7.2):
+/// an optional input to anchor caching, not a rung of the ladder.  Declared
+/// because the wire assigns it; nothing here issues or consults it.
 pub const ROLE_DOWNLINE: u64 = 3;
 
 /// `CurrencyReply` field 2.
