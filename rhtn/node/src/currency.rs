@@ -231,7 +231,7 @@ pub struct CurrencyAsk {
     pub asked: Vec<Keyhash>,
 }
 
-/// What establishing current control came to: settled from what the node
+/// What learning the current key came to: settled from what the node
 /// holds, or a question now outstanding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Requirement {

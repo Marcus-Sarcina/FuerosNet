@@ -1477,7 +1477,7 @@
    }
   ],
   "given": "Client N, introduced to X by I, holds a stale staple for X and has sessions reaching both I and X's patron.",
-  "when": "N needs current control of X's credential for a trust-bearing operation.",
+  "when": "N is about to address X, and the staple it holds for X is stale.",
   "then": "N's first CurrencyRequest naming X is observed on its session toward I, and none toward X's patron unless I answers with code 1 or not at all.",
   "oracle": "behaviour",
   "interpretation": null
@@ -5886,7 +5886,7 @@
    },
    {
     "where": "design §14.1.2",
-    "text": "Payload flows; trust-bearing operations do not"
+    "text": "Payload flows; the subnet-scoped transactions the patron countersigns wait for the patron"
    }
   ],
   "given": "N is both patron and serving node of C; N is dark and C holds a degraded session on N's sibling S (AttachAck field 1 equal to 1).",

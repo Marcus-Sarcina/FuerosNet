@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 43 and seed 4477593399555428655 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 298049] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 59 and seed -1153814988893648008 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 531506] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/CycleDetection.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,12 +8,12 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module CycleDetection
-Starting... (2026-09-09 00:27:33)
+Starting... (2026-09-10 17:31:20)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-09 00:27:33.
-Progress(17) at 2026-09-09 00:27:36: 129,001 states generated, 50,897 distinct states found, 0 states left on queue.
-Checking temporal properties for the complete state space with 50897 total distinct states at (2026-09-09 00:27:36)
+Finished computing initial states: 1 distinct state generated at 2026-09-10 17:31:20.
+Progress(17) at 2026-09-10 17:31:23: 129,001 states generated, 50,897 distinct states found, 0 states left on queue.
+Checking temporal properties for the complete state space with 50897 total distinct states at (2026-09-10 17:31:23)
 Error: Temporal properties were violated.
 
 Error: The following behavior constitutes a counter-example:
@@ -29,54 +29,55 @@ State 2: <Adopt line 197, col 3 to line 208, col 24 of module CycleDetection>
 /\ disavowed = {}
 /\ serial = 1
 /\ events = 1
-/\ patron = (a :> None @@ b :> a @@ d :> None @@ e :> None)
+/\ patron = (a :> None @@ b :> e @@ d :> None @@ e :> None)
 /\ memos = {}
 
 State 3: <Adopt line 197, col 3 to line 208, col 24 of module CycleDetection>
 /\ disavowed = {}
 /\ serial = 2
 /\ events = 2
-/\ patron = (a :> None @@ b :> a @@ d :> None @@ e :> a)
-/\ memos = {}
+/\ patron = (a :> None @@ b :> e @@ d :> b @@ e :> None)
+/\ memos = {[pat |-> b, occ |-> d, at |-> e, from |-> b, id |-> 1]}
 
 State 4: <Adopt line 197, col 3 to line 208, col 24 of module CycleDetection>
 /\ disavowed = {}
 /\ serial = 3
 /\ events = 3
-/\ patron = (a :> None @@ b :> a @@ d :> e @@ e :> a)
-/\ memos = {[pat |-> e, occ |-> d, at |-> a, from |-> e, id |-> 2]}
+/\ patron = (a :> e @@ b :> e @@ d :> b @@ e :> None)
+/\ memos = {[pat |-> b, occ |-> d, at |-> e, from |-> b, id |-> 1]}
 
 State 5: <Adopt line 197, col 3 to line 208, col 24 of module CycleDetection>
 /\ disavowed = {}
 /\ serial = 4
 /\ events = 4
-/\ patron = (a :> e @@ b :> a @@ d :> e @@ e :> a)
-/\ memos = { [pat |-> e, occ |-> a, at |-> a, from |-> e, id |-> 3],
-  [pat |-> e, occ |-> d, at |-> a, from |-> e, id |-> 2] }
+/\ patron = (a :> e @@ b :> e @@ d :> b @@ e :> b)
+/\ memos = { [pat |-> b, occ |-> d, at |-> e, from |-> b, id |-> 1],
+  [pat |-> b, occ |-> e, at |-> e, from |-> b, id |-> 3] }
 
 State 6: <Next line 275, col 6 to line 275, col 32 of module CycleDetection>
 /\ disavowed = {}
 /\ serial = 4
 /\ events = 4
-/\ patron = (a :> e @@ b :> a @@ d :> e @@ e :> a)
-/\ memos = { [pat |-> e, occ |-> a, at |-> e, from |-> a, id |-> 3],
-  [pat |-> e, occ |-> d, at |-> a, from |-> e, id |-> 2] }
+/\ patron = (a :> e @@ b :> e @@ d :> b @@ e :> b)
+/\ memos = { [pat |-> b, occ |-> d, at |-> b, from |-> e, id |-> 1],
+  [pat |-> b, occ |-> e, at |-> e, from |-> b, id |-> 3] }
 
-State 7: <Next line 276, col 6 to line 276, col 40 of module CycleDetection>
-/\ disavowed = {{d, e}}
+State 7: <Next line 275, col 6 to line 275, col 32 of module CycleDetection>
+/\ disavowed = {}
 /\ serial = 4
 /\ events = 4
-/\ patron = (a :> e @@ b :> a @@ d :> None @@ e :> a)
-/\ memos = {[pat |-> e, occ |-> d, at |-> a, from |-> e, id |-> 2]}
+/\ patron = (a :> e @@ b :> e @@ d :> b @@ e :> b)
+/\ memos = { [pat |-> b, occ |-> d, at |-> b, from |-> e, id |-> 1],
+  [pat |-> b, occ |-> e, at |-> b, from |-> e, id |-> 3] }
 
-State 8: <Next line 275, col 6 to line 275, col 32 of module CycleDetection>
-/\ disavowed = {{d, e}}
+State 8: <Next line 276, col 6 to line 276, col 40 of module CycleDetection>
+/\ disavowed = {{b, d}}
 /\ serial = 4
 /\ events = 4
-/\ patron = (a :> e @@ b :> a @@ d :> None @@ e :> a)
-/\ memos = {[pat |-> e, occ |-> d, at |-> e, from |-> a, id |-> 2]}
+/\ patron = (a :> e @@ b :> e @@ d :> None @@ e :> b)
+/\ memos = {[pat |-> b, occ |-> d, at |-> b, from |-> e, id |-> 1]}
 
 State 9: Stuttering
-Finished checking temporal properties in 00s at 2026-09-09 00:27:36
+Finished checking temporal properties in 00s at 2026-09-10 17:31:24
 129001 states generated, 50897 distinct states found, 0 states left on queue.
-Finished in 03s at (2026-09-09 00:27:36)
+Finished in 04s at (2026-09-10 17:31:24)

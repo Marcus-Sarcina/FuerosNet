@@ -7,10 +7,10 @@
 (* node's key-currency fresh when its patron is unreachable:               *)
 (*    patron  ->  sibling  ->  grandpatron  ->  re-adopt elsewhere.        *)
 (* The review plan's Stage 1.2 asks whether the ladder can DEADLOCK: reach *)
-(* a state where the node needs a fresh attestation, is not frozen by      *)
-(* rule, yet NO issuer can act.  This model answers that, and checks the   *)
-(* section's rule "issue fresh; never extend stale" against the            *)
-(* alternative the section names and rejects.                              *)
+(* a state where the node needs a fresh attestation, the honest limit      *)
+(* does not apply, yet NO issuer can act.  This model answers that, and    *)
+(* checks the section's rule "issue fresh; never extend stale" against     *)
+(* the alternative the section names and rejects.                          *)
 (*                                                                         *)
 (* WHAT THIS MODEL DOES NOT CARRY, stated so the scope is visible.         *)
 (*                                                                         *)
@@ -26,8 +26,8 @@
 (* patron" for extended or permanent outage -- and a fifth path for         *)
 (* light-client patrons, who "pre-delegate issuance to their own patron at *)
 (* adoption time" because they carry no uptime commitment.  Neither is     *)
-(* modelled.  Both are escapes from the frozen state rather than rungs of  *)
-(* the issuing ladder, so the liveness claim here is STRICTLY WEAKER than  *)
+(* modelled.  Both end the unattested state by means other than the        *)
+(* issuing ladder, so the liveness claim here is STRICTLY WEAKER than      *)
 (* the design's: the ladder does not deadlock while an ISSUER can serve,   *)
 (* and nothing is said about the re-adoption remedy.                       *)
 (*                                                                         *)
@@ -244,8 +244,9 @@ FreshOnly ==
 
 \* SAFETY (the deadlock question, restated as an invariant): the design's
 \* HONEST LIMIT (design Section 12.6.5.1) says that if the patron AND all
-\* siblings AND the grandpatron are unreachable, the node is legitimately
-\* frozen -- no issuance path exists and that is accepted, not a bug.  So
+\* siblings AND the grandpatron are unreachable, the node legitimately goes
+\* unattested -- no issuance path exists and that is accepted, not a bug,
+\* and nothing the node does waits on it (design Section 12.6.5).  So
 \* "deadlock" would be a state where the held attestation is EXPIRED, at
 \* least one issuer up the ladder IS reachable, and yet no issue action is
 \* enabled.  This invariant asserts that state is unreachable: whenever the

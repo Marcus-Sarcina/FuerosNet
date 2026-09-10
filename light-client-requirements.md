@@ -328,10 +328,10 @@ session secrecy. The client implements them; it does not reinvent them.
   only when a session dies mid-flight. The three-missed-intervals rule presupposes
   an established session; a client that waits for one can never fail over from a
   cold start.
-- **Tell the user when attachment is degraded.** On a sibling, trust-bearing
-  operations are unavailable; a user who is not told will read this as the
-  application being broken and will not know that reconnecting resolves it (design
-  §14.1.2).
+- **Tell the user when attachment is degraded.** On a sibling, the subnet-scoped
+  transactions the patron countersigns wait for the patron (design §6.4); a user
+  who is not told will read this as the application being broken and will not know
+  that reconnecting resolves it (design §14.1.2).
 - **Disclose trust evidence only in response to another party's actual evaluation
   need**, never proactively for speculative or unsolicited evaluation (design §15).
   Present encoding: attestations are pulled, not pushed.

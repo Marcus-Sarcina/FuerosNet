@@ -185,8 +185,8 @@ constants and lists the invariants and temporal properties.
 - **`CurrencyEscalation`** — the patron→sibling→grandpatron ladder (design
   §12.6.5.1) under outage. The table's **fourth** rung (re-adopt at a new
   patron) and the light-client pre-delegation path are *not* modelled, which
-  the file now states: both are escapes from the frozen state rather than
-  rungs of the issuing ladder, so the liveness claim proved here is strictly
+  the file now states: both end the unattested state by means other than the
+  issuing ladder, so the liveness claim proved here is strictly
   weaker than the design's. Checks the plan's deadlock question — the ladder
   never deadlocks while a rung can serve (`SomeIssuerCanAct`), and every
   expiry is followed by renewal from whichever rung outage leaves operative

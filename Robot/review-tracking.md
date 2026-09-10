@@ -8290,3 +8290,52 @@ root through the node's anchor table, is answered with the root's real
 endpoint, and attaches to the root directly, which answers a currency request
 with code 1 and a resolution for itself. None carries a catalogue id: no
 entry asks for genesis, and the tests are the author's own addition.
+
+**The sweep after the currency ruling (2026-09-10).** On the author's
+instruction, every material read for conformance to "nothing waits on a
+staple", design first, then models, implementation and tests, with every
+automated stage run.
+
+Design and requirements: 5 documents swept for trust-bearing, fail closed,
+frozen, current control and spend, and for every mention of a staple or of
+currency — 7 hits outside §12.6.5 read in context. Two needed changing.
+§14.1.2 and `light-client-requirements.md` §4 used "trust-bearing
+operations" for what a degraded session withholds, a phrase whose definition
+went with the table; both now say the subnet-scoped transactions the patron
+countersigns wait for the patron (design §6.4), and the comparison to
+secondhand attestations is dropped. The rest stand as they are: §3.4's
+"trust-bearing transaction history" names a replication class; §11.2's
+"a resource's key currency derives from its owner's attestation" and §9.x's
+fork visibility describe addressing; the compelled-provider entry's
+"thief-issued currency dies with the staple lifetime" was already about
+addressing. One reading left for the author: §11.4 lists currency among the
+time-dependent values a role table recalculates. A staple decides which key to
+address and is not a trust input, so what a role table recalculates from it
+is unclear; nothing was changed there.
+
+Models: `wire-only/currency`'s comments described a trust-bearing acceptance
+that fails closed in four places; they now describe taking a key as current
+for addressing, with nothing waiting on it, and the lemma names are kept.
+`CurrencyEscalation.tla`'s header and honest-limit comments said frozen in
+three places and now say unattested, with the sentence that nothing the node
+does waits on it. The compliant README describes
+`no_trust_bearing_operation_on_a_sibling` as countersigning nothing, the
+name kept from when the design called countersigned transactions
+trust-bearing. Appendix B holds no currency text. Model citations 197 / 0
+flags.
+
+Implementation and tests: the transport's degraded-session comment and the
+node's ask-machine doc followed the wording; SES-10's quote follows §14.1.2
+and CUR-11's trigger is addressing a subject on a stale staple. No source or
+test carries the withdrawn vocabulary now except the two tombstones' titles,
+which are the record of it. Catalogue 258 entries, 2 withdrawn, 165 of 256
+implemented, 0 flags. References 2074 / 0 flags.
+
+Stages run: refcheck, modelrefcheck and the catalogue checker above; the
+test-vector verifier, with dilithium-py on its target path — ALL CHECKS PASS;
+the code gate — CODE GATE PASSES, clippy clean, every test green, the fuzz
+smoke crash-free; the model runner — ALL MODELS PASS: the simulation's
+assertions, 6 TLC instances with no error, 5 TLC mutations violated as
+expected, 8 Tamarin theories verified (67 lemmas), 2 bounded companions, and
+7 theory mutations falsified as expected. The results files are regenerated
+by the run and differ from the committed ones in their timings only.

@@ -1134,8 +1134,8 @@ pub async fn fresh_attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, servin
 
 impl Session {
     /// A degraded session holds the replicated state but not the authority
-    /// to countersign (design §14.1.2).  Payload flows; trust-bearing
-    /// operations do not.
+    /// to countersign (design §14.1.2).  Payload flows; the subnet-scoped
+    /// transactions the patron countersigns wait for the patron.
     pub fn may_countersign(&self) -> bool {
         self.ack.mode == 0
     }

@@ -5106,13 +5106,13 @@ session establishment; impossible to add afterwards.
 
 **Attachment to a sibling is a degraded state, and the reference client must make
 that explicit to the user.** A sibling is not the patron and cannot countersign
-(§6.4). Payload flows; trust-bearing operations do not, the same shape as the
-secondhand currency attestations of §12.6.5.1.
+(§6.4). Payload flows; the subnet-scoped transactions the patron countersigns
+wait for the patron.
 
 **"Explicit" here means a product obligation, not a wire field**, of the same kind
-as §19.6's disclosure requirements. A user whose trust-bearing operations
-silently stop working will read it as the application being broken, and will not
-know that it resolves on reconnection. The serving sibling determines the mode
+as §19.6's disclosure requirements. A user whose countersigned transactions
+silently stop going through will read it as the application being broken, and will
+not know that it resolves on reconnection. The serving sibling determines the mode
 from its own topology, a client not in its subtree is in failover, and reports
 it in `AttachAck` (`wire-format.md` §8), because a client with stale topology may
 not know which state it is in.

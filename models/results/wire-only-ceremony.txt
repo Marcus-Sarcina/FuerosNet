@@ -6624,7 +6624,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/ceremony.spthy
 
-  processing time: 160.49s
+  processing time: 173.02s
   
   ceremony_is_executable (exists-trace): verified (18 steps)
   honest_ceremony_completes (exists-trace): verified (26 steps)

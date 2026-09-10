@@ -649,7 +649,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/currency.spthy
 
-  processing time: 5.65s
+  processing time: 6.39s
   
   currency_is_usable (exists-trace): verified (8 steps)
   currency_is_usable_honestly (exists-trace): verified (14 steps)

@@ -9286,3 +9286,18 @@ disavowed-leaf residual dissolves, since re-adoption waits on nothing.
 `wire-format.md` §7.1's caller receiving neither answer concludes nothing
 rather than failing closed, and §8's Attach comment says currency decides which
 key a caller addresses.
+
+### 2026-09-10 (the sweep after the currency ruling)
+
+**"Trust-bearing operations" no longer names anything a staple gates, so the
+two places that still used it for what a degraded session withholds now say
+what they mean.** §14.1.2 says payload flows and the subnet-scoped
+transactions the patron countersigns wait for the patron, dropping the
+comparison to secondhand attestations; `light-client-requirements.md` §4's
+degraded-attachment obligation says the same and cites §6.4. "Trust-bearing
+transaction history", the replication class of §3.4, is unchanged: it names
+what siblings hold, not a gate. Nothing else in the five documents carried the
+withdrawn reading; what remained of the vocabulary after the ruling — the
+lifetime derivation, A33, the compelled-provider entry's "thief-issued currency
+dies with the staple lifetime" — already described addressing rather than
+permission.

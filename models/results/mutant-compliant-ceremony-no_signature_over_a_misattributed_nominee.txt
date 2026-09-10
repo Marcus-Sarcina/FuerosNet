@@ -302,7 +302,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-ceremony-no_signature_over_a_misattributed_nominee.spthy
 
-  processing time: 0.44s
+  processing time: 0.52s
   
   no_signature_over_a_misattributed_nominee (all-traces): falsified - found trace (6 steps)
   no_nominee_from_the_nominators_own_neighbourhood (all-traces): analysis incomplete (1 steps)

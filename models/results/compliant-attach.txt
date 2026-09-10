@@ -514,7 +514,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/compliant/attach.spthy
 
-  processing time: 5.78s
+  processing time: 5.64s
   
   service_follows_an_attach (all-traces): verified (15 steps)
   delivery_is_to_the_credential_it_was_queued_for (all-traces): verified (3 steps)

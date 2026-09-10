@@ -28,8 +28,9 @@ WHAT THIS FILE IS
       "an epoch DECLARED expired is not subsequently accepted", never "a
       lifetime elapsed".
 
-  The lemma is about TRUST-BEARING acceptance, which fails closed, not
-  routine payload, which does not (design Section 12.6.5), and it does
+  The lemma is about which key a relying party takes as current -- the one
+  thing a staple decides; nothing the party then does waits on it (design
+  Section 12.6.5) -- and it does
   exercise the "issue fresh, never extend stale" rule (design Section
   12.6.5.1) in the sense that every issuance signs a new attestation rather
   than restamping an old one.
@@ -236,13 +237,14 @@ rule Issue_Currency_Arbitrary:
 --------------------------------------------------------------------------------
   RELYING ON AN ATTESTATION
 --------------------------------------------------------------------------------
-  A relying party performs a TRUST-BEARING operation: it accepts subject $S
-  as current under key sk, having checked a purported attestation from
-  patron $P.  Two things gate the acceptance:
+  A relying party takes subject $S as current under key sk -- the key it
+  will address -- having checked a purported attestation from patron $P.
+  Two things gate that acceptance:
     * the signature verifies (the Eq restriction, as in attach.spthy);
     * the epoch has NOT expired before this acceptance (the NotExpired
-      restriction below) -- this is the fail-CLOSED behaviour for
-      trust-bearing operations (design Section 12.6.5).
+      restriction below).
+  Nothing the party then does waits on it: a staple decides which key to
+  address and gates no operation (design Section 12.6.5).
 */
 
 /*  ACCEPTANCE READS THE TIMESTAMPS FROM THE ATTESTATION, not from a registry.
@@ -291,7 +293,7 @@ restriction OneKeyPerName:
 restriction Equality:
   "All x y #i. Eq(x, y) @ #i ==> x = y"
 
-// The fail-closed rule: an acceptance stamped NotExpiredAt(e) is only
+// The expiry rule: an acceptance stamped NotExpiredAt(e) is only
 // allowed on traces where no Expired(e) happened BEFORE it.  This is how
 // "current vs expired" becomes event order without a clock.
 //
@@ -368,8 +370,8 @@ lemma expiry_is_reachable:
   exists-trace
   "Ex e #x. Expired(e) @ #x"
 
-// THE SECURITY PROPERTY (Stage 1.1).  Every trust-bearing acceptance of a
-// key sk as current rests on a genuine, unexpired patron issuance for that
+// THE SECURITY PROPERTY (Stage 1.1).  Every acceptance of a key sk as
+// current rests on a genuine, unexpired patron issuance for that
 // exact key -- OR the patron's key was compromised.  Because Accept is
 // gated by NotExpiredBeforeAccept, an EXPIRED attestation cannot be
 // accepted; because the signature binds sk, an attestation for one key
