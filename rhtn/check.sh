@@ -15,6 +15,10 @@
 #  niced and capped at 8 jobs.
 # =============================================================================
 set -u
+# A pipeline's status is its last command's, so `cargo ... | tail` would
+# report tail's success whatever cargo did; pipefail makes the step's
+# verdict cargo's own.
+set -o pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail=0
 
