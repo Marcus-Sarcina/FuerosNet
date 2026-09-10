@@ -2101,6 +2101,62 @@
   "interpretation": "§1.2 states preservation for re-serialisation for signature verification; this entry asserts the same for every re-serialisation the implementation performs, on the reading that a key dropped on any other path yields a different object, and a different txid, at the next holder."
  },
  {
+  "id": "DEC-17",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject entries out of canonical order and any header entry beyond alg and kid",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.5",
+    "text": "entries sort by kid, then classical before post-quantum"
+   },
+   {
+    "where": "wire-format.md §3.5",
+    "text": "A nonempty unprotected header is malformed"
+   },
+   {
+    "where": "wire-format.md §3.5",
+    "text": "Embedded COSE_Sign1 objects omit it"
+   }
+  ],
+  "given": "A valid adoption envelope; the same with two entries swapped, with one entry's unprotected header nonempty, and with a third protected header entry; and a verifier response whose embedded signatures carry a kid.",
+  "when": "Each is decoded.",
+  "then": "The valid envelope is accepted; each variant is rejected at the structural layer before any signature is checked, and the response with a kid in an embedded or standalone signature is rejected. An implementation that tolerates a matching kid there fails.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-18",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Count the extension bounds in every nested signed map",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1.3",
+    "text": "Unknown extension keys per map"
+   },
+   {
+    "where": "wire-format.md §1.3",
+    "text": "the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work"
+   }
+  ],
+  "given": "A presence record whose first participant map carries sixteen unknown keys, then seventeen; an endpoint record whose first network point carries an unknown value of 1024 encoded bytes, then 1025.",
+  "when": "Each is decoded.",
+  "then": "Sixteen keys and 1024 bytes are accepted; seventeen keys and 1025 bytes are rejected, the nested map counted on its own. An implementation counting only the outermost map fails.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
   "id": "MET-01",
   "area": "metric",
   "gap": "metric",

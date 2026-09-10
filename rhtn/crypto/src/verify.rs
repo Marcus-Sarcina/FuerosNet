@@ -33,12 +33,27 @@ fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
         Item::Bytes(r) => Some(slice[r.clone()].to_vec()),
         _ => None,
     };
-    Some((p(&a[0])?, p(&a[3])?))
+    let prot = p(&a[0])?;
+    if !headers_of_a_named_signer(&prot, &a[1]) {
+        return None;
+    }
+    Some((prot, p(&a[3])?))
+}
+
+/// The header rule for a signature whose enclosing structure names the
+/// signer (`wire-format.md` §3.5): the protected header carries `alg` and
+/// nothing else — no `kid`, which would be a second copy that could
+/// disagree with the first — and the unprotected header is empty.
+fn headers_of_a_named_signer(prot: &[u8], unprotected: &Item) -> bool {
+    let parsed = parse_all(prot);
+    let protected_ok = matches!(&parsed, Ok(Item::Map(pm)) if pm.len() == 1 && matches!(&pm[0].0, Item::Uint(1)));
+    protected_ok && matches!(unprotected, Item::Map(u) if u.is_empty())
 }
 
 /// Verify an embedded `COSE_Sign` block signed by one known party: the
-/// enclosing structure names the signer, so `kid` is optional and must match
-/// when present; both algorithms must be present and verify.
+/// enclosing structure names the signer, so no entry carries a `kid` and
+/// no header carries anything but `alg`; both algorithms must be present
+/// and verify.
 fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &[u8]) -> Result<(), String> {
     let __cs_item = parse_all(block).map_err(|e| format!("cose: {e}"))?;
     let Item::Array(cs) = &__cs_item else {
@@ -56,15 +71,14 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
         };
         let prot = &block[pr.clone()];
         let sig = &block[sr.clone()];
+        if !headers_of_a_named_signer(prot, &ea[1]) {
+            return Err("an embedded signature carries a header beyond alg".into());
+        }
         let __pm_item = parse_all(prot).map_err(|_| "protected cbor")?;
         let Item::Map(pm) = &__pm_item else {
             return Err("protected not map".into());
         };
         let alg = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(1), Item::Neg(a)) => Some(*a), _ => None }).ok_or("no alg")?;
-        if let Some(kid) = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(4), Item::Bytes(r)) => Some(&prot[r.clone()]), _ => None })
-            && kid != signer.keyhash {
-                return Err("kid names another party".into());
-            }
         let id = signer;
         let tbs = cose::sig_structure_sign(prot, aad_tag, payload);
         let slot = got.entry(signer.keyhash.to_vec()).or_insert([false, false]);
@@ -198,6 +212,9 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<boo
     }
     let prot = match &cs[0] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("protected".into()) };
     let sig = match &cs[3] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("sig".into()) };
+    if !headers_of_a_named_signer(&prot, &cs[1]) {
+        return Err("a standalone signature carries a header beyond alg".into());
+    }
     let payload = map_without_key(raw, slot).ok_or("payload")?;
     Ok(id.verify_ed(&sig, &cose::sig_structure_sign1(&prot, tag, &payload)))
 }

@@ -435,9 +435,55 @@ pub fn extension_bounds(b: &[u8], map_at: usize, known: impl Fn(u64) -> bool) ->
     Ok(())
 }
 
+/// Extension bounds for the value at `key` of the map at `map_at`: the map
+/// itself, or every map in an array there.  §1.3 counts per map, so a
+/// nested map is bounded on its own.
+fn nested_extension_bounds(b: &[u8], map_at: usize, key: u64, known: &dyn Fn(u64) -> bool) -> Result<(), Error> {
+    let Some(r) = value_slice_at(b, map_at, key) else { return Ok(()) };
+    let p = Parser { b };
+    match p.item(r.start)?.0 {
+        Item::Map(_) => extension_bounds(b, r.start, known),
+        Item::Array(_) => {
+            for er in array_item_ranges(b, r.start).ok_or(Error("nested array walk"))? {
+                if matches!(p.item(er.start)?.0, Item::Map(_)) {
+                    extension_bounds(b, er.start, known)?;
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The extension bounds a signed record carries (§1.3, per map): the
+/// record's own map, and the maps nested in it, each against the keys its
+/// schema names.
+fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
+    if !matches!(item, Item::Map(_)) {
+        return Ok(());
+    }
+    let top: Option<u64> = match kind {
+        "CurrencyAttestation" => Some(7),
+        "AnchorEntry" | "SubtreeAck" | "PrekeyBundle" | "AbuseReport" | "Witness" => Some(5),
+        "EndpointRecord" => Some(4),
+        "CatalogEntry" => Some(9),
+        "KeyGrant" | "SignedLocator" | "LateResponse" | "Locator" | "NetworkPoint" => Some(3),
+        "VerifierResponse" => Some(10),
+        _ => None,
+    };
+    let Some(top) = top else { return Ok(()) };
+    extension_bounds(b, 0, |k| (1..=top).contains(&k))?;
+    match kind {
+        // network points, and a locator, are maps of their own
+        "AnchorEntry" | "EndpointRecord" | "SignedLocator" => nested_extension_bounds(b, 0, 2, &|k| (1..=3).contains(&k)),
+        _ => Ok(()),
+    }
+}
+
 /// Per-kind validation for the signed records and transaction bodies the
 /// corpus names.  `b` holds the bytes the item's ranges index.
 pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
+    record_extension_bounds(b, kind, item)?;
     match kind {
         "VerifierResponse" => {
             let Item::Map(m) = item else { return Err(Error("not map")) };
@@ -617,6 +663,26 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
     let is_adoption = matches!(f3, Some(Item::Map(_)));
     let is_disavowal = matches!(f3, Some(Item::Uint(_))) && map_get(m, 4).is_some();
     let is_peering = is_adoption && matches!(map_get(m, 4), Some(Item::Map(_)));
+    // the maps nested in a body, each bounded on its own (§1.3): a peering's
+    // second network point, an adoption's Recovery block and the responses
+    // in it and its Transfer, a presence record's participants, witnesses
+    // and responses
+    let responses = |k: u64| (1..=10).contains(&k);
+    if is_peering {
+        nested_extension_bounds(b, 0, 4, &|k| (1..=3).contains(&k))?;
+    }
+    if is_adoption && !is_peering {
+        nested_extension_bounds(b, 0, 6, &|k| (1..=3).contains(&k))?;
+        if let Some(r6) = value_slice(b, 6) {
+            nested_extension_bounds(b, r6.start, 2, &responses)?;
+        }
+        nested_extension_bounds(b, 0, 9, &|k| (1..=2).contains(&k))?;
+    }
+    if is_presence {
+        nested_extension_bounds(b, 0, 3, &|k| k == 1)?;
+        nested_extension_bounds(b, 0, 4, &|k| (1..=5).contains(&k))?;
+        nested_extension_bounds(b, 0, 5, &responses)?;
+    }
     if is_presence {
         if map_get(m, 7).is_some() {
             return Err(Error("retired body key 7"));

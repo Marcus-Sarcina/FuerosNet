@@ -25,17 +25,19 @@ pub fn identities() -> Vec<Identity> {
     NAMES.iter().map(|n| test_identity(n).public).collect()
 }
 
-/// The reply family a corpus reply entry belongs to, by the fixture's id.
-fn reply_family(id: &str) -> Family {
-    match id {
-        "P-reply-01" | "P-reply-02" | "P-reply-03" => Family::ResolveReply,
-        "P-reply-04" => Family::ArchiveReply,
-        "P-reply-05" | "P-reply-06" => Family::PrekeyReply,
-        "P-reply-07" => Family::CatalogReply,
-        "P-reply-08" | "P-reply-09" => Family::ResourceResponse,
-        "P-reply-10" | "P-reply-11" => Family::CurrencyReply,
-        "P-reply-12" => Family::ResourceRegistrationReply,
-        _ => Family::ResolveReply,
+/// The reply family a corpus reply entry belongs to, as the corpus states
+/// it on the entry.
+fn reply_family(e: &serde_json::Value) -> Family {
+    let name = e["family"].as_str().unwrap_or_else(|| panic!("{}: no reply family stated", e["id"]));
+    match name {
+        "ResolveReply" => Family::ResolveReply,
+        "ArchiveReply" => Family::ArchiveReply,
+        "PrekeyReply" => Family::PrekeyReply,
+        "CatalogReply" => Family::CatalogReply,
+        "ResourceResponse" => Family::ResourceResponse,
+        "CurrencyReply" => Family::CurrencyReply,
+        "ResourceRegistrationReply" => Family::ResourceRegistrationReply,
+        other => panic!("{}: unknown reply family {other}", e["id"]),
     }
 }
 
@@ -70,6 +72,9 @@ fn every_bytes_entry_agrees_with_its_expectation() {
         let outcome = expect["outcome"].as_str().unwrap();
         let kind = expect["kind"].as_str().unwrap_or("");
         let layer = expect["layer"].as_str().unwrap_or("");
+        // a shape fixture the corpus marks as carrying a stale signature is
+        // checked structurally; every other signed fixture verifies
+        let stale = expect["reason"].as_str().unwrap_or("").contains("signature stale");
         let raw = hex::decode(e["hex"].as_str().unwrap()).unwrap();
 
         let verdict: Result<(), String> = if kind == "frame" {
@@ -81,7 +86,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 _ => Err("unhandled".into()),
             }
         } else if kind == "reply" {
-            let fam = reply_family(id);
+            let fam = reply_family(e);
             let r = parse_all(&raw).map_err(|e| e.0).and_then(|_| schema::check_unsigned(fam, &raw, 0).map_err(|e| e.0));
             match (outcome, r) {
                 ("accept", Ok(())) => Ok(()),
@@ -99,7 +104,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 ("accept", Ok(item)) => match kind {
                     "envelope" => verify::envelope(&ids, &raw).map(|_| ()),
                     "presentation" => verify::presentation(&ids, &raw),
-                    k if verified_record_kind(k) => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
+                    k if verified_record_kind(k) && !stale => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
                         (Err(e2), _) => Err(e2.0.into()),
                         (Ok(()), Ok(true)) => Ok(()),
                         (Ok(()), Ok(false)) => Err("record signature fails".into()),
@@ -109,7 +114,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 },
                 ("reject", Ok(item)) => {
                     let schema_ok = schema::check_kind(&raw, kind, &item).is_ok();
-                    let sig_fails = verified_record_kind(kind) && matches!(verify::record(&ids, kind, &raw), Ok(false));
+                    let sig_fails = verified_record_kind(kind) && !stale && matches!(verify::record(&ids, kind, &raw), Ok(false));
                     if !schema_ok || sig_fails {
                         Ok(())
                     } else if implemented_kind(kind) || verified_record_kind(kind) {
@@ -173,11 +178,11 @@ fn every_bytes_entry_agrees_with_its_expectation() {
     assert!(pass >= 149, "expected at least the runner's 149 agreements, got {pass}");
 }
 
-/// Standalone records whose fixtures carry live signatures.  The
-/// EndpointRecord and SignedLocator shape fixtures say their signatures are
-/// stale by design, so those kinds are checked structurally here.
+/// Standalone records whose fixtures carry live signatures, verified as
+/// such; a shape fixture that says its signature is stale by design is the
+/// one exception, taken per fixture.
 fn verified_record_kind(kind: &str) -> bool {
-    matches!(kind, "CurrencyAttestation" | "CatalogEntry" | "AbuseReport" | "AnchorEntry" | "SubtreeAck" | "PrekeyBundle")
+    matches!(kind, "CurrencyAttestation" | "CatalogEntry" | "AbuseReport" | "AnchorEntry" | "SubtreeAck" | "PrekeyBundle" | "EndpointRecord" | "SignedLocator")
 }
 
 fn implemented_kind(kind: &str) -> bool {

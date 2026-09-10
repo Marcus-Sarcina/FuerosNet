@@ -6,7 +6,7 @@ use rhtn_archive::topology::{Supersession, Table};
 use rhtn_archive::tx::*;
 use rhtn_archive::{Keyhash, genesis};
 use rhtn_crypto::identity::testkit::test_identity;
-use rhtn_transport::queue::{DirStore, Queued, Refusal};
+use rhtn_transport::queue::{Queued, Refusal};
 use rhtn_transport::session::*;
 use rhtn_transport::tls::{self, Pins};
 use std::collections::BTreeMap;
@@ -134,57 +134,6 @@ async fn delete_on_delivery_leaves_nothing_for_a_second_attach() {
     let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr).await;
     assert_eq!(s2.ack.queued, 0);
     assert!(drain(&mut s2).await.is_empty());
-}
-
-// acceptance: QUE-04
-#[tokio::test]
-async fn no_crash_recovery_copy_outlives_a_delivery() {
-    let dir = std::env::temp_dir().join(format!("rhtn-queue-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let store = Arc::new(DirStore::new(&dir));
-    let mut cfg = node_cfg("alice");
-    cfg.queue = store.clone();
-    let (node, addr, ep) = spawn_node(cfg);
-    let sent = messages(3, "q4");
-    for m in &sent {
-        node.enqueue(kh("carol"), m.clone()).unwrap();
-    }
-    assert_eq!(store.all_files().len(), 3, "persisted while waiting");
-    let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
-    assert_eq!(drain(&mut s).await.len(), 3);
-    s.conn.close(0u32.into(), b"");
-    drop(s);
-    // the process dies without warning: the node and its endpoint go away,
-    // and a new node starts from whatever the directory holds
-    ep.close(0u32.into(), b"killed");
-    drop(node);
-    let mut cfg2 = node_cfg("alice");
-    cfg2.queue = Arc::new(DirStore::new(&dir));
-    let (node2, addr2, _ep2) = spawn_node(cfg2);
-    let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr2).await;
-    assert_eq!(s2.ack.queued, 0);
-    assert!(drain(&mut s2).await.is_empty());
-    assert!(node2.queue_records(&kh("carol")).is_empty());
-    let mut leftover = Vec::new();
-    for entry in walkdir(&dir) {
-        leftover.push(entry);
-    }
-    assert!(leftover.is_empty(), "none of the ciphertexts is present after the restart: {leftover:?}");
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let mut out = Vec::new();
-    if let Ok(rd) = std::fs::read_dir(dir) {
-        for e in rd.flatten() {
-            if e.path().is_dir() {
-                out.extend(walkdir(&e.path()));
-            } else {
-                out.push(e.path());
-            }
-        }
-    }
-    out
 }
 
 // acceptance: QUE-05

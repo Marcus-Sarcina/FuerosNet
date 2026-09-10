@@ -36,6 +36,10 @@ fn by_keyhash<'a>(s: &'a [SigningIdentity], kh: &[u8]) -> &'a SigningIdentity {
 
 /// `{1: 1, 2: type, 3: body, 4: [h'', {}, null, [entries]]}`.
 fn build_envelope(tx_type: u64, body: &[u8], signers: &[&SigningIdentity]) -> Vec<u8> {
+    // entries in the canonical order (`wire-format.md` §3.5): by kid, each
+    // signer's classical entry before its post-quantum one
+    let mut signers: Vec<&SigningIdentity> = signers.to_vec();
+    signers.sort_by_key(|s| s.public.keyhash);
     let mut out = Vec::new();
     emit_map_head(&mut out, 4);
     emit_uint(&mut out, 1);
@@ -65,7 +69,14 @@ fn kh_entry(out: &mut Vec<u8>, key: u64, kh: &[u8; 32]) {
 /// over the query id, the verifier's signature over the map minus field 9,
 /// classical or hybrid as the enclosing object requires.
 fn build_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32], prior: Option<&[u8; 32]>, hybrid: bool) -> Vec<u8> {
-    let consent = subject.sign1_ed(aad::CONSENT, qid);
+    build_response_with(verifier, subject, qid, prior, hybrid, false)
+}
+
+/// A verifier response; with `named`, its embedded signatures carry a
+/// `kid` the enclosing structure already supplies, which `wire-format.md`
+/// §3.5 makes malformed.
+fn build_response_with(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32], prior: Option<&[u8; 32]>, hybrid: bool, named: bool) -> Vec<u8> {
+    let consent = if named { subject.sign1_ed(aad::CONSENT, qid) } else { subject.sign1_ed_unnamed(aad::CONSENT, qid) };
     let mut payload = Vec::new();
     emit_map_head(&mut payload, if prior.is_some() { 8 } else { 7 });
     kh_entry(&mut payload, 1, &verifier.public.keyhash);
@@ -89,10 +100,12 @@ fn build_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[
         emit_map_head(&mut s, 0);
         emit_null(&mut s);
         emit_array_head(&mut s, 2);
-        s.extend_from_slice(&verifier.sign_entries(aad::VERIFIER, &payload));
+        s.extend_from_slice(&if named { verifier.sign_entries(aad::VERIFIER, &payload) } else { verifier.sign_entries_unnamed(aad::VERIFIER, &payload) });
         s
-    } else {
+    } else if named {
         verifier.sign1_ed(aad::VERIFIER, &payload)
+    } else {
+        verifier.sign1_ed_unnamed(aad::VERIFIER, &payload)
     };
     // insert field 9 before field 10, bumping the head count
     let r10 = value_slice(&payload, 10).unwrap();
@@ -264,4 +277,66 @@ fn dec_06_objects_exactly_at_a_ceiling_no_fixture_reaches_are_accepted() {
     }
     let body33 = replace_value(&body, 0, 6, &replace_value(&body[r6.clone()], 0, 2, &arr33));
     assert!(rhtn_codec::schema::check_body(&body33, &parse_all(&body33).unwrap()).is_err(), "33 recovery responses");
+}
+
+/// The envelope's signature entries in `order`, by index.
+fn with_entries_in_order(env: &[u8], order: &[usize]) -> Vec<u8> {
+    let r4 = value_slice(env, 4).unwrap();
+    let outer = array_item_ranges(env, r4.start).unwrap();
+    let ents = array_item_ranges(env, outer[3].start).unwrap();
+    let mut out = env[..ents[0].start].to_vec();
+    for &k in order {
+        out.extend_from_slice(&env[ents[k].clone()]);
+    }
+    out.extend_from_slice(&env[ents.last().unwrap().end..]);
+    out
+}
+
+/// Entry `i` with part `part` (0 protected, 1 unprotected, 2 signature)
+/// replaced by `bytes`.
+fn with_entry_part(env: &[u8], i: usize, part: usize, bytes: &[u8]) -> Vec<u8> {
+    let r4 = value_slice(env, 4).unwrap();
+    let outer = array_item_ranges(env, r4.start).unwrap();
+    let ents = array_item_ranges(env, outer[3].start).unwrap();
+    let parts = array_item_ranges(env, ents[i].start).unwrap();
+    let mut out = env[..parts[part].start].to_vec();
+    out.extend_from_slice(bytes);
+    out.extend_from_slice(&env[parts[part].end..]);
+    out
+}
+
+// acceptance: DEC-17
+#[test]
+fn dec_17_entries_out_of_canonical_order_or_with_extra_headers_are_rejected() {
+    let s = signers();
+    let ids = publics(&s);
+    let env = fixture("P-adopt-min").bytes.clone();
+    assert!(envelope::parse(&env).is_ok());
+    // post-quantum before classical within one signer
+    let swapped = with_entries_in_order(&env, &[1, 0, 2, 3]);
+    assert!(envelope::parse(&swapped).unwrap_err().0.contains("canonical order"));
+    // the second signer's group before the first's
+    assert!(envelope::parse(&with_entries_in_order(&env, &[2, 3, 0, 1])).is_err());
+    // one entry twice, and one missing: a duplicate at one place in the order
+    assert!(envelope::parse(&with_entries_in_order(&env, &[0, 0, 2, 3])).is_err());
+    // a nonempty unprotected header is malformed, not ignored
+    let unprot = with_entry_part(&env, 0, 1, &[0xa1, 0x05, 0x00]);
+    assert!(envelope::parse(&unprot).unwrap_err().0.contains("unprotected"));
+    // a third protected header entry beyond alg and kid
+    let parsed = envelope::parse(&env).unwrap();
+    let mut prot = env[parsed.entries[0].protected.clone()].to_vec();
+    prot[0] = 0xa3;
+    prot.extend_from_slice(&[0x05, 0x00]);
+    let mut wrapped = Vec::new();
+    emit_bstr(&mut wrapped, &prot);
+    let extra = with_entry_part(&env, 0, 0, &wrapped);
+    assert!(envelope::parse(&extra).unwrap_err().0.contains("protected header"));
+    // an embedded signature carrying a kid the enclosing structure already
+    // supplies, in the verifier block and in the consent
+    let (v, sub) = (by_name(&s, "alice"), by_name(&s, "bob"));
+    let qid = [7u8; 32];
+    assert!(verify::response(&ids, &build_response(v, sub, &qid, None, true), true).is_ok());
+    assert!(verify::response(&ids, &build_response(v, sub, &qid, None, false), false).is_ok());
+    assert!(verify::response(&ids, &build_response_with(v, sub, &qid, None, true, true), true).is_err(), "a kid in an embedded signature");
+    assert!(verify::response(&ids, &build_response_with(v, sub, &qid, None, false, true), false).is_err(), "a kid in a standalone consent");
 }

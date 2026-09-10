@@ -8387,3 +8387,42 @@ and retest":
 Four entries added, 262 in all, 169 of 260 implemented, 0 flags; the gate
 passes. The other three items — the queue's move, the decoder's tolerances,
 the corpus's stale fixtures and reply families — follow.
+
+**The other three open items built (2026-09-10).**
+
+- **The decoder's tolerances.** An envelope's signature entries must sit in
+  the canonical order, by kid and classical before post-quantum, a
+  nonempty unprotected header is malformed, and a protected header carries
+  alg and kid and nothing else; an embedded or standalone signature, whose
+  enclosing structure names the signer, carries alg alone, so a kid there —
+  matching or not — is rejected where it used to be tolerated. The
+  extension bounds are counted in every nested signed map — a peering's
+  network points, an adoption's Recovery block and its responses and
+  Transfer, a presence record's participants, witnesses and responses, and
+  the network points and locator inside a standalone record — each on its
+  own, as `wire-format.md` §1.3 counts per map. DEC-17 and DEC-18. The
+  signed-decoder tests' own response builder emitted kids in embedded
+  signatures, which the tolerance had hidden; it now builds as the archive's
+  builders do, and the kid-bearing variant is the negative case.
+- **The queue's move.** The directory store a restarting node keeps is
+  `rhtn-node`'s (`queue.rs`), with QUE-04 beside it; the store contract, the
+  memory store and the supersession discipline stay in the transport, whose
+  session layer delivers from them. The plan's milestone 3 note says so.
+- **The corpus.** Every reply entry now states its family on the entry, and
+  the two harnesses read it there rather than inferring it from the id.
+  EndpointRecord and SignedLocator fixtures are signature-verified like every
+  other signed record; the one shape fixture the corpus marks "signature
+  stale by design" is checked structurally, per fixture rather than per
+  kind. The vectors were regenerated with the spec-change acknowledgement.
+  What the acknowledgement covers: the documents changed since the pins
+  were last written on 2026-09-08, and the diff to `wire-format.md` was read
+  in full — a prose correction naming field 4 rather than 5 for the
+  resolution failure codes, the ≥ sign, "sends one", the currency comments
+  of §7.1 and §8 rewritten today, and the successor-continuity note of
+  2026-09-08 — none of which changes an encoding the generator constructs;
+  `network-design.md`'s changes are today's currency ruling and the
+  down-line reframing, which encode nothing. The regenerated set differs
+  from the committed one in the twelve `family` fields and the pin lines
+  only; the verifier reports ALL CHECKS PASS over it.
+
+Two entries added, 264 in all, 171 of 262 implemented, 0 flags.

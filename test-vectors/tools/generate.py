@@ -2639,7 +2639,8 @@ for fid, by, kind in [
 for i, (cap, by) in enumerate(_msg_pairs):
     reg(f'P-frame-{i+1:02d}', 'bytes', ACC('frame'), by, note=cap)
 for i, (cap, by) in enumerate(_reply_pairs):
-    reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap)
+    # the reply family, so a consumer need not infer it from the fixture id
+    reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap, family=cap.split(' ')[0])
 for i, (cap, by) in enumerate(_e2e_pairs):
     reg(f'P-e2e-{i+1:02d}', 'bytes', ACC('e2e-payload'), by, note=cap)
 for fid, by, why in [

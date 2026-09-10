@@ -124,6 +124,10 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
             return Err(Error("entry protected/signature not bstr"));
         };
         let _ = parts;
+        // a nonempty unprotected header is malformed, not ignored (§3.5)
+        if !matches!(&ea[1], Item::Map(u) if u.is_empty()) {
+            return Err(Error("unprotected header not empty"));
+        }
         let prot = &b[pr.clone()];
          let Item::Map(ref pm) = parse_all(prot)? else { return Err(Error("protected not map")) };
         let alg = pm
@@ -143,7 +147,19 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
         if !signers.contains(&kid) {
             return Err(Error("kid outside body signer set"));
         }
+        // nothing else appears in either header (§3.5): the protected
+        // header is covered by the signature, so an unrecognised entry there
+        // is a malformed object, not a tolerable extension
+        if pm.len() != 2 {
+            return Err(Error("protected header carries more than alg and kid"));
+        }
         entries.push(Entry { protected: pr.clone(), kid, alg, signature: sr.clone() });
+    }
+    // the canonical order (§3.5): by kid, then classical before post-quantum;
+    // two entries at one place are a duplicate
+    let rank = |e: &Entry| (e.kid.clone(), if e.alg == crate::cose::ALG_EDDSA { 0u8 } else { 1u8 });
+    if entries.windows(2).any(|w| rank(&w[0]) >= rank(&w[1])) {
+        return Err(Error("entries out of canonical order"));
     }
     Ok(Envelope { version, tx_type, body, body_item, signers, entries })
 }

@@ -30,6 +30,8 @@ pub struct Fixture {
     pub kind: String,
     pub outcome: String,
     pub layer: String,
+    /// The reply family a reply entry belongs to, as the corpus states it.
+    pub family: String,
     pub bytes: Vec<u8>,
 }
 
@@ -44,6 +46,7 @@ pub fn fixtures() -> Vec<Fixture> {
             kind: e["expect"]["kind"].as_str().unwrap_or("").to_string(),
             outcome: e["expect"]["outcome"].as_str().unwrap_or("").to_string(),
             layer: e["expect"]["layer"].as_str().unwrap_or("").to_string(),
+            family: e["family"].as_str().unwrap_or("").to_string(),
             bytes: hex::decode(e["hex"].as_str().unwrap()).unwrap(),
         })
         .collect()
@@ -53,18 +56,24 @@ pub fn fixture(id: &str) -> Fixture {
     fixtures().into_iter().find(|f| f.id == id).unwrap_or_else(|| panic!("no fixture {id}"))
 }
 
-/// The reply family a corpus reply entry belongs to, by the fixture's id.
+/// The reply family a corpus reply entry belongs to, as the corpus states
+/// it on the entry.
 pub fn reply_family(id: &str) -> Family {
-    match id {
-        "P-reply-01" | "P-reply-02" | "P-reply-03" => Family::ResolveReply,
-        "P-reply-04" => Family::ArchiveReply,
-        "P-reply-05" | "P-reply-06" => Family::PrekeyReply,
-        "P-reply-07" => Family::CatalogReply,
-        "P-reply-08" | "P-reply-09" => Family::ResourceResponse,
-        "P-reply-10" | "P-reply-11" => Family::CurrencyReply,
-        "P-reply-12" => Family::ResourceRegistrationReply,
-        _ => Family::ResolveReply,
-    }
+    family_by_name(&fixture(id).family).unwrap_or_else(|| panic!("{id}: no reply family stated"))
+}
+
+/// A reply family by the name the wire gives it.
+pub fn family_by_name(name: &str) -> Option<Family> {
+    Some(match name {
+        "ResolveReply" => Family::ResolveReply,
+        "ArchiveReply" => Family::ArchiveReply,
+        "PrekeyReply" => Family::PrekeyReply,
+        "CatalogReply" => Family::CatalogReply,
+        "ResourceResponse" => Family::ResourceResponse,
+        "CurrencyReply" => Family::CurrencyReply,
+        "ResourceRegistrationReply" => Family::ResourceRegistrationReply,
+        _ => return None,
+    })
 }
 
 pub fn unsigned_family(kind: &str) -> Option<Family> {

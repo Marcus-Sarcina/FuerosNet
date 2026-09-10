@@ -318,3 +318,37 @@ fn dec_16_every_accepted_object_round_trips_byte_for_byte() {
     }
     assert!(n >= 90, "{n} accepted objects round-tripped");
 }
+
+// acceptance: DEC-18
+#[test]
+fn dec_18_extension_bounds_hold_in_every_nested_signed_map() {
+    let ids = identities();
+    // a presence record's first participant map: sixteen unknown keys pass,
+    // seventeen do not
+    let body = body_of(&fixture("P-alice-c1-record").bytes);
+    let r3 = value_slice(&body, 3).unwrap();
+    let first = array_item_ranges(&body, r3.start).unwrap()[0].start;
+    let mut sixteen = Vec::new();
+    for k in 100..116u64 {
+        sixteen.extend(ext_entry(k, &[0x01]));
+    }
+    assert!(decode(&ids, "", "body", &append_entries(&body, first, &sixteen, 16)).is_ok());
+    let mut seventeen = sixteen.clone();
+    seventeen.extend(ext_entry(116, &[0x01]));
+    assert!(decode(&ids, "", "body", &append_entries(&body, first, &seventeen, 17)).unwrap_err().contains("16 extension keys"));
+    // a network point inside an endpoint record: a value of 1024 encoded
+    // bytes passes and 1025 does not, the slice counting head and all
+    let er = fixture("P-endpointrecord").bytes.clone();
+    let r2 = value_slice(&er, 2).unwrap();
+    let point = array_item_ranges(&er, r2.start).unwrap()[0].start;
+    // the entry helper wraps its payload as a bstr: a 1021-byte payload is
+    // a value of 1024 encoded bytes, its three-byte head included
+    assert_eq!(decode(&ids, "", "EndpointRecord", &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1021]), 1)), Ok(()));
+    assert!(decode(&ids, "", "EndpointRecord", &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1022]), 1)).unwrap_err().contains("over 1024"));
+    // and the record's own map is bounded as before
+    let mut many = Vec::new();
+    for k in 100..117u64 {
+        many.extend(ext_entry(k, &[0x01]));
+    }
+    assert!(decode(&ids, "", "EndpointRecord", &append_entries(&er, 0, &many, 17)).is_err());
+}
