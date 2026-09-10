@@ -201,7 +201,7 @@ fn equal_seqnos_with_different_contents_retire_the_pair() {
 fn memo(patron: &str, anchor: &str, slot: u64, timestamp: u64, occupant: Option<&str>) -> Memo {
     Memo {
         patron: kh(patron),
-        position: rhtn_archive::tx::Locator { anchor: kh(anchor), path: Path::pack(&[0]), nibbles: 1, seqno: Seqno { series: 1, counter: 0 } },
+        position: rhtn_archive::tx::Locator { anchor: kh(anchor), path: pack_path(&[0]), nibbles: 1, seqno: Seqno { series: 1, counter: 0 } },
         slot,
         timestamp,
         occupant: occupant.map(kh),

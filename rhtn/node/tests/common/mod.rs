@@ -206,17 +206,14 @@ pub fn table_with(me: Keyhash, w: &World, records: &[&Record], infra: &[&str]) -
 
 /// A node view for `name` with the given position and table.
 pub fn view(name: &str, table: Table, anchor: &str, path: &[u8]) -> NodeView {
-    let mut v = NodeView::new(Arc::new(id(name)), Locator { anchor: kh(anchor), path: Path::pack(path), nibbles: path.len() as u64, seqno: Seqno { series: 1, counter: 0 } });
+    let mut v = NodeView::new(Arc::new(id(name)), Locator { anchor: kh(anchor), path: pack_path(path), nibbles: path.len() as u64, seqno: Seqno { series: 1, counter: 0 } });
     v.table = table;
     v
 }
 
 /// Nibble packing, as `wire-format.md` §2.1 has it.
-pub struct Path;
-impl Path {
-    pub fn pack(ix: &[u8]) -> Vec<u8> {
-        rhtn_node::resolution::Path::from_indices(ix).bytes
-    }
+pub fn pack_path(ix: &[u8]) -> Vec<u8> {
+    rhtn_node::resolution::Path::from_indices(ix).bytes
 }
 
 pub fn point(last: u8, port: u16) -> NetworkPoint {

@@ -10,6 +10,8 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-transport = { path = "../transport" }
 sha2 = { workspace = true }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 
 [dev-dependencies]
 hex = { workspace = true }

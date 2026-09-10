@@ -882,3 +882,56 @@ impl Resolution {
         s
     }
 }
+
+// ---------------------------------------------------------------- contact
+
+/// Why a contact attempt at one endpoint failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EndpointFailure {
+    pub endpoint: NetworkPoint,
+    pub why: String,
+}
+
+/// The outcome of contacting a party a resolution named.
+#[derive(Debug)]
+pub enum Contact {
+    /// The handshake completed against the key this caller intended to reach.
+    Reached(quinn::Connection),
+    /// Every listed endpoint failed.  This is a failed contact with the
+    /// party the caller meant, never a contact with somebody else: the
+    /// requester authenticates the subject it intended to reach, so a wrong
+    /// address produces a handshake failure rather than a silent
+    /// misdirection (`wire-format.md` §7.7.3, §9.1).
+    Failed { target: Keyhash, attempts: Vec<EndpointFailure> },
+}
+
+/// Try a published endpoint list as alternatives, in the publisher's
+/// preference order, and stop at the first that authenticates as `target`.
+/// An implementation MUST try others on failure, or a single unreachable
+/// first entry becomes a permanent outage for that peer
+/// (`wire-format.md` §7.7.3).  How long to wait is local policy.
+pub async fn contact(
+    endpoints: &[NetworkPoint],
+    ep: &quinn::Endpoint,
+    me: &rhtn_crypto::SigningIdentity,
+    pins: &rhtn_transport::tls::Pins,
+    target: &Keyhash,
+    per_endpoint: std::time::Duration,
+) -> Contact {
+    let mut attempts = Vec::new();
+    for e in endpoints {
+        let connecting = match rhtn_transport::tls::dial(ep, me, pins, target, e.socket()) {
+            Ok(c) => c,
+            Err(err) => {
+                attempts.push(EndpointFailure { endpoint: e.clone(), why: format!("{err:?}") });
+                continue;
+            }
+        };
+        match tokio::time::timeout(per_endpoint, connecting).await {
+            Ok(Ok(conn)) => return Contact::Reached(conn),
+            Ok(Err(err)) => attempts.push(EndpointFailure { endpoint: e.clone(), why: format!("{err}") }),
+            Err(_) => attempts.push(EndpointFailure { endpoint: e.clone(), why: "no answer".into() }),
+        }
+    }
+    Contact::Failed { target: *target, attempts }
+}
