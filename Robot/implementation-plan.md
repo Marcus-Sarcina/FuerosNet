@@ -176,6 +176,13 @@ criterion that is a tool's verdict.
    rate-limited per requester; the gate lints every crate.
 5. **Reference metric** (design §24 step 5). Exit: the four regression cases and
    the fixed-graph conformance test pass.
+   Done: `rhtn-policy` carries the reference flow metric over the graph an
+   evaluator builds, the policy interface, and the conformance test; six
+   regression cases are carried from the simulation with the fixed-graph
+   fixture, and the simulation's committed E2 and E3 figures are reproduced
+   by the test itself; `rhtn-node` consults its policy through one call and
+   nowhere on its decision path. REP-07 is closed here. 165 of 256 entries
+   pass.
 
 **That is the initial implementation**: a headless node and client that adopt,
 resolve, replicate and peer. `Robot/review-plan.md` Stage 2 becomes meaningful here,

@@ -8086,3 +8086,94 @@ detector and the currency ladder's `unreachable` set are joined by hand
 rather than by the transport; REP-07 waits on milestone 5; the memo table
 is kept unconditionally; a cycle-check memo about an emptied slot is not
 treated as confirmed.
+
+**Milestone 5 closed (2026-09-10).** One crate is new. `rhtn-policy` carries
+the reference flow metric over the graph an evaluator builds, the policy
+interface a node consults, and the conformance test that reports what a
+substitute policy gives up. 9 entries pass: MET-01 to MET-08, and REP-07,
+deferred from milestone 4. 165 of 256 in all, in 13 metric tests, 1 archive
+test, 1 node metric test, and REP-07 among the peering tests, which are 13
+now.
+
+**The exit criterion is met**, and by more than it asks. The plan names four
+regression cases; six are carried from `models/simulation/flow_metric.py`
+and each fails when its rule is broken: λ < 1/f necessary and not
+sufficient, at the file's own numbers (branching 10 converges to 20,
+branching 11 passes 1,000); setwise conservation per computation and not
+per lifetime (8 + 8 separately against a cut of 8, 8 together); parallel
+edges collapsing to one pair (a pair joined by an adoption and two meetings
+carries 10, and the summed graph 30); visibility not composing (a peering
+edge one hop past a visible one invisible at reach 0 to 3, standing 0);
+hops in the collapsed graph being the landscape distance (every placed node
+in the E3 graph, 2d − 1 split hops for distance d); and the three-pass
+allocation independent of construction order, in the simulation's own three
+cases. The fixed-graph fixture ranks five candidates by flow, then hops,
+then consideration order, against a cut of 4 that admits four, and reports
+each candidate's flow. The simulation's committed figures are reproduced
+exactly and read back from `models/results/flow_metric.txt` by the test
+itself: E2's best individual score 10 at 7, 40 and 341 identities; E3's
+independent sums 32, 64, 104 and 168 against a joint of 4, 8, 8 and 8 at a
+cut of 8. `models/simulation/results.txt` was stale — 128 and 256 at 16
+and 32, from the clique construction the region lost on 2026-09-09 — and is
+regenerated; it is identical to the gate's file now.
+
+Readings the milestone's code takes, for the author to confirm or reverse:
+
+- **The policy interface is one call.** A policy is handed the evidence the
+  node holds and a candidate set, and returns each candidate's standing, the
+  admitted set and the joint, from one computation. Nothing on the node's
+  decision path consults it: MET-04 runs the same pushes through a node
+  under the reference metric and under a policy that scores every known
+  node alike, and shows the same decisions, the same forwarded frames and
+  the same stored objects, with only the standings differing.
+- **A node's evidence is its table and its store.** Adoption pairs come from
+  the table's open bindings; acquaintance pairs from the presence records
+  kept as evidence and the peering records stored. A relay keeps no
+  presence record it did not dereference itself, so a running node's
+  acquaintance graph is its peerings plus what it evaluated — design
+  §16.2.1's floor, "what §15.1 stores and §16.3 makes visible".
+- **Edge capacity is uniform at 10 and node throughput is the simulation's
+  schedule**: unthrottled for the observer and its whole horizon, then 16,
+  8, 4, 2, 1 by landscape distance. Both are the reference policy's numbers
+  and neither is the design's (design §16.2, §16.4). Every pair carries the
+  same edge whatever relationship produced it, which is design §16.2.1's
+  "no ratio between the two kinds".
+- **Standing is a float at the interface** so that a decay policy's λ^d and
+  the flow metric's integers share one type; the reference metric's own
+  calls are integer, and the tests on it compare integers.
+- **The conformance verdict is about growth for a policy that is not
+  flow-based.** A decay policy's joint standing is a sum of λ^d and compares
+  with nothing in flow units, so the report says it grows with population.
+  For the reference the report states the region's cut and that neither the
+  best individual standing nor the joint exceeded it at any size, and that
+  the joint stopped growing. The branching section grows two regions to
+  depth 3 at f = 10 and classifies by the ratio of successive increments:
+  0.95 for the hierarchy alone, 1.045 then 1.14 with an acquaintance degree
+  growing with depth — the same verdicts as the 200-level arithmetic, which
+  the test also carries.
+- **The conformance test's honest tree is not the simulation's tree.** The
+  simulation draws from Python's generator; the crate draws from its own,
+  seeded the same way. No figure above depends on the honest tree's shape,
+  only on a node existing at the horizon's edge and on the first child
+  being the peer, which both have.
+- **`rhtn-policy` builds at opt-level 2 in dev profiles** (an override in
+  the workspace manifest): the conformance report scores regions of about
+  1,900 identities with one max-flow each, which an unoptimised build made
+  a matter of minutes.
+- **The gate's verdict was `tail`'s, not cargo's.** `check.sh` ran
+  `cargo clippy … | tail -20` and `cargo test … | tail -20` and took the
+  pipeline's status, which is the last command's, so a lint error or a
+  failing test printed its text and the step still reported clean. Found
+  today when a lint in this milestone's own test compiled as an error and
+  the gate printed "cargo clippy: clean" beneath it. `set -o pipefail` is
+  added; the script has read this way since it was written on 2026-09-09,
+  so every verdict between then and now rested on the step's printed text
+  rather than its exit code. The text was read each time, and the
+  milestone 4 lint count came from a direct clippy run; this milestone's
+  run is the first whose exit code means what it says.
+
+Still open after this milestone: down-line issuance for roots (design
+§12.7.2); the reachability detector and the currency ladder's
+`unreachable` set joined by hand; the memo table kept unconditionally; a
+cycle-check memo about an emptied slot not treated as confirmed. Nothing
+from milestone 5 is owed.
