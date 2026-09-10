@@ -125,8 +125,11 @@ fn a_root_with_no_peers_can_still_adopt() {
     assert_eq!(i.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()), Decision::Stored);
 }
 
+/// Who carried what, to whom.
+type Carried = (Option<Keyhash>, Keyhash, Vec<u8>);
+
 #[derive(Default)]
-struct Carriers(Mutex<Vec<(Option<Keyhash>, Keyhash, Vec<u8>)>>);
+struct Carriers(Mutex<Vec<Carried>>);
 
 impl PayloadSink for Carriers {
     fn carry(&self, carrier: Option<Keyhash>, to: &Keyhash, bytes: &[u8]) {

@@ -23,12 +23,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// A handle into each session this node holds upstream, by peer.
+type Upstream = Arc<Mutex<HashMap<Keyhash, mpsc::UnboundedSender<(u64, Vec<u8>)>>>>;
+
 /// The frames a node can send: into an attached session, or up a session
 /// it holds as a client.
 #[derive(Clone)]
 pub struct LiveAdjacency {
     node: Arc<Mutex<Option<Arc<Node>>>>,
-    upstream: Arc<Mutex<HashMap<Keyhash, mpsc::UnboundedSender<(u64, Vec<u8>)>>>>,
+    upstream: Upstream,
 }
 
 impl Adjacency for LiveAdjacency {

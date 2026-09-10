@@ -173,11 +173,10 @@ impl Archive {
         }
         // §3.3: the record's own time is at or after every predecessor's effective time
         for p in &ptrs {
-            if let Some(prev) = self.records.get(p) {
-                if rec.time < prev.effective {
+            if let Some(prev) = self.records.get(p)
+                && rec.time < prev.effective {
                     return Err("timestamp before predecessor's effective time".into());
                 }
-            }
         }
         let txid = rec.txid;
         for p in &ptrs {

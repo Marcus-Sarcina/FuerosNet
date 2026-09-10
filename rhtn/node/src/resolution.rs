@@ -498,11 +498,10 @@ impl NodeView {
     /// path, and otherwise resolved on the client's behalf.
     pub fn resolve_for_client(&self, anchors: &AnchorTable, req: &ResolveRequest) -> Result<ClientResolution, NotResolvable> {
         let mine = self.position_in(&req.anchor).map(|p| Path { bytes: p.path.clone(), nibbles: p.nibbles });
-        if let Some(my) = mine {
-            if my.is_prefix_of(&req.path()) {
+        if let Some(my) = mine
+            && my.is_prefix_of(&req.path()) {
                 return Ok(ClientResolution::Answered(self.answer_resolution(req)));
             }
-        }
         let r = Resolution::begin(anchors, req.subject, req.anchor, req.path(), req.nonce)?;
         Ok(ClientResolution::Proxied(r))
     }
@@ -590,11 +589,10 @@ impl NodeView {
     pub fn publish_endpoints(&mut self, endpoints: &[NetworkPoint], seqno: Seqno) -> Vec<u8> {
         let me = self.me();
         let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
-        if let Some(held) = self.store.endpoint_in(&me, seqno.series) {
-            if held.endpoints == points {
+        if let Some(held) = self.store.endpoint_in(&me, seqno.series)
+            && held.endpoints == points {
                 return held.bytes.clone();
             }
-        }
         let mut payload = Vec::new();
         emit_map_head(&mut payload, 3);
         emit_uint(&mut payload, 1);

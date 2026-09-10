@@ -164,12 +164,16 @@ criterion that is a tool's verdict.
    first flight and replaying it as a second connection, and it replaces the
    frame filters the session tests stand on the path with. Exit: the
    `tla/PartitionMerge` invariants hold over the running code, and TRN-16 passes.
-   Done: `rhtn-node` carries propagation, resolution, currency and peering;
-   `rhtn-sim` carries the path harness and the mesh the model is restated over.
-   The exit criterion is met — both safety invariants and the convergence
-   property hold over the running code, and TRN-16 passes with its 0-RTT
-   premise asserted rather than assumed. One entry is deferred: REP-07 needs
-   the reference metric and belongs with milestone 5.
+   Done: `rhtn-node` carries propagation, resolution, currency and peering,
+   and its `LiveNode` binds them to real sessions through the transport's
+   control and request hooks; `rhtn-sim` carries the path harness, the mesh
+   the model is restated over, and end-to-end tests of one entry per area
+   over loopback QUIC. The exit criterion is met — both safety invariants and
+   the convergence property hold over the running code, and TRN-16 passes
+   with its 0-RTT premise asserted rather than assumed. One entry is
+   deferred: REP-07 needs the reference metric and belongs with milestone 5.
+   The topology store persists across a restart and request streams are
+   rate-limited per requester; the gate lints every crate.
 5. **Reference metric** (design §24 step 5). Exit: the four regression cases and
    the fixed-graph conformance test pass.
 

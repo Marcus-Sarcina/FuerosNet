@@ -195,7 +195,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         Path => {
             check_map(b, at, PATH)?;
              let Item::Map(ref m) = v else { unreachable!() };
-            if map_get(&m, 2).and_then(as_uint).unwrap_or(0) > PATH_NIBBLES {
+            if map_get(m, 2).and_then(as_uint).unwrap_or(0) > PATH_NIBBLES {
                 return Err(Error("path over 24 nibbles"));
             }
         }
@@ -229,21 +229,20 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             for r in pts {
                 check_map(b, r.start, NETWORK_POINT)?;
                  let (Item::Map(ref m), _) = p.item(r.start)? else { unreachable!() };
-                if bs(b, map_get(&m, 1).unwrap()).map(|s| s.len()) != Some(4) {
+                if bs(b, map_get(m, 1).unwrap()).map(|s| s.len()) != Some(4) {
                     return Err(Error("address width"));
                 }
-                if let Some(port) = map_get(&m, 3).and_then(as_uint) {
-                    if port == 0 || port > 65535 || port == 7431 {
+                if let Some(port) = map_get(m, 3).and_then(as_uint)
+                    && (port == 0 || port > 65535 || port == 7431) {
                         return Err(Error("port invalid"));
                     }
-                }
             }
         }
         ServingInfra => check_map(b, at, SERVING_INFRA)?,
         Referral => {
             check_map(b, at, REFERRAL)?;
              let Item::Map(ref m) = v else { unreachable!() };
-            if map_get(&m, 3).and_then(as_uint) == Some(0) {
+            if map_get(m, 3).and_then(as_uint) == Some(0) {
                 return Err(Error("referral advances nothing"));
             }
         }
@@ -295,9 +294,9 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
     match f {
         Family::PrekeyRequestOrBatch => {
              let (Item::Map(ref m), _) = p.item(at)? else { return Err(Error("not a map")) };
-            let schema = if matches!(map_get(&m, 1), Some(Item::Array(_))) { PREKEY_BATCH_REQUEST } else { PREKEY_REQUEST };
+            let schema = if matches!(map_get(m, 1), Some(Item::Array(_))) { PREKEY_BATCH_REQUEST } else { PREKEY_REQUEST };
             check_map(b, at, schema)?;
-            if schema.len() == 3 && map_get(&m, 2).and_then(as_uint).unwrap_or(0) > 1 {
+            if schema.len() == 3 && map_get(m, 2).and_then(as_uint).unwrap_or(0) > 1 {
                 return Err(Error("prekey request mode"));
             }
             Ok(())
@@ -466,11 +465,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         }
         "NetworkPoint" => {
             let Item::Map(m) = item else { return Err(Error("not map")) };
-            if let Some(port) = map_get(m, 3).and_then(as_uint) {
-                if port == 0 || port > 65535 || port == 7431 {
+            if let Some(port) = map_get(m, 3).and_then(as_uint)
+                && (port == 0 || port > 65535 || port == 7431) {
                     return Err(Error("port invalid"));
                 }
-            }
             Ok(())
         }
         "LocationEvidence" => {
@@ -491,11 +489,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                     return Err(Error("geohash malformed"));
                 }
             }
-            if let Some(Item::Array(cor)) = map_get(m, 2) {
-                if cor.len() > CORROBORATIONS_PER_RECORD {
+            if let Some(Item::Array(cor)) = map_get(m, 2)
+                && cor.len() > CORROBORATIONS_PER_RECORD {
                     return Err(Error("corroborations over 16"));
                 }
-            }
             Ok(())
         }
         "Proximity" => {
@@ -555,11 +552,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
         "PrekeyBundle" => {
             let Item::Map(m) = item else { return Err(Error("not map")) };
-            if let Some(Item::Bytes(r)) = map_get(m, 3) {
-                if r.len() > PREKEY_BUNDLE_BLOB {
+            if let Some(Item::Bytes(r)) = map_get(m, 3)
+                && r.len() > PREKEY_BUNDLE_BLOB {
                     return Err(Error("blob over 4KB"));
                 }
-            }
             Ok(())
         }
         "VerificationQuery" => {
@@ -610,11 +606,10 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
     // 0 through 9 (§4.1's Transfer is 9).
     extension_bounds(b, 0, |k| k <= 9)?;
     let f3 = map_get(m, 3);
-    if let Some(Item::Map(_)) = f3 {
-        if let Some(r3) = value_slice(b, 3) {
+    if let Some(Item::Map(_)) = f3
+        && let Some(r3) = value_slice(b, 3) {
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
         }
-    }
     if matches!(map_get(m, 1), Some(Item::Bytes(_))) && matches!(map_get(m, 2), Some(Item::Bytes(_))) && f3.is_none() {
         return Err(Error("field 3 required"));
     }
@@ -668,26 +663,22 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
             return Err(Error("disavowal code out of space"));
         }
     } else if is_peering {
-        if let Some(Item::Array(audits)) = map_get(m, 7) {
-            if audits.len() > PEERING_AUDIT_HISTORY {
+        if let Some(Item::Array(audits)) = map_get(m, 7)
+            && audits.len() > PEERING_AUDIT_HISTORY {
                 return Err(Error("audits over 8"));
             }
-        }
     } else if is_adoption {
         map_get(m, 4).and_then(as_uint).ok_or(Error("adoption timestamp uint"))?;
         if let Some(Item::Map(loc)) = f3 {
-            if let Some(Item::Array(sq)) = map_get(loc, 3) {
-                if let Some(Item::Uint(c)) = sq.get(1) {
-                    if *c != 0 {
+            if let Some(Item::Array(sq)) = map_get(loc, 3)
+                && let Some(Item::Uint(c)) = sq.get(1)
+                    && *c != 0 {
                         return Err(Error("adoption counter not 0"));
                     }
-                }
-            }
-            if let Some(Item::Array(resp)) = map_get(m, 6).and_then(|r| if let Item::Map(rm) = r { map_get(rm, 2) } else { None }) {
-                if resp.len() > VERIFIER_RESPONSES_PER_RECOVERY {
+            if let Some(Item::Array(resp)) = map_get(m, 6).and_then(|r| if let Item::Map(rm) = r { map_get(rm, 2) } else { None })
+                && resp.len() > VERIFIER_RESPONSES_PER_RECOVERY {
                     return Err(Error("recovery responses over 32"));
                 }
-            }
         }
     }
     Ok(())

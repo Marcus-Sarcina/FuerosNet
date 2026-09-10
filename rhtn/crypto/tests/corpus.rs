@@ -148,12 +148,11 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 let p = &raw[4..];
                 let __fa_item = parse_all(p).unwrap();
                 let Item::Array(fa) = &__fa_item else { panic!() };
-                if let Item::Map(fm) = &fa[1] {
-                    if let Some(Item::Bytes(pr)) = map_get(fm, 2) {
+                if let Item::Map(fm) = &fa[1]
+                    && let Some(Item::Bytes(pr)) = map_get(fm, 2) {
                         push_payload = p[pr.clone()].to_vec();
                         verify::envelope(&ids, &push_payload).expect("inner envelope");
                     }
-                }
             }
             "P-e2e-01" => keygrant = raw.clone(),
             _ => {}
@@ -166,7 +165,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
     assert_eq!(push_payload, adopt_min, "TopologyPush payload is P-adopt-min");
     let __kg_item = parse_all(&keygrant).unwrap();
     let Item::Map(kg) = &__kg_item else { panic!() };
-    let gb = |k: u64| match map_get(&kg, k) { Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(), _ => Vec::new() };
+    let gb = |k: u64| match map_get(kg, k) { Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(), _ => Vec::new() };
     assert_eq!(gb(1), pc1_txid, "KeyGrant names the prior record");
     assert_eq!(gb(2), normal_qid, "KeyGrant names the current query");
     assert!(failures.is_empty(), "{} failures:\n{}", failures.len(), failures.join("\n"));

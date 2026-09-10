@@ -148,9 +148,9 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let body_fx = &payload[parts[1].clone()];
     let __bm_item = parse_all(body_fx).unwrap();
     let Item::Map(bm) = &__bm_item else { panic!() };
-    let kh: [u8; 32] = match map_get(&bm, 1) { Some(Item::Bytes(r)) => body_fx[r.clone()].try_into().unwrap(), _ => panic!() };
+    let kh: [u8; 32] = match map_get(bm, 1) { Some(Item::Bytes(r)) => body_fx[r.clone()].try_into().unwrap(), _ => panic!() };
     let attestation = body_fx[value_slice(body_fx, 2).unwrap()].to_vec();
-    let caps_fx = decode_capabilities(body_fx, map_get(&bm, 3).unwrap());
+    let caps_fx = decode_capabilities(body_fx, map_get(bm, 3).unwrap());
     let named_value = caps_fx.get(&named).expect("the fixture carries the named capability").clone();
     let names = ["alice", "bob", "carol", "alice2", "c1", "c2", "c3", "c4", "c5", "w1"];
     let who = names.iter().find(|n| test_identity(n).public.keyhash == kh).expect("fixture identity is a test identity");
@@ -181,7 +181,7 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let strip_grease = |body: &[u8]| -> Vec<u8> {
         let __m_item = parse_all(body).unwrap();
         let Item::Map(m) = &__m_item else { panic!() };
-        let caps = decode_capabilities(body, map_get(&m, 3).unwrap());
+        let caps = decode_capabilities(body, map_get(m, 3).unwrap());
         let kept: BTreeMap<u64, Vec<u8>> = caps.into_iter().filter(|(k, _)| *k == named).collect();
         let r3 = value_slice(body, 3).unwrap();
         let mut out = body[..r3.start].to_vec();
@@ -260,7 +260,7 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
     let FrameRead::Payload(reply) = read_frame(&mut rr, 262_144).await else { panic!("request answered after the unknown frame") };
     let __m_item = parse_all(&reply).unwrap();
     let Item::Map(m) = &__m_item else { panic!() };
-    assert_eq!(map_get(&m, 2).and_then(as_uint), Some(1));
+    assert_eq!(map_get(m, 2).and_then(as_uint), Some(1));
     // the request path is independent of stream 0, so the unknown frame may still be in flight
     for _ in 0..40 {
         if node.log.count(|e| matches!(e, Event::Skipped { frame_type: 99 })) == 1 {

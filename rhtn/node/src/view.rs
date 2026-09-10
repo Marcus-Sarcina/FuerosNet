@@ -149,7 +149,7 @@ impl NodeView {
         }
         let i = (loc.nibbles - 1) as usize;
         let byte = *loc.path.get(i / 2)?;
-        Some(if i % 2 == 0 { (byte >> 4) as u64 } else { (byte & 0x0f) as u64 })
+        Some(if i.is_multiple_of(2) { (byte >> 4) as u64 } else { (byte & 0x0f) as u64 })
     }
 }
 

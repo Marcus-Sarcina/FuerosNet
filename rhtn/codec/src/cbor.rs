@@ -205,11 +205,10 @@ impl<'a> Parser<'a> {
                         if pending_key.is_none() {
                             // `item` is a key; its bytes ran key_start..at
                             let key_bytes = *key_start..at;
-                            if let Some(pr) = prev_key {
-                                if self.b[key_bytes.clone()] <= self.b[pr.clone()] {
+                            if let Some(pr) = prev_key
+                                && self.b[key_bytes.clone()] <= self.b[pr.clone()] {
                                     return Err(Error("map keys unsorted or duplicate"));
                                 }
-                            }
                             *prev_key = Some(key_bytes);
                             *pending_key = Some(item);
                         } else {
@@ -325,7 +324,7 @@ pub fn map_without_key(b: &[u8], key: u64) -> Option<Vec<u8>> {
     Some(out)
 }
 
-pub fn map_get<'m>(m: &'m [(Item, Item)], key: u64) -> Option<&'m Item> {
+pub fn map_get(m: &[(Item, Item)], key: u64) -> Option<&Item> {
     m.iter().find_map(|(k, v)| match k {
         Item::Uint(x) if *x == key => Some(v),
         _ => None,

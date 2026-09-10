@@ -110,14 +110,12 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txi
             ends.push(Root::DoesNotReachBack { at: from.unwrap_or(t), named: t });
             continue;
         };
-        if let Some(f) = from {
-            if let Some((ft, _)) = times.get(&f) {
-                if rec.effective > *ft {
+        if let Some(f) = from
+            && let Some((ft, _)) = times.get(&f)
+                && rec.effective > *ft {
                     ends.push(Root::Malformed { at: f, why: "time before predecessor's effective time".into() });
                     continue;
                 }
-            }
-        }
         times.insert(t, (rec.time, rec.is_checkpoint()));
         signatures.push((t, rec.check_signatures(ids)));
         for p in ptrs {
@@ -203,22 +201,20 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested_head: Optio
             break;
         };
         if i == 0 {
-            if let Some(h) = requested_head {
-                if rec.txid != *h {
+            if let Some(h) = requested_head
+                && rec.txid != *h {
                     end = Some(BatchEnd::Mismatch { index: 0, why: "first record is not the requested head".into() });
                     break;
                 }
-            }
         } else if !expected.contains(&rec.txid) {
             end = Some(BatchEnd::Mismatch { index: i, why: "not named by any preceding record's back-pointers".into() });
             break;
         }
-        if let Some(js) = named_by.get(&rec.txid) {
-            if js.iter().any(|j| rec.effective > verified[*j].time) {
+        if let Some(js) = named_by.get(&rec.txid)
+            && js.iter().any(|j| rec.effective > verified[*j].time) {
                 end = Some(BatchEnd::Mismatch { index: i, why: "effective time after the record that names it".into() });
                 break;
             }
-        }
         expected.remove(&rec.txid);
         for p in &ptrs {
             if *p != g {

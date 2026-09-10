@@ -105,15 +105,22 @@ pub struct Outcome {
 /// The standing acknowledgement policy of an infra node (design §11.2.1,
 /// `infra-client-requirements.md` §10.1): set beforehand, applied to every
 /// adoption under one of its subordinates without anyone being asked.
+/// Whether to acknowledge a given adoption: `(patron, node)` to a decision.
+pub type AckPolicy = Arc<dyn Fn(&Keyhash, &Keyhash) -> bool + Send + Sync>;
+
 pub struct AckIssuer {
     pub identity: Arc<SigningIdentity>,
-    pub policy: Arc<dyn Fn(&Keyhash, &Keyhash) -> bool + Send + Sync>,
+    pub policy: AckPolicy,
     pub now: u64,
 }
 
 /// A patron preference for competing recovery claims (design §9.0.2):
 /// which of two patrons this node trusts more.
 pub type Preference = Arc<dyn Fn(&Keyhash, &Keyhash) -> Ordering + Send + Sync>;
+
+/// A disavowal that arrived before the adoption it ends: patron, node, the
+/// patron's timestamp, the disavowal's txid, and its reason code.
+type PendingDisavowal = (Keyhash, Keyhash, u64, Txid, Option<u64>);
 
 #[derive(Default)]
 pub struct Table {
@@ -127,7 +134,7 @@ pub struct Table {
     attached: BTreeMap<Keyhash, Vec<Keyhash>>,
     /// prior key -> (successor, its patron), every recovery seen
     lineage: BTreeMap<Keyhash, Vec<(Keyhash, Keyhash)>>,
-    pending_disavowals: Vec<(Keyhash, Keyhash, u64, Txid, Option<u64>)>,
+    pending_disavowals: Vec<PendingDisavowal>,
     pub prefer: Option<Preference>,
 }
 
@@ -137,8 +144,7 @@ impl Table {
     }
 
     pub fn with_me(me: Keyhash) -> Self {
-        let mut t = Self::default();
-        t.me = Some(me);
+        let mut t = Table { me: Some(me), ..Default::default() };
         t.nodes.insert(me);
         t
     }
@@ -407,13 +413,12 @@ impl Table {
                 self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, evidence });
                 self.settle_pending_disavowals();
                 let mut acks = Vec::new();
-                if let (Some(me), Some(iss)) = (self.me, issuer) {
-                    if self.subordinates(&me).contains(&patron) && (iss.policy)(&patron, &node) {
+                if let (Some(me), Some(iss)) = (self.me, issuer)
+                    && self.subordinates(&me).contains(&patron) && (iss.policy)(&patron, &node) {
                         let bytes = subtree_ack(&iss.identity, &rec.txid, &node, iss.now);
                         self.acks.push(Ack { adoption: rec.txid, grandpatron: me, node, bytes: bytes.clone() });
                         acks.push(bytes);
                     }
-                }
                 Outcome { applied, acks }
             }
             TYPE_DEPARTURE => {

@@ -6,6 +6,7 @@
 #     gap coverage (tools/check.py; exit 1 on any flag).
 #  2. The generated stubs are in sync with the catalogue: regenerate into a
 #     temporary directory and diff.  A hand edit to tests/ fails here.
+#  3a. Every crate lints clean under clippy, all targets, warnings as errors.
 #  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
 #     are not run: they are the tests still owed, and `cargo test -- --ignored`
 #     lists them by failing each one.
@@ -29,6 +30,15 @@ else
   echo "  tests/ DIFFERS from the catalogue: regenerate with tools/gen_stubs.py"; fail=1
 fi
 rm -rf "$tmp"
+
+echo "=== 3a. Lint ==="
+# Every crate, every target, and a warning is a failure: clippy runs on the
+# stable toolchain the workspace builds with.
+if (cd "$HERE" && nice -n 19 cargo clippy -j 8 --workspace --all-targets --quiet -- -D warnings 2>&1 | tail -20); then
+  echo "  cargo clippy: clean"
+else
+  echo "  cargo clippy: WARNINGS"; fail=1
+fi
 
 echo "=== 3. Build and live tests ==="
 if (cd "$HERE" && nice -n 19 cargo test -j 8 --workspace --quiet 2>&1 | tail -20); then

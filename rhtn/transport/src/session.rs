@@ -401,19 +401,22 @@ pub enum Reachability {
     Unreachable,
 }
 
-/// The heartbeat and liveness loop both roles run after the ack (§8.2).
-/// Returns when the stream or connection ends.  `on_frame` sees every
-/// known non-heartbeat frame.
-async fn control_loop(
-    mut sender: Sender,
-    mut recv: RecvStream,
+/// What a control loop runs with: the interval, where it logs, the
+/// reachability it settles, whom it tells, and the frames it is handed to
+/// send.
+struct LoopIo {
     interval: Duration,
     log: Log,
     reach: Arc<Mutex<Reachability>>,
-    mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool,
     on_change: Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
-    mut outbound: mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
-) -> Option<quinn::ConnectionError> {
+    outbound: mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
+}
+
+/// The heartbeat and liveness loop both roles run after the ack (§8.2).
+/// Returns when the stream or connection ends.  `on_frame` sees every
+/// known non-heartbeat frame.
+async fn control_loop(mut sender: Sender, mut recv: RecvStream, io: LoopIo, mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool) -> Option<quinn::ConnectionError> {
+    let LoopIo { interval, log, reach, on_change, mut outbound } = io;
     let start = Instant::now();
     let mut next_send = start + interval;
     let mut counter: u64 = 0;
@@ -442,9 +445,8 @@ async fn control_loop(
             }
             _ = sleep_until(deadline), if deadline > Instant::now() => {}
             out = outbound.recv() => {
-                if let Some((ft, body)) = out {
-                    if sender.frame(ft, &body).await.is_err() { return None; }
-                }
+                if let Some((ft, body)) = out
+                    && sender.frame(ft, &body).await.is_err() { return None; }
             }
             r = read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES) => match r {
                 FrameRead::Closed(e) => return e,
@@ -454,19 +456,16 @@ async fn control_loop(
                     Control::Malformed => log.push(Event::Discarded),
                     Control::Known(Family::Heartbeat, _, _, item) => {
                         log.push(Event::Received { frame_type: FRAME_HEARTBEAT });
-                        if let Item::Map(m) = &item {
-                            if let Some(c) = map_get(m, 1).and_then(as_uint) {
-                                if seen.insert(c) {
+                        if let Item::Map(m) = &item
+                            && let Some(c) = map_get(m, 1).and_then(as_uint)
+                                && seen.insert(c) {
                                     last_valid = Instant::now();
                                     let was = std::mem::replace(&mut *reach.lock().unwrap(), Reachability::Reachable);
-                                    if was == Reachability::Unreachable {
-                                        if let Some(f) = &on_change {
+                                    if was == Reachability::Unreachable
+                                        && let Some(f) = &on_change {
                                             f(Reachability::Reachable);
                                         }
-                                    }
                                 }
-                            }
-                        }
                     }
                     Control::Known(fam, bytes, body, item) => {
                         let t = match fam { Family::Attach => 1, Family::AttachAck => 2, Family::SiblingUpdate => 4, Family::TopologyPush => 5, Family::TopologyMemo => 6, _ => 0 };
@@ -482,6 +481,9 @@ async fn control_loop(
 // ------------------------------------------------------------ the serving node
 
 pub type Predicate = Arc<dyn Fn(&[u8; 32]) -> bool + Send + Sync>;
+
+/// Where a client's reachability goes when the detector settles it.
+pub type ReplicateHook = Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>;
 
 /// What a node does with a known control frame a session delivers beyond
 /// the session's own (`wire-format.md` §8.0): the peer it came from, the
@@ -520,7 +522,7 @@ pub struct NodeConfig {
     /// Replicate a client's reachability to this node's siblings, so a
     /// sibling answering in failover knows the client's status
     /// (design §14.1.2).  The wire assigns no frame for this.
-    pub replicate: Option<Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>>,
+    pub replicate: Option<ReplicateHook>,
     /// The node's own handling of topology frames on stream 0.  Absent, a
     /// known frame beyond the session's own is logged and dropped.
     pub on_control: Option<ControlHandler>,
@@ -607,11 +609,10 @@ impl Node {
             tokio::spawn(async move { deliver(&conn, bytes).await });
             return Ok(());
         }
-        if let Some(cap) = self.cfg.queue_cap {
-            if self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
+        if let Some(cap) = self.cfg.queue_cap
+            && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
                 return Err(queue::Refusal::AtCap);
             }
-        }
         self.cfg.queue.push(Queued { ciphertext: bytes, recipient: keyhash, arrival: (self.cfg.clock)() });
         Ok(())
     }
@@ -791,9 +792,7 @@ impl Node {
         let _ = control_loop(
             sender,
             recv,
-            interval,
-            log,
-            reach,
+            LoopIo { interval, log, reach, on_change: Some(on_change), outbound: orx },
             move |fam, b, body, _| match fam {
                 Family::Attach | Family::AttachAck => false,
                 Family::TopologyPush | Family::TopologyMemo => {
@@ -804,8 +803,6 @@ impl Node {
                 }
                 _ => true,
             },
-            Some(on_change),
-            orx,
         )
         .await;
         requests.abort();
@@ -1045,9 +1042,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
         let _ = control_loop(
             sender,
             recv,
-            interval,
-            loop_log.clone(),
-            loop_reach.clone(),
+            LoopIo { interval, log: loop_log.clone(), reach: loop_reach.clone(), on_change: None, outbound: orx },
             move |fam, b, body, it| match fam {
                 Family::SiblingUpdate => {
                     let Item::Map(m) = it else { return true };
@@ -1068,8 +1063,6 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
                 }
                 _ => true,
             },
-            None,
-            orx,
         )
         .await;
         task_conn.close(VarInt::from_u32(0), b"");

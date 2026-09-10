@@ -87,11 +87,10 @@ impl DirStore {
         if let Ok(rd) = std::fs::read_dir(self.recipient_dir(r)) {
             for e in rd.flatten() {
                 let name = e.file_name().to_string_lossy().to_string();
-                if let Some((a, s)) = name.split_once('-') {
-                    if let (Ok(a), Ok(s)) = (a.parse::<u64>(), s.parse::<u64>()) {
+                if let Some((a, s)) = name.split_once('-')
+                    && let (Ok(a), Ok(s)) = (a.parse::<u64>(), s.parse::<u64>()) {
                         out.push((a, s, e.path()));
                     }
-                }
             }
         }
         out.sort();

@@ -251,6 +251,14 @@ pub struct CurrencyAsk {
     pub asked: Vec<Keyhash>,
 }
 
+/// What establishing current control came to: settled from what the node
+/// holds, or a question now outstanding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Requirement {
+    Settled(Gate),
+    Asked(CurrencyAsk),
+}
+
 /// What a reply to an outstanding ask did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AskStep {
@@ -372,19 +380,19 @@ impl NodeView {
     /// trust-bearing operation (design §12.6.5): the held staple where it is
     /// current; otherwise the fallback query, sent to the introducer first
     /// where one is known, so the patron learns nothing it did not know.
-    pub fn require_currency<L: Lookup + ?Sized>(&self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Result<Gate, CurrencyAsk> {
+    pub fn require_currency<L: Lookup + ?Sized>(&self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Requirement {
         if self.is_superseded(subject) {
-            return Ok(gate(Operation::TrustBearing, Staple::Current, true));
+            return Requirement::Settled(gate(Operation::TrustBearing, Staple::Current, true));
         }
         let hint: Vec<Keyhash> = patron.into_iter().collect();
         let state = self.staple_for(ids, subject, &hint);
         if state == Staple::Current {
-            return Ok(Gate::Proceed);
+            return Requirement::Settled(Gate::Proceed);
         }
         let nonce = rhtn_transport::tls::random_bytes();
         match self.ask_currency(adj, *subject, introducer, patron, nonce) {
-            Some(ask) => Err(ask),
-            None => Ok(gate(Operation::TrustBearing, state, false)),
+            Some(ask) => Requirement::Asked(ask),
+            None => Requirement::Settled(gate(Operation::TrustBearing, state, false)),
         }
     }
 

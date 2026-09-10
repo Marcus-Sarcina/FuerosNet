@@ -103,11 +103,10 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
         return Err(Error("cose arity"));
     }
     let Item::Array(ents) = &cs[3] else { return Err(Error("entries not array")) };
-    if let Some(ceiling) = crate::bounds::envelope_entry_ceiling(tx_type) {
-        if ents.len() > ceiling {
+    if let Some(ceiling) = crate::bounds::envelope_entry_ceiling(tx_type)
+        && ents.len() > ceiling {
             return Err(Error("entries over the derived ceiling"));
         }
-    }
     if ents.len() != signers.len() * 2 {
         return Err(Error("entry count != 2x signers"));
     }
@@ -141,7 +140,7 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
                 _ => None,
             })
             .ok_or(Error("no kid"))?;
-        if !signers.iter().any(|s| *s == kid) {
+        if !signers.contains(&kid) {
             return Err(Error("kid outside body signer set"));
         }
         entries.push(Entry { protected: pr.clone(), kid, alg, signature: sr.clone() });

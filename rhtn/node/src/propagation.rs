@@ -340,11 +340,10 @@ impl NodeView {
         // a node holding that slot at or after the memo's timestamp does not
         // forward it (§10.2)
         let key = (memo.patron, memo.slot);
-        if let Some(held) = self.memo_table.get(&key) {
-            if held.timestamp >= memo.timestamp {
+        if let Some(held) = self.memo_table.get(&key)
+            && held.timestamp >= memo.timestamp {
                 return MemoOutcome::AlreadyPassed;
             }
-        }
         if self.keeps_memo_table {
             self.memo_table.insert(key, Slot { occupant: memo.occupant, timestamp: memo.timestamp });
         }

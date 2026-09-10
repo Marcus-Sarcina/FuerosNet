@@ -102,9 +102,8 @@ async fn a_push_crosses_two_real_sessions() {
     assert_eq!(t.n.view.lock().unwrap().slots.get(&3).and_then(|s| s.occupant), Some(kh("w1")), "and its slot was written");
     let got = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            match t.c_view.lock().unwrap().store.holds_txid(&obj.txid) {
-                true => break,
-                false => {}
+            if t.c_view.lock().unwrap().store.holds_txid(&obj.txid) {
+                break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }

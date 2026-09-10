@@ -61,11 +61,10 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
             return Err("protected not map".into());
         };
         let alg = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(1), Item::Neg(a)) => Some(*a), _ => None }).ok_or("no alg")?;
-        if let Some(kid) = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(4), Item::Bytes(r)) => Some(&prot[r.clone()]), _ => None }) {
-            if kid != signer.keyhash {
+        if let Some(kid) = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(4), Item::Bytes(r)) => Some(&prot[r.clone()]), _ => None })
+            && kid != signer.keyhash {
                 return Err("kid names another party".into());
             }
-        }
         let id = signer;
         let tbs = cose::sig_structure_sign(prot, aad_tag, payload);
         let slot = got.entry(signer.keyhash.to_vec()).or_insert([false, false]);
@@ -89,7 +88,7 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
     let Item::Map(rm) = &__rm_item else {
         return Err("response not map".into());
     };
-    let get_b = |k: u64| match map_get(&rm, k) { Some(Item::Bytes(r)) => Some(resp[r.clone()].to_vec()), _ => None };
+    let get_b = |k: u64| match map_get(rm, k) { Some(Item::Bytes(r)) => Some(resp[r.clone()].to_vec()), _ => None };
     let subject = get_b(2).ok_or("subject")?;
     let verifier = get_b(1).ok_or("verifier")?;
     let qid = get_b(3).ok_or("query_id")?;
@@ -140,13 +139,12 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
         return Err("signer/alg coverage incomplete".into());
     }
     let Item::Map(bm) = &env.body_item else { return Err("body".into()) };
-    if env.tx_type == 5 {
-        if let Some(r5) = value_slice_at(b, env.body.start, 5) {
+    if env.tx_type == 5
+        && let Some(r5) = value_slice_at(b, env.body.start, 5) {
             for rr in array_item_ranges(b, r5.start).ok_or("responses walk")? {
                 response(ids, &b[rr], false)?;
             }
         }
-    }
     if env.tx_type == 1 {
         if let Some(r6) = value_slice_at(b, env.body.start, 6) {
             let prior = value_slice_at(b, r6.start, 1).map(|r| b[r.start + 2..r.end].to_vec()).ok_or("prior")?;
@@ -192,9 +190,9 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<boo
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let __m_item = parse_all(raw).map_err(|_| "cbor")?;
     let Item::Map(m) = &__m_item else { return Err("not map".into()) };
-    let signer = match map_get(&m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
+    let signer = match map_get(m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
     let id = ids.identity(&signer).ok_or("unknown signer identity")?;
-    let Some(Item::Array(cs)) = map_get(&m, slot) else { return Err("sig slot".into()) };
+    let Some(Item::Array(cs)) = map_get(m, slot) else { return Err("sig slot".into()) };
     if cs.len() != 4 {
         return Err("sign1 arity".into());
     }
@@ -259,7 +257,7 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Stri
     let body_range = value_slice(env_bytes, 3).ok_or("env body")?;
     let body = &env_bytes[body_range];
     let r8 = value_slice(body, 8).ok_or("no field 8")?;
-    if &body[r8.start + 2..r8.end] != root {
+    if body[r8.start + 2..r8.end] != root {
         return Err("root mismatch".into());
     }
     Ok(())

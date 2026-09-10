@@ -143,8 +143,8 @@ fn a_trust_bearing_operation_waits_on_an_expired_staple() {
     // that is the node asking, not the test
     let pop = w.formation("alice", "bob");
     let asked = match n.require_currency(&*fab, &ids(), &x, None, Some(patron)) {
-        Err(ask) => ask,
-        Ok(g) => panic!("no request went out: {g:?}"),
+        Requirement::Asked(ask) => ask,
+        Requirement::Settled(g) => panic!("no request went out: {g:?}"),
     };
     let sent: Vec<_> = fab.frames().into_iter().filter(|f| f.frame_type == REQUEST_CURRENCY).collect();
     assert_eq!(sent.len(), 1, "a CurrencyRequest naming X leaves N");
@@ -157,7 +157,7 @@ fn a_trust_bearing_operation_waits_on_an_expired_staple() {
     let reply = CurrencyReply::Attestation { nonce: ask.nonce, bytes: fresh };
     let step = n.on_currency_reply(&*fab, &ids(), &mut ask, &reply);
     assert_eq!(step, AskStep::Current);
-    assert_eq!(n.require_currency(&*fab, &ids(), &x, None, Some(patron)), Ok(Gate::Proceed));
+    assert_eq!(n.require_currency(&*fab, &ids(), &x, None, Some(patron)), Requirement::Settled(Gate::Proceed));
     let body = n.propose_adoption(&x, n.staple_for(&ids(), &x, &[patron]), Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]).expect("proceeds");
     let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
@@ -194,7 +194,7 @@ fn an_unexpired_staple_does_not_restore_a_superseded_binding() {
     // fail-open is for ignorance, never for knowledge: the node's own
     // reading of the binding decides, and the staple restores nothing
     let fab = Fabric::with(&[]);
-    assert!(matches!(n.require_currency(&*fab, &ids(), &k1, None, None), Ok(Gate::Refuse(_))), "no session is served under k1");
+    assert!(matches!(n.require_currency(&*fab, &ids(), &k1, None, None), Requirement::Settled(Gate::Refuse(_))), "no session is served under k1");
     assert!(matches!(gate(Operation::Routine, state, n.is_superseded(&k1)), Gate::Refuse(_)), "nothing is delivered under k1");
 }
 
@@ -294,8 +294,8 @@ fn a_caller_with_a_stale_staple_asks_its_introducer_first() {
     let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now - 40_000, n.now - 1, ROLE_PATRON);
     n.take_staple(&ids(), &x, &stale, &[patron]);
     let mut ask = match n.require_currency(&*fab, &ids(), &x, Some(introducer), Some(patron)) {
-        Err(ask) => ask,
-        Ok(g) => panic!("{g:?}"),
+        Requirement::Asked(ask) => ask,
+        Requirement::Settled(g) => panic!("{g:?}"),
     };
     assert_eq!(ask.asked, vec![introducer], "N's first request goes toward I");
     assert_eq!(fab.to(&introducer, REQUEST_CURRENCY).len(), 1);

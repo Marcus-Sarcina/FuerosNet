@@ -181,11 +181,10 @@ impl Record {
         let mut out = Vec::new();
         if let Some(Item::Array(ps)) = map_get(&m, 3) {
             for p in ps {
-                if let Item::Map(pm) = p {
-                    if let Some(k) = map_get(pm, 1).and_then(|it| kh(body, it)) {
+                if let Item::Map(pm) = p
+                    && let Some(k) = map_get(pm, 1).and_then(|it| kh(body, it)) {
                         out.push(k);
                     }
-                }
             }
         }
         out

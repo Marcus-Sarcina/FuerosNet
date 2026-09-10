@@ -197,11 +197,10 @@ impl Mesh {
             let Some(v) = self.views.get_mut(&to) else { continue };
             v.take_object(&links, &holder, KIND_TRANSACTION, &object, &ids);
             for (peer, ft, body) in links.out.0.into_inner().unwrap() {
-                if ft == FRAME_TOPOLOGY_PUSH {
-                    if let Ok((_, obj)) = decode_push(&body) {
+                if ft == FRAME_TOPOLOGY_PUSH
+                    && let Ok((_, obj)) = decode_push(&body) {
                         self.flood_one(to, peer, &obj);
                     }
-                }
             }
         }
     }
@@ -213,11 +212,10 @@ impl Mesh {
         let Some(v) = self.views.get_mut(&to) else { return };
         v.take_object(&links, &from, KIND_TRANSACTION, object, &ids);
         for (peer, ft, body) in links.out.0.into_inner().unwrap() {
-            if ft == FRAME_TOPOLOGY_PUSH {
-                if let Ok((_, obj)) = decode_push(&body) {
+            if ft == FRAME_TOPOLOGY_PUSH
+                && let Ok((_, obj)) = decode_push(&body) {
                     self.flood_one(to, peer, &obj);
                 }
-            }
         }
     }
 

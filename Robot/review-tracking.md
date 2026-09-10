@@ -7970,3 +7970,119 @@ Readings the milestone's code takes, for the author to confirm or reverse:
   The entries that turn on real packets — the failover detector, the
   mailbox across an absence, a wrong address, a dead first endpoint, the
   replay — run over loopback with the path harness.
+
+**Milestone 4 review pass (2026-09-10).** The milestone was built on a
+lower-spec model by accident and reviewed in full afterwards: every new and
+changed source and test file read, the readings checked against the wire and
+design text, and the tests checked against the entries they claim. The
+review found three definite bugs, two design-level gaps, one security gap,
+about ten tests that asserted what they set up, and one missing layer: the
+node's decisions were never bound to live sessions, so over real QUIC none
+of the propagation, resolution or currency behaviour ran. Seven commits
+disposed of it; what each decided is below, and the readings that need the
+author's word are marked.
+
+- **Bound to sessions.** The transport gives each session an outbound
+  channel, a control-frame hook and a request-stream hook, and a client
+  session exposes the frames its serving node delivers and a request call.
+  `rhtn-node`'s `LiveNode` installs the hooks, so a topology push arriving
+  on any session goes through the forwarding rule and out on the node's
+  adjacency, a client's resolve request is answered from the node's tables
+  or run on its behalf hop by hop over real sessions, and a currency
+  request is answered by the ladder. Six end-to-end tests over loopback
+  QUIC: a push crossing two real sessions byte for byte and never back up,
+  a resolution answered with the residual suffix, a resolution proxied
+  through a real referral chain into another subnet, a currency request
+  answered by the patron, a running node whose replication payload holds
+  its store and never its mailbox (REP-16 lives there now), and a
+  requester past its allowance. Binding it found two more defects: the
+  transport's classifier handed handlers the whole frame payload rather
+  than the body, and a node with no published endpoint record answered a
+  resolution with a reply the schema rejects. Both fixed; a running node
+  now publishes its own endpoint record at start, and a node with none
+  reports itself unavailable.
+- **The relay's table follows the flood** [reading, for the author]. The
+  storage rule measures distance from the table, and the table refused any
+  adoption whose presence record it could not dereference, which for a
+  relay is every adoption, so the flood stalled one hop past any relay.
+  The archive table now takes an evaluation mode: a patron relying on an
+  adoption evaluates first, as TOP-12 has it; a relay binds on structural
+  verification and records the evidence as unevaluated, upgrading it when
+  the record arrives. `wire-format.md` §3.4 separates valid from effective,
+  and this reads a relay's position table as the former. The author should
+  say whether an unevaluated binding is a position at all.
+- **Slots follow adoptions.** The child index a memo names is assigned from
+  the adoption's locator when the patron applies it, emptied by a departure
+  or disavowal, and every change to one of the node's own slots travels
+  rootward as a memo. A cycle-check disavowal therefore produces a memo
+  like any other (§10.2.2), and PRP-11 and PRP-12 now distinguish the
+  received memo, which is not forwarded, from the node's own, which is.
+- **Origination stores.** An originated object enters the originator's own
+  store and table before it goes out, so an echo dies as a duplicate.
+- **An attached client's own memo travels.** The serving node's cycle check
+  for a client fires only on a memo that arrived from below that client.
+- **Re-resolution starts from the subject's locator**, held in a locator
+  store the view now carries, with a random nonce from the transport's
+  crypto provider, and sends nothing when no locator is held.
+- **Memos route by subnet.** A node bound under several patrons carries a
+  position per subnet, sends each memo to the patron of that subnet, and
+  answers a resolution for each position it holds. The binding records the
+  anchor its adoption's locator named.
+- **The relying party places the issuer** [security gap closed]. A staple
+  is current only when its issuer stands on the rung it claims for the
+  subject — the patron, a sibling of the patron, or the grandpatron — as
+  the table or the introduction's locator has it. A stranger's signature or
+  a real party on the wrong rung is not current, and an issuer the node
+  cannot place at all is not current either; both fail closed. The variant
+  that checked the subject is now named for what it checks.
+- **The table is the currency record.** The parallel map of recorded keys
+  is gone; issuance names what the table records as current for the
+  identity asked about, following the recovery lineage, so an identity a
+  querier still names by its old key is answered with the successor and
+  never the old key. The fallback query is a state machine: introducer
+  first, patron only on the introducer's code 1 or absent session, and an
+  exhausted ask fails closed. Establishing current control before a
+  trust-bearing operation is the node's own act.
+- **Proposals are bodies.** An adoption proposal takes the subject's own
+  back-pointers, which are the subject's to supply, and assigns the lowest
+  free slot under the node's position; a peering proposal names the
+  counterparty's own point and a real presence record. The helpers that
+  forced genesis and fabricated endpoints are gone.
+- **A second endpoint line waits on a chain.** The global toggle is gone: a
+  subject's first line is taken as gossip, a second line for a subject the
+  node already holds is held until a series chain proves it, and two
+  unproved lines rank nobody rather than by series number. Tested.
+- **Smaller items.** One `NetworkPoint`, the transport's; the session's
+  reachability handle dropped at session end and the settled mark kept;
+  queued payload waits at the recipient's serving node; the adoption
+  evaluation dereferences through the store rather than reparsing it; dead
+  helpers removed; the mesh's dead adjacency removed.
+- **Tests that fail when their rule is broken.** RES-14's slot is emptied
+  by the node; RES-01 records every identity the requester asks for and
+  finds none; RES-07 is proxied by the serving node through a real referral
+  chain and returned; RES-03 goes through the node's entry point and shows
+  no frame; REP-08 shows the peering stored and forwarded and no memo;
+  REP-15 derives the replication set from the serving node's own table with
+  the light-client patron's sibling present and excluded; SES-10 submits a
+  body naming the patron and shows the sibling's signature over it is no
+  transaction at all; CUR-05 and CUR-11 are driven by the node's ask
+  machine; CUR-07 reads the node's own supersession; TRN-16 asserts its
+  premise, cuts the captured flight at the instant the handshake completed
+  and requires the replayed Attach never to have been read; NoInvention is
+  the model's formulation asked of the running views, and a record handed
+  to one node alone is caught. The tests that count seconds run one at a
+  time.
+- **Persistence and rate limiting.** The topology store writes itself to a
+  directory and reads back as the seen-set, so a restarted node replays no
+  forwarding wave; a running node allows each requester so many requests
+  per window and fails the stream past that.
+- **Lint.** clippy is installed on the stable toolchain and the gate runs
+  it over every crate and every target with warnings as errors: 76
+  findings on the first run, 0 after.
+
+Still open after this pass, for the record: down-line issuance for roots
+(design §12.7.2) is a multi-signer object not built; the reachability
+detector and the currency ladder's `unreachable` set are joined by hand
+rather than by the transport; REP-07 waits on milestone 5; the memo table
+is kept unconditionally; a cycle-check memo about an emptied slot is not
+treated as confirmed.

@@ -72,7 +72,7 @@ impl Direction {
         }
         let n = self.drop_one_in.load(Ordering::SeqCst);
         let seen = self.passed.load(Ordering::SeqCst) + self.dropped.load(Ordering::SeqCst);
-        if n > 0 && seen % n == 0 {
+        if n > 0 && seen.is_multiple_of(n) {
             self.dropped.fetch_add(1, Ordering::SeqCst);
             return None;
         }
