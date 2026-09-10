@@ -5,7 +5,6 @@
 //! every reply is unsigned: a wrong answer costs a failed dial, never a
 //! false identity (§7.7.3).
 
-use crate::store::EndpointRecord;
 use crate::view::NodeView;
 use crate::{Adjacency, Keyhash};
 use rhtn_archive::tx::{Order, Seqno, compare};
@@ -46,65 +45,19 @@ pub fn disposition(code: u64) -> Disposition {
     }
 }
 
-/// A `NetworkPoint` (`wire-format.md` §4.4): IPv4, optional ASN, optional
-/// port, the default being 7431.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkPoint {
-    pub ipv4: [u8; 4],
-    pub asn: Option<u64>,
-    pub port: Option<u64>,
-}
-
-impl NetworkPoint {
-    pub fn new(ipv4: [u8; 4], port: Option<u64>) -> Self {
-        NetworkPoint { ipv4, asn: None, port }
-    }
-    pub fn with_asn(mut self, asn: u64) -> Self {
-        self.asn = Some(asn);
-        self
-    }
-    pub fn emit(&self, out: &mut Vec<u8>) {
-        emit_map_head(out, 1 + self.asn.is_some() as usize + self.port.is_some() as usize);
-        emit_uint(out, 1);
-        emit_bstr(out, &self.ipv4);
-        if let Some(a) = self.asn {
-            emit_uint(out, 2);
-            emit_uint(out, a);
-        }
-        if let Some(p) = self.port {
-            emit_uint(out, 3);
-            emit_uint(out, p);
-        }
-    }
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        self.emit(&mut out);
-        out
-    }
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
-        let ipv4 = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 4 => <[u8; 4]>::try_from(&b[r.clone()]).map_err(|_| "ipv4")?,
-            _ => return Err("field 1".into()),
-        };
-        Ok(NetworkPoint { ipv4, asn: map_get(m, 2).and_then(as_uint), port: map_get(m, 3).and_then(as_uint) })
-    }
-    /// The socket address a dialler uses; the default port is 7431 (§4.4).
-    pub fn socket(&self) -> std::net::SocketAddr {
-        std::net::SocketAddr::from((self.ipv4, self.port.unwrap_or(7431) as u16))
-    }
-}
+/// A `NetworkPoint` (`wire-format.md` §4.4) is the transport's type; the
+/// node adds nothing to it.
+pub use rhtn_transport::session::NetworkPoint;
 
 fn emit_points(out: &mut Vec<u8>, points: &[NetworkPoint]) {
     emit_array_head(out, points.len());
     for p in points {
-        p.emit(out);
+        p.encode(out);
     }
 }
 
 fn decode_points(b: &[u8], at: usize) -> Result<Vec<NetworkPoint>, String> {
-    array_item_ranges(b, at).ok_or("points walk")?.iter().map(|r| NetworkPoint::decode(&b[r.clone()])).collect()
+    array_item_ranges(b, at).ok_or("points walk")?.iter().map(|r| NetworkPoint::decode_bytes(&b[r.clone()])).collect()
 }
 
 /// An anchor-relative path (`wire-format.md` §2.1): 4-bit hop indices, high
@@ -496,32 +449,84 @@ pub fn step(req: &ResolveRequest, consumed: usize, reply: &ResolveReply) -> Step
     }
 }
 
+/// How a resolution begun by this node is being carried.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Carried {
+    /// A light client's: sent to its serving node, which resolves on its
+    /// behalf and returns the result (`wire-format.md` §7.7.1).
+    Delegated(Keyhash),
+    /// An infra node's own: the first hop is the anchor, dialled from the
+    /// table's entry, or reached on a session where one exists.
+    Direct { sent_on_session: bool },
+}
+
+/// What a serving node does with a resolution request from a client.
+#[derive(Debug, Clone)]
+pub enum ClientResolution {
+    /// The node is an ancestor on the path and answers from its own
+    /// tables, as it would for anyone.
+    Answered(ResolveReply),
+    /// The node resolves on the client's behalf: it drives this resolution
+    /// against the anchor and every referral, and returns the result under
+    /// the client's nonce.
+    Proxied(Resolution),
+}
+
 impl NodeView {
-    /// Send a resolution for `subject` under `anchor` and `path`.  A locator
-    /// whose anchor is absent from the table is not resolvable by this node
-    /// and no request is sent (`wire-format.md` §7.7.3).
-    pub fn resolve(&self, adj: &dyn Adjacency, anchors: &AnchorTable, subject: Keyhash, anchor: Keyhash, path: Path, nonce: [u8; 16]) -> Result<ResolveRequest, NotResolvable> {
+    /// Begin a resolution for `subject` under `anchor` and `path`.  A light
+    /// client sends it to its serving node and never to the anchor; an
+    /// infra node begins it from its anchor table, and a locator whose
+    /// anchor is absent from that table is a caller-side condition with no
+    /// request sent (`wire-format.md` §7.7.1, §7.7.3).
+    pub fn resolve(&self, adj: &dyn Adjacency, anchors: &AnchorTable, subject: Keyhash, anchor: Keyhash, path: Path, nonce: [u8; 16]) -> Result<(Resolution, Carried), NotResolvable> {
         let req = ResolveRequest { subject, anchor, path: path.bytes.clone(), nibbles: path.nibbles, nonce };
-        // a light client sends to its serving infra node, never to the
-        // anchor (`wire-format.md` §7.7.1)
         if let Some(serving) = self.serving_node {
             adj.send(&serving, REQUEST_RESOLVE, &req.encode());
-            return Ok(req);
+            let r = Resolution { request: req, consumed: 0, hops: vec![serving], endpoints: Vec::new(), arrived: None };
+            return Ok((r, Carried::Delegated(serving)));
         }
-        if anchors.get(&anchor).is_none() {
-            return Err(NotResolvable::AnchorAbsent(anchor));
+        let r = Resolution::begin(anchors, subject, anchor, path, nonce)?;
+        let on_session = adj.has_session(&anchor);
+        if on_session {
+            adj.send(&anchor, REQUEST_RESOLVE, &r.request.encode());
         }
-        Ok(req)
+        Ok((r, Carried::Direct { sent_on_session: on_session }))
+    }
+
+    /// A resolution request from an attached client (`wire-format.md`
+    /// §7.7.1): answered from this node's own tables where it is on the
+    /// path, and otherwise resolved on the client's behalf.
+    pub fn resolve_for_client(&self, anchors: &AnchorTable, req: &ResolveRequest) -> Result<ClientResolution, NotResolvable> {
+        let mine = self.position_in(&req.anchor).map(|p| Path { bytes: p.path.clone(), nibbles: p.nibbles });
+        if let Some(my) = mine {
+            if my.is_prefix_of(&req.path()) {
+                return Ok(ClientResolution::Answered(self.answer_resolution(req)));
+            }
+        }
+        let r = Resolution::begin(anchors, req.subject, req.anchor, req.path(), req.nonce)?;
+        Ok(ClientResolution::Proxied(r))
+    }
+
+    /// The reply a serving node returns to its client once a proxied
+    /// resolution has run: the serving answer under the client's nonce, or
+    /// the failure the last hop gave.
+    pub fn reply_for_client(&self, r: &Resolution, last: Option<&ResolveReply>) -> ResolveReply {
+        match (&r.arrived, last) {
+            (Some(si), _) => ResolveReply::Serving { nonce: r.request.nonce, serving: si.clone() },
+            (None, Some(ResolveReply::Failure { code, .. })) => ResolveReply::Failure { nonce: r.request.nonce, code: *code },
+            (None, _) => ResolveReply::Failure { nonce: r.request.nonce, code: FAIL_NOT_AUTHORITATIVE },
+        }
     }
 
     /// Answer a resolution from this node's own position and tables.
     /// Nothing about the requester is retained (design §12.6.5).
     pub fn answer_resolution(&self, req: &ResolveRequest) -> ResolveReply {
         let nonce = req.nonce;
-        if req.anchor != self.anchor() {
+        // a node bound in several subnets has a position in each
+        let Some(pos) = self.position_in(&req.anchor) else {
             return ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE };
-        }
-        let my = Path { bytes: self.position.path.clone(), nibbles: self.position.nibbles };
+        };
+        let my = Path { bytes: pos.path.clone(), nibbles: pos.nibbles };
         let full = req.path();
         if !my.is_prefix_of(&full) {
             return ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE };
@@ -547,7 +552,7 @@ impl NodeView {
         // contacting it (`infra-client-requirements.md` §4.4)
         match self.store.endpoint(&child) {
             Some(er) => {
-                let endpoints = er.endpoints.iter().filter_map(|p| NetworkPoint::decode(p).ok()).collect();
+                let endpoints = er.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect();
                 ResolveReply::Referral { nonce, referral: Referral { next: child, endpoints, advances: 1, key_material: None } }
             }
             None => ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE },
@@ -568,7 +573,7 @@ impl NodeView {
 
     /// This node's own published endpoints, from its own endpoint record.
     pub fn own_endpoints(&self) -> Vec<NetworkPoint> {
-        self.store.endpoint(&self.me()).map(|er| er.endpoints.iter().filter_map(|p| NetworkPoint::decode(p).ok()).collect()).unwrap_or_default()
+        self.store.endpoint(&self.me()).map(|er| er.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect()).unwrap_or_default()
     }
 
     /// The subordinate this node holds at child index `ix`.
@@ -581,7 +586,7 @@ impl NodeView {
     /// record already held rather than consuming a number.
     pub fn publish_endpoints(&mut self, endpoints: &[NetworkPoint], seqno: Seqno) -> Vec<u8> {
         let me = self.me();
-        let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode()).collect();
+        let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
         if let Some(held) = self.store.endpoint_in(&me, seqno.series) {
             if held.endpoints == points {
                 return held.bytes.clone();
@@ -643,11 +648,6 @@ pub fn anchor_entry(identity: &rhtn_crypto::SigningIdentity, endpoints: &[Networ
     emit_uint(&mut out, 5);
     out.extend_from_slice(&sig);
     out
-}
-
-/// The endpoint record this node holds for `subject`, if any.
-pub fn held_endpoints(store: &crate::store::TopologyStore, subject: &Keyhash) -> Option<EndpointRecord> {
-    store.endpoint(subject).cloned()
 }
 
 // ---------------------------------------------------------------- locators

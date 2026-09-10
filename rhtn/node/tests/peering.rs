@@ -53,7 +53,7 @@ fn a_self_asserted_asn_is_not_validated_against_its_address() {
     let p = &o.peerings()[0];
     assert_eq!(p.a_point.asn, Some(64_512), "exactly those asserted");
     assert_eq!(p.b_point.asn, Some(64_513));
-    assert_eq!(p.a_point.ipv4, [203, 0, 113, 7]);
+    assert_eq!(p.a_point.ip, [203, 0, 113, 7]);
 }
 
 // acceptance: REP-06
@@ -88,8 +88,9 @@ fn a_peering_generates_no_rootward_memo() {
     let mut g = view("alice", a.table.clone_for(kh("alice")), "alice", &[]);
     let gfab = Fabric::with(&[kh("carol")]);
     let d = g.receive_push(&*gfab, &kh("carol"), &encode_push(KIND_TRANSACTION, &rec.bytes), &ids());
-    let _ = d;
-    assert!(g.memo_table.is_empty(), "G's memo table gains no entry");
+    assert_eq!(d, Decision::Stored, "G took the peering as topology");
+    assert!(g.memo_table.is_empty(), "and its memo table gains no entry");
+    assert_eq!(gfab.count(FRAME_TOPOLOGY_MEMO), 0, "and it sends none up");
 }
 
 // acceptance: REP-09

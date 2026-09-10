@@ -8,6 +8,7 @@ use common::*;
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_node::resolution::*;
 use rhtn_node::store::KIND_ENDPOINT_RECORD;
+use rhtn_node::resolution::{Carried, ClientResolution};
 use rhtn_node::view::NodeView;
 use std::sync::Arc;
 
@@ -21,8 +22,6 @@ struct Tree {
     a: NodeView,
     c: NodeView,
     afab: Arc<Fabric>,
-    #[allow(dead_code)]
-    cfab: Arc<Fabric>,
     c_record: Vec<u8>,
     a_entry: Vec<u8>,
 }
@@ -51,13 +50,26 @@ fn tree() -> Tree {
     c.take_object(&*cfab, &kh("alice"), KIND_ENDPOINT_RECORD, &c_record, &ids());
     let a_entry = anchor_entry(&id("alice"), &[point(1, 7000)], 200, Seqno { series: 1, counter: 1 });
     afab.clear();
-    cfab.clear();
-    Tree { a, c, afab, cfab, a_entry, c_record }
+    Tree { a, c, afab, a_entry, c_record }
 }
 
 /// The path from A to X: index 1 into C, then index 2 into X.
 fn path_to_x() -> Path {
     Path::from_indices(&[1, 2])
+}
+
+/// A lookup that records every identity it is asked for, so a test can see
+/// whether a path ever reached for a key.
+struct Recorder {
+    pins: Vec<rhtn_crypto::Identity>,
+    asked: std::cell::RefCell<Vec<[u8; 32]>>,
+}
+
+impl rhtn_crypto::verify::Lookup for Recorder {
+    fn identity(&self, keyhash: &[u8]) -> Option<&rhtn_crypto::Identity> {
+        self.asked.borrow_mut().push(keyhash.try_into().unwrap());
+        self.pins.iter().find(|i| i.keyhash == keyhash)
+    }
 }
 
 // acceptance: RES-01
@@ -67,9 +79,11 @@ fn a_gossiped_anchor_is_a_starting_point_and_is_never_pinned() {
     // the requester holds the entry and no key material for A
     let mut anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     let entry = AnchorEntry::parse(&t.a_entry).unwrap();
-    let unpinned: Vec<_> = ids().into_iter().filter(|i| i.keyhash != kh("alice")).collect();
+    let unpinned = Recorder { pins: ids().into_iter().filter(|i| i.keyhash != kh("alice")).collect(), asked: Default::default() };
     assert!(entry.signature_checks(&unpinned).is_none(), "nothing lets the recipient check it on receipt");
+    unpinned.asked.borrow_mut().clear();
     assert!(anchors.offer(entry, &unpinned));
+    assert!(unpinned.asked.borrow().is_empty(), "a gossip table asks for no key on ingestion");
     let mut r = Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(1)).unwrap();
     assert_eq!(r.next_hop().0, kh("alice"));
     assert_eq!(r.next_hop().1[0].socket().port(), 7000, "an endpoint taken from the entry");
@@ -89,8 +103,10 @@ fn a_gossiped_anchor_is_a_starting_point_and_is_never_pinned() {
         other => panic!("{other:?}"),
     }
     assert!(r.arrived.is_some(), "the resolution completes at the serving node");
-    // A was never pinned and its key material was never fetched
-    assert!(unpinned.iter().all(|i| i.keyhash != kh("alice")));
+    // at no point did the requester reach for A's key: nothing in beginning,
+    // following the referral or arriving asked the lookup for anyone
+    assert!(unpinned.asked.borrow().is_empty(), "no pin for A was created or sought: {:?}", unpinned.asked.borrow().len());
+    assert!(unpinned.pins.iter().all(|i| i.keyhash != kh("alice")));
 }
 
 // acceptance: RES-02
@@ -117,10 +133,13 @@ fn a_locator_whose_anchor_is_absent_sends_no_request() {
     let anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     let err = Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(3)).unwrap_err();
     assert_eq!(err, NotResolvable::AnchorAbsent(kh("alice")), "a caller-side condition, not a wire failure");
-    // and it is not one of the wire's failure codes
-    for code in [FAIL_NO_SUCH_CHILD, FAIL_NOT_AUTHORITATIVE, FAIL_UNAVAILABLE, FAIL_REFUSED] {
-        assert!(matches!(disposition(code), Disposition::ReResolve | Disposition::Retry | Disposition::Terminal));
-    }
+    // and through the node's own entry point nothing goes on any session
+    let mut w = World::new();
+    let n = view("w8", table_with(kh("w8"), &w, &[], &["w8"]), "w8", &[]);
+    let _ = w.tick();
+    let fab = Fabric::with(&[kh("alice"), kh("bob")]);
+    assert_eq!(n.resolve(&*fab, &anchors, kh("carol"), kh("alice"), path_to_x(), nonce(3)).unwrap_err(), NotResolvable::AnchorAbsent(kh("alice")));
+    assert_eq!(fab.frames().len(), 0, "no ResolveRequest is emitted on any connection");
 }
 
 fn fixture(id: &str) -> Vec<u8> {
@@ -194,21 +213,47 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     let lfab = Fabric::with(&[kh("bob")]);
     let lanchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     assert!(lanchors.is_empty(), "L holds none");
-    let req = l.resolve(&*lfab, &lanchors, kh("w5"), kh("alice"), path_to_x(), nonce(7)).unwrap();
+    // X sits beneath another anchor, W (w7), that S holds an entry for
+    let x_path = Path::from_indices(&[4, 1]);
+    let (mut lr, carried) = l.resolve(&*lfab, &lanchors, kh("w5"), kh("w7"), x_path.clone(), nonce(7)).unwrap();
+    assert_eq!(carried, Carried::Delegated(kh("bob")));
     let sent: Vec<_> = lfab.frames();
     assert_eq!(sent.len(), 1, "L's only request");
     assert_eq!(sent[0].to, kh("bob"), "on its session with S");
     assert_eq!(sent[0].frame_type, REQUEST_RESOLVE);
-    assert_eq!(ResolveRequest::decode(&sent[0].body).unwrap(), req);
-    assert!(lfab.to(&kh("alice"), REQUEST_RESOLVE).is_empty(), "L opens no connection to A");
-    // S resolves on L's behalf, from its own anchor table
+    let at_s = ResolveRequest::decode(&sent[0].body).unwrap();
+    assert!(lfab.to(&kh("w7"), REQUEST_RESOLVE).is_empty(), "L opens no connection to W");
+    // S takes L's request and resolves on L's behalf from its own table
     let mut anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
-    anchors.offer(AnchorEntry::parse(&t.a_entry).unwrap(), &ids());
-    let mut r = Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(7)).unwrap();
-    let reply = t.a.answer_resolution(&r.request);
+    anchors.offer(AnchorEntry::parse(&anchor_entry(&id("w7"), &[point(7, 7007)], 50, Seqno { series: 1, counter: 1 })).unwrap(), &ids());
+    let ClientResolution::Proxied(mut r) = t.c.resolve_for_client(&anchors, &at_s).unwrap() else { panic!("S is not on W's path") };
+    assert_eq!(r.next_hop().0, kh("w7"), "S sends a ResolveRequest to an endpoint of W");
+    assert_eq!(r.request.nonce, nonce(7), "under the client's nonce");
+    // W refers to its child w6, which serves X
+    let mut w7 = view("w7", table_with(kh("w7"), &t_world(), &[], &["w7", "w6"]), "w7", &[]);
+    w7.set_slot(4, Some(kh("w6")), 1);
+    let w6_record = endpoint_record(&id("w6"), &[point(6, 7006)], Seqno { series: 1, counter: 1 });
+    w7.take_object(&*Fabric::with(&[]), &kh("w6"), KIND_ENDPOINT_RECORD, &w6_record, &ids());
+    let reply = w7.answer_resolution(&r.request);
     assert!(matches!(r.take(&reply), Step::Continue(_)), "S follows the referral");
-    let reply = t.c.answer_resolution(&r.request);
-    assert!(matches!(r.take(&reply), Step::Arrived(_)), "and returns the result to L");
+    let mut w6 = view("w6", table_with(kh("w6"), &t_world(), &[], &["w7", "w6"]), "w7", &[4]);
+    w6.set_slot(1, Some(kh("w5")), 1);
+    w6.attached.insert(kh("w5"));
+    let reply = w6.answer_resolution(&r.request);
+    assert!(matches!(r.take(&reply), Step::Arrived(_)));
+    // and S returns the result to L, who is done
+    let to_l = t.c.reply_for_client(&r, Some(&reply));
+    match lr.take(&to_l) {
+        Step::Arrived(si) => {
+            assert_eq!(si.node, kh("w6"), "L receives X's serving node");
+            assert_eq!(si.residual.indices(), vec![1], "and the residual path");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+fn t_world() -> World {
+    World::new()
 }
 
 // acceptance: RES-08
@@ -264,7 +309,7 @@ fn a_referral_comes_from_the_childs_endpoint_record_before_any_contact() {
     let reply = t.a.answer_resolution(&req);
     let ResolveReply::Referral { referral, .. } = &reply else { panic!("{reply:?}") };
     assert_eq!(referral.next, kh("bob"));
-    assert_eq!(referral.endpoints, er.endpoints.iter().map(|p| NetworkPoint::decode(p).unwrap()).collect::<Vec<_>>());
+    assert_eq!(referral.endpoints, er.endpoints.iter().map(|p| NetworkPoint::decode_bytes(p).unwrap()).collect::<Vec<_>>());
     assert!(referral.advances >= 1);
     assert_eq!(t.afab.frames().len(), 0, "S opens no connection to C before replying");
 }
@@ -302,9 +347,10 @@ fn a_departed_child_is_removed_and_its_path_fails_rather_than_redirecting() {
     let mut t = tree();
     // C departs from A and is adopted by an unrelated patron
     let dep = t.w_depart();
-    t.a.take_object(&*t.afab, &kh("bob"), rhtn_node::store::KIND_TRANSACTION, &dep, &ids());
+    assert_eq!(t.a.child_at(1), Some(kh("bob")), "the child table holds C at index 1");
+    let d = t.a.take_object(&*t.afab, &kh("bob"), rhtn_node::store::KIND_TRANSACTION, &dep, &ids());
+    assert_eq!(d, rhtn_node::store::Decision::Stored);
     assert!(!t.a.table.subordinates(&kh("alice")).contains(&kh("bob")), "C has left the subtree");
-    t.a.set_slot(1, None, 0); // the child table entry goes with it
     let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: path_to_x().bytes, nibbles: 2, nonce: nonce(14) };
     let reply = t.a.answer_resolution(&req);
     match &reply {

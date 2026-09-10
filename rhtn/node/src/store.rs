@@ -186,11 +186,23 @@ impl TopologyStore {
         self.len() == 0
     }
 
-    /// The current endpoint record this node holds for `subject`, in a
-    /// series it has proved current where it holds more than one.
+    /// The current endpoint record this node holds for `subject`.  Holding
+    /// one line, that line; holding several, the one whose series this
+    /// node has been shown a chain for — and none where it has been shown
+    /// none, since records in different series do not rank and a reader
+    /// MUST NOT invent an order (`wire-format.md` §2.3).
     pub fn endpoint(&self, subject: &Keyhash) -> Option<&EndpointRecord> {
-        let proved = self.endpoints.iter().find(|((s, ser), _)| s == subject && self.proved_series.contains(&(*s, *ser)));
-        proved.or_else(|| self.endpoints.iter().find(|((s, _), _)| s == subject)).map(|(_, h)| &h.record)
+        let mine: Vec<_> = self.endpoints.iter().filter(|((s, _), _)| s == subject).collect();
+        match mine.len() {
+            0 => None,
+            1 => Some(&mine[0].1.record),
+            _ => mine.iter().find(|((s, ser), _)| self.proved_series.contains(&(*s, *ser))).map(|(_, h)| &h.record),
+        }
+    }
+
+    /// Every endpoint record held for `subject`, one per series.
+    pub fn endpoints_of(&self, subject: &Keyhash) -> Vec<&EndpointRecord> {
+        self.endpoints.iter().filter(|((s, _), _)| s == subject).map(|(_, h)| &h.record).collect()
     }
 
     pub fn endpoint_in(&self, subject: &Keyhash, series: u32) -> Option<&EndpointRecord> {
@@ -310,9 +322,13 @@ impl TopologyStore {
                 }
                 Order::Newer => {}
             }
-        } else if !self.proved_series.is_empty() && self.endpoints.keys().any(|(s, _)| *s == er.node) && !self.series_proved(&er.node, er.seqno.series) {
-            // a record in a series the receiver cannot prove current is
-            // neither stored nor forwarded (§10.1.2)
+        } else if self.endpoints.keys().any(|(s, _)| *s == er.node) && !self.series_proved(&er.node, er.seqno.series) {
+            // a second line for a subject this node already holds a line
+            // for: a record in a series the receiver cannot prove current
+            // is neither stored nor forwarded (§10.1.2).  It is held, and
+            // enters when a §4.6 chain proves the series.  A subject's
+            // first line is taken as gossip, there being nothing to rank it
+            // against and nothing a chain could say yet.
             let p = Pending { kind: KIND_ENDPOINT_RECORD, bytes: bytes.to_vec(), from: *from, missing_key: None, unproved_series: Some((er.node, er.seqno.series)) };
             if !self.pending.contains(&p) {
                 self.pending.push(p.clone());

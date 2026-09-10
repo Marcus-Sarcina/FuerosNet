@@ -9,7 +9,7 @@
 use rhtn_archive::record::Record;
 use rhtn_archive::Keyhash;
 use rhtn_crypto::Identity;
-use rhtn_node::propagation::{FRAME_TOPOLOGY_PUSH, decode_push, encode_push};
+use rhtn_node::propagation::{FRAME_TOPOLOGY_PUSH, decode_push};
 use rhtn_node::store::KIND_TRANSACTION;
 use rhtn_node::view::NodeView;
 use rhtn_node::Adjacency;
@@ -20,18 +20,9 @@ use std::sync::Mutex;
 #[derive(Default)]
 struct Outbox(Mutex<Vec<(Keyhash, u64, Vec<u8>)>>);
 
-impl Adjacency for Outbox {
-    fn peers(&self) -> Vec<Keyhash> {
-        Vec::new()
-    }
-    fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
-        self.0.lock().unwrap().push((*peer, frame_type, body.to_vec()));
-    }
-}
-
-/// A peer list that answers for one node, so `adjacent` can filter.
+/// A peer list that answers for one node, so `adjacent` can filter, and
+/// the outbox its frames land in.
 struct Links {
-    me: Keyhash,
     peers: Vec<Keyhash>,
     out: Outbox,
 }
@@ -41,7 +32,7 @@ impl Adjacency for Links {
         self.peers.clone()
     }
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
-        self.out.send(peer, frame_type, body);
+        self.out.0.lock().unwrap().push((*peer, frame_type, body.to_vec()));
     }
 }
 
@@ -167,11 +158,10 @@ impl Mesh {
                 break;
             }
             let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-            let links = Links { me: to, peers, out: Outbox::default() };
+            let links = Links { peers, out: Outbox::default() };
             let ids = self.identities.clone();
             let Some(v) = self.views.get_mut(&to) else { continue };
             v.take_object(&links, &sender, KIND_TRANSACTION, &bytes, &ids);
-            let _ = links.me;
             for (peer, ft, body) in links.out.0.into_inner().unwrap() {
                 if ft != FRAME_TOPOLOGY_PUSH {
                     continue;
@@ -189,7 +179,7 @@ impl Mesh {
         let objects: Vec<Vec<u8>> = self.views[&holder].store.objects().into_iter().filter(|(k, _)| *k == KIND_TRANSACTION).map(|(_, b)| b).collect();
         for object in objects {
             let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-            let links = Links { me: to, peers, out: Outbox::default() };
+            let links = Links { peers, out: Outbox::default() };
             let ids = self.identities.clone();
             let Some(v) = self.views.get_mut(&to) else { continue };
             v.take_object(&links, &holder, KIND_TRANSACTION, &object, &ids);
@@ -205,7 +195,7 @@ impl Mesh {
 
     fn flood_one(&mut self, from: Keyhash, to: Keyhash, object: &[u8]) {
         let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-        let links = Links { me: to, peers, out: Outbox::default() };
+        let links = Links { peers, out: Outbox::default() };
         let ids = self.identities.clone();
         let Some(v) = self.views.get_mut(&to) else { return };
         v.take_object(&links, &from, KIND_TRANSACTION, object, &ids);
@@ -239,11 +229,6 @@ impl Mesh {
         for v in self.views.values_mut() {
             v.store.keep_presence(txid, bytes.clone());
         }
-    }
-
-    /// The push frame an object travels in, for a test that wants the bytes.
-    pub fn push_of(object: &[u8]) -> Vec<u8> {
-        encode_push(KIND_TRANSACTION, object)
     }
 }
 

@@ -34,7 +34,7 @@ impl Peering {
         let body = &rec.bytes[rec.body.clone()];
         let point = |k: u64| -> Result<NetworkPoint, String> {
             let r = value_slice(body, k).ok_or("network point")?;
-            NetworkPoint::decode(&body[r])
+            NetworkPoint::decode_bytes(&body[r])
         };
         Ok(Peering {
             a: rec.field_hash(1).ok_or("field 1")?,
@@ -68,9 +68,9 @@ pub fn peering_body(back: [&[[u8; 32]]; 2], a: &Keyhash, b: &Keyhash, a_point: &
     emit_uint(&mut out, 2);
     emit_bstr(&mut out, b);
     emit_uint(&mut out, 3);
-    a_point.emit(&mut out);
+    a_point.encode(&mut out);
     emit_uint(&mut out, 4);
-    b_point.emit(&mut out);
+    b_point.encode(&mut out);
     emit_uint(&mut out, 5);
     emit_uint(&mut out, timestamp);
     if let Some(c) = commitment {

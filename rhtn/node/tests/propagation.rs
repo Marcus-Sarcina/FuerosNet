@@ -367,3 +367,33 @@ fn reconciliation_replays_the_same_frame() {
     assert_eq!(d, Decision::Stored);
     assert_eq!(s.fab.recipients(FRAME_TOPOLOGY_PUSH), others(&s));
 }
+
+/// Not a catalogue entry: a second line for a subject the node already
+/// holds a line for waits on a chain, two unproved lines rank nobody, and a
+/// proved series is the one served (`wire-format.md` §2.3, §10.1.2).
+#[test]
+fn a_second_series_waits_on_a_chain_and_two_unproved_lines_rank_nobody() {
+    let mut s = scene();
+    let x = "carol";
+    let in_2 = er(x, &[point(1, 5000)], Seqno { series: 2, counter: 5 });
+    assert_eq!(s.n.receive_push(&*s.fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &in_2), &ids()), Decision::Stored, "a subject's first line is taken as gossip");
+    s.fab.clear();
+    let in_9 = er(x, &[point(2, 9000)], Seqno { series: 9, counter: 1 });
+    let d = s.n.receive_push(&*s.fab, &kh("w1"), &encode_push(KIND_ENDPOINT_RECORD, &in_9), &ids());
+    assert!(matches!(d, Decision::Held(_)), "{d:?}");
+    assert_eq!(s.fab.count(FRAME_TOPOLOGY_PUSH), 0, "an unproved series never floods onward");
+    assert_eq!(s.n.store.endpoint(&kh(x)).unwrap().bytes, in_2, "one line held, that line");
+    // a §4.6 chain proves series 9: the held record enters and floods
+    s.n.store.prove_series(kh(x), 9);
+    assert_eq!(s.n.release_pending(&*s.fab, &ids()), vec![Decision::Stored]);
+    assert_eq!(s.fab.recipients(FRAME_TOPOLOGY_PUSH), [kh("alice"), kh("carol"), kh("w3"), kh("c1")].into_iter().collect::<BTreeSet<_>>(), "everyone but the session it arrived on, which was S2");
+    assert_eq!(s.n.store.endpoint(&kh(x)).unwrap().bytes, in_9, "the proved series is the one served");
+    assert_eq!(s.n.store.endpoints_of(&kh(x)).len(), 2, "and both lines are held");
+    // two lines and no chain for either: nobody is ranked
+    let mut fresh = scene();
+    fresh.n.store.prove_series(kh("w9"), 1); // a chain for somebody else changes nothing here
+    fresh.n.receive_push(&*fresh.fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &in_2), &ids());
+    let d = fresh.n.receive_push(&*fresh.fab, &kh("w1"), &encode_push(KIND_ENDPOINT_RECORD, &in_9), &ids());
+    assert!(matches!(d, Decision::Held(_)));
+    assert_eq!(fresh.n.store.endpoint(&kh(x)).unwrap().bytes, in_2, "the one stored line is served while the other waits");
+}

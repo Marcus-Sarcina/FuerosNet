@@ -165,7 +165,34 @@ pub struct SiblingRef {
 }
 
 impl NetworkPoint {
-    fn encode(&self, out: &mut Vec<u8>) {
+    pub fn new(ip: [u8; 4], port: Option<u64>) -> Self {
+        NetworkPoint { ip, asn: None, port }
+    }
+    pub fn with_asn(mut self, asn: u64) -> Self {
+        self.asn = Some(asn);
+        self
+    }
+    /// The socket address a dialler uses; the default port is 7431 (§4.4).
+    pub fn socket(&self) -> std::net::SocketAddr {
+        std::net::SocketAddr::from((self.ip, self.port.unwrap_or(7431) as u16))
+    }
+    /// A point for a loopback socket address, as a test on one host makes.
+    pub fn from_socket(addr: std::net::SocketAddr) -> Option<Self> {
+        match addr.ip() {
+            std::net::IpAddr::V4(v4) => Some(NetworkPoint { ip: v4.octets(), asn: None, port: Some(addr.port() as u64) }),
+            _ => None,
+        }
+    }
+    pub fn encode_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        self.encode(&mut out);
+        out
+    }
+    pub fn decode_bytes(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| e.0)?;
+        Self::decode(b, &item).ok_or_else(|| "network point".to_string())
+    }
+    pub fn encode(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 1 + self.asn.is_some() as usize + self.port.is_some() as usize);
         emit_uint(out, 1);
         emit_bstr(out, &self.ip);
@@ -178,7 +205,7 @@ impl NetworkPoint {
             emit_uint(out, p);
         }
     }
-    fn decode(b: &[u8], it: &Item) -> Option<Self> {
+    pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
         let ip = match map_get(m, 1) { Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?, _ => return None };
         Some(NetworkPoint { ip, asn: map_get(m, 2).and_then(as_uint), port: map_get(m, 3).and_then(as_uint) })
@@ -717,7 +744,11 @@ impl Node {
         });
         let _ = control_loop(sender, recv, interval, log, reach, |fam, _, _| !matches!(fam, Family::Attach | Family::AttachAck), Some(on_change)).await;
         requests.abort();
-        self.state.lock().unwrap().sessions.remove(&claimed);
+        {
+            let mut st = self.state.lock().unwrap();
+            st.sessions.remove(&claimed);
+            st.reach.remove(&claimed);
+        }
         self.log.push(Event::Closed);
         Ok(())
     }
