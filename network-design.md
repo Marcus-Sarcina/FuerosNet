@@ -3756,9 +3756,9 @@ nodes at f = 10 (§15.1); one row each, per resource.
 3. **When evidence about a standing member arrives** — a fresh presence record, a
    disavowal, a change in what the metric reads. The span is narrow enough that
    re-scoring on events is affordable [author, 2026-09-02].
-4. **Periodically, for time-dependent values.** Decay and currency move with time
-   alone, so they recalculate in a scheduled whole-table pass rather than
-   continuously; between passes the table stands.
+4. **Periodically, for time-dependent values.** Decay moves with time alone, so
+   it recalculates in a scheduled whole-table pass rather than continuously;
+   between passes the table stands.
 
 **Nothing recalculates on request.** A resource request consults the table as it
 stands, which makes authorisation deterministic, fast, and inspectable — an

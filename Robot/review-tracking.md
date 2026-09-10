@@ -8339,3 +8339,8 @@ assertions, 6 TLC instances with no error, 5 TLC mutations violated as
 expected, 8 Tamarin theories verified (67 lemmas), 2 bounded companions, and
 7 theory mutations falsified as expected. The results files are regenerated
 by the run and differ from the committed ones in their timings only.
+
+**§11.4's currency taken out (2026-09-10).** Asked about the one reading the
+sweep left, the author: *"Take it out."* §11.4's fourth trigger now names
+decay alone as what moves with time; the change-log records it. No entry
+quoted the sentence. References 2074 / 0 flags.

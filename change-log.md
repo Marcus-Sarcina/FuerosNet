@@ -9301,3 +9301,10 @@ withdrawn reading; what remained of the vocabulary after the ruling — the
 lifetime derivation, A33, the compelled-provider entry's "thief-issued currency
 dies with the staple lifetime" — already described addressing rather than
 permission.
+
+### 2026-09-10 (a role table recalculates nothing from currency)
+
+**§11.4 no longer lists currency among the time-dependent values a role table
+recalculates** [author]. A staple decides which key to address and is not a
+trust input (§12.6.5), so a role table has nothing to recalculate from it;
+decay is the one value that moves with time alone.
