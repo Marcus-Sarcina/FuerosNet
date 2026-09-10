@@ -336,3 +336,25 @@ fn a_sibling_attests_what_its_replicated_state_holds() {
     assert!(!encoded.windows(32).any(|x| x == kh("alice2")), "no successor P knows about appears");
     assert_eq!(CurrencyReply::decode(&encoded).unwrap(), reply, "the lag is visible only as the secondhand role");
 }
+
+// acceptance: REP-07
+#[test]
+fn asn_concentration_leaves_the_metric_s_output_unchanged() {
+    // the same topology twice, differing only in the ASNs the peering
+    // network points carry: one concentrated, one diverse
+    let score = |asn_a: u64, asn_b: u64| {
+        let (_w, mut o, fab) = observer();
+        let a_point = NetworkPoint::new([203, 0, 113, 7], None).with_asn(asn_a);
+        let b_point = NetworkPoint::new([198, 51, 100, 9], None).with_asn(asn_b);
+        let rec = peering("bob", "w5", a_point, b_point);
+        assert_eq!(o.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &rec.bytes, &ids()), Decision::Stored);
+        let concentrated = o.peerings()[0].concentrated();
+        (concentrated, o.standing(&kh("w5")), o.evaluate(&[kh("w5"), kh("bob")]))
+    };
+    let (same, s1, e1) = score(64_496, 64_496);
+    let (differ, s2, e2) = score(64_496, 64_497);
+    assert_eq!((same, differ), (Some(true), Some(false)), "concentration is visible");
+    assert_eq!(s1, s2, "and nothing in the metric consumes it");
+    assert_eq!(e1, e2);
+    assert_eq!(s1, 10.0, "a peer of a horizon member: one edge beyond it, at the edge's capacity");
+}

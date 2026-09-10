@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use crate::resolution::LocatorStore;
 use crate::store::{Horizon, TopologyStore};
+use rhtn_policy::{Policy, ReferenceMetric};
 
 /// One subordinate slot under this node's own position: the child index a
 /// memo names, with the occupant and the timestamp that put them there
@@ -57,6 +58,10 @@ pub struct NodeView {
     pub serving_node: Option<Keyhash>,
     /// The node's own clock.
     pub now: u64,
+    /// The trust policy this node computes standing with: the reference
+    /// metric unless its operator substitutes one (design §16.1).  Nothing
+    /// the node stores or forwards consults it (design §16.4).
+    pub policy: Arc<dyn Policy<Keyhash>>,
 }
 
 impl NodeView {
@@ -80,6 +85,7 @@ impl NodeView {
             peers: BTreeSet::new(),
             serving_node: None,
             now: 1_800_000_000,
+            policy: Arc::new(ReferenceMetric::default()),
         }
     }
 

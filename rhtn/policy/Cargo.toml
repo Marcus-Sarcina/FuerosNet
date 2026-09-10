@@ -1,0 +1,12 @@
+[package]
+name = "rhtn-policy"
+version = "0.1.0"
+edition = "2024"
+description = "RHTN trust policy: the reference flow metric over the graph an evaluator builds, the policy interface a node consults, and the conformance test that reports what a substitute policy gives up"
+
+[dependencies]
+rhtn-archive = { path = "../archive" }
+
+[dev-dependencies]
+rhtn-codec = { path = "../codec" }
+rhtn-crypto = { path = "../crypto" }

@@ -595,10 +595,20 @@ dependencies = [
  "rhtn-archive",
  "rhtn-codec",
  "rhtn-crypto",
+ "rhtn-policy",
  "rhtn-transport",
  "serde_json",
  "sha2",
  "tokio",
+]
+
+[[package]]
+name = "rhtn-policy"
+version = "0.1.0"
+dependencies = [
+ "rhtn-archive",
+ "rhtn-codec",
+ "rhtn-crypto",
 ]
 
 [[package]]
