@@ -84,6 +84,31 @@ impl Locator {
     }
 }
 
+impl Locator {
+    /// Decode a `Locator` map (`wire-format.md` §2.3).
+    pub fn decode(b: &[u8]) -> Result<Locator, String> {
+        use rhtn_codec::cbor::*;
+        let item = parse_all(b).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else { return Err("locator not a map".into()) };
+        let anchor: Keyhash = match map_get(m, 1) {
+            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "anchor width")?,
+            _ => return Err("locator field 1".into()),
+        };
+        let Some(Item::Map(pm)) = map_get(m, 2) else { return Err("locator field 2".into()) };
+        let path = match map_get(pm, 1) {
+            Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
+            _ => return Err("path field 1".into()),
+        };
+        let nibbles = map_get(pm, 2).and_then(as_uint).ok_or("path field 2")?;
+        let Some(Item::Array(sq)) = map_get(m, 3) else { return Err("locator field 3".into()) };
+        let seqno = Seqno {
+            series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
+            counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32,
+        };
+        Ok(Locator { anchor, path, nibbles, seqno })
+    }
+}
+
 /// Key 0: one list per required signer, in signer order; a list longer than
 /// one is a merge and is sorted ascending bytewise (`wire-format.md` §3.1).
 pub fn emit_back_pointers(out: &mut Vec<u8>, lists: &[Vec<Txid>]) {

@@ -116,6 +116,24 @@ impl Table {
         t
     }
 
+    /// The same bindings, read as another node's own table.  Every node's
+    /// view is its own; this copies what one node holds into another's,
+    /// which is what a test does when both learned the same transactions.
+    pub fn clone_for(&self, me: Keyhash) -> Table {
+        Table {
+            me: Some(me),
+            bindings: self.bindings.clone(),
+            nodes: self.nodes.clone(),
+            held: self.held.clone(),
+            acks: self.acks.clone(),
+            infra: self.infra.clone(),
+            attached: BTreeMap::new(),
+            lineage: self.lineage.clone(),
+            pending_disavowals: self.pending_disavowals.clone(),
+            prefer: self.prefer.clone(),
+        }
+    }
+
     /// Mark a node as infrastructure (design §12.6.3).
     pub fn mark_infra(&mut self, k: Keyhash) {
         self.infra.insert(k);
@@ -162,6 +180,29 @@ impl Table {
 
     pub fn is_root(&self, node: &Keyhash) -> bool {
         self.nodes.contains(node) && self.patrons(node).is_empty()
+    }
+
+    /// Every node within an `h`-edge walk of `me` over adoption and sibling
+    /// edges, `me` included (design §15.1).  Peering edges do not count.
+    pub fn horizon(&self, me: &Keyhash, h: usize) -> BTreeSet<Keyhash> {
+        let mut seen: BTreeSet<Keyhash> = BTreeSet::from([*me]);
+        let mut frontier: BTreeSet<Keyhash> = seen.clone();
+        for _ in 0..h {
+            let mut next = BTreeSet::new();
+            for x in &frontier {
+                next.extend(self.patrons(x));
+                next.extend(self.subordinates(x));
+                next.extend(self.siblings(x));
+            }
+            frontier = next.difference(&seen).copied().collect();
+            seen.extend(frontier.iter().copied());
+        }
+        seen
+    }
+
+    /// design §15.1's h = 2: the ball a node stores topology for.
+    pub fn in_h_store(&self, me: &Keyhash, x: &Keyhash) -> bool {
+        self.horizon(me, 2).contains(x)
     }
 
     /// Whether `x` lies at or below `node` over open bindings.
