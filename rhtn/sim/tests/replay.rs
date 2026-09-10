@@ -53,17 +53,18 @@ async fn a_replayed_first_flight_binds_nothing() {
         other => panic!("{other:?}"),
     };
     path.to_server.capture(false);
-    let flight = path.to_server.captured();
+    // the Attach rode early data, and A's handshake then completed
+    assert_eq!(a.log.count(|e| *e == Event::EarlyDataSent), 1, "the Attach rode 0-RTT early data");
+    let hs = handshake_at(&a.log).expect("A's handshake completed");
+    // the early-data packets are what the client sent before that instant
+    let flight = path.to_server.captured_before(hs);
     assert!(!flight.is_empty(), "the first flight was recorded");
+    assert!(flight.len() < path.to_server.captured().len(), "and the 1-RTT packets that followed the handshake are not part of it");
 
     // on A, nothing was acted on before the handshake of the connection
     // that carried the early data completed
-    let sent_early = a.log.count(|e| *e == Event::EarlyDataSent);
-    if sent_early > 0 {
-        let hs = handshake_at(&a.log).expect("A's handshake completed");
-        let ack = ack_at(&a.log).expect("an AttachAck followed");
-        assert!(ack >= hs, "no AttachAck before A's handshake completed");
-    }
+    let ack = ack_at(&a.log).expect("an AttachAck followed");
+    assert!(ack >= hs, "no AttachAck before A's handshake completed");
     let delivered = drain(&mut a, 700).await;
     assert_eq!(delivered, vec![item.clone()], "the queued item is delivered on A alone");
     assert_eq!(s.node.queued(&kh("carol")), 0);
@@ -86,8 +87,9 @@ async fn a_replayed_first_flight_binds_nothing() {
     assert_eq!(s.node.queued(&kh("carol")), 0, "the queued item is not re-delivered");
     assert!(drain(&mut a, 300).await.is_empty(), "and nothing further arrives on A");
     // the deferral is what stands behind this: a server reads nothing
-    // before the handshake of the connection that carried the early data
-    assert!(s.node.log.count(|e| matches!(e, Event::Received { frame_type: 1 })) <= attaches_after_a + 1);
+    // before the handshake of the connection that carried the early data,
+    // so the replayed Attach was never read at all
+    assert_eq!(s.node.log.count(|e| matches!(e, Event::Received { frame_type: 1 })), attaches_after_a, "B's Attach was never read");
 }
 
 /// The premise TRN-16 rests on, asserted rather than assumed: the second

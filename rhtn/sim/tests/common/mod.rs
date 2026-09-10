@@ -13,6 +13,14 @@ use std::sync::{Arc, Mutex};
 
 pub const NAMES: [&str; 8] = ["alice", "bob", "carol", "alice2", "w1", "w2", "c1", "c2"];
 
+/// The tests that count seconds on a wall clock run one at a time, so a
+/// loaded machine does not turn a bound into a flake.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+pub async fn serial() -> tokio::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().await
+}
+
 pub fn id(n: &str) -> SigningIdentity {
     test_identity(n)
 }

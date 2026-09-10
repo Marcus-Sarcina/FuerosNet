@@ -21,7 +21,7 @@ pub struct Direction {
     delay_ms: AtomicU64,
     /// Keep a copy of each datagram while capturing.
     capturing: AtomicBool,
-    captured: Mutex<Vec<Vec<u8>>>,
+    captured: Mutex<Vec<(tokio::time::Instant, Vec<u8>)>>,
     passed: AtomicU64,
     dropped: AtomicU64,
 }
@@ -43,7 +43,13 @@ impl Direction {
         self.capturing.store(on, Ordering::SeqCst);
     }
     pub fn captured(&self) -> Vec<Vec<u8>> {
-        self.captured.lock().unwrap().clone()
+        self.captured.lock().unwrap().iter().map(|(_, d)| d.clone()).collect()
+    }
+
+    /// The datagrams captured before `at`: what an attacker recording the
+    /// path held at that instant.
+    pub fn captured_before(&self, at: tokio::time::Instant) -> Vec<Vec<u8>> {
+        self.captured.lock().unwrap().iter().filter(|(t, _)| *t < at).map(|(_, d)| d.clone()).collect()
     }
     pub fn clear_captured(&self) {
         self.captured.lock().unwrap().clear();
@@ -58,7 +64,7 @@ impl Direction {
     /// Decide one datagram: `None` drops it, `Some(delay)` passes it.
     fn admit(&self, datagram: &[u8]) -> Option<u64> {
         if self.capturing.load(Ordering::SeqCst) {
-            self.captured.lock().unwrap().push(datagram.to_vec());
+            self.captured.lock().unwrap().push((tokio::time::Instant::now(), datagram.to_vec()));
         }
         if self.blackhole.load(Ordering::SeqCst) {
             self.dropped.fetch_add(1, Ordering::SeqCst);

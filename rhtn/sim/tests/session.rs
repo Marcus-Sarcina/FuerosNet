@@ -48,6 +48,7 @@ fn pair(n_filter: Option<OutboundFilter>) -> Pair {
 // acceptance: SES-08
 #[tokio::test]
 async fn three_missed_intervals_move_the_client_to_a_sibling() {
+    let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
     let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
     assert_eq!(c.ack.mode, 0, "primary at first");
@@ -62,6 +63,7 @@ async fn three_missed_intervals_move_the_client_to_a_sibling() {
 // acceptance: SES-06
 #[tokio::test]
 async fn payload_does_not_reset_the_detector() {
+    let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
     let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
     // N keeps sending payload on unidirectional streams and no Heartbeat
@@ -81,6 +83,7 @@ async fn payload_does_not_reset_the_detector() {
 // acceptance: SES-07
 #[tokio::test]
 async fn misses_are_counted_by_elapsed_intervals_not_by_callbacks() {
+    let _serial = serial().await;
     let p = partitioned().await;
     let AttachOutcome::Attached(mut c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
     // the session is running: heartbeats have been exchanged both ways
@@ -110,6 +113,7 @@ async fn misses_are_counted_by_elapsed_intervals_not_by_callbacks() {
 // acceptance: SES-09
 #[tokio::test]
 async fn a_restarted_client_uses_its_persisted_sibling_list_at_once() {
+    let _serial = serial().await;
     let p = pair(None);
     let AttachOutcome::Attached(c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
     let persisted = p.cfg.sibling_cache.lock().unwrap().clone();
@@ -131,6 +135,7 @@ async fn a_restarted_client_uses_its_persisted_sibling_list_at_once() {
 // acceptance: SES-10
 #[tokio::test]
 async fn a_degraded_session_produces_no_countersignature() {
+    let _serial = serial().await;
     let p = pair(None);
     p.n.go_dark();
     let fresh = client_cfg("carol");
@@ -139,8 +144,33 @@ async fn a_degraded_session_produces_no_countersignature() {
     know(&fresh, "bob", p.s.addr);
     let AttachOutcome::Attached(mut deg) = fresh_attach(&fresh, &client_ep(), kh("alice"), false).await else { panic!() };
     assert!(deg.degraded());
-    assert!(!deg.may_countersign(), "S holds the replicated state but not the authority");
-    // payload flows on the same session
+    assert!(!deg.may_countersign(), "the client will not ask a sibling to countersign");
+    // C submits a subnet-scoped transaction that needs its patron N's
+    // countersignature: an adoption body naming N as patron.  S is not the
+    // party the body names, so an envelope S signs is not that transaction
+    // and does not parse as one: no transaction countersigned by S exists.
+    let mut signers = Signers::new();
+    let pop = signers.formation("alice", "carol");
+    let body = {
+        let bn = vec![rhtn_archive::genesis(&kh("carol"))];
+        let bp = vec![rhtn_archive::genesis(&kh("alice"))];
+        let a = rhtn_archive::tx::Adoption {
+            node: kh("carol"),
+            patron: kh("alice"),
+            locator: rhtn_archive::tx::Locator::root(kh("alice"), rhtn_archive::tx::Seqno { series: 5, counter: 0 }),
+            timestamp: signers.clock,
+            key_material: None,
+            evidence: rhtn_archive::tx::Evidence::Presence(pop.txid),
+            presented_head: None,
+            back: [&bn, &bp],
+        };
+        rhtn_archive::tx::adoption_body(&a)
+    };
+    let mut s_view = view_of("bob", rhtn_archive::topology::Table::with_me(kh("bob")), "alice", &[1], signers.clock);
+    assert!(s_view.countersign_adoption(&body, &id("carol")).is_none(), "S's signature over a body naming N is no transaction at all");
+    let by_n = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &body, &[&id("carol"), &id("alice")]);
+    assert!(rhtn_archive::record::Record::parse(&by_n).is_ok(), "whereas N's would be");
+    // and payload flows on the same session
     p.s.node.enqueue(kh("carol"), b"payload".to_vec()).unwrap();
     let got = drain(&mut deg, 700).await;
     assert_eq!(got, vec![b"payload".to_vec()], "the payload is carried");
@@ -149,6 +179,7 @@ async fn a_degraded_session_produces_no_countersignature() {
 // acceptance: SES-11
 #[tokio::test]
 async fn there_is_no_automatic_failback() {
+    let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
     let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
     let AttachOutcome::Attached(deg) = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep)).await.unwrap() else { panic!() };
@@ -166,6 +197,7 @@ async fn there_is_no_automatic_failback() {
 // acceptance: SES-12
 #[tokio::test]
 async fn the_next_fresh_attach_tries_the_serving_node_first() {
+    let _serial = serial().await;
     let p = pair(None);
     // C holds a degraded session on S
     let AttachOutcome::Attached(deg) = attach(&p.cfg, &p.ep, kh("bob"), p.s.addr, false).await else { panic!() };
@@ -212,6 +244,7 @@ async fn partitioned() -> Partitioned {
 // acceptance: REP-01
 #[tokio::test]
 async fn a_clients_unreachability_replicates_to_the_siblings() {
+    let _serial = serial().await;
     let p = partitioned().await;
     let AttachOutcome::Attached(c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
     assert_eq!(p.n.node.reachability(&kh("carol")), Some(Reachability::Reachable));
@@ -227,6 +260,7 @@ async fn a_clients_unreachability_replicates_to_the_siblings() {
 // acceptance: QUE-10
 #[tokio::test]
 async fn material_queues_for_a_client_marked_unreachable() {
+    let _serial = serial().await;
     let p = partitioned().await;
     let AttachOutcome::Attached(c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
     p.path.partition(true);
@@ -248,6 +282,7 @@ async fn material_queues_for_a_client_marked_unreachable() {
 // acceptance: QUE-11
 #[tokio::test]
 async fn an_offline_subordinate_differs_from_a_keyhash_with_no_record() {
+    let _serial = serial().await;
     let mut cfg = node_cfg("alice", I);
     // N serves C and holds no record of Z
     cfg.serves = Arc::new(|k| *k != kh("w2"));
@@ -270,6 +305,7 @@ async fn an_offline_subordinate_differs_from_a_keyhash_with_no_record() {
 // acceptance: REP-02
 #[tokio::test]
 async fn a_failover_sibling_holds_no_queue_state() {
+    let _serial = serial().await;
     let p = pair(None);
     let msgs = messages(3, "at N");
     for m in &msgs {
@@ -294,6 +330,7 @@ async fn a_failover_sibling_holds_no_queue_state() {
 // acceptance: QUE-13
 #[tokio::test]
 async fn a_client_collects_from_its_own_serving_node_when_it_returns() {
+    let _serial = serial().await;
     let s = Running::start({
         let mut c = node_cfg("bob", I);
         c.in_subtree = Arc::new(|_| false);
@@ -351,11 +388,27 @@ async fn a_client_collects_from_its_own_serving_node_when_it_returns() {
 // acceptance: REP-15
 #[tokio::test]
 async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
-    // T1, T2 are S's infra siblings; Q is the light-client patron's sibling
+    let _serial = serial().await;
+    // R (alice2) over S (alice), T1 (w1) and T2 (w2), all infra; P (bob), a
+    // light client, under S; Q (c1), P's light-client sibling, under S too;
+    // L (carol) under P
+    let mut sg = Signers::new();
+    let a_s = sg.adopt("alice", "alice2", "alice2", &[0], 1);
+    let a_t1 = sg.adopt("w1", "alice2", "alice2", &[1], 2);
+    let a_t2 = sg.adopt("w2", "alice2", "alice2", &[2], 3);
+    let a_p = sg.adopt("bob", "alice", "alice2", &[0, 0], 4);
+    let a_q = sg.adopt("c1", "alice", "alice2", &[0, 1], 5);
+    let a_l = sg.adopt("carol", "bob", "alice2", &[0, 0, 0], 6);
+    let s_view = view_of("alice", table_of("alice", &sg, &[&a_s, &a_t1, &a_t2, &a_p, &a_q, &a_l], &["alice2", "alice", "w1", "w2"]), "alice2", &[0], sg.clock);
     let t1 = Running::start(node_cfg("w1", I));
     let t2 = Running::start(node_cfg("w2", I));
+    let known = [(kh("w1"), t1.addr), (kh("w2"), t2.addr)];
+    // the list S pushes is derived from its own table: its siblings, not P's
+    let set = s_view.replication_set();
+    assert_eq!(set, [kh("w1"), kh("w2")].into_iter().collect());
+    assert!(!set.contains(&kh("c1")), "Q is P's sibling, not S's");
     let mut cfg = node_cfg("alice", I);
-    cfg.siblings = vec![sibling_ref("w1", t1.addr), sibling_ref("w2", t2.addr)];
+    cfg.siblings = set.iter().map(|k| known.iter().find(|(x, _)| x == k).map(|(_, a)| sibling_ref(if *k == kh("w1") { "w1" } else { "w2" }, *a)).unwrap()).collect();
     let s = Running::start(cfg);
     let ccfg = client_cfg("carol");
     know(&ccfg, "alice", s.addr);
@@ -363,8 +416,8 @@ async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
         AttachOutcome::Attached(x) => x,
         other => panic!("{other:?}"),
     };
-    let named: Vec<[u8; 32]> = sess.ack.siblings.iter().map(|r| r.keyhash).collect();
-    assert_eq!(named, vec![kh("w1"), kh("w2")], "T1 and T2 with their endpoints");
-    assert!(!named.contains(&kh("bob")), "and not the patron's sibling Q");
+    let named: std::collections::BTreeSet<[u8; 32]> = sess.ack.siblings.iter().map(|r| r.keyhash).collect();
+    assert_eq!(named, [kh("w1"), kh("w2")].into_iter().collect(), "T1 and T2 with their endpoints");
+    assert!(!named.contains(&kh("c1")), "and not the patron's sibling Q");
     assert!(sess.ack.siblings.iter().all(|r| r.key_material.is_some()));
 }

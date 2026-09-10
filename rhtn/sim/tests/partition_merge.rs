@@ -196,17 +196,18 @@ fn gossip_copies_and_never_creates() {
     let mut s = Signers::new();
     let mut m = mesh();
     seed(&mut m, &mut s);
-    // a further adoption, delivered but deliberately NOT recorded as
-    // originated: what a store would have to hold for the invariant to fail
+    // an adoption of carol handed to alice alone, as an injection would:
+    // alice holds a transaction its subject does not, and the check says so
     let pop = s.formation("alice", "carol");
     m.share_presence(pop.txid, pop.bytes.clone());
     m.originate(&pop);
     let later = s.adoption("carol", "alice", pop.txid, 9);
-    m.flood(kh("carol"), &later.bytes);
-    assert!(m.no_invention().is_err(), "the check is live and would catch an object no signer made");
-    // recorded as signed, which is what a real signature means, it passes
     m.originate(&later);
-    m.no_invention().expect("a genuinely signed object passes");
+    m.inject(kh("alice"), kh("bob"), &later.bytes);
+    assert!(m.no_invention().is_err(), "the check is live: a store holding what its subject does not is caught");
+    // once the subject holds what it signed, as origination makes it, it passes
+    m.flood(kh("carol"), &later.bytes);
+    m.no_invention().expect("a genuinely originated object passes everywhere");
     safety(&m);
     assert_eq!(m.view_patrons(&kh("alice"), &kh("carol")), [kh("alice"), kh("bob")].into(), "adopting elsewhere leaves the old binding in view");
 }

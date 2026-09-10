@@ -88,18 +88,31 @@ impl Mesh {
         }
     }
 
-    /// Every transaction a node holds is in its signers' own sets: gossip
+    /// Every transaction a node holds is in its subject's own store: the
+    /// model's `t ∈ store[t.subj]`, asked of the running views.  Gossip
     /// copies, never creates.
     pub fn no_invention(&self) -> Result<(), String> {
         for (holder, v) in &self.views {
             for rec in v.store.transactions() {
-                let signed = rec.signers.iter().any(|s| self.origin.get(s).is_some_and(|set| set.iter().any(|r| r.txid == rec.txid)));
-                if !signed {
-                    return Err(format!("{} holds {} which no signer originated", hex4(holder), hex4(&rec.txid)));
+                for subject in rhtn_node::store::subjects(rec) {
+                    let Some(sv) = self.views.get(&subject) else { continue };
+                    if !sv.store.holds_txid(&rec.txid) {
+                        return Err(format!("{} holds {} which its subject {} does not", hex4(holder), hex4(&rec.txid), hex4(&subject)));
+                    }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Deliver one object to one node and nowhere else, as an injection
+    /// would; what that node forwards is dropped.
+    pub fn inject(&mut self, to: Keyhash, from: Keyhash, object: &[u8]) {
+        let links = Links { peers: Vec::new(), out: Outbox::default() };
+        let ids = self.identities.clone();
+        if let Some(v) = self.views.get_mut(&to) {
+            v.take_object(&links, &from, KIND_TRANSACTION, object, &ids);
+        }
     }
 
     /// A subject is never behind its own store: what a node's own store
