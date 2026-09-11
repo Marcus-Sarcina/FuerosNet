@@ -129,6 +129,48 @@ fn read_error_connection(e: quinn::ReadExactError) -> Option<quinn::ConnectionEr
     }
 }
 
+/// A reader of length-prefixed frames that survives cancellation: bytes
+/// arrive through the cancellation-safe chunk read into a buffer the
+/// reader keeps, and a frame is returned only once whole, so a timer or an
+/// outbound frame winning a select between a length prefix and its payload
+/// loses nothing (§8.0, §9.2).  The one-shot [`read_frame`] serves where
+/// nothing races the read.
+pub struct FrameReader {
+    recv: RecvStream,
+    buf: Vec<u8>,
+}
+
+impl FrameReader {
+    pub fn new(recv: RecvStream) -> Self {
+        FrameReader { recv, buf: Vec::new() }
+    }
+
+    /// The next whole frame's payload, or how the stream ended.  Dropping
+    /// the future between polls loses nothing the reader has taken.
+    pub async fn next(&mut self, bound: usize) -> FrameRead {
+        loop {
+            if self.buf.len() >= 4 {
+                let n = u32::from_be_bytes([self.buf[0], self.buf[1], self.buf[2], self.buf[3]]);
+                if n as usize > bound {
+                    return FrameRead::OverBound(n);
+                }
+                if self.buf.len() >= 4 + n as usize {
+                    let payload = self.buf[4..4 + n as usize].to_vec();
+                    self.buf.drain(..4 + n as usize);
+                    return FrameRead::Payload(payload);
+                }
+            }
+            let mut chunk = [0u8; 4096];
+            match self.recv.read(&mut chunk).await {
+                Ok(Some(k)) => self.buf.extend_from_slice(&chunk[..k]),
+                Ok(None) => return FrameRead::Closed(None),
+                Err(quinn::ReadError::ConnectionLost(c)) => return FrameRead::Closed(Some(c)),
+                Err(_) => return FrameRead::Closed(None),
+            }
+        }
+    }
+}
+
 /// What a received control payload turned out to be.
 pub enum Control {
     /// A known frame: its family, the whole payload the item's ranges
@@ -443,8 +485,11 @@ struct LoopIo {
 /// The heartbeat and liveness loop both roles run after the ack (§8.2).
 /// Returns when the stream or connection ends.  `on_frame` sees every
 /// known non-heartbeat frame.
-async fn control_loop(mut sender: Sender, mut recv: RecvStream, io: LoopIo, mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool) -> Option<quinn::ConnectionError> {
+async fn control_loop(mut sender: Sender, recv: RecvStream, io: LoopIo, mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool) -> Option<quinn::ConnectionError> {
     let LoopIo { interval, log, reach, on_change, mut outbound } = io;
+    // the reader outlives every select below, so a frame half-read when
+    // another branch wins is finished on the next turn
+    let mut reader = FrameReader::new(recv);
     let start = Instant::now();
     let mut next_send = start + interval;
     let mut counter: u64 = 0;
@@ -476,7 +521,7 @@ async fn control_loop(mut sender: Sender, mut recv: RecvStream, io: LoopIo, mut 
                 if let Some((ft, body)) = out
                     && sender.frame(ft, &body).await.is_err() { return None; }
             }
-            r = read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES) => match r {
+            r = reader.next(bounds::CONTROL_FRAME_BYTES) => match r {
                 FrameRead::Closed(e) => return e,
                 FrameRead::OverBound(_) => { log.push(Event::OverBound); return None; }
                 FrameRead::Payload(p) => match classify(&p) {

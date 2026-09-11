@@ -633,3 +633,30 @@ async fn a_running_node_retains_no_session_history() {
     assert_eq!(rec.log.count(|e| matches!(e, Event::Attached { .. })), 1);
     assert_eq!(s2.log.count(|e| matches!(e, Event::Attached { .. })), 1);
 }
+
+// acceptance: SES-17
+#[tokio::test]
+async fn a_frame_half_received_when_an_outbound_frame_goes_is_finished_not_lost() {
+    let kh = |n: &str| test_identity(n).public.keyhash;
+    let (node, addr) = spawn_node(node_cfg("alice", 3600));
+    let (conn, mut send, mut recv) = raw_dial("bob", "alice", addr).await;
+    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&kh("bob"), None, &Default::default()))).await.unwrap();
+    assert!(matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)), "the ack");
+    // one whole heartbeat, then the next frame's length prefix alone
+    send.write_all(&control_frame(FRAME_HEARTBEAT, &encode_heartbeat(0, 100))).await.unwrap();
+    sleep(Duration::from_millis(80)).await;
+    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: FRAME_HEARTBEAT })), 1);
+    let frame = control_frame(FRAME_HEARTBEAT, &encode_heartbeat(1, 101));
+    send.write_all(&frame[..4]).await.unwrap();
+    sleep(Duration::from_millis(80)).await;
+    // an outbound frame wins the node's select while the payload is owed
+    assert!(node.send_control(&kh("bob"), 99, &[0xa0]));
+    assert!(matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)), "the outbound frame went");
+    // the rest of the heartbeat arrives, and the whole of it is read
+    send.write_all(&frame[4..]).await.unwrap();
+    sleep(Duration::from_millis(120)).await;
+    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: FRAME_HEARTBEAT })), 2, "the second heartbeat is received whole");
+    assert_eq!(node.log.count(|e| matches!(e, Event::Discarded | Event::OverBound)), 0);
+    assert!(node.has_session(&kh("bob")), "the session lives");
+    conn.close(0u32.into(), b"");
+}

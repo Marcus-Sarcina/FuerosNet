@@ -7733,5 +7733,32 @@
   "then": "The archive is unchanged: one head, the departure, no fork, three records, and the next back-pointer list naming the head alone. An implementation that re-inserts a held predecessor into the head set beside its successor, reporting a fork the DAG does not have, fails.",
   "oracle": "model",
   "interpretation": null
+ },
+ {
+  "id": "SES-17",
+  "area": "session",
+  "gap": "session",
+  "title": "Finish a frame half received when a timer or an outbound frame interrupts the read, never lose it",
+  "milestone": 5,
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §8.0",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Same framing as stream 0 (§8.0), same rule"
+   },
+   {
+    "where": "wire-format.md §8.0",
+    "text": "Stream 0 carries length-delimited, type-tagged frames."
+   }
+  ],
+  "given": "A raw peer attached to N that sends one whole heartbeat, then only the four-byte length prefix of a second; N then has an outbound frame to send on that session; the peer sends the rest of the second heartbeat.",
+  "when": "N's control loop runs through the outbound send between the two fragments.",
+  "then": "The outbound frame goes, and the second heartbeat is received whole afterwards: two heartbeats received, nothing discarded, the session alive. An implementation whose frame read is abandoned when another event wins, dropping the bytes it had consumed, fails.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]
