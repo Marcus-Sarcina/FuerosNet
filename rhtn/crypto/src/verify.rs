@@ -34,7 +34,7 @@ fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
         _ => None,
     };
     let prot = p(&a[0])?;
-    if !headers_of_a_named_signer(&prot, &a[1]) {
+    if !headers_of_a_named_signer(&prot, &a[1]) || !matches!(a[2], Item::Null) {
         return None;
     }
     Some((prot, p(&a[3])?))
@@ -50,10 +50,22 @@ fn headers_of_a_named_signer(prot: &[u8], unprotected: &Item) -> bool {
     protected_ok && matches!(unprotected, Item::Map(u) if u.is_empty())
 }
 
+/// The container of a `COSE_Sign` in this profile (`wire-format.md` §1,
+/// §3.5): the outer protected header is empty, since the structure carries
+/// no signature of its own; the unprotected header is empty; and the
+/// payload is nil, every signature being detached.  A container that
+/// departs from this is a second encoding of the object, and malformed.
+fn detached_sign_container(cs: &[Item]) -> bool {
+    matches!(&cs[0], Item::Bytes(r) if r.is_empty()) && matches!(&cs[1], Item::Map(u) if u.is_empty()) && matches!(cs[2], Item::Null)
+}
+
 /// Verify an embedded `COSE_Sign` block signed by one known party: the
 /// enclosing structure names the signer, so no entry carries a `kid` and
-/// no header carries anything but `alg`; both algorithms must be present
-/// and verify.
+/// no header carries anything but `alg`.  One logical signer contributes
+/// exactly two entries, classical then post-quantum (`wire-format.md`
+/// §3.5), so an empty block, a lone entry, a duplicated algorithm or a
+/// reversed pair is malformed before any signature is checked; both
+/// entries must verify.
 fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &[u8]) -> Result<(), String> {
     let __cs_item = parse_all(block).map_err(|e| format!("cose: {e}"))?;
     let Item::Array(cs) = &__cs_item else {
@@ -62,10 +74,19 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
     if cs.len() != 4 {
         return Err("cose arity".into());
     }
+    if !detached_sign_container(cs) {
+        return Err("cose container departs from the profile".into());
+    }
     let Item::Array(entries) = &cs[3] else { return Err("entries not array".into()) };
-    let mut got = std::collections::BTreeMap::<Vec<u8>, [bool; 2]>::new();
-    for e in entries {
+    if entries.len() != 2 {
+        return Err("a hybrid signer contributes exactly two entries".into());
+    }
+    let mut got = [false, false];
+    for (i, e) in entries.iter().enumerate() {
         let Item::Array(ea) = e else { return Err("entry not array".into()) };
+        if ea.len() != 3 {
+            return Err("entry arity".into());
+        }
         let (Some(Item::Bytes(pr)), Some(Item::Bytes(sr))) = (ea.first(), ea.get(2)) else {
             return Err("entry shape".into());
         };
@@ -79,16 +100,16 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
             return Err("protected not map".into());
         };
         let alg = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(1), Item::Neg(a)) => Some(*a), _ => None }).ok_or("no alg")?;
-        let id = signer;
+        if alg != [cose::ALG_EDDSA, cose::ALG_ML_DSA_65][i] {
+            return Err("entries out of canonical order".into());
+        }
         let tbs = cose::sig_structure_sign(prot, aad_tag, payload);
-        let slot = got.entry(signer.keyhash.to_vec()).or_insert([false, false]);
         match alg {
-            cose::ALG_EDDSA => { if !id.verify_ed(sig, &tbs) { return Err("ed25519 fails".into()); } slot[0] = true; }
-            cose::ALG_ML_DSA_65 => { if !id.verify_pq(sig, &tbs) { return Err("ml-dsa fails".into()); } slot[1] = true; }
-            _ => return Err("unexpected alg".into()),
+            cose::ALG_EDDSA => { if !signer.verify_ed(sig, &tbs) { return Err("ed25519 fails".into()); } got[0] = true; }
+            _ => { if !signer.verify_pq(sig, &tbs) { return Err("ml-dsa fails".into()); } got[1] = true; }
         }
     }
-    if got.values().any(|v| !v[0] || !v[1]) {
+    if got != [true, true] {
         return Err("signer/alg coverage incomplete".into());
     }
     Ok(())
@@ -209,6 +230,9 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<boo
     let Some(Item::Array(cs)) = map_get(m, slot) else { return Err("sig slot".into()) };
     if cs.len() != 4 {
         return Err("sign1 arity".into());
+    }
+    if !matches!(cs[2], Item::Null) {
+        return Err("sign1 payload not detached".into());
     }
     let prot = match &cs[0] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("protected".into()) };
     let sig = match &cs[3] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("sig".into()) };

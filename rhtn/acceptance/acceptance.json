@@ -7108,5 +7108,36 @@
   "then": "On A, no AttachAck and no queued delivery is observed before A's handshake completes; afterwards either an AttachAck follows or none is ever sent for that Attach. On B, no AttachAck is ever sent and the queued item is not delivered: it remains queued at S or is delivered on A alone.",
   "oracle": "model",
   "interpretation": "Handshake completion is read as completion of the handshake of the connection that carried the early data, as the compliant Tamarin theory states it; the wire says only 'until handshake completion', and a completed handshake on A is taken not to admit B's replay."
+ },
+ {
+  "id": "DEC-19",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a COSE container that departs from the profile: a carried payload, a filled outer header, an entry set that is not one hybrid pair",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §1",
+   "wire-format.md §3.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §1",
+    "text": "All signatures in this profile are DETACHED."
+   },
+   {
+    "where": "wire-format.md §3.5",
+    "text": "the outer COSE_Sign.protected is empty"
+   },
+   {
+    "where": "wire-format.md §3.5",
+    "text": "A group with fewer than two entries, two entries of the same alg, or any alg outside the profile is malformed."
+   }
+  ],
+  "given": "A valid adoption envelope; the same with its COSE payload slot carrying h'00', with its outer protected header nonempty, and with its outer unprotected header nonempty. A valid transfer adoption whose former-patron block is replaced by an empty COSE_Sign, by one carrying a single entry, by one carrying the classical entry twice, by one with the post-quantum entry first, and by one whose payload slot carries h'00', the body re-signed by the node and patron each time. A valid endpoint record whose COSE_Sign1 payload slot carries h'00'.",
+  "when": "Each is decoded and verified.",
+  "then": "The valid objects are accepted. Every variant is rejected: the envelope variants at the structural layer, the block variants before any signature in the block is checked, and the endpoint record at verification. An implementation that reconstructs the signing input from its own empty headers and nil payload while ignoring what was received fails, as does one that treats an empty block as covered.",
+  "oracle": "fixture",
+  "interpretation": null
  }
 ]

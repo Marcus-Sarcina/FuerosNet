@@ -340,3 +340,68 @@ fn dec_17_entries_out_of_canonical_order_or_with_extra_headers_are_rejected() {
     assert!(verify::response(&ids, &build_response_with(v, sub, &qid, None, true, true), true).is_err(), "a kid in an embedded signature");
     assert!(verify::response(&ids, &build_response_with(v, sub, &qid, None, false, true), false).is_err(), "a kid in a standalone consent");
 }
+
+/// Item `i` of the COSE array at `at` in `b` replaced by `bytes`.
+fn with_cose_item(b: &[u8], at: usize, i: usize, bytes: &[u8]) -> Vec<u8> {
+    let parts = array_item_ranges(b, at).unwrap();
+    let mut out = b[..parts[i].start].to_vec();
+    out.extend_from_slice(bytes);
+    out.extend_from_slice(&b[parts[i].end..]);
+    out
+}
+
+// acceptance: DEC-19
+#[test]
+fn dec_19_a_cose_container_departing_from_the_profile_is_rejected() {
+    let s = signers();
+    let ids = publics(&s);
+    let h00: [u8; 2] = [0x41, 0x00];
+
+    // (a) the envelope's own COSE_Sign: empty protected, empty unprotected,
+    // nil payload.  A payload carried, or a header filled, is malformed with
+    // every signature untouched
+    let env = fixture("P-adopt-min").bytes.clone();
+    let r4 = value_slice(&env, 4).unwrap();
+    assert!(envelope::parse(&env).is_ok());
+    assert!(envelope::parse(&with_cose_item(&env, r4.start, 2, &h00)).unwrap_err().0.contains("payload"), "payload present");
+    assert!(envelope::parse(&with_cose_item(&env, r4.start, 0, &h00)).unwrap_err().0.contains("protected"), "outer protected filled");
+    assert!(envelope::parse(&with_cose_item(&env, r4.start, 1, &[0xa1, 0x05, 0x00])).unwrap_err().0.contains("unprotected"), "outer unprotected filled");
+
+    // (b) an embedded COSE_Sign: the former patron's transfer statement.
+    // The body is re-signed by the node and patron each time, so what fails
+    // is the block and not the envelope
+    let xfer = fixture("P-transfer-adoption").bytes.clone();
+    let body = body_of(&xfer);
+    let kh = |r: std::ops::Range<usize>| -> [u8; 32] { body[r.start + 2..r.end].try_into().unwrap() };
+    let node = by_keyhash(&s, &kh(value_slice(&body, 1).unwrap()));
+    let patron = by_keyhash(&s, &kh(value_slice(&body, 2).unwrap()));
+    let r9 = value_slice(&body, 9).unwrap();
+    let block = body[value_slice_at(&body, r9.start, 2).unwrap()].to_vec();
+    let rebuilt = |blk: &[u8]| build_envelope(1, &replace_value(&body, r9.start, 2, blk), &[node, patron]);
+    verify::envelope(&ids, &rebuilt(&block)).expect("the fixture's block, re-enveloped, verifies");
+    let outer = array_item_ranges(&block, 0).unwrap();
+    let ents = array_item_ranges(&block, outer[3].start).unwrap();
+    let (ed, pq) = (block[ents[0].clone()].to_vec(), block[ents[1].clone()].to_vec());
+    let with_entries = |es: &[&[u8]]| {
+        let mut out = block[..outer[3].start].to_vec();
+        emit_array_head(&mut out, es.len());
+        for e in es {
+            out.extend_from_slice(e);
+        }
+        out
+    };
+    let empty = [0x84, 0x40, 0xa0, 0xf6, 0x80];
+    let e = verify::envelope(&ids, &rebuilt(&empty)).unwrap_err();
+    assert!(e.contains("exactly two entries"), "an empty block: {e}");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed]))).unwrap_err().contains("exactly two entries"), "a lone entry");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed, &ed]))).unwrap_err().contains("canonical order"), "one algorithm twice");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&pq, &ed]))).unwrap_err().contains("canonical order"), "post-quantum first");
+    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 2, &h00))).unwrap_err().contains("container"), "block payload present");
+    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 0, &h00))).unwrap_err().contains("container"), "block outer protected filled");
+
+    // (c) a standalone COSE_Sign1: the endpoint record's signature slot
+    let er = fixture("P-endpointrecord").bytes.clone();
+    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(true));
+    let r4 = value_slice(&er, 4).unwrap();
+    assert!(verify::record(&ids, "EndpointRecord", &with_cose_item(&er, r4.start, 2, &h00)).is_err(), "sign1 payload present");
+}

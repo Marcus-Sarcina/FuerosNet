@@ -102,6 +102,19 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
     if cs.len() != 4 {
         return Err(Error("cose arity"));
     }
+    // the outer COSE_Sign carries no signature of its own, so its protected
+    // header is empty; its unprotected header is empty; and its payload is
+    // nil, every signature being detached (§1, §3.5).  Anything else is a
+    // second encoding of the transaction, and malformed
+    if !matches!(&cs[0], Item::Bytes(r) if r.is_empty()) {
+        return Err(Error("outer protected header not empty"));
+    }
+    if !matches!(&cs[1], Item::Map(u) if u.is_empty()) {
+        return Err(Error("outer unprotected header not empty"));
+    }
+    if !matches!(cs[2], Item::Null) {
+        return Err(Error("payload not detached"));
+    }
     let Item::Array(ents) = &cs[3] else { return Err(Error("entries not array")) };
     if let Some(ceiling) = crate::bounds::envelope_entry_ceiling(tx_type)
         && ents.len() > ceiling {
