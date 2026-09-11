@@ -382,6 +382,14 @@ impl TopologyStore {
         for (t, r) in &self.transactions {
             std::fs::write(dir.join("tx").join(hex(t)), &r.bytes)?;
         }
+        // the endpoint records are rewritten whole: a record retired since
+        // the last save, by a newer counter or a conflict, must not outlive
+        // it on disk
+        if let Ok(rd) = std::fs::read_dir(dir.join("ep")) {
+            for e in rd.flatten() {
+                std::fs::remove_file(e.path())?;
+            }
+        }
         for ((subject, series), h) in &self.endpoints {
             std::fs::write(dir.join("ep").join(format!("{}-{series}", hex(subject))), &h.record.bytes)?;
         }
@@ -441,6 +449,10 @@ impl TopologyStore {
                 }
             }
         }
+        // a record whose number the conflict markers retire is not current,
+        // whatever the directory held (`wire-format.md` §10.1.2)
+        let conflicts = st.conflicts.clone();
+        st.endpoints.retain(|_, h| !conflicts.contains(&(h.record.node, h.record.seqno.series, h.record.seqno.counter)));
         Ok(st)
     }
 }

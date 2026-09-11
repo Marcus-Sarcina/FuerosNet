@@ -405,3 +405,26 @@ fn one_chain_per_key_across_bindings_partitioned_by_series() {
     assert_eq!(a2.seqno(), Some(Seqno { series: 22, counter: 0 }));
     assert_eq!(w.archive("bob").series_occupied().len(), 2);
 }
+
+// acceptance: ARC-18
+#[test]
+fn appending_a_record_already_held_changes_nothing() {
+    let mut w = World::new(&["alice", "bob"]);
+    let f = w.meet("alice", "bob");
+    let a = w.adopt("bob", "alice", f.txid, 1);
+    let d = w.depart("bob", "alice", Seqno { series: 1, counter: 1 });
+    // an archive holding all three; the same records offered again, in any
+    // order, leave one DAG with one head
+    let mut ar = rhtn_archive::chain::Archive::new(w.kh("bob"));
+    for r in [&f, &a, &d] {
+        ar.append(r.clone()).unwrap();
+    }
+    assert_eq!(ar.heads(), vec![d.txid]);
+    ar.append(a.clone()).unwrap();
+    ar.append(f.clone()).unwrap();
+    ar.append(d.clone()).unwrap();
+    assert_eq!(ar.heads(), vec![d.txid], "a predecessor offered again is not a head beside its successor");
+    assert!(!ar.is_forked());
+    assert_eq!(ar.next_back_pointers(), vec![d.txid]);
+    assert_eq!(ar.len(), 3);
+}

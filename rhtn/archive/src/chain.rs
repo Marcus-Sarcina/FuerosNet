@@ -161,6 +161,12 @@ impl Archive {
     /// this key must each be held, be the genesis value, or be the
     /// checkpoint's own predecessors; the heads they name stop being heads.
     pub fn append(&mut self, rec: Record) -> Result<Txid, String> {
+        // a record already held is held once: appending it again changes
+        // nothing, and never makes a predecessor a head beside its
+        // successor (design §10.3: one DAG, not a fork)
+        if self.records.contains_key(&rec.txid) {
+            return Ok(rec.txid);
+        }
         let ptrs = rec.back_pointers_of(&self.key).ok_or("not signed by this key")?.to_vec();
         let g = genesis(&self.key);
         for p in &ptrs {

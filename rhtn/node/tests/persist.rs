@@ -48,3 +48,31 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     assert_eq!(fab2.count(FRAME_TOPOLOGY_PUSH), 0, "a node that kept its store replays nothing");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// acceptance: PRP-20
+#[test]
+fn a_retired_endpoint_record_does_not_return_from_disk() {
+    let mut w = World::new();
+    let (a_n, _) = w.adopt("bob", "alice", 1);
+    let (a_s, _) = w.adopt("carol", "bob", 2);
+    let table = table_with(kh("bob"), &w, &[&a_n, &a_s], &["alice", "bob", "carol"]);
+    let mut n = view("bob", table, "alice", &[0]);
+    let fab = Fabric::with(&[kh("alice"), kh("carol")]);
+    let sq = Seqno { series: 2, counter: 4 };
+    let first = endpoint_record(&id("carol"), &[point(3, 7003)], sq);
+    let second = endpoint_record(&id("carol"), &[point(3, 7004)], sq);
+    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &first), &ids()), Decision::Stored);
+    let dir = std::env::temp_dir().join(format!("rhtn-store-conflict-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    n.store.save(&dir).unwrap();
+    // the same number with different signed contents: the pair is malformed
+    // and neither is current
+    assert!(matches!(n.receive_push(&*fab, &kh("carol"), &encode_push(KIND_ENDPOINT_RECORD, &second), &ids()), Decision::Conflict { .. }));
+    assert!(n.store.endpoint(&kh("carol")).is_none());
+    n.store.save(&dir).unwrap();
+    let loaded = TopologyStore::load(&dir).unwrap();
+    assert!(loaded.conflicted(&kh("carol"), sq), "the marker persists");
+    assert!(loaded.endpoint(&kh("carol")).is_none(), "and the retired record does not return");
+    assert!(loaded.objects().iter().all(|(k, b)| *k != KIND_ENDPOINT_RECORD || *b != first), "nor is it replayed");
+    let _ = std::fs::remove_dir_all(&dir);
+}

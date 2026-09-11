@@ -7680,5 +7680,58 @@
   "then": "The forged record is refused under both: a failing record is never evidence. The unverifiable record is refused under required evaluation, naming the missing key, and leaves the binding's evidence unevaluated under deferred evaluation; with every key held it satisfies. An implementation that marks fetched evidence satisfied on its type, txid and parties alone fails.",
   "oracle": "model",
   "interpretation": null
+ },
+ {
+  "id": "PRP-20",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Keep a retired endpoint record retired across a save and a load",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §10.1.2",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "a holder retains neither as current and forwards nothing further for that (subject, seqno)"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Keep the topology store across a restart"
+   }
+  ],
+  "given": "N holding a subordinate's endpoint record at one number, saved; then the same number with different signed contents, which N takes as a conflict and saves again.",
+  "when": "The store is loaded from disk.",
+  "then": "The conflict marker persists, the store serves no endpoint record for that subject, and its replay carries neither record. An implementation whose save leaves the retired record's file in place, or whose load reads it back before the markers, fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "ARC-18",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Append a record already held without making its predecessor a head again",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "design §10.3"
+  ],
+  "rule": [
+   {
+    "where": "design §10.3",
+    "text": "The structure is properly a Merkle DAG, git-shaped"
+   },
+   {
+    "where": "design §10.3",
+    "text": "Branches can be merged, and merging strengthens completeness."
+   }
+  ],
+  "given": "An archive holding a formation, an adoption and the departure that follows it.",
+  "when": "Each of the three is appended again.",
+  "then": "The archive is unchanged: one head, the departure, no fork, three records, and the next back-pointer list naming the head alone. An implementation that re-inserts a held predecessor into the head set beside its successor, reporting a fork the DAG does not have, fails.",
+  "oracle": "model",
+  "interpretation": null
  }
 ]
