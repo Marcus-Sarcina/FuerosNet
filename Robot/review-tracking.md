@@ -8759,3 +8759,56 @@ Open after the review, each a decision or a milestone of its own:
 - **`rhtnd` and `rhtn`**, the daemon and the CLI, are unstarted.
 - **PAY-13** stays open on the library decision, libsignal being AGPL;
   PRD-01 to PRD-09 are manual.
+
+**Adaptors for both kinds of client (2026-09-11).** The author's answer
+to the review's two open seams: "at least create the adaptors for local
+resources for both types of client." One gate-green commit, 8922a72, a
+new crate `rhtn-adaptors`: `rhtn-client` bound to what is local to its
+process, for a light client beside its serving node and for a node that
+is a participant alike. Two catalogue entries, CER-30 and TRV-07, carry
+markers; 284 of 294 implemented, 0 flags.
+
+- **The client on a thread of its own.** `Client` reaches its device
+  through `Rc` and never moves; a handle carries closures across, from
+  the transport's tasks and the node's request handlers.
+- **A hosted verifier answers on the node's request stream.**
+  `rhtn-node`'s `LiveNode` gains a slot for the verifiers its process
+  hosts, and request type 4 goes there; nothing hosted, and the stream
+  fails, as before. The adaptor registers each hosted client under its
+  keyhash: a node that is a participant for its own key, a light client
+  beside it for its own. A query awaiting its grant holds the stream up
+  to the buffer bound; the grant arriving on the payload channel
+  completes it early, and the bound passing lets the client's own expiry
+  answer `unavailable`. The subject's copy travels as a payload kind of
+  the reference's own, kind 4, beside kinds 0 to 3.
+- **The direct path over the transport's socket.** The client's
+  interface stays a yes-or-no per peer; the transport side sets it. A
+  light client binds a socket of its own: it gathers on it, dials the
+  peer's candidates from it, and accepts what a pinned peer opens toward
+  it. A node that is a participant uses the node's own socket, which
+  already gathers inside the horizon, dials and holds the path per peer.
+  Candidates go out as kind 3 from the client's own send, over whatever
+  path exists; a peer receiving them dials, and offers its own back.
+- **The serving node beside the client** answers what the client asks of
+  its serving node in-process: material published and stocked, a peer's
+  fetched, payload relayed. A node reaches a neighbour for a subject it
+  does not hold or a recipient it does not serve, and only for those, so
+  two nodes each beyond the other never bounce a fetch between them.
+
+Two things the wire does not say, kept as seams and recorded here for
+the author:
+
+- **A client's hand-off of payload to relay.** `wire-format.md` §9.2 has
+  unidirectional streams carry payload delivery and queue drain, and the
+  served session loop accepts none from an attached client; no frame
+  submits material for relay, and nothing names the sender to the
+  recipient, who decrypts under it. The adaptors frame relayed bytes as
+  `[sender, bytes]` between themselves. An adaptor convention, not the
+  wire's.
+- **A serving node's leg to a client attached over the wire**, for a
+  verifier query, stays as the review left it.
+
+Found on the way: the light-client test gates the direct path on the
+node's table, since a light client keeps none; whether a light client
+should carry a horizon of its own is a question for
+`light-client-requirements.md`.

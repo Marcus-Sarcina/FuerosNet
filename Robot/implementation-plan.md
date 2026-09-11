@@ -64,6 +64,7 @@ document cites `rhtn/`; the code cites the documents.
 | `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling | `light-client-requirements.md` §1 to §8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
 | `rhtn-policy` | The reference flow metric; the conformance test; the policy interface | design §16, §17; `models/simulation/flow_metric.py` | The four regression cases carried across; fixed-graph expected scores |
 | `rhtn-resources` (later) | The component-model runtime for hosted packages and their packaging. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5); what this crate still owes is the sandbox itself | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
+| `rhtn-adaptors` | `rhtn-client` bound to what is local to its process: the client on a thread of its own, the node beside it as serving node, the direct payload path over the transport's socket (the client's own or the node's), a hosted verifier answered on the node's request stream, and the courier. The seams the documents leave unwritten, a serving node's leg to a client attached over the wire and a client's hand-off of payload to relay, are traits with the in-process implementation behind them | design §12.6.3, §14.1.1; `wire-format.md` §5.6, §7.7.2, §9.2 | Live tests over loopback QUIC for both kinds of client |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
 | `rhtnd`, `rhtn` | The node daemon and the developer CLI | | Smoke tests |
 
@@ -318,6 +319,19 @@ carries a verifier query to the light client it attaches, which the
 documents do not say either; the join between `rhtn-client`'s direct-path
 interface and `rhtn-transport`'s socket; and `rhtnd` and `rhtn`
 themselves.
+
+**Adaptors** (2026-09-11). The author's answer to the first two: build the
+adaptors for what is local to the process, for both kinds of client.
+`rhtn-adaptors` (section 2.1) hosts a client on a thread of its own and
+binds it to the node beside it and to the transport's socket: a verifier
+hosted in the process answers request type 4 on the node's request stream,
+whether the node itself as a participant or a light client beside it, and
+the direct path is joined from the client's own send, candidates as a
+payload kind over the relay and the peer's dialled. Two entries, CER-30
+and TRV-07. The seams the documents leave unwritten stay traits: a serving
+node's leg to a client attached over the wire, and a client's hand-off of
+payload to relay, which the wire has no frame for and no sender
+attribution in.
 
 ---
 
