@@ -189,8 +189,27 @@ criterion that is a tool's verdict.
 resolve, replicate and peer. `Robot/review-plan.md` Stage 2 becomes meaningful here,
 and this is where to run it.
 
-Then, in order: ceremony record and verification with the channels stubbed (design §24
-steps 6 and 7), recovery (step 8), payload encryption (step 9), ICE (step 9b),
+**Milestone 6, ceremony record and verification with the channels stubbed**
+(design §24 steps 6 and 7). Exit: the 29 ceremony entries pass.
+Done: `rhtn-client` carries the two constructions a ceremony fixes to the
+byte, checked against the corpus; the sealed capture store, bound to the
+ceremony and not to the record, since sealing precedes the record; the
+query objects, selection by recognition, the verifier's automatic answer
+and the subject's consent, counters and grant; record assembly with the
+participant's refusals, the witness's clock check, the presentation that
+withholds by default, and late responses beside a record; and the
+ceremony itself over a device interface — proximity channels, camera,
+clock, randomness, operator, notifier and engine — with an in-process
+harness that carries the direct channel and logs every path. The engine
+is a stand-in that hashes a frame's leading bytes (design §22.2 is
+undecided); the sealed store's AEAD, nonce and framing are the
+implementation's choice pending §7.5.2.10. All 29 ceremony entries pass;
+224 of 286 entries pass. One reading is open to the author: design §7.3
+says a verifier's operator is not told they were sampled, and design
+§19.6 says a verifier is told, when asked, that answering records them;
+the client raises the §19.6 disclosure as a notice naming no ceremony.
+
+Then, in order: recovery (step 8), payload encryption (step 9), ICE (step 9b),
 resources (step 10). The mobile application is its own track once the client core
 is stable.
 

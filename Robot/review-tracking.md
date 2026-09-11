@@ -8544,3 +8544,33 @@ submission path: it makes the store block inside the cap read until a
 second submission reaches the same point, which the gate that closes the
 race now prevents, so that one assertion waits on its own barrier rather
 than failing or passing.
+
+**Milestone 6, the ceremony, built (2026-09-11).** `rhtn-client` added in
+three gate-green commits: 8560119 (the pre-commitment and the capture key
+against the corpus's known answers, the sealed capture store), bf0ed03 (the
+query objects, selection by recognition, the verifier's and the subject's
+sides, record assembly and the presentation), e142182 (the device interface,
+the ceremony driver and its in-process harness). All 29 CER entries carry a
+marker; 224 of 286 entries implemented, 0 flags; the ceremony stubs file is
+gone. Three readings are the assistant's and open to reversal:
+
+- **The seal binds the ceremony, not the record.** Design §7.5.2.6 says
+  sealing happens at capture, before the record exists, and argues from
+  that against deriving the key from `txid`; the store's associated data
+  follows the same argument and carries subject, holder, pre-commitment,
+  modality and template version, with the record only as the index the
+  capture is filed under at finalization. §7.5.2.10 leaves the AEAD
+  parameters open; AES-256-GCM, a random 96-bit nonce, and the template
+  ahead of length-prefixed frames are the implementation's.
+- **The engine is a stand-in.** Design §22.2 is undecided; the client's
+  template is a hash of a frame's leading bytes, the profile is the
+  template, and a comparison is byte equality, all behind one trait.
+- **The verifier's operator.** Design §7.3 says a verifier's operator is
+  not told they were sampled; design §19.6 and `light-client-requirements.md`
+  §1.5 say a verifier is told, at the moment they are asked, that answering
+  records them in someone else's evidence. Both are stated as obligations
+  and they cannot both hold of the same moment. The client raises §19.6's
+  disclosure as a notice naming no ceremony, subject or querier, and asks
+  nothing; CER-17 records that reading in its interpretation and CER-26
+  asserts the notice. Which the author intends is a question for him, and
+  the answer changes one line in the verifier's query path.
