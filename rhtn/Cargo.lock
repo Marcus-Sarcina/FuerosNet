@@ -599,6 +599,20 @@ name = "rhtn-acceptance"
 version = "0.1.0"
 
 [[package]]
+name = "rhtn-adaptors"
+version = "0.1.0"
+dependencies = [
+ "quinn",
+ "rhtn-archive",
+ "rhtn-client",
+ "rhtn-codec",
+ "rhtn-crypto",
+ "rhtn-node",
+ "rhtn-transport",
+ "tokio",
+]
+
+[[package]]
 name = "rhtn-archive"
 version = "0.1.0"
 dependencies = [

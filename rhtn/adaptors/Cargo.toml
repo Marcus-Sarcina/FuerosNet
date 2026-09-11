@@ -1,0 +1,15 @@
+[package]
+name = "rhtn-adaptors"
+version = "0.1.0"
+edition = "2024"
+description = "RHTN adaptors: the participant client bound to what is local to its process, the node beside it for the queries it answers as verifier and the transport's socket for the direct payload path, for a light client and for a node that is a participant"
+
+[dependencies]
+rhtn-codec = { path = "../codec" }
+rhtn-crypto = { path = "../crypto" }
+rhtn-archive = { path = "../archive" }
+rhtn-client = { path = "../client" }
+rhtn-node = { path = "../node" }
+rhtn-transport = { path = "../transport" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }

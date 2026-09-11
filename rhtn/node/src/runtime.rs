@@ -185,6 +185,12 @@ impl RateLimit {
 /// Payload that arrived on the direct path, with the peer it came from.
 pub type DirectInbox = mpsc::UnboundedReceiver<(Keyhash, Vec<u8>)>;
 
+/// A verifier this process hosts: a node that is a participant answering
+/// for its own key, or a light client beside its serving node.  Given the
+/// authenticated requester and a type-4 body, the signed response for the
+/// stream, or nothing, which fails the stream (`wire-format.md` §9.2).
+pub type LocalVerifier = Arc<dyn Fn(Keyhash, Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>> + Send + Sync>;
+
 /// The state of the direct path to one peer (design §14.1.1): held, or
 /// failed and not retried until the next path opening.
 pub enum DirectState {
@@ -224,6 +230,10 @@ pub struct LiveNode {
     direct: Mutex<HashMap<Keyhash, DirectState>>,
     /// Payload that arrived on the direct path, for the caller to take.
     direct_deliveries: Mutex<Option<DirectInbox>>,
+    /// The verifiers this process hosts, answering request type 4 for the
+    /// key a query names; none installed, and such a request fails the
+    /// stream.
+    pub verifier: Arc<Mutex<Option<LocalVerifier>>>,
 }
 
 impl LiveNode {
@@ -295,8 +305,10 @@ impl LiveNode {
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
         let ids_for_requests = ids.clone();
+        let verifier: Arc<Mutex<Option<LocalVerifier>>> = Arc::default();
+        let hosted_verifier = verifier.clone();
         let on_request: RequestHandler = Arc::new(move |peer, family, body| {
-            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone());
+            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone(), hosted_verifier.clone());
             Box::pin(async move {
                 // over the requester's allowance the stream fails, and nothing
                 // about the request is kept
@@ -321,6 +333,18 @@ impl LiveNode {
                         let req = rhtn_archive::chain::ArchiveRequest::decode(&body).ok()?;
                         let view = v.lock().unwrap();
                         Some(view.archive.serve(&req).encode())
+                    }
+                    Family::VerifierQuery => {
+                        // the query names its verifier (field 7): one hosted
+                        // in this process answers.  The leg from a serving
+                        // node to a client attached over the wire is not
+                        // written (`wire-format.md` §7.7.2), so with no
+                        // hosted verifier the stream fails
+                        let hosted = hosted_verifier.lock().unwrap().clone();
+                        match hosted {
+                            Some(answer) => answer(peer, body).await,
+                            None => None,
+                        }
                     }
                     Family::CatalogQuery => {
                         let view = v.lock().unwrap();
@@ -408,7 +432,7 @@ impl LiveNode {
             }
         }
         tokio::spawn(node.clone().serve(endpoint.clone()));
-        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits, traversal, upstream_addr: Mutex::new(None), direct: Mutex::new(HashMap::new()), direct_deliveries: Mutex::new(Some(drx)) })
+        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits, traversal, upstream_addr: Mutex::new(None), direct: Mutex::new(HashMap::new()), direct_deliveries: Mutex::new(Some(drx)), verifier })
     }
 
     pub fn me(&self) -> Keyhash {
@@ -509,6 +533,14 @@ impl LiveNode {
             Some(DirectState::Connected(_)) => Some(true),
             Some(DirectState::Failed(_)) => Some(false),
             None => None,
+        }
+    }
+
+    /// The connection the direct path to `peer` holds, where one is held.
+    pub fn direct_connection(&self, peer: &Keyhash) -> Option<quinn::Connection> {
+        match self.direct.lock().unwrap().get(peer) {
+            Some(DirectState::Connected(c)) => Some(c.clone()),
+            _ => None,
         }
     }
 

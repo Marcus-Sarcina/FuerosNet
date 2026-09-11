@@ -251,6 +251,9 @@ pub enum Dispatched {
     /// The peer's candidates for the direct path, for the transport to
     /// dial.
     Candidates(Vec<u8>),
+    /// A verifier's copy of its response about me: the query it answered,
+    /// or why the copy was refused.
+    ResponseCopy(Result<[u8; 32], String>),
 }
 
 fn hex8(k: &Keyhash) -> String {
@@ -456,6 +459,14 @@ impl Client {
         self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Verifier });
         let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
         self.verifier.take_query(&cx, from, bytes, self.device.clock.now_ms())
+    }
+
+    /// As verifier: let the bounds pass by this clock.  A query whose grant
+    /// never came within the buffer is answered `unavailable`; a grant
+    /// whose query never came is dropped unopened.
+    pub fn expire(&mut self) -> Vec<crate::verifier::Answer> {
+        let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
+        self.verifier.expire(&cx, self.device.clock.now_ms())
     }
 
     /// As querier: a response to a query I issued, verified under its
@@ -883,6 +894,7 @@ impl Client {
                 Dispatched::Late(record::take_late_response(&mut self.store, &self.known, &inner, &consented))
             }
             payload::KIND_CANDIDATES => Dispatched::Candidates(inner),
+            payload::KIND_RESPONSE_COPY => Dispatched::ResponseCopy(self.take_response_copy(&inner)),
             _ => Dispatched::Application(inner),
         })
     }

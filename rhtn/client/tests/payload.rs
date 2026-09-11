@@ -54,6 +54,7 @@ fn describe(d: &Dispatched) -> String {
         Dispatched::Grant(o) => format!("Grant({o:?})"),
         Dispatched::Late(r) => format!("Late({r:?})"),
         Dispatched::Candidates(b) => format!("Candidates({} bytes)", b.len()),
+        Dispatched::ResponseCopy(r) => format!("ResponseCopy({r:?})"),
     }
 }
 

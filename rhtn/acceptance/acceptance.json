@@ -7980,5 +7980,69 @@
   "then": "The reflexive addresses travel only in the candidate exchange between the two leaves; no TopologyPush, EndpointRecord, memo or replicated state at either serving node carries either address.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "CER-30",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Answer a query at the node hosting the verifier, for a node that is a participant and for a light client beside it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.7.2",
+   "wire-format.md §5.6",
+   "design §7.4.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.2",
+    "text": "The serving node uses it to identify which of its attached clients is meant."
+   },
+   {
+    "where": "wire-format.md §5.6",
+    "text": "The verifier checks the consent against the query's own `query_id` before anything else"
+   },
+   {
+    "where": "design §7.4.2",
+    "text": "a verifier answering a query about subject S sends a copy of its signed response to S as well as to the querier"
+   }
+  ],
+  "given": "Node N hosts two verifiers in its own process: itself, a participant answering for its own key, and light client V beside it. Querier C is attached to N over a session; subject S is beside N too and has consented within an open window.",
+  "when": "C sends type-4 requests on N's request stream: one addressed to N, one to V, one to a verifier N hosts nothing for, and one naming a querier other than C. For V's, S's grant arrives on the payload channel while the stream waits.",
+  "then": "N's and V's streams each carry a signed VerifierResponse from the verifier named, V's within the grant buffer rather than at its end, and S receives a copy of each over the payload channel. The other two streams fail with nothing signed.",
+  "oracle": "behaviour",
+  "interpretation": "The documents route a query to its verifier's serving node and stop there; how that node carries it to a client attached over the wire is unwritten. The reference answers for the verifiers hosted in the node's own process, a node that is a participant for its own key and a light client beside it, and the subject's copy travels as a payload kind of the reference's own."
+ },
+ {
+  "id": "TRV-07",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Offer candidates as their own payload kind over the relay, dial the peer's, and take the direct path from the client's own send",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §12.6.3",
+   "design §14.1.1",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "The peers exchange addresses during setup and connect"
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "ICE attempts the direct path first and falls back to the serving node when it fails."
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Payload attempts a direct path inside the horizon, which does require traversal"
+   }
+  ],
+  "given": "Two clients inside each other's horizon, each with a payload session to the other: light clients L1 and L2 beside their serving node on sockets of their own, and nodes N1 and N2 that are participants on the nodes' own sockets. A peer outside the horizon exists.",
+  "when": "L1 (and N1) offers the direct path to its peer from its own client, then sends application payload; then offers the peer outside the horizon.",
+  "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer outside the horizon gathers and sends nothing.",
+  "oracle": "behaviour",
+  "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. A light client keeps no table, so whether the path may be direct is what the node beside it says of its horizon."
  }
 ]

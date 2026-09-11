@@ -286,6 +286,9 @@ pub const KIND_LATE_RESPONSE: u64 = 2;
 /// The direct path's candidates, exchanged with the peer alone over the
 /// relayed channel (design §12.6.3, §14.1.1).
 pub const KIND_CANDIDATES: u64 = 3;
+/// The verifier's copy of its signed response, to the subject over the
+/// association the grant established (`wire-format.md` §5.6).
+pub const KIND_RESPONSE_COPY: u64 = 4;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {
