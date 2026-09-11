@@ -500,6 +500,14 @@ impl NodeView {
         Ok(rhtn_archive::tx::adoption_body(&a))
     }
 
+    /// This node's chain under `patron` (`wire-format.md` §4.6.1), as it
+    /// is presented when a counterparty asks which series it is in: the
+    /// adoption and every reissue since, on the asker's stream and nowhere
+    /// else.  Presented, never propagated.
+    pub fn present_chain(&self, patron: &Keyhash) -> Vec<Vec<u8>> {
+        self.archive.chain_for(patron).map(|c| c.bytes()).unwrap_or_default()
+    }
+
     /// Countersign a proposed adoption body with this node's key, given the
     /// subject's signature entries were gathered separately; the result is
     /// this node's own transaction and advances its chain.  Before the

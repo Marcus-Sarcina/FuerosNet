@@ -4,6 +4,8 @@
 
 #![allow(dead_code)]
 
+pub mod harness;
+
 use rhtn_archive::chain::Archive;
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::*;

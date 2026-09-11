@@ -10,6 +10,7 @@ use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
 use crate::query::{KeyGrant, QueryRequest, Response, VerificationQuery};
 use crate::record::{self, DisclosureSet, Proposal, Refusal, disclosure_root, disclosures, participant_check, sort_responses, witness_check};
+use crate::rotation::Rotation;
 use crate::selection::{self, Acquaintance, SelectionBasis, required};
 use crate::store::{Capture, ClientStore, OwnSeed, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
@@ -17,7 +18,7 @@ use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState,
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
 use rhtn_archive::record::Record;
-use rhtn_archive::tx::{TYPE_PRESENCE, Witness, envelope_from_entries};
+use rhtn_archive::tx::{Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_PRESENCE, Witness, adoption_body, envelope_from_entries, recovery_block, recovery_response_with_consent};
 use rhtn_codec::cose::aad;
 use rhtn_crypto::verify;
 use rhtn_crypto::{Identity, SigningIdentity};
@@ -69,6 +70,14 @@ pub enum Abort {
     NoWitness,
     /// The record did not parse or append.
     Record(String),
+    /// The recovering subject holds no prior key to rotate from.
+    NoPriorKey,
+    /// The verifier never met the prior key, or does not recognise the
+    /// person; or the subject gathered no recognition.
+    NotRecognised,
+    /// The patron's check of the evidence against the adoption's own
+    /// fields failed, or it holds no position to adopt under.
+    PatronRefused(String),
 }
 
 /// What one party says to another on the direct channel, or to a verifier
@@ -99,6 +108,17 @@ pub enum Msg {
     /// A signer's envelope entries over the body, or its refusal.
     Signed(Result<Vec<u8>, Refusal>),
     Record(Vec<u8>),
+    /// The recovering subject names the prior key whose history it claims.
+    ClaimPrior(Keyhash),
+    /// A recovery verifier's signed response, hybrid, to the subject.
+    RecoveryResponse(Vec<u8>),
+    /// The assembled `Recovery` block and the old archive's head, to the
+    /// patron.
+    RecoveryProposal { block: Vec<u8>, presented_head: Option<Txid> },
+    /// The adoption body the patron proposes.
+    AdoptionBody(Vec<u8>),
+    /// A sealed line, to whoever holds a locator for it.
+    Seal(Vec<u8>),
 }
 
 /// What the proposer shows every signer: the proposal, the disclosure set
@@ -115,7 +135,8 @@ impl Msg {
     pub fn payload(&self) -> Vec<u8> {
         match self {
             Msg::CaptureKey(k) => k.to_vec(),
-            Msg::Grant(b) | Msg::Query(b) | Msg::Response(b) | Msg::ResponseCopy(b) | Msg::Record(b) => b.clone(),
+            Msg::Grant(b) | Msg::Query(b) | Msg::Response(b) | Msg::ResponseCopy(b) | Msg::Record(b) | Msg::RecoveryResponse(b) | Msg::AdoptionBody(b) | Msg::Seal(b) => b.clone(),
+            Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
             Msg::Responses(v) => v.concat(),
             Msg::Signed(Ok(e)) => e.clone(),
@@ -173,7 +194,9 @@ struct Active {
 /// A participant client: its identity, archive and store, its two query
 /// roles, whom it recognises, and the device it runs on.
 pub struct Client {
-    pub id: SigningIdentity,
+    /// Boxed: a signing identity carries its expanded post-quantum key
+    /// inline, and a client is moved around a harness by value.
+    pub id: Box<SigningIdentity>,
     pub known: Vec<Identity>,
     pub archive: Archive,
     pub store: ClientStore,
@@ -182,6 +205,14 @@ pub struct Client {
     pub acquaintance: Acquaintance,
     pub cfg: Config,
     pub device: Device,
+    /// As a patron: the position this client adopts under, when it is one.
+    pub position: Option<Locator>,
+    /// As a recovering subject: the rotation from the prior key, holding
+    /// that key until the lines are sealed.
+    pub rotation: Option<Box<Rotation>>,
+    /// As a recovering subject: the responses gathered at recovery
+    /// meetings, verified, awaiting the block.
+    pub recovery_responses: Vec<Vec<u8>>,
     active: Option<Active>,
     witnessing: Option<WitnessRequest>,
 }
@@ -193,7 +224,7 @@ fn hex8(k: &Keyhash) -> String {
 impl Client {
     pub fn new(id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> Self {
         let kh = id.public.keyhash;
-        Client { id, known, archive: Archive::new(kh), store: ClientStore::default(), subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), cfg, device, active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -502,6 +533,13 @@ impl Client {
         Ok(())
     }
 
+    /// Drop the ceremony under way without a record: nothing sealed is
+    /// filed, the seed is gone with it.
+    pub fn abandon(&mut self) {
+        self.active = None;
+        self.subject.responses.clear();
+    }
+
     /// The record, finalized: appended to my archive and kept; as a
     /// participant, the sealed capture of the counterparty and my own seed
     /// are filed under it, the disclosure set is kept as record state, and
@@ -527,6 +565,114 @@ impl Client {
         }
         self.witnessing = None;
         Ok(txid)
+    }
+}
+
+impl Client {
+    /// As the recovering subject: the prior key this rotation claims.
+    pub fn prior_key(&self) -> Option<Keyhash> {
+        self.rotation.as_ref().and_then(|r| r.old_key()).map(|k| k.public.keyhash)
+    }
+
+    /// As a recovery verifier, its own querier (design §9.1): the query
+    /// about the person in front of me, under this meeting's
+    /// pre-commitment, addressed to myself — only where my own records show
+    /// I met the prior key claimed.
+    pub fn recovery_query(&mut self, prior: Keyhash) -> Result<VerificationQuery, Abort> {
+        if !self.store.has_met(&prior) {
+            return Err(Abort::NotRecognised);
+        }
+        let me = self.keyhash();
+        self.query_for(me)
+    }
+
+    /// As a recovery verifier: the recognition is the person's (design
+    /// §9.1), so the one question of the meeting is asked; on yes, the
+    /// hybrid response naming the prior key, `personal_knowledge`, `met`.
+    pub fn recognise(&mut self, q: &VerificationQuery, consent: &[u8], prior: Keyhash) -> Result<Vec<u8>, Abort> {
+        let subject = q.subject;
+        if !self.device.operator.ask(&format!("Do you recognise the person in front of you as the holder of {}?", hex8(&prior))) {
+            return Err(Abort::NotRecognised);
+        }
+        self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Verifier });
+        Ok(recovery_response_with_consent(&self.id, &subject, &q.query_id(), consent, &prior))
+    }
+
+    /// As the recovering subject: a response to the query I consented to,
+    /// verified hybrid under its verifier, naming my prior key.
+    pub fn take_recovery_response(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let r = Response::read(bytes)?;
+        let prior = self.prior_key().ok_or("no prior key")?;
+        if r.subject != self.keyhash() || r.selection_basis != 0 {
+            return Err("not about me as a recovery".into());
+        }
+        if !self.subject.consented(&self.ceremony_id().ok_or("no ceremony")?).contains(&r.query_id) {
+            return Err("a query I did not consent to".into());
+        }
+        verify::response(&self.known, bytes, true).map_err(|e| e.to_string())?;
+        if crate::query::prior_key_of(bytes) != Some(prior) {
+            return Err("names another prior key".into());
+        }
+        self.recovery_responses.push(bytes.to_vec());
+        Ok(())
+    }
+
+    /// As the recovering subject: the `Recovery` block for adoption under
+    /// `patron` — the old key's successor statement over prior, new and
+    /// patron, and the responses gathered — and the old archive's head.
+    pub fn recovery_block(&self, patron: &Keyhash) -> Result<(Vec<u8>, Option<Txid>), Abort> {
+        let rot = self.rotation.as_ref().ok_or(Abort::NoPriorKey)?;
+        let old = rot.old_key().ok_or(Abort::NoPriorKey)?;
+        if !self.recovery_responses.iter().any(|r| Response::read(r).is_ok_and(|x| x.verdict == crate::query::Verdict::Match)) {
+            return Err(Abort::NotRecognised);
+        }
+        Ok((recovery_block(old, &self.keyhash(), patron, self.recovery_responses.clone()), rot.old_head()))
+    }
+
+    /// As a patron: the adoption body for `node` under my position, the
+    /// evidence checked against the body's own fields before anything is
+    /// signed (`wire-format.md` §4.1).
+    pub fn propose_adoption(&self, node: Keyhash, evidence: Evidence, series: u32, presented_head: Option<Txid>, node_back: &[Txid], key_material: Option<Vec<u8>>) -> Result<Vec<u8>, Abort> {
+        let pos = self.position.as_ref().ok_or(Abort::PatronRefused("no position".into()))?;
+        let mut path = pos.path.clone();
+        let nibbles = pos.nibbles + 1;
+        if pos.nibbles % 2 == 0 { path.push(0x00) }
+        let locator = Locator { anchor: pos.anchor, path, nibbles, seqno: Seqno { series, counter: 0 } };
+        let back = self.archive.next_back_pointers();
+        let a = Adoption { node, patron: self.keyhash(), locator, timestamp: self.now_s(), key_material, evidence, presented_head, back: [node_back, &back] };
+        let body = adoption_body(&a);
+        verify::adoption_evidence(&self.known, &body).map_err(|e| Abort::PatronRefused(e.to_string()))?;
+        Ok(body)
+    }
+
+    /// Sign a body I proposed or was shown, as its subject or its patron.
+    pub fn sign_body(&self, body: &[u8]) -> Vec<u8> {
+        self.id.sign_entries(aad::ENVELOPE, body)
+    }
+
+    /// Take a finalized adoption I signed: appended and kept.
+    pub fn take_adoption(&mut self, envelope: &[u8]) -> Result<Txid, Abort> {
+        let rec = Record::parse(envelope).map_err(Abort::Record)?;
+        verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
+        let t = rec.txid;
+        self.archive.append(rec).map_err(Abort::Record)?;
+        self.store.records.insert(t, envelope.to_vec());
+        Ok(t)
+    }
+
+    /// The chain proving my series under `patron`, presented when asked
+    /// (`wire-format.md` §4.6.1) and propagated to nobody.
+    pub fn present_chain(&self, patron: &Keyhash) -> Vec<Vec<u8>> {
+        self.archive.chain_for(patron).map(|c| c.bytes()).unwrap_or_default()
+    }
+
+    /// As the recovering subject: seal every old line as the old key's
+    /// last act (design §9.0).  After this the old key is gone.
+    pub fn seal_old_lines(&mut self) -> Vec<(Keyhash, Vec<u8>)> {
+        match self.rotation.as_mut() {
+            Some(r) => r.seal().to_vec(),
+            None => Vec::new(),
+        }
     }
 }
 
@@ -662,6 +808,101 @@ impl Harness {
             self.client(s).finalize(&envelope, set)?;
         }
         Ok(txid)
+    }
+
+    /// An ordinary adoption on the harness: `node` and `patron` meet in a
+    /// ceremony, each nominating as given, and the patron adopts on that
+    /// record.
+    pub fn run_adoption(&mut self, node: Keyhash, patron: Keyhash, node_nominees: Vec<Keyhash>, patron_nominees: Vec<Keyhash>, series: u32) -> Result<Txid, Abort> {
+        let pop = self.run(node, patron, node_nominees, patron_nominees)?;
+        let node_back = self.client(&node).back_pointers();
+        let body = self.client(&patron).propose_adoption(node, Evidence::Presence(pop), series, None, &node_back, None)?;
+        let m = self.send(patron, node, Msg::AdoptionBody(body));
+        let Msg::AdoptionBody(body) = m else { unreachable!() };
+        let n_entries = self.client(&node).sign_body(&body);
+        self.send(node, patron, Msg::Signed(Ok(n_entries.clone())));
+        let p_entries = self.client(&patron).sign_body(&body);
+        let envelope = envelope_from_entries(TYPE_ADOPTION, &body, &[(node, n_entries), (patron, p_entries)]);
+        let t = self.client(&patron).take_adoption(&envelope)?;
+        self.send(patron, node, Msg::Record(envelope.clone()));
+        self.client(&node).take_adoption(&envelope)?;
+        Ok(t)
+    }
+
+    /// A recovery meeting (design §9.1): `subject`, holding its prior key,
+    /// meets `verifier`, a prior counterparty of that key, with its new
+    /// key.  The meeting opens as a ceremony through capture; then the
+    /// verifier is its own querier, the subject's new key consents, the
+    /// verifier's person recognises, and the hybrid response goes to the
+    /// subject.  No record is produced; the response is what the meeting
+    /// yields.
+    pub fn run_recovery_meeting(&mut self, subject: Keyhash, verifier: Keyhash) -> Result<Vec<u8>, Abort> {
+        let prior = self.client(&subject).prior_key().ok_or(Abort::NoPriorKey)?;
+        let ia = self.client(&subject).begin(verifier, vec![], true)?;
+        let ib = self.client(&verifier).begin(subject, vec![], false)?;
+        let m = self.send(subject, verifier, Msg::Intent(ia));
+        let Msg::Intent(i) = &m else { unreachable!() };
+        self.client(&verifier).take_intent(subject, i)?;
+        let m = self.send(verifier, subject, Msg::Intent(ib));
+        let Msg::Intent(i) = &m else { unreachable!() };
+        self.client(&subject).take_intent(verifier, i)?;
+        let ch = self.client(&subject).proximity()?;
+        let m = self.send(subject, verifier, Msg::Channels(ch));
+        let Msg::Channels(ch) = &m else { unreachable!() };
+        self.client(&verifier).take_channels(ch)?;
+        let ks = self.client(&subject).capture_key()?;
+        let kv = self.client(&verifier).capture_key()?;
+        self.send(subject, verifier, Msg::CaptureKey(ks));
+        self.send(verifier, subject, Msg::CaptureKey(kv));
+        self.client(&verifier).capture(ks)?;
+        self.client(&subject).capture(kv)?;
+        // the claim, the query, the consent, the recognition
+        self.send(subject, verifier, Msg::ClaimPrior(prior));
+        let q = self.client(&verifier).recovery_query(prior)?;
+        let m = self.send(verifier, subject, Msg::ConsentRequest(q.clone()));
+        let Msg::ConsentRequest(q) = m else { unreachable!() };
+        let (consent, _) = self.client(&subject).consent(&q).ok_or(Abort::NotRecognised)?;
+        let m = self.send(subject, verifier, Msg::Consent { query_id: q.query_id(), consent });
+        let Msg::Consent { consent, .. } = m else { unreachable!() };
+        let resp = self.client(&verifier).recognise(&q, &consent, prior)?;
+        let m = self.send(verifier, subject, Msg::RecoveryResponse(resp));
+        let Msg::RecoveryResponse(resp) = m else { unreachable!() };
+        self.client(&subject).take_recovery_response(&resp).map_err(Abort::Record)?;
+        // the meeting closes without a record
+        self.client(&subject).subject.close_window();
+        self.client(&subject).abandon();
+        self.client(&verifier).subject.close_window();
+        self.client(&verifier).abandon();
+        Ok(resp)
+    }
+
+    /// The recovery adoption (design §9.0; `wire-format.md` §4.1): the
+    /// subject assembles the block from what its meetings yielded and its
+    /// old key's statement, the patron proposes the adoption and checks
+    /// the block against it, both sign, and the old lines are sealed as
+    /// the old key's last act before the adoption goes anywhere.
+    pub fn run_recovery_adoption(&mut self, subject: Keyhash, patron: Keyhash, series: u32) -> Result<Txid, Abort> {
+        let (block, head) = self.client(&subject).recovery_block(&patron)?;
+        let m = self.send(subject, patron, Msg::RecoveryProposal { block, presented_head: head });
+        let Msg::RecoveryProposal { block, presented_head } = m else { unreachable!() };
+        let node_back = self.client(&subject).back_pointers();
+        let km = self.client(&subject).id.public.key_material();
+        let body = self.client(&patron).propose_adoption(subject, Evidence::Recovery(block), series, presented_head, &node_back, Some(km))?;
+        let m = self.send(patron, subject, Msg::AdoptionBody(body));
+        let Msg::AdoptionBody(body) = m else { unreachable!() };
+        let s_entries = self.client(&subject).sign_body(&body);
+        self.send(subject, patron, Msg::Signed(Ok(s_entries.clone())));
+        let p_entries = self.client(&patron).sign_body(&body);
+        let envelope = envelope_from_entries(TYPE_ADOPTION, &body, &[(subject, s_entries), (patron, p_entries)]);
+        // the old key's last act, before the adoption is pushed
+        let seals = self.client(&subject).seal_old_lines();
+        for (holder, seal) in seals {
+            self.send(subject, holder, Msg::Seal(seal));
+        }
+        let t = self.client(&patron).take_adoption(&envelope)?;
+        self.send(patron, subject, Msg::Record(envelope.clone()));
+        self.client(&subject).take_adoption(&envelope)?;
+        Ok(t)
     }
 
     /// `selector` picks `subject`'s verifiers and queries each: the query

@@ -105,3 +105,29 @@ fn a_plain_rotation_carries_nothing_and_its_memo_names_no_prior_key() {
     let rhtn_codec::cbor::Item::Map(fields) = &memo_item else { panic!("memo not a map") };
     assert_eq!(fields.len(), 5, "five fields and no sixth for a prior key");
 }
+
+// acceptance: REC-10
+#[test]
+fn the_chain_is_presented_when_asked_and_never_propagated() {
+    let mut w = World::new();
+    let (ua, _) = w.adopt("alice", "bob", 1);
+    let r = w.reissue("alice", "bob", Seqno { series: 1, counter: 2 }, 5);
+    let t = table_with(kh("alice"), &w, &[&ua], &["bob"]);
+    let mut s = view("alice", t, "bob", &[0]);
+    s.archive = w.archives[&kh("alice")].clone();
+    let fab = Fabric::with(&[kh("bob"), kh("carol")]);
+    // a counterparty asks S to prove its series: the adoption and the reissue
+    let chain = s.present_chain(&kh("bob"));
+    assert_eq!(chain, vec![ua.bytes.clone(), r.bytes.clone()]);
+    let read = rhtn_archive::series::SeriesChain::from_records(&chain, &ids()).unwrap();
+    assert_eq!(read.series(), vec![1, 5]);
+    let mut holder = rhtn_node::resolution::LocatorStore::new();
+    holder.take_chain(&read);
+    assert!(holder.abandoned(&kh("alice"), 1));
+    // nothing leaves S on any session in response, then or later
+    s.set_now(s.now() + 7 * 86_400);
+    assert_eq!(fab.count(rhtn_node::propagation::FRAME_TOPOLOGY_PUSH), 0, "no TopologyPush carrying either");
+    assert!(fab.frames().is_empty());
+    // no chain under a patron S was never adopted by
+    assert!(s.present_chain(&kh("carol")).is_empty());
+}

@@ -306,6 +306,16 @@ impl Response {
     }
 }
 
+/// The prior key a recovery response names in field 8, if any.
+pub fn prior_key_of(b: &[u8]) -> Option<Keyhash> {
+    let r = value_slice(b, 8)?;
+    let (it, _) = Parser { b }.item(r.start).ok()?;
+    match &it {
+        Item::Bytes(br) if br.len() == 32 => b[br.clone()].try_into().ok(),
+        _ => None,
+    }
+}
+
 fn bytes_of_value(b: &[u8], key: u64) -> Option<Vec<u8>> {
     value_slice(b, key).map(|r| b[r].to_vec())
 }

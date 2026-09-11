@@ -204,6 +204,11 @@ impl Archive {
         self.records.values().filter_map(|r| r.seqno()).filter(|s| s.series == series).max_by_key(|s| s.counter)
     }
 
+    /// Every record held, in no particular order.
+    pub fn records(&self) -> impl Iterator<Item = &Record> {
+        self.records.values()
+    }
+
     /// Every series this key has occupied (`light-client-requirements.md`
     /// §2: never reissue into one of them).
     pub fn series_occupied(&self) -> BTreeSet<u32> {

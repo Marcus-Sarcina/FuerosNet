@@ -17,6 +17,9 @@
 //! - [`record`] is record assembly: the body every signer sees, the
 //!   disclosure set and its root, a signer's refusals, the presentation
 //!   that withholds by default, and late responses kept beside a record.
+//! - [`rotation`] is what a subject does with its own lines: seal on
+//!   rotation, seal then reissue on suspicion, never into a series it has
+//!   occupied, and keep the chain that proves its series.
 //! - [`notice`] is what the person is told, raised through one hook.
 //! - [`device`] is the hardware and the person behind traits: proximity
 //!   channels, the camera, the clock, randomness, the operator, the engine.
@@ -34,6 +37,7 @@ pub mod keys;
 pub mod notice;
 pub mod query;
 pub mod record;
+pub mod rotation;
 pub mod selection;
 pub mod store;
 pub mod subject;

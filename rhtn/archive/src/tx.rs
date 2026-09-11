@@ -227,12 +227,19 @@ pub fn sign_block(signer: &SigningIdentity, tag: &[u8], payload: &[u8]) -> Vec<u
 /// prior key whose holder the verifier recognised.
 pub fn recovery_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32], prior: &Keyhash) -> Vec<u8> {
     let consent = subject.sign1_ed_unnamed(aad::CONSENT, qid);
+    recovery_response_with_consent(verifier, &subject.public.keyhash, qid, &consent, prior)
+}
+
+/// The same response with the subject's consent supplied, as a verifier
+/// issues it: the subject's client signed the consent, the verifier signs
+/// the rest.
+pub fn recovery_response_with_consent(verifier: &SigningIdentity, subject: &Keyhash, qid: &[u8; 32], consent: &[u8], prior: &Keyhash) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 8);
     emit_uint(&mut payload, 1);
     emit_bstr(&mut payload, &verifier.public.keyhash);
     emit_uint(&mut payload, 2);
-    emit_bstr(&mut payload, &subject.public.keyhash);
+    emit_bstr(&mut payload, subject);
     emit_uint(&mut payload, 3);
     emit_bstr(&mut payload, qid);
     emit_uint(&mut payload, 4);
@@ -240,7 +247,7 @@ pub fn recovery_response(verifier: &SigningIdentity, subject: &SigningIdentity, 
     emit_uint(&mut payload, 5);
     emit_uint(&mut payload, 1);
     emit_uint(&mut payload, 7);
-    payload.extend_from_slice(&consent);
+    payload.extend_from_slice(consent);
     emit_uint(&mut payload, 8);
     emit_bstr(&mut payload, prior);
     emit_uint(&mut payload, 10);
