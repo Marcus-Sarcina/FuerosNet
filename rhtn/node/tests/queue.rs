@@ -98,6 +98,12 @@ async fn no_crash_recovery_copy_outlives_a_delivery() {
     assert_eq!(store.all_files().len(), 3, "persisted while waiting");
     let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
     assert_eq!(drain(&mut s).await.len(), 3);
+    // each file goes as its delivery is taken, and the last acknowledgement
+    // may follow the last read by a moment
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    while !store.all_files().is_empty() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     s.conn.close(0u32.into(), b"");
     drop(s);
     // the process dies without warning: the node and its endpoint go away,

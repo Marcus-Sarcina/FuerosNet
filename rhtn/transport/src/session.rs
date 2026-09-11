@@ -583,6 +583,8 @@ impl NodeConfig {
 
 #[derive(Default)]
 struct NodeState {
+    /// One drain at a time per recipient.
+    drains: HashMap<[u8; 32], Arc<tokio::sync::Mutex<()>>>,
     reach: HashMap<[u8; 32], Arc<Mutex<Reachability>>>,
     sessions: HashMap<[u8; 32], Connection>,
     /// Credentials this node holds supersession evidence for, and their
@@ -613,7 +615,7 @@ impl Node {
     /// queue is at its cap, when the newest is refused and the sender told
     /// (design §14.1.6), or the credential is one this node has verified
     /// superseded (design §12.6.5).
-    pub fn enqueue(&self, keyhash: [u8; 32], bytes: Vec<u8>) -> Result<(), queue::Refusal> {
+    pub fn enqueue(self: &Arc<Self>, keyhash: [u8; 32], bytes: Vec<u8>) -> Result<(), queue::Refusal> {
         if !(self.cfg.serves)(&keyhash) {
             return Err(queue::Refusal::NoRecord);
         }
@@ -633,16 +635,22 @@ impl Node {
                 st.sessions.get(&keyhash).cloned()
             }
         };
-        if let Some(conn) = conn {
-            tokio::spawn(async move { deliver(&conn, bytes).await });
-            return Ok(());
-        }
         if let Some(cap) = self.cfg.queue_cap
             && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
                 return Err(queue::Refusal::AtCap);
             }
+        // accepted means stored: the message enters the mailbox, and a live
+        // session drains it from there, so nothing is reported delivered
+        // before the peer has taken it
         self.cfg.queue.push(Queued { ciphertext: bytes, recipient: keyhash, arrival: (self.cfg.clock)() });
+        if let Some(conn) = conn {
+            tokio::spawn(drain(self.clone(), keyhash, conn));
+        }
         Ok(())
+    }
+
+    fn drain_lock(&self, recipient: &[u8; 32]) -> Arc<tokio::sync::Mutex<()>> {
+        self.state.lock().unwrap().drains.entry(*recipient).or_default().clone()
     }
 
     pub fn queued(&self, keyhash: &[u8; 32]) -> usize {
@@ -794,11 +802,10 @@ impl Node {
             st.reach.insert(claimed, reach.clone());
             st.outbound.insert(claimed, otx);
         }
-        // drain: each item leaves the store as it goes out, and no copy
-        // outlives its delivery (design §14.1.6)
-        for item in self.cfg.queue.take_all(&claimed) {
-            deliver(&conn, item.ciphertext).await;
-        }
+        // drain: each waiting message goes out oldest first and leaves the
+        // store only once the peer has taken it, so a session that fails
+        // mid-drain leaves the rest where it was (design §14.1.6)
+        tokio::spawn(drain(self.clone(), claimed, conn.clone()));
         // requests on bidirectional streams, answered for as long as the session lives
         let req_conn = conn.clone();
         let handler = self.cfg.on_request.clone();
@@ -845,10 +852,31 @@ impl Node {
     }
 }
 
-async fn deliver(conn: &Connection, bytes: Vec<u8>) {
-    if let Ok(mut s) = conn.open_uni().await {
-        let _ = s.write_all(&bytes).await;
-        let _ = s.finish();
+/// Deliver one message on a fresh unidirectional stream and wait for the
+/// peer to take it: the stream written, finished, and every byte
+/// acknowledged received.  Anything short of that is no delivery, and the
+/// caller leaves the message where it was.
+async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
+    let Ok(mut s) = conn.open_uni().await else { return false };
+    if s.write_all(&bytes).await.is_err() || s.finish().is_err() {
+        return false;
+    }
+    matches!(s.stopped().await, Ok(None))
+}
+
+/// Deliver what waits for `recipient` on `conn`, oldest first, each removed
+/// from the store once taken and not before (design §14.1.6,
+/// `infra-client-requirements.md` §2: delete on delivery).  One drain runs
+/// per recipient at a time; a failed delivery ends the drain, and the rest
+/// waits for the next session.
+async fn drain(node: Arc<Node>, recipient: [u8; 32], conn: Connection) {
+    let lock = node.drain_lock(&recipient);
+    let _running = lock.lock().await;
+    while let Some(item) = node.cfg.queue.peek_oldest(&recipient) {
+        if !deliver(&conn, item.ciphertext.clone()).await {
+            return;
+        }
+        node.cfg.queue.remove(&recipient, &item);
     }
 }
 

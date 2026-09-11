@@ -97,16 +97,18 @@ impl QueueStore for DirStore {
             }
         }
     }
-    fn take_all(&self, recipient: &[u8; 32]) -> Vec<Queued> {
-        let mut out = Vec::new();
+    fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued> {
+        self.files(recipient).into_iter().find_map(|(arrival, _, path)| std::fs::read(&path).ok().map(|ciphertext| Queued { ciphertext, recipient: *recipient, arrival }))
+    }
+    fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool {
         for (arrival, _, path) in self.files(recipient) {
-            if let Ok(ciphertext) = std::fs::read(&path) {
+            if arrival == item.arrival && std::fs::read(&path).is_ok_and(|c| c == item.ciphertext) {
                 let _ = std::fs::remove_file(&path);
-                out.push(Queued { ciphertext, recipient: *recipient, arrival });
+                let _ = std::fs::remove_dir(self.recipient_dir(recipient));
+                return true;
             }
         }
-        let _ = std::fs::remove_dir(self.recipient_dir(recipient));
-        out
+        false
     }
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued> {
         self.files(recipient).into_iter().filter_map(|(arrival, _, path)| std::fs::read(&path).ok().map(|ciphertext| Queued { ciphertext, recipient: *recipient, arrival })).collect()

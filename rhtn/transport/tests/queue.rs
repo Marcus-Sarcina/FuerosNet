@@ -362,3 +362,57 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
     assert_eq!(path, vec![kh("bob"), kh("carol")], "listed by path, beneath A");
     assert!(shared.lock().unwrap().attached_clients().contains_key(&kh("carol")));
 }
+
+// acceptance: QUE-19
+#[tokio::test]
+async fn a_delivery_the_peer_never_took_leaves_the_message_in_the_mailbox() {
+    let (node, addr, _ep) = spawn_node(node_cfg("alice"));
+    let sent = messages(40, "q19");
+    for m in &sent {
+        node.enqueue(kh("carol"), m.clone()).unwrap();
+    }
+    assert_eq!(node.queued(&kh("carol")), 40);
+    // C attaches, takes what arrives in a moment, and its connection dies
+    let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
+    let first = timeout(Duration::from_secs(3), s.deliveries.recv()).await.expect("a first delivery").unwrap();
+    s.conn.close(0u32.into(), b"gone");
+    let mut got1 = vec![first];
+    got1.extend(drain(&mut s).await);
+    drop(s);
+    sleep(Duration::from_millis(500)).await;
+    // what C took is gone from the store; what it never took is still there
+    let left = node.queued(&kh("carol"));
+    assert!((1..40).contains(&left), "the drain stopped where the connection died: {left} left");
+    let got2 = {
+        let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr).await;
+        assert_eq!(s2.ack.queued as usize, left);
+        drain(&mut s2).await
+    };
+    assert_eq!(got2.len(), left, "the next session gets exactly what was left");
+    let mut all: Vec<Vec<u8>> = got1.iter().chain(got2.iter()).cloned().collect();
+    all.sort();
+    all.dedup();
+    let mut expected = sent.clone();
+    expected.sort();
+    assert_eq!(all, expected, "nothing accepted was lost");
+    assert_eq!(node.queued(&kh("carol")), 0);
+}
+
+// acceptance: QUE-19
+#[tokio::test]
+async fn a_message_for_an_attached_client_is_stored_until_taken() {
+    // the immediate path is the same path: accepted means stored, and the
+    // store empties as the peer takes each message
+    let (node, addr, _ep) = spawn_node(node_cfg("alice"));
+    let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
+    for m in messages(3, "q19b") {
+        node.enqueue(kh("carol"), m).unwrap();
+    }
+    let got = drain(&mut s).await;
+    assert_eq!(got.len(), 3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    while node.queued(&kh("carol")) > 0 && tokio::time::Instant::now() < deadline {
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(node.queued(&kh("carol")), 0, "deleted on delivery, once taken");
+}

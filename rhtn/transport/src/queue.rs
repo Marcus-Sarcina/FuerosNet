@@ -1,8 +1,10 @@
 //! The serving node's mailbox (design §14.1.6, `infra-client-requirements.md`
-//! §2): ciphertext held for a client that is not attached, with the minimum
-//! metadata — recipient keyhash and arrival time — deleted on delivery,
-//! capped per subordinate with the newest refused, and kept for an absence
-//! of any length.  The store is the session layer's contract and the memory
+//! §2): ciphertext held for a client, with the minimum metadata — recipient
+//! keyhash and arrival time — deleted on delivery and not before, capped
+//! per subordinate with the newest refused, and kept for an absence of any
+//! length.  Every accepted message enters the store; a live session drains
+//! it from there, one message at a time, each removed once the peer has
+//! taken it.  The store is the session layer's contract and the memory
 //! store its default; the directory store a restarting node keeps is
 //! `rhtn-node`'s (`Robot/implementation-plan.md`'s crate table).
 
@@ -31,8 +33,12 @@ pub enum Refusal {
 
 pub trait QueueStore: Send + Sync {
     fn push(&self, item: Queued);
-    /// Remove and return everything queued for `recipient`, oldest first.
-    fn take_all(&self, recipient: &[u8; 32]) -> Vec<Queued>;
+    /// The oldest message waiting for `recipient`, left in place: what a
+    /// drain reads before it delivers.
+    fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued>;
+    /// Remove one message, the first equal to `item`, once it has been
+    /// delivered.  Whether anything was removed.
+    fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool;
     /// What is queued for `recipient`, for inspection; nothing is removed.
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued>;
     fn drop_all(&self, recipient: &[u8; 32]);
@@ -51,8 +57,18 @@ impl QueueStore for MemoryStore {
     fn push(&self, item: Queued) {
         self.0.lock().unwrap().entry(item.recipient).or_default().push_back(item);
     }
-    fn take_all(&self, recipient: &[u8; 32]) -> Vec<Queued> {
-        self.0.lock().unwrap().remove(recipient).map(|q| q.into_iter().collect()).unwrap_or_default()
+    fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued> {
+        self.0.lock().unwrap().get(recipient).and_then(|q| q.front().cloned())
+    }
+    fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool {
+        let mut m = self.0.lock().unwrap();
+        let Some(q) = m.get_mut(recipient) else { return false };
+        let Some(i) = q.iter().position(|x| x == item) else { return false };
+        q.remove(i);
+        if q.is_empty() {
+            m.remove(recipient);
+        }
+        true
     }
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued> {
         self.0.lock().unwrap().get(recipient).map(|q| q.iter().cloned().collect()).unwrap_or_default()

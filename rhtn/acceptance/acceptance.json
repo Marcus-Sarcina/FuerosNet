@@ -7446,5 +7446,32 @@
   "then": "The first node reports the session live and the client reachable, and both sides' logs are empty: the reachability state is kept and nothing of what passed. The second node's log and its client's each record the attach. An implementation whose sessions append every frame sent and every delivery to a store no configuration turns off fails.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "QUE-19",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Delete a message on delivery and not before: a delivery the peer never took leaves it in the mailbox for the next session",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "Undelivered messages queue indefinitely at the recipient's serving node"
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Delete on delivery, immediately, leaving nothing recoverable."
+   }
+  ],
+  "given": "N holding forty messages for C. C attaches, receives what arrives within a moment, and its connection dies mid-drain; C attaches again later. Separately, C attached and three messages submitted for it.",
+  "when": "N drains on each attach; the submissions for the attached client are delivered.",
+  "then": "After the failed session the store still holds every message C never took and none it took; the second AttachAck reports that count and the drain delivers exactly those, so across both sessions every accepted message was received and nothing was lost. For the attached client each message is stored on acceptance and gone once taken. An implementation that empties the mailbox before delivering, or reports success before the peer has taken the message, fails.",
+  "oracle": "behaviour",
+  "interpretation": "Taken means the peer acknowledged every byte of the delivery stream, the transport's own boundary; a message whose acknowledgement the failure swallowed may be delivered again, which is the failure mode the design's no-loss rule chooses."
  }
 ]
