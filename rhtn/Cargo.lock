@@ -575,6 +575,7 @@ dependencies = [
  "rhtn-archive",
  "rhtn-codec",
  "rhtn-crypto",
+ "serde_json",
 ]
 
 [[package]]

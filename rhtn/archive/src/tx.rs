@@ -346,6 +346,7 @@ pub fn reissue_body(back: [&[Txid]; 2], node: &Keyhash, patron: &Keyhash, leavin
 /// A witness on a normal presence record (`wire-format.md` §4.5): its
 /// keyhash, the participant who nominated it, and its attestation bits
 /// (bit 0 protocol_ran, bit 1 both_responsive, bit 2 latency_bound).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witness {
     pub keyhash: Keyhash,
     pub nominated_by: Keyhash,

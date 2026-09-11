@@ -158,6 +158,17 @@ pub fn open(p: &SealParams, key: &[u8; 32], sealed: &SealedCapture) -> Result<Ca
     Ok(Capture { modality: sealed.modality, template_version: sealed.template_version, template, frames })
 }
 
+/// A subject's own seed for one of its records (design §7.5.2, §7.5.2.9):
+/// what unlocks its likeness on that counterparty's device, with what a
+/// grant needs to name the capture and derive its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnSeed {
+    pub seed: [u8; 32],
+    pub counterparty: Keyhash,
+    pub ceremony_id: [u8; 32],
+    pub finalized_at: u64,
+}
+
 /// A compliant client's persistent state (design §7.5.2, §7.5.2.9;
 /// `light-client-requirements.md` §1.3): the sealed captures it holds of
 /// others, by record; its own seeds, by record, which unlock its likeness
@@ -167,7 +178,7 @@ pub fn open(p: &SealParams, key: &[u8; 32], sealed: &SealedCapture) -> Result<Ca
 #[derive(Debug, Default, Clone)]
 pub struct ClientStore {
     pub sealed: BTreeMap<Txid, SealedCapture>,
-    pub seeds: BTreeMap<Txid, [u8; 32]>,
+    pub seeds: BTreeMap<Txid, OwnSeed>,
     pub records: BTreeMap<Txid, Vec<u8>>,
     pub late: BTreeMap<Txid, Vec<Vec<u8>>>,
 }
@@ -178,9 +189,15 @@ impl ClientStore {
     pub fn holds_bytes(&self, needle: &[u8]) -> bool {
         let find = |hay: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
         self.sealed.values().any(|s| find(&s.ciphertext) || find(&s.nonce))
-            || self.seeds.values().any(|s| find(s))
+            || self.seeds.values().any(|s| find(&s.seed))
             || self.records.values().any(|r| find(r))
             || self.late.values().flatten().any(|l| find(l))
+    }
+
+    /// Whether this client's own presence records name `k` as a
+    /// participant: what refutes a claimed `met` (`wire-format.md` §5.6).
+    pub fn has_met(&self, k: &Keyhash) -> bool {
+        self.records.values().any(|r| rhtn_archive::record::Record::parse(r).is_ok_and(|rec| rec.participants().contains(k)))
     }
 
     /// Discard a record and everything kept beside it (`wire-format.md`

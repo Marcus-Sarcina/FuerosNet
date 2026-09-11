@@ -6,12 +6,30 @@
 //! - [`store`] is the sealed capture store (design §7.5.2) and the client's
 //!   persistent state, kept so a test can look at what a compliant client
 //!   holds and does not hold.
+//! - [`query`] is the verification query, the consent, the response and
+//!   the key grant as bytes (`wire-format.md` §5.6, §7.4, §8.4).
+//! - [`selection`] is how a participant picks whom to ask (design §7.4).
+//! - [`verifier`] is what a client does when asked (design §7.4.1,
+//!   §7.5.2.4): the comparison in memory and nothing kept of it.
+//! - [`subject`] is the other side: consent, the per-ceremony counters,
+//!   the key grant against the most recent eligible capture, and the
+//!   responses held for the finalization veto.
+//! - [`record`] is record assembly: the body every signer sees, the
+//!   disclosure set and its root, a signer's refusals, the presentation
+//!   that withholds by default, and late responses kept beside a record.
+//! - [`notice`] is what the person is told, raised through one hook.
 //!
 //! Every decision here is the client's own, taken against what the client
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
 
 pub mod keys;
+pub mod notice;
+pub mod query;
+pub mod record;
+pub mod selection;
 pub mod store;
+pub mod subject;
+pub mod verifier;
 
 pub use rhtn_archive::{Keyhash, Txid};
