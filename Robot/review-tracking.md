@@ -8491,3 +8491,56 @@ Numbers: Thirteen entries added, 277 in all, 184 of 275 implemented,
 gaining the two fields the request path added and the view's clock set
 through its setter; the reviewer's directory itself is untouched and
 untracked.
+
+**Second conformance review of `rhtn/`, at 85fcf08, remediated
+(2026-09-11).** The reviewer's second pass (`conformance-review/`, again
+untracked and untouched) found the twelve original assertions passing
+after adapting its own harness to the clock and adjacency interfaces, and
+reported eleven current findings, five P1 and six P2: two carried forward
+as partially resolved (F02, F04) and nine new (N01 to N09). All eleven held
+on verification: the harness's thirteen new assertions reproduced here
+exactly, and every cited path read as described. Three were wider than
+their reproductions and were treated so: N01's collapse of a verification
+error into "no key" was the anchor entry's too; N05's validator belongs in
+the codec, since an adoption's field 5 carries the same encoding; N08's
+unchecked algorithm value applied to every classical Sign1. Applied, one
+gate-green commit per pair, in three groups:
+
+- **F02, N08** (c783edb): the adoption's locator and the peering's network
+  points checked in a signed body, a signed map's unknown keys kept as the
+  extensions it bounds; a witness nominated by a participant; the crypto
+  verifier running the typed body rules. DEC-24. A signature's declared
+  algorithm held to its profile's. DEC-25. Found on the way: the test
+  worlds wrote the default port out, which §4.4 makes malformed, so the
+  network point normalises it to absent.
+- **N03, N01** (34f6900): the verifier's failure typed, a missing key of any
+  signer, envelope or embedded, reported as unverifiable naming it, so the
+  store holds a transfer for the former patron's key. DEC-26. A self-signed
+  record with no slot, or failing under a held key, malformed and never
+  gossip; every standalone signed kind carries its slot. RES-18.
+- **F04, N09** (2ff4d57): a routing slot derived from the settled binding,
+  so a departure held before its adoption leaves the row empty. PRP-19.
+  Dereferenced evidence counted only once its signatures verify: a failing
+  record never evidence, an unverifiable one unevaluated where deferred and
+  refused naming the key where required. TOP-19. That reading of "an
+  evaluation step, not a structural one" is the assistant's, open to
+  reversal.
+- **N02, N04** (05a055c): the store's save rewrites the endpoint records
+  whole and its load drops what the conflict markers retire. PRP-20. An
+  archive appends a held record idempotently. ARC-18.
+- **N06** (1628413): a frame reader that keeps its buffer across the loop's
+  selects, reading through the cancellation-safe chunk read, so a frame
+  half received when a timer or an outbound frame wins is finished on the
+  next turn. SES-17.
+- **N07, N05** (500b9e6): the cap read and the push under one gate. QUE-20.
+  Key material validated to §2.2's shape before a pin. TRN-17.
+
+Numbers: Eleven entries added, 288 in all, 195 of 286 implemented, 0 flags;
+each commit's gate green. The reviewer's harness rerun at the end:
+24 of its 25 assertions pass on an unadapted copy in the
+scratchpad, N07 excluded and run alone, where it waits past a one-minute
+timeout. Its N07 reproduction cannot pass against a serialised
+submission path: it makes the store block inside the cap read until a
+second submission reaches the same point, which the gate that closes the
+race now prevents, so that one assertion waits on its own barrier rather
+than failing or passing.
