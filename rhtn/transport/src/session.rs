@@ -651,13 +651,16 @@ struct NodeState {
 pub struct Node {
     pub cfg: NodeConfig,
     state: Mutex<NodeState>,
+    /// Held across a submission's cap check and its push, so two
+    /// submissions cannot both see the room for one (design §14.1.6).
+    queue_gate: Mutex<()>,
     pub log: Log,
 }
 
 impl Node {
     pub fn new(cfg: NodeConfig) -> Arc<Self> {
         let log = cfg.log.clone();
-        Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), log })
+        Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), queue_gate: Mutex::new(()), log })
     }
 
     /// Accept material for a client: delivered now on a unidirectional
@@ -685,6 +688,10 @@ impl Node {
                 st.sessions.get(&keyhash).cloned()
             }
         };
+        // the cap is read and the message stored under one gate: capacity is
+        // reserved and taken as one step, so a concurrent submission sees
+        // the store this one leaves
+        let _gate = self.queue_gate.lock().unwrap();
         if let Some(cap) = self.cfg.queue_cap
             && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
                 return Err(queue::Refusal::AtCap);

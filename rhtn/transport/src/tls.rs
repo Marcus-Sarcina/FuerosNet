@@ -29,8 +29,11 @@ impl Pins {
         Self::default()
     }
 
-    /// Pin `key_material`; refused if it does not hash to `keyhash`.
+    /// Pin `key_material`; refused unless it has the shape §2.2 gives an
+    /// identity, both components in order and nothing else, and hashes to
+    /// `keyhash`.
     pub fn pin(&self, keyhash: [u8; 32], key_material: &[u8]) -> Result<(), &'static str> {
+        rhtn_codec::cose::check_key_material(key_material).map_err(|e| e.0)?;
         if rhtn_codec::cose::sha256(key_material) != keyhash {
             return Err("key material does not hash to the keyhash");
         }

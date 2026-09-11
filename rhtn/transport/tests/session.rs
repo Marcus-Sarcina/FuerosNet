@@ -660,3 +660,46 @@ async fn a_frame_half_received_when_an_outbound_frame_goes_is_finished_not_lost(
     assert!(node.has_session(&kh("bob")), "the session lives");
     conn.close(0u32.into(), b"");
 }
+
+// acceptance: TRN-17
+#[test]
+fn a_pin_takes_only_key_material_of_the_profiles_shape() {
+    let id = test_identity("alice").public;
+    let km = id.key_material();
+    let pins = Pins::new();
+    assert_eq!(pins.pin(id.keyhash, &km), Ok(()), "the identity's own material");
+    assert!(pins.classical_key(&id.keyhash).is_some());
+    let members = array_item_ranges(&km, 0).unwrap();
+    let hash = |b: &[u8]| rhtn_codec::cose::sha256(b);
+    // the classical key alone: a single key cannot represent an identity
+    let mut classical_only = Vec::new();
+    emit_array_head(&mut classical_only, 1);
+    classical_only.extend_from_slice(&km[members[0].clone()]);
+    let fresh = Pins::new();
+    assert!(fresh.pin(hash(&classical_only), &classical_only).is_err());
+    assert!(fresh.classical_key(&hash(&classical_only)).is_none());
+    // the two keys in the other order
+    let mut swapped = Vec::new();
+    emit_array_head(&mut swapped, 2);
+    swapped.extend_from_slice(&km[members[1].clone()]);
+    swapped.extend_from_slice(&km[members[0].clone()]);
+    assert!(fresh.pin(hash(&swapped), &swapped).is_err());
+    // a third key beside the two
+    let mut three = Vec::new();
+    emit_array_head(&mut three, 3);
+    three.extend_from_slice(&km[members[0].clone()]);
+    three.extend_from_slice(&km[members[1].clone()]);
+    three.extend_from_slice(&km[members[0].clone()]);
+    assert!(fresh.pin(hash(&three), &three).is_err());
+    // a classical key carrying a label the profile forbids
+    let mut labelled = Vec::new();
+    emit_array_head(&mut labelled, 2);
+    let mut c = km[members[0].clone()].to_vec();
+    c[0] = 0xa4;
+    emit_uint(&mut c, 2);
+    emit_bstr(&mut c, b"kid");
+    labelled.extend_from_slice(&c);
+    labelled.extend_from_slice(&km[members[1].clone()]);
+    assert!(fresh.pin(hash(&labelled), &labelled).is_err());
+    assert!(fresh.classical_key(&hash(&labelled)).is_none(), "nothing entered the pins");
+}

@@ -88,6 +88,46 @@ pub fn key_material(ed_pub: &[u8; 32], pq_pub: &[u8]) -> Vec<u8> {
     km
 }
 
+/// An ML-DSA-65 public key's length in bytes (FIPS 204).
+pub const ML_DSA_65_PUBLIC_BYTES: usize = 1952;
+
+/// The shape `KeyMaterial` has and no other (`wire-format.md` §2.2):
+/// exactly two keys, classical then post-quantum; the first exactly kty
+/// OKP, crv Ed25519 and a 32-byte x; the second exactly kty AKP, alg
+/// ML-DSA-65 and a public key of the algorithm's length.  Any other label,
+/// order or size is a different encoding, and so a different identity or
+/// none: a single key cannot represent one.
+pub fn check_key_material(km: &[u8]) -> Result<(), crate::cbor::Error> {
+    use crate::cbor::{Error, Item, parse_all};
+    let item = parse_all(km)?;
+    let Item::Array(a) = &item else { return Err(Error("key material not an array")) };
+    if a.len() != 2 {
+        return Err(Error("key material is exactly two keys"));
+    }
+    let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else { return Err(Error("a key is not a map")) };
+    let width = |it: &Item| match it {
+        Item::Bytes(r) => Some(r.len()),
+        _ => None,
+    };
+    let classical = c.len() == 3
+        && matches!((&c[0].0, &c[0].1), (Item::Uint(1), Item::Uint(1)))
+        && matches!((&c[1].0, &c[1].1), (Item::Neg(-1), Item::Uint(6)))
+        && matches!(&c[2].0, Item::Neg(-2))
+        && width(&c[2].1) == Some(32);
+    if !classical {
+        return Err(Error("the classical key is not Ed25519 with exactly kty, crv and x"));
+    }
+    let post_quantum = q.len() == 3
+        && matches!((&q[0].0, &q[0].1), (Item::Uint(1), Item::Uint(7)))
+        && matches!((&q[1].0, &q[1].1), (Item::Uint(3), Item::Neg(ALG_ML_DSA_65)))
+        && matches!(&q[2].0, Item::Neg(-1))
+        && width(&q[2].1) == Some(ML_DSA_65_PUBLIC_BYTES);
+    if !post_quantum {
+        return Err(Error("the post-quantum key is not ML-DSA-65 with exactly kty, alg and pub"));
+    }
+    Ok(())
+}
+
 /// The keyhash covers both components (design §5.1).
 pub fn keyhash(ed_pub: &[u8; 32], pq_pub: &[u8]) -> [u8; 32] {
     sha256(&key_material(ed_pub, pq_pub))

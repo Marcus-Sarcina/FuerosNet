@@ -416,3 +416,45 @@ async fn a_message_for_an_attached_client_is_stored_until_taken() {
     }
     assert_eq!(node.queued(&kh("carol")), 0, "deleted on delivery, once taken");
 }
+
+// acceptance: QUE-20
+#[test]
+fn two_submissions_at_once_cannot_both_take_the_room_for_one() {
+    use rhtn_transport::queue::{MemoryStore, QueueStore, Queued};
+    /// The memory store, slow to answer how full it is, so two submissions
+    /// that were not serialised would both read it empty.
+    struct Slow(MemoryStore);
+    impl QueueStore for Slow {
+        fn push(&self, q: Queued) {
+            self.0.push(q)
+        }
+        fn peek_oldest(&self, k: &[u8; 32]) -> Option<Queued> {
+            self.0.peek_oldest(k)
+        }
+        fn remove(&self, k: &[u8; 32], q: &Queued) -> bool {
+            self.0.remove(k, q)
+        }
+        fn list(&self, k: &[u8; 32]) -> Vec<Queued> {
+            self.0.list(k)
+        }
+        fn drop_all(&self, k: &[u8; 32]) {
+            self.0.drop_all(k)
+        }
+        fn bytes(&self, k: &[u8; 32]) -> usize {
+            let n = self.0.bytes(k);
+            std::thread::sleep(Duration::from_millis(60));
+            n
+        }
+    }
+    let mut cfg = node_cfg("alice");
+    cfg.queue_cap = Some(1);
+    cfg.queue = Arc::new(Slow(MemoryStore::default()));
+    let node = Node::new(cfg);
+    let results = std::thread::scope(|s| {
+        let a = s.spawn(|| node.enqueue(kh("carol"), vec![1]));
+        let b = s.spawn(|| node.enqueue(kh("carol"), vec![2]));
+        [a.join().unwrap(), b.join().unwrap()]
+    });
+    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1, "one fits, the other is refused: {results:?}");
+    assert_eq!(node.queued(&kh("carol")), 1);
+}

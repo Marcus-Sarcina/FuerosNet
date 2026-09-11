@@ -7760,5 +7760,63 @@
   "then": "The outbound frame goes, and the second heartbeat is received whole afterwards: two heartbeats received, nothing discarded, the session alive. An implementation whose frame read is abandoned when another event wins, dropping the bytes it had consumed, fails.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "QUE-20",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Reserve capacity and store as one step, so concurrent submissions cannot exceed the recipient's cap",
+  "milestone": 5,
+  "kind": "robustness",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "At the cap, refuse the newest message and tell the sender"
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "bounded by a per-subordinate storage cap"
+   }
+  ],
+  "given": "N with a one-byte cap for C and a store slow to answer how full it is; two one-byte submissions for C at once.",
+  "when": "Both run.",
+  "then": "Exactly one is accepted and one refused at the cap, and the store holds one message. An implementation that reads the cap and stores in two steps, so both submissions see the room for one, fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRN-17",
+  "area": "transport",
+  "gap": "transport",
+  "title": "Pin only key material of the profile's shape: two keys in order, each with exactly its three labels",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2.2",
+   "wire-format.md §9.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.2",
+    "text": "of exactly two entries in fixed order"
+   },
+   {
+    "where": "wire-format.md §2.2",
+    "text": "a single COSE_Key cannot represent one"
+   },
+   {
+    "where": "wire-format.md §9.1",
+    "text": "the classical member of the KeyMaterial it has pinned"
+   }
+  ],
+  "given": "An identity's own key material; the classical key alone; the two keys in the other order; three keys; and a classical key carrying a kid label. Each variant offered with its own hash.",
+  "when": "Each is pinned.",
+  "then": "The identity's own material pins and yields its classical key. Every variant is refused and yields nothing: it is not an identity, whatever it hashes to. An implementation that pins anything hashing to the keyhash it was given fails.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]
