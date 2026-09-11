@@ -255,8 +255,27 @@ the identity binding is classical, a sweep of one subject is a single
 reusable request, a batch is answered with an array of replies, and how
 bundles, one-time keys and the exhaustion notice reach the serving node.
 
-Then, in order: ICE (step 9b), resources (step 10). The mobile application
-is its own track once the client core is stable.
+**Milestone 9, the direct payload path** (design §24 step 9b). Exit: the
+six traversal entries pass. Done: `rhtn-transport` carries STUN Binding to
+the byte and a socket that serves QUIC and STUN together, so a serving
+node is a STUN server at the address it already serves on and a leaf
+learns the reflexive address of the very socket its direct connection
+will use; candidates and their exchange; and the dial race that is the
+connectivity check, the first QUIC handshake under the pinned key kept.
+`rhtn-node`'s live node gathers only where design §12.6.3's decision says
+the path may be direct, holds or remembers the failed path per peer, and
+sends on it or through the relay without waiting. `rhtn-sim` carries an
+emulated NAT with RFC 4787's mapping and filtering behaviours, so two
+leaves behind endpoint-independent NATs punch through and two behind
+address-and-port-dependent ones fall back to the relay. Control traffic
+dials outward and never asks STUN. All six traversal entries pass; 258 of
+292 entries pass. Two readings are open to the author and recorded in
+`Robot/review-tracking.md`: TURN's function is the node's existing payload
+relay rather than RFC 8656, and candidates travel on the relayed
+end-to-end channel, so the wire carries no signalling object.
+
+Then, in order: resources (step 10). The mobile application is its own
+track once the client core is stable.
 
 ---
 
@@ -344,6 +363,7 @@ checks it and the implementation's test suite is the first check.
 | Ceremony as executed: channel ranking with no upgrade; guided capture; the sealed store, key discard and release policy; a key grant only against a countersigned query; late responses; consent over the query id; disclosure defaults; metadata stripping; decryption failure reported as inconclusive; the local face store | design §7.2, §7.3, §7.5, §7.5.2, §7.6.3, §8.1.1; `wire-format.md` §5.6, §7.3, §7.4; `light-client-requirements.md` §1 | after 5 |
 | Recovery as a transaction: block assembly with hybrid responses, the successor proof, the old-key proof, series reissue as executed, acceptance beyond the evidence gate | design §9; `wire-format.md` §4.1, §4.6 | after 5 |
 | Payload: PQXDH and Triple Ratchet integration; prekey distribution and service; binding to the hybrid identity; payload demultiplexing | design §14.2, §14.2.4; `wire-format.md` §7.8; `infra-client-requirements.md` §6 | after 5 |
+| Traversal: the serving node as STUN; candidates gathered and exchanged with the peer alone; the direct path attempted first and the relay on failure; control traffic dialled outward without traversal; no traversal outside the horizon | design §14.1.1, §12.6.3; `wire-format.md` §9.2; `infra-client-requirements.md` §7 | after 5 |
 | Resources: catalog registration, query, lifecycle and abuse reports; scope fields; request evaluation order and refusal; role table, predicates and templates; hosted-session termination on role change; no network bindings in the sandbox; package supply chain; gateways | design §11; `wire-format.md` §6, §11; `infra-client-requirements.md` §9, §10, §11; `resource-requirements.md` | after 5 |
 | Product-level commitments: privacy choices, warnings before irreversible actions, client-side cycle handling, operator disclosure, retention and backup | `light-client-requirements.md` §5, §6, §7; `infra-client-requirements.md` §8; design §13.7.1 | manual, per release |
 

@@ -8656,3 +8656,38 @@ the author, each recorded where it bites:
   everything else the client draws; the KEM's encapsulation randomness
   too, so a session is deterministic in its seeds and a harness can
   replay one.
+
+**Milestone 9, the direct payload path, built (2026-09-11).** One
+gate-green commit, 951e97c. The catalogue gained an area, `traversal`, with
+six entries quoting design §14.1.1 and §12.6.3, `wire-format.md` §9.2 and
+`infra-client-requirements.md` §7, since design §24 step 9b had none; all
+six carry a marker; 258 of 292 entries implemented, 0 flags. STUN Binding
+is RFC 8489's to the byte, checked against RFC 5769's sample
+XOR-MAPPED-ADDRESS; ICE is RFC 8445's shape without its message set: host
+and server-reflexive candidates, every pair tried at once, the first QUIC
+handshake under the pinned key kept, and the relay on failure. Two readings
+are the assistant's and open to reversal:
+
+- **TURN is the relay the node already is.** Design §14.1.1 says the
+  infra node acts as STUN and TURN and that relaying payload is what a TURN
+  server does; the reference runs no RFC 8656 allocation protocol, and the
+  relayed path is the serving node's delivery and mailbox (PAY-15, QUE).
+  A TURN server proper would add a second relay of the same bytes under a
+  second protocol; whether the author wants one for interoperability with
+  ICE agents outside this implementation is his.
+- **Candidates travel on the end-to-end channel, through the relay.** No
+  wire object carries an ICE offer or answer; the design says the peers
+  exchange addresses during setup, and the relayed path must work first.
+  The harness carries them as a payload delivery; on a live client they
+  would ride the ratchet session over the relay as a payload kind of their
+  own, which is a demultiplexing decision already recorded as open under
+  milestone 8.
+
+Found on the way: the NAT emulator lives on loopback, where every address
+shares one IP, so address-dependent filtering cannot be told from
+endpoint-independent there; the tests use address-and-port-dependent
+filtering for the hard case. And a serving node's STUN answers and a
+leaf's outward dial share the leaf's NAT mapping only because both cross
+the same emulated NAT; the leaf's two sockets — the one it serves and
+dials peers on, the one it dials upstream on — are distinct, as they
+would be on a phone.
