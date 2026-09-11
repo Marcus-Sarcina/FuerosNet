@@ -294,8 +294,9 @@ impl LiveNode {
         let client_ep = rhtn_transport::traversal::endpoint(client_socket, None).expect("client endpoint");
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
+        let ids_for_requests = ids.clone();
         let on_request: RequestHandler = Arc::new(move |peer, family, body| {
-            let (v, c, an, s, identity, dial_ep, lim) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone());
+            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone());
             Box::pin(async move {
                 // over the requester's allowance the stream fails, and nothing
                 // about the request is kept
@@ -312,6 +313,26 @@ impl LiveNode {
                         let mut view = v.lock().unwrap();
                         let now = view.now();
                         view.prekeys.answer(&peer, &body, now)
+                    }
+                    Family::CatalogQuery => {
+                        let view = v.lock().unwrap();
+                        let me = view.me();
+                        let scopes = crate::catalog::TableScopes { table: &view.table, me };
+                        view.catalog.answer(&peer, &body, &scopes)
+                    }
+                    Family::ResourceRegistration => {
+                        let mut view = v.lock().unwrap();
+                        let i = ids_for_requests.lock().unwrap();
+                        view.catalog.register(&*i, &peer, &body)
+                    }
+                    Family::ResourceRequest => {
+                        // never in early data: the transport defers every
+                        // request stream past the handshake; one request
+                        // per stream: the transport reads one and answers
+                        let mut view = v.lock().unwrap();
+                        let me = view.me();
+                        let table = view.table.clone_for(me);
+                        Some(view.resources.serve(&me, &table, &peer, &body).encode())
                     }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;

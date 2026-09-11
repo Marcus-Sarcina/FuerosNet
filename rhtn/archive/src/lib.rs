@@ -13,6 +13,7 @@
 //!   derives from it (design §6, §11.2.1, §6.2.5, §14.1.2).
 //! - [`currency`] reads currency attestations and reports a fork (design §9.0.2).
 
+pub mod catalog;
 pub mod chain;
 pub mod currency;
 pub mod locator;

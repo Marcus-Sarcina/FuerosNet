@@ -45,6 +45,11 @@ pub struct NodeView {
     /// The prekey bundles and one-time pools this node serves for its
     /// clients (`wire-format.md` §7.8).
     pub prekeys: crate::prekeys::PrekeyService,
+    /// The catalog this node answers from (`wire-format.md` §6).
+    pub catalog: crate::catalog::CatalogService,
+    /// The resources this node hosts or brokers, their role tables and
+    /// hosted sessions (`wire-format.md` §11).
+    pub resources: crate::resources::Gateway,
     /// This node's own archive, which its disavowals advance.
     pub archive: Archive,
     /// `slot -> occupant`, this node's own subordinate slots.
@@ -98,6 +103,8 @@ impl NodeView {
             locators: LocatorStore::new(),
             staples: BTreeMap::new(),
             prekeys: crate::prekeys::PrekeyService::default(),
+            catalog: crate::catalog::CatalogService::default(),
+            resources: crate::resources::Gateway::default(),
             archive: Archive::new(me),
             slots: BTreeMap::new(),
             memo_table: BTreeMap::new(),

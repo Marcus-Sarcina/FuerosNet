@@ -22,6 +22,9 @@ pub enum Notice {
     /// The selector recognises nobody in the counterparty's candidate pool
     /// (`light-client-requirements.md` §1.4).
     NoCandidateRecognised,
+    /// A catalog entry declares a data practice this client does not
+    /// recognise (`wire-format.md` §6.1): a declaration exists.
+    UnrecognisedDeclaration { resource: Keyhash, value: u64 },
 }
 
 /// The capacity a party is told in.

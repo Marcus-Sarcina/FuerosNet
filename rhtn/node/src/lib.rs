@@ -16,12 +16,15 @@
 //! Every decision here is the node's own, taken against the node's own view.
 //! Nothing in this crate consults a party it shares no state with.
 
+pub mod catalog;
 pub mod currency;
+pub mod http;
 pub mod peering;
 pub mod prekeys;
 pub mod propagation;
 pub mod queue;
 pub mod resolution;
+pub mod resources;
 pub mod runtime;
 pub mod store;
 pub mod trust;

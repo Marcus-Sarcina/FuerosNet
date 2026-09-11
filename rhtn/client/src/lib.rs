@@ -24,6 +24,8 @@
 //!   and stocked, the prefetch and the one-time request, the session opened
 //!   on PQXDH, and the channel's framing.
 //! - [`ratchet`] is the Double Ratchet the session runs.
+//! - [`catalog`] is the client's catalog view, swept and cached, and the
+//!   brokered service matched against its signed entry.
 //! - [`notice`] is what the person is told, raised through one hook.
 //! - [`device`] is the hardware and the person behind traits: proximity
 //!   channels, the camera, the clock, randomness, the operator, the engine.
@@ -35,6 +37,7 @@
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
 
+pub mod catalog;
 pub mod ceremony;
 pub mod device;
 pub mod keys;

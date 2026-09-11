@@ -1049,7 +1049,7 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    fn tls_for(&self, target: &[u8; 32]) -> Option<rustls::ClientConfig> {
+    pub fn tls_for(&self, target: &[u8; 32]) -> Option<rustls::ClientConfig> {
         let mut map = self.tls.lock().unwrap();
         if let Some(c) = map.get(target) {
             return Some(c.clone());
