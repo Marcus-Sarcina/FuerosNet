@@ -7622,5 +7622,63 @@
   "then": "The slotless record is malformed whoever holds the key, and the failing signature is malformed under a held key, so neither is stored or forwarded; the failing record is stored as gossip only where the key is absent. The slotless anchor entry does not parse and the failing one is refused by the verifying table. An implementation that turns any verification error into an unavailable key fails.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "PRP-19",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Derive a routing slot from the settled binding, so a departure held before its adoption leaves the row empty",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "wire-format.md §10.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Remove a child on departure or disavowal."
+   },
+   {
+    "where": "wire-format.md §10.2",
+    "text": "A minified record of every membership change travels rootward to its subnet's root."
+   }
+  ],
+  "given": "P's node; N's adoption under P and N's departure from P.",
+  "when": "P's node takes the departure and then the adoption; and, on another node, the adoption and then the departure.",
+  "then": "In both orders the binding is closed and no row names N: taken after the held departure, the adoption's row is written empty as of the departure. An implementation that writes the child into the slot on every adoption it applies, whatever the table settled, fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-19",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Count dereferenced evidence only once its own signatures verify",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.4",
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.4",
+    "text": "Structural verification does not dereference proof_of_presence."
+   },
+   {
+    "where": "wire-format.md §3.4",
+    "text": "That is an evaluation step, not a structural one"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "proof-of-presence record between these two parties"
+   }
+  ],
+  "given": "A valid adoption whose presence record is fetched with one signature byte flipped, its body and txid untouched; another whose witnessed presence record has a witness key the holder lacks.",
+  "when": "The table applies each under required evaluation and under deferred evaluation.",
+  "then": "The forged record is refused under both: a failing record is never evidence. The unverifiable record is refused under required evaluation, naming the missing key, and leaves the binding's evidence unevaluated under deferred evaluation; with every key held it satisfies. An implementation that marks fetched evidence satisfied on its type, txid and parties alone fails.",
+  "oracle": "model",
+  "interpretation": null
  }
 ]

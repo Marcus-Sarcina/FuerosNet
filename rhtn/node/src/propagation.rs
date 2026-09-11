@@ -249,7 +249,18 @@ impl NodeView {
             TYPE_ADOPTION if rec.field_hash(2) == Some(me) => {
                 let node = rec.field_hash(1)?;
                 let slot = rec.locator().and_then(|l| NodeView::slot_from(&l))?;
-                self.set_slot(slot, Some(node), rec.time);
+                // the row follows the settled binding, not the transaction:
+                // an adoption whose binding a held departure has already
+                // ended leaves the row empty, dated by that ending
+                let binding = self.table.bindings().iter().find(|b| b.adoption == rec.txid).cloned();
+                match binding.as_ref().and_then(|b| b.end.as_ref()) {
+                    None => self.set_slot(slot, Some(node), rec.time),
+                    Some((_, ended_at, _)) => {
+                        if self.slots.get(&slot).is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node)) {
+                            self.set_slot(slot, None, *ended_at);
+                        }
+                    }
+                }
                 Some(slot)
             }
             TYPE_DEPARTURE if rec.field_hash(2) == Some(me) => {

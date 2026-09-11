@@ -467,3 +467,44 @@ fn a_departure_ends_its_series_in_whatever_order_it_arrives() {
     assert_eq!(apply(&mut t, &w, &d).applied, Applied::Ended);
     assert_eq!(apply(&mut t, &w, &d).applied, Applied::Nothing);
 }
+
+/// A fetch that answers every txid with one record's bytes.
+struct One(Vec<u8>);
+impl Fetch for One {
+    fn fetch(&self, _: &Txid) -> Option<Vec<u8>> {
+        Some(self.0.clone())
+    }
+}
+
+// acceptance: TOP-19
+#[test]
+fn dereferenced_evidence_counts_only_once_its_signatures_verify() {
+    let mut w = World::new(&["alice", "bob", "carol"]);
+    let f = w.meet("alice", "bob");
+    let a = w.adopt("bob", "alice", f.txid, 1);
+    // the record's body and txid untouched, one signature byte flipped
+    let mut forged = f.bytes.clone();
+    *forged.last_mut().unwrap() ^= 1;
+    assert!(matches!(Record::parse(&forged).unwrap().check_signatures(&w.lookup()), SigStatus::Invalid(_)));
+    let mut t = Table::with_me(w.kh("alice"));
+    assert!(t.apply(&a, &w.lookup(), &One(forged.clone()), None).is_err(), "required evaluation refuses");
+    assert!(t.apply_with(&a, &w.lookup(), &One(forged), None, Evaluation::Deferred).is_err(), "and a failing record is never evidence, deferred or not");
+    assert!(t.patrons(&w.kh("bob")).is_empty());
+    // a witnessed record whose witness key this holder lacks: unevaluated
+    // where deferred, refused naming the key where required
+    let f2 = w.meet("alice", "carol");
+    let a2 = w.adopt("carol", "alice", f2.txid, 2);
+    let without_witness: Vec<_> = w.lookup().into_iter().filter(|i| i.keyhash != w.kh("witness")).collect();
+    let mut t = Table::with_me(w.kh("alice"));
+    let e = t.apply(&a2, &without_witness, &w, None).unwrap_err();
+    assert!(format!("{e:?}").contains("unverifiable"), "{e:?}");
+    let mut t = Table::with_me(w.kh("alice"));
+    t.apply_with(&a2, &without_witness, &w, None, Evaluation::Deferred).unwrap();
+    let b = t.bindings().iter().find(|b| b.adoption == a2.txid).unwrap().clone();
+    assert_eq!(b.evidence, EvidenceStatus::Unevaluated);
+    // with every key, the same record satisfies
+    let mut t = Table::with_me(w.kh("alice"));
+    t.apply(&a2, &w.lookup(), &w, None).unwrap();
+    let b = t.bindings().iter().find(|b| b.adoption == a2.txid).unwrap().clone();
+    assert_eq!(b.evidence, EvidenceStatus::Satisfied);
+}

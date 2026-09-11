@@ -519,3 +519,28 @@ fn an_object_whose_embedded_signer_key_is_missing_waits_and_then_flows() {
     assert_eq!(c.release_pending(&*fab, &ids()), vec![Decision::Stored]);
     assert!(c.table.patrons(&kh("alice")).contains(&kh("carol")));
 }
+
+// acceptance: PRP-19
+#[test]
+fn a_slot_follows_the_settled_binding_not_the_transaction() {
+    // alice's adoption under bob and her departure; bob's node receives the
+    // departure first, then the adoption
+    let mut w = World::new();
+    let (a1, _) = w.adopt("alice", "bob", 1);
+    let d = w.depart("alice", "bob", Seqno { series: 1, counter: 1 });
+    let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    let fab = Fabric::with(&[kh("alice")]);
+    assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &d.bytes, &ids()), Decision::Stored);
+    assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &a1.bytes, &ids()), Decision::Stored);
+    assert!(n.table.patrons(&kh("alice")).is_empty(), "the binding is closed");
+    assert!(n.slots.values().all(|s| s.occupant != Some(kh("alice"))), "and no row names the departed child");
+    let slot = rhtn_node::view::NodeView::slot_from(&a1.locator().unwrap()).unwrap();
+    assert_eq!(n.slots[&slot].timestamp, d.time, "the row is empty as of the departure");
+    assert_eq!(n.child_at(slot as u8), None);
+    // in arrival order the row fills and then empties as before
+    let mut m = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    assert_eq!(m.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &a1.bytes, &ids()), Decision::Stored);
+    assert_eq!(m.child_at(slot as u8), Some(kh("alice")));
+    assert_eq!(m.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &d.bytes, &ids()), Decision::Stored);
+    assert_eq!(m.child_at(slot as u8), None);
+}

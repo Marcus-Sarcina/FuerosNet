@@ -362,7 +362,7 @@ impl Table {
     }
 
     /// Check the presence record an adoption names against the two parties.
-    fn evidence_status(rec: &Record, node: &Keyhash, patron: &Keyhash, presence: &dyn Fetch, mode: Evaluation) -> Result<EvidenceStatus, Refusal> {
+    fn evidence_status<L: Lookup + ?Sized>(rec: &Record, ids: &L, node: &Keyhash, patron: &Keyhash, presence: &dyn Fetch, mode: Evaluation) -> Result<EvidenceStatus, Refusal> {
         let Some(pop) = rec.field_hash(8) else { return Ok(EvidenceStatus::Satisfied) };
         let Some(bytes) = presence.fetch(&pop) else {
             return match mode {
@@ -375,7 +375,18 @@ impl Table {
         if pr.tx_type != TYPE_PRESENCE || pr.txid != pop || !(parts.contains(node) && parts.contains(patron)) {
             return Err(Refusal::Evidence("presence record does not name these two parties".into()));
         }
-        Ok(EvidenceStatus::Satisfied)
+        // evidence counts only once its own signatures verify
+        // (`wire-format.md` §3.4): a record that fails is never evidence,
+        // and one this holder cannot verify is unevaluated where evaluation
+        // is deferred and refused, naming the key, where it is required
+        match pr.check_signatures(ids) {
+            SigStatus::Verified => Ok(EvidenceStatus::Satisfied),
+            SigStatus::Invalid(e) => Err(Refusal::Evidence(format!("presence record fails verification: {e}"))),
+            SigStatus::Unverifiable { missing } => match mode {
+                Evaluation::Required => Err(Refusal::Evidence(format!("presence record unverifiable: missing key {}", missing.iter().map(|b| format!("{b:02x}")).collect::<String>()))),
+                Evaluation::Deferred => Ok(EvidenceStatus::Unevaluated),
+            },
+        }
     }
 
     /// `apply`, with the evidence gate applied as `mode` says.
@@ -395,7 +406,7 @@ impl Table {
                 let node = f(1)?;
                 let patron = f(2)?;
                 let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
-                let evidence = Self::evidence_status(rec, &node, &patron, presence, mode)?;
+                let evidence = Self::evidence_status(rec, ids, &node, &patron, presence, mode)?;
                 let anchor = rec.locator().map(|l| l.anchor);
                 // an adoption already held is not bound twice; an unevaluated
                 // one whose evidence has since arrived is upgraded
