@@ -31,7 +31,7 @@ fn scene() -> Scene {
     let (a_s3, _) = w.adopt("w2", "carol", 4);
     let table = table_with(kh("bob"), &w, &[&a_n, &a_s1, &a_s2, &a_s3], &["alice", "bob", "carol", "w1", "w3"]);
     let mut n = view("bob", table, "alice", &[0]);
-    n.now = w.clock + 3600;
+    n.set_now(w.clock + 3600);
     n.peers.insert(kh("w3"));
     n.attached.insert(kh("c1"));
     n.set_slot(0, Some(kh("carol")), w.clock);

@@ -18,7 +18,7 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     let (a_x, pop) = w.adopt("w1", "carol", 3);
     let table = table_with(kh("bob"), &w, &[&a_n, &a_s], &["alice", "bob", "carol"]);
     let mut n = view("bob", table, "alice", &[0]);
-    n.now = w.clock + 1;
+    n.set_now(w.clock + 1);
     let fab = Fabric::with(&[kh("alice"), kh("carol")]);
     let er = endpoint_record(&id("carol"), &[point(3, 7003)], Seqno { series: 2, counter: 4 });
     assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_TRANSACTION, &a_x.bytes), &ids()), Decision::Stored);

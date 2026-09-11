@@ -41,8 +41,17 @@ pub fn loopback() -> SocketAddr {
     "127.0.0.1:0".parse().unwrap()
 }
 
+/// The instant every scenario starts from: the signers' clock opens here,
+/// and every live node's clock is pinned here (a running node reads its
+/// configuration's clock), so a test that needs time to pass sets a view's
+/// clock forward rather than waiting on the wall.
+pub const SIM_EPOCH: u64 = 1_800_000_000;
+
 pub fn node_cfg(name: &str, interval: u64) -> NodeConfig {
-    NodeConfig::defaults(Arc::new(id(name)), pins(), interval)
+    let mut cfg = NodeConfig::defaults(Arc::new(id(name)), pins(), interval);
+    cfg.clock = Arc::new(|| SIM_EPOCH);
+    cfg.log = Log::recording();
+    cfg
 }
 
 pub fn client_cfg(name: &str) -> ClientConfig {
@@ -57,6 +66,7 @@ pub fn client_cfg(name: &str) -> ClientConfig {
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
         on_reachability: None,
+        log: Log::recording(),
     }
 }
 
@@ -126,7 +136,7 @@ impl Default for Signers {
 
 impl Signers {
     pub fn new() -> Signers {
-        Signers { archives: NAMES.iter().map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n)))).collect(), store: BTreeMap::new(), clock: 1_800_000_000 }
+        Signers { archives: NAMES.iter().map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n)))).collect(), store: BTreeMap::new(), clock: SIM_EPOCH }
     }
     fn tick(&mut self) -> u64 {
         self.clock += 3600;
@@ -230,7 +240,7 @@ pub fn view_of(me: &str, table: Table, anchor: &str, path: &[u8], now: u64) -> r
     let p = rhtn_node::resolution::Path::from_indices(path);
     let mut v = rhtn_node::view::NodeView::new(Arc::new(id(me)), Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series: 1, counter: 0 } });
     v.table = table;
-    v.now = now;
+    v.set_now(now);
     v
 }
 

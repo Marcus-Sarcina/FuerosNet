@@ -22,7 +22,7 @@ use std::sync::Arc;
 /// patron, no subordinates, no history.
 fn new_root(name: &str) -> NodeView {
     let mut r = NodeView::new(Arc::new(id(name)), Locator::root(kh(name), Seqno { series: 1, counter: 0 }));
-    r.now = 1_800_000_000 + 7200;
+    r.set_now(1_800_000_000 + 7200);
     r
 }
 
@@ -37,7 +37,7 @@ fn subnet() -> (World, NodeView, NodeView, NodeView) {
     let mut bob = view("bob", table_with(kh("bob"), &w, &[&a_bob, &a_carol], &infra), "alice", &[1]);
     let mut carol = view("carol", table_with(kh("carol"), &w, &[&a_bob, &a_carol], &infra), "alice", &[1, 2]);
     for v in [&mut alice, &mut bob, &mut carol] {
-        v.now = w.clock + 7200;
+        v.set_now(w.clock + 7200);
     }
     (w, alice, bob, carol)
 }

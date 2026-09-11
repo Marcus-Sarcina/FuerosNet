@@ -322,7 +322,7 @@ impl NodeView {
         }
         // a sibling of the patron, holding the record by replication
         let unreachable_patron = patrons.iter().find(|p| cur.unreachable.contains_key(*p))?;
-        let outage = cur.dark_for(unreachable_patron, self.now).unwrap_or(0);
+        let outage = cur.dark_for(unreachable_patron, self.now()).unwrap_or(0);
         if self.table.siblings(unreachable_patron).contains(&me) {
             return if outage >= cur.sibling_after { Some(Rung::Sibling) } else { None };
         }
@@ -330,7 +330,7 @@ impl NodeView {
         // for days
         if self.table.patrons(unreachable_patron).contains(&me) && outage >= cur.grandpatron_after {
             let siblings = self.table.siblings(unreachable_patron);
-            if siblings.iter().all(|s| cur.dark_for(s, self.now).is_some_and(|d| d >= cur.grandpatron_after)) {
+            if siblings.iter().all(|s| cur.dark_for(s, self.now()).is_some_and(|d| d >= cur.grandpatron_after)) {
                 return Some(Rung::Grandpatron);
             }
         }
@@ -345,7 +345,7 @@ impl NodeView {
     pub fn issue_currency(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
         let rung = self.rung_for(cur, subject)?;
         let current = self.table.current_key(subject);
-        Some(currency_attestation(&self.identity, subject, &current, self.now, self.now + cur.lifetime, rung.role()))
+        Some(currency_attestation(&self.identity, subject, &current, self.now(), self.now() + cur.lifetime, rung.role()))
     }
 
     /// Answer a currency request.  Nothing about it is retained.
@@ -370,7 +370,7 @@ impl NodeView {
                 None => None,
             }
         };
-        let s = staple_state(Some(&a), subject, self.now, &known, &placed);
+        let s = staple_state(Some(&a), subject, self.now(), &known, &placed);
         (Some(a), s)
     }
 
@@ -475,7 +475,7 @@ impl NodeView {
             node: *subject,
             patron: self.me(),
             locator: rhtn_archive::tx::Locator { anchor: self.anchor(), path: path.bytes, nibbles: path.nibbles, seqno: rhtn_archive::tx::Seqno { series, counter: 0 } },
-            timestamp: self.now,
+            timestamp: self.now(),
             key_material: None,
             evidence,
             presented_head: None,

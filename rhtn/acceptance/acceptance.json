@@ -7392,5 +7392,59 @@
   "then": "The first record is at counter 1 and the position advances to 1; the second publication for A returns the held bytes and spends nothing; B takes counter 2, the position advances to 2, and the store takes the record as newer; the second line's record is at series 7 counter 1 with the primary line untouched. The restarted node's store holds its record at counter 2 for the new address, the position reads 2, and an unchanged republication replays those bytes. An implementation that publishes counter 1 at every start fails: on a restored store it collides with itself or publishes stale.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "CUR-17",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Read a clock that moves: issuance stamps the current time, and the ladder's intervals elapse on the clock alone",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §3",
+   "design §12.6.5.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §3",
+    "text": "Issue fresh, never extend stale."
+   },
+   {
+    "where": "design §12.6.5.1",
+    "text": "Outage duration"
+   }
+  ],
+  "given": "A grandpatron's view whose clock is a source the test moves and never writes through the view; the same for a running patron node, whose view was built at another time.",
+  "when": "Currency is issued twice with the clock advanced between them; the patron and its sibling are marked dark and the clock, not the view, advances by the grandpatron interval; a client asks the running node for currency at three clock readings.",
+  "then": "Each attestation's issued_at is the clock's reading at issuance, and expires_at the lifetime past it; the outage stamp is the clock's reading; the grandpatron rung opens once the interval has elapsed on the clock; the running node's view reads the configured clock from start and each answer is issued at the reading current when asked. An implementation that stamps a value set at construction, or that a running node never advances, fails.",
+  "oracle": "behaviour",
+  "interpretation": "The design fixes no clock source; the reference node reads one source for every time-dependent decision, its configuration's, and a test substitutes a controllable one."
+ },
+ {
+  "id": "SES-16",
+  "area": "session",
+  "gap": "session",
+  "title": "Retain no session history in a running node: recording is a test facility, off unless a configuration turns it on",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §1",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "Process liveness updates and discard them."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Do not log queue events"
+   }
+  ],
+  "given": "A node and a client on their default configurations; a session between them that attaches, exchanges a heartbeat and carries one delivery. A second node whose test configuration turns recording on.",
+  "when": "The session has run for a heartbeat interval; each side's event log is read; a client attaches to the second node.",
+  "then": "The first node reports the session live and the client reachable, and both sides' logs are empty: the reachability state is kept and nothing of what passed. The second node's log and its client's each record the attach. An implementation whose sessions append every frame sent and every delivery to a store no configuration turns off fails.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

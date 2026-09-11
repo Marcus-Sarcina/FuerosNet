@@ -144,8 +144,11 @@ impl LiveNode {
     }
 
     /// `start`, with the request allowance the operator chose.
-    pub fn start_with(mut cfg: NodeConfig, view: NodeView, ids: Vec<Identity>, anchors: AnchorTable, limits: RateLimit) -> Arc<LiveNode> {
+    pub fn start_with(mut cfg: NodeConfig, mut view: NodeView, ids: Vec<Identity>, anchors: AnchorTable, limits: RateLimit) -> Arc<LiveNode> {
         let limits = Arc::new(limits);
+        // one clock for the node: the configuration's, read by every
+        // decision the view takes from here on
+        view.clock = cfg.clock.clone();
         let view = Arc::new(Mutex::new(view));
         let currency = Arc::new(Mutex::new(CurrencyState::default()));
         let anchors = Arc::new(Mutex::new(anchors));
@@ -181,7 +184,7 @@ impl LiveNode {
         // then go wherever the operator sent them
         let (ladder, clock, prev) = (currency.clone(), view.clone(), cfg.replicate.clone());
         cfg.replicate = Some(Arc::new(move |kh, r| {
-            let now = clock.lock().unwrap().now;
+            let now = clock.lock().unwrap().now();
             let mut cur = ladder.lock().unwrap();
             match r {
                 rhtn_transport::session::Reachability::Unreachable => cur.dark(kh, now),
@@ -277,7 +280,7 @@ impl LiveNode {
         let mut cfg = cfg.clone();
         let (c, v) = (self.currency.clone(), self.view.clone());
         cfg.on_reachability = Some(Arc::new(move |r| {
-            let now = v.lock().unwrap().now;
+            let now = v.lock().unwrap().now();
             let mut cur = c.lock().unwrap();
             match r {
                 rhtn_transport::session::Reachability::Unreachable => cur.dark(serving, now),
@@ -354,6 +357,7 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
         tls: Arc::new(Mutex::new(HashMap::new())),
         connect_timeout: per_endpoint,
         on_reachability: None,
+        log: rhtn_transport::session::Log::default(),
     };
     let mut last: Option<ResolveReply> = None;
     for _ in 0..16 {

@@ -359,18 +359,41 @@ pub enum Event {
     Superseded,
 }
 
+/// Session events, for a test that reads what a session did.  Off by
+/// default: a running node keeps the reachability state its sessions
+/// settle and nothing of what passed on them (`infra-client-requirements.md`
+/// §1, §2: process liveness updates and discard them; do not log queue
+/// events), so a default log retains nothing and grows by nothing.  A test
+/// switches recording on through its configuration.
 #[derive(Default, Clone)]
-pub struct Log(Arc<Mutex<Vec<(Instant, Event)>>>);
+pub struct Log {
+    events: Arc<Mutex<Vec<(Instant, Event)>>>,
+    recording: bool,
+}
 
 impl Log {
+    /// A log that keeps every event: the test facility.
+    pub fn recording() -> Self {
+        Log { events: Arc::default(), recording: true }
+    }
+    /// A fresh log with this one's setting: each session records into its
+    /// own, or into nothing.
+    pub fn fresh(&self) -> Self {
+        if self.recording { Log::recording() } else { Log::default() }
+    }
+    pub fn is_recording(&self) -> bool {
+        self.recording
+    }
     pub fn push(&self, e: Event) {
-        self.0.lock().unwrap().push((Instant::now(), e));
+        if self.recording {
+            self.events.lock().unwrap().push((Instant::now(), e));
+        }
     }
     pub fn events(&self) -> Vec<(Instant, Event)> {
-        self.0.lock().unwrap().clone()
+        self.events.lock().unwrap().clone()
     }
     pub fn count(&self, f: impl Fn(&Event) -> bool) -> usize {
-        self.0.lock().unwrap().iter().filter(|(_, e)| f(e)).count()
+        self.events.lock().unwrap().iter().filter(|(_, e)| f(e)).count()
     }
 }
 
@@ -529,6 +552,9 @@ pub struct NodeConfig {
     /// The node's own answers on request streams.  Absent, a currency
     /// request is answered "cannot issue" and anything else fails the stream.
     pub on_request: Option<RequestHandler>,
+    /// Where session events go: nowhere by default, since a running node
+    /// retains no session history; a test installs a recording log.
+    pub log: Log,
 }
 
 impl NodeConfig {
@@ -550,6 +576,7 @@ impl NodeConfig {
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
             clock: Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)),
+            log: Log::default(),
         }
     }
 }
@@ -577,7 +604,8 @@ pub struct Node {
 
 impl Node {
     pub fn new(cfg: NodeConfig) -> Arc<Self> {
-        Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), log: Log::default() })
+        let log = cfg.log.clone();
+        Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), log })
     }
 
     /// Accept material for a client: delivered now on a unidirectional
@@ -890,6 +918,9 @@ pub struct ClientConfig {
     /// settles them: a node feeding its currency ladder from what its own
     /// sessions tell it (design §12.6.5.1), or nobody.
     pub on_reachability: Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
+    /// Where the session's events go: nowhere by default; a test installs
+    /// a recording log.
+    pub log: Log,
 }
 
 impl ClientConfig {
@@ -948,7 +979,7 @@ pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8;
         Ok(c) => c,
         Err(e) => return AttachOutcome::EndpointFailure(format!("{e:?}")),
     };
-    let log = Log::default();
+    let log = cfg.log.fresh();
     let conn = if early {
         match connecting.into_0rtt() {
             Ok((conn, accepted)) => {

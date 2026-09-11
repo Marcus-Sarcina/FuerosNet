@@ -35,7 +35,7 @@ fn observer() -> (World, NodeView, Arc<Fabric>) {
     let (a_o, _) = w.adopt("carol", "alice", 2);
     let table = table_with(kh("carol"), &w, &[&a_a, &a_o], &["alice", "bob", "w5"]);
     let mut o = view("carol", table, "alice", &[1]);
-    o.now = w.clock;
+    o.set_now(w.clock);
     let fab = Fabric::with(&[kh("alice"), kh("bob")]);
     (w, o, fab)
 }
@@ -112,7 +112,7 @@ fn a_root_with_no_peers_can_still_adopt() {
     let mut w = World::new();
     let table = table_with(kh("alice"), &w, &[], &["alice"]);
     let mut i = view("alice", table, "alice", &[]);
-    i.now = w.clock;
+    i.set_now(w.clock);
     assert!(i.is_root());
     assert_eq!(i.peers_of(&kh("alice")), BTreeSet::new(), "no peering records");
     let pop = w.meet("alice", "bob");
@@ -152,7 +152,7 @@ fn siblings_scene() -> (World, NodeView) {
     let table = table_with(kh("carol"), &w, &[&a_p, &a1, &a2], &["alice"]);
     let mut l1 = view("carol", table, "alice", &[0, 1]);
     l1.serving_node = Some(kh("alice"));
-    l1.now = w.clock;
+    l1.set_now(w.clock);
     (w, l1)
 }
 
@@ -178,7 +178,7 @@ fn distant_scene() -> (World, NodeView) {
     let table = table_with(kh("carol"), &w, &[&a_p1, &a_l1, &a_p2, &a_l2], &["alice", "w7"]);
     let mut l1 = view("carol", table, "alice", &[0, 1]);
     l1.serving_node = Some(kh("alice"));
-    l1.now = w.clock;
+    l1.set_now(w.clock);
     (w, l1)
 }
 
@@ -281,7 +281,7 @@ fn a_move_inside_the_replication_horizon_needs_no_archive_presentation() {
     let (a_l, _) = w.adopt("carol", "bob", 3); // L under P
     let table = table_with(kh("w1"), &w, &[&a_p, &a_t, &a_l], &["alice", "bob", "w1"]);
     let mut t = view("w1", table, "alice", &[1]);
-    t.now = w.clock;
+    t.set_now(w.clock);
     assert!(t.inside_replication_horizon(&kh("bob"), &kh("w1")), "T is P's sibling");
     // L presents T an adoption carrying P's countersignature: a lateral shift
     let block = tx::transfer_block(&id("bob"), &kh("carol"), &kh("w1"));
@@ -291,7 +291,7 @@ fn a_move_inside_the_replication_horizon_needs_no_archive_presentation() {
         node: kh("carol"),
         patron: kh("w1"),
         locator: tx::Locator { anchor: kh("alice"), path: pack_path(&[1, 0]), nibbles: 2, seqno: Seqno { series: 9, counter: 0 } },
-        timestamp: t.now,
+        timestamp: t.now(),
         key_material: None,
         evidence: tx::Evidence::Transfer { former: kh("bob"), block },
         presented_head: None,
@@ -319,11 +319,11 @@ fn a_sibling_attests_what_its_replicated_state_holds() {
     let (a_l, _) = w.adopt("carol", "bob", 3); // L under P
     let table = table_with(kh("w1"), &w, &[&a_p, &a_t, &a_l], &["alice", "bob", "w1"]);
     let mut t = view("w1", table, "alice", &[1]);
-    t.now = w.clock;
+    t.set_now(w.clock);
     // T holds P's replicated record for L; P has since countersigned a
     // rotation that has not reached T
     let mut cur = CurrencyState::default();
-    cur.dark(kh("bob"), t.now - cur.sibling_after);
+    cur.dark(kh("bob"), t.now() - cur.sibling_after);
     assert_eq!(t.rung_for(&cur, &kh("carol")), Some(Rung::Sibling));
     let bytes = t.issue_currency(&cur, &kh("carol")).expect("T issues");
     let a = rhtn_archive::currency::parse_attestation(&ids(), &bytes).unwrap();

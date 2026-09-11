@@ -28,6 +28,7 @@ fn pins_for(names: &[&str]) -> Pins {
 fn node_cfg(name: &str, interval: u64) -> NodeConfig {
     let mut cfg = NodeConfig::defaults(Arc::new(test_identity(name)), pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]), interval);
     cfg.capabilities = BTreeMap::from([(capability_id("rhtn/core:max-archive-batch"), vec![0x01, 0x00])]);
+    cfg.log = Log::recording();
     cfg
 }
 
@@ -43,6 +44,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
         on_reachability: None,
+        log: Log::recording(),
     }
 }
 
@@ -603,3 +605,31 @@ async fn trn_15_the_session_survives_a_client_address_change_without_a_new_attac
     assert_eq!(node.log.count(|e| matches!(e, Event::Sent { frame_type: 2, .. })), 1, "no new AttachAck");
 }
 
+
+// acceptance: SES-16
+#[tokio::test]
+async fn a_running_node_retains_no_session_history() {
+    // both sides on their defaults: a session attaches, heartbeats once and
+    // carries a delivery, and neither side has an event to show for it
+    let kh = |n: &str| test_identity(n).public.keyhash;
+    let cfg = NodeConfig::defaults(Arc::new(test_identity("alice")), pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]), 1);
+    assert!(!cfg.log.is_recording(), "the default retains nothing");
+    let (node, addr) = spawn_node(cfg);
+    let mut ccfg = client_cfg("bob");
+    ccfg.log = Log::default();
+    let AttachOutcome::Attached(mut s) = attach(&ccfg, &client_ep(), kh("alice"), addr, false).await else { panic!("attached") };
+    node.enqueue(kh("bob"), b"hello".to_vec()).unwrap();
+    let got = tokio::time::timeout(std::time::Duration::from_secs(3), s.deliveries.recv()).await.expect("delivered").unwrap();
+    assert_eq!(got, b"hello");
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    assert!(node.has_session(&kh("bob")), "the session runs");
+    assert_eq!(node.reachability(&kh("bob")), Some(Reachability::Reachable), "the resulting state is kept");
+    assert!(node.log.events().is_empty(), "and no history of how it got there");
+    assert!(s.log.events().is_empty(), "on the client either");
+    // the recording log is the test facility, and it is switched on by the
+    // configuration alone
+    let (rec, addr2) = spawn_node(node_cfg("carol", 1));
+    let AttachOutcome::Attached(s2) = attach(&client_cfg("bob"), &client_ep(), kh("carol"), addr2, false).await else { panic!("attached") };
+    assert_eq!(rec.log.count(|e| matches!(e, Event::Attached { .. })), 1);
+    assert_eq!(s2.log.count(|e| matches!(e, Event::Attached { .. })), 1);
+}

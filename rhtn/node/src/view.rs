@@ -25,6 +25,9 @@ pub struct Slot {
 }
 
 /// A node's own state above the session.
+/// A source of the time, in seconds since the epoch.
+pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
+
 pub struct NodeView {
     pub identity: Arc<SigningIdentity>,
     /// This node's own position in its primary subnet; its anchor names
@@ -60,8 +63,11 @@ pub struct NodeView {
     /// The nearest infrastructure node on this node's patron chain, where
     /// this node is not itself infrastructure.
     pub serving_node: Option<Keyhash>,
-    /// The node's own clock.
-    pub now: u64,
+    /// The node's own clock, read at every decision that needs the time.
+    /// A view built for a test holds a fixed clock; a running node installs
+    /// its configuration's clock at start, so issuance, outage stamps and
+    /// the ladder's intervals all read time that moves.
+    pub clock: Clock,
     /// The trust policy this node computes standing with: the reference
     /// metric unless its operator substitutes one (design §16.1).  Nothing
     /// the node stores or forwards consults it (design §16.4).
@@ -89,9 +95,20 @@ impl NodeView {
             attached: BTreeSet::new(),
             peers: BTreeSet::new(),
             serving_node: None,
-            now: 1_800_000_000,
+            clock: Arc::new(|| 1_800_000_000),
             policy: Arc::new(ReferenceMetric::default()),
         }
+    }
+
+    /// The time now, by this node's clock.
+    pub fn now(&self) -> u64 {
+        (self.clock)()
+    }
+
+    /// Fix the clock at `t`: what a test or a simulation does to move time.
+    /// A running node's clock is its configuration's, installed at start.
+    pub fn set_now(&mut self, t: u64) {
+        self.clock = Arc::new(move || t);
     }
 
     pub fn me(&self) -> Keyhash {

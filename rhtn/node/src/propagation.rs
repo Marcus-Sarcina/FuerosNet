@@ -462,7 +462,7 @@ impl NodeView {
         let ids: Vec<rhtn_crypto::Identity> = vec![self.identity.public.clone()];
         self.originate_push(adj, KIND_TRANSACTION, &dis.bytes, &ids);
         if let Some(slot) = self.slot_of(from) {
-            self.set_slot(slot, None, self.now);
+            self.set_slot(slot, None, self.now());
         }
         MemoOutcome::CycleConfirmed { disavowed: *from }
     }
@@ -470,7 +470,7 @@ impl NodeView {
     /// Sign a disavowal of `node` by this node, advancing its own chain.
     pub fn disavow(&mut self, node: &Keyhash, code: Option<u64>) -> Option<Record> {
         let back = self.archive.next_back_pointers();
-        let body = tx::disavowal_body(&back, &self.me(), node, self.now, code);
+        let body = tx::disavowal_body(&back, &self.me(), node, self.now(), code);
         let env = tx::envelope(tx::TYPE_DISAVOWAL, &body, &[&self.identity]);
         let rec = Record::parse(&env).ok()?;
         self.archive.append(rec.clone()).ok()?;

@@ -161,7 +161,7 @@ impl NodeView {
         let me = self.me();
         let back_me = self.archive.next_back_pointers();
         let mine = self.own_endpoints().first().cloned().ok_or(Gate::Refuse("no published endpoint of our own"))?;
-        Ok(peering_body([&back_me, other_back], &me, other, &mine, other_point, self.now, Some(1 << 20), pop))
+        Ok(peering_body([&back_me, other_back], &me, other, &mine, other_point, self.now(), Some(1 << 20), pop))
     }
 
     /// Which path payload takes to `peer`.  The check is the whole of it:

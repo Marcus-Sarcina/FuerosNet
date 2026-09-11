@@ -33,7 +33,9 @@ fn kh(n: &str) -> Keyhash {
 }
 
 fn node_cfg(name: &str) -> NodeConfig {
-    NodeConfig::defaults(Arc::new(test_identity(name)), pins(), 30)
+    let mut cfg = NodeConfig::defaults(Arc::new(test_identity(name)), pins(), 30);
+    cfg.log = Log::recording();
+    cfg
 }
 
 fn client_cfg(name: &str) -> ClientConfig {
@@ -48,6 +50,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
         on_reachability: None,
+        log: Log::recording(),
     }
 }
 

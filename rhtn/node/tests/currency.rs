@@ -26,7 +26,7 @@ fn patron_and_subordinate() -> (World, NodeView, CurrencyState) {
     let (a, _) = w.adopt("bob", "alice", 1);
     let table = table_with(kh("alice"), &w, &[&a], &["alice"]);
     let mut p = view("alice", table, "alice", &[]);
-    p.now = w.clock;
+    p.set_now(w.clock);
     (w, p, CurrencyState::default())
 }
 
@@ -58,7 +58,8 @@ fn a_patron_issues_a_fresh_attestation_for_its_subordinate() {
 fn a_refresh_is_a_fresh_issuance_never_an_extension() {
     let (_w, mut p, cur) = patron_and_subordinate();
     let a0 = att(&p.issue_currency(&cur, &kh("bob")).unwrap());
-    p.now += 1800;
+    let later = p.now() + 1800;
+    p.set_now(later);
     let a1 = att(&p.issue_currency(&cur, &kh("bob")).unwrap());
     assert!(a1.issued_at > a0.issued_at, "field 3 is later");
     assert_ne!(a1.bytes, a0.bytes, "a different signature");
@@ -131,7 +132,7 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     let mut w = World::new();
     let table = table_with(kh("alice"), &w, &[], &["alice"]);
     let mut n = view("alice", table, "alice", &[]);
-    n.now = w.clock;
+    n.set_now(w.clock);
     let x = kh("bob");
     let patron = kh("carol");
     let fab = Fabric::with(&[patron, kh("w1")]);
@@ -142,7 +143,7 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
     // then a staple expired against N's own clock
-    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now - 40_000, n.now - 3600, ROLE_PATRON);
+    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now() - 40_000, n.now() - 3600, ROLE_PATRON);
     assert_eq!(n.take_staple(&ids(), &x, &stale, &[patron]), Staple::Expired);
     let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 6, &[rhtn_archive::genesis(&x)]).expect("produced with an expired staple");
     let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
@@ -156,7 +157,7 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
 fn routine_payload_fails_open_on_an_expired_staple() {
     let (_w, mut n, _cur) = patron_and_subordinate();
     // S arrives holding only an expired staple from its patron
-    let stale = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("bob"), n.now - 40_000, n.now - 1, ROLE_PATRON);
+    let stale = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("bob"), n.now() - 40_000, n.now() - 1, ROLE_PATRON);
     assert_eq!(n.take_staple(&ids(), &kh("bob"), &stale, &[]), Staple::Expired);
     assert_eq!(n.staple_for(&ids(), &kh("bob"), &[]), Staple::Expired);
     assert_eq!(gate(n.is_superseded(&kh("bob"))), Gate::Proceed, "delivery proceeds");
@@ -174,7 +175,7 @@ fn an_unexpired_staple_does_not_restore_a_superseded_binding() {
     n.table.apply(&rec, &ids(), &no_presence(), None).expect("validated");
     assert!(n.is_superseded(&k1));
     // an unexpired, validly signed attestation naming S under k1
-    let staple = tx::currency_attestation(&id("alice"), &k1, &k1, n.now, n.now + 36_000, ROLE_PATRON);
+    let staple = tx::currency_attestation(&id("alice"), &k1, &k1, n.now(), n.now() + 36_000, ROLE_PATRON);
     let state = n.take_staple(&ids(), &k1, &staple, &[]);
     assert_eq!(state, Staple::Current, "unexpired and validly signed by S's patron");
     // fail-open is for ignorance, never for knowledge: the node's own
@@ -193,7 +194,7 @@ fn ladder_view(name: &str) -> NodeView {
     let (a3, _) = w.adopt("carol", "bob", 3);
     let table = table_with(kh(name), &w, &[&a1, &a2, &a3], &["alice", "bob", "w1", "carol"]);
     let mut v = view(name, table, "alice", &[]);
-    v.now = w.clock;
+    v.set_now(w.clock);
     v
 }
 
@@ -204,15 +205,15 @@ fn a_sibling_issues_secondhand_while_the_patron_is_dark() {
     let p2 = ladder_view("w1");
     assert_eq!(p2.rung_for(&cur, &kh("carol")), None, "not while the patron answers");
     // dark for an hour: within the attestation lifetime nothing is needed
-    cur.dark(kh("bob"), p2.now - 3600);
+    cur.dark(kh("bob"), p2.now() - 3600);
     assert_eq!(p2.rung_for(&cur, &kh("carol")), None, "the staple still stands");
     // dark for the lifetime: the sibling rung opens
-    cur.unreachable.insert(kh("bob"), p2.now - cur.sibling_after);
+    cur.unreachable.insert(kh("bob"), p2.now() - cur.sibling_after);
     assert_eq!(p2.rung_for(&cur, &kh("carol")), Some(Rung::Sibling));
     let a = att(&p2.issue_currency(&cur, &kh("carol")).unwrap());
     assert_eq!(a.role, ROLE_SIBLING, "marked secondhand");
     assert_eq!(a.issuer, kh("w1"));
-    assert_eq!(a.issued_at, p2.now, "fresh, from P' own clock");
+    assert_eq!(a.issued_at, p2.now(), "fresh, from P' own clock");
     assert_eq!(a.current, kh("carol"));
     // a relying party that holds the topology places the issuer on its rung
     let relying = ladder_view("alice");
@@ -224,12 +225,12 @@ fn a_sibling_issues_secondhand_while_the_patron_is_dark() {
 fn the_grandpatron_issues_once_the_patron_and_its_siblings_are_dark() {
     let mut cur = CurrencyState::default();
     let g = ladder_view("alice");
-    cur.unreachable.insert(kh("bob"), g.now - cur.grandpatron_after);
+    cur.unreachable.insert(kh("bob"), g.now() - cur.grandpatron_after);
     assert_eq!(g.rung_for(&cur, &kh("carol")), None, "P' can still answer");
     // the sibling dark for an hour: hours are the sibling's rung, not days
-    cur.unreachable.insert(kh("w1"), g.now - 3600);
+    cur.unreachable.insert(kh("w1"), g.now() - 3600);
     assert_eq!(g.rung_for(&cur, &kh("carol")), None, "not until every sibling has been dark for days");
-    cur.unreachable.insert(kh("w1"), g.now - cur.grandpatron_after);
+    cur.unreachable.insert(kh("w1"), g.now() - cur.grandpatron_after);
     assert_eq!(g.rung_for(&cur, &kh("carol")), Some(Rung::Grandpatron));
     let a = att(&g.issue_currency(&cur, &kh("carol")).unwrap());
     assert_eq!(a.role, ROLE_GRANDPATRON);
@@ -247,14 +248,14 @@ fn a_peering_is_proposed_with_no_staple_however_many_issuers_are_dark() {
     let fab = Fabric::with(&[]);
     s.take_object(&*fab, &kh("carol"), rhtn_node::store::KIND_ENDPOINT_RECORD, &er, &ids());
     for who in ["bob", "w1", "alice"] {
-        cur.dark(kh(who), s.now - 3 * 86_400);
+        cur.dark(kh(who), s.now() - 3 * 86_400);
     }
     // every rung is unreachable: nobody can issue for S
     for issuer in ["bob", "w1", "alice"] {
         let v = ladder_view(issuer);
         assert!(v.rung_for(&cur, &kh("carol")).is_none() || cur.unreachable.contains_key(&kh(issuer)));
     }
-    let stale = tx::currency_attestation(&id("bob"), &kh("carol"), &kh("carol"), s.now - 40_000, s.now - 1, ROLE_PATRON);
+    let stale = tx::currency_attestation(&id("bob"), &kh("carol"), &kh("carol"), s.now() - 40_000, s.now() - 1, ROLE_PATRON);
     assert_eq!(s.take_staple(&ids(), &kh("carol"), &stale, &[]), Staple::Expired);
     let pop = rhtn_codec::cose::sha256(b"pop between carol and w5");
     let other_point = point(5, 7005);
@@ -273,12 +274,12 @@ fn a_peering_is_proposed_with_no_staple_however_many_issuers_are_dark() {
 fn a_caller_with_a_stale_staple_asks_its_introducer_first() {
     let mut w = World::new();
     let mut n = view("alice", table_with(kh("alice"), &w, &[], &["alice"]), "alice", &[]);
-    n.now = w.tick();
+    n.set_now(w.tick());
     let x = kh("bob");
     let introducer = kh("w1");
     let patron = kh("carol");
     let fab = Fabric::with(&[introducer, patron]);
-    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now - 40_000, n.now - 1, ROLE_PATRON);
+    let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now() - 40_000, n.now() - 1, ROLE_PATRON);
     n.take_staple(&ids(), &x, &stale, &[patron]);
     let mut ask = match n.require_currency(&*fab, &ids(), &x, Some(introducer), Some(patron)) {
         Requirement::Asked(ask) => ask,
@@ -325,12 +326,12 @@ fn expiry_is_decided_against_the_relying_partys_own_clock() {
     let t = 1_900_000_000u64;
     let staple = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("bob"), t - 36_000, t, ROLE_PATRON);
     let fab = Fabric::with(&[kh("w1")]);
-    n.now = t - 1;
+    n.set_now(t - 1);
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Current);
     n.take_staple(&ids(), &kh("bob"), &staple, &[]);
     assert_eq!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Settled(Gate::Proceed), "current: nothing to ask");
     assert_eq!(fab.count(REQUEST_CURRENCY), 0);
-    n.now = t + 1;
+    n.set_now(t + 1);
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Expired);
     assert!(matches!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Asked(_)), "expired: the fallback query is sent");
     assert_eq!(fab.count(REQUEST_CURRENCY), 1);
@@ -344,7 +345,7 @@ fn expiry_is_decided_against_the_relying_partys_own_clock() {
 fn a_staple_from_an_issuer_the_relying_party_cannot_place_is_not_current() {
     let relying = ladder_view("alice");
     let subject = kh("carol");
-    let t = relying.now;
+    let t = relying.now();
     // a stranger signs a syntactically perfect staple
     let forged = tx::currency_attestation(&id("w9"), &subject, &subject, t, t + 36_000, ROLE_PATRON);
     assert_eq!(relying.read_staple(&ids(), &forged, &subject, &[]).1, Staple::WrongIssuer);
@@ -361,4 +362,33 @@ fn a_staple_from_an_issuer_the_relying_party_cannot_place_is_not_current() {
     // unless the introduction named the patron
     let by_patron = tx::currency_attestation(&id("bob"), &subject, &subject, t, t + 36_000, ROLE_PATRON);
     assert_eq!(blank.read_staple(&ids(), &by_patron, &subject, &[kh("bob")]).1, Staple::Current);
+}
+
+// acceptance: CUR-17
+#[test]
+fn issuance_and_the_ladder_read_a_clock_that_moves() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let mut w = World::new();
+    let (a_n, _) = w.adopt("bob", "alice", 1);
+    let (a_s, _) = w.adopt("carol", "bob", 2);
+    // the grandpatron's view on a shared clock nobody writes through the view
+    let clock = std::sync::Arc::new(AtomicU64::new(w.clock + 10));
+    let reader = clock.clone();
+    let mut g = view("alice", table_with(kh("alice"), &w, &[&a_n, &a_s], &["alice", "bob"]), "alice", &[]);
+    g.clock = std::sync::Arc::new(move || reader.load(Ordering::SeqCst));
+    let mut cur = CurrencyState::default();
+    // issuance for the patron's own subordinate stamps the clock's reading
+    let t0 = clock.load(Ordering::SeqCst);
+    let a = rhtn_archive::currency::parse_attestation(&ids(), &g.issue_currency(&cur, &kh("bob")).unwrap()).unwrap();
+    assert_eq!((a.issued_at, a.expires_at), (t0, t0 + cur.lifetime));
+    clock.fetch_add(1, Ordering::SeqCst);
+    let a = rhtn_archive::currency::parse_attestation(&ids(), &g.issue_currency(&cur, &kh("bob")).unwrap()).unwrap();
+    assert_eq!(a.issued_at, t0 + 1, "the next issuance reads the clock again");
+    // the ladder: the patron and its sibling go dark at the clock's reading,
+    // and the grandpatron rung opens when the clock, not the view, has moved
+    cur.dark(kh("bob"), g.now());
+    assert_eq!(cur.unreachable[&kh("bob")], t0 + 1);
+    assert_eq!(g.rung_for(&cur, &kh("carol")), None, "within the interval");
+    clock.fetch_add(cur.grandpatron_after, Ordering::SeqCst);
+    assert_eq!(g.rung_for(&cur, &kh("carol")), Some(Rung::Grandpatron), "the interval elapsed on the clock alone");
 }

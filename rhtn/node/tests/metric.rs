@@ -52,7 +52,7 @@ fn run(policy: Arc<dyn Policy<Keyhash>>) -> Run {
     let (w, own, pushed) = observed();
     let table = table_with(kh("carol"), &w, &own.iter().collect::<Vec<_>>(), &["alice", "bob", "carol", "w1", "w5"]);
     let mut v: NodeView = view("carol", table, "alice", &[1]);
-    v.now = w.clock;
+    v.set_now(w.clock);
     v.policy = policy;
     // sessions to the patron and to a subordinate: what arrives from one is
     // forwarded to the other
