@@ -13,6 +13,7 @@ protocol fact; code cites them and never the other way round.
 | `transport/` | `rhtn-transport`: QUIC and TLS 1.3 sessions with raw-public-key mutual authentication, control frames, 0-RTT deferral, attach, heartbeats and failover |
 | `node/` | `rhtn-node`: what a node decides above the session — the topology store and the forwarding rule, the rootward memo, resolution and the anchor table, currency and its ladder, peering and replication, the mailbox on disk — and `LiveNode`, which binds them to real sessions |
 | `sim/` | `rhtn-sim`: an in-process multi-node harness with a datagram-level path that drops, delays, blackholes and replays, and the mesh the TLA+ models are restated over |
+| `client/` | `rhtn-client`: the participant client above the session — the two constructions a ceremony fixes to the byte, the sealed capture store a compliant holder cannot open unaided, verifier selection by recognition, consent and key grants, the verifier's and the subject's sides of a query, record assembly and the checks a signer makes, and the ceremony over device I/O behind an interface |
 | `policy/` | `rhtn-policy`: the reference flow metric over the graph an evaluator builds, the policy interface a node consults, and the conformance test that reports what a substitute policy gives up. `cargo run -p rhtn-policy --example report` prints the report for the reference and a decay policy |
 
 Crates arrived in the plan's milestone order, `rhtn-codec` and `rhtn-crypto`

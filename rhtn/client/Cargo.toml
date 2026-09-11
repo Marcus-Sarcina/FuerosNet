@@ -1,0 +1,14 @@
+[package]
+name = "rhtn-client"
+version = "0.1.0"
+edition = "2024"
+description = "RHTN participant client: verifier selection, consent and key grants, the sealed capture store, and the presence ceremony over device I/O behind an interface"
+
+[dependencies]
+rhtn-codec = { path = "../codec" }
+rhtn-crypto = { path = "../crypto" }
+rhtn-archive = { path = "../archive" }
+aws-lc-rs = "1.18"
+
+[dev-dependencies]
+hex = { workspace = true }

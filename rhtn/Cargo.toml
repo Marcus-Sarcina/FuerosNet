@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["acceptance", "archive", "codec", "crypto", "node", "policy", "sim", "transport"]
+members = ["acceptance", "archive", "client", "codec", "crypto", "node", "policy", "sim", "transport"]
 
 [workspace.dependencies]
 sha2 = "0.11.0"

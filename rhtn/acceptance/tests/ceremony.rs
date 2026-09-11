@@ -53,40 +53,6 @@ fn cer_03_run_the_guided_capture_with_randomised_prompts_t() {
     todo!("CER-03: Run the guided capture with randomised prompts, three to five images over ten to fifteen seconds")
 }
 
-/// Derive the capture key exactly as specified
-///
-/// Spec: design §7.5.2.6
-/// Milestone: after-5.  Kind: positive.  Oracle: fixture.
-///
-/// Rule (design §7.5.2.6): "The derivation is HKDF-SHA-256, exactly"
-/// Rule (design §7.5.2.6): "salt empty, IKM the seed, info the ASCII tag `rhtn/1:capture` followed by the raw 32-byte subject and holder keyhashes and the raw 32-byte ceremony pre-commitment, output length 32"
-///
-/// Given: A fixed seed, subject keyhash, holder keyhash and ceremony pre-commitment.
-/// When: The client derives k_capture.
-/// Then: The 32 bytes equal HKDF-SHA-256 computed independently with empty salt, the seed as IKM and the stated info; a different holder or ceremony_id yields a different key.
-#[test]
-#[ignore = "acceptance CER-04: owed at milestone after-5"]
-fn cer_04_derive_the_capture_key_exactly_as_specified() {
-    todo!("CER-04: Derive the capture key exactly as specified")
-}
-
-/// Compute the ceremony pre-commitment contributorily, in ascending keyhash order
-///
-/// Spec: design §7.5.2.6
-/// Milestone: after-5.  Kind: positive.  Oracle: fixture.
-///
-/// Rule (design §7.5.2.6): "the pre-commitment is the SHA-256 of the ASCII tag `rhtn/1:ceremony` followed by the two contributions in ascending participant-keyhash order"
-/// Rule (design §7.5.2.6): "neither party can force a repeat"
-///
-/// Given: Two clients each contributing 16 fixed random bytes over the direct channel, with participant keyhashes in known order.
-/// When: Both compute the pre-commitment.
-/// Then: Both produce the same 32 bytes, equal to SHA-256 of the tag followed by the contributions ordered by ascending participant keyhash, and changing either contribution changes the value.
-#[test]
-#[ignore = "acceptance CER-05: owed at milestone after-5"]
-fn cer_05_compute_the_ceremony_pre_commitment_contributori() {
-    todo!("CER-05: Compute the ceremony pre-commitment contributorily, in ascending keyhash order")
-}
-
 /// Hold no decryptable likeness and no sealing key once the capture is sealed
 ///
 /// Spec: light-client-requirements.md §1.3; design §7.5.2
