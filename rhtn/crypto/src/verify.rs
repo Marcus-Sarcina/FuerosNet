@@ -215,7 +215,6 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
     if seen.len() != distinct.len() || seen.values().any(|v| !v[0] || !v[1]) {
         return Err("signer/alg coverage incomplete".into());
     }
-    let Item::Map(bm) = &env.body_item else { return Err("body".into()) };
     if env.tx_type == 5
         && let Some(r5) = value_slice_at(b, env.body.start, 5) {
             for rr in array_item_ranges(b, r5.start).ok_or("responses walk")? {
@@ -223,42 +222,54 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
             }
         }
     if env.tx_type == 1 {
-        if let Some(r6) = value_slice_at(b, env.body.start, 6) {
-            let prior = value_slice_at(b, r6.start, 1).map(|r| b[r.start + 2..r.end].to_vec()).ok_or("prior")?;
-            let r2 = value_slice_at(b, r6.start, 2).ok_or("recovery responses")?;
-            for rr in array_item_ranges(b, r2.start).ok_or("recovery walk")? {
-                response(ids, &b[rr], true)?;
-            }
-            let bs = |it: &Item| match it { Item::Bytes(r) => b[r.clone()].to_vec(), _ => Vec::new() };
-            let newk = bs(map_get(bm, 1).ok_or("new key")?);
-            let patron = bs(map_get(bm, 2).ok_or("patron")?);
-            let mut stmt = Vec::new();
-            emit_array_head(&mut stmt, 3);
-            emit_bstr(&mut stmt, &prior);
-            emit_bstr(&mut stmt, &newk);
-            emit_bstr(&mut stmt, &patron);
-            let r3 = value_slice_at(b, r6.start, 3).ok_or("successor")?;
-            let pid = ids.identity(&prior).ok_or_else(|| Failure::MissingKey(prior.clone()))?;
-            verify_sign_block(pid, &b[r3], aad::SUCCESSOR, &stmt).map_err(|e| Failure::Invalid(format!("successor proof: {e}")))?;
-        }
-        // field 9: the former patron's transfer statement over
-        // [node, former, new patron] (§4.1), by the party field 9.1 names
-        if let Some(r9) = value_slice_at(b, env.body.start, 9) {
-            let former = value_slice_at(b, r9.start, 1).map(|r| b[r.start + 2..r.end].to_vec()).ok_or("former patron")?;
-            let bs = |it: &Item| match it { Item::Bytes(r) => b[r.clone()].to_vec(), _ => Vec::new() };
-            let node = bs(map_get(bm, 1).ok_or("node")?);
-            let patron = bs(map_get(bm, 2).ok_or("patron")?);
-            let mut stmt = Vec::new();
-            emit_array_head(&mut stmt, 3);
-            emit_bstr(&mut stmt, &node);
-            emit_bstr(&mut stmt, &former);
-            emit_bstr(&mut stmt, &patron);
-            let r2 = value_slice_at(b, r9.start, 2).ok_or("transfer block")?;
-            let fid = ids.identity(&former).ok_or_else(|| Failure::MissingKey(former.clone()))?;
-            verify_sign_block(fid, &b[r2], aad::TRANSFER, &stmt).map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
-        }
+        adoption_evidence(ids, body)?;
     }
     Ok(env)
+}
+
+/// The evidence an adoption carries, checked against the adoption's own
+/// fields (§4.1's consistency rules): a `Recovery` block's responses, each
+/// hybrid, and its successor statement over the prior key, field 1 and
+/// field 2 under the prior key; a `Transfer` block's statement over field
+/// 1, the former patron it names and field 2 under that former patron.  A
+/// patron runs this before its countersignature goes on the line.
+pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(), Failure> {
+    let item = parse_all(body).map_err(|e| format!("body: {e}"))?;
+    let Item::Map(bm) = &item else { return Err("body not map".into()) };
+    let bs = |it: &Item| match it { Item::Bytes(r) => body[r.clone()].to_vec(), _ => Vec::new() };
+    if let Some(r6) = value_slice(body, 6) {
+        let prior = value_slice_at(body, r6.start, 1).map(|r| body[r.start + 2..r.end].to_vec()).ok_or("prior")?;
+        let r2 = value_slice_at(body, r6.start, 2).ok_or("recovery responses")?;
+        for rr in array_item_ranges(body, r2.start).ok_or("recovery walk")? {
+            response(ids, &body[rr], true)?;
+        }
+        let newk = bs(map_get(bm, 1).ok_or("new key")?);
+        let patron = bs(map_get(bm, 2).ok_or("patron")?);
+        let mut stmt = Vec::new();
+        emit_array_head(&mut stmt, 3);
+        emit_bstr(&mut stmt, &prior);
+        emit_bstr(&mut stmt, &newk);
+        emit_bstr(&mut stmt, &patron);
+        let r3 = value_slice_at(body, r6.start, 3).ok_or("successor")?;
+        let pid = ids.identity(&prior).ok_or_else(|| Failure::MissingKey(prior.clone()))?;
+        verify_sign_block(pid, &body[r3], aad::SUCCESSOR, &stmt).map_err(|e| Failure::Invalid(format!("successor proof: {e}")))?;
+    }
+    // field 9: the former patron's transfer statement over
+    // [node, former, new patron] (§4.1), by the party field 9.1 names
+    if let Some(r9) = value_slice(body, 9) {
+        let former = value_slice_at(body, r9.start, 1).map(|r| body[r.start + 2..r.end].to_vec()).ok_or("former patron")?;
+        let node = bs(map_get(bm, 1).ok_or("node")?);
+        let patron = bs(map_get(bm, 2).ok_or("patron")?);
+        let mut stmt = Vec::new();
+        emit_array_head(&mut stmt, 3);
+        emit_bstr(&mut stmt, &node);
+        emit_bstr(&mut stmt, &former);
+        emit_bstr(&mut stmt, &patron);
+        let r2 = value_slice_at(body, r9.start, 2).ok_or("transfer block")?;
+        let fid = ids.identity(&former).ok_or_else(|| Failure::MissingKey(former.clone()))?;
+        verify_sign_block(fid, &body[r2], aad::TRANSFER, &stmt).map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
+    }
+    Ok(())
 }
 
 /// A standalone `COSE_Sign1` record under its named signer: the signature

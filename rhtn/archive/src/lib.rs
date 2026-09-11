@@ -15,7 +15,9 @@
 
 pub mod chain;
 pub mod currency;
+pub mod locator;
 pub mod record;
+pub mod series;
 pub mod topology;
 pub mod tx;
 pub mod walk;

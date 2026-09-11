@@ -140,13 +140,13 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     // X hands over no staple at all
     assert_eq!(n.staple_for(&ids(), &x, &[patron]), Staple::Absent);
     let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]).expect("produced with no staple");
-    let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
+    let rec = n.countersign_adoption(&body, &id("bob"), &ids()).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
     // then a staple expired against N's own clock
     let stale = tx::currency_attestation(&id("carol"), &x, &x, n.now() - 40_000, n.now() - 3600, ROLE_PATRON);
     assert_eq!(n.take_staple(&ids(), &x, &stale, &[patron]), Staple::Expired);
     let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 6, &[rhtn_archive::genesis(&x)]).expect("produced with an expired staple");
-    let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
+    let rec = n.countersign_adoption(&body, &id("bob"), &ids()).unwrap();
     assert_eq!(rec.signers, vec![x, kh("alice")]);
     // and nothing about X's currency was asked of anyone first
     assert_eq!(fab.request_count(REQUEST_CURRENCY), 0);

@@ -502,8 +502,24 @@ impl NodeView {
 
     /// Countersign a proposed adoption body with this node's key, given the
     /// subject's signature entries were gathered separately; the result is
-    /// this node's own transaction and advances its chain.
-    pub fn countersign_adoption(&mut self, body: &[u8], subject_signer: &rhtn_crypto::SigningIdentity) -> Option<rhtn_archive::record::Record> {
+    /// this node's own transaction and advances its chain.  Before the
+    /// signature goes on the line the body is checked as an adoption naming
+    /// this node as patron, and its evidence against its own fields
+    /// (`wire-format.md` §4.1): a successor statement or a transfer
+    /// statement lifted from another adoption names another key, and is
+    /// countersigned by nobody here.
+    pub fn countersign_adoption<L: Lookup + ?Sized>(&mut self, body: &[u8], subject_signer: &rhtn_crypto::SigningIdentity, ids: &L) -> Option<rhtn_archive::record::Record> {
+        let item = parse_all(body).ok()?;
+        schema::check_body_of_type(body, &item, rhtn_archive::tx::TYPE_ADOPTION).ok()?;
+        let Item::Map(m) = &item else { return None };
+        let patron = match map_get(m, 2) {
+            Some(Item::Bytes(r)) => &body[r.clone()],
+            _ => return None,
+        };
+        if patron != self.me() {
+            return None;
+        }
+        rhtn_crypto::verify::adoption_evidence(ids, body).ok()?;
         let env = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, body, &[subject_signer, &self.identity]);
         let rec = rhtn_archive::record::Record::parse(&env).ok()?;
         self.archive.append(rec.clone()).ok()?;

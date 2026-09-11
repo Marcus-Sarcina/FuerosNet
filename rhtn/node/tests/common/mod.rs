@@ -159,7 +159,7 @@ impl World {
         self.clock
     }
 
-    fn back(&self, n: &str) -> Vec<Txid> {
+    pub fn back(&self, n: &str) -> Vec<Txid> {
         self.archives[&kh(n)].next_back_pointers()
     }
 
@@ -224,6 +224,15 @@ impl World {
         let b = self.back(node);
         let body = departure_body(&b, &kh(node), &kh(patron), seqno, t, None);
         self.commit(TYPE_DEPARTURE, &body, &[node])
+    }
+
+    /// A series reissue for `node` under `patron`, countersigned by the
+    /// patron: leaving `leaving`, entering `new_series` at counter 0.
+    pub fn reissue(&mut self, node: &str, patron: &str, leaving: Seqno, new_series: u32) -> Record {
+        let t = self.tick();
+        let (bn, bp) = (self.back(node), self.back(patron));
+        let body = reissue_body([&bn, &bp], &kh(node), &kh(patron), leaving, new_series, t);
+        self.commit(TYPE_REISSUE, &body, &[node, patron])
     }
 
     pub fn disavow(&mut self, patron: &str, node: &str, code: Option<u64>) -> Record {

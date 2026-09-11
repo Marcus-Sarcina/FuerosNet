@@ -20,22 +20,6 @@ fn rec_01_assemble_a_recovery_adoption_carrying_both_halve() {
     todo!("REC-01: Assemble a recovery adoption carrying both halves and no other evidence field")
 }
 
-/// Reject a recovery whose successor statement names a different successor or patron
-///
-/// Spec: wire-format.md §4.1
-/// Milestone: after-5.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §4.1): "A verifier MUST check `new_key` and `patron_key` against adoption fields 1 and 2 and reject on mismatch."
-///
-/// Given: Patron P receives a recovery adoption whose field 3 successor statement was lifted from another recovery and names a different new key, then one naming a different patron.
-/// When: P evaluates each.
-/// Then: P countersigns neither and records no binding for either.
-#[test]
-#[ignore = "acceptance REC-02: owed at milestone after-5"]
-fn rec_02_reject_a_recovery_whose_successor_statement_name() {
-    todo!("REC-02: Reject a recovery whose successor statement names a different successor or patron")
-}
-
 /// Sign a recovery verifier response with both components, and the consent classically
 ///
 /// Spec: wire-format.md §4.1
@@ -123,39 +107,6 @@ fn rec_07_never_reissue_into_a_series_you_have_occupied() {
     todo!("REC-07: Never reissue into a series you have occupied")
 }
 
-/// Reject a reissue naming a series already in the chain you hold
-///
-/// Spec: wire-format.md §4.6; wire-format.md §4.6.1
-/// Milestone: after-5.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §4.6): "who MUST reject a reissue naming a series already in it"
-/// Rule (wire-format.md §4.6.1): "Chain length is the order."
-///
-/// Given: Holder H has the chain for S: adoption into s1, reissue to s2.
-/// When: A patron-countersigned reissue for S with field 4 equal to s1 arrives, then one into an unused s3.
-/// Then: The first is rejected and H's chain is unchanged; the second extends H's chain to length three.
-#[test]
-#[ignore = "acceptance REC-08: owed at milestone after-5"]
-fn rec_08_reject_a_reissue_naming_a_series_already_in_the() {
-    todo!("REC-08: Reject a reissue naming a series already in the chain you hold")
-}
-
-/// Reject records in an abandoned series whatever their counter
-///
-/// Spec: wire-format.md §4.6
-/// Milestone: after-5.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §4.6): "MUST reject records in it whatever their counter"
-///
-/// Given: Holder H has S's chain showing s1 left for s2.
-/// When: A validly signed locator for S in s1 at a counter above every s1 record H holds arrives, then a locator in s2 at counter 1.
-/// Then: The s1 locator is rejected; the s2 locator is installed.
-#[test]
-#[ignore = "acceptance REC-09: owed at milestone after-5"]
-fn rec_09_reject_records_in_an_abandoned_series_whatever_t() {
-    todo!("REC-09: Reject records in an abandoned series whatever their counter")
-}
-
 /// Present the chain when asked to rank, and never propagate it
 ///
 /// Spec: light-client-requirements.md §2; wire-format.md §4.6.1
@@ -172,74 +123,4 @@ fn rec_09_reject_records_in_an_abandoned_series_whatever_t() {
 #[ignore = "acceptance REC-10: owed at milestone after-5"]
 fn rec_10_present_the_chain_when_asked_to_rank_and_never_p() {
     todo!("REC-10: Present the chain when asked to rank, and never propagate it")
-}
-
-/// Let a thief's seal freeze a chainless holder's entry, and never move it afterwards
-///
-/// Spec: wire-format.md §4.6
-/// Milestone: after-5.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §4.6): "against them it is a race the thief can win by reaching a reader first"
-/// Rule (wire-format.md §4.6): "What a recipient ends up holding is an address that can never be updated."
-/// Rule (wire-format.md §4.6): "So a thief who seals first burns a line rather than capturing one."
-///
-/// Given: Holder H has a cached locator for S in series s at counter 5 and no chain. A thief holding S's key produces a locator in s at the maximum counter.
-/// When: The thief's locator reaches H first; S's locator in s at counter 6 arrives later.
-/// Then: H installs the thief's locator, rejects S's counter-6 locator, and no further record in s changes H's entry.
-#[test]
-#[ignore = "acceptance REC-11: owed at milestone after-5"]
-fn rec_11_let_a_thief_s_seal_freeze_a_chainless_holder_s_e() {
-    todo!("REC-11: Let a thief's seal freeze a chainless holder's entry, and never move it afterwards")
-}
-
-/// Resolve two competing recoveries for one prior key to one current binding, by trusted patron
-///
-/// Spec: design §9.0.2
-/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (design §9.0.2): "it resolves to one, by which patron it trusts"
-/// Rule (design §9.0.2): "Both successors remain valid nodes network-wide"
-///
-/// Given: Observer O within the horizon receives two recovery adoptions for prior key k1: successor kX under patron X and successor kY under patron Y, with O's policy set by the test to prefer X.
-/// When: O processes both.
-/// Then: O's binding for the identity is kX alone; kY is held as a distinct valid node and not as the continuation.
-///
-/// Interpretation: Which patron an observer trusts is policy; the test fixes it and asserts that exactly one continuation results.
-#[test]
-#[ignore = "acceptance REC-12: owed at milestone after-5"]
-fn rec_12_resolve_two_competing_recoveries_for_one_prior_k() {
-    todo!("REC-12: Resolve two competing recoveries for one prior key to one current binding, by trusted patron")
-}
-
-/// Carry nothing in a plain rotation
-///
-/// Spec: wire-format.md §4.1; design §9.0
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §4.1): "A plain rotation carries nothing"
-/// Rule (design §9.0): "A plain rotation carries nothing"
-///
-/// Given: Subject S rotates from k1 to k2 without claiming k1's history.
-/// When: S's client performs the rotation and the memo for the adoption travels rootward.
-/// Then: The adoption carries no field 6, no field naming k1 anywhere, and the memo carries no prior key.
-#[test]
-#[ignore = "acceptance REC-13: owed at milestone after-5"]
-fn rec_13_carry_nothing_in_a_plain_rotation() {
-    todo!("REC-13: Carry nothing in a plain rotation")
-}
-
-/// Reject a transfer whose statement disagrees with the enclosing adoption
-///
-/// Spec: wire-format.md §4.1
-/// Milestone: after-5.  Kind: negative.  Oracle: model.
-///
-/// Rule (wire-format.md §4.1): "A verifier MUST check all three against the enclosing adoption"
-///
-/// Given: Patron P receives a transfer adoption whose TransferStatement names a different node, then one naming a different new patron, then one naming a different former patron than the Transfer map's field 1.
-/// When: P evaluates each.
-/// Then: P countersigns none of them.
-#[test]
-#[ignore = "acceptance REC-14: owed at milestone after-5"]
-fn rec_14_reject_a_transfer_whose_statement_disagrees_with() {
-    todo!("REC-14: Reject a transfer whose statement disagrees with the enclosing adoption")
 }

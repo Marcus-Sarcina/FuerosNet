@@ -322,6 +322,7 @@ fn a_recovery_replaces_the_old_key_inside_the_horizon() {
 }
 
 // acceptance: TOP-16
+// acceptance: REC-12
 #[test]
 fn competing_recoveries_resolve_to_one_current_key_by_patron_trust() {
     let names = ["alice", "bob", "carol", "alice2", "w1", "w2", "w3"];
@@ -346,6 +347,11 @@ fn competing_recoveries_resolve_to_one_current_key_by_patron_trust() {
             assert_eq!(t.patrons(&k_a), set(&[p_a]));
             assert_eq!(t.patrons(&k_b), set(&[p_b]));
             assert!(t.patrons(&k_old).is_empty());
+            // the other successor is a valid node, and not the continuation
+            let other = if want == k_a { k_b } else { k_a };
+            assert!(t.is_node(&other));
+            assert_eq!(t.current_key(&other), other, "its own key, bound under its own patron");
+            assert_ne!(t.current_key(&k_old), other);
         }
     }
 }

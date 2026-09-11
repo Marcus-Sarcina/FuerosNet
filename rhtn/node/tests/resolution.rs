@@ -539,3 +539,53 @@ fn a_self_signed_record_without_a_signature_or_with_a_failing_one_is_malformed_u
     assert!(!strict.offer(AnchorEntry::parse(&bad_entry).unwrap(), &ids()), "a failing signature under a held key is refused");
     assert!(strict.offer(AnchorEntry::parse(&entry).unwrap(), &ids()));
 }
+
+/// A locator for alice under bob at `seqno`.
+fn alice_at(series: u32, counter: u32) -> Vec<u8> {
+    signed_locator(&id("alice"), &Locator { anchor: kh("bob"), path: vec![0x91], nibbles: 2, seqno: Seqno { series, counter } })
+}
+
+// acceptance: REC-09
+#[test]
+fn a_chain_holder_rejects_records_in_an_abandoned_series_whatever_their_counter() {
+    let mut w = World::new();
+    let (a, _) = w.adopt("alice", "bob", 1);
+    let r = w.reissue("alice", "bob", Seqno { series: 1, counter: 5 }, 2);
+    let chain = rhtn_archive::series::SeriesChain::from_records(&[a.bytes.clone(), r.bytes.clone()], &ids()).unwrap();
+    let mut store = LocatorStore::new();
+    // H held a locator in s1 before the chain arrived
+    assert_eq!(store.offer(&alice_at(1, 3), &ids()), LocatorOutcome::Installed);
+    store.take_chain(&chain);
+    assert!(store.in_series(&kh("alice"), 1).is_none(), "the abandoned line is dropped with the chain");
+    // a validly signed locator in s1 above every s1 record H holds: rejected
+    assert_eq!(store.offer(&alice_at(1, 4_000_000_000), &ids()), LocatorOutcome::Abandoned);
+    assert!(store.in_series(&kh("alice"), 1).is_none());
+    // a locator in s2 at counter 1: installed, and it is what H dials
+    assert_eq!(store.offer(&alice_at(2, 1), &ids()), LocatorOutcome::Installed);
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!("{:?}", store.reach(&kh("alice"))) };
+    assert_eq!(loc.seqno, Seqno { series: 2, counter: 1 });
+    // and s1 stays closed, seal or no seal
+    assert_eq!(store.offer(&alice_at(1, u32::MAX), &ids()), LocatorOutcome::Abandoned);
+    assert!(store.abandoned(&kh("alice"), 1));
+}
+
+// acceptance: REC-11
+#[test]
+fn a_thiefs_seal_freezes_a_chainless_holders_entry_and_nothing_moves_it_afterwards() {
+    let mut store = LocatorStore::new();
+    assert_eq!(store.offer(&alice_at(5, 5), &ids()), LocatorOutcome::Installed);
+    // the thief, holding alice's key, seals series 5 and reaches H first
+    let thief = alice_at(5, u32::MAX);
+    assert_eq!(store.offer(&thief, &ids()), LocatorOutcome::Replaced);
+    // alice's own counter-6 locator arrives later: rejected
+    assert_eq!(store.offer(&alice_at(5, 6), &ids()), LocatorOutcome::IgnoredStale);
+    assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!() };
+    assert_eq!(loc.seqno.counter, u32::MAX, "H dials the frozen entry");
+    // no further record in s changes the entry
+    for c in [7, 1_000_000, u32::MAX - 1] {
+        assert_eq!(store.offer(&alice_at(5, c), &ids()), LocatorOutcome::IgnoredStale);
+    }
+    assert_eq!(store.offer(&thief, &ids()), LocatorOutcome::Replay);
+    assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);
+}

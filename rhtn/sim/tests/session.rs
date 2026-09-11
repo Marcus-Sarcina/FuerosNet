@@ -167,7 +167,7 @@ async fn a_degraded_session_produces_no_countersignature() {
         rhtn_archive::tx::adoption_body(&a)
     };
     let mut s_view = view_of("bob", rhtn_archive::topology::Table::with_me(kh("bob")), "alice", &[1], signers.clock);
-    assert!(s_view.countersign_adoption(&body, &id("carol")).is_none(), "S's signature over a body naming N is no transaction at all");
+    assert!(s_view.countersign_adoption(&body, &id("carol"), &ids()).is_none(), "S's signature over a body naming N is no transaction at all");
     let by_n = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &body, &[&id("carol"), &id("alice")]);
     assert!(rhtn_archive::record::Record::parse(&by_n).is_ok(), "whereas N's would be");
     // and payload flows on the same session

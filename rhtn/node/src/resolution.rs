@@ -690,50 +690,7 @@ pub fn anchor_entry(identity: &rhtn_crypto::SigningIdentity, endpoints: &[Networ
 
 // ---------------------------------------------------------------- locators
 
-/// A `SignedLocator` (`wire-format.md` §2.3) as a holder keeps it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignedLocator {
-    pub subject: Keyhash,
-    pub locator: rhtn_archive::tx::Locator,
-    pub bytes: Vec<u8>,
-}
-
-impl SignedLocator {
-    pub fn parse(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        schema::check_kind(b, "SignedLocator", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
-        let subject: Keyhash = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?,
-            _ => return Err("field 1".into()),
-        };
-        let r2 = value_slice(b, 2).ok_or("field 2")?;
-        let locator = rhtn_archive::tx::Locator::decode(&b[r2])?;
-        Ok(SignedLocator { subject, locator, bytes: b.to_vec() })
-    }
-
-    /// Signed by the subject; a bare `Locator` presented alone is rejected.
-    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
-        verify::record(ids, "SignedLocator", &self.bytes).map_err(|e| e.to_string())
-    }
-}
-
-/// Build a `SignedLocator` for `identity`'s own position.
-pub fn signed_locator(identity: &rhtn_crypto::SigningIdentity, locator: &rhtn_archive::tx::Locator) -> Vec<u8> {
-    let mut payload = Vec::new();
-    emit_map_head(&mut payload, 2);
-    emit_uint(&mut payload, 1);
-    emit_bstr(&mut payload, &identity.public.keyhash);
-    emit_uint(&mut payload, 2);
-    locator.emit(&mut payload);
-    let sig = identity.sign1_ed_unnamed(rhtn_codec::cose::aad::LOCATOR, &payload);
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 3);
-    out.extend_from_slice(&payload[1..]);
-    emit_uint(&mut out, 3);
-    out.extend_from_slice(&sig);
-    out
-}
+pub use rhtn_archive::locator::{SignedLocator, signed_locator};
 
 /// What a holder's store did with a freshness-bearing record
 /// (`negative-vectors.md`'s `state_action`).
@@ -751,6 +708,9 @@ pub enum LocatorOutcome {
     /// A different series: the two do not rank, and a reader holding both
     /// has learned nothing (`wire-format.md` §2.3).
     Incomparable,
+    /// A series the subject's own chain shows it left: rejected whatever
+    /// the counter (`wire-format.md` §4.6).
+    Abandoned,
     Malformed(String),
 }
 
@@ -776,6 +736,8 @@ pub struct LocatorStore {
     conflicts: std::collections::BTreeSet<(Keyhash, u32, u32)>,
     /// Series this holder has been shown a §4.6 chain for.
     proved: std::collections::BTreeSet<(Keyhash, u32)>,
+    /// Series a presented chain shows the subject left.
+    abandoned: std::collections::BTreeSet<(Keyhash, u32)>,
 }
 
 impl LocatorStore {
@@ -785,6 +747,25 @@ impl LocatorStore {
 
     pub fn prove_series(&mut self, subject: Keyhash, series: u32) {
         self.proved.insert((subject, series));
+    }
+
+    /// Take a subject's presented chain (`wire-format.md` §4.6.1): its
+    /// current series is proved, and every series it left is abandoned —
+    /// whatever this holder held there is dropped, and nothing in it is
+    /// taken again whatever its counter.  A chain-holder does not need the
+    /// seal.
+    pub fn take_chain(&mut self, chain: &rhtn_archive::series::SeriesChain) {
+        let s = chain.node;
+        self.proved.insert((s, chain.current()));
+        for a in chain.abandoned() {
+            self.abandoned.insert((s, a));
+            self.proved.remove(&(s, a));
+            self.held.remove(&(s, a));
+        }
+    }
+
+    pub fn abandoned(&self, subject: &Keyhash, series: u32) -> bool {
+        self.abandoned.contains(&(*subject, series))
     }
 
     /// Offer a signed locator; it must verify under its own subject.
@@ -799,6 +780,9 @@ impl LocatorStore {
             Err(e) => return LocatorOutcome::Malformed(e),
         }
         let sq = sl.locator.seqno;
+        if self.abandoned.contains(&(sl.subject, sq.series)) {
+            return LocatorOutcome::Abandoned;
+        }
         if self.conflicts.contains(&(sl.subject, sq.series, sq.counter)) {
             return LocatorOutcome::Conflict;
         }

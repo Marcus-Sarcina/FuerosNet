@@ -4,7 +4,7 @@
 //! which releases the chain and never the evidence (design §10.0).
 
 use crate::record::Record;
-use crate::tx::Seqno;
+use crate::tx::{Seqno, TYPE_ADOPTION, TYPE_REISSUE};
 use crate::walk::Fetch;
 use crate::{Keyhash, Txid, WINDOW_SECONDS, genesis};
 use rhtn_codec::cbor::*;
@@ -208,6 +208,22 @@ impl Archive {
     /// §2: never reissue into one of them).
     pub fn series_occupied(&self) -> BTreeSet<u32> {
         self.records.values().filter_map(|r| r.seqno()).map(|s| s.series).collect()
+    }
+
+    /// This key's chain under `patron` (`wire-format.md` §4.6.1): its
+    /// latest adoption there and every reissue since, which is what it
+    /// presents when asked which series it is in.
+    pub fn chain_for(&self, patron: &Keyhash) -> Option<crate::series::SeriesChain> {
+        let adoption = self.records.values().filter(|r| r.tx_type == TYPE_ADOPTION && r.field_hash(1) == Some(self.key) && r.field_hash(2) == Some(*patron)).max_by_key(|r| (r.time, r.txid))?;
+        let mut chain = crate::series::SeriesChain::open(adoption).ok()?;
+        let mut reissues: Vec<&Record> = self.records.values().filter(|r| r.tx_type == TYPE_REISSUE && r.field_hash(1) == Some(self.key) && r.field_hash(2) == Some(*patron) && r.time >= adoption.time).collect();
+        reissues.sort_by_key(|r| (r.time, r.txid));
+        for r in reissues {
+            // a reissue that does not extend the chain is not a link of it,
+            // whatever else this key signed
+            let _ = chain.extend(r);
+        }
+        Some(chain)
     }
 
     /// Records reachable backward from `head`, head first, every record

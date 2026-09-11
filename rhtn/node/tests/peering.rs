@@ -119,7 +119,7 @@ fn a_root_with_no_peers_can_still_adopt() {
     let body = i
         .propose_adoption(&kh("bob"), tx::Evidence::Presence(pop.txid), 3, &[rhtn_archive::genesis(&kh("bob"))])
         .expect("no step refuses or defers it for want of a peering record");
-    let rec = i.countersign_adoption(&body, &id("bob")).unwrap();
+    let rec = i.countersign_adoption(&body, &id("bob"), &ids()).unwrap();
     assert_eq!(rec.tx_type, tx::TYPE_ADOPTION);
     let fab = Fabric::with(&[kh("bob")]);
     assert_eq!(i.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()), Decision::Stored);
