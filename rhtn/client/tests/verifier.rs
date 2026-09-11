@@ -49,7 +49,7 @@ fn setup() -> Setup {
     for (rec, c, s, t) in [(&rec1, c1, s1, &t1), (&rec2, c2, s2, &t2)] {
         let key = capture_key(&s, &kh("alice"), &kh("bob"), &c);
         let cap = Capture { modality: 0, template_version: 1, template: t.clone(), frames: vec![Frame { at_ms: 1, bytes: b"a frame".to_vec() }] };
-        b_store.sealed.insert(rec.txid, seal(&p, &key, rec.txid, kh("alice"), kh("bob"), c, &cap));
+        b_store.sealed.insert(rec.txid, seal(&p, &key, kh("alice"), kh("bob"), c, &cap));
         b_store.records.insert(rec.txid, rec.bytes.clone());
     }
     b_store.records.insert(cb.txid, cb.bytes.clone());

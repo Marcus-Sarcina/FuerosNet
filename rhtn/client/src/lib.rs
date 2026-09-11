@@ -18,11 +18,18 @@
 //!   disclosure set and its root, a signer's refusals, the presentation
 //!   that withholds by default, and late responses kept beside a record.
 //! - [`notice`] is what the person is told, raised through one hook.
+//! - [`device`] is the hardware and the person behind traits: proximity
+//!   channels, the camera, the clock, randomness, the operator, the engine.
+//! - [`ceremony`] is the ceremony itself (design §7.1): each party's steps
+//!   and refusals, and an in-process harness that carries the direct
+//!   channel and logs every path.
 //!
 //! Every decision here is the client's own, taken against what the client
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
 
+pub mod ceremony;
+pub mod device;
 pub mod keys;
 pub mod notice;
 pub mod query;

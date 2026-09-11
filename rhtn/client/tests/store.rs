@@ -19,7 +19,7 @@ fn a_capture_opens_under_its_key_alone() {
         let p = SealParams { aead, template_len: 32 };
         let c = capture(&p);
         let key = [1u8; 32];
-        let sealed = seal(&p, &key, [2; 32], [3; 32], [4; 32], [5; 32], &c);
+        let sealed = seal(&p, &key, [3; 32], [4; 32], [5; 32], &c);
         assert_eq!(open(&p, &key, &sealed), Ok(c.clone()));
         assert_eq!(open(&p, &[9u8; 32], &sealed), Err(OpenFailure::Unauthenticated), "another key");
         // the ciphertext carries no frame in the clear
@@ -35,8 +35,11 @@ fn a_capture_opens_under_its_key_alone() {
         flipped.ciphertext[0] ^= 1;
         assert_eq!(open(&p, &key, &flipped), Err(OpenFailure::Unauthenticated));
         let mut relabelled = sealed.clone();
-        relabelled.record = [6; 32];
-        assert_eq!(open(&p, &key, &relabelled), Err(OpenFailure::Unauthenticated), "the record is in the seal");
+        relabelled.ceremony_id = [6; 32];
+        assert_eq!(open(&p, &key, &relabelled), Err(OpenFailure::Unauthenticated), "the ceremony is in the seal");
+        let mut reholder = sealed.clone();
+        reholder.holder = [7; 32];
+        assert_eq!(open(&p, &key, &reholder), Err(OpenFailure::Unauthenticated), "and so is the holder");
     }
 }
 
@@ -45,7 +48,7 @@ fn the_store_shows_what_it_holds_and_discards_beside_a_record() {
     let p = SealParams::default();
     let c = capture(&p);
     let key = [1u8; 32];
-    let sealed = seal(&p, &key, [2; 32], [3; 32], [4; 32], [5; 32], &c);
+    let sealed = seal(&p, &key, [3; 32], [4; 32], [5; 32], &c);
     let mut st = ClientStore::default();
     st.sealed.insert([2; 32], sealed);
     st.records.insert([8; 32], b"record bytes".to_vec());

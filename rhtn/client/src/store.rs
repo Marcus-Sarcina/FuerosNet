@@ -14,6 +14,7 @@
 use crate::{Keyhash, Txid};
 use aws_lc_rs::aead::{AES_256_GCM, Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
+use crate::record::DisclosureSet;
 use std::collections::BTreeMap;
 
 /// The AEAD a store seals under: a parameter (design §22.2).
@@ -58,12 +59,13 @@ pub struct Capture {
     pub frames: Vec<Frame>,
 }
 
-/// A capture sealed under one key: the record it belongs to, whose likeness
-/// it is, who holds it, the ceremony that sealed it, and the ciphertext.
-/// Nothing here opens it.
+/// A capture sealed under one key: whose likeness it is, who holds it, the
+/// ceremony that sealed it, and the ciphertext.  Nothing here opens it.
+/// It is bound to the ceremony and not to the record (design §7.5.2.6):
+/// sealing happens at capture, before the record exists, and the record
+/// is what the store files it under afterwards.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealedCapture {
-    pub record: Txid,
     pub subject: Keyhash,
     pub holder: Keyhash,
     pub ceremony_id: [u8; 32],
@@ -88,10 +90,9 @@ pub enum OpenFailure {
 
 const SEAL_AAD_TAG: &[u8] = b"rhtn/1:sealed-capture";
 
-fn aad_of(record: &Txid, subject: &Keyhash, holder: &Keyhash, ceremony_id: &[u8; 32], modality: u64, template_version: u64) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(SEAL_AAD_TAG.len() + 128 + 16);
+fn aad_of(subject: &Keyhash, holder: &Keyhash, ceremony_id: &[u8; 32], modality: u64, template_version: u64) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(SEAL_AAD_TAG.len() + 96 + 16);
     aad.extend_from_slice(SEAL_AAD_TAG);
-    aad.extend_from_slice(record);
     aad.extend_from_slice(subject);
     aad.extend_from_slice(holder);
     aad.extend_from_slice(ceremony_id);
@@ -108,10 +109,10 @@ fn key_of(aead: Aead, key: &[u8; 32]) -> LessSafeKey {
     LessSafeKey::new(UnboundKey::new(alg, key).expect("a 32-byte key"))
 }
 
-/// Seal `capture` under `key` for `record`: the template, which must be
-/// exactly the parameters' length, then each frame as its instant and its
+/// Seal `capture` under `key`: the template, which must be exactly the
+/// parameters' length, then each frame as its instant and its
 /// length-prefixed bytes, under a fresh nonce.
-pub fn seal(p: &SealParams, key: &[u8; 32], record: Txid, subject: Keyhash, holder: Keyhash, ceremony_id: [u8; 32], capture: &Capture) -> SealedCapture {
+pub fn seal(p: &SealParams, key: &[u8; 32], subject: Keyhash, holder: Keyhash, ceremony_id: [u8; 32], capture: &Capture) -> SealedCapture {
     assert_eq!(capture.template.len(), p.template_len, "the template has the modality version's fixed length");
     let mut plain = Vec::new();
     plain.extend_from_slice(&capture.template);
@@ -122,9 +123,9 @@ pub fn seal(p: &SealParams, key: &[u8; 32], record: Txid, subject: Keyhash, hold
     }
     let mut nonce = [0u8; 12];
     SystemRandom::new().fill(&mut nonce).expect("the system's random source");
-    let aad = aad_of(&record, &subject, &holder, &ceremony_id, capture.modality, capture.template_version);
+    let aad = aad_of(&subject, &holder, &ceremony_id, capture.modality, capture.template_version);
     key_of(p.aead, key).seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from(&aad), &mut plain).expect("sealing cannot fail");
-    SealedCapture { record, subject, holder, ceremony_id, modality: capture.modality, template_version: capture.template_version, nonce, ciphertext: plain }
+    SealedCapture { subject, holder, ceremony_id, modality: capture.modality, template_version: capture.template_version, nonce, ciphertext: plain }
 }
 
 /// Open a sealed capture under `key`.  Anything short of an authenticated,
@@ -134,7 +135,7 @@ pub fn open(p: &SealParams, key: &[u8; 32], sealed: &SealedCapture) -> Result<Ca
         return Err(OpenFailure::Truncated);
     }
     let mut buf = sealed.ciphertext.clone();
-    let aad = aad_of(&sealed.record, &sealed.subject, &sealed.holder, &sealed.ceremony_id, sealed.modality, sealed.template_version);
+    let aad = aad_of(&sealed.subject, &sealed.holder, &sealed.ceremony_id, sealed.modality, sealed.template_version);
     let plain = key_of(p.aead, key).open_in_place(Nonce::assume_unique_for_key(sealed.nonce), Aad::from(&aad), &mut buf).map_err(|_| OpenFailure::Unauthenticated)?;
     if plain.len() < p.template_len {
         return Err(OpenFailure::Framing);
@@ -173,14 +174,17 @@ pub struct OwnSeed {
 /// `light-client-requirements.md` §1.3): the sealed captures it holds of
 /// others, by record; its own seeds, by record, which unlock its likeness
 /// on others' devices; the presence records it keeps; and the late
-/// responses kept beside them and discarded with them.  No plaintext
-/// likeness and no released key is ever written here.
+/// responses kept beside them and discarded with them; and the disclosure
+/// sets of its own records, which are ordinary record state
+/// (`wire-format.md` §4.5.1.2).  No plaintext likeness and no released key
+/// is ever written here.
 #[derive(Debug, Default, Clone)]
 pub struct ClientStore {
     pub sealed: BTreeMap<Txid, SealedCapture>,
     pub seeds: BTreeMap<Txid, OwnSeed>,
     pub records: BTreeMap<Txid, Vec<u8>>,
     pub late: BTreeMap<Txid, Vec<Vec<u8>>>,
+    pub disclosures: BTreeMap<Txid, DisclosureSet>,
 }
 
 impl ClientStore {
@@ -205,5 +209,6 @@ impl ClientStore {
     pub fn discard_record(&mut self, txid: &Txid) {
         self.records.remove(txid);
         self.late.remove(txid);
+        self.disclosures.remove(txid);
     }
 }

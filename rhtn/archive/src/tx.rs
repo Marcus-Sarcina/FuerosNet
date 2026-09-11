@@ -419,8 +419,17 @@ pub fn formation_body(back: [&[Txid]; 2], participants: [&Keyhash; 2], started_a
 /// type, the body, and a `COSE_Sign` whose entries sort by `kid` then
 /// classical before post-quantum.
 pub fn envelope(tx_type: u64, body: &[u8], signers: &[&SigningIdentity]) -> Vec<u8> {
-    let mut signers: Vec<&SigningIdentity> = signers.to_vec();
-    signers.sort_by_key(|s| s.public.keyhash);
+    let entries: Vec<(Keyhash, Vec<u8>)> = signers.iter().map(|s| (s.public.keyhash, s.sign_entries(aad::ENVELOPE, body))).collect();
+    envelope_from_entries(tx_type, body, &entries)
+}
+
+/// The same envelope from entries each signer produced on its own, as a
+/// ceremony gathers them (`wire-format.md` §3): each signer's two entries
+/// over the body under `rhtn/1:envelope`, placed in ascending keyhash
+/// order whatever order they arrived in.
+pub fn envelope_from_entries(tx_type: u64, body: &[u8], entries: &[(Keyhash, Vec<u8>)]) -> Vec<u8> {
+    let mut entries: Vec<&(Keyhash, Vec<u8>)> = entries.iter().collect();
+    entries.sort_by_key(|(k, _)| *k);
     let mut out = Vec::new();
     emit_map_head(&mut out, 4);
     emit_uint(&mut out, 1);
@@ -434,9 +443,9 @@ pub fn envelope(tx_type: u64, body: &[u8], signers: &[&SigningIdentity]) -> Vec<
     emit_bstr(&mut out, b"");
     emit_map_head(&mut out, 0);
     emit_null(&mut out);
-    emit_array_head(&mut out, signers.len() * 2);
-    for s in signers {
-        out.extend_from_slice(&s.sign_entries(aad::ENVELOPE, body));
+    emit_array_head(&mut out, entries.len() * 2);
+    for (_, e) in entries {
+        out.extend_from_slice(e);
     }
     out
 }

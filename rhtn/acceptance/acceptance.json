@@ -914,7 +914,7 @@
   "when": "The ceremony runs and its queries are answered.",
   "then": "Queries are issued and answered, and the hook records no prompt to any operator for querying, witnessing or answering; the verifier's operator receives no notification.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "design §7.3 (the verifier's operator is not told they were sampled) and design §19.6 (a verifier is told, at the moment they are asked, that answering records them in a third party's evidence) pull in opposite directions for the verifier. The reference client raises §19.6's disclosure as a notice carrying no ceremony, subject or querier, and asks nothing; this test reads 'no notification' as no prompt and no notice naming the ceremony. Which of the two the author intends is open."
  },
  {
   "id": "CER-18",
