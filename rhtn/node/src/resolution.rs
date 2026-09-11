@@ -86,8 +86,11 @@ impl Path {
         Path { bytes, nibbles: ix.len() as u64 }
     }
 
+    /// The hop indices.  A decoded path satisfies `wire-format.md` §2.1's
+    /// invariant; this is total regardless, so a path reached by any other
+    /// route cannot index past its bytes.
     pub fn indices(&self) -> Vec<u8> {
-        (0..self.nibbles as usize).map(|i| if i % 2 == 0 { self.bytes[i / 2] >> 4 } else { self.bytes[i / 2] & 0x0f }).collect()
+        (0..self.nibbles as usize).map(|i| self.bytes.get(i / 2).map_or(0, |b| if i % 2 == 0 { b >> 4 } else { b & 0x0f })).collect()
     }
 
     pub fn len(&self) -> usize {
@@ -122,7 +125,10 @@ impl Path {
             Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
             _ => return Err("path field 1".into()),
         };
-        Ok(Path { bytes, nibbles: map_get(m, 2).and_then(as_uint).ok_or("path field 2")? })
+        let nibbles = map_get(m, 2).and_then(as_uint).ok_or("path field 2")?;
+        // the packed-path invariant at every decoding boundary (§2.1)
+        schema::packed_path(&bytes, nibbles).map_err(|e| e.0)?;
+        Ok(Path { bytes, nibbles })
     }
 }
 

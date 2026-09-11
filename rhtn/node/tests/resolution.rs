@@ -455,3 +455,22 @@ fn a_node_with_no_published_endpoints_reports_itself_unavailable() {
     publish(&mut r, "bob", 7102);
     assert!(matches!(r.answer_resolution(&req), ResolveReply::Serving { .. }));
 }
+
+// acceptance: DEC-23
+#[test]
+fn a_resolve_request_with_a_malformed_path_is_refused_before_any_path_operation() {
+    // the request as an attacker would send it: one nibble claimed, no bytes
+    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Vec::new(), nibbles: 1, nonce: nonce(23) };
+    let e = ResolveRequest::decode(&req.encode()).unwrap_err();
+    assert!(e.contains("byte length"), "{e}");
+    // the same path, met by any other route, indexes nothing past its bytes
+    assert_eq!(Path { bytes: Vec::new(), nibbles: 1 }.indices(), vec![0]);
+    assert_eq!(Path { bytes: vec![0x12], nibbles: 5 }.indices(), vec![1, 2, 0, 0, 0]);
+    // the archive's locator decoder holds the same line
+    let mut loc = Vec::new();
+    Locator { anchor: kh("alice"), path: vec![0x1f], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } }.emit(&mut loc);
+    assert!(Locator::decode(&loc).unwrap_err().contains("pad nibble"));
+    let mut good = Vec::new();
+    Locator { anchor: kh("alice"), path: vec![0x10], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } }.emit(&mut good);
+    assert!(Locator::decode(&good).is_ok());
+}

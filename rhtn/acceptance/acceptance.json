@@ -7240,5 +7240,35 @@
   "then": "The departure parses as type 2 and is rejected as type 1 for want of a locator: the type comes from the envelope, never from the body's shape. Each one-identity body is rejected, as are the reissue at counter 1 and the peering without its presence record. An implementation that classifies a body by its fields and applies whichever rules the shape suggests fails.",
   "oracle": "fixture",
   "interpretation": null
+ },
+ {
+  "id": "DEC-23",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a packed path whose byte length, nibble values or pad nibble depart from the encoding, at every decoding boundary",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.1",
+    "text": "The packed byte string MUST be exactly ceil(nibble_count / 2) bytes."
+   },
+   {
+    "where": "wire-format.md §2.1",
+    "text": "Nibble values MUST be 0-9"
+   },
+   {
+    "where": "wire-format.md §2.1",
+    "text": "On an odd nibble count the unused low nibble of the final byte MUST be zero."
+   }
+  ],
+  "given": "Locators whose paths are the empty self-anchor, one nibble with a zero pad, two nibbles, and three nibbles with a zero pad; and locators claiming one nibble over no bytes, carrying a surplus byte, a byte short, a nibble of value 10 in either position, and a nonzero pad nibble on one and on three nibbles. A ResolveRequest whose path claims one nibble over no bytes.",
+  "when": "Each locator is decoded; the request is decoded, and the same path is asked for its hop indices by another route.",
+  "then": "The four well-formed paths are accepted. Each departure is rejected, naming the byte length, the nibble value or the pad nibble. The request is refused at decoding, and the hop-index operation on the malformed path returns without indexing past its bytes. An implementation that checks the nibble ceiling alone and then indexes by the claimed count fails.",
+  "oracle": "fixture",
+  "interpretation": null
  }
 ]

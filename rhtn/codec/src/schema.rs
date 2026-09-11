@@ -158,6 +158,31 @@ pub fn check_map(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
     Ok(())
 }
 
+/// The packed-path invariant (§2.1): at most 24 nibbles, exactly
+/// `ceil(nibbles / 2)` bytes, every nibble 0-9, and on an odd count the
+/// unused low nibble of the last byte zero.  One logical path has one
+/// encoding; a path that departs from this is malformed, and a decoder
+/// that admitted one would index past its bytes.
+pub fn packed_path(packed: &[u8], nibbles: u64) -> Result<(), Error> {
+    if nibbles > PATH_NIBBLES {
+        return Err(Error("path over 24 nibbles"));
+    }
+    let n = nibbles as usize;
+    if packed.len() != n.div_ceil(2) {
+        return Err(Error("path byte length is not ceil(nibbles / 2)"));
+    }
+    for i in 0..n {
+        let v = if i % 2 == 0 { packed[i / 2] >> 4 } else { packed[i / 2] & 0x0f };
+        if v > 9 {
+            return Err(Error("path nibble over 9"));
+        }
+    }
+    if n % 2 == 1 && packed[n / 2] & 0x0f != 0 {
+        return Err(Error("path pad nibble not zero"));
+    }
+    Ok(())
+}
+
 /// The value at offset `at` against type `t`.
 pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
     let p = Parser { b };
@@ -194,10 +219,10 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         Locator => check_map(b, at, LOCATOR)?,
         Path => {
             check_map(b, at, PATH)?;
-             let Item::Map(ref m) = v else { unreachable!() };
-            if map_get(m, 2).and_then(as_uint).unwrap_or(0) > PATH_NIBBLES {
-                return Err(Error("path over 24 nibbles"));
-            }
+            let Item::Map(ref m) = v else { unreachable!() };
+            let n = map_get(m, 2).and_then(as_uint).ok_or(Error("path nibble count"))?;
+            let Some(packed) = map_get(m, 1).and_then(|it| bs(b, it)) else { return Err(Error("path not bstr")) };
+            packed_path(packed, n)?;
         }
         Capabilities => {
              let Item::Map(ref m) = v else { return Err(Error("capabilities not map")) };

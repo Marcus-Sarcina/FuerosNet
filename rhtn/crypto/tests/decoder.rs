@@ -352,3 +352,40 @@ fn dec_18_extension_bounds_hold_in_every_nested_signed_map() {
     }
     assert!(decode(&ids, "", "EndpointRecord", &append_entries(&er, 0, &many, 17)).is_err());
 }
+
+/// A Locator over `packed` with `nibbles`, anchored at a fixed keyhash at seqno [5, 0].
+fn locator_with_path(packed: &[u8], nibbles: u64) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 3);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, &[0xbb; 32]);
+    emit_uint(&mut out, 2);
+    emit_map_head(&mut out, 2);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, packed);
+    emit_uint(&mut out, 2);
+    emit_uint(&mut out, nibbles);
+    emit_uint(&mut out, 3);
+    emit_array_head(&mut out, 2);
+    emit_uint(&mut out, 5);
+    emit_uint(&mut out, 0);
+    out
+}
+
+// acceptance: DEC-23
+#[test]
+fn dec_23_a_packed_path_departing_from_its_encoding_is_rejected() {
+    let ids = identities();
+    let ok = |packed: &[u8], n: u64| decode(&ids, "", "Locator", &locator_with_path(packed, n));
+    ok(&[], 0).expect("the self-anchor case");
+    ok(&[0x10], 1).expect("one nibble, zero pad");
+    ok(&[0x12], 2).expect("two nibbles");
+    ok(&[0x12, 0x30], 3).expect("three nibbles, zero pad");
+    assert!(ok(&[], 1).unwrap_err().contains("byte length"), "one nibble claimed, no bytes");
+    assert!(ok(&[0x12, 0x34], 2).unwrap_err().contains("byte length"), "a surplus byte");
+    assert!(ok(&[0x12], 3).unwrap_err().contains("byte length"), "a byte short");
+    assert!(ok(&[0x1a], 2).unwrap_err().contains("nibble over 9"), "nibble value 10");
+    assert!(ok(&[0xa0], 1).unwrap_err().contains("nibble over 9"), "nibble value 10, first position");
+    assert!(ok(&[0x1f], 1).unwrap_err().contains("pad nibble"), "a nonzero pad nibble");
+    assert!(ok(&[0x12, 0x35], 3).unwrap_err().contains("pad nibble"), "a nonzero pad nibble, three nibbles");
+}

@@ -100,6 +100,9 @@ impl Locator {
             _ => return Err("path field 1".into()),
         };
         let nibbles = map_get(pm, 2).and_then(as_uint).ok_or("path field 2")?;
+        // the packed-path invariant (`wire-format.md` §2.1), at this
+        // decoding boundary as at the schema's
+        rhtn_codec::schema::packed_path(&path, nibbles).map_err(|e| e.0)?;
         let Some(Item::Array(sq)) = map_get(m, 3) else { return Err("locator field 3".into()) };
         let seqno = Seqno {
             series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
