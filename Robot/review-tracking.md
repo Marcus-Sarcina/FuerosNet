@@ -8611,3 +8611,48 @@ Found on the way: a signing identity carries its expanded ML-DSA key
 inline, 66 KB, and a client that held one by value, plus a rotation
 holding another, overflowed a debug test thread's stack once the recovery
 path added depth; both are boxed now.
+
+**Milestone 8, payload encryption, built (2026-09-11).** One gate-green
+commit, 9360cd1: PQXDH in `rhtn-crypto` on RustCrypto's `ml-kem` and
+`x25519-dalek`, both permissively licensed; the prekey objects in
+`rhtn-archive`; the prekey service in `rhtn-node`, dispatched from the
+runtime's request handler; the client's material, sweep, one-time request,
+session, ratchet, routing and dispatch in `rhtn-client`. 14 of the 15 PAY
+entries carry a marker; 252 of 286 entries implemented, 0 flags. Open for
+the author, each recorded where it bites:
+
+- **PAY-13 is not marked, and the library decision is what blocks it.**
+  Design §14.2.4.3 adopts the Triple Ratchet, the Double Ratchet beside the
+  Sparse Post-Quantum Ratchet with their outputs mixed. The Double Ratchet
+  is built to Signal's specification; the post-quantum ratchet is
+  libsignal's alone, AGPL (`Robot/implementation-plan.md` sections 3 and
+  7), and writing one would be designing what §14.2.4 says to import. The
+  entry also asks for agreement with the adopted library's published
+  vectors; none are published for PQXDH or either ratchet, so the oracle
+  is libsignal's own tests or nothing. Until the library is chosen, the
+  session runs on PQXDH and the Double Ratchet, which is post-quantum in
+  its agreement and classical in its ratchet.
+- **The identity binding is classical.** Design §14.2.4.2 wants
+  authentication to bind to the post-quantum identity component, past the
+  deployed profile. `wire-format.md` §7.8 signs the bundle classically and
+  bounds its blob at 4 KB; an ML-DSA-65 signature is 3.3 KB and an ML-KEM
+  key 1.2 KB, so the hybrid signature does not fit inside the blob either.
+  The bundle's classical signature binds the material to the identity; the
+  design's wish and the wire's bound disagree, and one of them moves.
+- **A sweep names at least two.** `wire-format.md` §7.8's batch is
+  `2*256` keyhashes, so a client whose org has one other member asks for
+  that one singly, reusable material only — the case PAY-07 cannot reach.
+- **A batch is answered with an array of replies.** §7.8 defines the
+  single `PrekeyReply` and no batch reply; the node answers a sweep with
+  one `PrekeyReply` per subject named, in order, on the one stream.
+- **What travels client to serving node is unspecified.** §7.8 says the
+  patron serves bundles and one-time keys and tells the subject of
+  exhaustion; no message publishes a bundle, uploads keys, or carries the
+  notice. The harness moves them as values; the session will carry them
+  as whatever the author specifies. A one-time request for a subject
+  served elsewhere goes to that subject's serving node, which is how the
+  harness routes it and what §7.8's "the patron serves" implies.
+- **Randomness for the ratchet's keys comes from the device**, as
+  everything else the client draws; the KEM's encapsulation randomness
+  too, so a session is deterministic in its seeds and a harness can
+  replay one.

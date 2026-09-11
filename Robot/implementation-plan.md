@@ -232,9 +232,31 @@ the author and recorded in `Robot/review-tracking.md`: recognition by
 personal knowledge only, the recovery verifier's person asked, and the
 stream on which a chain is asked for.
 
-Then, in order: payload encryption (step 9), ICE (step 9b), resources
-(step 10). The mobile application is its own track once the client core is
-stable.
+**Milestone 8, payload encryption** (design §24 step 9). Exit: the 15
+payload entries pass. Done, all but one: `rhtn-crypto` carries PQXDH to
+the byte, instantiated with X25519, SHA-256 and ML-KEM-768 from
+RustCrypto's `ml-kem` and `x25519-dalek`; `rhtn-archive` the prekey
+objects; `rhtn-node` the prekey service — bundles held without reading,
+reusable material served freely, a one-time key consumed once and only
+when requested, rate-limited per requester per subject, the subject told
+when its pool runs dry, and nothing persisted about who asked; and
+`rhtn-client` the material published and stocked, the org swept as one
+batch, a one-time key asked for only when opening a session, the session
+opened on PQXDH and run on the Double Ratchet with the direct path or the
+relay chosen per message, and the channel's dispatch of key grants, late
+responses and application payload. 14 of the 15 payload entries pass; 252
+of 286 entries pass. **PAY-13 is not marked**: the Triple Ratchet is the
+Double Ratchet beside the Sparse Post-Quantum Ratchet, whose only
+implementation is libsignal, AGPL, and whose adoption is the author's
+decision (section 7); what stands is the Double Ratchet alone, and no
+published vectors exist to match either construction against. Four
+readings are open to the author and recorded in `Robot/review-tracking.md`:
+the identity binding is classical, a sweep of one subject is a single
+reusable request, a batch is answered with an array of replies, and how
+bundles, one-time keys and the exhaustion notice reach the serving node.
+
+Then, in order: ICE (step 9b), resources (step 10). The mobile application
+is its own track once the client core is stable.
 
 ---
 
