@@ -7818,5 +7818,167 @@
   "then": "The identity's own material pins and yields its classical key. Every variant is refused and yields nothing: it is not an identity, whatever it hashes to. An implementation that pins anything hashing to the keyhash it was given fails.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TRV-01",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Learn the server-reflexive address from the serving node acting as STUN, on the socket the direct path will use",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.1",
+   "infra-client-requirements.md §7"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.1",
+    "text": "Infra nodes act as STUN and TURN."
+   },
+   {
+    "where": "infra-client-requirements.md §7",
+    "text": "Act as STUN and TURN for clients attempting direct payload paths"
+   }
+  ],
+  "given": "Leaf L attached to serving node S, behind an emulated NAT with endpoint-independent mapping, preparing a direct path to an in-horizon peer.",
+  "when": "L gathers candidates.",
+  "then": "L sends a STUN Binding Request to S at the address it serves QUIC on, S answers with the source address it saw, and L's candidates carry its host address and the reflexive address the NAT mapped for that socket.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRV-02",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Attempt the direct path first and fall back to the serving node when the checks fail",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.1",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.1",
+    "text": "ICE attempts the direct path first and falls back to the serving node when it fails."
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "ICE falls back to relaying through the serving node when hole punching fails"
+   }
+  ],
+  "given": "Leaves L1 and L2 inside each other's horizon, each behind an emulated NAT, having exchanged candidates through their serving nodes. The NATs' mapping and filtering behaviour is the harness's parameter.",
+  "when": "L1 sends payload to L2, first with endpoint-independent NATs and then with address-and-port-dependent ones.",
+  "then": "With endpoint-independent NATs a connection completes on a candidate pair and the payload crosses it with neither serving node carrying the bytes; with address-and-port-dependent NATs the checks fail within the bound and the same payload is delivered through L2's serving node.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRV-03",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Keep the relayed path a first-class route, taken whenever the direct path is not",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.1",
+   "infra-client-requirements.md §7"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.1",
+    "text": "The relay path is not vestigial and must be maintained as a first-class route."
+   },
+   {
+    "where": "infra-client-requirements.md §7",
+    "text": "carry the relayed path as a first-class route rather than a fallback afterthought"
+   }
+  ],
+  "given": "Leaves L1 and L2 whose direct path the harness defeats, both online.",
+  "when": "L1 sends L2 several messages over time while the direct path stays defeated.",
+  "then": "Every message is delivered through L2's serving node in order, the relay is not retried into a failure per message, and the direct path is re-attempted only when L1 next opens a path, not on every send.",
+  "oracle": "behaviour",
+  "interpretation": "How often a client re-attempts the direct path after a failure is not stated; the test fixes one attempt per path opening and asserts that sends in between go by the relay without delay."
+ },
+ {
+  "id": "TRV-04",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Dial the serving node outward and never traverse for control traffic",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.2",
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "NAT traversal for the payload path only. Control traffic needs none: clients dial outward to their serving infra node at a static IP, and infra nodes dial each other directly."
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "Control traffic needs none."
+   }
+  ],
+  "given": "Leaf L behind an emulated NAT, and serving node S.",
+  "when": "L attaches to S, heartbeats, resolves and fetches through the session.",
+  "then": "No STUN Binding Request leaves L's socket and S answers none; the session runs entirely on L's outward dial.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRV-05",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Gather no candidates and open no direct path for a peer outside the horizon",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §9.2",
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Payload attempts a direct path inside the horizon, which does require traversal."
+   },
+   {
+    "where": "design §12.6.3",
+    "text": "Direct connection is limited to the horizon"
+   }
+  ],
+  "given": "Leaf L1 with a peer L2 outside its horizon, both behind NATs the harness would let a direct path through.",
+  "when": "L1 sends L2 payload.",
+  "then": "L1 sends no STUN request, exchanges no candidates and dials no address of L2's; the payload goes by the relay.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TRV-06",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Exchange addresses with the peer alone, and put no reflexive address in topology state",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §12.6.3",
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "The peers exchange addresses during setup and connect"
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "a direct connection reveals each peer's IP (P17)"
+   }
+  ],
+  "given": "Leaves L1 and L2 inside each other's horizon, each behind a NAT, with their serving nodes recording every topology object and endpoint record they hold and forward.",
+  "when": "L1 and L2 exchange candidates and connect.",
+  "then": "The reflexive addresses travel only in the candidate exchange between the two leaves; no TopologyPush, EndpointRecord, memo or replicated state at either serving node carries either address.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

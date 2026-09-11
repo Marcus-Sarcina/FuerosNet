@@ -227,7 +227,7 @@ pub fn client_endpoint(addr: std::net::SocketAddr) -> std::io::Result<quinn::End
     quinn::Endpoint::client(addr)
 }
 
-fn transport_config() -> quinn::TransportConfig {
+pub fn transport_config() -> quinn::TransportConfig {
     let mut t = quinn::TransportConfig::default();
     // Liveness is the session's heartbeat, not QUIC's idle timer; keep the
     // idle timeout above any advertised interval so it never pre-empts §8.2.

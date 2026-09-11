@@ -182,6 +182,23 @@ impl RateLimit {
 
 /// A running node: transport, view, and the state the request handlers
 /// read.
+/// Payload that arrived on the direct path, with the peer it came from.
+pub type DirectInbox = mpsc::UnboundedReceiver<(Keyhash, Vec<u8>)>;
+
+/// The state of the direct path to one peer (design §14.1.1): held, or
+/// failed and not retried until the next path opening.
+pub enum DirectState {
+    Connected(quinn::Connection),
+    Failed(std::time::Instant),
+}
+
+/// Where live payload went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveDelivery {
+    Direct,
+    Relayed,
+}
+
 pub struct LiveNode {
     pub node: Arc<Node>,
     pub view: Arc<Mutex<NodeView>>,
@@ -197,6 +214,16 @@ pub struct LiveNode {
     /// How long one dial may take on a proxied resolution.
     pub dial_timeout: Duration,
     pub limits: Arc<RateLimit>,
+    /// The socket this node serves and dials on: QUIC, STUN answered for
+    /// the clients it serves, and STUN asked of its own serving node.
+    pub traversal: Arc<rhtn_transport::traversal::TraversalSocket>,
+    /// Where this node's serving node is, once attached: the STUN server
+    /// its candidates are gathered against.
+    pub upstream_addr: Mutex<Option<SocketAddr>>,
+    /// The direct path per peer.
+    direct: Mutex<HashMap<Keyhash, DirectState>>,
+    /// Payload that arrived on the direct path, for the caller to take.
+    direct_deliveries: Mutex<Option<DirectInbox>>,
 }
 
 impl LiveNode {
@@ -260,7 +287,11 @@ impl LiveNode {
                 f(kh, r);
             }
         }));
-        let client_ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).expect("client endpoint");
+        // the outward dials sit behind the same NAT as the served socket on
+        // a harness; control traffic needs no traversal (`wire-format.md`
+        // §9.2), so this socket never asks STUN of anyone
+        let client_socket = rhtn_transport::traversal::TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), cfg.nat).expect("client socket");
+        let client_ep = rhtn_transport::traversal::endpoint(client_socket, None).expect("client endpoint");
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
         let on_request: RequestHandler = Arc::new(move |peer, family, body| {
@@ -304,8 +335,22 @@ impl LiveNode {
         });
         cfg.on_request = Some(on_request);
 
-        let endpoint = tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).expect("server endpoint");
-        let addr = endpoint.local_addr().expect("bound");
+        // payload delivered on the direct path reaches the caller through
+        // a channel; the peer is the connection's authenticated identity
+        let (dtx, drx) = mpsc::unbounded_channel();
+        cfg.on_direct = Some(Arc::new(move |peer, bytes| {
+            let _ = dtx.send((peer, bytes));
+        }));
+        // one socket for QUIC and STUN (design §14.1.1): the node answers
+        // Binding Requests at the address it serves on
+        let traversal = rhtn_transport::traversal::TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), cfg.nat).expect("traversal socket");
+        let endpoint = {
+            let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&cfg.identity)).expect("quinn accepts the profile");
+            let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
+            qcfg.transport_config(Arc::new(tls::transport_config()));
+            rhtn_transport::traversal::endpoint(traversal.clone(), Some(qcfg)).expect("server endpoint")
+        };
+        let addr = traversal.addr().expect("bound");
         // an infra node publishes its own endpoint record per relationship
         // line (`wire-format.md` §7.6, `infra-client-requirements.md` §4.4):
         // the record it holds where the address is unchanged, the next
@@ -334,7 +379,7 @@ impl LiveNode {
             }
         }
         tokio::spawn(node.clone().serve(endpoint.clone()));
-        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits })
+        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits, traversal, upstream_addr: Mutex::new(None), direct: Mutex::new(HashMap::new()), direct_deliveries: Mutex::new(Some(drx)) })
     }
 
     pub fn me(&self) -> Keyhash {
@@ -359,6 +404,7 @@ impl LiveNode {
         }));
         match fresh_attach(&cfg, &self.client_ep, serving, false).await {
             AttachOutcome::Attached(mut session) => {
+                *self.upstream_addr.lock().unwrap() = Some(session.conn.remote_address());
                 self.adjacency.upstream.lock().unwrap().insert(serving, UpstreamSession { outbound: session.outbound.clone(), conn: session.conn.clone() });
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
@@ -385,6 +431,78 @@ impl LiveNode {
             }
             other => other,
         }
+    }
+
+    /// Gather this node's candidates for the direct path (design §14.1.1):
+    /// its host address, and the reflexive address its serving node
+    /// reports, asked of the STUN server at the address it attached to.
+    pub async fn gather(&self) -> Vec<rhtn_transport::traversal::Candidate> {
+        let stun = *self.upstream_addr.lock().unwrap();
+        self.traversal.gather(stun, Duration::from_secs(2)).await
+    }
+
+    /// Prepare the direct path to `peer`: candidates gathered only where
+    /// design §12.6.3's decision says the path may be direct, which is
+    /// inside the horizon absent an override; outside it nothing is
+    /// gathered, nothing exchanged and nothing dialled.
+    pub async fn prepare_direct(&self, peer: &Keyhash) -> Option<Vec<rhtn_transport::traversal::Candidate>> {
+        let path = self.view.lock().unwrap().payload_path(peer, crate::peering::PathOverride::None);
+        match path {
+            crate::peering::PayloadPath::Direct => Some(self.gather().await),
+            crate::peering::PayloadPath::Relayed => None,
+        }
+    }
+
+    /// Open the direct path to `peer` on its candidates: every candidate
+    /// dialled at once, the first handshake under the pinned key kept.
+    /// Whether it opened; a failure is remembered and not retried until
+    /// the next opening.
+    pub async fn open_direct(&self, peer: Keyhash, pins: &rhtn_transport::tls::Pins, candidates: &[rhtn_transport::traversal::Candidate]) -> bool {
+        let me = self.node.cfg.identity.clone();
+        let conn = rhtn_transport::traversal::connect_direct(&self.endpoint, &me, pins, &peer, candidates, self.dial_timeout).await;
+        let mut d = self.direct.lock().unwrap();
+        match conn {
+            Some(c) => {
+                d.insert(peer, DirectState::Connected(c));
+                true
+            }
+            None => {
+                d.insert(peer, DirectState::Failed(std::time::Instant::now()));
+                false
+            }
+        }
+    }
+
+    /// The direct path's state toward `peer`: `Some(true)` held,
+    /// `Some(false)` failed, `None` never opened.
+    pub fn direct_state(&self, peer: &Keyhash) -> Option<bool> {
+        match self.direct.lock().unwrap().get(peer) {
+            Some(DirectState::Connected(_)) => Some(true),
+            Some(DirectState::Failed(_)) => Some(false),
+            None => None,
+        }
+    }
+
+    /// Payload arriving on the direct path, once: the receiver.
+    pub fn take_direct_deliveries(&self) -> DirectInbox {
+        self.direct_deliveries.lock().unwrap().take().expect("taken once")
+    }
+
+    /// Send live payload to `peer`: on the direct path where it is held,
+    /// and otherwise through `relay`, which hands the bytes to the serving
+    /// node.  A direct path that failed is not retried here; a send never
+    /// waits on one.
+    pub async fn send_payload_live(&self, peer: Keyhash, bytes: Vec<u8>, relay: &dyn Fn(Vec<u8>)) -> LiveDelivery {
+        let conn = match self.direct.lock().unwrap().get(&peer) {
+            Some(DirectState::Connected(c)) => Some(c.clone()),
+            _ => None,
+        };
+        if let Some(c) = conn
+            && rhtn_transport::session::deliver(&c, bytes.clone()).await {
+                return LiveDelivery::Direct;
+            }
+        relay(bytes);
+        LiveDelivery::Relayed
     }
 
     /// Originate a topology object this node is a party to.  A recovery or

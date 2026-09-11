@@ -397,6 +397,8 @@ pub enum Event {
     Delivered { bytes: Vec<u8> },
     /// The Attach went as 0-RTT early data on this connection.
     EarlyDataSent,
+    /// A peer opened the direct payload path on this connection.
+    DirectOpened,
     /// This connection's own handshake completed; `early_accepted` says
     /// whether the server took the early data.
     HandshakeDone { early_accepted: bool },
@@ -562,6 +564,9 @@ pub type ReplicateHook = Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>;
 /// the session's own (`wire-format.md` §8.0): the peer it came from, the
 /// frame type, and the body bytes.
 pub type ControlHandler = Arc<dyn Fn([u8; 32], u64, Vec<u8>) + Send + Sync>;
+/// Payload delivered on the direct path (design §14.1.1): the
+/// authenticated peer and one message.
+pub type DirectHandler = Arc<dyn Fn([u8; 32], Vec<u8>) + Send + Sync>;
 
 /// What a node answers on a request stream (`wire-format.md` §9.2): the
 /// authenticated peer, the family, and the body bytes, to a reply body or
@@ -599,6 +604,13 @@ pub struct NodeConfig {
     /// The node's own handling of topology frames on stream 0.  Absent, a
     /// known frame beyond the session's own is logged and dropped.
     pub on_control: Option<ControlHandler>,
+    /// Payload arriving on a direct connection from an authenticated peer
+    /// that opens no session (design §14.1.1).  Absent, such a connection
+    /// is closed.
+    pub on_direct: Option<DirectHandler>,
+    /// The emulated NAT this node's socket sits behind, for a harness
+    /// (`rhtn-sim`); none on a real network.
+    pub nat: Option<std::net::SocketAddr>,
     /// The node's own answers on request streams.  Absent, a currency
     /// request is answered "cannot issue" and anything else fails the stream.
     pub on_request: Option<RequestHandler>,
@@ -622,6 +634,8 @@ impl NodeConfig {
             serves: Arc::new(|_| true),
             replicate: None,
             on_control: None,
+            on_direct: None,
+            nat: None,
             on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
@@ -797,7 +811,32 @@ impl Node {
         let conn = incoming.await.map_err(|e| e.to_string())?;
         let spki = tls::peer_spki(&conn).ok_or("no peer key")?;
         let authenticated = self.cfg.pins.keyhash_for_spki(&spki);
-        let (send, mut recv) = conn.accept_bi().await.map_err(|e| e.to_string())?;
+        // a session opens stream 0 with an Attach; a direct payload path
+        // (design §14.1.1) opens no session and delivers on unidirectional
+        // streams alone, so whichever arrives first says which this is
+        let (send, mut recv) = tokio::select! {
+            bi = conn.accept_bi() => bi.map_err(|e| e.to_string())?,
+            uni = conn.accept_uni() => {
+                let first = uni.map_err(|e| e.to_string())?;
+                let (Some(peer), Some(handler)) = (authenticated, self.cfg.on_direct.clone()) else {
+                    conn.close(VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
+                    return Err("direct path from an unpinned peer or with no handler".into());
+                };
+                self.log.push(Event::DirectOpened);
+                let mut streams = vec![first];
+                loop {
+                    for mut s in streams.drain(..) {
+                        if let Ok(bytes) = s.read_to_end(1 << 20).await {
+                            handler(peer, bytes);
+                        }
+                    }
+                    match conn.accept_uni().await {
+                        Ok(s) => streams.push(s),
+                        Err(_) => return Ok(()),
+                    }
+                }
+            }
+        };
         let mut sender = Sender { send, filter: self.cfg.filter.clone(), log: self.log.clone() };
         // the first known frame must be Attach; unknown ones are skipped
         let (attach_bytes, attach_item) = loop {
@@ -912,8 +951,9 @@ impl Node {
 /// Deliver one message on a fresh unidirectional stream and wait for the
 /// peer to take it: the stream written, finished, and every byte
 /// acknowledged received.  Anything short of that is no delivery, and the
-/// caller leaves the message where it was.
-async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
+/// caller leaves the message where it was.  The direct path delivers the
+/// same way, peer to peer.
+pub async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
     let Ok(mut s) = conn.open_uni().await else { return false };
     if s.write_all(&bytes).await.is_err() || s.finish().is_err() {
         return false;
