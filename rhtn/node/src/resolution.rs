@@ -485,17 +485,17 @@ impl NodeView {
     /// anchor is absent from that table is a caller-side condition with no
     /// request sent (`wire-format.md` §7.7.1, §7.7.3).
     pub fn resolve(&self, adj: &dyn Adjacency, anchors: &AnchorTable, subject: Keyhash, anchor: Keyhash, path: Path, nonce: [u8; 16]) -> Result<(Resolution, Carried), NotResolvable> {
+        // the request goes on a bidirectional stream (`wire-format.md`
+        // §9.2) of a session that can carry one; the caller holds the
+        // resolution and takes its reply
         let req = ResolveRequest { subject, anchor, path: path.bytes.clone(), nibbles: path.nibbles, nonce };
-        if let Some(serving) = self.serving_node {
-            adj.send(&serving, REQUEST_RESOLVE, &req.encode());
-            let r = Resolution { request: req, consumed: 0, hops: vec![serving], endpoints: Vec::new(), arrived: None };
-            return Ok((r, Carried::Delegated(serving)));
-        }
+        if let Some(serving) = self.serving_node
+            && adj.request(&serving, REQUEST_RESOLVE, &req.encode()) {
+                let r = Resolution { request: req, consumed: 0, hops: vec![serving], endpoints: Vec::new(), arrived: None };
+                return Ok((r, Carried::Delegated(serving)));
+            }
         let r = Resolution::begin(anchors, subject, anchor, path, nonce)?;
-        let on_session = adj.has_session(&anchor);
-        if on_session {
-            adj.send(&anchor, REQUEST_RESOLVE, &r.request.encode());
-        }
+        let on_session = adj.has_session(&anchor) && adj.request(&anchor, REQUEST_RESOLVE, &r.request.encode());
         Ok((r, Carried::Direct { sent_on_session: on_session }))
     }
 

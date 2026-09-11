@@ -1145,14 +1145,20 @@ impl Session {
     /// One request on a fresh bidirectional stream (`wire-format.md` §9.2):
     /// the framed request out, the length-prefixed reply body back.
     pub async fn request(&self, frame_type: u64, body: &[u8]) -> Result<Vec<u8>, String> {
-        let (mut send, mut recv) = self.conn.open_bi().await.map_err(|e| e.to_string())?;
-        send.write_all(&control_frame(frame_type, body)).await.map_err(|e| e.to_string())?;
-        send.finish().map_err(|e| e.to_string())?;
-        match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
-            FrameRead::Payload(p) => Ok(p),
-            FrameRead::OverBound(n) => Err(format!("reply over bound: {n}")),
-            FrameRead::Closed(e) => Err(format!("stream ended: {e:?}")),
-        }
+        request_on(&self.conn, frame_type, body).await
+    }
+}
+
+/// One request on a fresh bidirectional stream of `conn` (`wire-format.md`
+/// §9.2): the framed request out, the length-prefixed reply body back.
+pub async fn request_on(conn: &Connection, frame_type: u64, body: &[u8]) -> Result<Vec<u8>, String> {
+    let (mut send, mut recv) = conn.open_bi().await.map_err(|e| e.to_string())?;
+    send.write_all(&control_frame(frame_type, body)).await.map_err(|e| e.to_string())?;
+    send.finish().map_err(|e| e.to_string())?;
+    match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
+        FrameRead::Payload(p) => Ok(p),
+        FrameRead::OverBound(n) => Err(format!("reply over bound: {n}")),
+        FrameRead::Closed(e) => Err(format!("stream ended: {e:?}")),
     }
 }
 

@@ -94,3 +94,30 @@ async fn a_restarted_node_advances_its_endpoint_counter_only_for_a_new_address()
     assert_eq!(n2.view.lock().unwrap().position.seqno.counter, 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// acceptance: CUR-18
+#[tokio::test]
+async fn a_running_node_asks_currency_up_its_session_and_takes_the_answer() {
+    // P (alice) root over N (bob) at index 0 and X (carol) at index 1; N
+    // holds a session upstream to P, and asks P about X
+    let mut s = Signers::new();
+    let a_n = s.adopt("bob", "alice", "alice", &[0], 1);
+    let a_x = s.adopt("carol", "alice", "alice", &[1], 2);
+    let records = [&a_n, &a_x];
+    let infra = ["alice", "bob"];
+    let mut p_view = view_of("alice", table_of("alice", &s, &records, &infra), "alice", &[], s.clock);
+    p_view.set_slot(0, Some(kh("bob")), s.clock);
+    p_view.set_slot(1, Some(kh("carol")), s.clock);
+    let p = LiveNode::start(node_cfg("alice", I), p_view, ids(), anchors());
+    let n = LiveNode::start(node_cfg("bob", I), view_of("bob", table_of("bob", &s, &records, &infra), "alice", &[0], s.clock), ids(), anchors());
+    let ncli = client_cfg("bob");
+    know(&ncli, "alice", p.addr);
+    let AttachOutcome::Attached(_up) = n.attach_upstream(&ncli, kh("alice")).await else { panic!("N attaches to P") };
+    assert!(!n.view.lock().unwrap().staples.contains_key(&kh("carol")));
+    let ask = n.view.lock().unwrap().ask_currency(&n.adjacency, kh("carol"), None, Some(kh("alice")), [8; 16]).expect("asked up the session");
+    assert_eq!(ask.asked, vec![kh("alice")]);
+    assert!(until(4000, || n.view.lock().unwrap().staples.contains_key(&kh("carol"))).await, "P's attestation came back on the request stream and is N's staple");
+    assert!(n.view.lock().unwrap().asks.is_empty(), "the ask is settled");
+    // P serves N and holds no session as N's client, so P cannot ask N
+    assert!(p.view.lock().unwrap().ask_currency(&p.adjacency, kh("carol"), Some(kh("bob")), None, [9; 16]).is_none());
+}

@@ -304,7 +304,7 @@ fn a_move_inside_the_replication_horizon_needs_no_archive_presentation() {
     let d = t.take_object(&*fab, &kh("carol"), KIND_TRANSACTION, &rec.bytes, &ids());
     assert_eq!(d, Decision::Stored);
     assert!(t.table.patrons(&kh("carol")).contains(&kh("w1")), "the adoption completes");
-    assert_eq!(fab.count(rhtn_node::resolution::REQUEST_RESOLVE), 0);
+    assert_eq!(fab.request_count(rhtn_node::resolution::REQUEST_RESOLVE), 0);
     let archive_requests = fab.frames().into_iter().filter(|f| f.frame_type == 2).count();
     assert_eq!(archive_requests, 0, "no archive-fetch request");
 }

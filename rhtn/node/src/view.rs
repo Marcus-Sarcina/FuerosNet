@@ -68,6 +68,13 @@ pub struct NodeView {
     /// its configuration's clock at start, so issuance, outage stamps and
     /// the ladder's intervals all read time that moves.
     pub clock: Clock,
+    /// Currency asks this node has sent and not yet had answered, by nonce
+    /// (`wire-format.md` §7.1): the reply comes back on the request stream
+    /// and settles the ask it names.
+    pub asks: BTreeMap<[u8; 16], crate::currency::CurrencyAsk>,
+    /// Re-resolutions this node has sent after a conflict and not yet had
+    /// answered, by nonce (`wire-format.md` §7.7.3).
+    pub repairs: BTreeMap<[u8; 16], crate::resolution::Resolution>,
     /// The trust policy this node computes standing with: the reference
     /// metric unless its operator substitutes one (design §16.1).  Nothing
     /// the node stores or forwards consults it (design §16.4).
@@ -96,6 +103,8 @@ impl NodeView {
             peers: BTreeSet::new(),
             serving_node: None,
             clock: Arc::new(|| 1_800_000_000),
+            asks: BTreeMap::new(),
+            repairs: BTreeMap::new(),
             policy: Arc::new(ReferenceMetric::default()),
         }
     }

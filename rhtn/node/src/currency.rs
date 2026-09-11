@@ -397,7 +397,7 @@ impl NodeView {
     /// fallback query, sent to the introducer first where one is known, so
     /// the patron learns nothing it did not know.  Nothing waits on the
     /// answer; a party holding supersession evidence refuses instead.
-    pub fn require_currency<L: Lookup + ?Sized>(&self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Requirement {
+    pub fn require_currency<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Requirement {
         if self.is_superseded(subject) {
             return Requirement::Settled(gate(true));
         }
@@ -414,13 +414,29 @@ impl NodeView {
         }
     }
 
-    /// Ask about `subject`: the introducer first, then the patron.
-    pub fn ask_currency(&self, adj: &dyn Adjacency, subject: Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>, nonce: [u8; 16]) -> Option<CurrencyAsk> {
+    /// Ask about `subject`: the introducer first, then the patron, on a
+    /// bidirectional request stream (`wire-format.md` §7.1, §9.2) of a
+    /// session that can carry one.  The ask is held by nonce for its reply.
+    pub fn ask_currency(&mut self, adj: &dyn Adjacency, subject: Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>, nonce: [u8; 16]) -> Option<CurrencyAsk> {
         let mut ask = CurrencyAsk { subject, nonce, introducer, patron, asked: Vec::new() };
-        let to = introducer.filter(|i| adj.has_session(i)).or(patron.filter(|p| adj.has_session(p)))?;
-        adj.send(&to, crate::resolution::REQUEST_CURRENCY, &CurrencyRequest { subject, nonce }.encode());
+        let request = CurrencyRequest { subject, nonce }.encode();
+        let to = introducer.into_iter().chain(patron).filter(|p| adj.has_session(p)).find(|p| adj.request(p, crate::resolution::REQUEST_CURRENCY, &request))?;
         ask.asked.push(to);
+        self.asks.insert(nonce, ask.clone());
         Some(ask)
+    }
+
+    /// Take a reply that came back on a request stream: the ask it names is
+    /// settled, or moved to the patron and held again.  A reply naming no
+    /// outstanding ask concludes nothing.
+    pub fn take_currency_reply<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, bytes: &[u8]) -> Option<AskStep> {
+        let reply = CurrencyReply::decode(bytes).ok()?;
+        let mut ask = self.asks.remove(&reply.nonce())?;
+        let step = self.on_currency_reply(adj, ids, &mut ask, &reply);
+        if matches!(step, AskStep::AskedNext(_)) {
+            self.asks.insert(ask.nonce, ask);
+        }
+        Some(step)
     }
 
     /// Take the reply to an outstanding ask.  Code 1 from the introducer
@@ -439,10 +455,10 @@ impl NodeView {
                 }
             }
             CurrencyReply::CannotIssue { .. } => {
-                let next = ask.patron.filter(|p| !ask.asked.contains(p) && adj.has_session(p));
+                let request = CurrencyRequest { subject: ask.subject, nonce: ask.nonce }.encode();
+                let next = ask.patron.filter(|p| !ask.asked.contains(p) && adj.has_session(p) && adj.request(p, crate::resolution::REQUEST_CURRENCY, &request));
                 match next {
                     Some(p) => {
-                        adj.send(&p, crate::resolution::REQUEST_CURRENCY, &CurrencyRequest { subject: ask.subject, nonce: ask.nonce }.encode());
                         ask.asked.push(p);
                         AskStep::AskedNext(p)
                     }

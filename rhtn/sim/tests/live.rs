@@ -23,6 +23,9 @@ impl rhtn_node::Adjacency for Quiet {
         Vec::new()
     }
     fn send(&self, _: &rhtn_archive::Keyhash, _: u64, _: &[u8]) {}
+    fn request(&self, _: &rhtn_archive::Keyhash, _: u64, _: &[u8]) -> bool {
+        false
+    }
 }
 
 /// P (alice) is the root; N (bob) is its infra child at index 0; C (carol)

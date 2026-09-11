@@ -7473,5 +7473,32 @@
   "then": "After the failed session the store still holds every message C never took and none it took; the second AttachAck reports that count and the drain delivers exactly those, so across both sessions every accepted message was received and nothing was lost. For the attached client each message is stored on acceptance and gone once taken. An implementation that empties the mailbox before delivering, or reports success before the peer has taken the message, fails.",
   "oracle": "behaviour",
   "interpretation": "Taken means the peer acknowledged every byte of the delivery stream, the transport's own boundary; a message whose acknowledgement the failure swallowed may be delivered again, which is the failure mode the design's no-loss rule chooses."
+ },
+ {
+  "id": "CUR-18",
+  "area": "currency",
+  "gap": "currency",
+  "title": "Send the currency fallback and a conflict's re-resolution on bidirectional request streams, up sessions the node holds as a client, and take the replies",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.1",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.1",
+    "text": "Bidirectional request type 8"
+   },
+   {
+    "where": "wire-format.md §9.2",
+    "text": "Every bidirectional stream opens with a request-type tag."
+   }
+  ],
+  "given": "N with a session to X's patron P; and a running N attached upstream to P, where X is P's subordinate. Separately, a fabric on which P is a session N serves.",
+  "when": "N asks about X's currency; P's attestation comes back; a reply naming no outstanding ask arrives; N asks again on the served session; the running N asks the running P.",
+  "then": "The ask travels as one request toward P and nothing on stream 0, and is held by nonce; the reply settles it and the attestation becomes N's staple; the stray reply concludes nothing; on the served session nothing is sent and the ask is refused, since a light client answers no request stream; the running N's staple for X appears from P's answer on the request stream with no ask left open, and P cannot ask N. An implementation that writes a request as a stream-0 control frame fails.",
+  "oracle": "behaviour",
+  "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11]."
  }
 ]

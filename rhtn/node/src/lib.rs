@@ -33,8 +33,14 @@ pub use rhtn_archive::{Keyhash, Txid};
 pub trait Adjacency {
     /// Every peer this node holds a session with.
     fn peers(&self) -> Vec<Keyhash>;
-    /// Send one control frame, already framed, to `peer`.
+    /// Send one control frame, already framed, to `peer` on stream 0.
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]);
+    /// Open a bidirectional request stream to `peer` (`wire-format.md`
+    /// §9.2) and send one request on it; the reply reaches the node through
+    /// its reply path, not here.  Whether it was sent: a session this node
+    /// serves carries none, since a light client answers no request stream,
+    /// and a peer without a session carries nothing.
+    fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool;
     /// Whether a session with `peer` exists right now.
     fn has_session(&self, peer: &Keyhash) -> bool {
         self.peers().contains(peer)

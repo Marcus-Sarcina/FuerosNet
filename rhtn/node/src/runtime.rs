@@ -26,15 +26,42 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// A session this node holds upstream: where its control frames go, and
+/// the connection its request streams open on.
+struct UpstreamSession {
+    outbound: mpsc::UnboundedSender<(u64, Vec<u8>)>,
+    conn: quinn::Connection,
+}
+
 /// A handle into each session this node holds upstream, by peer.
-type Upstream = Arc<Mutex<HashMap<Keyhash, mpsc::UnboundedSender<(u64, Vec<u8>)>>>>;
+type Upstream = Arc<Mutex<HashMap<Keyhash, UpstreamSession>>>;
+
+/// Where the reply to a request this node sent goes: the peer that
+/// answered, the request type, and the reply body.
+pub type ReplyHandler = Arc<dyn Fn(Keyhash, u64, Vec<u8>) + Send + Sync>;
+
+/// Send one request on `conn` and hand the reply to `hook`, off the caller's
+/// thread.  No reply, or no hook, and the request concludes nothing.
+fn request_and_reply(conn: quinn::Connection, peer: Keyhash, request_type: u64, body: &[u8], hook: Arc<Mutex<Option<ReplyHandler>>>) {
+    let body = body.to_vec();
+    tokio::spawn(async move {
+        if let Ok(reply) = rhtn_transport::session::request_on(&conn, request_type, &body).await {
+            let hook = hook.lock().unwrap().clone();
+            if let Some(h) = hook {
+                h(peer, request_type, reply);
+            }
+        }
+    });
+}
 
 /// The frames a node can send: into an attached session, or up a session
-/// it holds as a client.
+/// it holds as a client; and the requests it can make, on the sessions it
+/// holds as a client alone.
 #[derive(Clone)]
 pub struct LiveAdjacency {
     node: Arc<Mutex<Option<Arc<Node>>>>,
     upstream: Upstream,
+    on_reply: Arc<Mutex<Option<ReplyHandler>>>,
 }
 
 impl Adjacency for LiveAdjacency {
@@ -44,13 +71,22 @@ impl Adjacency for LiveAdjacency {
         out
     }
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
-        if let Some(tx) = self.upstream.lock().unwrap().get(peer) {
-            let _ = tx.send((frame_type, body.to_vec()));
+        if let Some(u) = self.upstream.lock().unwrap().get(peer) {
+            let _ = u.outbound.send((frame_type, body.to_vec()));
             return;
         }
         if let Some(n) = self.node.lock().unwrap().as_ref() {
             n.send_control(peer, frame_type, body);
         }
+    }
+    /// A request goes up a session this node holds as the client.  A
+    /// session it serves carries none: a light client answers no request
+    /// stream, so a party attached below cannot be asked [author,
+    /// 2026-09-11].
+    fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
+        let Some(conn) = self.upstream.lock().unwrap().get(peer).map(|u| u.conn.clone()) else { return false };
+        request_and_reply(conn, *peer, request_type, body, self.on_reply.clone());
+        true
     }
 }
 
@@ -70,10 +106,14 @@ fn carry_supersession(node: &Arc<Mutex<Option<Arc<Node>>>>, ids: &[Identity], ki
     }
 }
 
-/// A light client's one session, as an adjacency.
+/// A light client's one session, as an adjacency: control frames on stream
+/// 0, requests on fresh bidirectional streams of the same connection, and
+/// the replies back through `on_reply`.
 pub struct SessionAdjacency {
     pub peer: Keyhash,
     pub outbound: mpsc::UnboundedSender<(u64, Vec<u8>)>,
+    pub conn: Option<quinn::Connection>,
+    pub on_reply: Arc<Mutex<Option<ReplyHandler>>>,
 }
 
 impl Adjacency for SessionAdjacency {
@@ -85,6 +125,29 @@ impl Adjacency for SessionAdjacency {
             let _ = self.outbound.send((frame_type, body.to_vec()));
         }
     }
+    fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
+        let Some(conn) = self.conn.clone().filter(|_| *peer == self.peer) else { return false };
+        request_and_reply(conn, *peer, request_type, body, self.on_reply.clone());
+        true
+    }
+}
+
+/// The reply path into a view: a currency reply settles the ask it answers,
+/// a resolve reply steps the repair it answers.
+fn reply_handler(view: Arc<Mutex<NodeView>>, ids: Arc<Mutex<Vec<Identity>>>, adj: Arc<dyn Adjacency + Send + Sync>) -> ReplyHandler {
+    Arc::new(move |_peer, request_type, bytes| {
+        let mut v = view.lock().unwrap();
+        let i = ids.lock().unwrap();
+        match request_type {
+            crate::resolution::REQUEST_CURRENCY => {
+                v.take_currency_reply(&*adj, &*i, &bytes);
+            }
+            REQUEST_RESOLVE => {
+                v.take_resolve_reply(&*adj, &bytes);
+            }
+            _ => {}
+        }
+    })
 }
 
 /// Requests per requester per window (`wire-format.md` §7.1: rate-limit
@@ -154,7 +217,9 @@ impl LiveNode {
         let anchors = Arc::new(Mutex::new(anchors));
         let ids = Arc::new(Mutex::new(ids));
         let slot: Arc<Mutex<Option<Arc<Node>>>> = Arc::default();
-        let adjacency = LiveAdjacency { node: slot.clone(), upstream: Arc::default() };
+        let adjacency = LiveAdjacency { node: slot.clone(), upstream: Arc::default(), on_reply: Arc::default() };
+        // replies to this node's own requests come back into the view
+        *adjacency.on_reply.lock().unwrap() = Some(reply_handler(view.clone(), ids.clone(), Arc::new(adjacency.clone())));
 
         // stream 0: topology frames into the forwarding rule and the memo
         let (v, i, a, s) = (view.clone(), ids.clone(), adjacency.clone(), slot.clone());
@@ -289,7 +354,7 @@ impl LiveNode {
         }));
         match fresh_attach(&cfg, &self.client_ep, serving, false).await {
             AttachOutcome::Attached(mut session) => {
-                self.adjacency.upstream.lock().unwrap().insert(serving, session.outbound.clone());
+                self.adjacency.upstream.lock().unwrap().insert(serving, UpstreamSession { outbound: session.outbound.clone(), conn: session.conn.clone() });
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
                 let (v, i, a, s) = (self.view.clone(), self.ids.clone(), self.adjacency.clone(), self.adjacency.node.clone());
@@ -383,8 +448,11 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
 pub fn pump_client(session: &mut Session, serving: Keyhash, view: Arc<Mutex<NodeView>>, ids: Arc<Mutex<Vec<Identity>>>) -> SessionAdjacency {
     let (_, dummy) = mpsc::unbounded_channel();
     let mut frames = std::mem::replace(&mut session.frames, dummy);
-    let adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone() };
-    let pump_adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone() };
+    let on_reply: Arc<Mutex<Option<ReplyHandler>>> = Arc::default();
+    let adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
+    let pump_adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
+    let reply_adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
+    *on_reply.lock().unwrap() = Some(reply_handler(view.clone(), ids.clone(), Arc::new(reply_adj)));
     tokio::spawn(async move {
         while let Some((ft, body)) = frames.recv().await {
             let mut v = view.lock().unwrap();

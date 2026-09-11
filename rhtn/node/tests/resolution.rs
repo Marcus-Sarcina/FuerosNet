@@ -225,12 +225,13 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     let x_path = Path::from_indices(&[4, 1]);
     let (mut lr, carried) = l.resolve(&*lfab, &lanchors, kh("w5"), kh("w7"), x_path.clone(), nonce(7)).unwrap();
     assert_eq!(carried, Carried::Delegated(kh("bob")));
-    let sent: Vec<_> = lfab.frames();
+    let sent: Vec<_> = lfab.requests();
     assert_eq!(sent.len(), 1, "L's only request");
+    assert!(lfab.frames().is_empty(), "on a request stream, nothing on stream 0");
     assert_eq!(sent[0].to, kh("bob"), "on its session with S");
     assert_eq!(sent[0].frame_type, REQUEST_RESOLVE);
     let at_s = ResolveRequest::decode(&sent[0].body).unwrap();
-    assert!(lfab.to(&kh("w7"), REQUEST_RESOLVE).is_empty(), "L opens no connection to W");
+    assert!(lfab.requests_to(&kh("w7"), REQUEST_RESOLVE).is_empty(), "L opens no connection to W");
     // S takes L's request and resolves on L's behalf from its own table
     let mut anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     anchors.offer(AnchorEntry::parse(&anchor_entry(&id("w7"), &[point(7, 7007)], 50, Seqno { series: 1, counter: 1 })).unwrap(), &ids());
@@ -285,7 +286,7 @@ fn a_client_two_levels_down_is_answered_with_the_residual_suffix() {
     let ResolveReply::Serving { serving, .. } = &reply else { panic!("{reply:?}") };
     assert_eq!(serving.node, kh("alice"), "field 1 is S");
     assert_eq!(serving.residual.indices(), vec![3, 4], "the non-empty suffix identifying L beneath S");
-    assert_eq!(sfab.count(REQUEST_RESOLVE), 0, "no request is forwarded to P");
+    assert_eq!(sfab.request_count(REQUEST_RESOLVE), 0, "no request is forwarded to P");
 }
 
 // acceptance: RES-09

@@ -34,6 +34,11 @@ impl Adjacency for Links {
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
         self.out.0.lock().unwrap().push((*peer, frame_type, body.to_vec()));
     }
+    /// The mesh carries stream 0 between views and opens no request
+    /// streams: the model it restates has none.
+    fn request(&self, _peer: &Keyhash, _request_type: u64, _body: &[u8]) -> bool {
+        false
+    }
 }
 
 /// Several node views with links between them, some of which may be cut.

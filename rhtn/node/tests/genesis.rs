@@ -44,7 +44,7 @@ fn subnet() -> (World, NodeView, NodeView, NodeView) {
 
 #[test]
 fn a_new_root_comes_into_being_needing_nothing() {
-    let r = new_root("w9");
+    let mut r = new_root("w9");
     let me = kh("w9");
     assert!(r.is_root());
     assert_eq!(r.patron(), None);
@@ -125,7 +125,7 @@ fn an_existing_node_reaches_a_new_root_through_its_anchor_table() {
     let bfab = Fabric::with(&[kh("w9")]);
     let (mut res, carried) = bob.resolve(&*bfab, &anchors, kh("w9"), kh("w9"), Path::empty(), [3; 16]).unwrap();
     assert!(matches!(carried, Carried::Direct { sent_on_session: true }));
-    let sent = bfab.to(&kh("w9"), REQUEST_RESOLVE);
+    let sent = bfab.requests_to(&kh("w9"), REQUEST_RESOLVE);
     assert_eq!(sent.len(), 1);
     let req = ResolveRequest::decode(&sent[0]).unwrap();
     assert_eq!((req.subject, req.anchor, req.nibbles), (kh("w9"), kh("w9"), 0));
@@ -143,5 +143,5 @@ fn an_existing_node_reaches_a_new_root_through_its_anchor_table() {
     // (`wire-format.md` §7.7.1)
     let empty = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     assert!(bob.resolve(&*bfab, &empty, kh("w9"), kh("w9"), Path::empty(), [4; 16]).is_err());
-    assert_eq!(bfab.to(&kh("w9"), REQUEST_RESOLVE).len(), 1, "no second request left");
+    assert_eq!(bfab.requests_to(&kh("w9"), REQUEST_RESOLVE).len(), 1, "no second request left");
 }

@@ -44,11 +44,15 @@ pub struct SentFrame {
     pub body: Vec<u8>,
 }
 
-/// An in-process stand-in for the sessions a node holds.
+/// An in-process stand-in for the sessions a node holds: control frames
+/// and requests are recorded apart, as they travel apart, and a peer this
+/// node serves carries no request.
 #[derive(Default)]
 pub struct Fabric {
     peers: Mutex<BTreeSet<Keyhash>>,
+    served: Mutex<BTreeSet<Keyhash>>,
     sent: Mutex<Vec<SentFrame>>,
+    requests: Mutex<Vec<SentFrame>>,
 }
 
 impl Fabric {
@@ -74,6 +78,26 @@ impl Fabric {
 
     pub fn clear(&self) {
         self.sent.lock().unwrap().clear();
+        self.requests.lock().unwrap().clear();
+    }
+
+    /// Mark `peer` as a session this node serves: it carries no request.
+    pub fn serve(&self, peer: &Keyhash) {
+        self.served.lock().unwrap().insert(*peer);
+    }
+
+    /// Every request sent: to whom, of what type, with what body.
+    pub fn requests(&self) -> Vec<SentFrame> {
+        self.requests.lock().unwrap().clone()
+    }
+
+    /// Requests of one type sent to one peer.
+    pub fn requests_to(&self, peer: &Keyhash, request_type: u64) -> Vec<Vec<u8>> {
+        self.requests().into_iter().filter(|f| f.to == *peer && f.frame_type == request_type).map(|f| f.body).collect()
+    }
+
+    pub fn request_count(&self, request_type: u64) -> usize {
+        self.requests().iter().filter(|f| f.frame_type == request_type).count()
     }
 
     /// Frames of one type sent to one peer.
@@ -97,6 +121,13 @@ impl Adjacency for Fabric {
     }
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
         self.sent.lock().unwrap().push(SentFrame { to: *peer, frame_type, body: body.to_vec() });
+    }
+    fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
+        if !self.peers.lock().unwrap().contains(peer) || self.served.lock().unwrap().contains(peer) {
+            return false;
+        }
+        self.requests.lock().unwrap().push(SentFrame { to: *peer, frame_type: request_type, body: body.to_vec() });
+        true
     }
 }
 

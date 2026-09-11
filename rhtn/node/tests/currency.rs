@@ -149,7 +149,7 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     let rec = n.countersign_adoption(&body, &id("bob")).unwrap();
     assert_eq!(rec.signers, vec![x, kh("alice")]);
     // and nothing about X's currency was asked of anyone first
-    assert_eq!(fab.count(REQUEST_CURRENCY), 0);
+    assert_eq!(fab.request_count(REQUEST_CURRENCY), 0);
 }
 
 // acceptance: CUR-06
@@ -266,7 +266,7 @@ fn a_peering_is_proposed_with_no_staple_however_many_issuers_are_dark() {
     // and again, with nobody any more reachable than before
     let second = s.propose_peering(&kh("w5"), &other_point, &pop, &other_back).expect("and again");
     assert!(!second.is_empty());
-    assert_eq!(fab.count(REQUEST_CURRENCY), 0, "nothing about S's currency was asked of anyone");
+    assert_eq!(fab.request_count(REQUEST_CURRENCY), 0, "nothing about S's currency was asked of anyone");
 }
 
 // acceptance: CUR-11
@@ -286,13 +286,13 @@ fn a_caller_with_a_stale_staple_asks_its_introducer_first() {
         Requirement::Settled(g) => panic!("{g:?}"),
     };
     assert_eq!(ask.asked, vec![introducer], "N's first request goes toward I");
-    assert_eq!(fab.to(&introducer, REQUEST_CURRENCY).len(), 1);
-    assert_eq!(fab.to(&patron, REQUEST_CURRENCY).len(), 0, "and none toward X's patron");
+    assert_eq!(fab.requests_to(&introducer, REQUEST_CURRENCY).len(), 1);
+    assert_eq!(fab.requests_to(&patron, REQUEST_CURRENCY).len(), 0, "and none toward X's patron");
     // I answers code 1: only then is the patron asked
     let cannot = CurrencyReply::CannotIssue { nonce: ask.nonce };
     let step = n.on_currency_reply(&*fab, &ids(), &mut ask, &cannot);
     assert_eq!(step, AskStep::AskedNext(patron));
-    assert_eq!(fab.to(&patron, REQUEST_CURRENCY).len(), 1);
+    assert_eq!(fab.requests_to(&patron, REQUEST_CURRENCY).len(), 1);
     // and the patron's code 1 exhausts the ask: the caller concludes nothing
     assert_eq!(n.on_currency_reply(&*fab, &ids(), &mut ask, &cannot), AskStep::Exhausted);
     // where I holds no session at all, the patron is asked at once
@@ -330,11 +330,11 @@ fn expiry_is_decided_against_the_relying_partys_own_clock() {
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Current);
     n.take_staple(&ids(), &kh("bob"), &staple, &[]);
     assert_eq!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Settled(Gate::Proceed), "current: nothing to ask");
-    assert_eq!(fab.count(REQUEST_CURRENCY), 0);
+    assert_eq!(fab.request_count(REQUEST_CURRENCY), 0);
     n.set_now(t + 1);
     assert_eq!(n.read_staple(&ids(), &staple, &kh("bob"), &[]).1, Staple::Expired);
     assert!(matches!(n.require_currency(&*fab, &ids(), &kh("bob"), Some(kh("w1")), None), Requirement::Asked(_)), "expired: the fallback query is sent");
-    assert_eq!(fab.count(REQUEST_CURRENCY), 1);
+    assert_eq!(fab.request_count(REQUEST_CURRENCY), 1);
 }
 
 /// Not a catalogue entry: the relying party places the issuer.  A staple
@@ -391,4 +391,33 @@ fn issuance_and_the_ladder_read_a_clock_that_moves() {
     assert_eq!(g.rung_for(&cur, &kh("carol")), None, "within the interval");
     clock.fetch_add(cur.grandpatron_after, Ordering::SeqCst);
     assert_eq!(g.rung_for(&cur, &kh("carol")), Some(Rung::Grandpatron), "the interval elapsed on the clock alone");
+}
+
+// acceptance: CUR-18
+#[test]
+fn a_currency_ask_goes_on_a_request_stream_and_its_reply_settles_it() {
+    let mut w = World::new();
+    let mut n = view("alice", table_with(kh("alice"), &w, &[], &["alice"]), "alice", &[]);
+    n.set_now(w.tick());
+    let (x, patron) = (kh("bob"), kh("carol"));
+    let fab = Fabric::with(&[patron]);
+    let ask = n.ask_currency(&*fab, x, None, Some(patron), nonce(18)).expect("asked");
+    assert_eq!(fab.requests_to(&patron, REQUEST_CURRENCY).len(), 1, "one request stream toward the patron");
+    assert!(fab.frames().is_empty(), "and nothing on stream 0");
+    assert!(n.asks.contains_key(&ask.nonce), "held for its reply");
+    // the reply comes back by the request path and settles the ask
+    let att = tx::currency_attestation(&id("carol"), &x, &x, n.now(), n.now() + 36_000, ROLE_PATRON);
+    let reply = CurrencyReply::Attestation { nonce: ask.nonce, bytes: att }.encode();
+    assert_eq!(n.take_currency_reply(&*fab, &ids(), &reply), Some(AskStep::Current));
+    assert!(!n.asks.contains_key(&ask.nonce));
+    assert!(n.staples.contains_key(&x), "the attestation is the staple now held");
+    // a reply naming no outstanding ask concludes nothing
+    assert_eq!(n.take_currency_reply(&*fab, &ids(), &reply), None);
+    // a session this node serves carries no request: a light client
+    // answers no request stream, so the patron attached below cannot be asked
+    let below = Fabric::with(&[patron]);
+    below.serve(&patron);
+    assert!(n.ask_currency(&*below, x, None, Some(patron), nonce(19)).is_none());
+    assert_eq!(below.request_count(REQUEST_CURRENCY), 0);
+    assert!(below.frames().is_empty());
 }

@@ -268,6 +268,21 @@ impl NodeView {
         }
     }
 
+    /// Take the reply to a repair, back on its request stream: the
+    /// resolution it names steps, a referral is followed where a session
+    /// with the next hop exists, and an arrival or a failure ends it.
+    pub fn take_resolve_reply(&mut self, adj: &dyn Adjacency, bytes: &[u8]) -> Option<crate::resolution::Step> {
+        let reply = crate::resolution::ResolveReply::decode(bytes).ok()?;
+        let mut r = self.repairs.remove(&reply.nonce())?;
+        let step = r.take(&reply);
+        if let crate::resolution::Step::Continue(referral) = &step
+            && adj.has_session(&referral.next)
+            && adj.request(&referral.next, crate::resolution::REQUEST_RESOLVE, &r.request.encode()) {
+                self.repairs.insert(r.request.nonce, r);
+            }
+        Some(step)
+    }
+
     /// Re-offer everything whose prerequisite has since arrived
     /// (`wire-format.md` §10.1.1's *hold it, fetch the key*).
     pub fn release_pending<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L) -> Vec<Decision> {
@@ -298,9 +313,14 @@ impl NodeView {
             nonce: rhtn_transport::tls::random_bytes(),
         };
         // a light client asks its serving node; an infra node asks the
-        // anchor, where a session with it exists
+        // anchor, where a session that can carry a request exists; the
+        // request goes on a bidirectional stream (§9.2) and is held for
+        // its reply
         let target = self.serving_node.or(Some(loc.anchor)).filter(|t| adj.has_session(t))?;
-        adj.send(&target, crate::resolution::REQUEST_RESOLVE, &req.encode());
+        if !adj.request(&target, crate::resolution::REQUEST_RESOLVE, &req.encode()) {
+            return None;
+        }
+        self.repairs.insert(req.nonce, crate::resolution::Resolution { request: req.clone(), consumed: 0, hops: vec![target], endpoints: Vec::new(), arrived: None });
         Some(req)
     }
 

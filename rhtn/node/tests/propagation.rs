@@ -194,7 +194,7 @@ fn equal_seqnos_with_different_contents_retire_the_pair() {
     assert!(s.n.store.endpoint(&kh(x)).is_none(), "neither is current");
     assert_eq!(s.fab.count(FRAME_TOPOLOGY_PUSH), 0, "nothing further for that pair");
     // and it repairs by re-resolving
-    let resolutions: Vec<Vec<u8>> = s.fab.frames().into_iter().filter(|f| f.frame_type == REQUEST_RESOLVE).map(|f| f.body).collect();
+    let resolutions: Vec<Vec<u8>> = s.fab.requests().into_iter().filter(|f| f.frame_type == REQUEST_RESOLVE).map(|f| f.body).collect();
     assert_eq!(resolutions.len(), 1, "a resolution for X leaves N");
     let req = ResolveRequest::decode(&resolutions[0]).unwrap();
     assert_eq!(req.subject, kh(x));
