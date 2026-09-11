@@ -8691,3 +8691,33 @@ leaf's outward dial share the leaf's NAT mapping only because both cross
 the same emulated NAT; the leaf's two sockets — the one it serves and
 dials peers on, the one it dials upstream on — are distinct, as they
 would be on a phone.
+
+**Milestone 10, resources, built (2026-09-11).** One gate-green commit,
+738b535: the resource objects in `rhtn-archive`, the catalog service, the
+gateway with its strict HTTP parse, the role table and the package host in
+`rhtn-node`, the early-data proof in `rhtn-transport`, and the catalog
+view in `rhtn-client`. All 24 RSC entries carry a marker; 282 of 292
+entries implemented, 0 flags. Design §24's order is complete. Two readings
+are the assistant's and open to reversal:
+
+- **The package host is a binding table, not a runtime.**
+  `infra-client-requirements.md` §9.2 expects a component-model sandbox
+  and calls its effectiveness an open engineering question; the plan
+  names `wasmtime` for when `rhtn-resources` arrives. The reference
+  encodes the contract the sandbox must honour — two exports, the
+  credentialled request and its response, and no binding for topology,
+  liveness, the queue, prekeys or role inputs — as the host's export list,
+  and refuses a manifest importing anything else. A backend is a trait a
+  test stands in for. Whether a wasm runtime is adopted now is his.
+- **A request to a brokered resource through the node is unavailable.**
+  Design §11.7 and `resource-requirements.md` §3 have the client reach a
+  brokered service itself; the node holds no backend to carry a
+  `ResourceRequest` to, so one arriving is answered code 2 after the
+  gates. No document says which code such a request gets, since none
+  expects it.
+
+Found on the way: the HTTP parser is the reference's own rather than a
+crate's, because `wire-format.md` §11.2 asks for rejection of exactly the
+tolerances a general parser exists to provide; and `ClientConfig::tls_for`
+is public now, so a test can dial a resumed session and put a request in
+early data by hand.

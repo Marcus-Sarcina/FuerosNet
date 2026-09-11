@@ -63,7 +63,7 @@ document cites `rhtn/`; the code cites the documents.
 | `rhtn-node` | Serving; queue; currency issuance and escalation; resolution and anchor table; endpoint records; subtree acknowledgement; prekey service; sibling replication; topology propagation and the rootward memo; role table and hosted-session lifecycle; catalog | `infra-client-requirements.md` §1 to §4, §6, §10, §11; design §3.4, §12, §14.1.2, §14.1.6, §15; `wire-format.md` §6, §7.1, §7.2, §7.5, §7.6, §7.7, §7.8, §10 | Sim scenarios from `tla/`; `wire-only/currency` and `tla/IssuerAuthorisation` as tests; queue and heartbeat tests (section 8) |
 | `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling | `light-client-requirements.md` §1 to §8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
 | `rhtn-policy` | The reference flow metric; the conformance test; the policy interface | design §16, §17; `models/simulation/flow_metric.py` | The four regression cases carried across; fixed-graph expected scores |
-| `rhtn-resources` (later) | Catalog registration, query and lifecycle; request evaluation order and refusal; sandbox with no network bindings; packaging; gateways | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
+| `rhtn-resources` (later) | The component-model runtime for hosted packages and their packaging. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5); what this crate still owes is the sandbox itself | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
 | `rhtnd`, `rhtn` | The node daemon and the developer CLI | | Smoke tests |
 
@@ -274,8 +274,37 @@ dials outward and never asks STUN. All six traversal entries pass; 258 of
 relay rather than RFC 8656, and candidates travel on the relayed
 end-to-end channel, so the wire carries no signalling object.
 
-Then, in order: resources (step 10). The mobile application is its own
-track once the client core is stable.
+**Milestone 10, resources** (design §24 step 10). Exit: the 24 resource
+entries pass. Done: `rhtn-archive` carries the resource objects — scopes,
+the owner-signed entry, the resource-signed abuse report, the query, the
+registration and the request with their replies — checked against the
+corpus's fixtures; `rhtn-node` the catalog, registered over the owner's
+own session, one owner per keyhash, replaced without an archive, filtered
+at answer time by a scope evaluated over the table, ordered by resource
+then owner with the continuation, the owner's signature returned
+unchanged, and an asker outside the horizon given no reply; the gateway,
+evaluating a request in the normative order from one snapshot, parsing
+and re-serialising the HTTP message strictly, refusing the ambiguous,
+routing by the resource, stripping the caller's `rhtn-*` headers and
+presenting the pairwise principal, the roles, the audience and a session
+minted per resource, handing off once and never retrying, and ending the
+hosted session on a row change; the role table materialised and refusing
+a row wider than 64; acknowledgements issued under policy and lapsing
+with the relationship; the package host's two exports and nothing else;
+and abuse reports stored for the owner and carried nowhere.
+`rhtn-transport` proves a request stream is never processed in early
+data and carries one request. `rhtn-client` sweeps the catalog and reads
+a repeated continuation as truncation, routes to a brokered service only
+where it matches the signed entry, shows the page as served, and
+surfaces an unrecognised declaration. All 24 resource entries pass; 282
+of 292 entries pass. Two readings are open to the author and recorded in
+`Robot/review-tracking.md`: the package host is a binding table without
+a component runtime, and a request to a brokered resource through the
+node is answered unavailable.
+
+That completes design §24's order. The mobile application is its own
+track once the client core is stable; what remains in the catalogue is
+PAY-13, on the library decision, and the nine manual product entries.
 
 ---
 
