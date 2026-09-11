@@ -8426,3 +8426,68 @@ the corpus's stale fixtures and reply families — follow.
   only; the verifier reports ALL CHECKS PASS over it.
 
 Two entries added, 264 in all, 171 of 262 implemented, 0 flags.
+
+**Conformance review of `rhtn/` at ea4d5aa, remediated (2026-09-10 to
+2026-09-11).** The review (`conformance-review/`, untracked, the reviewer's
+own directory with a harness of twelve assertions) reported twelve findings
+against the implemented components, eight P1 and four P2, and a coverage
+section on the unbuilt subsystems, which the author set aside. All twelve
+held on verification: the harness reproduced eleven here exactly as
+recorded, and the three source-traced findings (F08, F10, F12) were
+confirmed by reading the paths cited. Nothing rested on a misreading of the
+root documents. One ruling was needed and given: a light client answers no
+request stream, so a request goes only up a session the node holds as the
+client, and a party attached below cannot be asked (2026-09-11). Applied,
+one gate-green commit per finding or pair, in review order within three
+groups:
+
+- **F01, F03** (2321e99): the COSE container checked in the four places a
+  COSE array is read; an embedded block by one hybrid signer carries exactly
+  two entries in canonical order, so an empty block no longer verifies.
+  DEC-19.
+- **F02** (c6a3b2e): the body checked against the type its envelope names,
+  never guessed from shape; exactly one evidence form; the Recovery block's
+  consistency rules; two distinct parties in every two-party type; a
+  peering's evidence and a reissue's counter; a formation genesis-rooted
+  with no evidence arrays, a normal record witnessed, participants distinct.
+  DEC-20 to DEC-22. Wider than the review's three reproductions, since the
+  decoder had none of §4.1's Recovery rules and the corpus no negative for
+  any of them: three boundary fixtures that omitted their evidence were
+  repaired in the generator and nine negatives added, the envelope-class
+  ones now run through the verifier. The test worlds meet established keys
+  on a witnessed normal record, a key forming only once (`wire-format.md`
+  §3.2), which every harness had been violating.
+- **F07** (e29271e): the packed-path invariant at the schema, the resolver's
+  decoder and the archive's locator decoder; hop extraction total. DEC-23.
+- **F04, F09** (02d2ed8): a departure held and settled against the series it
+  names in any arrival order; a re-adoption's new series untouched.
+  TOP-18. The mailbox on disk resumes its sequence and creates exclusively.
+  QUE-17.
+- **F05, F12** (a929b8b): every stored recovery or reissue carried into the
+  serving state on both paths, and seeded from the store at start. QUE-18.
+  Own endpoints published per relationship line from what is held: replay
+  unchanged, next counter for a change, the position advancing with it.
+  RES-17.
+- **F11, F10** (9574398): a clock source read at every decision, the running
+  node's installed at start, the simulation harness pinning each node at
+  its scenario's epoch. CUR-17. Session recording a test facility, off by
+  default on both sides. SES-16.
+- **F08** (2276ef8): every accepted message enters the store; a drain per
+  recipient delivers oldest first and removes each message once the peer
+  has acknowledged every byte; the immediate path is the same path. QUE-19.
+  Taken means transport-acknowledged, so a message whose acknowledgement a
+  failure swallowed may go twice: the no-loss failure mode.
+- **F06** (5ff6f18): the adjacency gains a request operation on a
+  bidirectional stream; the currency ask and a conflict's re-resolution use
+  it and are held by nonce for replies, which come back through a reply
+  path into the view; the test fabric records requests apart from control
+  frames. CUR-18. The ruling above is the documented limit; what a node does
+  with a repair's answer beyond following referrals is not specified and
+  not built.
+
+Numbers: Thirteen entries added, 277 in all, 184 of 275 implemented,
+0 flags; each commit's gate green. The review harness rerun at the end:
+12 of 12 pass on a copy in the scratchpad, after two adaptations to its own code, the session-adjacency literal
+gaining the two fields the request path added and the view's clock set
+through its setter; the reviewer's directory itself is untouched and
+untracked.
