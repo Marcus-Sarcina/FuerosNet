@@ -511,3 +511,31 @@ fn own_endpoint_publication_replays_or_advances_per_relationship_line() {
     // no position in a subnet: nothing to publish there
     assert!(c.publish_own_endpoints(&kh("carol"), std::slice::from_ref(&b)).is_none());
 }
+
+// acceptance: RES-18
+#[test]
+fn a_self_signed_record_without_a_signature_or_with_a_failing_one_is_malformed_under_a_held_key() {
+    let t = tree();
+    let mut a = t.a;
+    let good = endpoint_record(&id("bob"), &[point(1, 7101)], Seqno { series: 1, counter: 9 });
+    let without = rhtn_codec::cbor::map_without_key(&good, 4).unwrap();
+    let mut failing = good.clone();
+    *failing.last_mut().unwrap() ^= 1;
+    let no_bob: Vec<_> = ids().into_iter().filter(|i| i.keyhash != kh("bob")).collect();
+    // no signature slot: malformed whoever holds the key
+    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &without, &ids()), rhtn_node::store::Decision::Malformed(_)));
+    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &without, &no_bob), rhtn_node::store::Decision::Malformed(_)));
+    // a failing signature under a held key: malformed, never gossip
+    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &failing, &ids()), rhtn_node::store::Decision::Malformed(_)));
+    assert!(a.store.endpoint(&kh("bob")).is_none_or(|e| e.seqno.counter < 9), "nothing at counter 9 entered");
+    // the same record where the key is not held: gossip, checked at contact
+    assert_eq!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &failing, &no_bob), rhtn_node::store::Decision::Stored);
+    // the anchor entry holds the same line
+    let entry = anchor_entry(&id("bob"), &[point(1, 7101)], 3, Seqno { series: 1, counter: 9 });
+    assert!(AnchorEntry::parse(&rhtn_codec::cbor::map_without_key(&entry, 5).unwrap()).is_err(), "no signature slot");
+    let mut bad_entry = entry.clone();
+    *bad_entry.last_mut().unwrap() ^= 1;
+    let mut strict = AnchorTable::new(0, Ingestion::VerifiedOnAcceptance);
+    assert!(!strict.offer(AnchorEntry::parse(&bad_entry).unwrap(), &ids()), "a failing signature under a held key is refused");
+    assert!(strict.offer(AnchorEntry::parse(&entry).unwrap(), &ids()));
+}

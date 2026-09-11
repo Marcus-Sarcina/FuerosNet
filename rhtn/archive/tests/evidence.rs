@@ -278,3 +278,35 @@ fn nested_signed_structures_are_checked_inside_a_body() {
     assert!(check_body(&peering(&[127, 0, 0, 1]), &rhtn_codec::cbor::parse_all(&peering(&[127, 0, 0, 1])).unwrap()).is_ok());
     assert!(body_err(&peering(&[127, 0, 0, 1, 9])).contains("address width"));
 }
+
+// acceptance: DEC-26
+#[test]
+fn a_missing_embedded_signers_key_is_the_third_outcome_and_names_the_key() {
+    let mut w = World::new(&["alice", "bob", "carol", "alice2"]);
+    let pop = w.meet("alice", "bob");
+    let block = transfer_block(w.id("carol"), &w.kh("alice"), &w.kh("bob"));
+    let xfer = w.adopt_with("alice", "bob", Evidence::Transfer { former: w.kh("carol"), block }, 1, None);
+    let without = |name: &str| -> Vec<rhtn_crypto::Identity> { w.lookup().into_iter().filter(|i| i.keyhash != w.kh(name)).collect() };
+    // the former patron's key absent: neither verified nor rejected, and
+    // the identity to fetch is named
+    assert_eq!(xfer.check_signatures(&without("carol")), SigStatus::Unverifiable { missing: w.kh("carol") });
+    assert_eq!(xfer.check_signatures(&w.lookup()), SigStatus::Verified);
+    // a recovery: the verifier's key, then the prior key, each named
+    let (old, new, carol, bob) = (w.id("alice"), w.id("alice2"), w.id("carol"), w.id("bob"));
+    let qid = rhtn_codec::cose::sha256(b"dec-26");
+    let resp = recovery_response(carol, new, &qid, &old.public.keyhash);
+    let rec = Evidence::Recovery(recovery_block(old, &new.public.keyhash, &bob.public.keyhash, vec![resp]));
+    let body = adoption_bytes(&w, "alice2", "bob", rec, 2);
+    let rec = parsed(&w, TYPE_ADOPTION, &body, &["alice2", "bob"]).unwrap();
+    assert_eq!(rec.check_signatures(&without("carol")), SigStatus::Unverifiable { missing: w.kh("carol") });
+    assert_eq!(rec.check_signatures(&without("alice")), SigStatus::Unverifiable { missing: w.kh("alice") });
+    assert_eq!(rec.check_signatures(&w.lookup()), SigStatus::Verified);
+    // a failing embedded signature under a held key is still a failure
+    let mut bad = xfer.bytes.clone();
+    let r9 = value_slice(&bad[xfer.body.clone()], 9).unwrap();
+    let at = xfer.body.start + r9.end - 1;
+    bad[at] ^= 1;
+    let bad = Record::parse(&bad).unwrap();
+    assert!(matches!(bad.check_signatures(&w.lookup()), SigStatus::Invalid(_)));
+    let _ = pop;
+}

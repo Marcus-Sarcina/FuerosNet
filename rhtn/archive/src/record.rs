@@ -101,9 +101,16 @@ impl Record {
                 return SigStatus::Unverifiable { missing: *s };
             }
         }
+        // an embedded signer's key — a former patron, a prior key, a
+        // verifier — is resolved inside verification, and its absence is
+        // the same third outcome as an envelope signer's
         match verify::envelope(ids, &self.bytes) {
             Ok(_) => SigStatus::Verified,
-            Err(e) => SigStatus::Invalid(e),
+            Err(verify::Failure::MissingKey(k)) => match <[u8; 32]>::try_from(k.as_slice()) {
+                Ok(missing) => SigStatus::Unverifiable { missing },
+                Err(_) => SigStatus::Invalid("a signer named by a value that is not a keyhash".into()),
+            },
+            Err(verify::Failure::Invalid(e)) => SigStatus::Invalid(e),
         }
     }
 

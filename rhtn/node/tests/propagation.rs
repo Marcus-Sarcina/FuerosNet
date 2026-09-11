@@ -487,3 +487,35 @@ fn a_cycle_memo_about_an_emptied_slot_is_confirmed_by_the_empty_row() {
     assert_eq!(s2.n.receive_memo(&*s2.fab, &kh("carol"), &m.encode()), MemoOutcome::Unconfirmed);
     assert_eq!(s2.fab.frames().len(), 0);
 }
+
+// acceptance: DEC-26
+#[test]
+fn an_object_whose_embedded_signer_key_is_missing_waits_and_then_flows() {
+    // alice, under bob, moves to carol on bob's countersignature; the
+    // receiving node holds every key but bob's, the former patron's
+    let mut w = World::new();
+    let (a1, _) = w.adopt("alice", "bob", 1);
+    let (ba, bc) = (w.archives[&kh("alice")].next_back_pointers(), vec![rhtn_archive::genesis(&kh("carol"))]);
+    let block = rhtn_archive::tx::transfer_block(&id("bob"), &kh("alice"), &kh("carol"));
+    let body = rhtn_archive::tx::adoption_body(&rhtn_archive::tx::Adoption {
+        node: kh("alice"),
+        patron: kh("carol"),
+        locator: rhtn_archive::tx::Locator { anchor: kh("carol"), path: vec![0x10], nibbles: 1, seqno: Seqno { series: 2, counter: 0 } },
+        timestamp: w.clock + 10,
+        key_material: None,
+        evidence: rhtn_archive::tx::Evidence::Transfer { former: kh("bob"), block },
+        presented_head: None,
+        back: [&ba, &bc],
+    });
+    let xfer = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &body, &[&id("alice"), &id("carol")]);
+    let mut c = view("carol", table_with(kh("carol"), &w, &[&a1], &["bob", "carol"]), "carol", &[]);
+    let fab = Fabric::with(&[kh("alice")]);
+    let partial: Vec<_> = ids().into_iter().filter(|i| i.keyhash != kh("bob")).collect();
+    match c.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &xfer, &partial) {
+        Decision::Held(p) => assert_eq!(p.missing_key, Some(kh("bob")), "held for the former patron's key"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(fab.count(FRAME_TOPOLOGY_PUSH), 0, "nothing before the key arrives");
+    assert_eq!(c.release_pending(&*fab, &ids()), vec![Decision::Stored]);
+    assert!(c.table.patrons(&kh("alice")).contains(&kh("carol")));
+}

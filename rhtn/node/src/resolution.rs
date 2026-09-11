@@ -338,8 +338,13 @@ impl AnchorEntry {
     /// Verifiable only by a holder that already has the anchor's key
     /// (`wire-format.md` §7.2): the entry carries the keyhash, not the key.
     pub fn signature_checks<L: Lookup + ?Sized>(&self, ids: &L) -> Option<bool> {
-        ids.identity(&self.anchor)?;
-        verify::record(ids, "AnchorEntry", &self.bytes).ok()
+        // unknown only for want of the key: a signature that fails or is
+        // malformed under a key this holder has is a failure
+        match verify::record(ids, "AnchorEntry", &self.bytes) {
+            Ok(v) => Some(v),
+            Err(verify::Failure::MissingKey(_)) => None,
+            Err(verify::Failure::Invalid(_)) => Some(false),
+        }
     }
 }
 
@@ -709,7 +714,7 @@ impl SignedLocator {
 
     /// Signed by the subject; a bare `Locator` presented alone is rejected.
     pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
-        verify::record(ids, "SignedLocator", &self.bytes)
+        verify::record(ids, "SignedLocator", &self.bytes).map_err(|e| e.to_string())
     }
 }
 

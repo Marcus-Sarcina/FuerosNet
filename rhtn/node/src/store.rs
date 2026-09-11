@@ -52,10 +52,15 @@ impl EndpointRecord {
     }
 
     /// Self-signed by the node it names; checkable only by a holder that
-    /// already has the key (`wire-format.md` §7.6).
+    /// already has the key (`wire-format.md` §7.6).  Unknown only for want
+    /// of the key: a signature that fails or is malformed under a key this
+    /// holder has is a failure, never gossip.
     pub fn signature_checks<L: Lookup + ?Sized>(&self, ids: &L) -> Option<bool> {
-        ids.identity(&self.node)?;
-        verify::record(ids, "EndpointRecord", &self.bytes).ok()
+        match verify::record(ids, "EndpointRecord", &self.bytes) {
+            Ok(v) => Some(v),
+            Err(verify::Failure::MissingKey(_)) => None,
+            Err(verify::Failure::Invalid(_)) => Some(false),
+        }
     }
 }
 

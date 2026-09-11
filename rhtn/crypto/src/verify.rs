@@ -7,6 +7,36 @@ use rhtn_codec::cose::{self, aad};
 use rhtn_codec::encode::*;
 use rhtn_codec::envelope;
 
+/// Why a verification did not succeed (`wire-format.md` §3.4): a signer
+/// whose key this verifier does not hold, which is the third outcome and
+/// names the identity to fetch, or an object that fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failure {
+    MissingKey(Vec<u8>),
+    Invalid(String),
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Failure::MissingKey(k) => write!(f, "missing key for signer {}", k.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+            Failure::Invalid(s) => f.write_str(s),
+        }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(s: &str) -> Self {
+        Failure::Invalid(s.into())
+    }
+}
+
+impl From<String> for Failure {
+    fn from(s: String) -> Self {
+        Failure::Invalid(s)
+    }
+}
+
 /// Resolve a keyhash to a pinned identity.
 pub trait Lookup {
     fn identity(&self, keyhash: &[u8]) -> Option<&Identity>;
@@ -125,7 +155,7 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
 /// A verifier response (§4.5): subject consent over the raw `query_id`
 /// (classical), and the verifier's signature over the map minus field 9,
 /// classical in a presence record and hybrid inside a `Recovery` block.
-pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Result<(), String> {
+pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Result<(), Failure> {
     let __rm_item = parse_all(resp).map_err(|_| "response cbor")?;
     let Item::Map(rm) = &__rm_item else {
         return Err("response not map".into());
@@ -136,7 +166,7 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
     let qid = get_b(3).ok_or("query_id")?;
     let c_range = value_slice(resp, 7).ok_or("consent")?;
     let (cp, csig) = parts_sign1(&resp[c_range]).ok_or("consent shape")?;
-    let sid = ids.identity(&subject).ok_or("subject identity")?;
+    let sid = ids.identity(&subject).ok_or_else(|| Failure::MissingKey(subject.clone()))?;
     if !sid.verify_ed(&csig, &cose::sig_structure_sign1(&cp, aad::CONSENT, &qid)) {
         return Err("consent fails".into());
     }
@@ -145,10 +175,10 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
     let vslice = &resp[v_range];
     if hybrid {
         // the block must be by the named verifier alone
-        let vid = ids.identity(&verifier).ok_or("verifier identity")?;
-        verify_sign_block(vid, vslice, aad::VERIFIER, &payload)
+        let vid = ids.identity(&verifier).ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
+        verify_sign_block(vid, vslice, aad::VERIFIER, &payload).map_err(Failure::Invalid)
     } else {
-        let vid = ids.identity(&verifier).ok_or("verifier identity")?;
+        let vid = ids.identity(&verifier).ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
         let (vp, vsig) = parts_sign1(vslice).ok_or("field 9 shape")?;
         if !vid.verify_ed(&vsig, &cose::sig_structure_sign1(&vp, aad::VERIFIER, &payload)) {
             return Err("verifier signature fails".into());
@@ -160,7 +190,7 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
 /// A complete transaction envelope: structure, every entry under both
 /// algorithms, and the embedded evidence (§4.1's Recovery block, §4.5's
 /// responses).
-pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envelope, String> {
+pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envelope, Failure> {
     let env = envelope::parse(b).map_err(|e| format!("structure: {e}"))?;
     let body = &b[env.body.clone()];
     // the body's structural rules by the type the envelope names, before
@@ -170,7 +200,7 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
     rhtn_codec::schema::check_body_of_type(body, &body_item, env.tx_type).map_err(|e| format!("body: {e}"))?;
     let mut seen = std::collections::BTreeMap::<Vec<u8>, [bool; 2]>::new();
     for e in &env.entries {
-        let id = ids.identity(&e.kid).ok_or("kid not a pinned identity")?;
+        let id = ids.identity(&e.kid).ok_or_else(|| Failure::MissingKey(e.kid.clone()))?;
         let prot = &b[e.protected.clone()];
         let sig = &b[e.signature.clone()];
         let tbs = cose::sig_structure_sign(prot, aad::ENVELOPE, body);
@@ -208,8 +238,8 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
             emit_bstr(&mut stmt, &newk);
             emit_bstr(&mut stmt, &patron);
             let r3 = value_slice_at(b, r6.start, 3).ok_or("successor")?;
-            let pid = ids.identity(&prior).ok_or("prior identity")?;
-            verify_sign_block(pid, &b[r3], aad::SUCCESSOR, &stmt).map_err(|e| format!("successor proof: {e}"))?;
+            let pid = ids.identity(&prior).ok_or_else(|| Failure::MissingKey(prior.clone()))?;
+            verify_sign_block(pid, &b[r3], aad::SUCCESSOR, &stmt).map_err(|e| Failure::Invalid(format!("successor proof: {e}")))?;
         }
         // field 9: the former patron's transfer statement over
         // [node, former, new patron] (§4.1), by the party field 9.1 names
@@ -224,8 +254,8 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
             emit_bstr(&mut stmt, &former);
             emit_bstr(&mut stmt, &patron);
             let r2 = value_slice_at(b, r9.start, 2).ok_or("transfer block")?;
-            let fid = ids.identity(&former).ok_or("former patron identity")?;
-            verify_sign_block(fid, &b[r2], aad::TRANSFER, &stmt).map_err(|e| format!("transfer statement: {e}"))?;
+            let fid = ids.identity(&former).ok_or_else(|| Failure::MissingKey(former.clone()))?;
+            verify_sign_block(fid, &b[r2], aad::TRANSFER, &stmt).map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
         }
     }
     Ok(env)
@@ -233,12 +263,12 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
 
 /// A standalone `COSE_Sign1` record under its named signer: the signature
 /// slot, role tag and signer field per kind (§7).
-pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<bool, String> {
+pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<bool, Failure> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let __m_item = parse_all(raw).map_err(|_| "cbor")?;
     let Item::Map(m) = &__m_item else { return Err("not map".into()) };
     let signer = match map_get(m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
-    let id = ids.identity(&signer).ok_or("unknown signer identity")?;
+    let id = ids.identity(&signer).ok_or_else(|| Failure::MissingKey(signer.clone()))?;
     let Some(Item::Array(cs)) = map_get(m, slot) else { return Err("sig slot".into()) };
     if cs.len() != 4 {
         return Err("sign1 arity".into());
@@ -272,7 +302,7 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Stri
     }
     let ranges = array_item_ranges(pres, 0).ok_or("walk")?;
     let env_bytes = &pres[ranges[0].clone()];
-    envelope(ids, env_bytes)?;
+    envelope(ids, env_bytes).map_err(|e| e.to_string())?;
     let Item::Array(slots) = &outer[1] else { return Err("slots not array".into()) };
     if slots.len() != 7 {
         return Err("slot count".into());

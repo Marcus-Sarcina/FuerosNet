@@ -173,6 +173,15 @@ fn check_map_with(b: &[u8], at: usize, schema: Fields, signed: bool) -> Result<(
     Ok(())
 }
 
+/// The shape of a `COSE_Sign1` (§1): protected header bytes, an empty
+/// unprotected header, a nil payload, and signature bytes.
+pub fn sign1_shape(it: &Item) -> Result<(), Error> {
+    match it {
+        Item::Array(a) if a.len() == 4 && matches!(a[0], Item::Bytes(_)) && matches!(&a[1], Item::Map(u) if u.is_empty()) && matches!(a[2], Item::Null) && matches!(a[3], Item::Bytes(_)) => Ok(()),
+        _ => Err(Error("signature slot is not a COSE_Sign1")),
+    }
+}
+
 /// One `NetworkPoint` map (§4.4): its fields, a four-byte address, and a
 /// port in range that is not the default written out; in a signed object
 /// its unknown keys are extensions.
@@ -532,7 +541,24 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
 /// corpus names.  `b` holds the bytes the item's ranges index.
 pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
     record_extension_bounds(b, kind, item)?;
+    // a standalone signed kind carries its signature slot, in COSE_Sign1's
+    // shape (§7): a record without one is malformed, not unverified
+    if let Some((slot, _, _)) = sign1_profile(kind)
+        && let Item::Map(m) = item {
+            sign1_shape(map_get(m, slot).ok_or(Error("signature slot required"))?)?;
+        }
     match kind {
+        "EndpointRecord" | "AnchorEntry" => {
+            let r2 = value_slice(b, 2).ok_or(Error("field 2"))?;
+            let pts = array_item_ranges(b, r2.start).ok_or(Error("network points not array"))?;
+            if pts.is_empty() || pts.len() > NETWORK_POINTS_PER_RECORD {
+                return Err(Error("network point count"));
+            }
+            for r in pts {
+                network_point_at(b, r.start, true)?;
+            }
+            Ok(())
+        }
         "VerifierResponse" => {
             let Item::Map(m) = item else { return Err(Error("not map")) };
             if map_get(m, 4).and_then(as_uint).ok_or(Error("no result"))? > 3 {

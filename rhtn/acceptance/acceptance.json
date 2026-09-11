@@ -7564,5 +7564,63 @@
   "then": "Both are refused: the signature is authentic, and the algorithm it declares is not the one the classical profile requires. An implementation that reads the header only for its shape and verifies with the algorithm it assumed fails.",
   "oracle": "fixture",
   "interpretation": null
+ },
+ {
+  "id": "DEC-26",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Name a missing embedded signer's key as the third outcome, so the object is held and fetched for rather than discarded",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §3.4",
+   "wire-format.md §10.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.4",
+    "text": "A verifier lacking one signer's key material has neither verified nor rejected the object."
+   },
+   {
+    "where": "wire-format.md §3.4",
+    "text": "Name the identity whose key is missing."
+   },
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "hold it, fetch the key, and let it enter"
+   }
+  ],
+  "given": "A genuinely signed transfer whose former patron's key the verifier lacks; a genuinely signed recovery whose verifier's key, and then whose prior key, the verifier lacks; the transfer with one byte of the former patron's block flipped under every key held; and a node receiving the transfer while holding every key but the former patron's.",
+  "when": "Each is signature-checked; the node takes the object, and the key arrives.",
+  "then": "Each missing key is reported as unverifiable, naming that identity, and the same objects verify once the key is held; the flipped block is invalid. The node holds the transfer pending the former patron's key, forwards nothing, and stores and forwards it when the key arrives. An implementation that reports an embedded signer's missing key as an invalid signature fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-18",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Treat a self-signed record with no signature slot, or one failing under a held key, as malformed, never as gossip",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.6",
+   "wire-format.md §10.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Self-signed, and the signature's value is the same one §7.2 states"
+   },
+   {
+    "where": "wire-format.md §10.1.2",
+    "text": "Equal seqno with different signed contents is malformed"
+   }
+  ],
+  "given": "An endpoint record without its signature slot; the same record with one signature byte flipped, offered to a holder that has the node's key and to one that has not; an anchor entry without its slot and one with a flipped signature under a verifying table.",
+  "when": "Each is offered.",
+  "then": "The slotless record is malformed whoever holds the key, and the failing signature is malformed under a held key, so neither is stored or forwarded; the failing record is stored as gossip only where the key is absent. The slotless anchor entry does not parse and the failing one is refused by the verifying table. An implementation that turns any verification error into an unavailable key fails.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

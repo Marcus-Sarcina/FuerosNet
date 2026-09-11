@@ -391,13 +391,13 @@ fn dec_19_a_cose_container_departing_from_the_profile_is_rejected() {
         out
     };
     let empty = [0x84, 0x40, 0xa0, 0xf6, 0x80];
-    let e = verify::envelope(&ids, &rebuilt(&empty)).unwrap_err();
+    let e = verify::envelope(&ids, &rebuilt(&empty)).unwrap_err().to_string();
     assert!(e.contains("exactly two entries"), "an empty block: {e}");
-    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed]))).unwrap_err().contains("exactly two entries"), "a lone entry");
-    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed, &ed]))).unwrap_err().contains("canonical order"), "one algorithm twice");
-    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&pq, &ed]))).unwrap_err().contains("canonical order"), "post-quantum first");
-    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 2, &h00))).unwrap_err().contains("container"), "block payload present");
-    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 0, &h00))).unwrap_err().contains("container"), "block outer protected filled");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed]))).unwrap_err().to_string().contains("exactly two entries"), "a lone entry");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&ed, &ed]))).unwrap_err().to_string().contains("canonical order"), "one algorithm twice");
+    assert!(verify::envelope(&ids, &rebuilt(&with_entries(&[&pq, &ed]))).unwrap_err().to_string().contains("canonical order"), "post-quantum first");
+    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 2, &h00))).unwrap_err().to_string().contains("container"), "block payload present");
+    assert!(verify::envelope(&ids, &rebuilt(&with_cose_item(&block, 0, 0, &h00))).unwrap_err().to_string().contains("container"), "block outer protected filled");
 
     // (c) a standalone COSE_Sign1: the endpoint record's signature slot
     let er = fixture("P-endpointrecord").bytes.clone();
@@ -420,7 +420,7 @@ fn dec_24_the_public_verifier_refuses_what_the_record_parser_refuses() {
     // the same body without its evidence, genuinely signed: every
     // signature verifies, and the body rule refuses it first
     let bare = remove_key(&body, 0, 8);
-    let e = verify::envelope(&ids, &build_envelope(1, &bare, &[node, patron])).unwrap_err();
+    let e = verify::envelope(&ids, &build_envelope(1, &bare, &[node, patron])).unwrap_err().to_string();
     assert!(e.contains("body") && e.contains("exactly one of fields 6, 8 and 9"), "{e}");
 }
 
@@ -444,7 +444,7 @@ fn dec_25_a_classical_signature_declaring_another_algorithm_is_refused() {
     emit_null(&mut sign1);
     emit_bstr(&mut sign1, &sig);
     assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(true), "the fixture verifies");
-    let e = verify::record(&ids, "EndpointRecord", &replace_value(&er, 0, 4, &sign1)).unwrap_err();
+    let e = verify::record(&ids, "EndpointRecord", &replace_value(&er, 0, 4, &sign1)).unwrap_err().to_string();
     assert!(e.contains("algorithm"), "{e}");
     // (b) a consent signature inside a verifier response, the same way
     let (verifier, subject) = (by_name(&s, "carol"), by_name(&s, "alice"));
@@ -459,6 +459,6 @@ fn dec_25_a_classical_signature_declaring_another_algorithm_is_refused() {
     emit_map_head(&mut consent, 0);
     emit_null(&mut consent);
     emit_bstr(&mut consent, &csig);
-    let e = verify::response(&ids, &replace_value(&resp, 0, 7, &consent), false).unwrap_err();
+    let e = verify::response(&ids, &replace_value(&resp, 0, 7, &consent), false).unwrap_err().to_string();
     assert!(e.contains("consent"), "{e}");
 }
