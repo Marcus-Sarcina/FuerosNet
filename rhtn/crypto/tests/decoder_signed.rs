@@ -405,3 +405,60 @@ fn dec_19_a_cose_container_departing_from_the_profile_is_rejected() {
     let r4 = value_slice(&er, 4).unwrap();
     assert!(verify::record(&ids, "EndpointRecord", &with_cose_item(&er, r4.start, 2, &h00)).is_err(), "sign1 payload present");
 }
+
+// acceptance: DEC-24
+#[test]
+fn dec_24_the_public_verifier_refuses_what_the_record_parser_refuses() {
+    let s = signers();
+    let ids = publics(&s);
+    let env = fixture("P-adopt-min").bytes.clone();
+    let body = body_of(&env);
+    let kh = |r: std::ops::Range<usize>| -> [u8; 32] { body[r.start + 2..r.end].try_into().unwrap() };
+    let node = by_keyhash(&s, &kh(value_slice(&body, 1).unwrap()));
+    let patron = by_keyhash(&s, &kh(value_slice(&body, 2).unwrap()));
+    verify::envelope(&ids, &build_envelope(1, &body, &[node, patron])).expect("the fixture's body, re-enveloped, verifies");
+    // the same body without its evidence, genuinely signed: every
+    // signature verifies, and the body rule refuses it first
+    let bare = remove_key(&body, 0, 8);
+    let e = verify::envelope(&ids, &build_envelope(1, &bare, &[node, patron])).unwrap_err();
+    assert!(e.contains("body") && e.contains("exactly one of fields 6, 8 and 9"), "{e}");
+}
+
+// acceptance: DEC-25
+#[test]
+fn dec_25_a_classical_signature_declaring_another_algorithm_is_refused() {
+    let s = signers();
+    let ids = publics(&s);
+    // (a) a standalone record: the node's genuine Ed25519 signature over a
+    // header that declares ML-DSA
+    let er = fixture("P-endpointrecord").bytes.clone();
+    let node_kh: [u8; 32] = { let r = value_slice(&er, 1).unwrap(); er[r.start + 2..r.end].try_into().unwrap() };
+    let node = by_keyhash(&s, &node_kh);
+    let payload = map_without_key(&er, 4).unwrap();
+    let prot = cose::protected_alg(cose::ALG_ML_DSA_65);
+    let sig = node.sign_ed(&cose::sig_structure_sign1(&prot, aad::ENDPOINTS, &payload));
+    let mut sign1 = Vec::new();
+    emit_array_head(&mut sign1, 4);
+    emit_bstr(&mut sign1, &prot);
+    emit_map_head(&mut sign1, 0);
+    emit_null(&mut sign1);
+    emit_bstr(&mut sign1, &sig);
+    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(true), "the fixture verifies");
+    let e = verify::record(&ids, "EndpointRecord", &replace_value(&er, 0, 4, &sign1)).unwrap_err();
+    assert!(e.contains("algorithm"), "{e}");
+    // (b) a consent signature inside a verifier response, the same way
+    let (verifier, subject) = (by_name(&s, "carol"), by_name(&s, "alice"));
+    let qid = cose::sha256(b"dec-25");
+    let resp = build_response(verifier, subject, &qid, None, false);
+    verify::response(&ids, &resp, false).expect("the response verifies");
+    let cprot = cose::protected_alg(cose::ALG_ML_DSA_65);
+    let csig = subject.sign_ed(&cose::sig_structure_sign1(&cprot, aad::CONSENT, &qid));
+    let mut consent = Vec::new();
+    emit_array_head(&mut consent, 4);
+    emit_bstr(&mut consent, &cprot);
+    emit_map_head(&mut consent, 0);
+    emit_null(&mut consent);
+    emit_bstr(&mut consent, &csig);
+    let e = verify::response(&ids, &replace_value(&resp, 0, 7, &consent), false).unwrap_err();
+    assert!(e.contains("consent"), "{e}");
+}

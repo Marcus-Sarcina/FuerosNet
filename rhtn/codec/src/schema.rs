@@ -135,6 +135,18 @@ fn bs<'a>(b: &'a [u8], it: &Item) -> Option<&'a [u8]> {
 /// likewise.  Walks the received bytes, so nested values are checked at
 /// their own offsets.
 pub fn check_map(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
+    check_map_with(b, at, schema, false)
+}
+
+/// A map nested in a signed object at offset `at` against its schema:
+/// every required key present and every known value of its type, with
+/// unknown keys kept as the extensions §1.2 preserves, bounded by the
+/// caller's extension count.
+pub fn check_map_signed(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
+    check_map_with(b, at, schema, true)
+}
+
+fn check_map_with(b: &[u8], at: usize, schema: Fields, signed: bool) -> Result<(), Error> {
     let p = Parser { b };
     if p.head(at)?.0 != 5 {
         return Err(Error("not a map"));
@@ -145,6 +157,9 @@ pub fn check_map(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
         let (k, _) = p.item(kr.start)?;
         let Item::Uint(key) = k else { return Err(Error("map key not uint")) };
         let Some((_, _, t)) = schema.iter().find(|(sk, _, _)| *sk == key) else {
+            if signed {
+                continue;
+            }
             return Err(Error("unknown key on an unsigned message"));
         };
         check_type(b, vr.start, *t)?;
@@ -155,6 +170,22 @@ pub fn check_map(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
             return Err(Error("required field absent"));
         }
     }
+    Ok(())
+}
+
+/// One `NetworkPoint` map (§4.4): its fields, a four-byte address, and a
+/// port in range that is not the default written out; in a signed object
+/// its unknown keys are extensions.
+fn network_point_at(b: &[u8], at: usize, signed: bool) -> Result<(), Error> {
+    check_map_with(b, at, NETWORK_POINT, signed)?;
+    let (Item::Map(ref m), _) = (Parser { b }).item(at)? else { unreachable!() };
+    if bs(b, map_get(m, 1).unwrap()).map(|s| s.len()) != Some(4) {
+        return Err(Error("address width"));
+    }
+    if let Some(port) = map_get(m, 3).and_then(as_uint)
+        && (port == 0 || port > 65535 || port == 7431) {
+            return Err(Error("port invalid"));
+        }
     Ok(())
 }
 
@@ -252,15 +283,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 return Err(Error("network point count"));
             }
             for r in pts {
-                check_map(b, r.start, NETWORK_POINT)?;
-                 let (Item::Map(ref m), _) = p.item(r.start)? else { unreachable!() };
-                if bs(b, map_get(m, 1).unwrap()).map(|s| s.len()) != Some(4) {
-                    return Err(Error("address width"));
-                }
-                if let Some(port) = map_get(m, 3).and_then(as_uint)
-                    && (port == 0 || port > 65535 || port == 7431) {
-                        return Err(Error("port invalid"));
-                    }
+                network_point_at(b, r.start, false)?;
             }
         }
         ServingInfra => check_map(b, at, SERVING_INFRA)?,
@@ -725,6 +748,9 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
         1 => {
             let Some(Item::Map(loc)) = map_get(m, 3) else { return Err(Error("adoption field 3 not a locator")) };
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
+            // the locator's own shape, its packed path included (§2.1,
+            // §2.3), its unknown keys the extensions a signed body keeps
+            check_map_signed(b, r3.start, LOCATOR)?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
             map_get(m, 4).and_then(as_uint).ok_or(Error("adoption timestamp uint"))?;
             if seqno_of(map_get(loc, 3))?.1 != 0 {
@@ -776,10 +802,10 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             Ok(())
         }
         4 => {
+            // both network points, each in the shape §4.4 gives them
             for k in [3u64, 4] {
-                if !matches!(map_get(m, k), Some(Item::Map(_))) {
-                    return Err(Error("peering network point not a map"));
-                }
+                let r = value_slice(b, k).ok_or(Error("peering network point"))?;
+                network_point_at(b, r.start, true)?;
             }
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
@@ -925,6 +951,14 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         let Item::Map(wm) = w else { return Err(Error("witness not map")) };
         if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
             return Err(Error("retired witness key"));
+        }
+        if keyhash_at(b, wm, 1).is_none() {
+            return Err(Error("witness keyhash"));
+        }
+        // the nominator is one of the two participants (§3.2)
+        match keyhash_at(b, wm, 2) {
+            Some(n) if keys.contains(&n) => {}
+            _ => return Err(Error("a witness's nominator is not a participant")),
         }
         if map_get(wm, 3).and_then(as_uint).is_some_and(|x| x & 3 == 3) {
             affirmative = true;

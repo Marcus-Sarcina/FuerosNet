@@ -34,7 +34,9 @@ fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
         _ => None,
     };
     let prot = p(&a[0])?;
-    if !headers_of_a_named_signer(&prot, &a[1]) || !matches!(a[2], Item::Null) {
+    // a classical COSE_Sign1 whose enclosing structure names the signer:
+    // alg -8 and nothing else, an empty unprotected header, a nil payload
+    if named_signer_alg(&prot, &a[1]) != Some(cose::ALG_EDDSA) || !matches!(a[2], Item::Null) {
         return None;
     }
     Some((prot, p(&a[3])?))
@@ -43,11 +45,21 @@ fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
 /// The header rule for a signature whose enclosing structure names the
 /// signer (`wire-format.md` §3.5): the protected header carries `alg` and
 /// nothing else — no `kid`, which would be a second copy that could
-/// disagree with the first — and the unprotected header is empty.
-fn headers_of_a_named_signer(prot: &[u8], unprotected: &Item) -> bool {
-    let parsed = parse_all(prot);
-    let protected_ok = matches!(&parsed, Ok(Item::Map(pm)) if pm.len() == 1 && matches!(&pm[0].0, Item::Uint(1)));
-    protected_ok && matches!(unprotected, Item::Map(u) if u.is_empty())
+/// disagree with the first — and the unprotected header is empty.  The
+/// algorithm declared is returned for the caller to hold to the one its
+/// profile requires; `None` where the headers depart from the rule.
+fn named_signer_alg(prot: &[u8], unprotected: &Item) -> Option<i64> {
+    if !matches!(unprotected, Item::Map(u) if u.is_empty()) {
+        return None;
+    }
+    let parsed = parse_all(prot).ok()?;
+    match &parsed {
+        Item::Map(pm) if pm.len() == 1 => match &pm[0] {
+            (Item::Uint(1), Item::Neg(a)) => Some(*a),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The container of a `COSE_Sign` in this profile (`wire-format.md` §1,
@@ -92,14 +104,9 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
         };
         let prot = &block[pr.clone()];
         let sig = &block[sr.clone()];
-        if !headers_of_a_named_signer(prot, &ea[1]) {
+        let Some(alg) = named_signer_alg(prot, &ea[1]) else {
             return Err("an embedded signature carries a header beyond alg".into());
-        }
-        let __pm_item = parse_all(prot).map_err(|_| "protected cbor")?;
-        let Item::Map(pm) = &__pm_item else {
-            return Err("protected not map".into());
         };
-        let alg = pm.iter().find_map(|(k, v)| match (k, v) { (Item::Uint(1), Item::Neg(a)) => Some(*a), _ => None }).ok_or("no alg")?;
         if alg != [cose::ALG_EDDSA, cose::ALG_ML_DSA_65][i] {
             return Err("entries out of canonical order".into());
         }
@@ -156,6 +163,11 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
 pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envelope, String> {
     let env = envelope::parse(b).map_err(|e| format!("structure: {e}"))?;
     let body = &b[env.body.clone()];
+    // the body's structural rules by the type the envelope names, before
+    // any signature: verify means structurally valid (§3.4), and this entry
+    // point refuses what the record parser refuses
+    let body_item = parse_all(body).map_err(|e| format!("body: {e}"))?;
+    rhtn_codec::schema::check_body_of_type(body, &body_item, env.tx_type).map_err(|e| format!("body: {e}"))?;
     let mut seen = std::collections::BTreeMap::<Vec<u8>, [bool; 2]>::new();
     for e in &env.entries {
         let id = ids.identity(&e.kid).ok_or("kid not a pinned identity")?;
@@ -236,8 +248,10 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<boo
     }
     let prot = match &cs[0] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("protected".into()) };
     let sig = match &cs[3] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("sig".into()) };
-    if !headers_of_a_named_signer(&prot, &cs[1]) {
-        return Err("a standalone signature carries a header beyond alg".into());
+    // classical only (§7): the declared algorithm is -8, or the object is
+    // not one this profile signs
+    if named_signer_alg(&prot, &cs[1]) != Some(cose::ALG_EDDSA) {
+        return Err("a standalone signature carries a header beyond alg, or an algorithm other than the profile's".into());
     }
     let payload = map_without_key(raw, slot).ok_or("payload")?;
     Ok(id.verify_ed(&sig, &cose::sig_structure_sign1(&prot, tag, &payload)))

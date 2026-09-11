@@ -7500,5 +7500,69 @@
   "then": "The ask travels as one request toward P and nothing on stream 0, and is held by nonce; the reply settles it and the attestation becomes N's staple; the stray reply concludes nothing; on the served session nothing is sent and the ask is refused, since a light client answers no request stream; the running N's staple for X appears from P's answer on the request stream with no ask left open, and P cannot ask N. An implementation that writes a request as a stream-0 control frame fails.",
   "oracle": "behaviour",
   "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11]."
+ },
+ {
+  "id": "DEC-24",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Check the structures nested in a signed body, and refuse at the public verifier what the record parser refuses",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2.1",
+   "wire-format.md §3.2",
+   "wire-format.md §3.4",
+   "wire-format.md §4.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.1",
+    "text": "The packed byte string MUST be exactly ceil(nibble_count / 2) bytes."
+   },
+   {
+    "where": "wire-format.md §3.2",
+    "text": "A witness's nominated_by MUST be one of the two participants."
+   },
+   {
+    "where": "wire-format.md §3.4",
+    "text": "A verifier confirms encoding, signatures, and the structural rules stated here."
+   },
+   {
+    "where": "wire-format.md §4.4",
+    "text": "a 16-byte address here is malformed in v1"
+   }
+  ],
+  "given": "A genuinely signed adoption whose locator claims one nibble over no bytes; a normal presence record whose witness names itself as nominator, and the same nominated by a participant; a peering whose network point carries a five-byte address; and a genuinely signed adoption without its evidence, offered to the public envelope verifier.",
+  "when": "Each is parsed as a record or checked as a body; the last is verified.",
+  "then": "The malformed locator, the self-nominated witness and the wide address are rejected, and the nominated record parses. The public verifier refuses the bare adoption on the body rule before any signature, with the same reason the record parser gives. An implementation that checks a locator's path only when it stands alone, or whose crypto entry point verifies signatures over a body it never checked, fails.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-25",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Hold a signature's declared algorithm to the profile's before verifying it",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.5",
+   "wire-format.md §7.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.5",
+    "text": "alg lives in the protected header of whatever structure holds the signature."
+   },
+   {
+    "where": "wire-format.md §7.1",
+    "text": "Classical only"
+   }
+  ],
+  "given": "An endpoint record whose signature slot carries the node's genuine Ed25519 signature over a protected header declaring ML-DSA-65; a verifier response whose consent signature does the same.",
+  "when": "Each is verified.",
+  "then": "Both are refused: the signature is authentic, and the algorithm it declares is not the one the classical profile requires. An implementation that reads the header only for its shape and verifies with the algorithm it assumed fails.",
+  "oracle": "fixture",
+  "interpretation": null
  }
 ]

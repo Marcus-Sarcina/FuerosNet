@@ -221,3 +221,60 @@ fn a_body_is_checked_against_the_type_its_envelope_names() {
     assert!(parsed(&w, TYPE_PEERING, &peering(true), &["alice", "bob"]).is_ok());
     assert!(body_err(&peering(false)).contains("field 8"), "peering without evidence");
 }
+
+// acceptance: DEC-24
+#[test]
+fn nested_signed_structures_are_checked_inside_a_body() {
+    let mut w = World::new(&["alice", "bob", "carol"]);
+    let pop = w.meet("alice", "bob");
+    let (ka, kb, kc) = (w.kh("alice"), w.kh("bob"), w.kh("carol"));
+    let t = w.clock + 1;
+    // (a) an adoption whose locator claims one nibble over no bytes: the
+    // packed-path invariant holds inside a signed body too
+    let (bn, bp) = (w.back("alice"), w.back("bob"));
+    let body = adoption_body(&Adoption {
+        node: ka,
+        patron: kb,
+        locator: Locator { anchor: kb, path: Vec::new(), nibbles: 1, seqno: Seqno { series: 1, counter: 0 } },
+        timestamp: t,
+        key_material: None,
+        evidence: Evidence::Presence(pop.txid),
+        presented_head: None,
+        back: [&bn, &bp],
+    });
+    let e = parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).unwrap_err();
+    assert!(e.contains("byte length"), "{e}");
+    // (b) a witness nominated by nobody who was there
+    let root = [5u8; 32];
+    let backs = vec![w.back("alice"), w.back("bob"), w.back("carol")];
+    let stray = presence_record_body(&backs, [&ka, &kb], &[Witness { keyhash: kc, nominated_by: kc, flags: 3 }], t, t + 600, &root);
+    let e = parsed(&w, TYPE_PRESENCE, &stray, &["alice", "bob", "carol"]).unwrap_err();
+    assert!(e.contains("nominator"), "{e}");
+    let nominated = presence_record_body(&backs, [&ka, &kb], &[Witness { keyhash: kc, nominated_by: kb, flags: 3 }], t, t + 600, &root);
+    assert!(parsed(&w, TYPE_PRESENCE, &nominated, &["alice", "bob", "carol"]).is_ok(), "nominated by a participant");
+    // (c) a peering whose network point carries a five-byte address
+    let peering = |addr: &[u8]| {
+        let mut b = Vec::new();
+        emit_map_head(&mut b, 7);
+        emit_back_pointers(&mut b, &[w.back("alice"), w.back("bob")]);
+        emit_uint(&mut b, 1);
+        emit_bstr(&mut b, &ka);
+        emit_uint(&mut b, 2);
+        emit_bstr(&mut b, &kb);
+        emit_uint(&mut b, 3);
+        emit_map_head(&mut b, 1);
+        emit_uint(&mut b, 1);
+        emit_bstr(&mut b, addr);
+        emit_uint(&mut b, 4);
+        emit_map_head(&mut b, 1);
+        emit_uint(&mut b, 1);
+        emit_bstr(&mut b, &[127, 0, 0, 2]);
+        emit_uint(&mut b, 5);
+        emit_uint(&mut b, t);
+        emit_uint(&mut b, 8);
+        emit_bstr(&mut b, &pop.txid);
+        b
+    };
+    assert!(check_body(&peering(&[127, 0, 0, 1]), &rhtn_codec::cbor::parse_all(&peering(&[127, 0, 0, 1])).unwrap()).is_ok());
+    assert!(body_err(&peering(&[127, 0, 0, 1, 9])).contains("address width"));
+}

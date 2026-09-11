@@ -166,9 +166,13 @@ pub struct SiblingRef {
     pub key_material: Option<Vec<u8>>,
 }
 
+/// The default UDP port (§4.4, §9.2): absent on the wire, since writing it
+/// out is malformed, so a point is normalised to carry no port for it.
+pub const DEFAULT_PORT: u64 = 7431;
+
 impl NetworkPoint {
     pub fn new(ip: [u8; 4], port: Option<u64>) -> Self {
-        NetworkPoint { ip, asn: None, port }
+        NetworkPoint { ip, asn: None, port: port.filter(|p| *p != DEFAULT_PORT) }
     }
     pub fn with_asn(mut self, asn: u64) -> Self {
         self.asn = Some(asn);
@@ -176,12 +180,12 @@ impl NetworkPoint {
     }
     /// The socket address a dialler uses; the default port is 7431 (§4.4).
     pub fn socket(&self) -> std::net::SocketAddr {
-        std::net::SocketAddr::from((self.ip, self.port.unwrap_or(7431) as u16))
+        std::net::SocketAddr::from((self.ip, self.port.unwrap_or(DEFAULT_PORT) as u16))
     }
     /// A point for a loopback socket address, as a test on one host makes.
     pub fn from_socket(addr: std::net::SocketAddr) -> Option<Self> {
         match addr.ip() {
-            std::net::IpAddr::V4(v4) => Some(NetworkPoint { ip: v4.octets(), asn: None, port: Some(addr.port() as u64) }),
+            std::net::IpAddr::V4(v4) => Some(NetworkPoint::new(v4.octets(), Some(addr.port() as u64))),
             _ => None,
         }
     }
@@ -195,14 +199,15 @@ impl NetworkPoint {
         Self::decode(b, &item).ok_or_else(|| "network point".to_string())
     }
     pub fn encode(&self, out: &mut Vec<u8>) {
-        emit_map_head(out, 1 + self.asn.is_some() as usize + self.port.is_some() as usize);
+        emit_map_head(out, 1 + self.asn.is_some() as usize + self.port.is_some_and(|p| p != DEFAULT_PORT) as usize);
         emit_uint(out, 1);
         emit_bstr(out, &self.ip);
         if let Some(a) = self.asn {
             emit_uint(out, 2);
             emit_uint(out, a);
         }
-        if let Some(p) = self.port {
+        // the default port is never written out (§4.4)
+        if let Some(p) = self.port.filter(|p| *p != DEFAULT_PORT) {
             emit_uint(out, 3);
             emit_uint(out, p);
         }
