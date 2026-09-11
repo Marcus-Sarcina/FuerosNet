@@ -9,10 +9,13 @@
 //! upstream to its own patron or serving node.
 
 use crate::currency::{CurrencyRequest, CurrencyState};
-use crate::resolution::{AnchorTable, ClientResolution, NetworkPoint, REQUEST_RESOLVE, ResolveReply, ResolveRequest, Resolution, Step, endpoint_record};
-use crate::store::{KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
+use crate::resolution::{AnchorTable, ClientResolution, NetworkPoint, REQUEST_RESOLVE, ResolveReply, ResolveRequest, Resolution, Step};
+use crate::propagation::decode_push;
+use crate::store::{Decision, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
 use crate::view::NodeView;
 use crate::{Adjacency, Keyhash};
+use rhtn_archive::record::Record;
+use rhtn_archive::topology::Supersession;
 use rhtn_codec::schema::Family;
 use rhtn_crypto::Identity;
 use rhtn_transport::session::{AttachOutcome, ClientConfig, ControlHandler, Node, NodeConfig, RequestHandler, Session, fresh_attach};
@@ -48,6 +51,22 @@ impl Adjacency for LiveAdjacency {
         if let Some(n) = self.node.lock().unwrap().as_ref() {
             n.send_control(peer, frame_type, body);
         }
+    }
+}
+
+/// Carry a supersession the view has just stored into the serving state
+/// (`infra-client-requirements.md` §2, design §12.6.5): a validated recovery
+/// or reissue ends the old credential's sessions and queue at the transport
+/// as it does in the table.  Anything but a verified transaction of those
+/// two kinds carries nothing.
+fn carry_supersession(node: &Arc<Mutex<Option<Arc<Node>>>>, ids: &[Identity], kind: u64, object: &[u8]) {
+    if kind != KIND_TRANSACTION {
+        return;
+    }
+    let Ok(rec) = Record::parse(object) else { return };
+    let Ok(sup) = Supersession::from_record(&rec, ids) else { return };
+    if let Some(n) = node.lock().unwrap().as_ref() {
+        n.supersede(sup);
     }
 }
 
@@ -135,13 +154,16 @@ impl LiveNode {
         let adjacency = LiveAdjacency { node: slot.clone(), upstream: Arc::default() };
 
         // stream 0: topology frames into the forwarding rule and the memo
-        let (v, i, a) = (view.clone(), ids.clone(), adjacency.clone());
+        let (v, i, a, s) = (view.clone(), ids.clone(), adjacency.clone(), slot.clone());
         let on_control: ControlHandler = Arc::new(move |peer, ft, body| {
             let mut view = v.lock().unwrap();
             let ids = i.lock().unwrap();
             match ft {
                 5 => {
-                    view.receive_push(&a, &peer, &body, &*ids);
+                    if view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored
+                        && let Ok((kind, object)) = decode_push(&body) {
+                            carry_supersession(&s, &ids, kind, &object);
+                        }
                 }
                 6 => {
                     view.receive_memo(&a, &peer, &body);
@@ -211,18 +233,33 @@ impl LiveNode {
 
         let endpoint = tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).expect("server endpoint");
         let addr = endpoint.local_addr().expect("bound");
-        // an infra node publishes its own endpoint record (`wire-format.md`
-        // §7.6): into its own store now, and onto the flood as sessions come
+        // an infra node publishes its own endpoint record per relationship
+        // line (`wire-format.md` §7.6, `infra-client-requirements.md` §4.4):
+        // the record it holds where the address is unchanged, the next
+        // counter where it moved; into its own store now, and onto the
+        // flood as sessions come
         if let Some(point) = NetworkPoint::from_socket(addr) {
             let mut v = view.lock().unwrap();
-            let series = v.position.seqno.series;
-            let record = endpoint_record(&cfg.identity, &[point], rhtn_archive::tx::Seqno { series, counter: 1 });
             let me = v.me();
             let i = ids.lock().unwrap();
-            v.take_object(&adjacency, &me, KIND_ENDPOINT_RECORD, &record, &*i);
+            for anchor in v.anchors() {
+                if let Some(record) = v.publish_own_endpoints(&anchor, std::slice::from_ref(&point)) {
+                    v.take_object(&adjacency, &me, KIND_ENDPOINT_RECORD, &record, &*i);
+                }
+            }
         }
         let node = Node::new(cfg);
         *slot.lock().unwrap() = Some(node.clone());
+        // what the store already holds about supersession reaches the
+        // serving state before the first session: a restarted node serves
+        // nothing under a credential it knew superseded
+        {
+            let v = view.lock().unwrap();
+            let i = ids.lock().unwrap();
+            for (kind, object) in v.store.objects() {
+                carry_supersession(&slot, &i, kind, &object);
+            }
+        }
         tokio::spawn(node.clone().serve(endpoint.clone()));
         Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits })
     }
@@ -252,14 +289,17 @@ impl LiveNode {
                 self.adjacency.upstream.lock().unwrap().insert(serving, session.outbound.clone());
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
-                let (v, i, a) = (self.view.clone(), self.ids.clone(), self.adjacency.clone());
+                let (v, i, a, s) = (self.view.clone(), self.ids.clone(), self.adjacency.clone(), self.adjacency.node.clone());
                 tokio::spawn(async move {
                     while let Some((ft, body)) = frames.recv().await {
                         let mut view = v.lock().unwrap();
                         let ids = i.lock().unwrap();
                         match ft {
                             5 => {
-                                view.receive_push(&a, &serving, &body, &*ids);
+                                if view.receive_push(&a, &serving, &body, &*ids) == Decision::Stored
+                                    && let Ok((kind, object)) = decode_push(&body) {
+                                        carry_supersession(&s, &ids, kind, &object);
+                                    }
                             }
                             6 => {
                                 view.receive_memo(&a, &serving, &body);
@@ -274,10 +314,15 @@ impl LiveNode {
         }
     }
 
-    /// Originate a topology object this node is a party to.
-    pub fn originate(&self, kind: u64, object: &[u8]) -> crate::store::Decision {
+    /// Originate a topology object this node is a party to.  A recovery or
+    /// reissue it stores ends the old credential's service at once.
+    pub fn originate(&self, kind: u64, object: &[u8]) -> Decision {
         let ids = self.ids.lock().unwrap();
-        self.view.lock().unwrap().originate_push(&self.adjacency, kind, object, &*ids)
+        let decision = self.view.lock().unwrap().originate_push(&self.adjacency, kind, object, &*ids);
+        if decision == Decision::Stored {
+            carry_supersession(&self.adjacency.node, &ids, kind, object);
+        }
+        decision
     }
 
     /// Originate a transaction.

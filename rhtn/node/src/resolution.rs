@@ -589,6 +589,32 @@ impl NodeView {
         self.slots.get(&(ix as u64)).and_then(|s| s.occupant)
     }
 
+    /// Publish this node's own endpoint record for the relationship line
+    /// `anchor` names (`wire-format.md` §7.6, `infra-client-requirements.md`
+    /// §4.4): the record already held where the list is unchanged, and
+    /// otherwise the next counter past what is held and what the position
+    /// carries, which the position advances with (§2.3: one counter for
+    /// position and endpoint changes).  `None` where this node has no
+    /// position in that subnet.
+    pub fn publish_own_endpoints(&mut self, anchor: &Keyhash, endpoints: &[NetworkPoint]) -> Option<Vec<u8>> {
+        let me = self.me();
+        let pos = self.position_in(anchor)?.clone();
+        let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
+        let held = self.store.endpoint_in(&me, pos.seqno.series);
+        if let Some(h) = held
+            && h.endpoints == points {
+                return Some(h.bytes.clone());
+            }
+        let counter = held.map(|h| h.seqno.counter).unwrap_or(0).max(pos.seqno.counter) + 1;
+        let seqno = Seqno { series: pos.seqno.series, counter };
+        if self.position.anchor == *anchor {
+            self.position.seqno = seqno;
+        } else if let Some(p) = self.positions.get_mut(anchor) {
+            p.seqno = seqno;
+        }
+        Some(endpoint_record(&self.identity, endpoints, seqno))
+    }
+
     /// Publish this node's own endpoint record for a series
     /// (`wire-format.md` §7.6).  Republishing an unchanged list replays the
     /// record already held rather than consuming a number.

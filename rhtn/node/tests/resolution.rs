@@ -474,3 +474,39 @@ fn a_resolve_request_with_a_malformed_path_is_refused_before_any_path_operation(
     Locator { anchor: kh("alice"), path: vec![0x10], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } }.emit(&mut good);
     assert!(Locator::decode(&good).is_ok());
 }
+
+// acceptance: RES-17
+#[test]
+fn own_endpoint_publication_replays_or_advances_per_relationship_line() {
+    let t = tree();
+    let mut c = t.c;
+    let me = c.me();
+    // C already holds its own record at series 1 counter 3 for A, and its
+    // position still reads counter 0
+    let (a, b) = (point(1, 7001), point(1, 7002));
+    let held = c.store.endpoint(&me).unwrap().clone();
+    assert_eq!(held.seqno.counter, 3);
+    // unchanged: the held bytes, and no number spent on either side
+    assert_eq!(c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a)).unwrap(), held.bytes);
+    assert_eq!(c.position.seqno.counter, 0);
+    // changed: one past what is held, which the position advances with,
+    // and the store takes as newer
+    let second = c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&b)).unwrap();
+    assert_eq!(c.position.seqno.counter, 4);
+    assert_eq!(c.take_object(&*t.afab, &me, KIND_ENDPOINT_RECORD, &second, &ids()), rhtn_node::store::Decision::Stored);
+    assert_eq!(c.store.endpoint(&me).unwrap().seqno.counter, 4);
+    // and the position's own counter counts too, where it is ahead
+    c.position.seqno.counter = 9;
+    let third = c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a)).unwrap();
+    assert_eq!(rhtn_node::store::EndpointRecord::parse(&third).unwrap().seqno.counter, 10);
+    assert_eq!(c.position.seqno.counter, 10);
+    // a second relationship line publishes its own record on its own series
+    c.positions.insert(kh("w1"), Locator { anchor: kh("w1"), path: vec![0x30], nibbles: 1, seqno: Seqno { series: 7, counter: 0 } });
+    let other = c.publish_own_endpoints(&kh("w1"), std::slice::from_ref(&b)).unwrap();
+    let er = rhtn_node::store::EndpointRecord::parse(&other).unwrap();
+    assert_eq!((er.seqno.series, er.seqno.counter), (7, 1));
+    assert_eq!(c.positions[&kh("w1")].seqno.counter, 1);
+    assert_eq!(c.position.seqno.counter, 10, "the primary line is untouched");
+    // no position in a subnet: nothing to publish there
+    assert!(c.publish_own_endpoints(&kh("carol"), std::slice::from_ref(&b)).is_none());
+}

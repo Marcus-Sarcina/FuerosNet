@@ -7329,5 +7329,68 @@
   "then": "All three ciphertexts are held, oldest first, and three files exist: the restarted store resumes its sequence past what the directory holds and never creates a file over an existing one. An implementation that restarts its sequence at zero and overwrites fails.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "QUE-18",
+  "area": "queue",
+  "gap": "queue",
+  "title": "End the old credential's service when the node itself applies the recovery, and know it again after a restart",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §12.6.5"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Stop serving a binding you have verified superseded"
+   },
+   {
+    "where": "design §12.6.5",
+    "text": "a party holding that knowledge serves nothing under the old key"
+   }
+  ],
+  "given": "N, a root serving its light client C, with C attached. A recovery adoption of C' claiming C's history under N, which N originates as the countersigning patron. Later, a node started from N's saved topology store.",
+  "when": "N stores the recovery; C attaches again and a sender submits a message for C; the restarted node is asked about C.",
+  "then": "N's serving state reports C superseded with no separate call: C's session ends, the fresh attach is refused with close code 1, and the submission is refused as superseded. The restarted node reports C superseded before its first session and refuses C's attach. An implementation whose table learns the recovery while its serving state keeps delivering under the old key fails.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RES-17",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "Publish own endpoints from what is held: replay an unchanged list, advance the counter for a changed one, one record per relationship line",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.6",
+   "infra-client-requirements.md §4.4",
+   "wire-format.md §2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Publishing a changed endpoint list advances the counter"
+   },
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Republishing an unchanged list replays the record already held"
+   },
+   {
+    "where": "infra-client-requirements.md §4.4",
+    "text": "publish one record per relationship line"
+   },
+   {
+    "where": "wire-format.md §2.3",
+    "text": "incremented on every position change and on every endpoint change"
+   }
+  ],
+  "given": "An infra node C adopted at series 1 counter 0, with no endpoint record of its own; then holding one at counter 1 for address A; then bound under a second patron on series 7. A node restarted from its saved store on a new address.",
+  "when": "C publishes for A, for A again, for B, and for its second line; the restarted node starts.",
+  "then": "The first record is at counter 1 and the position advances to 1; the second publication for A returns the held bytes and spends nothing; B takes counter 2, the position advances to 2, and the store takes the record as newer; the second line's record is at series 7 counter 1 with the primary line untouched. The restarted node's store holds its record at counter 2 for the new address, the position reads 2, and an unchanged republication replays those bytes. An implementation that publishes counter 1 at every start fails: on a restored store it collides with itself or publishes stale.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

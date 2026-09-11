@@ -168,6 +168,30 @@ impl Signers {
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
 
+    /// A recovery adoption (`wire-format.md` §4.1): `new` claims `old`'s
+    /// history under `patron`, placed at `(anchor, path, series)`, with
+    /// `verifier`, a prior counterparty, recognising the holder.
+    pub fn recover(&mut self, old: &str, new: &str, patron: &str, verifier: &str, place: (&str, &[u8], u32)) -> Record {
+        let (anchor, path, series) = place;
+        let t = self.tick();
+        let qid = rhtn_codec::cose::sha256(format!("recover:{old}:{new}:{t}").as_bytes());
+        let resp = recovery_response(&id(verifier), &id(new), &qid, &kh(old));
+        let block = recovery_block(&id(old), &kh(new), &kh(patron), vec![resp]);
+        let (bn, bp) = (self.back(new), self.back(patron));
+        let p = rhtn_node::resolution::Path::from_indices(path);
+        let a = Adoption {
+            node: kh(new),
+            patron: kh(patron),
+            locator: Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series, counter: 0 } },
+            timestamp: t,
+            key_material: None,
+            evidence: Evidence::Recovery(block),
+            presented_head: None,
+            back: [&bn, &bp],
+        };
+        self.commit(TYPE_ADOPTION, &adoption_body(&a), &[new, patron])
+    }
+
     /// An adoption of `node` under `patron` at `path` in the subnet
     /// `anchor` names, on a fresh presence record.
     pub fn adopt(&mut self, node: &str, patron: &str, anchor: &str, path: &[u8], series: u32) -> Record {
