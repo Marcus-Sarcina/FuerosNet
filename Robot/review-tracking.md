@@ -8574,3 +8574,40 @@ gone. Three readings are the assistant's and open to reversal:
   nothing; CER-17 records that reading in its interpretation and CER-26
   asserts the notice. Which the author intends is a question for him, and
   the answer changes one line in the verifier's query path.
+
+**Milestone 7, recovery, built (2026-09-11).** Two gate-green commits:
+adcfcda (the chain-holder's side: the series chain, abandoned lines, the
+signed locator and the seal moved to the archive, the patron's check of an
+adoption's evidence before it countersigns, a plain rotation's memo) and
+afa41bf (the subject's side: sealing on rotation as the old key's last act,
+seal-then-reissue on suspicion into a series never held, the chain
+presented on request; and the recovery meeting on the ceremony harness,
+the verifier its own querier, the adoption on both halves). All 14 REC
+entries carry a marker; 238 of 286 entries implemented, 0 flags; the
+recovery stubs file is gone. Three readings are the assistant's and open to
+reversal:
+
+- **Recovery recognises by personal knowledge only.** Design §9.1 has the
+  recognition as the person's judgment, a stored photo supporting it; the
+  reference client asks the verifier's operator the one question of the
+  meeting and issues `personal_knowledge`, `met`. A photo-match recovery
+  would need the verifier to open a capture sealed for the *prior* key
+  against a query about the *new* key, which the grant and the response
+  schema bind to one subject; not built, and whether it should be is the
+  author's.
+- **The recovery verifier's operator is asked.** Unlike an ordinary query
+  (design §7.3, Appendix A.3), the recovery meeting asks the person whether
+  they recognise the subject, since design §9.1 makes that judgment theirs.
+  CER-17's reading of the ordinary case stands beside it.
+- **How the chain is asked for.** `wire-format.md` §4.6.1 says the chain is
+  presented on request; §9.2's request table carries no request type for
+  it, and the archive fetch (§7.9) walks by back-pointers rather than by
+  countersignature. The client and the node present the chain as records;
+  on which stream the ask arrives is unspecified and left to the author.
+  REC-10 asserts what is specified: the adoption and the reissues are
+  presented, and nothing is pushed.
+
+Found on the way: a signing identity carries its expanded ML-DSA key
+inline, 66 KB, and a client that held one by value, plus a rotation
+holding another, overflowed a debug test thread's stack once the recovery
+path added depth; both are boxed now.

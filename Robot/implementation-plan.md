@@ -209,9 +209,32 @@ says a verifier's operator is not told they were sampled, and design
 §19.6 says a verifier is told, when asked, that answering records them;
 the client raises the §19.6 disclosure as a notice naming no ceremony.
 
-Then, in order: recovery (step 8), payload encryption (step 9), ICE (step 9b),
-resources (step 10). The mobile application is its own track once the client core
-is stable.
+**Milestone 7, recovery** (design §24 step 8). Exit: the 14 recovery
+entries pass.
+Done: `rhtn-archive` carries the signed locator and the seal that closes
+a line, and the series chain a subject presents and a holder reads,
+extends only into a series it never held, and ranks by length;
+`rhtn-node`'s locator store takes a chain and thereafter rejects the
+abandoned lines whatever their counter, while a thief's seal freezes a
+chainless holder's entry; the verifier checks an adoption's evidence
+against the adoption's own fields as an entry point of its own, and a
+patron runs it before countersigning, so a lifted successor or transfer
+statement binds nothing; competing recoveries resolve per observer by the
+patron it prefers; a plain rotation carries nothing and its memo names no
+prior key. `rhtn-client` carries the subject's side: sealing every line as
+the old key's last act, seal-then-reissue on suspicion into a fresh
+series, the chain presented on request, and the recovery meeting on the
+ceremony harness — the verifier its own querier, the new key consenting,
+the person recognising, the hybrid response naming the prior key, the
+adoption assembled on both halves and checked by the patron. All 14
+recovery entries pass; 238 of 286 entries pass. Three readings are open to
+the author and recorded in `Robot/review-tracking.md`: recognition by
+personal knowledge only, the recovery verifier's person asked, and the
+stream on which a chain is asked for.
+
+Then, in order: payload encryption (step 9), ICE (step 9b), resources
+(step 10). The mobile application is its own track once the client core is
+stable.
 
 ---
 
