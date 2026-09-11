@@ -314,6 +314,14 @@ impl LiveNode {
                         let now = view.now();
                         view.prekeys.answer(&peer, &body, now)
                     }
+                    Family::ArchiveRequest => {
+                        // this node serves its own archive; a subject it is
+                        // not gets an empty batch, which says nothing about
+                        // that archive (`wire-format.md` §7.9)
+                        let req = rhtn_archive::chain::ArchiveRequest::decode(&body).ok()?;
+                        let view = v.lock().unwrap();
+                        Some(view.archive.serve(&req).encode())
+                    }
                     Family::CatalogQuery => {
                         let view = v.lock().unwrap();
                         let me = view.me();

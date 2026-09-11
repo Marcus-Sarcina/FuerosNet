@@ -248,6 +248,9 @@ pub enum Dispatched {
     Application(Vec<u8>),
     Grant(GrantOutcome),
     Late(Result<Txid, String>),
+    /// The peer's candidates for the direct path, for the transport to
+    /// dial.
+    Candidates(Vec<u8>),
 }
 
 fn hex8(k: &Keyhash) -> String {
@@ -879,6 +882,7 @@ impl Client {
                 let consented = self.subject.all_consented();
                 Dispatched::Late(record::take_late_response(&mut self.store, &self.known, &inner, &consented))
             }
+            payload::KIND_CANDIDATES => Dispatched::Candidates(inner),
             _ => Dispatched::Application(inner),
         })
     }

@@ -283,6 +283,9 @@ pub const CHANNEL_MESSAGE: u64 = 1;
 pub const KIND_APPLICATION: u64 = 0;
 pub const KIND_KEY_GRANT: u64 = 1;
 pub const KIND_LATE_RESPONSE: u64 = 2;
+/// The direct path's candidates, exchanged with the peer alone over the
+/// relayed channel (design §12.6.3, §14.1.1).
+pub const KIND_CANDIDATES: u64 = 3;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

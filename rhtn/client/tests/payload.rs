@@ -53,6 +53,7 @@ fn describe(d: &Dispatched) -> String {
         Dispatched::Application(b) => format!("Application({})", String::from_utf8_lossy(b)),
         Dispatched::Grant(o) => format!("Grant({o:?})"),
         Dispatched::Late(r) => format!("Late({r:?})"),
+        Dispatched::Candidates(b) => format!("Candidates({} bytes)", b.len()),
     }
 }
 

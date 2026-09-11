@@ -145,6 +145,10 @@ impl Signers {
     fn back(&self, n: &str) -> Vec<Txid> {
         self.archives[&kh(n)].next_back_pointers()
     }
+    /// A copy of `n`'s archive as the signers built it.
+    pub fn archive_of(&self, n: &str) -> rhtn_archive::chain::Archive {
+        self.archives[&kh(n)].clone()
+    }
     fn commit(&mut self, tx_type: u64, body: &[u8], signers: &[&str]) -> Record {
         let sids: Vec<SigningIdentity> = signers.iter().map(|s| test_identity(s)).collect();
         let refs: Vec<&SigningIdentity> = sids.iter().collect();

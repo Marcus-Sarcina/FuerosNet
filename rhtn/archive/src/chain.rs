@@ -12,6 +12,9 @@ use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+/// Request type 2 (`wire-format.md` §9.2's table).
+pub const REQUEST_ARCHIVE: u64 = 2;
+
 /// An `ArchiveRequest` (`wire-format.md` §7.9).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveRequest {
