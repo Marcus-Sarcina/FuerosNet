@@ -8721,3 +8721,41 @@ crate's, because `wire-format.md` §11.2 asks for rejection of exactly the
 tolerances a general parser exists to provide; and `ClientConfig::tls_for`
 is public now, so a test can dial a resumed session and put a request in
 early data by hand.
+
+**Review of the sources after milestone 10 (2026-09-11).** A read of every
+crate for gaps and dangling stubs, one gate-green commit, 42c4b56. No
+`todo!`, `unimplemented!`, `#[ignore]` or unmarked catalogue entry beyond
+the ten named last below. Found and closed:
+
+- **Archive fetch was unserved.** `Archive::serve` existed since milestone
+  3 and no runtime arm dispatched request type 2, so a prospective patron
+  could not fetch from a live node. Dispatched to the node's own archive
+  (`wire-format.md` §7.9; `light-client-requirements.md` §2); a subject
+  the node is not gets an empty batch. A live test in `rhtn-sim` covers
+  both.
+- **The direct path's candidates had no payload kind.** Design §12.6.3
+  exchanges them over the relayed channel; the client dispatched every
+  unknown kind to the application. Kind 3 is theirs now, and the client
+  hands them out as their own outcome.
+- **The plan's crate table still promised `rhtn-resources` the catalog
+  and the gateway**, which landed in `rhtn-node` and `rhtn-archive` at
+  milestone 10. The row now says what that crate still owes: the sandbox.
+
+Open after the review, each a decision or a milestone of its own:
+
+- **Request type 4 to a light client.** `wire-format.md` §7.7.2 has
+  resolution stop at the verifier's serving node, which identifies the
+  attached client from the path suffix, and §9.2 has a bidirectional
+  stream carry a request. How the serving node carries the query to the
+  client it attaches, and the response back, is written in neither the
+  documents nor the reference. `rhtn-client`
+  verifies and answers a query the ceremony driver hands it; no runtime
+  arm dispatches type 4.
+- **The client's direct path is a device trait.** `rhtn-transport`
+  gathers, punches and dials; `rhtn-client` asks a `DirectPath` object
+  whether a peer is reachable. The join, where a client's candidates go
+  out as kind 3 and the transport's socket answers the trait, is not
+  built.
+- **`rhtnd` and `rhtn`**, the daemon and the CLI, are unstarted.
+- **PAY-13** stays open on the library decision, libsignal being AGPL;
+  PRD-01 to PRD-09 are manual.

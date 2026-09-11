@@ -306,6 +306,19 @@ That completes design §24's order. The mobile application is its own
 track once the client core is stable; what remains in the catalogue is
 PAY-13, on the library decision, and the nine manual product entries.
 
+**Review after milestone 10** (2026-09-11). A read of every crate for gaps
+and dangling stubs found no `todo!`, `unimplemented!` or ignored test, and
+three things the milestones had walked past: the runtime dispatched no
+archive request although `Archive::serve` had existed since milestone 3
+(closed, with a live test); the direct path's candidates had no payload
+kind of their own (closed: kind 3); and the crate table above still
+promised `rhtn-resources` the catalog and the gateway (corrected). Left
+open, each a decision or a milestone of its own: how a serving node
+carries a verifier query to the light client it attaches, which the
+documents do not say either; the join between `rhtn-client`'s direct-path
+interface and `rhtn-transport`'s socket; and `rhtnd` and `rhtn`
+themselves.
+
 ---
 
 ## 6. Risks to retire, in order
