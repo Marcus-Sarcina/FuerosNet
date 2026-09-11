@@ -19,13 +19,16 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const NODES: [&str; 3] = ["alice", "bob", "carol"];
+/// The witness on every meeting after a key's first (`wire-format.md`
+/// §3.2): it signs presence records and runs no node.
+const WITNESS: &str = "witness";
 
 fn kh(n: &str) -> Keyhash {
     test_identity(n).public.keyhash
 }
 
 fn ids() -> Vec<Identity> {
-    NODES.iter().map(|n| test_identity(n).public).collect()
+    NODES.iter().chain([WITNESS].iter()).map(|n| test_identity(n).public).collect()
 }
 
 /// The signing side: archives advance as transactions are made, exactly as
@@ -37,7 +40,7 @@ struct Signers {
 
 impl Signers {
     fn new() -> Signers {
-        Signers { archives: NODES.iter().map(|n| (kh(n), Archive::new(kh(n)))).collect(), clock: 1_800_000_000 }
+        Signers { archives: NODES.iter().chain([WITNESS].iter()).map(|n| (kh(n), Archive::new(kh(n)))).collect(), clock: 1_800_000_000 }
     }
     fn tick(&mut self) -> u64 {
         self.clock += 3600;
@@ -61,6 +64,19 @@ impl Signers {
         let root = rhtn_codec::cose::sha256(format!("f:{a}:{b}:{t}").as_bytes());
         let body = formation_body([&ba, &bb], [&kh(a), &kh(b)], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b])
+    }
+    /// Presence evidence: a formation for two fresh keys, otherwise a
+    /// witnessed normal record, a key forming only once.
+    fn meet(&mut self, a: &str, b: &str) -> Record {
+        if self.archives[&kh(a)].is_empty() && self.archives[&kh(b)].is_empty() {
+            return self.formation(a, b);
+        }
+        let t = self.tick();
+        let back = vec![self.back(a), self.back(b), self.back(WITNESS)];
+        let root = rhtn_codec::cose::sha256(format!("m:{a}:{b}:{t}").as_bytes());
+        let w = Witness { keyhash: kh(WITNESS), nominated_by: kh(a), flags: 3 };
+        let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
+        self.commit(TYPE_PRESENCE, &body, &[a, b, WITNESS])
     }
     fn adoption(&mut self, node: &str, patron: &str, pop: Txid, series: u32) -> Record {
         let t = self.tick();
@@ -118,9 +134,9 @@ fn safety(m: &Mesh) {
 /// everywhere, and share the presence records evaluation needs.
 fn seed(m: &mut Mesh, s: &mut Signers) -> Vec<Record> {
     let mut made = Vec::new();
-    let pop_ab = s.formation("alice", "bob");
+    let pop_ab = s.meet("alice", "bob");
     let a_b = s.adoption("bob", "alice", pop_ab.txid, 1);
-    let pop_bc = s.formation("bob", "carol");
+    let pop_bc = s.meet("bob", "carol");
     let a_c = s.adoption("carol", "bob", pop_bc.txid, 2);
     for r in [&pop_ab, &pop_bc] {
         m.share_presence(r.txid, r.bytes.clone());
@@ -198,7 +214,7 @@ fn gossip_copies_and_never_creates() {
     seed(&mut m, &mut s);
     // an adoption of carol handed to alice alone, as an injection would:
     // alice holds a transaction its subject does not, and the check says so
-    let pop = s.formation("alice", "carol");
+    let pop = s.meet("alice", "carol");
     m.share_presence(pop.txid, pop.bytes.clone());
     m.originate(&pop);
     let later = s.adoption("carol", "alice", pop.txid, 9);

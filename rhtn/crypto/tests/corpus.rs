@@ -112,6 +112,12 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                     },
                     _ => schema::check_kind(&raw, kind, &item).map_err(|e| e.0.into()),
                 },
+                // an envelope reject is one the verifier refuses: its
+                // structure, its signer set, or an embedded block (§3.5, §4.1)
+                ("reject", Ok(_)) if kind == "envelope" => match verify::envelope(&ids, &raw) {
+                    Err(_) => Ok(()),
+                    Ok(_) => Err("reject envelope passed our verifier".into()),
+                },
                 ("reject", Ok(item)) => {
                     let schema_ok = schema::check_kind(&raw, kind, &item).is_ok();
                     let sig_fails = verified_record_kind(kind) && !stale && matches!(verify::record(&ids, kind, &raw), Ok(false));

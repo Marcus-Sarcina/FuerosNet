@@ -31,7 +31,7 @@ impl Fetch for World {
 impl World {
     pub fn new(names: &[&str]) -> Self {
         let mut w = World { ids: BTreeMap::new(), archives: BTreeMap::new(), store: BTreeMap::new(), clock: 1_800_000_000 };
-        for n in names {
+        for n in names.iter().chain(["witness"].iter()) {
             let id = test_identity(n);
             w.archives.insert(id.public.keyhash, Archive::new(id.public.keyhash));
             w.ids.insert(n.to_string(), id);
@@ -97,6 +97,23 @@ impl World {
         let root = rhtn_codec::cose::sha256(b"formation: nothing disclosable");
         let body = formation_body([&ba, &bb], [&ka, &kb], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b])
+    }
+
+    /// Presence evidence between `a` and `b`: a formation record where both
+    /// keys are fresh (design §13.1), and otherwise a normal record
+    /// witnessed by the world's witness, since a key appears in at most
+    /// one formation record, its first (`wire-format.md` §3.2).
+    pub fn meet(&mut self, a: &str, b: &str) -> Record {
+        if self.archive(a).is_empty() && self.archive(b).is_empty() {
+            return self.formation(a, b);
+        }
+        let t = self.tick();
+        let back = vec![self.back(a), self.back(b), self.back("witness")];
+        let (ka, kb) = (self.kh(a), self.kh(b));
+        let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
+        let w = Witness { keyhash: self.kh("witness"), nominated_by: ka, flags: 3 };
+        let body = presence_record_body(&back, [&ka, &kb], &[w], t, t + 600, &root);
+        self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
 
     /// An adoption of `node` under `patron` on presence evidence, opening

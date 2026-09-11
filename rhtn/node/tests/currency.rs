@@ -135,7 +135,7 @@ fn an_adoption_is_countersigned_whatever_the_subjects_staple_says() {
     let x = kh("bob");
     let patron = kh("carol");
     let fab = Fabric::with(&[patron, kh("w1")]);
-    let pop = w.formation("alice", "bob");
+    let pop = w.meet("alice", "bob");
     // X hands over no staple at all
     assert_eq!(n.staple_for(&ids(), &x, &[patron]), Staple::Absent);
     let body = n.propose_adoption(&x, Evidence::Presence(pop.txid), 5, &[rhtn_archive::genesis(&x)]).expect("produced with no staple");

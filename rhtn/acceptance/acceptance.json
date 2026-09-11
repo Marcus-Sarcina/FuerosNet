@@ -7139,5 +7139,106 @@
   "then": "The valid objects are accepted. Every variant is rejected: the envelope variants at the structural layer, the block variants before any signature in the block is checked, and the endpoint record at verification. An implementation that reconstructs the signing input from its own empty headers and nil payload while ignoring what was received fails, as does one that treats an empty block as covered.",
   "oracle": "fixture",
   "interpretation": null
+ },
+ {
+  "id": "DEC-20",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Require exactly one evidence form on an adoption, and bind a Recovery block's responses to the parties it names",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "EXACTLY ONE of fields 6, 8 and 9 is present"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "Every response's subject MUST equal the newly adopted node"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "Every response's field 8 MUST equal prior_key"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "Every response's verifier MUST differ from its subject"
+   }
+  ],
+  "given": "A valid adoption on a presence record; the same with field 8 removed, and with a transfer statement added beside it. A valid recovery adoption of a new key under a patron with one genuine match; the same with a response naming a third party as subject, with a response naming another prior key in field 8, with the new key as its own verifier, with no match among the responses, with a selection basis other than met, with one verifier twice, with no response at all, and with the prior key equal to the new key. Every signature is genuine in every variant.",
+  "when": "Each is parsed as a record.",
+  "then": "The two valid adoptions parse, and the recovery control verifies. Each variant is rejected at the structural layer, before any signature is checked, naming the rule it broke. An implementation that verifies each embedded signature without checking whom it is about fails.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-21",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Check a presence record's subtype rules: a formation is genesis-rooted and carries no evidence arrays, a normal record is witnessed, and the participants differ",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.2",
+   "wire-format.md §4.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.2",
+    "text": "A key may appear in at most one formation record: its first."
+   },
+   {
+    "where": "wire-format.md §3.2",
+    "text": "a validator checks the subtype, the absent evidence arrays, and the genesis back-pointers"
+   },
+   {
+    "where": "wire-format.md §3.2",
+    "text": "The two participant identities MUST differ."
+   },
+   {
+    "where": "wire-format.md §4.5",
+    "text": "PRESENT on a normal record (1..=16)"
+   }
+  ],
+  "given": "A formation between two fresh keys on genesis back-pointers; the same with arbitrary hashes in key 0; a formation for a key that already has a transaction; a witnessed normal record with its subtype flipped to formation; a formation with its subtype flipped to normal; and a formation naming one identity as both participants.",
+  "when": "Each is parsed as a record, or checked as a body.",
+  "then": "The genesis-rooted formation parses. Each variant is rejected: the arbitrary and the established key's back-pointers as not the genesis value, the flipped normal record as a formation carrying witnesses, the flipped formation as a normal record without witnesses, and the equal participants as one identity. An implementation that checks the subtype's range and nothing the subtype conditions fails.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-22",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Check a body against the type its envelope names, with two distinct parties in every two-party type, a peering's evidence present, and a reissue's new series at counter 0",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1",
+   "wire-format.md §4.4",
+   "wire-format.md §4.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "the rule holds for every two-party type"
+   },
+   {
+    "where": "wire-format.md §4.4",
+    "text": "without it is MALFORMED"
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "the new series. Its counter is 0"
+   }
+  ],
+  "given": "A valid departure body enveloped as type 2 and then as type 1; a departure, a disavowal, a reissue and an adoption each naming one identity in both fields 1 and 2; a valid reissue and the same with its new series opening at counter 1; a valid peering and the same without field 8.",
+  "when": "Each is parsed as a record, or checked as a body.",
+  "then": "The departure parses as type 2 and is rejected as type 1 for want of a locator: the type comes from the envelope, never from the body's shape. Each one-identity body is rejected, as are the reissue at counter 1 and the peering without its presence record. An implementation that classifies a body by its fields and applies whichever rules the shape suggests fails.",
+  "oracle": "fixture",
+  "interpretation": null
  }
 ]

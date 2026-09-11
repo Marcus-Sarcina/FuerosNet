@@ -62,7 +62,7 @@ async fn a_new_root_peers_floods_and_is_reached_over_real_sessions() {
         AttachOutcome::Attached(x) => x,
         other => panic!("R reaches N: {other:?}"),
     };
-    let pop = s.formation("bob", "w2");
+    let pop = s.meet("bob", "w2");
     let body = r.view.lock().unwrap().propose_peering(&kh("bob"), &NetworkPoint::from_socket(n.addr).unwrap(), &pop.txid, &[rhtn_archive::genesis(&kh("bob"))]).expect("a naked root peers");
     let peering = Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&id("w2"), &id("bob")])).unwrap();
     assert_eq!(r.originate_transaction(&peering.bytes), Decision::Stored);

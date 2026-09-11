@@ -19,9 +19,9 @@ use rhtn_node::{Adjacency, resolution::NetworkPoint};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
-pub const NAMES: [&str; 25] = [
+pub const NAMES: [&str; 26] = [
     "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11",
-    "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5",
+    "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5", "witness",
 ];
 
 pub fn ids() -> Vec<Identity> {
@@ -152,9 +152,25 @@ impl World {
         self.commit(TYPE_PRESENCE, &body, &[a, b])
     }
 
+    /// Presence evidence between `a` and `b`: a formation record where both
+    /// keys are fresh, and otherwise a normal record witnessed by the
+    /// world's witness, since a key appears in at most one formation
+    /// record, its first (`wire-format.md` §3.2).
+    pub fn meet(&mut self, a: &str, b: &str) -> Record {
+        if self.archives[&kh(a)].is_empty() && self.archives[&kh(b)].is_empty() {
+            return self.formation(a, b);
+        }
+        let t = self.tick();
+        let back = vec![self.back(a), self.back(b), self.back("witness")];
+        let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
+        let w = Witness { keyhash: kh("witness"), nominated_by: kh(a), flags: 3 };
+        let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
+        self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
+    }
+
     /// An adoption of `node` under `patron` on a fresh presence record.
     pub fn adopt(&mut self, node: &str, patron: &str, series: u32) -> (Record, Record) {
-        let pop = self.formation(patron, node);
+        let pop = self.meet(patron, node);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
         let a = Adoption {

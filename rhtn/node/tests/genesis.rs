@@ -73,7 +73,7 @@ fn a_new_root_s_peering_propagates_through_its_peer_into_an_existing_subnet() {
     assert_eq!(r.own_endpoints(), vec![point(9, 7009)]);
     // R and bob meet, and R proposes the peering: a naked root, no staple,
     // nobody's authority required (design §6.3, §12.6.5)
-    let pop = w.formation("bob", "w9");
+    let pop = w.meet("bob", "w9");
     let body = r.propose_peering(&kh("bob"), &point(2, 7002), &pop.txid, &[rhtn_archive::genesis(&kh("bob"))]).expect("a naked root peers");
     let peering = Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&id("w9"), &id("bob")])).unwrap();
     r.peers.insert(kh("bob"));

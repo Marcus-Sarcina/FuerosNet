@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-pub const NAMES: [&str; 8] = ["alice", "bob", "carol", "alice2", "w1", "w2", "c1", "c2"];
+pub const NAMES: [&str; 9] = ["alice", "bob", "carol", "alice2", "w1", "w2", "c1", "c2", "witness"];
 
 /// The tests that count seconds on a wall clock run one at a time, so a
 /// loaded machine does not turn a bound into a flake.
@@ -152,10 +152,26 @@ impl Signers {
         let body = formation_body([&ba, &bb], [&kh(a), &kh(b)], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b])
     }
+    /// Presence evidence between `a` and `b`: a formation record where both
+    /// keys are fresh, and otherwise a normal record witnessed by the
+    /// harness's witness, since a key appears in at most one formation
+    /// record, its first (`wire-format.md` §3.2).
+    pub fn meet(&mut self, a: &str, b: &str) -> Record {
+        if self.archives[&kh(a)].is_empty() && self.archives[&kh(b)].is_empty() {
+            return self.formation(a, b);
+        }
+        let t = self.tick();
+        let back = vec![self.back(a), self.back(b), self.back("witness")];
+        let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
+        let w = Witness { keyhash: kh("witness"), nominated_by: kh(a), flags: 3 };
+        let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
+        self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
+    }
+
     /// An adoption of `node` under `patron` at `path` in the subnet
     /// `anchor` names, on a fresh presence record.
     pub fn adopt(&mut self, node: &str, patron: &str, anchor: &str, path: &[u8], series: u32) -> Record {
-        let pop = self.formation(patron, node);
+        let pop = self.meet(patron, node);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
         let p = rhtn_node::resolution::Path::from_indices(path);

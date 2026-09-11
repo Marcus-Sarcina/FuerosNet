@@ -4,7 +4,7 @@
   "network-design.md": "b034b39d486665e75083a00928127a61cfca3b35b5a2e0a99e116c1c6b88579b",
   "light-client-requirements.md": "6bb4286d5a2d9101f11b5c30746bf4fca2fcf59a0e8a1a99d32bc561223fc26d"
  },
- "generator": "99c31ec904c449a3a42cd854a2316c228330b6751054e50d4bf5be0f4e129c8c",
+ "generator": "193fc524ae7a660d8ca03e2bce58b819b0929ba0965f397b05aec02777ae6c3b",
  "verifier": "3bbad26792fa75a2bd20bf2e33bc992ef82de6ffbb762c874a8efc8255b86235",
  "deps": {
   "dilithium-py": "1.4.0",

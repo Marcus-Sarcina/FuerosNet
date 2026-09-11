@@ -27,7 +27,7 @@ fn apply(t: &mut Table, w: &World, rec: &Record) -> Outcome {
 /// A world with patron alice over carol, and a table holding it.
 fn patron_with_one() -> (World, Table) {
     let mut w = World::new(&["alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5"]);
-    let f = w.formation("alice", "carol");
+    let f = w.meet("alice", "carol");
     let a = w.adopt("carol", "alice", f.txid, 1);
     let mut t = Table::new();
     apply(&mut t, &w, &f);
@@ -39,7 +39,7 @@ fn patron_with_one() -> (World, Table) {
 #[test]
 fn a_verified_adoption_adds_the_subordinate_and_its_siblings() {
     let (mut w, mut t) = patron_with_one();
-    let pop = w.formation("alice", "bob");
+    let pop = w.meet("alice", "bob");
     let adoption = w.adopt("bob", "alice", pop.txid, 2);
     apply(&mut t, &w, &pop);
     let out = apply(&mut t, &w, &adoption);
@@ -54,9 +54,9 @@ fn a_verified_adoption_adds_the_subordinate_and_its_siblings() {
 /// N (bob) under P1 (alice) and P2 (carol), as TOP-02 leaves it.
 fn two_patrons() -> (World, Table) {
     let mut w = World::new(&["alice", "bob", "carol", "w1", "w2"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let a1 = w.adopt("bob", "alice", f.txid, 1);
-    let fw = w.formation("alice", "w1");
+    let fw = w.meet("alice", "w1");
     let aw = w.adopt("w1", "alice", fw.txid, 3);
     let (bob, carol) = (w.kh("bob"), w.kh("carol"));
     let block = transfer_block(w.id("alice"), &bob, &carol);
@@ -111,7 +111,7 @@ fn a_departed_node_with_no_other_binding_is_a_root() {
 #[test]
 fn a_disavowal_ends_one_relationship_and_nothing_else() {
     let (mut w, mut t) = two_patrons();
-    let fm = w.formation("bob", "w2");
+    let fm = w.meet("bob", "w2");
     let am = w.adopt("w2", "bob", fm.txid, 9);
     apply(&mut t, &w, &fm);
     apply(&mut t, &w, &am);
@@ -141,9 +141,9 @@ fn a_disavowal_applies_on_verification_whatever_its_timestamp() {
 /// G (alice, infra) over P (bob); a proof of presence between P and N (carol).
 fn grandpatron_world() -> (World, Record, Record, Record) {
     let mut w = World::new(&["alice", "bob", "carol", "w1"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let a = w.adopt("bob", "alice", f.txid, 1);
-    let pop = w.formation("bob", "carol");
+    let pop = w.meet("bob", "carol");
     (w, f, a, pop)
 }
 
@@ -235,7 +235,7 @@ fn two_genesis_identities_form_a_subnet() {
     let mut w = World::new(&["alice", "bob"]);
     let (a, b) = (w.kh("alice"), w.kh("bob"));
     assert!(w.archive("alice").is_empty() && w.archive("bob").is_empty());
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     assert_eq!(f.field_uint(6), Some(1), "subtype 1");
     assert_eq!(f.back, vec![vec![rhtn_archive::genesis(&a)], vec![rhtn_archive::genesis(&b)]]);
     let adoption = w.adopt("bob", "alice", f.txid, 1);
@@ -259,7 +259,7 @@ fn two_genesis_identities_form_a_subnet() {
 #[test]
 fn a_presence_record_between_other_parties_does_not_satisfy_an_adoption() {
     let mut w = World::new(&["alice", "bob", "carol"]);
-    let pz = w.formation("alice", "carol"); // P and Z
+    let pz = w.meet("alice", "carol"); // P and Z
     let adoption = w.adopt("bob", "alice", pz.txid, 1); // N under P naming it
     assert_eq!(adoption.check_signatures(&w.lookup()), SigStatus::Verified, "structurally valid");
     let mut t = Table::new();
@@ -274,9 +274,9 @@ fn a_presence_record_between_other_parties_does_not_satisfy_an_adoption() {
 fn a_proposed_patron_is_refused_only_on_positive_knowledge() {
     let mut w = World::new(&["alice", "bob", "carol", "w1"]);
     let n = w.kh("alice");
-    let f1 = w.formation("alice", "bob");
+    let f1 = w.meet("alice", "bob");
     let a1 = w.adopt("bob", "alice", f1.txid, 1); // M under N
-    let f2 = w.formation("bob", "carol");
+    let f2 = w.meet("bob", "carol");
     let a2 = w.adopt("carol", "bob", f2.txid, 2); // M2 under M
     let mut t = Table::with_me(n);
     for r in [&f1, &a1, &f2, &a2] {
@@ -287,7 +287,7 @@ fn a_proposed_patron_is_refused_only_on_positive_knowledge() {
     let x = w.kh("w1");
     assert!(!t.is_node(&x));
     assert_eq!(t.propose_patron(&n, &x), Ok(()), "nothing known about X: not refused");
-    let pop = w.formation("alice", "w1");
+    let pop = w.meet("alice", "w1");
     let adoption = w.adopt("alice", "w1", pop.txid, 3);
     assert_eq!(adoption.signers.len(), 2);
 }
@@ -305,7 +305,7 @@ fn recover(w: &mut World, old: &str, new: &str, patron: &str, verifier: &str, se
 #[test]
 fn a_recovery_replaces_the_old_key_inside_the_horizon() {
     let mut w = World::new(&["alice", "bob", "carol", "w1"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let a = w.adopt("bob", "alice", f.txid, 1);
     let mut t = Table::new();
     apply(&mut t, &w, &f);
@@ -327,7 +327,7 @@ fn competing_recoveries_resolve_to_one_current_key_by_patron_trust() {
     let names = ["alice", "bob", "carol", "alice2", "w1", "w2", "w3"];
     for preferred in ["w1", "w2"] {
         let mut w = World::new(&names);
-        let f = w.formation("alice", "bob");
+        let f = w.meet("alice", "bob");
         let a = w.adopt("bob", "alice", f.txid, 1);
         let ra = recover(&mut w, "bob", "carol", "w1", "w3", 2); // K_a under P_a
         let rb = recover(&mut w, "bob", "alice2", "w2", "w3", 3); // K_b under P_b
@@ -355,13 +355,13 @@ fn competing_recoveries_resolve_to_one_current_key_by_patron_trust() {
 fn a_disavowal_is_ordered_within_the_slot_by_the_patrons_clock() {
     let mut w = World::new(&["alice", "bob"]);
     let (p, n) = (w.kh("alice"), w.kh("bob"));
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let t1 = w.clock + 1000;
     let a1 = w.adopt_at("bob", "alice", f.txid, 1, t1);
     let t2 = t1 + 1000;
     let d = w.disavow_at("alice", "bob", Some(0), t2);
     let t3 = t2 + 1000;
-    let f2 = w.formation("alice", "bob");
+    let f2 = w.meet("alice", "bob");
     let a2 = w.adopt_at("bob", "alice", f2.txid, 2, t3.max(f2.effective));
     let t3 = a2.time;
     let records = [&a1, &d, &a2];
@@ -385,14 +385,14 @@ fn a_disavowal_is_ordered_within_the_slot_by_the_patrons_clock() {
 #[test]
 fn a_presented_archive_is_weighed_by_known_counterparties_only() {
     let mut w = World::new(&["alice", "bob", "carol", "w1", "w2", "w3", "w4", "w5"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let a = w.adopt("bob", "alice", f.txid, 1);
-    let fc = w.formation("bob", "carol");
+    let fc = w.meet("bob", "carol");
     let chain_a: Vec<Record> = vec![fc.clone(), a.clone(), f.clone()];
     let mut chain_b = chain_a.clone();
     for s in ["w1", "w2", "w3", "w4", "w5"] {
-        chain_b.insert(0, w.formation("bob", s));
-        chain_b.insert(0, w.formation("bob", s));
+        chain_b.insert(0, w.meet("bob", s));
+        chain_b.insert(0, w.meet("bob", s));
     }
     let known: BTreeSet<Keyhash> = set(&[w.kh("alice"), w.kh("carol")]);
     let bob = w.kh("bob");

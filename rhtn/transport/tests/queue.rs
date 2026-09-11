@@ -309,10 +309,23 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
     let mut heads: BTreeMap<Keyhash, [u8; 32]> = BTreeMap::new();
     let mut adopt = |node: &str, patron: &str, table: &mut Table| {
         let (n, p) = (test_identity(node), test_identity(patron));
-        let bn = heads.get(&n.public.keyhash).copied().unwrap_or(genesis(&n.public.keyhash));
-        let bp = heads.get(&p.public.keyhash).copied().unwrap_or(genesis(&p.public.keyhash));
-        let pop_body = formation_body([&[bn], &[bp]], [&n.public.keyhash, &p.public.keyhash], 1_800_000_000, 1_800_000_600, &[7u8; 32]);
-        let pop = Record::parse(&envelope(TYPE_PRESENCE, &pop_body, &[&n, &p])).unwrap();
+        let head = |k: &Keyhash| heads.get(k).copied().unwrap_or(genesis(k));
+        let (bn, bp) = (head(&n.public.keyhash), head(&p.public.keyhash));
+        // fresh keys form; an established key meets on a witnessed normal
+        // record, a key forming only once (`wire-format.md` §3.2)
+        let fresh = !heads.contains_key(&n.public.keyhash) && !heads.contains_key(&p.public.keyhash);
+        let w = test_identity("w1");
+        let pop = if fresh {
+            let pop_body = formation_body([&[bn], &[bp]], [&n.public.keyhash, &p.public.keyhash], 1_800_000_000, 1_800_000_600, &[7u8; 32]);
+            Record::parse(&envelope(TYPE_PRESENCE, &pop_body, &[&n, &p])).unwrap()
+        } else {
+            let witness = Witness { keyhash: w.public.keyhash, nominated_by: n.public.keyhash, flags: 3 };
+            let back = vec![vec![bn], vec![bp], vec![head(&w.public.keyhash)]];
+            let pop_body = presence_record_body(&back, [&n.public.keyhash, &p.public.keyhash], &[witness], 1_800_000_000, 1_800_000_600, &[7u8; 32]);
+            let rec = Record::parse(&envelope(TYPE_PRESENCE, &pop_body, &[&n, &p, &w])).unwrap();
+            heads.insert(w.public.keyhash, rec.txid);
+            rec
+        };
         let mut st = store.clone();
         st.insert(pop.txid, pop.bytes.clone());
         let a = Adoption {

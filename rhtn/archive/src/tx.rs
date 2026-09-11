@@ -340,6 +340,52 @@ pub fn reissue_body(back: [&[Txid]; 2], node: &Keyhash, patron: &Keyhash, leavin
     out
 }
 
+/// A witness on a normal presence record (`wire-format.md` §4.5): its
+/// keyhash, the participant who nominated it, and its attestation bits
+/// (bit 0 protocol_ran, bit 1 both_responsive, bit 2 latency_bound).
+pub struct Witness {
+    pub keyhash: Keyhash,
+    pub nominated_by: Keyhash,
+    pub flags: u64,
+}
+
+/// A normal presence record body (`wire-format.md` §4.5): subtype 0, the
+/// two participants, the witnesses in field 4, no responses, and the
+/// disclosure root.  Key 0 carries one list per signer, the participants
+/// first and then the witnesses in field 4's order.
+pub fn presence_record_body(back: &[Vec<Txid>], participants: [&Keyhash; 2], witnesses: &[Witness], started_at: u64, finalized_at: u64, root: &[u8; 32]) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 7);
+    emit_back_pointers(&mut out, back);
+    emit_uint(&mut out, 1);
+    emit_uint(&mut out, started_at);
+    emit_uint(&mut out, 2);
+    emit_uint(&mut out, finalized_at);
+    emit_uint(&mut out, 3);
+    emit_array_head(&mut out, 2);
+    for p in participants {
+        emit_map_head(&mut out, 1);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, p);
+    }
+    emit_uint(&mut out, 4);
+    emit_array_head(&mut out, witnesses.len());
+    for w in witnesses {
+        emit_map_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &w.keyhash);
+        emit_uint(&mut out, 2);
+        emit_bstr(&mut out, &w.nominated_by);
+        emit_uint(&mut out, 3);
+        emit_uint(&mut out, w.flags);
+    }
+    emit_uint(&mut out, 6);
+    emit_uint(&mut out, 0);
+    emit_uint(&mut out, 8);
+    emit_bstr(&mut out, root);
+    out
+}
+
 /// A formation presence record body (`wire-format.md` §4.5, design §13.2):
 /// subtype 1, no witnesses, no responses, the two participants in field 3's
 /// order and the disclosure root the client computed.

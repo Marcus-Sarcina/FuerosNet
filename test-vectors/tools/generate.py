@@ -2741,6 +2741,73 @@ reg('D-enum-location-method', 'bytes', ACC('LocationEvidence', 'method 9: the re
 reg('D-enum-witness-reserved-bits', 'bytes', ACC('Witness', 'bits 3+ retained, 0-2 interpreted (D4)'),
     witness_entry(IDS['w1'], alice, 0b1111))
 
+# ---- bar 13b: consistency rules a validator checks from the object alone
+#      (s3.2, s3.5, s4.1, s4.4) [conformance review F01-F03, 2026-09-11].  Each
+#      is otherwise a valid object; what it gets wrong is whom or what the
+#      evidence is about, or the container it sits in.
+_adopt_bare = [(e_uint(0), backptrs([ab_form_txid], [ab_form_txid])),
+               (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
+               (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT))]
+reg('N-adopt-no-evidence', 'bytes',
+    REJ('body', 'schema', 'none of fields 6, 8 and 9: an adoption carries exactly one evidence form (s4.1, design s6.1.1)'),
+    e_map(_adopt_bare))
+reg('N-adopt-two-evidence', 'bytes',
+    REJ('body', 'schema', 'fields 8 and 9 together: the evidence forms are alternatives (s4.1)'),
+    e_map(_adopt_bare + [(e_uint(8), e_bstr(ab_form_txid)), (e_uint(9), xfer_block)]))
+reg('N-adopt-self-patron', 'bytes',
+    REJ('body', 'schema', 'node and patron one identity: a node cannot hold authority over itself (s4.1)'),
+    e_map([(e_uint(0), backptrs([ab_form_txid], [ab_form_txid])),
+           (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(alice.keyhash)),
+           (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT)), (e_uint(8), e_bstr(ab_form_txid))]))
+reg('N-peering-no-evidence', 'bytes',
+    REJ('body', 'schema', 'field 8 absent: a peering carries its presence record, unconditionally (s4.4)'),
+    e_map([(e_uint(0), backptrs([adopt_txid], [formation_txid])),
+           (e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), e_bstr(carol.keyhash)),
+           (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+           (e_uint(4), network_point([192, 0, 2, 7])),
+           (e_uint(5), e_uint(TS_DEPART + 7200))]))
+reg('N-formation-non-genesis', 'bytes',
+    REJ('body', 'schema', 'key 0 lists are not the genesis value: a key appears in at most one formation record, its first (s3.2)'),
+    e_map([(e_uint(0), backptrs([formation_txid], [formation_txid])),
+           (e_uint(1), e_uint(TS_START)), (e_uint(2), e_uint(TS_FINAL)),
+           (e_uint(3), e_arr([participant(p_hi), participant(p_lo)])),
+           (e_uint(6), e_uint(1)), (e_uint(8), e_bstr(form_root))]))
+def _rec_body_with(response):
+    return e_map([(e_uint(0), backptrs([genesis(alice2.keyhash)], [adopt_txid])),
+                  (e_uint(1), e_bstr(alice2.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
+                  (e_uint(3), rec_loc), (e_uint(4), e_uint(TS_RECOVER)),
+                  (e_uint(6), e_map([(e_uint(1), e_bstr(alice.keyhash)),
+                                     (e_uint(2), e_arr([response])),
+                                     (e_uint(3), rec_succ)]))])
+def _resp_with(key, value):
+    # the recovery response with one field swapped; its signatures go stale,
+    # and the rule this exercises is structural
+    return e_map([(k, value if k == e_uint(key) else v) for k, v in resp_unsigned_pairs[:5]]
+                 + [(e_uint(7), rec_consent),
+                    (e_uint(8), value if key == 8 else e_bstr(alice.keyhash)),
+                    (e_uint(9), rec_vr_sig), (e_uint(10), e_uint(0))])
+reg('N-recovery-subject-other', 'bytes',
+    REJ('body', 'schema', "response subject is bob, not the adopted node alice2: every response's subject MUST equal field 1 (s4.1)"),
+    _rec_body_with(_resp_with(2, e_bstr(bob.keyhash))))
+reg('N-recovery-prior-other', 'bytes',
+    REJ('body', 'schema', "response field 8 names bob, not the block's prior key alice: evidence about one old identity under a claim about another (s4.1)"),
+    _rec_body_with(_resp_with(8, e_bstr(bob.keyhash))))
+_empty_xfer_body = e_map([(e_uint(0), backptrs([adopt_txid], [formation_txid])),
+                          (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(carol.keyhash)),
+                          (e_uint(3), xfer_loc), (e_uint(4), e_uint(TS_TRANSFER)),
+                          (e_uint(9), e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                                             (e_uint(2), e_arr([e_bstr(b''), b'\xa0', NULL, e_arr([])]))]))])
+_empty_xfer_env, _ = envelope(1, 1, _empty_xfer_body, [alice, carol])
+reg('N-transfer-empty-block', 'bytes',
+    REJ('envelope', 'schema', "the former patron's COSE_Sign carries no entries: one hybrid signer contributes exactly two, and an empty block covers nothing (s3.5, s4.1)"),
+    _empty_xfer_env)
+_payload_env = e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(1)), (e_uint(3), adopt_body),
+                      (e_uint(4), e_arr([e_bstr(b''), b'\xa0', e_bstr(b'\x00'),
+                                         e_arr([cose_signature_entry(p, sg) for _, _, p, _, sg in adopt_entries])]))])
+reg('N-envelope-payload-present', 'bytes',
+    REJ('envelope', 'schema', "the COSE payload slot carries h'00' with every signature intact: signatures are detached and the slot is nil (s1, s3.5)"),
+    _payload_env)
+
 # ---- bar 14: schema-shape — missing-required and wrong-major-type per core schema
 reg('N-shape-adoption-missing-locator', 'bytes', REJ('body', 'schema', 'field 3 required'),
     e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
@@ -2813,9 +2880,12 @@ def _adopt_ext(nkeys, vlen):
         # bstr header for this size is 3 bytes (0x59 + u16 length)
         ext = [(e_uint(100), e_bstr(b'v' * (vlen - 3)))]
         assert len(ext[0][1]) == vlen
+    # field 8 present: an adoption carries exactly one evidence form (s4.1),
+    # and a boundary body is otherwise valid [conformance review, 2026-09-11]
     return e_map([(e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
                   (e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(bob.keyhash)),
-                  (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT))] + ext)
+                  (e_uint(3), adopt_loc), (e_uint(4), e_uint(TS_ADOPT)),
+                  (e_uint(8), e_bstr(ab_form_txid))] + ext)
 reg('B-ext-keys-16', 'bytes', ACC('body', 'sixteen unknown keys, the ceiling'), _adopt_ext(16, 0))
 reg('B-ext-keys-17', 'bytes', REJ('body', 'schema', 'seventeen unknown keys exceed the ceiling'), _adopt_ext(17, 0))
 reg('B-ext-value-1024', 'bytes', ACC('body', 'an unknown value whose ENCODED slice is exactly the 1024-byte ceiling'), _adopt_ext(0, 1024))
@@ -2827,7 +2897,8 @@ def _peer_with_audits(k):
                   (e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), e_bstr(carol.keyhash)),
                   (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
                   (e_uint(4), network_point([192, 0, 2, 7])),
-                  (e_uint(5), e_uint(TS_DEPART + 7200)), (e_uint(7), audits)])
+                  (e_uint(5), e_uint(TS_DEPART + 7200)), (e_uint(7), audits),
+                  (e_uint(8), e_bstr(bc_txid))])   # required, unconditionally (s4.4)
 reg('B-audits-8', 'bytes', ACC('body', 'eight peering audits, the ceiling'), _peer_with_audits(8))
 reg('B-audits-9', 'bytes', REJ('body', 'schema', 'nine audits exceed the ceiling'), _peer_with_audits(9))
 def _er_np(k):

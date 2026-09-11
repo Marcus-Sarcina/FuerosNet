@@ -51,7 +51,7 @@ impl Record {
         // the body rules index the body's own bytes
         let body_bytes = &bytes[env.body.clone()];
         let body_item = parse_all(body_bytes).map_err(|e| format!("body: {e}"))?;
-        schema::check_body(body_bytes, &body_item).map_err(|e| format!("body: {e}"))?;
+        schema::check_body_of_type(body_bytes, &body_item, env.tx_type).map_err(|e| format!("body: {e}"))?;
         let Item::Map(m) = &env.body_item else { return Err("body".into()) };
         let Item::Array(lists) = map_get(m, 0).ok_or("key 0")? else { return Err("key 0".into()) };
         if lists.len() != env.signers.len() {

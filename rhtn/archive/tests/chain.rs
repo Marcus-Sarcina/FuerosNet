@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 /// hold chains of two records.
 fn formed() -> (World, Txid) {
     let mut w = World::new(&["alice", "bob", "carol", "w1", "w2"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     w.adopt("bob", "alice", f.txid, 5);
     (w, f.txid)
 }
@@ -29,9 +29,9 @@ fn key0_lists(rec: &Record) -> Vec<Vec<Txid>> {
 fn a_first_transaction_carries_the_genesis_value() {
     let mut w = World::new(&["alice", "bob", "carol"]);
     // P (alice) has an existing chain; K (carol) has none; a record between them
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     w.adopt("bob", "alice", f.txid, 5);
-    let pop = w.formation("alice", "carol"); // carol's first transaction
+    let pop = w.meet("alice", "carol"); // carol's first transaction
     // K's first transaction THROUGH the component: an adoption of K under P
     let carol = w.kh("carol");
     let mut fresh = World::new(&["alice", "carol"]);
@@ -52,15 +52,19 @@ fn a_first_transaction_carries_the_genesis_value() {
 #[test]
 fn an_adoption_advances_both_chains_in_signer_order() {
     let (mut w, _) = formed();
-    let pop = w.formation("alice", "carol");
+    let pop = w.meet("alice", "carol");
     w.adopt("carol", "alice", pop.txid, 7);
     let h_n = w.head("bob");
     let h_p = w.head("alice");
     // a fresh adoption of N (bob) under P (alice): re-adoption on new evidence
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     let h_n2 = w.head("bob");
     let h_p2 = w.head("alice");
-    assert_eq!(key0_lists(&f), vec![vec![h_p], vec![h_n]], "presence: participants in field 3 order (alice, bob)");
+    // a normal record between established keys: the participants' lists in
+    // field 3 order (alice, bob), then the witness's
+    let lists = key0_lists(&f);
+    assert_eq!(lists.len(), 3, "two participants and a witness");
+    assert_eq!(lists[..2], [vec![h_p], vec![h_n]], "presence: participants in field 3 order (alice, bob)");
     let adoption = w.adopt("bob", "alice", f.txid, 6);
     assert_eq!(key0_lists(&adoption), vec![vec![h_n2], vec![h_p2]], "node then patron");
     let dep = w.depart("bob", "alice", Seqno { series: 6, counter: 1 });
@@ -73,10 +77,10 @@ fn an_adoption_advances_both_chains_in_signer_order() {
 #[test]
 fn swapped_lists_verify_and_do_not_reach_back() {
     let (mut w, _) = formed();
-    w.formation("alice", "carol"); // P's head is a record N never signed
+    w.meet("alice", "carol"); // P's head is a record N never signed
     let h_n = w.head("bob");
     let h_p = w.head("alice");
-    let pop = w.formation("alice", "bob");
+    let pop = w.meet("alice", "bob");
     let t = w.tick();
     let a = Adoption {
         node: w.kh("bob"),
@@ -179,7 +183,7 @@ fn two_heads_are_merged_by_the_next_ordinary_transaction() {
 /// departures with rising counters.
 fn long_chain(n: usize) -> World {
     let mut w = World::new(&["alice", "bob"]);
-    let f = w.formation("alice", "bob");
+    let f = w.meet("alice", "bob");
     w.adopt("bob", "alice", f.txid, 5);
     for c in 1..=(n - 2) as u32 {
         w.depart("bob", "alice", Seqno { series: 5, counter: c });
@@ -358,9 +362,9 @@ fn a_walk_stops_at_a_reissue_as_a_checkpoint() {
 #[test]
 fn pruning_at_a_checkpoint_keeps_the_evidence() {
     let mut w = World::new(&["alice", "bob"]);
-    let f1 = w.formation("alice", "bob");
+    let f1 = w.meet("alice", "bob");
     w.adopt("bob", "alice", f1.txid, 5);
-    let f2 = w.formation("alice", "bob");
+    let f2 = w.meet("alice", "bob");
     for (t, name) in [(f1.txid, "f1"), (f2.txid, "f2")] {
         let ev = Kept { record: w.store[&t].clone(), sealed_capture: format!("capture:{name}").into_bytes(), seed: format!("seed:{name}").into_bytes() };
         w.archive_mut("bob").keep_evidence(t, ev);
@@ -387,12 +391,12 @@ fn pruning_at_a_checkpoint_keeps_the_evidence() {
 #[test]
 fn one_chain_per_key_across_bindings_partitioned_by_series() {
     let mut w = World::new(&["alice", "bob", "carol"]);
-    let f1 = w.formation("alice", "bob");
+    let f1 = w.meet("alice", "bob");
     let a1 = w.adopt("bob", "alice", f1.txid, 11);
-    let p1 = w.formation("bob", "alice");
-    let f2 = w.formation("carol", "bob");
+    let p1 = w.meet("bob", "alice");
+    let f2 = w.meet("carol", "bob");
     let a2 = w.adopt("bob", "carol", f2.txid, 22);
-    let p2 = w.formation("bob", "carol");
+    let p2 = w.meet("bob", "carol");
     let bob = w.kh("bob");
     let out = walk::fetch_chain(&bob, None, 256, &w.lookup(), |r| w.archive("bob").serve(r));
     assert_eq!(out.end, BatchEnd::Genesis);

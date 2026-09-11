@@ -635,8 +635,45 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
     }
 }
 
-/// A transaction body (§4), classified by shape as the runner classifies it.
+/// A transaction body (§4) met without its envelope, as a fixture presents
+/// one: the type its shape implies, then that type's rules.  Inside an
+/// envelope the type is named, and [`check_body_of_type`] takes it from
+/// there rather than guessing.
 pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
+    let Item::Map(m) = item else { return Err(Error("not map")) };
+    let tx_type = match map_get(m, 3) {
+        Some(Item::Map(_)) if matches!(map_get(m, 4), Some(Item::Map(_))) => 4,
+        Some(Item::Map(_)) => 1,
+        Some(Item::Array(a)) if a.iter().all(|x| matches!(x, Item::Map(_))) && map_get(m, 6).is_some() => 5,
+        Some(Item::Array(_)) if matches!(map_get(m, 4), Some(Item::Array(_))) => 7,
+        Some(Item::Array(_)) => 2,
+        Some(Item::Uint(_)) => 3,
+        _ => return Err(Error("field 3 required")),
+    };
+    check_body_of_type(b, item, tx_type)
+}
+
+/// A `seqno` pair (§2.3): `[series, counter]`, two uints.
+fn seqno_of(it: Option<&Item>) -> Result<(u64, u64), Error> {
+    let Some(Item::Array(a)) = it else { return Err(Error("seqno not an array")) };
+    if a.len() != 2 {
+        return Err(Error("seqno arity"));
+    }
+    Ok((as_uint(&a[0]).ok_or(Error("seqno series"))?, as_uint(&a[1]).ok_or(Error("seqno counter"))?))
+}
+
+/// The 32-byte value at `key` of the map `m` over `b`, where there is one.
+fn keyhash_at<'a>(b: &'a [u8], m: &[(Item, Item)], key: u64) -> Option<&'a [u8]> {
+    match map_get(m, key) {
+        Some(Item::Bytes(r)) if r.len() == 32 => Some(&b[r.clone()]),
+        _ => None,
+    }
+}
+
+/// A transaction body against the rules of the type its envelope names
+/// (§4): the fields the type requires in the shapes it gives them, and
+/// every consistency rule a validator checks from the object alone.
+pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Error> {
     let Item::Map(m) = item else { return Err(Error("not map")) };
     let Item::Array(lists) = map_get(m, 0).ok_or(Error("key 0"))? else {
         return Err(Error("key0 not array"));
@@ -647,104 +684,236 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
             return Err(Error("back-pointer bound"));
         }
     }
-    // extension bounds: the body map, and the Locator map of an adoption or
-    // peering, each counted on its own (§1.3: per map).  Bodies name keys
-    // 0 through 9 (§4.1's Transfer is 9).
+    // extension bounds on the body map (§1.3): bodies name keys 0 through 9
     extension_bounds(b, 0, |k| k <= 9)?;
-    let f3 = map_get(m, 3);
-    if let Some(Item::Map(_)) = f3
-        && let Some(r3) = value_slice(b, 3) {
+    // every two-party type names two distinct parties in fields 1 and 2
+    // (§4.1): a node cannot hold authority over itself
+    if matches!(tx_type, 1 | 2 | 3 | 4 | 7) {
+        let (Some(a), Some(p)) = (keyhash_at(b, m, 1), keyhash_at(b, m, 2)) else {
+            return Err(Error("fields 1 and 2 are keyhashes"));
+        };
+        if a == p {
+            return Err(Error("the two parties are one identity"));
+        }
+    }
+    match tx_type {
+        1 => {
+            let Some(Item::Map(loc)) = map_get(m, 3) else { return Err(Error("adoption field 3 not a locator")) };
+            let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
-        }
-    if matches!(map_get(m, 1), Some(Item::Bytes(_))) && matches!(map_get(m, 2), Some(Item::Bytes(_))) && f3.is_none() {
-        return Err(Error("field 3 required"));
-    }
-    let is_presence = matches!(f3, Some(Item::Array(a)) if a.iter().all(|x| matches!(x, Item::Map(_)))) && map_get(m, 6).is_some();
-    let is_adoption = matches!(f3, Some(Item::Map(_)));
-    let is_disavowal = matches!(f3, Some(Item::Uint(_))) && map_get(m, 4).is_some();
-    let is_peering = is_adoption && matches!(map_get(m, 4), Some(Item::Map(_)));
-    // the maps nested in a body, each bounded on its own (§1.3): a peering's
-    // second network point, an adoption's Recovery block and the responses
-    // in it and its Transfer, a presence record's participants, witnesses
-    // and responses
-    let responses = |k: u64| (1..=10).contains(&k);
-    if is_peering {
-        nested_extension_bounds(b, 0, 4, &|k| (1..=3).contains(&k))?;
-    }
-    if is_adoption && !is_peering {
-        nested_extension_bounds(b, 0, 6, &|k| (1..=3).contains(&k))?;
-        if let Some(r6) = value_slice(b, 6) {
-            nested_extension_bounds(b, r6.start, 2, &responses)?;
-        }
-        nested_extension_bounds(b, 0, 9, &|k| (1..=2).contains(&k))?;
-    }
-    if is_presence {
-        nested_extension_bounds(b, 0, 3, &|k| k == 1)?;
-        nested_extension_bounds(b, 0, 4, &|k| (1..=5).contains(&k))?;
-        nested_extension_bounds(b, 0, 5, &responses)?;
-    }
-    if is_presence {
-        if map_get(m, 7).is_some() {
-            return Err(Error("retired body key 7"));
-        }
-        map_get(m, 8).ok_or(Error("presence field 8 required"))?;
-        let sub = map_get(m, 6).and_then(as_uint).ok_or(Error("subtype uint"))?;
-        if sub > 1 {
-            return Err(Error("subtype out of range"));
-        }
-        let s = map_get(m, 1).and_then(as_uint).ok_or(Error("started_at uint"))?;
-        let f = map_get(m, 2).and_then(as_uint).ok_or(Error("finalized_at uint"))?;
-        if f < s || f - s > 86_400 {
-            return Err(Error("finalization gap"));
-        }
-        if let Some(Item::Array(ws)) = map_get(m, 4) {
-            if ws.len() > WITNESSES_PER_RECORD {
-                return Err(Error("witnesses over 16"));
+            map_get(m, 4).and_then(as_uint).ok_or(Error("adoption timestamp uint"))?;
+            if seqno_of(map_get(loc, 3))?.1 != 0 {
+                return Err(Error("adoption counter not 0"));
             }
-            let mut affirmative = false;
-            for w in ws {
-                if let Item::Map(wm) = w {
-                    if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
-                        return Err(Error("retired witness key"));
-                    }
-                    if map_get(wm, 3).and_then(as_uint).is_some_and(|x| x & 3 == 3) {
-                        affirmative = true;
-                    }
+            // exactly one evidence form (§4.1, design §6.1.1): a recovery's
+            // own block, a presence record's txid, or a former patron's
+            // statement; none, or more than one, is malformed
+            if [6u64, 8, 9].iter().filter(|k| map_get(m, **k).is_some()).count() != 1 {
+                return Err(Error("an adoption carries exactly one of fields 6, 8 and 9"));
+            }
+            nested_extension_bounds(b, 0, 6, &|k| (1..=3).contains(&k))?;
+            nested_extension_bounds(b, 0, 9, &|k| (1..=2).contains(&k))?;
+            if let Some(Item::Map(rm)) = map_get(m, 6) {
+                let r6 = value_slice(b, 6).ok_or(Error("field 6"))?;
+                nested_extension_bounds(b, r6.start, 2, &|k| (1..=10).contains(&k))?;
+                check_recovery(b, m, rm)?;
+            } else if map_get(m, 6).is_some() {
+                return Err(Error("field 6 not a map"));
+            }
+            if map_get(m, 8).is_some() && keyhash_at(b, m, 8).is_none() {
+                return Err(Error("field 8 not a txid"));
+            }
+            if let Some(Item::Map(tm)) = map_get(m, 9) {
+                if keyhash_at(b, tm, 1).is_none() {
+                    return Err(Error("transfer field 1 not a keyhash"));
+                }
+                if !matches!(map_get(tm, 2), Some(Item::Array(_))) {
+                    return Err(Error("transfer field 2 not a COSE_Sign"));
+                }
+            } else if map_get(m, 9).is_some() {
+                return Err(Error("field 9 not a map"));
+            }
+            Ok(())
+        }
+        2 => {
+            seqno_of(map_get(m, 3))?;
+            map_get(m, 4).and_then(as_uint).ok_or(Error("departure timestamp uint"))?;
+            if map_get(m, 5).is_some() && map_get(m, 5).and_then(as_uint).ok_or(Error("reason code uint"))? > 63 {
+                return Err(Error("departure reason code out of space"));
+            }
+            Ok(())
+        }
+        3 => {
+            map_get(m, 3).and_then(as_uint).ok_or(Error("disavowal timestamp uint"))?;
+            if map_get(m, 4).is_some() && map_get(m, 4).and_then(as_uint).ok_or(Error("code uint"))? > 63 {
+                return Err(Error("disavowal code out of space"));
+            }
+            Ok(())
+        }
+        4 => {
+            for k in [3u64, 4] {
+                if !matches!(map_get(m, k), Some(Item::Map(_))) {
+                    return Err(Error("peering network point not a map"));
                 }
             }
-            if sub == 0 && !affirmative {
-                return Err(Error("witness floor: no affirmative attestation"));
-            }
-        }
-        if let Some(Item::Array(resp)) = map_get(m, 5) {
-            if resp.len() > VERIFIER_RESPONSES_PER_RECORD {
-                return Err(Error("responses over 32"));
-            }
-            if resp.is_empty() {
-                return Err(Error("empty response array must be omitted"));
-            }
-        }
-    } else if is_disavowal {
-        if map_get(m, 4).and_then(as_uint).ok_or(Error("code uint"))? > 63 {
-            return Err(Error("disavowal code out of space"));
-        }
-    } else if is_peering {
-        if let Some(Item::Array(audits)) = map_get(m, 7)
-            && audits.len() > PEERING_AUDIT_HISTORY {
-                return Err(Error("audits over 8"));
-            }
-    } else if is_adoption {
-        map_get(m, 4).and_then(as_uint).ok_or(Error("adoption timestamp uint"))?;
-        if let Some(Item::Map(loc)) = f3 {
-            if let Some(Item::Array(sq)) = map_get(loc, 3)
-                && let Some(Item::Uint(c)) = sq.get(1)
-                    && *c != 0 {
-                        return Err(Error("adoption counter not 0"));
-                    }
-            if let Some(Item::Array(resp)) = map_get(m, 6).and_then(|r| if let Item::Map(rm) = r { map_get(rm, 2) } else { None })
-                && resp.len() > VERIFIER_RESPONSES_PER_RECOVERY {
-                    return Err(Error("recovery responses over 32"));
+            let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
+            extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
+            nested_extension_bounds(b, 0, 4, &|k| (1..=3).contains(&k))?;
+            map_get(m, 5).and_then(as_uint).ok_or(Error("peering timestamp uint"))?;
+            if let Some(Item::Array(audits)) = map_get(m, 7)
+                && audits.len() > PEERING_AUDIT_HISTORY {
+                    return Err(Error("audits over 8"));
                 }
+            // the proof of presence between the peers is required, and
+            // unconditionally so (§4.4)
+            if keyhash_at(b, m, 8).is_none() {
+                return Err(Error("a peering carries its presence record in field 8"));
+            }
+            Ok(())
+        }
+        5 => check_presence(b, m, lists),
+        7 => {
+            seqno_of(map_get(m, 3))?;
+            if seqno_of(map_get(m, 4))?.1 != 0 {
+                return Err(Error("reissue new series counter not 0"));
+            }
+            map_get(m, 5).and_then(as_uint).ok_or(Error("reissue timestamp uint"))?;
+            Ok(())
+        }
+        _ => Err(Error("unknown transaction type")),
+    }
+}
+
+/// The consistency rules of a `Recovery` block (§4.1), each checkable
+/// from the adoption alone: the prior key differs from the new one; every
+/// response names the new key as its subject and the prior key in field 8;
+/// no verifier is its own subject; responses sort by verifier with no
+/// repeat; each claims the met basis; and at least one is a match.
+fn check_recovery(b: &[u8], m: &[(Item, Item)], rm: &[(Item, Item)]) -> Result<(), Error> {
+    let node = keyhash_at(b, m, 1).ok_or(Error("node"))?;
+    let prior = keyhash_at(b, rm, 1).ok_or(Error("recovery prior key"))?;
+    if prior == node {
+        return Err(Error("recovery prior key equals the new key"));
+    }
+    let Some(Item::Array(resp)) = map_get(rm, 2) else { return Err(Error("recovery responses not array")) };
+    if resp.is_empty() {
+        return Err(Error("a recovery carries at least one response"));
+    }
+    if resp.len() > VERIFIER_RESPONSES_PER_RECOVERY {
+        return Err(Error("recovery responses over 32"));
+    }
+    if !matches!(map_get(rm, 3), Some(Item::Array(_))) {
+        return Err(Error("recovery old-key proof not a COSE_Sign"));
+    }
+    let mut prev: Option<&[u8]> = None;
+    let mut matched = false;
+    for r in resp {
+        let Item::Map(x) = r else { return Err(Error("response not map")) };
+        let verifier = keyhash_at(b, x, 1).ok_or(Error("response verifier"))?;
+        let subject = keyhash_at(b, x, 2).ok_or(Error("response subject"))?;
+        if subject != node {
+            return Err(Error("a response names a subject other than the adopted node"));
+        }
+        if verifier == subject {
+            return Err(Error("a response's verifier is its subject"));
+        }
+        if keyhash_at(b, x, 8) != Some(prior) {
+            return Err(Error("a response's field 8 differs from the prior key"));
+        }
+        if map_get(x, 10).and_then(as_uint) != Some(0) {
+            return Err(Error("a recovery response's selection basis is not met"));
+        }
+        if map_get(x, 4).and_then(as_uint) == Some(0) {
+            matched = true;
+        }
+        if prev.is_some_and(|p| verifier <= p) {
+            return Err(Error("recovery responses unsorted or repeating a verifier"));
+        }
+        prev = Some(verifier);
+    }
+    if !matched {
+        return Err(Error("a recovery carries at least one match"));
+    }
+    Ok(())
+}
+
+/// A presence record's body rules (§3.2, §4.5): two distinct participants,
+/// the subtype's conditional fields, the witness floor, the responses
+/// bound, and a formation's genesis back-pointers.
+fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Error> {
+    nested_extension_bounds(b, 0, 3, &|k| k == 1)?;
+    nested_extension_bounds(b, 0, 4, &|k| (1..=5).contains(&k))?;
+    nested_extension_bounds(b, 0, 5, &|k| (1..=10).contains(&k))?;
+    if map_get(m, 7).is_some() {
+        return Err(Error("retired body key 7"));
+    }
+    map_get(m, 8).ok_or(Error("presence field 8 required"))?;
+    let Some(Item::Array(parts)) = map_get(m, 3) else { return Err(Error("participants not array")) };
+    if parts.len() != 2 {
+        return Err(Error("a presence record names two participants"));
+    }
+    let mut keys = Vec::new();
+    for p in parts {
+        let Item::Map(pm) = p else { return Err(Error("participant not map")) };
+        keys.push(keyhash_at(b, pm, 1).ok_or(Error("participant keyhash"))?);
+    }
+    if keys[0] == keys[1] {
+        return Err(Error("the two participant identities are one"));
+    }
+    let sub = map_get(m, 6).and_then(as_uint).ok_or(Error("subtype uint"))?;
+    if sub > 1 {
+        return Err(Error("subtype out of range"));
+    }
+    let s = map_get(m, 1).and_then(as_uint).ok_or(Error("started_at uint"))?;
+    let f = map_get(m, 2).and_then(as_uint).ok_or(Error("finalized_at uint"))?;
+    if f < s || f - s > 86_400 {
+        return Err(Error("finalization gap"));
+    }
+    if sub == 1 {
+        // a formation (§3.2, §4.5): no witnesses, no responses, and each
+        // participant's key 0 list exactly the genesis value, a key
+        // appearing in at most one formation record, its first
+        if map_get(m, 4).is_some() || map_get(m, 5).is_some() {
+            return Err(Error("a formation carries no witnesses and no responses"));
+        }
+        if lists.len() != 2 {
+            return Err(Error("a formation carries one back-pointer list per participant"));
+        }
+        for (l, k) in lists.iter().zip(&keys) {
+            let Item::Array(hs) = l else { return Err(Error("list")) };
+            let genesis = crate::cose::sha256(k);
+            let ok = hs.len() == 1 && matches!(&hs[0], Item::Bytes(r) if b[r.clone()] == genesis[..]);
+            if !ok {
+                return Err(Error("a formation's back-pointers are the genesis value"));
+            }
+        }
+        return Ok(());
+    }
+    // a normal record carries witnesses, one to sixteen, and at least one
+    // attesting that the protocol ran and both were responsive
+    let Some(Item::Array(ws)) = map_get(m, 4) else { return Err(Error("a normal record carries witnesses")) };
+    if ws.is_empty() || ws.len() > WITNESSES_PER_RECORD {
+        return Err(Error("witnesses out of 1..=16"));
+    }
+    let mut affirmative = false;
+    for w in ws {
+        let Item::Map(wm) = w else { return Err(Error("witness not map")) };
+        if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
+            return Err(Error("retired witness key"));
+        }
+        if map_get(wm, 3).and_then(as_uint).is_some_and(|x| x & 3 == 3) {
+            affirmative = true;
+        }
+    }
+    if !affirmative {
+        return Err(Error("witness floor: no affirmative attestation"));
+    }
+    if let Some(Item::Array(resp)) = map_get(m, 5) {
+        if resp.len() > VERIFIER_RESPONSES_PER_RECORD {
+            return Err(Error("responses over 32"));
+        }
+        if resp.is_empty() {
+            return Err(Error("empty response array must be omitted"));
         }
     }
     Ok(())
