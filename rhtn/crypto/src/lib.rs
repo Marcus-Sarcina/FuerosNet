@@ -12,6 +12,7 @@
 //! transaction envelope including embedded evidence.
 
 pub mod identity;
+pub mod pqxdh;
 pub mod verify;
 
 pub use identity::{Identity, SigningIdentity};

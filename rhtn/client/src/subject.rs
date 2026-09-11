@@ -81,6 +81,11 @@ impl SubjectState {
         self.consented.get(ceremony).cloned().unwrap_or_default()
     }
 
+    /// Every query id this subject consented to, in any ceremony.
+    pub fn all_consented(&self) -> BTreeSet<[u8; 32]> {
+        self.consented.values().flatten().copied().collect()
+    }
+
     /// Consent to `q`, or not: only within the open window it binds to,
     /// only about this subject, only under the ceremony's one profile, and
     /// only within the requester's allowance.  The query is surfaced to the

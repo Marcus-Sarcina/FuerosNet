@@ -113,11 +113,21 @@ impl Notifier for Hook {
     }
 }
 
+/// A direct path the harness switches: reachable, or defeated by the NATs
+/// it emulates.
+pub struct Reach(pub Cell<bool>);
+impl DirectPath for Reach {
+    fn reachable(&self, _: &[u8; 32]) -> bool {
+        self.0.get()
+    }
+}
+
 /// What the test keeps of one client's device.
 pub struct Handles {
     pub cam: Rc<Cam>,
     pub person: Rc<Person>,
     pub hook: Rc<Hook>,
+    pub reach: Rc<Reach>,
 }
 
 pub fn face(name: &str) -> Vec<u8> {
@@ -129,8 +139,9 @@ pub fn device(channels: Vec<ChannelKind>, clock: Rc<Cell<u64>>, seed: u64, skew_
     let person = Rc::new(Person(RefCell::new(vec![])));
     let hook = Rc::new(Hook { clock: clock.clone(), notices: RefCell::new(vec![]) });
     let clk: Rc<dyn Clock> = if skew_ms == 0 { Rc::new(SharedClock(clock)) } else { Rc::new(SkewedClock(clock, skew_ms)) };
-    let d = Device { proximity: Rc::new(Channels(channels)), camera: cam.clone(), clock: clk, random: Rc::new(Seeded(Cell::new(seed))), operator: person.clone(), notifier: hook.clone(), engine: Rc::new(HashEngine::new(16)) };
-    (d, Handles { cam, person, hook })
+    let reach = Rc::new(Reach(Cell::new(true)));
+    let d = Device { proximity: Rc::new(Channels(channels)), camera: cam.clone(), clock: clk, random: Rc::new(Seeded(Cell::new(seed))), operator: person.clone(), notifier: hook.clone(), engine: Rc::new(HashEngine::new(16)), direct: reach.clone() };
+    (d, Handles { cam, person, hook, reach })
 }
 
 /// A harness of named clients, all with the same channels.

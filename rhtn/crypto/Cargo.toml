@@ -9,6 +9,9 @@ rhtn-codec = { path = "../codec" }
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
 ml-dsa = { workspace = true }
+x25519-dalek = { version = "3.0.0", features = ["static_secrets"] }
+ml-kem = { version = "0.3.2", features = ["hazmat"] }
+hkdf = "0.13.0"
 
 [dev-dependencies]
 hex = { workspace = true }

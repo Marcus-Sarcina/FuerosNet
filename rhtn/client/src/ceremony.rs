@@ -8,6 +8,7 @@
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
 use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
+use crate::payload::{self, PayloadError, PayloadState};
 use crate::query::{KeyGrant, QueryRequest, Response, VerificationQuery};
 use crate::record::{self, DisclosureSet, Proposal, Refusal, disclosure_root, disclosures, participant_check, sort_responses, witness_check};
 use crate::rotation::Rotation;
@@ -15,6 +16,7 @@ use crate::selection::{self, Acquaintance, SelectionBasis, required};
 use crate::store::{Capture, ClientStore, OwnSeed, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
+use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
 use rhtn_archive::record::Record;
@@ -37,11 +39,12 @@ pub struct Config {
     pub seal: SealParams,
     pub subject: SubjectConfig,
     pub verifier: VerifierConfig,
+    pub payload: payload::PayloadConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { clock_tolerance_s: 300, retention_years: 2, template_version: 1, capture: Default::default(), seal: SealParams::default(), subject: SubjectConfig::default(), verifier: VerifierConfig::default() }
+        Config { clock_tolerance_s: 300, retention_years: 2, template_version: 1, capture: Default::default(), seal: SealParams::default(), subject: SubjectConfig::default(), verifier: VerifierConfig::default(), payload: payload::PayloadConfig::default() }
     }
 }
 
@@ -119,6 +122,23 @@ pub enum Msg {
     AdoptionBody(Vec<u8>),
     /// A sealed line, to whoever holds a locator for it.
     Seal(Vec<u8>),
+    /// A signed prekey bundle, to the serving node.
+    PublishBundle(Vec<u8>),
+    /// One-time keys, to the serving node.
+    StockOneTime(Vec<Vec<u8>>),
+    /// A `PrekeyRequest` or `PrekeyBatchRequest`, to the serving node.
+    PrekeyRequest(Vec<u8>),
+    /// The reply, from the serving node.
+    PrekeyReply(Vec<u8>),
+    /// The serving node's word that the pool ran dry.
+    PoolExhausted,
+    /// Bytes on the end-to-end channel, on the direct path to `to`.
+    Payload { to: Keyhash, bytes: Vec<u8> },
+    /// The same bytes handed to the serving node to relay to `to`.
+    Relay { to: Keyhash, bytes: Vec<u8> },
+    /// Application traffic to the serving node itself: it rides the
+    /// transport session and needs no construction.
+    Transport(Vec<u8>),
 }
 
 /// What the proposer shows every signer: the proposal, the disclosure set
@@ -135,7 +155,9 @@ impl Msg {
     pub fn payload(&self) -> Vec<u8> {
         match self {
             Msg::CaptureKey(k) => k.to_vec(),
-            Msg::Grant(b) | Msg::Query(b) | Msg::Response(b) | Msg::ResponseCopy(b) | Msg::Record(b) | Msg::RecoveryResponse(b) | Msg::AdoptionBody(b) | Msg::Seal(b) => b.clone(),
+            Msg::Grant(b) | Msg::Query(b) | Msg::Response(b) | Msg::ResponseCopy(b) | Msg::Record(b) | Msg::RecoveryResponse(b) | Msg::AdoptionBody(b) | Msg::Seal(b) | Msg::PublishBundle(b) | Msg::PrekeyRequest(b) | Msg::PrekeyReply(b) | Msg::Transport(b) => b.clone(),
+            Msg::Payload { bytes, .. } | Msg::Relay { bytes, .. } => bytes.clone(),
+            Msg::StockOneTime(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
             Msg::Responses(v) => v.concat(),
@@ -213,8 +235,19 @@ pub struct Client {
     /// As a recovering subject: the responses gathered at recovery
     /// meetings, verified, awaiting the block.
     pub recovery_responses: Vec<Vec<u8>>,
+    /// Payload confidentiality: material, sessions and what waits.
+    pub payload: PayloadState,
     active: Option<Active>,
     witnessing: Option<WitnessRequest>,
+}
+
+/// What arrived on the end-to-end channel, delivered where it belongs
+/// (design §14.2.4.6).
+#[derive(Debug)]
+pub enum Dispatched {
+    Application(Vec<u8>),
+    Grant(GrantOutcome),
+    Late(Result<Txid, String>),
 }
 
 fn hex8(k: &Keyhash) -> String {
@@ -224,7 +257,11 @@ fn hex8(k: &Keyhash) -> String {
 impl Client {
     pub fn new(id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> Self {
         let kh = id.public.keyhash;
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        let now = device.clock.now_ms() / 1000;
+        let random = device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -673,6 +710,177 @@ impl Client {
             Some(r) => r.seal().to_vec(),
             None => Vec::new(),
         }
+    }
+}
+
+impl Client {
+    fn nonce(&self) -> [u8; 16] {
+        let mut n = [0u8; 16];
+        self.device.random.fill(&mut n);
+        n
+    }
+
+    /// Attach to `serving` (design §14.1.2): the bundle is published, the
+    /// one-time pool stocked, and the reusable material of the whole
+    /// population prefetched as one sweep (`light-client-requirements.md`
+    /// §3).  Everything returned goes to the serving node.
+    pub fn attach(&mut self, serving: Keyhash, population: &[Keyhash]) -> Vec<Msg> {
+        self.payload.serving = Some(serving);
+        let now = self.now_s();
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let bundle = self.payload.keys.bundle(&self.id, now);
+        let n = self.payload.cfg.pool_target;
+        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
+        self.payload.pool_reported = n;
+        let me = self.keyhash();
+        let others: Vec<Keyhash> = population.iter().copied().filter(|k| *k != me && *k != serving).collect();
+        let mut out = vec![Msg::PublishBundle(bundle), Msg::StockOneTime(keys)];
+        match others.len() {
+            0 => {}
+            // a sweep names at least two (`wire-format.md` §7.8); one other
+            // is asked for singly, reusable material only
+            1 => {
+                let nonce = self.nonce();
+                out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce }.encode()));
+            }
+            _ => out.push(Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))),
+        }
+        out
+    }
+
+    /// Routine maintenance: rotate the signed prekey when its interval has
+    /// elapsed, and replenish the pool when it has fallen low.
+    pub fn maintain(&mut self) -> Vec<Msg> {
+        let now = self.now_s();
+        let mut out = Vec::new();
+        if self.payload.keys.due_for_rotation(now, &self.payload.cfg) {
+            let random = self.device.random.clone();
+            let mut fresh = |out: &mut [u8]| random.fill(out);
+            self.payload.keys.rotate_signed_prekey(now, &mut fresh);
+            out.push(Msg::PublishBundle(self.payload.keys.bundle(&self.id, now)));
+        }
+        if self.payload.pool_reported < self.payload.cfg.replenish_below {
+            out.extend(self.restock());
+        }
+        out
+    }
+
+    fn restock(&mut self) -> Vec<Msg> {
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let n = self.payload.cfg.pool_target.saturating_sub(self.payload.pool_reported);
+        if n == 0 {
+            return Vec::new();
+        }
+        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
+        self.payload.pool_reported += n;
+        vec![Msg::StockOneTime(keys)]
+    }
+
+    /// The serving node reports how many one-time keys remain, or that
+    /// none do: below the threshold the pool is replenished at once.
+    pub fn on_pool_report(&mut self, remaining: usize) -> Vec<Msg> {
+        self.payload.pool_reported = remaining;
+        if remaining < self.payload.cfg.replenish_below { self.restock() } else { Vec::new() }
+    }
+
+    /// Send `bytes` of `kind` to `to` (design §14.2.4.1): to the serving
+    /// node it rides the transport session; to a leaf it goes on the
+    /// session held, or waits for the one-time key requested now, and
+    /// takes the direct path where one exists and the relay otherwise.
+    pub fn send_payload(&mut self, to: Keyhash, kind: u64, bytes: &[u8]) -> Result<Vec<Msg>, PayloadError> {
+        if Some(to) == self.payload.serving {
+            return Ok(vec![Msg::Transport(bytes.to_vec())]);
+        }
+        let plaintext = payload::wrap(kind, bytes);
+        if self.payload.sessions.has_session(&to) {
+            let m = self.payload.sessions.send(&to, &plaintext)?;
+            return Ok(vec![self.route(to, m)]);
+        }
+        self.payload.pending.entry(to).or_default().push(plaintext);
+        if self.payload.outstanding.values().any(|t| *t == to) {
+            return Ok(Vec::new());
+        }
+        let nonce = self.nonce();
+        self.payload.outstanding.insert(nonce, to);
+        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(to, nonce))])
+    }
+
+    fn route(&self, to: Keyhash, bytes: Vec<u8>) -> Msg {
+        if self.device.direct.reachable(&to) { Msg::Payload { to, bytes } } else { Msg::Relay { to, bytes } }
+    }
+
+    /// A reply from the serving node: a sweep's bundles are kept; a
+    /// one-time reply opens the session it was asked for, with the key
+    /// where one came and on reusable material alone where none did, and
+    /// sends what was waiting.
+    pub fn take_prekey_reply(&mut self, bytes: &[u8]) -> Result<Vec<Msg>, String> {
+        if let Ok(replies) = decode_batch_reply(bytes) {
+            for r in replies {
+                if let Some(b) = r.bundle
+                    && let Ok(p) = payload::read_bundle(&self.known, &b) {
+                        self.payload.sessions.prefetched.insert(p.subject, p);
+                    }
+            }
+            return Ok(Vec::new());
+        }
+        let r = PrekeyReply::decode(bytes)?;
+        let Some(to) = self.payload.outstanding.remove(&r.nonce) else {
+            // a reusable-only reply: the bundle is kept, and nothing opens
+            if let Some(b) = r.bundle
+                && let Ok(p) = payload::read_bundle(&self.known, &b) {
+                    self.payload.sessions.prefetched.insert(p.subject, p);
+                }
+            return Ok(Vec::new());
+        };
+        let their = match r.bundle {
+            Some(b) => {
+                let p = payload::read_bundle(&self.known, &b)?;
+                if p.subject != to {
+                    return Err("bundle for another subject".into());
+                }
+                self.payload.sessions.prefetched.insert(to, p.clone());
+                p
+            }
+            None => self.payload.sessions.prefetched.get(&to).cloned().ok_or("no bundle for the peer")?,
+        };
+        let one_time = match r.one_time {
+            Some(k) => Some(payload::OneTimeKey::decode(&k)?),
+            None => None,
+        };
+        let mut waiting = self.payload.pending.remove(&to).unwrap_or_default();
+        if waiting.is_empty() {
+            waiting.push(payload::wrap(payload::KIND_APPLICATION, b""));
+        }
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let first = self.payload.sessions.open(&self.payload.keys, to, &their, one_time.as_ref(), &mut fresh, &waiting[0]).map_err(|e| e.to_string())?;
+        let mut out = vec![self.route(to, first)];
+        for p in &waiting[1..] {
+            let m = self.payload.sessions.send(&to, p).map_err(|e| e.to_string())?;
+            out.push(self.route(to, m));
+        }
+        Ok(out)
+    }
+
+    /// What arrived on the end-to-end channel from `from`: decrypted on the
+    /// session, or a session opened on my prekeys, and delivered by kind —
+    /// a key grant to the grant handler, a late response beside its record,
+    /// application payload to the application.
+    pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let plaintext = self.payload.sessions.receive(&mut self.payload.keys, from, bytes, &mut fresh).map_err(|e| e.to_string())?;
+        let (kind, inner) = payload::unwrap(&plaintext)?;
+        Ok(match kind {
+            payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),
+            payload::KIND_LATE_RESPONSE => {
+                let consented = self.subject.all_consented();
+                Dispatched::Late(record::take_late_response(&mut self.store, &self.known, &inner, &consented))
+            }
+            _ => Dispatched::Application(inner),
+        })
     }
 }
 

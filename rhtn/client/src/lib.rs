@@ -20,6 +20,10 @@
 //! - [`rotation`] is what a subject does with its own lines: seal on
 //!   rotation, seal then reissue on suspicion, never into a series it has
 //!   occupied, and keep the chain that proves its series.
+//! - [`payload`] is payload confidentiality: the prekey material published
+//!   and stocked, the prefetch and the one-time request, the session opened
+//!   on PQXDH, and the channel's framing.
+//! - [`ratchet`] is the Double Ratchet the session runs.
 //! - [`notice`] is what the person is told, raised through one hook.
 //! - [`device`] is the hardware and the person behind traits: proximity
 //!   channels, the camera, the clock, randomness, the operator, the engine.
@@ -35,7 +39,9 @@ pub mod ceremony;
 pub mod device;
 pub mod keys;
 pub mod notice;
+pub mod payload;
 pub mod query;
+pub mod ratchet;
 pub mod record;
 pub mod rotation;
 pub mod selection;

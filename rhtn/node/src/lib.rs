@@ -18,6 +18,7 @@
 
 pub mod currency;
 pub mod peering;
+pub mod prekeys;
 pub mod propagation;
 pub mod queue;
 pub mod resolution;

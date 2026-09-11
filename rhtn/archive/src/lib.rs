@@ -16,6 +16,7 @@
 pub mod chain;
 pub mod currency;
 pub mod locator;
+pub mod prekey;
 pub mod record;
 pub mod series;
 pub mod topology;

@@ -277,6 +277,11 @@ impl LiveNode {
                         let reply = v.lock().unwrap().answer_currency(&c.lock().unwrap(), &req);
                         Some(reply.encode())
                     }
+                    Family::PrekeyRequestOrBatch => {
+                        let mut view = v.lock().unwrap();
+                        let now = view.now();
+                        view.prekeys.answer(&peer, &body, now)
+                    }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;
                         let started = v.lock().unwrap().resolve_for_client(&an.lock().unwrap(), &req);

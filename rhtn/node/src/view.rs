@@ -42,6 +42,9 @@ pub struct NodeView {
     pub locators: LocatorStore,
     /// Staples handed over with introductions, by subject (design §12.6.5).
     pub staples: BTreeMap<Keyhash, Vec<u8>>,
+    /// The prekey bundles and one-time pools this node serves for its
+    /// clients (`wire-format.md` §7.8).
+    pub prekeys: crate::prekeys::PrekeyService,
     /// This node's own archive, which its disavowals advance.
     pub archive: Archive,
     /// `slot -> occupant`, this node's own subordinate slots.
@@ -94,6 +97,7 @@ impl NodeView {
             store: TopologyStore::new(),
             locators: LocatorStore::new(),
             staples: BTreeMap::new(),
+            prekeys: crate::prekeys::PrekeyService::default(),
             archive: Archive::new(me),
             slots: BTreeMap::new(),
             memo_table: BTreeMap::new(),

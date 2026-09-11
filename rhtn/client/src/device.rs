@@ -216,6 +216,22 @@ pub fn guided_capture(cam: &dyn Camera, clock: &dyn Clock, rng: &dyn Random, p: 
     (frames, prompts)
 }
 
+/// The direct payload path (design §14.1.1, §12.6.3): whether a peer can
+/// be reached without the relay.  Traversal is the transport's; what the
+/// client decides is only which route a message takes.
+pub trait DirectPath {
+    fn reachable(&self, peer: &Keyhash) -> bool;
+}
+
+/// No direct path to anyone: every payload is relayed.
+pub struct NoDirectPath;
+
+impl DirectPath for NoDirectPath {
+    fn reachable(&self, _: &Keyhash) -> bool {
+        false
+    }
+}
+
 /// Everything a client reaches the world through.
 pub struct Device {
     pub proximity: Rc<dyn Proximity>,
@@ -225,6 +241,7 @@ pub struct Device {
     pub operator: Rc<dyn Operator>,
     pub notifier: Rc<dyn Notifier>,
     pub engine: Rc<dyn Engine>,
+    pub direct: Rc<dyn DirectPath>,
 }
 
 /// A verdict is what an engine returns; re-exported so a harness engine
