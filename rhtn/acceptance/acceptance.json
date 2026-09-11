@@ -7270,5 +7270,64 @@
   "then": "The four well-formed paths are accepted. Each departure is rejected, naming the byte length, the nibble value or the pad nibble. The request is refused at decoding, and the hop-index operation on the malformed path returns without indexing past its bytes. An implementation that checks the nibble ceiling alone and then indexes by the claimed count fails.",
   "oracle": "fixture",
   "interpretation": null
+ },
+ {
+  "id": "TOP-18",
+  "area": "topology",
+  "gap": "topology",
+  "title": "End the binding a departure's series names, in whatever order the departure and its adoption arrive",
+  "milestone": 5,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.2",
+   "wire-format.md §10.1.3",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.2",
+    "text": "counter incremented within the current series"
+   },
+   {
+    "where": "wire-format.md §10.1.3",
+    "text": "reconciliation is a replay of the same frames"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Remove a child on departure or disavowal."
+   }
+  ],
+  "given": "O's table; an adoption of N under P opening series 1, N's departure from P at series 1 counter 1, and a later re-adoption of N under P opening series 2.",
+  "when": "O applies the departure before its adoption; and applies the three records in each of their six arrival orders.",
+  "then": "After the departure and then the adoption, N is not among P's subordinates: the departure is held and settled against the adoption its series names. In every order the series-1 binding is ended and the series-2 binding stands open, so N's patrons are {P} by the re-adoption alone. A departure applied twice ends nothing the second time. An implementation that discards a departure arriving before its adoption, or ends whichever open binding it finds first, fails.",
+  "oracle": "model",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-17",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Keep every accepted message across a restart in its arrival second",
+  "milestone": 5,
+  "kind": "negative",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "Undelivered messages queue indefinitely at the recipient's serving node"
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Queue indefinitely, bounded by a per-subordinate storage cap"
+   }
+  ],
+  "given": "N's mailbox on disk holding two messages for C that arrived in one second; N restarts within that second and accepts a third for C.",
+  "when": "C's queue is listed.",
+  "then": "All three ciphertexts are held, oldest first, and three files exist: the restarted store resumes its sequence past what the directory holds and never creates a file over an existing one. An implementation that restarts its sequence at zero and overwrites fails.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

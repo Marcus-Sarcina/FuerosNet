@@ -130,3 +130,22 @@ fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     out
 }
 
+
+// acceptance: QUE-17
+#[test]
+fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
+    use rhtn_node::queue::{QueueStore, Queued};
+    let dir = std::env::temp_dir().join(format!("rhtn-queue-restart-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let first = DirStore::new(&dir);
+    first.push(Queued { recipient: kh("carol"), arrival: 100, ciphertext: b"one".to_vec() });
+    first.push(Queued { recipient: kh("carol"), arrival: 100, ciphertext: b"two".to_vec() });
+    drop(first);
+    // the node restarts within the same second and accepts a third
+    let second = DirStore::new(&dir);
+    second.push(Queued { recipient: kh("carol"), arrival: 100, ciphertext: b"three".to_vec() });
+    let held: Vec<Vec<u8>> = second.list(&kh("carol")).into_iter().map(|q| q.ciphertext).collect();
+    assert_eq!(held, vec![b"one".to_vec(), b"two".to_vec(), b"three".to_vec()], "all three, oldest first");
+    assert_eq!(second.all_files().len(), 3);
+    let _ = std::fs::remove_dir_all(&dir);
+}

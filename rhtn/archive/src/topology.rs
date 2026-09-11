@@ -121,6 +121,9 @@ pub type Preference = Arc<dyn Fn(&Keyhash, &Keyhash) -> Ordering + Send + Sync>;
 /// A disavowal that arrived before the adoption it ends: patron, node, the
 /// patron's timestamp, the disavowal's txid, and its reason code.
 type PendingDisavowal = (Keyhash, Keyhash, u64, Txid, Option<u64>);
+/// A departure received before the adoption whose series it names: node,
+/// patron, series, txid, time.
+type PendingDeparture = (Keyhash, Keyhash, u32, Txid, u64);
 
 #[derive(Default)]
 pub struct Table {
@@ -135,6 +138,7 @@ pub struct Table {
     /// prior key -> (successor, its patron), every recovery seen
     lineage: BTreeMap<Keyhash, Vec<(Keyhash, Keyhash)>>,
     pending_disavowals: Vec<PendingDisavowal>,
+    pending_departures: Vec<PendingDeparture>,
     pub prefer: Option<Preference>,
 }
 
@@ -163,6 +167,7 @@ impl Table {
             attached: BTreeMap::new(),
             lineage: self.lineage.clone(),
             pending_disavowals: self.pending_disavowals.clone(),
+            pending_departures: self.pending_departures.clone(),
             prefer: self.prefer.clone(),
         }
     }
@@ -380,6 +385,11 @@ impl Table {
             s => return Err(Refusal::Signatures(s)),
         }
         let f = |k| rec.field_hash(k).ok_or_else(|| Refusal::Structure(format!("field {k}")));
+        // an ending transaction already held is not applied twice: it ended
+        // what it ended, or waits where it waits
+        if self.held.contains(&rec.txid) && matches!(rec.tx_type, TYPE_DEPARTURE | TYPE_DISAVOWAL) {
+            return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
+        }
         let out = match rec.tx_type {
             TYPE_ADOPTION => {
                 let node = f(1)?;
@@ -411,6 +421,7 @@ impl Table {
                 self.nodes.insert(node);
                 self.nodes.insert(patron);
                 self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, evidence });
+                self.settle_pending_departures();
                 self.settle_pending_disavowals();
                 let mut acks = Vec::new();
                 if let (Some(me), Some(iss)) = (self.me, issuer)
@@ -424,7 +435,17 @@ impl Table {
             TYPE_DEPARTURE => {
                 let node = f(1)?;
                 let patron = f(2)?;
-                let ended = self.end_binding(&node, &patron, rec.txid, rec.time, End::Departure, None);
+                // a departure ends the binding whose series it names
+                // (`wire-format.md` §4.2, §2.3): a later re-adoption opens a
+                // new series and is untouched by it.  Received before that
+                // binding's adoption, it is held and settled when the
+                // adoption arrives, so arrival order cannot resurrect a
+                // relationship the node ended (§10.1.3's replay)
+                let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
+                let ended = self.end_binding(&node, &patron, Some(series), (rec.txid, rec.time, End::Departure), None);
+                if !ended {
+                    self.pending_departures.push((node, patron, series, rec.txid, rec.time));
+                }
                 self.nodes.insert(node);
                 Outcome { applied: if ended { Applied::Ended } else { Applied::Nothing }, acks: Vec::new() }
             }
@@ -432,7 +453,7 @@ impl Table {
                 let patron = f(1)?;
                 let node = f(2)?;
                 let code = rec.field_uint(4);
-                let ended = self.end_binding(&node, &patron, rec.txid, rec.time, End::Disavowal(code), Some(rec.time));
+                let ended = self.end_binding(&node, &patron, None, (rec.txid, rec.time, End::Disavowal(code)), Some(rec.time));
                 if !ended {
                     self.pending_disavowals.push((patron, node, rec.time, rec.txid, code));
                 }
@@ -445,12 +466,13 @@ impl Table {
         Ok(out)
     }
 
-    /// End the binding of `node` under `patron`.  A disavowal is ordered by
-    /// the patron's own clock: it ends the adoption in that slot whose
+    /// End the binding of `node` under `patron`.  A departure names the
+    /// series of the relationship it ends; a disavowal is ordered by the
+    /// patron's own clock: it ends the adoption in that slot whose
     /// timestamp precedes it and which no later adoption has replaced.
-    fn end_binding(&mut self, node: &Keyhash, patron: &Keyhash, txid: Txid, at: u64, end: End, ordered_at: Option<u64>) -> bool {
+    fn end_binding(&mut self, node: &Keyhash, patron: &Keyhash, series: Option<u32>, ending: (Txid, u64, End), ordered_at: Option<u64>) -> bool {
         let idx = match ordered_at {
-            None => self.bindings.iter().position(|b| b.node == *node && b.patron == *patron && b.open()),
+            None => self.bindings.iter().position(|b| b.node == *node && b.patron == *patron && series.is_none_or(|s| b.series == s) && b.open()),
             Some(t) => self
                 .bindings
                 .iter()
@@ -467,14 +489,23 @@ impl Table {
                 return false;
             }
         }
-        self.bindings[i].end = Some((txid, at, end));
+        self.bindings[i].end = Some(ending);
         true
+    }
+
+    fn settle_pending_departures(&mut self) {
+        let pending = std::mem::take(&mut self.pending_departures);
+        for (node, patron, series, txid, t) in pending {
+            if !self.end_binding(&node, &patron, Some(series), (txid, t, End::Departure), None) {
+                self.pending_departures.push((node, patron, series, txid, t));
+            }
+        }
     }
 
     fn settle_pending_disavowals(&mut self) {
         let pending = std::mem::take(&mut self.pending_disavowals);
         for (patron, node, t, txid, code) in pending {
-            if !self.end_binding(&node, &patron, txid, t, End::Disavowal(code), Some(t)) {
+            if !self.end_binding(&node, &patron, None, (txid, t, End::Disavowal(code)), Some(t)) {
                 self.pending_disavowals.push((patron, node, t, txid, code));
             }
         }

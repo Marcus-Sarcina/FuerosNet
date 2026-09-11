@@ -428,3 +428,42 @@ fn divergent_currency_assertions_are_a_fork_and_both_patrons_are_told() {
     let _: BTreeMap<Txid, Vec<u8>> = BTreeMap::new();
     let _ = <World as Fetch>::fetch;
 }
+
+// acceptance: TOP-18
+#[test]
+fn a_departure_ends_its_series_in_whatever_order_it_arrives() {
+    let mut w = World::new(&["alice", "bob"]);
+    let (p, n) = (w.kh("alice"), w.kh("bob"));
+    let f = w.meet("alice", "bob");
+    let a1 = w.adopt("bob", "alice", f.txid, 1);
+    let d = w.depart("bob", "alice", Seqno { series: 1, counter: 1 });
+    // the reviewer's case: the departure before its own adoption
+    let mut t = Table::with_me(p);
+    apply(&mut t, &w, &f);
+    apply(&mut t, &w, &d);
+    assert_eq!(apply(&mut t, &w, &a1).applied, Applied::Adopted);
+    assert!(!t.patrons(&n).contains(&p), "the held departure settles against the adoption it names");
+    // a re-adoption on a new series, in every arrival order: series 1 ends
+    // and series 2 stands
+    let f2 = w.meet("alice", "bob");
+    let a2 = w.adopt("bob", "alice", f2.txid, 2);
+    let records = [&a1, &d, &a2];
+    let orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+    for order in orders {
+        let mut t = Table::with_me(p);
+        apply(&mut t, &w, &f);
+        apply(&mut t, &w, &f2);
+        for i in order {
+            apply(&mut t, &w, records[i]);
+        }
+        let open: Vec<u32> = t.bindings().iter().filter(|b| b.node == n && b.patron == p && b.open()).map(|b| b.series).collect();
+        assert_eq!(open, vec![2], "arrival order {order:?}: series 1 ended, series 2 open");
+        assert_eq!(t.patrons(&n), set(&[p]), "arrival order {order:?}");
+    }
+    // the departure applied twice ends nothing twice and holds nothing new
+    let mut t = Table::with_me(p);
+    apply(&mut t, &w, &f);
+    apply(&mut t, &w, &a1);
+    assert_eq!(apply(&mut t, &w, &d).applied, Applied::Ended);
+    assert_eq!(apply(&mut t, &w, &d).applied, Applied::Nothing);
+}

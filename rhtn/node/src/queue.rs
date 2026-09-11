@@ -13,6 +13,9 @@ pub use rhtn_transport::queue::{MemoryStore, QueueStore, Queued, Refusal};
 /// One file per message under `<dir>/<recipient hex>/<arrival>-<seq>`: the
 /// path carries the recipient and arrival time, the content is the
 /// ciphertext, and delivery unlinks the file.  No journal, no tombstone.
+/// The sequence resumes past every file the directory already holds and a
+/// file is only ever created, never overwritten, so a restart in the same
+/// second as an earlier arrival cannot take an accepted message's name.
 pub struct DirStore {
     dir: PathBuf,
     seq: Mutex<u64>,
@@ -22,7 +25,20 @@ impl DirStore {
     pub fn new(dir: impl Into<PathBuf>) -> Self {
         let dir = dir.into();
         std::fs::create_dir_all(&dir).expect("queue directory");
-        DirStore { dir, seq: Mutex::new(0) }
+        let mut seq = 0u64;
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for d in rd.flatten() {
+                if let Ok(inner) = std::fs::read_dir(d.path()) {
+                    for e in inner.flatten() {
+                        if let Some((_, s)) = e.file_name().to_string_lossy().split_once('-')
+                            && let Ok(s) = s.parse::<u64>() {
+                                seq = seq.max(s);
+                            }
+                    }
+                }
+            }
+        }
+        DirStore { dir, seq: Mutex::new(seq) }
     }
 
     fn recipient_dir(&self, r: &[u8; 32]) -> PathBuf {
@@ -62,12 +78,24 @@ impl DirStore {
 
 impl QueueStore for DirStore {
     fn push(&self, item: Queued) {
+        use std::io::Write;
         let dir = self.recipient_dir(&item.recipient);
         std::fs::create_dir_all(&dir).expect("recipient directory");
         let mut seq = self.seq.lock().unwrap();
-        *seq += 1;
-        let path = dir.join(format!("{}-{}", item.arrival, *seq));
-        std::fs::write(path, &item.ciphertext).expect("queue write");
+        loop {
+            *seq += 1;
+            let path = dir.join(format!("{}-{}", item.arrival, *seq));
+            // exclusive creation: a name already taken is passed over, and
+            // nothing accepted is ever written over
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut f) => {
+                    f.write_all(&item.ciphertext).expect("queue write");
+                    return;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => panic!("queue write: {e}"),
+            }
+        }
     }
     fn take_all(&self, recipient: &[u8; 32]) -> Vec<Queued> {
         let mut out = Vec::new();
