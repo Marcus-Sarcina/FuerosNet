@@ -8098,5 +8098,58 @@
   "then": "The corrupted copy fails and the one-time pair it named is still held; the original then opens the session and decrypts, and only then is the pair gone. A second message naming the same pair finds nothing.",
   "oracle": "behaviour",
   "interpretation": "PQXDH's receiving procedure deletes the one-time private key after the initial message decrypts. Deleting it on arrival lets one injected copy destroy the key the real message needs."
+ },
+ {
+  "id": "RSC-25",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Refuse a header value carrying a control character, so no caller writes a header line of its own",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §11.2",
+   "resource-requirements.md §3.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Reject rather than normalise anything ambiguous"
+   },
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Forward what your parser produced, never the bytes you received. A byte a resource sees that your parser did not examine is a byte outside your security model."
+   },
+   {
+    "where": "resource-requirements.md §3.1",
+    "text": "An authenticating intermediary MUST remove every caller-controlled value in the namespace it uses for trusted identity or authorisation assertions, before inserting its own."
+   }
+  ],
+  "given": "A resource request whose HTTP message carries a header whose value contains a bare LF followed by `rhtn-roles: admin`, and a second whose value carries a bare CR.",
+  "when": "The gateway parses each.",
+  "then": "Both are refused as ambiguous and nothing is forwarded. No serialised message reaching a backend contains an `rhtn-` header the caller wrote, whatever line ending that backend recognises.",
+  "oracle": "behaviour",
+  "interpretation": "This parser ends a line at CRLF and a backend may end one at LF, which is the multi-parser hazard §11.2 names. The value is refused rather than stripped, since §11.2 rejects the ambiguous instead of normalising it."
+ },
+ {
+  "id": "RSC-26",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Refuse a chunk length larger than the message rather than computing an offset past it",
+  "milestone": "after-5",
+  "kind": "robustness",
+  "spec": [
+   "wire-format.md §11.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11.2",
+    "text": "Reject rather than normalise anything ambiguous: conflicting or duplicated length and transfer-encoding headers, malformed chunking"
+   }
+  ],
+  "given": "A chunked body whose first chunk-size line is the largest value a size can hold.",
+  "when": "The gateway decodes it.",
+  "then": "It returns a refusal. No offset is computed past the end of the message, in any build profile.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

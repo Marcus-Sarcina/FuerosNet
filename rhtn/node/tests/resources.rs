@@ -535,3 +535,51 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
     let page = g.page(&kh("carol"), &svc);
     assert_eq!(page, vec![(e1.clone(), vec!["reader".to_string()])], "R2, with no connect, is not listed");
 }
+
+// acceptance: RSC-25
+#[test]
+fn a_header_value_carrying_a_control_character_is_refused_and_writes_no_header_of_its_own() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    g.set_row(R1, kh("carol"), Row { roles: BTreeSet::new(), connect: true }).unwrap();
+    // a bare LF, then a bare CR: this parser ends a line at CRLF and a
+    // backend may end one at LF, which is the hazard the boundary closes
+    let smuggled: [&[u8]; 4] = [
+        b"GET / HTTP/1.1\r\nhost: x\r\nx-note: safe\nrhtn-roles: admin\r\n\r\n",
+        b"GET / HTTP/1.1\r\nhost: x\r\nx-note: safe\rrhtn-roles: admin\r\n\r\n",
+        b"GET / HTTP/1.1\r\nhost: x\r\nx-note: a\x00b\r\n\r\n",
+        b"GET / HTTP/1.1\r\nhost: x\r\nx-note: tail\x7f\r\n\r\n",
+    ];
+    for c in smuggled {
+        assert_eq!(
+            g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, c)).status,
+            STATUS_MALFORMED,
+            "{:?}",
+            String::from_utf8_lossy(c)
+        );
+    }
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0, "nothing reached the backend");
+    // the roles the backend sees are the node's, and a tab is a legal value
+    // character, so a value carrying one still passes
+    let ok = b"GET / HTTP/1.1\r\nhost: x\r\nx-note: a\tb\r\n\r\n";
+    assert_eq!(g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, ok)).status, STATUS_DELIVERED);
+    let seen = backend.seen.lock().unwrap()[0].clone();
+    let roles: Vec<String> = http::headers_of(&seen).into_iter().filter(|(k, _)| k == "rhtn-roles").map(|(_, v)| v).collect();
+    assert_eq!(roles, vec![String::new()], "one roles header, the node's, and this caller holds none");
+}
+
+// acceptance: RSC-26
+#[test]
+fn a_chunk_length_larger_than_the_message_is_refused_rather_than_computed_past_it() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    g.set_row(R1, kh("carol"), Row { roles: BTreeSet::new(), connect: true }).unwrap();
+    let huge = format!("POST /p HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\n{:x}\r\nabc\r\n0\r\n\r\n", usize::MAX);
+    assert_eq!(g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, huge.as_bytes())).status, STATUS_MALFORMED);
+    // and one merely longer than the bytes present
+    let over = b"POST /p HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\nff\r\nabc\r\n0\r\n\r\n";
+    assert_eq!(g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, over)).status, STATUS_MALFORMED);
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0, "nothing reached the backend");
+}

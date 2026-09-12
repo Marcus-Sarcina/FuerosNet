@@ -38,6 +38,18 @@ fn is_token(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|c| c.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&c))
 }
 
+/// A header value is visible characters, spaces and horizontal tabs (RFC
+/// 9110 §5.5).  **A bare LF or CR is the whole hazard this boundary
+/// exists to close**: this parser ends a line at CRLF, a backend may end
+/// one at LF, and a value carrying either would reach that backend as a
+/// header line of the caller's own writing — `rhtn-roles` among them,
+/// which `resource-requirements.md` §3.1 says defeats the gateway
+/// entirely.  Rejected rather than stripped: `wire-format.md` §11.2
+/// refuses the ambiguous instead of normalising it.
+fn is_field_value(s: &str) -> bool {
+    s.bytes().all(|c| c == b'\t' || (0x20..=0x7e).contains(&c))
+}
+
 fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     hay[from..].windows(needle.len()).position(|w| w == needle).map(|p| p + from)
 }
@@ -91,6 +103,9 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
         let (name, value) = (&line[..colon], line[colon + 1..].trim_matches([' ', '\t']));
         if !is_token(name) {
             return Err(Reject::Malformed("header name"));
+        }
+        if !is_field_value(value) {
+            return Err(Reject::Ambiguous("control character in a header value"));
         }
         let lname = name.to_ascii_lowercase();
         match lname.as_str() {
@@ -166,15 +181,19 @@ fn decode_chunked(b: &[u8]) -> Result<(Vec<u8>, usize), Reject> {
         let size = usize::from_str_radix(size_str, 16).map_err(|_| Reject::Malformed("chunk size"))?;
         at = eol + 2;
         if size == 0 {
-            if b.get(at..at + 2) != Some(b"\r\n") {
+            if b.get(at..at.saturating_add(2)) != Some(b"\r\n") {
                 return Err(Reject::Ambiguous("trailers"));
             }
             return Ok((out, at + 2));
         }
-        let data = b.get(at..at + size).ok_or(Reject::Malformed("chunk short"))?;
+        // a length is a claim about bytes that are here: added to the
+        // offset unchecked it overflows, which is a panic in one build
+        // profile and a wrapped slice in another
+        let end = at.checked_add(size).ok_or(Reject::Malformed("chunk size over the message"))?;
+        let data = b.get(at..end).ok_or(Reject::Malformed("chunk short"))?;
         out.extend_from_slice(data);
-        at += size;
-        if b.get(at..at + 2) != Some(b"\r\n") {
+        at = end;
+        if b.get(at..at.saturating_add(2)) != Some(b"\r\n") {
             return Err(Reject::Malformed("chunk end"));
         }
         at += 2;
