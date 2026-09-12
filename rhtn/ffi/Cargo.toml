@@ -1,0 +1,10 @@
+[package]
+name = "rhtn-ffi"
+version = "0.1.0"
+edition = "2024"
+description = "The boundary the mobile shells bind to: one facade over rhtn-client and rhtn-adaptors, and the platform's devices passed inward"
+
+[dependencies]
+rhtn-adaptors = { path = "../adaptors" }
+rhtn-archive = { path = "../archive" }
+rhtn-client = { path = "../client" }

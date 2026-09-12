@@ -1,0 +1,13 @@
+[package]
+name = "rhtn-daemon"
+version = "0.1.0"
+edition = "2024"
+description = "rhtnd: a node run from an operator's configuration, and the operator's view of what that configuration exposes"
+
+[[bin]]
+name = "rhtnd"
+path = "src/main.rs"
+
+[dependencies]
+rhtn-archive = { path = "../archive" }
+rhtn-node = { path = "../node" }

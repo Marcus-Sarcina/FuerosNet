@@ -624,6 +624,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rhtn-cli"
+version = "0.1.0"
+dependencies = [
+ "rhtn-codec",
+]
+
+[[package]]
 name = "rhtn-client"
 version = "0.1.0"
 dependencies = [
@@ -658,6 +665,23 @@ dependencies = [
  "serde_json",
  "sha2",
  "x25519-dalek",
+]
+
+[[package]]
+name = "rhtn-daemon"
+version = "0.1.0"
+dependencies = [
+ "rhtn-archive",
+ "rhtn-node",
+]
+
+[[package]]
+name = "rhtn-ffi"
+version = "0.1.0"
+dependencies = [
+ "rhtn-adaptors",
+ "rhtn-archive",
+ "rhtn-client",
 ]
 
 [[package]]

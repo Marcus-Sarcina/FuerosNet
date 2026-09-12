@@ -1,0 +1,12 @@
+[package]
+name = "rhtn-cli"
+version = "0.1.0"
+edition = "2024"
+description = "rhtn: the developer command line — decode what the wire carries, mint and inspect identities, and probe a running node"
+
+[[bin]]
+name = "rhtn"
+path = "src/main.rs"
+
+[dependencies]
+rhtn-codec = { path = "../codec" }

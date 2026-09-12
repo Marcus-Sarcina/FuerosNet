@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["acceptance", "adaptors", "archive", "client", "codec", "crypto", "node", "policy", "sim", "transport"]
+# `mobile/` holds the Kotlin and Swift shells, which build with Gradle and
+# Xcode and are not Cargo members.
+members = ["acceptance", "adaptors", "archive", "cli", "client", "codec", "crypto", "daemon", "ffi", "node", "policy", "sim", "transport"]
 
 [workspace.dependencies]
 sha2 = "0.11.0"
