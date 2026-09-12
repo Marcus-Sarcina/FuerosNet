@@ -611,6 +611,11 @@ pub struct NodeConfig {
     /// The emulated NAT this node's socket sits behind, for a harness
     /// (`rhtn-sim`); none on a real network.
     pub nat: Option<std::net::SocketAddr>,
+    /// The address to serve on, which an operator chooses
+    /// (`infra-client-requirements.md` §7).  Absent binds an ephemeral
+    /// loopback port, which is what a harness wants and what every test
+    /// here relies on.
+    pub listen: Option<std::net::SocketAddr>,
     /// The node's own answers on request streams.  Absent, a currency
     /// request is answered "cannot issue" and anything else fails the stream.
     pub on_request: Option<RequestHandler>,
@@ -636,6 +641,7 @@ impl NodeConfig {
             on_control: None,
             on_direct: None,
             nat: None,
+            listen: None,
             on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,

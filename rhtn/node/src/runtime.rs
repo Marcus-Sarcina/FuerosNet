@@ -299,8 +299,11 @@ impl LiveNode {
         }));
         // the outward dials sit behind the same NAT as the served socket on
         // a harness; control traffic needs no traversal (`wire-format.md`
-        // §9.2), so this socket never asks STUN of anyone
-        let client_socket = rhtn_transport::traversal::TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), cfg.nat).expect("client socket");
+        // §9.2), so this socket never asks STUN of anyone.  It takes an
+        // ephemeral port on the same interface the node serves, so a host
+        // with several does not dial out of one it was not given.
+        let outward = cfg.listen.map(|a| std::net::SocketAddr::new(a.ip(), 0)).unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
+        let client_socket = rhtn_transport::traversal::TraversalSocket::bind(outward, cfg.nat).expect("client socket");
         let client_ep = rhtn_transport::traversal::endpoint(client_socket, None).expect("client endpoint");
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
@@ -395,8 +398,10 @@ impl LiveNode {
             let _ = dtx.send((peer, bytes));
         }));
         // one socket for QUIC and STUN (design §14.1.1): the node answers
-        // Binding Requests at the address it serves on
-        let traversal = rhtn_transport::traversal::TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), cfg.nat).expect("traversal socket");
+        // Binding Requests at the address it serves on, which the operator
+        // chooses (`infra-client-requirements.md` §7)
+        let served = cfg.listen.unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
+        let traversal = rhtn_transport::traversal::TraversalSocket::bind(served, cfg.nat).expect("traversal socket");
         let endpoint = {
             let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&cfg.identity)).expect("quinn accepts the profile");
             let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));

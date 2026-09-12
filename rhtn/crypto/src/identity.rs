@@ -24,6 +24,32 @@ impl Identity {
         Identity { keyhash, ed, pq }
     }
 
+    /// The identity a `KeyMaterial` array names (`wire-format.md` §2.2).
+    ///
+    /// The inverse of [`Identity::key_material`], and the way a holder
+    /// turns material it was handed into the keys it verifies with: a
+    /// `SiblingRef` carries material for a node the holder has never
+    /// contacted (`wire-format.md` §8.2), and an operator configures its
+    /// peers the same way, there being no fetch path for material a node
+    /// lacks.  The shape is checked first, so a blob that is not exactly
+    /// two well-formed keys yields nothing.
+    pub fn from_key_material(km: &[u8]) -> Option<Self> {
+        use rhtn_codec::cbor::{Item, parse_all};
+        cose::check_key_material(km).ok()?;
+        let item = parse_all(km).ok()?;
+        let Item::Array(a) = &item else { return None };
+        let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else { return None };
+        let bytes = |it: &Item| match it {
+            Item::Bytes(r) => Some(&km[r.clone()]),
+            _ => None,
+        };
+        let ed: [u8; 32] = bytes(&c[2].1)?.try_into().ok()?;
+        let ed = EdVk::from_bytes(&ed).ok()?;
+        let pq = ml_dsa::EncodedVerifyingKey::<MlDsa65>::try_from(bytes(&q[2].1)?).ok()?;
+        let pq = ml_dsa::VerifyingKey::<MlDsa65>::decode(&pq);
+        Some(Identity::from_public(ed, pq))
+    }
+
     /// The `KeyMaterial` array whose hash is this identity (`wire-format.md` §2.2).
     pub fn key_material(&self) -> Vec<u8> {
         cose::key_material(self.ed.as_bytes(), self.pq.encode().as_ref())
