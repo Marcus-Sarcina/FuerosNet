@@ -8862,3 +8862,70 @@ Left as it stands, and worth the author's eye:
   checker over `Robot/` would flag `review-tracking.md`'s as-of-filing
   references, which are deliberately not remapped, so the scope is the
   author's call and not the assistant's.
+
+**The 2026-09-12 conformance review, applied (2026-09-12).** Twelve
+findings against commit edb5cb3: F02 and F04 still open from the previous
+round, R01 to R07 still open, and R08 to R10 newly identified. **All
+twelve held on verification**: every cited path read as described and
+every rule they cite says what the reviewer says it says. Applied in seven
+gate-green commits, one per coherent area:
+
+- **bdcedbf, the traversal assertion.** Not a finding but the reviewer's
+  workspace failure: `mappings()[0]` indexed a `HashMap`'s values while the
+  fixture held two sockets behind that NAT. `Nat::mappings_for` filters by
+  inside address, and the assertion names the socket it is about. Fixed
+  first so the gates behind it were worth reading.
+- **35d78bd, R02 and R03** (client payload). The initial key came from the
+  message's identity key and the ratchet was stored under the name the
+  channel gave, unchecked against each other. The binding is the prekey
+  bundle, which its subject signs. A one-time pair is now used and spent
+  after, not before. PAY-16, PAY-17.
+- **9f9a5ee, R01** (the HTTP boundary). A header value could carry a bare
+  LF and be copied verbatim into the forwarded message, writing a header
+  line of the caller's own. A chunk length was added to an offset
+  unchecked. RSC-25, RSC-26.
+- **bf4ae83, R04 and R10** (the adaptors, both written the day before).
+  `gather` asked the local gate and `open` did not; the accept did not
+  either. The verifier's reply channel was registered before the requester
+  was checked, so a replayed body cancelled a legitimate request. TRV-08,
+  CER-31.
+- **267feab, R07, R08 and F04** (the node). Directional scopes escaped the
+  owner's Dunbar Org; the boundary is now taken once, before the scope is
+  read. `connect` and `discover` could be declared, assigned and emitted.
+  An ending cleared a slot by identity without asking which binding closed.
+  RSC-27, RSC-28, PRP-21.
+- **fa36b72, F02, R09 and R06** (validation). The transfer's three keys
+  were never compared; a presented chain was never held to §3.3's
+  chronology although the archive's append path was; a late response was
+  tested against consent flattened across ceremonies. DEC-27, ARC-19,
+  CER-32.
+- **2c09b52, R05** (frame and dispatch). The generic decoder applied the
+  body schema before dispatch, so the gateway's own "code 3" branch was
+  unreachable and a malformed resource body reset the stream. `parse_outer`
+  separates the outer frame from the body's schema, and the fallback is
+  scoped to request type 6, since no other family has an answer defined for
+  a body that does not decode. RSC-29.
+
+Three readings are the assistant's, each open to reversal:
+
+- **A recipient holding no binding for a sender refuses its first
+  message.** R02 admits a pending path or a refusal; refusal was chosen
+  and the author approved it. The cost is real: a peer who published after
+  this client's last sweep loses its first message. The client records the
+  peer as wanted and routine maintenance asks for the binding, so the
+  second attempt is attributable. A pending-and-retry path would recover
+  the first, at the cost of holding ciphertext it cannot attribute.
+- **`Client::sweep` no longer drops the caller's serving node.** A node
+  can be a participant and send payload of its own, which is exactly the
+  hosted verifier, and the population is the caller's to choose.
+- **A reserved role is refused where the operator writes it**, not
+  filtered where it is emitted, so a mistake is visible rather than silent.
+
+The author's ruling this round: **refuse but record**, for a late response
+whose record is held without its seed. Recorded as the verifier's keyhash
+against that record, not the bytes, since retention follows the record; and
+only where the response verified, a forgery being no signal.
+
+Numbers: twelve entries added, 309 in all, 297 of 307 implemented, 0 flags;
+each commit's gate green. Ten entries remain unimplemented: PAY-13 on the
+library decision and the nine manual product entries.
