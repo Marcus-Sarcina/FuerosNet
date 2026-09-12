@@ -97,10 +97,12 @@ async fn candidates_carry_the_host_address_and_the_reflexive_address_the_serving
     assert_eq!(sc.s1.traversal.answered.load(Ordering::SeqCst), 1, "answered at the address it serves QUIC on");
     assert_eq!(cs.iter().map(|c| c.kind).collect::<Vec<_>>(), vec![CandidateKind::Host, CandidateKind::ServerReflexive]);
     assert_eq!(cs[0].addr, sc.l1.addr, "the host address is the socket's own");
-    assert!(sc.nat1.mappings().contains(&cs[1].addr), "the reflexive address is the NAT's mapping for that socket");
     assert_ne!(cs[1].addr, sc.l1.addr);
-    // and it is the same mapping the serving node's session sees
-    assert_eq!(cs[1].addr, sc.nat1.mappings()[0]);
+    // The mapping is that socket's own, asked for by inside address: the
+    // NAT holds one per inside socket here, and this node has a second
+    // socket behind the same NAT for its outward dials, so the map's own
+    // order says nothing about which is which.
+    assert_eq!(sc.nat1.mappings_for(sc.l1.addr), vec![cs[1].addr], "endpoint-independent: one mapping for that socket, and it is the reflexive address");
     assert_eq!(decode_candidates(&encode_candidates(&cs)).unwrap(), cs);
     let _ = &sc.s;
 }

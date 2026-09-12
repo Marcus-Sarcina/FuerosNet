@@ -124,8 +124,18 @@ impl Nat {
         ext
     }
 
-    /// The external addresses in use, for a test to count mappings.
+    /// The external addresses in use, for a test to count mappings.  The
+    /// order is the map's and means nothing: a caller that wants one
+    /// socket's mapping asks for it by inside address.
     pub fn mappings(&self) -> Vec<SocketAddr> {
         self.state.lock().unwrap().external.values().filter_map(|s| s.local_addr().ok()).collect()
+    }
+
+    /// The external addresses this NAT holds for one inside socket: one
+    /// under endpoint-independent mapping, and one per destination under
+    /// address-and-port-dependent mapping (RFC 4787 §4.1).
+    pub fn mappings_for(&self, inside: SocketAddr) -> Vec<SocketAddr> {
+        let st = self.state.lock().unwrap();
+        st.external.iter().filter(|((i, _), _)| *i == inside).filter_map(|(_, s)| s.local_addr().ok()).collect()
     }
 }
