@@ -310,3 +310,28 @@ fn a_missing_embedded_signers_key_is_the_third_outcome_and_names_the_key() {
     assert!(matches!(bad.check_signatures(&w.lookup()), SigStatus::Invalid(_)));
     let _ = pop;
 }
+
+// acceptance: DEC-27
+#[test]
+fn a_transfer_whose_former_patron_is_a_participant_is_malformed() {
+    let mut w = World::new(&["alice", "bob", "carol"]);
+    let _ = w.meet("alice", "bob");
+    // the node vouching for its own move: the statement verifies under the
+    // key it names, and the adoption is still malformed
+    let own = transfer_block(w.id("alice"), &w.kh("alice"), &w.kh("bob"));
+    let body = adoption_bytes(&w, "alice", "bob", Evidence::Transfer { former: w.kh("alice"), block: own }, 1);
+    let e = body_err(&body);
+    assert!(e.contains("equals the adopted node"), "{e}");
+    assert!(parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).is_err(), "and it never reaches a signature check");
+    // the new patron vouching for the move to itself
+    let mine = transfer_block(w.id("bob"), &w.kh("alice"), &w.kh("bob"));
+    let body = adoption_bytes(&w, "alice", "bob", Evidence::Transfer { former: w.kh("bob"), block: mine }, 2);
+    let e = body_err(&body);
+    assert!(e.contains("equals the new patron"), "{e}");
+    assert!(parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).is_err());
+    // three distinct parties: the control, which parses and verifies
+    let good = transfer_block(w.id("carol"), &w.kh("alice"), &w.kh("bob"));
+    let body = adoption_bytes(&w, "alice", "bob", Evidence::Transfer { former: w.kh("carol"), block: good }, 3);
+    let rec = parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).expect("well formed");
+    assert_eq!(rec.check_signatures(&w.lookup()), SigStatus::Verified);
+}

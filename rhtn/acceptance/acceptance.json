@@ -8283,5 +8283,84 @@
   "then": "The table stays bound through A2 and the child's slot stays occupied, so resolution and the memo still name it. A departure ending the binding that is actually open does empty the slot, dated by that ending.",
   "oracle": "behaviour",
   "interpretation": "Which relationship an ending closes is the table's answer, not the record's: the slot follows the settled bindings, as the adoption branch already did."
+ },
+ {
+  "id": "DEC-27",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Reject a transfer whose former patron is the adopted node or the new patron",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "`former_patron_key` MUST differ from adoption field 2 — identical keys represent no transfer, the same rule and the same reason as `prior_key` MUST differ from field 1 in a `Recovery` — and MUST differ from field 1"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "A verifier MUST check all three against the enclosing adoption"
+   }
+  ],
+  "given": "An adoption carrying a transfer whose former patron is the adopted node, and another whose former patron is the new patron, each with a signature that verifies under the key named.",
+  "when": "Each is parsed.",
+  "then": "Both are malformed at typed validation, before any signature is weighed. An adoption whose three keys are distinct still parses and verifies.",
+  "oracle": "behaviour",
+  "interpretation": "Checkable from the adoption alone, so it sits beside the recovery block's prior-key rule rather than in a verifier that needs keys."
+ },
+ {
+  "id": "ARC-19",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Reject a presented series chain whose reissue is timed before the record it follows",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §3.3",
+   "wire-format.md §4.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.3",
+    "text": "the current record's effective time — `started_at` for a presence record, `timestamp` otherwise — MUST be greater than or equal to the effective time of every record its key 0 list names"
+   },
+   {
+    "where": "wire-format.md §4.6.1",
+    "text": "A node proves its current series by presenting"
+   }
+  ],
+  "given": "A presentation of an adoption dated 100 followed by a countersigned reissue dated 99, whose back-pointers name that adoption, with every signature verifying and the predecessor present in the chain.",
+  "when": "The chain is read.",
+  "then": "It is refused on chronology, as the archive's own append would refuse it. The same chain with the reissue dated 101 is accepted, and only then may it prove a series and abandon the old one.",
+  "oracle": "behaviour",
+  "interpretation": "The predecessor is in the presentation, so this is not the unavailable-history case; the presented path is held to the rule the append path already applies."
+ },
+ {
+  "id": "CER-32",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Attach a late response only under consent from the ceremony of the record it supplements",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.4",
+    "text": "The response must carry a `query_id` the subject countersigned for that ceremony"
+   },
+   {
+    "where": "wire-format.md §7.4",
+    "text": "Otherwise anyone could attach unsolicited assertions to a record naming someone else."
+   }
+  ],
+  "given": "A holder keeping a record from ceremony 6 and consent given in ceremonies 6 and 7, and a correctly signed late response answering a query consented in ceremony 7.",
+  "when": "The response is offered for the ceremony 6 record, and then one consented in ceremony 6 is.",
+  "then": "The first is refused naming the ceremony and nothing is attached; the second is kept beside the record. A holder that keeps the record but cannot resolve its ceremony refuses too, and records the arrival with its verifier where the response verified.",
+  "oracle": "behaviour",
+  "interpretation": "The arrival is recorded because a late response is a sign of the responder's reliability whatever became of it [author, 2026-09-12]; the bytes are not kept, since retention follows the record. A response that does not verify is not recorded, a forgery being no signal."
  }
 ]

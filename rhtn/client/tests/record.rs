@@ -8,7 +8,7 @@ use common::*;
 use rhtn_client::notice::{Notice, Notifier};
 use rhtn_client::query::*;
 use rhtn_client::record::*;
-use rhtn_client::store::ClientStore;
+use rhtn_client::store::{ClientStore, OwnSeed};
 use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
 use rhtn_archive::record::Record;
 use std::cell::RefCell;
@@ -171,6 +171,7 @@ fn a_witness_declines_a_claimed_start_far_from_its_clock() {
 }
 
 // acceptance: CER-29
+// acceptance: CER-32
 #[test]
 fn a_late_response_is_kept_beside_its_record_and_goes_with_it() {
     let mut w = world();
@@ -179,9 +180,17 @@ fn a_late_response_is_kept_beside_its_record_and_goes_with_it() {
     let mut store = ClientStore::default();
     store.records.insert(rec.txid, rec.bytes.clone());
     let ceremony = [7u8; 32];
+    // the record's own ceremony, which its seed names
+    store.seeds.insert(rec.txid, OwnSeed { seed: [3; 32], counterparty: kh("bob"), ceremony_id: ceremony, finalized_at: 0 });
     let consented_q = VerificationQuery { subject: kh("alice"), querier: kh("bob"), ceremony_id: ceremony, profile: vec![1], template_version: 1, verifier: kh("c1") };
     let other_q = VerificationQuery { verifier: kh("c2"), ..consented_q.clone() };
-    let consented = BTreeSet::from([consented_q.query_id()]);
+    // a query consented in a different encounter, correctly signed
+    let elsewhere = [8u8; 32];
+    let elsewhere_q = VerificationQuery { ceremony_id: elsewhere, verifier: kh("c3"), ..consented_q.clone() };
+    let consented = BTreeMap::from([
+        (ceremony, BTreeSet::from([consented_q.query_id()])),
+        (elsewhere, BTreeSet::from([elsewhere_q.query_id()])),
+    ]);
     let response = |q: &VerificationQuery, v: &str| {
         Response { verifier: kh(v), subject: kh("alice"), query_id: q.query_id(), verdict: Verdict::Inconclusive, basis: Some(Basis::PhotoMatch), template_version: Some(1), consent: consent(&id("alice"), &q.query_id()), selection_basis: 1 }.sign(&id(v))
     };
@@ -197,6 +206,28 @@ fn a_late_response_is_kept_beside_its_record_and_goes_with_it() {
     assert!(take_late_response(&mut store, &ids(), &unknown, &consented).is_err());
     let not_party = LateResponse { subject: kh("carol"), ..LateResponse::decode(&good).unwrap() }.encode();
     assert!(take_late_response(&mut store, &ids(), &not_party, &consented).is_err());
+    // consent from another ceremony authorises nothing here, however well
+    // the response is signed (`wire-format.md` §7.4)
+    let cross = LateResponse { record: rec.txid, subject: kh("alice"), response: response(&elsewhere_q, "c3") }.encode();
+    assert!(take_late_response(&mut store, &ids(), &cross, &consented).unwrap_err().contains("this record's ceremony"));
+    assert_eq!(store.late[&rec.txid].len(), 1, "nothing was attached for it");
+    // a holder keeping the record but not its seed cannot resolve the
+    // ceremony: refused, and the arrival recorded, since a late response is
+    // a sign of the responder's reliability
+    let mut bare = ClientStore::default();
+    bare.records.insert(rec.txid, rec.bytes.clone());
+    assert!(take_late_response(&mut bare, &ids(), &good, &consented).unwrap_err().contains("not resolvable"));
+    assert!(!bare.late.contains_key(&rec.txid), "the evidence is not kept");
+    assert_eq!(bare.unattached_late[&rec.txid], vec![kh("c1")], "the arrival is, naming its verifier");
+    // a forgery is no signal: one that does not verify is not recorded
+    let mut forged = good.clone();
+    let last = forged.len() - 1;
+    forged[last] ^= 1;
+    assert!(take_late_response(&mut bare, &ids(), &forged, &consented).is_err());
+    assert_eq!(bare.unattached_late[&rec.txid].len(), 1, "still only the one that verified");
+    // and the record it was offered for takes the arrivals with it
+    bare.discard_record(&rec.txid);
+    assert!(!bare.unattached_late.contains_key(&rec.txid));
     // R discarded: the late response goes with it
     store.discard_record(&rec.txid);
     assert!(!store.records.contains_key(&rec.txid));

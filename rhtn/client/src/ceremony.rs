@@ -922,7 +922,7 @@ impl Client {
         Ok(match kind {
             payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),
             payload::KIND_LATE_RESPONSE => {
-                let consented = self.subject.all_consented();
+                let consented = self.subject.consented_by_ceremony().clone();
                 Dispatched::Late(record::take_late_response(&mut self.store, &self.known, &inner, &consented))
             }
             payload::KIND_CANDIDATES => Dispatched::Candidates(inner),

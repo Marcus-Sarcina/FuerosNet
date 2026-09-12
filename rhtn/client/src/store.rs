@@ -184,6 +184,15 @@ pub struct ClientStore {
     pub seeds: BTreeMap<Txid, OwnSeed>,
     pub records: BTreeMap<Txid, Vec<u8>>,
     pub late: BTreeMap<Txid, Vec<Vec<u8>>>,
+    /// Late responses that verified and named a participant but could not
+    /// be attached, by the record they were offered for, naming their
+    /// verifier.  **A late response is a sign of the responder's
+    /// reliability whatever became of it** [author, 2026-09-12], so the
+    /// arrival is kept even where the evidence is refused.  The bytes are
+    /// not: retention follows the record (`wire-format.md` §7.4), and
+    /// keeping evidence this holder declined to admit would outlive the
+    /// reason it was declined.
+    pub unattached_late: BTreeMap<Txid, Vec<Keyhash>>,
     pub disclosures: BTreeMap<Txid, DisclosureSet>,
 }
 
@@ -209,6 +218,7 @@ impl ClientStore {
     pub fn discard_record(&mut self, txid: &Txid) {
         self.records.remove(txid);
         self.late.remove(txid);
+        self.unattached_late.remove(txid);
         self.disclosures.remove(txid);
     }
 }

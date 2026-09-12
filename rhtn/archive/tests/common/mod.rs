@@ -177,6 +177,19 @@ impl World {
         self.commit(TYPE_ADOPTION, &body, &[node, patron])
     }
 
+    /// A reissue stamped at `t`, signed and stored WITHOUT appending to any
+    /// archive: the append path enforces §3.3's monotonicity itself, so a
+    /// record that breaks it can only be built beside the archive, which is
+    /// how one reaches a holder in a presentation.
+    pub fn loose_reissue_at(&mut self, node: &str, patron: &str, leaving: Seqno, new_series: u32, t: u64) -> Record {
+        let (bn, bp) = (self.back(node), self.back(patron));
+        let body = reissue_body([&bn, &bp], &self.kh(node), &self.kh(patron), leaving, new_series, t);
+        let env = envelope(TYPE_REISSUE, &body, &[&self.ids[node], &self.ids[patron]]);
+        let rec = Record::parse(&env).expect("well-formed");
+        self.store.insert(rec.txid, env);
+        rec
+    }
+
     pub fn reissue(&mut self, node: &str, patron: &str, leaving: Seqno, new_series: u32) -> Record {
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));

@@ -86,6 +86,13 @@ impl SubjectState {
         self.consented.values().flatten().copied().collect()
     }
 
+    /// What this subject countersigned, by ceremony: what a late response
+    /// is tested against, since a query id belongs to the encounter it was
+    /// consented in (`wire-format.md` §7.4).
+    pub fn consented_by_ceremony(&self) -> &BTreeMap<[u8; 32], BTreeSet<[u8; 32]>> {
+        &self.consented
+    }
+
     /// Consent to `q`, or not: only within the open window it binds to,
     /// only about this subject, only under the ceremony's one profile, and
     /// only within the requester's allowance.  The query is surfaced to the

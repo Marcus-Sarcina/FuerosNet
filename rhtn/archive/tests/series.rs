@@ -71,3 +71,31 @@ fn two_chains_from_one_adoption_that_diverge_are_equivocation() {
     assert_eq!(cx.rank(&cy), Ranking::Diverge);
     assert_eq!(cy.rank(&cx), Ranking::Diverge);
 }
+
+// acceptance: ARC-19
+#[test]
+fn a_presented_reissue_timed_before_the_record_it_follows_is_refused() {
+    let mut w = World::new(&["alice", "bob"]);
+    let f = w.meet("alice", "bob");
+    // the adoption's own timestamp, and a reissue dated one second before it
+    let a = w.adopt("bob", "alice", f.txid, 1);
+    let early = w.loose_reissue_at("bob", "alice", Seqno { series: 1, counter: 5 }, 2, a.time - 1);
+    let ids = w.lookup();
+    // everything verifies and the predecessor is in the presentation, so
+    // this is chronology and not unavailable history
+    assert_eq!(early.check_signatures(&ids), rhtn_archive::record::SigStatus::Verified);
+    let e = SeriesChain::from_records(&[a.bytes.clone(), early.bytes.clone()], &ids).unwrap_err();
+    assert!(e.contains("before its predecessor"), "{e}");
+    // and taken into a held chain it is refused the same way, leaving it
+    let mut chain = SeriesChain::from_adoption(&a, &ids).unwrap();
+    assert!(chain.take_reissue(&early, &ids).unwrap_err().contains("before its predecessor"));
+    assert_eq!((chain.current(), chain.depth()), (1, 1));
+    // the same chain dated after its predecessor is taken
+    let later = w.loose_reissue_at("bob", "alice", Seqno { series: 1, counter: 6 }, 3, a.time + 1);
+    let ok = SeriesChain::from_records(&[a.bytes.clone(), later.bytes.clone()], &ids).expect("in order");
+    assert_eq!((ok.current(), ok.depth()), (3, 2));
+    // a second reissue is held to the one before it, not only to the adoption
+    let back = w.loose_reissue_at("bob", "alice", Seqno { series: 3, counter: 1 }, 4, later.time - 1);
+    let e = SeriesChain::from_records(&[a.bytes, later.bytes, back.bytes], &ids).unwrap_err();
+    assert!(e.contains("before its predecessor"), "{e}");
+}

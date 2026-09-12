@@ -275,8 +275,21 @@ pub fn present(envelope: &[u8], set: &DisclosureSet, reveal: &[&str]) -> Vec<u8>
 /// Keep a late response beside the record it supplements
 /// (`wire-format.md` §7.4): the record must be held, the response must
 /// verify, name one of the record's participants, and answer a query the
-/// subject countersigned for that ceremony.  Nothing in the record changes.
-pub fn take_late_response<L: Lookup + ?Sized>(store: &mut ClientStore, ids: &L, bytes: &[u8], consented: &BTreeSet<[u8; 32]>) -> Result<Txid, String> {
+/// subject countersigned **for that ceremony**.  Nothing in the record
+/// changes.
+///
+/// `consented` is the subject's consent by ceremony, not one flattened
+/// set: a query id consented in another encounter authorises nothing
+/// here, or a correctly signed response from one ceremony attaches to a
+/// record from another.
+///
+/// Where the record's ceremony cannot be resolved — the holder keeps the
+/// record but not the seed that names its ceremony — the response is
+/// refused and its arrival recorded: **a late response is a sign of the
+/// responder's reliability whatever became of it** [author, 2026-09-12].
+/// Only a response that verified and named a participant is recorded;
+/// anyone can manufacture one that does not, and a forgery is no signal.
+pub fn take_late_response<L: Lookup + ?Sized>(store: &mut ClientStore, ids: &L, bytes: &[u8], consented: &BTreeMap<[u8; 32], BTreeSet<[u8; 32]>>) -> Result<Txid, String> {
     let late = LateResponse::decode(bytes)?;
     let Some(record) = store.records.get(&late.record) else { return Err("names a record not held".into()) };
     let rec = Record::parse(record)?;
@@ -287,10 +300,16 @@ pub fn take_late_response<L: Lookup + ?Sized>(store: &mut ClientStore, ids: &L, 
     if r.subject != late.subject {
         return Err("response subject differs".into());
     }
-    if !consented.contains(&r.query_id) {
-        return Err("a query the subject did not countersign".into());
-    }
     rhtn_crypto::verify::response(ids, &late.response, false).map_err(|e| e.to_string())?;
+    // the ceremony is the record's, and consent is read within it
+    let Some(seed) = store.seeds.get(&late.record) else {
+        store.unattached_late.entry(late.record).or_default().push(r.verifier);
+        return Err("the record's ceremony is not resolvable here".into());
+    };
+    let ceremony = seed.ceremony_id;
+    if !consented.get(&ceremony).is_some_and(|qs| qs.contains(&r.query_id)) {
+        return Err("a query the subject did not countersign for this record's ceremony".into());
+    }
     store.late.entry(late.record).or_default().push(bytes.to_vec());
     Ok(late.record)
 }

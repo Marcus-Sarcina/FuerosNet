@@ -84,6 +84,15 @@ impl SeriesChain {
         if self.series().contains(&entered.series) {
             return Err("names a series already in the chain".into());
         }
+        // §3.3's monotonicity, over the predecessor the chain carries: a
+        // reissue's back-pointers name the record it follows, so the same
+        // rule the archive applies on append applies to a presentation.
+        // Without it a chain the archive would refuse advances a locator,
+        // since `take_chain` proves the new series and abandons the old.
+        let prev = self.reissues.last().unwrap_or(&self.adoption);
+        if rec.time < prev.effective {
+            return Err("a reissue timed before its predecessor's effective time".into());
+        }
         self.reissues.push(rec.clone());
         Ok(())
     }

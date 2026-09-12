@@ -797,6 +797,11 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             } else if map_get(m, 6).is_some() {
                 return Err(Error("field 6 not a map"));
             }
+            if let Some(Item::Map(tm)) = map_get(m, 9) {
+                check_transfer(b, m, tm)?;
+            } else if map_get(m, 9).is_some() {
+                return Err(Error("field 9 not a map"));
+            }
             if map_get(m, 8).is_some() && keyhash_at(b, m, 8).is_none() {
                 return Err(Error("field 8 not a txid"));
             }
@@ -859,6 +864,25 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
         }
         _ => Err(Error("unknown transaction type")),
     }
+}
+
+/// The consistency rule of a `Transfer` block (§4.1): the former patron
+/// differs from the adopted node and from the new patron.  Identical keys
+/// represent no transfer, the same rule and the same reason as a
+/// `Recovery`'s prior key differing from field 1, and a node does not
+/// vouch for its own move.  Checkable from the adoption alone, so it sits
+/// beside that one rather than in a verifier that needs keys.
+fn check_transfer(b: &[u8], m: &[(Item, Item)], tm: &[(Item, Item)]) -> Result<(), Error> {
+    let node = keyhash_at(b, m, 1).ok_or(Error("node"))?;
+    let patron = keyhash_at(b, m, 2).ok_or(Error("patron"))?;
+    let former = keyhash_at(b, tm, 1).ok_or(Error("transfer former patron"))?;
+    if former == node {
+        return Err(Error("transfer former patron equals the adopted node"));
+    }
+    if former == patron {
+        return Err(Error("transfer former patron equals the new patron"));
+    }
+    Ok(())
 }
 
 /// The consistency rules of a `Recovery` block (§4.1), each checkable
