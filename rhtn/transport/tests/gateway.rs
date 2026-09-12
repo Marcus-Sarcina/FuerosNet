@@ -93,3 +93,52 @@ async fn a_resource_request_is_never_processed_from_early_data_and_a_stream_carr
     sleep(Duration::from_millis(200)).await;
     assert_eq!(handled.lock().unwrap().len(), 2, "one per stream, never a second on one stream");
 }
+
+// acceptance: RSC-29
+#[tokio::test]
+async fn a_malformed_resource_body_is_answered_status_three_and_a_malformed_frame_fails_the_stream() {
+    // the node's handler is the gateway's own first step: a body that does
+    // not decode is code 3
+    let mut cfg = NodeConfig::defaults(Arc::new(test_identity("bob")), pins_for(&["alice", "bob"]), 30);
+    cfg.log = Log::recording();
+    let reached: Arc<Mutex<Vec<Family>>> = Arc::default();
+    let r = reached.clone();
+    cfg.on_request = Some(Arc::new(move |_peer, family, body| {
+        let r = r.clone();
+        Box::pin(async move {
+            r.lock().unwrap().push(family);
+            if family != Family::ResourceRequest {
+                return None;
+            }
+            match ResourceRequest::decode(&body) {
+                Ok(_) => Some(ResourceResponse { status: STATUS_DELIVERED, body: None }.encode()),
+                Err(_) => Some(ResourceResponse::code(3).encode()),
+            }
+        })
+    }));
+    let ep = tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let addr = ep.local_addr().unwrap();
+    let node = Node::new(cfg);
+    tokio::spawn(node.clone().serve(ep));
+    let ccfg = client_cfg("alice");
+    let cep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let target = test_identity("bob").public.keyhash;
+    let AttachOutcome::Attached(c) = attach(&ccfg, &cep, target, addr, false).await else { panic!("attach") };
+    // an empty CBOR map on request type 6: the frame is fine, the body is not
+    let empty_map = vec![0xa0];
+    let reply = c.request(6, &empty_map).await.expect("answered rather than reset");
+    assert_eq!(ResourceResponse::decode(&reply).unwrap().status, 3, "the body did not decode, and nothing was addressed");
+    assert_eq!(*reached.lock().unwrap(), vec![Family::ResourceRequest], "the handler saw it");
+    // the same body on another request type still fails the stream: no other
+    // family has an answer defined for a body that does not decode
+    assert!(c.request(5, &empty_map).await.is_err(), "a catalog query with a malformed body fails its stream");
+    assert_eq!(reached.lock().unwrap().len(), 1, "and never reached a handler");
+    // a malformed outer frame fails the stream whatever its type would be
+    let (mut s, mut rr) = c.conn.open_bi().await.unwrap();
+    let bad = vec![0x83, 0x06, 0xa0, 0xa0];
+    s.write_all(&(bad.len() as u32).to_be_bytes()).await.unwrap();
+    s.write_all(&bad).await.unwrap();
+    s.finish().unwrap();
+    assert!(matches!(read_frame(&mut rr, bounds::REQUEST_FRAME_BYTES).await, FrameRead::Closed(_)), "no response to a malformed frame");
+    assert_eq!(reached.lock().unwrap().len(), 1, "and no handler saw it");
+}

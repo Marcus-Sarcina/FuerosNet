@@ -8362,5 +8362,28 @@
   "then": "The first is refused naming the ceremony and nothing is attached; the second is kept beside the record. A holder that keeps the record but cannot resolve its ceremony refuses too, and records the arrival with its verifier where the response verified.",
   "oracle": "behaviour",
   "interpretation": "The arrival is recorded because a late response is a sign of the responder's reliability whatever became of it [author, 2026-09-12]; the bytes are not kept, since retention follows the record. A response that does not verify is not recorded, a forgery being no signal."
+ },
+ {
+  "id": "RSC-29",
+  "area": "resources",
+  "gap": "resources",
+  "title": "Answer a malformed resource body with status 3 rather than failing the stream",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §11",
+   "wire-format.md §9.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §11",
+    "text": "The body decodes at all → code 3 if it does not. Nothing has been addressed yet, so answering directly discloses nothing about any resource. A malformed outer frame is a stream failure, not a response"
+   }
+  ],
+  "given": "An attached session sending request type 6 whose outer frame is well formed and correctly typed but whose body is an empty CBOR map, and a second stream whose outer frame itself is malformed.",
+  "when": "Each is sent.",
+  "then": "The first is answered `ResourceResponse` with status 3 and nothing about any resource is disclosed; the second fails its stream with no response. A malformed body on any other request type still fails its stream.",
+  "oracle": "behaviour",
+  "interpretation": "Only the resource family has an answer defined for a body that does not decode, so the fallback is scoped to it: every other type's malformed body has no specified response and §9.2's stream failure stands."
  }
 ]

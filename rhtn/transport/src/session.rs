@@ -982,9 +982,21 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], conn: Connection) {
 /// anything else fails the stream (§9.2).
 async fn answer_request(mut send: SendStream, mut recv: RecvStream, peer: [u8; 32], handler: Option<RequestHandler>) {
     let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else { return };
-    let Ok(f) = frame::parse_payload(Stream::Request, &p) else {
-        let _ = send.reset(VarInt::from_u32(0));
-        return;
+    let f = match frame::parse_payload(Stream::Request, &p) {
+        Ok(f) => f,
+        // A resource request whose body does not decode is answered code 3
+        // rather than failing the stream (`wire-format.md` §11's evaluation
+        // order, step 0), so its handler is given the body to refuse.  Its
+        // outer frame must still parse: a malformed frame is the stream's
+        // failure, and every other request type's malformed body has no
+        // answer defined (§9.2).
+        Err(_) => match frame::parse_outer(Stream::Request, &p) {
+            Ok(f) if f.family == Some(Family::ResourceRequest) => f,
+            _ => {
+                let _ = send.reset(VarInt::from_u32(0));
+                return;
+            }
+        },
     };
     if let (Some(h), Some(fam)) = (handler, f.family) {
         let body = p[f.body.clone()].to_vec();

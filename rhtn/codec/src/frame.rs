@@ -71,6 +71,24 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
 /// reported here as `family: None` with the body left unvalidated; an unknown
 /// request type is the stream's failure (§9.2).
 pub fn parse_payload(stream: Stream, p: &[u8]) -> Result<Frame, Error> {
+    let f = parse_outer(stream, p)?;
+    if let Some(fam) = f.family {
+        schema::check_unsigned(fam, p, f.body.start)?;
+    }
+    Ok(f)
+}
+
+/// The outer frame alone: the array, its type tag and the body's range,
+/// with the body left unvalidated.
+///
+/// **The two failures are not the same failure.** A malformed outer frame
+/// is the stream's (`wire-format.md` §9.2); a body that does not decode is
+/// the family's own answer to give, and §11's evaluation order opens with
+/// one — a resource request whose body is malformed is answered code 3,
+/// disclosing nothing, because nothing has been addressed yet. A caller
+/// that must tell the two apart parses the outer frame here and validates
+/// the body where the family's policy lives.
+pub fn parse_outer(stream: Stream, p: &[u8]) -> Result<Frame, Error> {
     let mut item = parse_all(p)?;
     // move the body out rather than cloning it: a clone recurses per nesting level
     let (frame_type, body_item) = match &mut item {
@@ -84,10 +102,8 @@ pub fn parse_payload(stream: Stream, p: &[u8]) -> Result<Frame, Error> {
     let ranges = array_item_ranges(p, 0).ok_or(Error("frame walk"))?;
     let body = ranges[1].clone();
     let family = family_of(stream, frame_type);
-    match family {
-        None if stream == Stream::Request => return Err(Error("unknown request type")),
-        None => {}
-        Some(f) => schema::check_unsigned(f, p, body.start)?,
+    if family.is_none() && stream == Stream::Request {
+        return Err(Error("unknown request type"));
     }
     Ok(Frame { stream, frame_type, family, body, body_item })
 }
