@@ -113,6 +113,11 @@ pub struct Service {
     /// shutdown writes them to the same places startup read them from.
     prekeys: std::path::PathBuf,
     topology: std::path::PathBuf,
+    /// Whether this node runs a backend of its own for any resource, which
+    /// is what an operator is told (`infra-client-requirements.md` §10.6).
+    /// No resource is bound from a configuration yet, so it is false until
+    /// `rhtn-resources` gives the daemon packages to host.
+    hosts_resources: bool,
     /// The upstream session, held for as long as the daemon runs: dropping
     /// it ends the attachment.
     _upstream: Option<rhtn_transport::session::Session>,
@@ -187,7 +192,18 @@ impl Service {
                 }
             }
         };
-        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), _upstream: upstream })
+        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), hosts_resources: false, _upstream: upstream })
+    }
+
+    /// What this node's configuration exposes the identities below it to
+    /// (`infra-client-requirements.md` §8).  A node always relays payload
+    /// for the clients it serves, which is what a serving node is for
+    /// (design §14.1.6).
+    pub fn exposure(&self) -> crate::operator::ExposureView {
+        let view = self.node.view.lock().unwrap();
+        let me = view.me();
+        let subordinates = view.table.subordinates(&me).len();
+        crate::operator::ExposureView::new(subordinates, true, self.hosts_resources, view.serving_node.is_some())
     }
 
     /// Routine maintenance: one-time keys whose window has passed are

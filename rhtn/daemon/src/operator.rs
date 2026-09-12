@@ -69,9 +69,10 @@ pub enum Hosting {
 /// One resource bound at this node, as the operator is shown it.
 ///
 /// The three facts are the ones `infra-client-requirements.md` §10.6 turns
-/// on: which resource, whose it is, and where it runs.  The binding's authority and its declared roles
-/// are omitted deliberately; they say what the gateway addresses and what a
-/// row may name, neither of which is a question about exposure.
+/// on: which resource, whose it is, and where it runs.  The binding's
+/// authority and its declared roles are omitted deliberately; they say what
+/// the gateway addresses and what a row may name, neither of which is a
+/// question about exposure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingView {
     pub resource: Keyhash,

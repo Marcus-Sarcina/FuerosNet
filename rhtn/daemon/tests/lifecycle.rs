@@ -141,6 +141,7 @@ async fn collect(addr: SocketAddr, ms: u64) -> Vec<Vec<u8>> {
     got
 }
 
+// acceptance: DMN-02
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_daemon_serves_from_a_configuration_and_redelivers_across_a_restart_exactly_once() {
     let l = layout("restart");
@@ -164,6 +165,7 @@ async fn the_daemon_serves_from_a_configuration_and_redelivers_across_a_restart_
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+// acceptance: DMN-01
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_daemon_refuses_to_start_on_an_identity_it_would_have_to_mint_or_share() {
     let l = layout("identity");

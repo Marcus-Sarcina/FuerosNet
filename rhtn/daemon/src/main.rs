@@ -42,6 +42,8 @@ async fn main() -> ExitCode {
     // the address it actually bound, which an operator needs when the
     // configuration named port 0, and a test needs to dial it
     println!("rhtnd: serving on {}", service.node.addr);
+    // §8's disclosure, at the one moment an operator is certainly watching
+    print!("{}", service.exposure().render());
     match service.run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

@@ -8385,5 +8385,59 @@
   "then": "The first is answered `ResourceResponse` with status 3 and nothing about any resource is disclosed; the second fails its stream with no response. A malformed body on any other request type still fails its stream.",
   "oracle": "behaviour",
   "interpretation": "Only the resource family has an answer defined for a body that does not decode, so the fallback is scoped to it: every other type's malformed body has no specified response and §9.2's stream failure stands."
+ },
+ {
+  "id": "DMN-01",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Start from the operator's configuration alone, and never mint the identity it was told to read",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §1",
+   "infra-client-requirements.md §7"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §7",
+    "text": "**Act as STUN and TURN**"
+   },
+   {
+    "where": "infra-client-requirements.md §1",
+    "text": "**Push the sibling list at attach.**"
+   }
+  ],
+  "given": "A configuration naming an identity file, a peers file, a queue, a prekey directory and a topology directory, and an address to serve on.",
+  "when": "The daemon is started, then started again with the identity file absent, and again with it readable beyond its owner.",
+  "then": "The first serves a real session at the address it reports. The other two refuse, naming what they could not read, and exit non-zero. No identity is generated in any case.",
+  "oracle": "behaviour",
+  "interpretation": "A node that mints a key when its file is missing serves under an identity nobody has adopted, and its operator is not told. The identity file holds the two seeds an identity is derived from; no document fixes that format, so it is the reference's."
+ },
+ {
+  "id": "DMN-02",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Load consumable state before the first session and write it back on the way out",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "**Delete on delivery, immediately, leaving nothing recoverable.**"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "**Keep the topology store across a restart — it is your seen-set.**"
+   }
+  ],
+  "given": "A daemon stopped with a signal, with material accepted for a client waiting in its queue.",
+  "when": "It is restarted and that client attaches, and then it is stopped, restarted and the client attaches again.",
+  "then": "The material is delivered once, on the first attach. The store then holds nothing for that client and the second attach delivers nothing.",
+  "oracle": "behaviour",
+  "interpretation": "A node serving before it has loaded its one-time pools reissues a key it already served, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session."
  }
 ]
