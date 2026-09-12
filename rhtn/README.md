@@ -19,6 +19,7 @@ protocol fact; code cites them and never the other way round.
 | `daemon/` | `rhtn-daemon`: `rhtnd`, a node run from an operator's configuration — the configuration a node cannot derive, the lifecycle from start to signal to stop, and the operator's view of what that configuration exposes to the identities below it |
 | `cli/` | `rhtn-cli`: `rhtn`, the developer command line — decode what the wire carries with the same strict parser a node uses, mint and inspect identities, and ask a running node the read-only questions |
 | `ffi/` | `rhtn-ffi`: the one boundary the mobile shells bind to — the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross. No decision is taken at the boundary that is not taken below it |
+| `daemon/` | `rhtn-daemon`: `rhtnd`, a node run from an operator's configuration — the file read strictly and refused rather than defaulted, the identity read and never minted, the queue, the one-time pools and the topology store loaded before a session is accepted and written back on the way out, the upstream attached where one is named, and the operator's three views of what the configuration exposes |
 | `mobile/` | The light client application: Kotlin on Android and Swift on iOS over `ffi/`. Not Cargo members, and not built by the gate; they live here because eight of the nine manual product entries are theirs, and an entry is marked by a marker in a file the catalogue's walk reaches |
 
 Crates arrived in the plan's milestone order, `rhtn-codec` and `rhtn-crypto`
