@@ -583,3 +583,67 @@ fn a_chunk_length_larger_than_the_message_is_refused_rather_than_computed_past_i
     assert_eq!(g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, over)).status, STATUS_MALFORMED);
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0, "nothing reached the backend");
 }
+
+// acceptance: RSC-27
+#[test]
+fn a_directional_scope_grants_nothing_outside_the_owners_dunbar_org() {
+    // a chain alice -> bob -> w4 -> w5: w5 is three edges from alice and
+    // two from bob
+    let mut w = World::new();
+    let (a_b, _) = w.adopt("bob", "alice", 1);
+    let (a_4, _) = w.adopt("w4", "bob", 2);
+    let (a_5, _) = w.adopt("w5", "w4", 3);
+    let table = table_with(kh("alice"), &w, &[&a_b, &a_4, &a_5], &["alice", "bob", "w4"]);
+    // the host's own horizon is not the guard under test: it holds every
+    // party here
+    let scopes = TableScopes { table: &table, me: kh("bob") };
+    assert!(table.horizon(&kh("bob"), 2).contains(&kh("w5")), "the asker is inside the host's own horizon");
+    let mut svc = CatalogService::default();
+    let down = entry("alice", R1, "rhtn-forum", b"down");
+    assert_eq!(register(&mut svc, "alice", &down, Some(Scope::Down(3)), 1), REGISTRATION_RECORDED);
+    assert!(query(&svc, &scopes, "w5", None).unwrap().entries.is_empty(), "three edges down is outside alice's Dunbar Org");
+    // the reverse: w5 owning, alice three edges up
+    let mut up = CatalogService::default();
+    let e = entry("w5", R2, "rhtn-forum", b"up");
+    assert_eq!(register(&mut up, "w5", &e, Some(Scope::Up(3)), 2), REGISTRATION_RECORDED);
+    assert!(query(&up, &scopes, "alice", None).unwrap().entries.is_empty(), "three edges up is outside w5's Dunbar Org");
+    // the entry was kept, not rejected: the same Down(3) still admits the
+    // depths that fall inside the owner's Dunbar Org, so what the clip
+    // removes is the reach beyond it and not the scope (§6.8)
+    assert_eq!(query(&svc, &scopes, "bob", None).unwrap().entries, vec![down.clone()], "one edge down is inside it");
+    assert_eq!(query(&svc, &scopes, "w4", None).unwrap().entries, vec![down.clone()], "two edges down is inside it");
+}
+
+// acceptance: RSC-28
+#[test]
+fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backend() {
+    // the manifest: a package may not declare the node's own vocabulary
+    let m = Manifest { imports: vec![], roles: ["connect", "discover", "read"].iter().map(|s| s.to_string()).collect() };
+    let err = instantiate(&m).unwrap_err();
+    assert!(err.contains("connect") && err.contains("reserved"), "{err}");
+    assert!(instantiate(&Manifest { imports: vec![], roles: BTreeSet::from(["discover".to_string()]) }).is_err());
+    let ok = instantiate(&Manifest { imports: vec![], roles: BTreeSet::from(["read".to_string()]) }).expect("an application role");
+    assert_eq!(ok.roles, BTreeSet::from(["read".to_string()]));
+    // the row: refused even where a binding declared the name some other way
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    g.bind(
+        R2,
+        Binding {
+            owner: kh("alice"),
+            authority: "x".into(),
+            backend: Some(backend.clone()),
+            declared_roles: ["connect", "discover", "read"].iter().map(|s| s.to_string()).collect(),
+        },
+    );
+    let all: BTreeSet<String> = ["connect", "discover", "read"].iter().map(|s| s.to_string()).collect();
+    assert!(matches!(g.set_row(R2, kh("carol"), Row { roles: all, connect: true }), Err(RowError::Reserved(r)) if r == "connect"));
+    // the application role alone is accepted, and it alone reaches the backend
+    g.set_row(R2, kh("carol"), Row { roles: BTreeSet::from(["read".to_string()]), connect: true }).unwrap();
+    let msg = b"GET / HTTP/1.1\r\nhost: x\r\n\r\n";
+    assert_eq!(g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R2, msg)).status, STATUS_DELIVERED);
+    let seen = backend.seen.lock().unwrap()[0].clone();
+    let roles: Vec<String> = http::headers_of(&seen).into_iter().filter(|(k, _)| k == "rhtn-roles").map(|(_, v)| v).collect();
+    assert_eq!(roles, vec!["read".to_string()], "the application role, and neither reserved name");
+}

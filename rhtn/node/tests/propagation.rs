@@ -544,3 +544,30 @@ fn a_slot_follows_the_settled_binding_not_the_transaction() {
     assert_eq!(m.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &d.bytes, &ids()), Decision::Stored);
     assert_eq!(m.child_at(slot as u8), None);
 }
+
+// acceptance: PRP-21
+#[test]
+fn a_delayed_ending_of_an_earlier_binding_leaves_a_later_one_and_its_slot_alone() {
+    // alice adopted under bob twice, the second in a new relationship
+    // series; the departure that ends the first arrives last
+    let mut w = World::new();
+    let (a1, _) = w.adopt("alice", "bob", 1);
+    let d1 = w.depart("alice", "bob", Seqno { series: 1, counter: 1 });
+    let (a2, _) = w.adopt("alice", "bob", 2);
+    let slot = rhtn_node::view::NodeView::slot_from(&a1.locator().unwrap()).unwrap();
+    assert_eq!(rhtn_node::view::NodeView::slot_from(&a2.locator().unwrap()).unwrap(), slot, "the same child index");
+    assert!(d1.time < a2.time, "the departure is dated before the adoption that follows it");
+    let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    let fab = Fabric::with(&[kh("alice")]);
+    for r in [&a1, &a2, &d1] {
+        assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &ids()), Decision::Stored);
+    }
+    assert!(n.table.patrons(&kh("alice")).contains(&kh("bob")), "the table stays bound through the later adoption");
+    assert_eq!(n.child_at(slot as u8), Some(kh("alice")), "and the slot with it");
+    // the ending that closes the binding actually open does empty it
+    let d2 = w.depart("alice", "bob", Seqno { series: 2, counter: 1 });
+    assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &d2.bytes, &ids()), Decision::Stored);
+    assert!(n.table.patrons(&kh("alice")).is_empty(), "the binding is closed");
+    assert_eq!(n.child_at(slot as u8), None);
+    assert_eq!(n.slots[&slot].timestamp, d2.time, "dated by the ending that closed it");
+}

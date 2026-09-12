@@ -266,16 +266,42 @@ impl NodeView {
             TYPE_DEPARTURE if rec.field_hash(2) == Some(me) => {
                 let node = rec.field_hash(1)?;
                 let slot = self.slot_of(&node)?;
-                self.set_slot(slot, None, rec.time);
+                self.clear_if_unbound(slot, node, &rec);
                 Some(slot)
             }
             TYPE_DISAVOWAL if rec.field_hash(1) == Some(me) => {
                 let node = rec.field_hash(2)?;
                 let slot = self.slot_of(&node)?;
-                self.set_slot(slot, None, rec.time);
+                self.clear_if_unbound(slot, node, &rec);
                 Some(slot)
             }
             _ => None,
+        }
+    }
+
+    /// Empty the slot `node` occupies, but only where this node holds no
+    /// open binding to it.  The adoption branch already reads the settled
+    /// binding rather than the transaction; an ending must do the same, or
+    /// a departure or disavowal from a series the node has already left
+    /// clears a slot a later adoption filled.  Which relationship ended is
+    /// the table's answer, not the record's (`wire-format.md` §4.2, §2.3).
+    ///
+    /// The slot is dated by the binding this record ended, so a delayed
+    /// record does not stamp the row with its own late arrival.
+    fn clear_if_unbound(&mut self, slot: u64, node: Keyhash, rec: &Record) {
+        let me = self.me();
+        let (still_bound, ended_at) = {
+            let bs = self.table.bindings();
+            let still = bs.iter().any(|b| b.node == node && b.patron == me && b.open());
+            let at = bs
+                .iter()
+                .find(|b| b.node == node && b.patron == me && b.end.as_ref().is_some_and(|(t, _, _)| *t == rec.txid))
+                .and_then(|b| b.end.as_ref().map(|(_, a, _)| *a))
+                .unwrap_or(rec.time);
+            (still, at)
+        };
+        if !still_bound {
+            self.set_slot(slot, None, ended_at);
         }
     }
 

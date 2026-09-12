@@ -33,6 +33,15 @@ impl ScopeEval for TableScopes<'_> {
     fn admits(&self, scope: &Scope, owner: &Keyhash, asker: &Keyhash) -> bool {
         let t = self.table;
         let dunbar = t.horizon(owner, 2);
+        // No scope reaches outside the owner's Dunbar Org (`wire-format.md`
+        // §6.8), so the boundary is taken once, before the scope is read at
+        // all.  Applied per arm it is a rule each new arm can forget, and
+        // `Down` and `Up` did: a depth of three walked straight past it.
+        // The scope stays structurally valid and simply matches nobody,
+        // which is what §6.8 asks for.
+        if !dunbar.contains(asker) {
+            return false;
+        }
         match scope {
             Scope::Own => asker == owner,
             Scope::Down(n) => {
@@ -58,8 +67,8 @@ impl ScopeEval for TableScopes<'_> {
                 false
             }
             Scope::Siblings => t.siblings(owner).contains(asker),
-            Scope::Dunbar => dunbar.contains(asker),
-            Scope::List(ks) => ks.contains(asker) && dunbar.contains(asker),
+            Scope::Dunbar => true,
+            Scope::List(ks) => ks.contains(asker),
         }
     }
 

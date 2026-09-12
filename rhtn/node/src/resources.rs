@@ -48,6 +48,9 @@ pub enum RowError {
     TooWide(usize),
     /// A role the package did not declare.
     Undeclared(String),
+    /// A name reserved for the node's own evaluation
+    /// (`resource-requirements.md` §3).
+    Reserved(String),
     NoSuchResource,
 }
 
@@ -73,13 +76,17 @@ impl Gateway {
         self.bindings.get(resource)
     }
 
-    /// Set a member's row for a resource, refusing one wider than 64 roles
-    /// or naming a role the package did not declare.  A changed row ends
-    /// the member's hosted session with that resource.
+    /// Set a member's row for a resource, refusing one wider than 64 roles,
+    /// naming a reserved name, or naming a role the package did not
+    /// declare.  A changed row ends the member's hosted session with that
+    /// resource.
     pub fn set_row(&mut self, resource: Keyhash, member: Keyhash, row: Row) -> Result<(), RowError> {
         let b = self.bindings.get(&resource).ok_or(RowError::NoSuchResource)?;
         if row.roles.len() > MAX_ROLES {
             return Err(RowError::TooWide(row.roles.len()));
+        }
+        if let Some(r) = row.roles.iter().find(|r| RESERVED_ROLES.contains(&r.as_str())) {
+            return Err(RowError::Reserved(r.clone()));
         }
         if let Some(r) = row.roles.iter().find(|r| !b.declared_roles.contains(*r)) {
             return Err(RowError::Undeclared(r.clone()));
@@ -186,6 +193,14 @@ impl Gateway {
 /// manifest importing one cannot be instantiated.
 pub const HOST_EXPORTS: [&str; 2] = ["rhtn/1:request", "rhtn/1:response"];
 
+/// Reserved for the node's own evaluation and never an application role
+/// (`resource-requirements.md` §3, design §11.4).  `connect` is the gate
+/// spent getting a request to a backend and `discover` decides a catalog
+/// answer; a backend is present for neither decision, so a row carrying
+/// either name would put the node's own vocabulary in the credential and
+/// a package could claim a grant nobody made.
+pub const RESERVED_ROLES: [&str; 2] = ["connect", "discover"];
+
 /// What a package declares (`resource-requirements.md` §7, §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
@@ -210,6 +225,9 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
     }
     if m.roles.iter().any(|r| r.is_empty() || r.len() > 32 || !r.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')) {
         return Err("a role name is [a-z0-9_-], 1 to 32 bytes".into());
+    }
+    if let Some(r) = m.roles.iter().find(|r| RESERVED_ROLES.contains(&r.as_str())) {
+        return Err(format!("{r} is reserved for the node's own evaluation"));
     }
     Ok(Package { roles: m.roles.clone() })
 }
