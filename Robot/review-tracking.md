@@ -8929,3 +8929,19 @@ only where the response verified, a forgery being no signal.
 Numbers: twelve entries added, 309 in all, 297 of 307 implemented, 0 flags;
 each commit's gate green. Ten entries remain unimplemented: PAY-13 on the
 library decision and the nine manual product entries.
+
+**The reviewer's harness rerun (2026-09-12).** All 38 of its assertions
+pass on a copy in the scratchpad, its own directory untouched. Two calls
+were adapted, both because a repair changed the surface the reviewer's
+correction asked to change:
+
+- **R06's** call passed `all_consented()`, the flattened set. The fix
+  replaced it with consent by ceremony, which is what that finding's
+  correction asked for; the adapted call passes
+  `consented_by_ceremony()` and still fails to attach, as it should.
+- **R03's** fixture received on a `Sessions::default()` holding no
+  bundles, so R02's repair refuses it before the one-time key is reached.
+  The adapted fixture prefetches the sender's bundle; the corrupted copy
+  then fails and the original still opens, which is what R03 asserts.
+  Neither adaptation weakens an assertion, and both defects have workspace
+  regressions of their own in PAY-16 and CER-32.
