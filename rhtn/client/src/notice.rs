@@ -25,6 +25,10 @@ pub enum Notice {
     /// A catalog entry declares a data practice this client does not
     /// recognise (`wire-format.md` §6.1): a declaration exists.
     UnrecognisedDeclaration { resource: Keyhash, value: u64 },
+    /// An initial payload message could not be attributed to the sender it
+    /// named, so no session was opened and nothing was dispatched
+    /// (design §14.2.4.2).
+    PayloadUnattributable { from: Keyhash },
 }
 
 /// The capacity a party is told in.

@@ -747,20 +747,31 @@ impl Client {
         let n = self.payload.cfg.pool_target;
         let keys = self.payload.keys.one_time_keys(n, &mut fresh);
         self.payload.pool_reported = n;
-        let me = self.keyhash();
-        let others: Vec<Keyhash> = population.iter().copied().filter(|k| *k != me && *k != serving).collect();
         let mut out = vec![Msg::PublishBundle(bundle), Msg::StockOneTime(keys)];
+        out.extend(self.sweep(population));
+        out
+    }
+
+    /// Sweep the population's reusable material (`light-client-requirements.md`
+    /// §3), which `attach` does once.  A sweep is a snapshot of what was
+    /// published when it ran, so a client that must attribute an initial
+    /// message from a peer who published later sweeps again.
+    /// The population is the caller's: a client that names its serving
+    /// node wants that binding, since a node can be a participant and send
+    /// payload of its own.  Only this client is dropped.
+    pub fn sweep(&mut self, population: &[Keyhash]) -> Vec<Msg> {
+        let me = self.keyhash();
+        let others: Vec<Keyhash> = population.iter().copied().filter(|k| *k != me).collect();
         match others.len() {
-            0 => {}
+            0 => Vec::new(),
             // a sweep names at least two (`wire-format.md` §7.8); one other
             // is asked for singly, reusable material only
             1 => {
                 let nonce = self.nonce();
-                out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce }.encode()));
+                vec![Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce }.encode())]
             }
-            _ => out.push(Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))),
+            _ => vec![Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))],
         }
-        out
     }
 
     /// Routine maintenance: rotate the signed prekey when its interval has
@@ -776,6 +787,12 @@ impl Client {
         }
         if self.payload.pool_reported < self.payload.cfg.replenish_below {
             out.extend(self.restock());
+        }
+        // bindings wanted for peers who wrote before this client held
+        // theirs: reusable material only, one request each
+        for subject in std::mem::take(&mut self.payload.wanted) {
+            let nonce = self.nonce();
+            out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject, one_time: false, nonce }.encode()));
         }
         out
     }
@@ -885,7 +902,22 @@ impl Client {
     pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let plaintext = self.payload.sessions.receive(&mut self.payload.keys, from, bytes, &mut fresh).map_err(|e| e.to_string())?;
+        let plaintext = match self.payload.sessions.receive(&mut self.payload.keys, from, bytes, &mut fresh) {
+            Ok(p) => p,
+            Err(e) => {
+                // Nothing is opened and nothing dispatched under a name
+                // this client cannot give the message.  Where the binding
+                // is merely absent, it is asked for: the peer's next
+                // attempt is attributable, and this one is not recovered.
+                if matches!(e, payload::PayloadError::NoBundle) {
+                    self.payload.wanted.insert(from);
+                }
+                if matches!(e, payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle) {
+                    self.device.notifier.notify(Notice::PayloadUnattributable { from });
+                }
+                return Err(e.to_string());
+            }
+        };
         let (kind, inner) = payload::unwrap(&plaintext)?;
         Ok(match kind {
             payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),

@@ -116,6 +116,7 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
     let mut w1 = light("w1", &node, &serving, &inboxes);
     carol.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("carol")]).await;
+    carol.courier.sweep(vec![kh("w1")]).await;
     // carol offers: her candidates go as their own kind over the relay;
     // w1 dials them, and offers its own back
     assert!(carol.courier.offer(kh("w1")).await);
@@ -157,6 +158,7 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     let mut p2 = infra("w2", &n2, &serving2, &inboxes);
     p1.courier.attach(vec![kh("w2")]).await;
     p2.courier.attach(vec![kh("w1")]).await;
+    p1.courier.sweep(vec![kh("w2")]).await;
     assert!(p1.courier.offer(kh("w2")).await);
     assert!(until(4000, || p1.reachable.holds(&kh("w2")) && p2.reachable.holds(&kh("w1"))).await, "both hold the path");
     let relayed = c1.relayed() + c2.relayed();

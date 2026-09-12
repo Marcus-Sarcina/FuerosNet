@@ -20,7 +20,7 @@ use rhtn_codec::encode::*;
 use rhtn_crypto::SigningIdentity;
 use rhtn_crypto::pqxdh::{self, DhPublic, DhSecret, KemPublic, KemSecret, TheirBundle};
 use rhtn_crypto::verify::Lookup;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The client's own numbers (`light-client-requirements.md` §3: cadence and
 /// last-resort policy are the client's).
@@ -108,6 +108,13 @@ impl PayloadKeys {
             self.one_time.insert(id, pair);
         }
         out
+    }
+
+    /// The one-time pair `id` names, still held.  A receiver opens with
+    /// this and spends the key with `take_one_time` once the message it
+    /// opened has authenticated.
+    pub fn one_time(&self, id: u32) -> Option<&OneTimePair> {
+        self.one_time.get(&id)
     }
 
     /// Take a one-time pair by id: it is gone from the store, and a second
@@ -380,6 +387,9 @@ impl InitialMessage {
 pub enum PayloadError {
     NoSession,
     NoBundle,
+    /// An initial message whose identity key is not the one bound to the
+    /// sender it names (design §14.2.4.2).
+    NotTheSender,
     Malformed(String),
     Crypto(String),
 }
@@ -389,6 +399,7 @@ impl std::fmt::Display for PayloadError {
         match self {
             PayloadError::NoSession => write!(f, "no session with that peer"),
             PayloadError::NoBundle => write!(f, "no bundle for that peer"),
+            PayloadError::NotTheSender => write!(f, "the initial message's identity key is not the named sender's"),
             PayloadError::Malformed(s) => write!(f, "malformed: {s}"),
             PayloadError::Crypto(s) => write!(f, "{s}"),
         }
@@ -438,10 +449,25 @@ impl Sessions {
         match tag {
             CHANNEL_INITIAL => {
                 let m = InitialMessage::decode(&inner).map_err(PayloadError::Malformed)?;
+                // The sender is the keyhash the channel names; the identity
+                // key is the one that keyhash published and signed for
+                // (design §14.2.4.2).  An initial message whose key is not
+                // the one bound to the name is not that party's, whatever
+                // it decrypts to, and the transport authenticating a relay
+                // hop says nothing about who wrote this.  Held under no
+                // binding, it cannot be attributed and is not opened.
+                let bound = self.prefetched.get(&from).ok_or(PayloadError::NoBundle)?.blob.ik;
+                if bound != m.ik {
+                    return Err(PayloadError::NotTheSender);
+                }
                 let (spk, pqspk) = keys.signed_prekeys(m.spk_id).ok_or(PayloadError::Crypto("unknown signed prekey".into()))?;
                 let (spk, pqspk) = (spk.clone(), pqspk.clone());
+                // Used now, spent later: the pair opens the message and is
+                // removed once that message authenticates.  Removing it
+                // first lets one corrupted copy destroy the key the real
+                // message needs, and PQXDH deletes it after decryption.
                 let one_time = match m.opk_id {
-                    Some(id) => Some(keys.take_one_time(id).ok_or(PayloadError::Crypto("one-time key already used or unknown".into()))?),
+                    Some(id) => Some(keys.one_time(id).ok_or(PayloadError::Crypto("one-time key already used or unknown".into()))?.clone()),
                     None => None,
                 };
                 let me = pqxdh::Responder { ik: &keys.ik, spk: &spk, pqspk: &pqspk, opk: one_time.as_ref().map(|o| &o.dh), pqopk: one_time.as_ref().map(|o| &o.kem) };
@@ -454,6 +480,10 @@ impl Sessions {
                     s
                 };
                 let pt = r.decrypt(&m.first, &mut seed).map_err(PayloadError::Crypto)?;
+                // authenticated: the key is spent and the session committed
+                if let Some(o) = &one_time {
+                    keys.take_one_time(o.id);
+                }
                 self.ratchets.insert(from, r);
                 Ok(pt)
             }
@@ -483,10 +513,15 @@ pub struct PayloadState {
     pub outstanding: BTreeMap<[u8; 16], Keyhash>,
     /// What the node last reported of the pool, or what was uploaded.
     pub pool_reported: usize,
+    /// Peers who sent an initial message this client could not attribute
+    /// for want of their binding.  Routine maintenance asks for it, so a
+    /// peer that published after this client's last sweep is reachable on
+    /// its next attempt (design §14.2.4.2).
+    pub wanted: BTreeSet<Keyhash>,
 }
 
 impl PayloadState {
     pub fn new(cfg: PayloadConfig, fresh: Fresh, now: u64) -> Self {
-        PayloadState { keys: PayloadKeys::generate(fresh, now), cfg, sessions: Sessions::default(), serving: None, pending: BTreeMap::new(), outstanding: BTreeMap::new(), pool_reported: 0 }
+        PayloadState { keys: PayloadKeys::generate(fresh, now), cfg, sessions: Sessions::default(), serving: None, pending: BTreeMap::new(), outstanding: BTreeMap::new(), pool_reported: 0, wanted: BTreeSet::new() }
     }
 }

@@ -11,6 +11,7 @@ use common::*;
 use rhtn_archive::prekey::*;
 use rhtn_client::ceremony::*;
 use rhtn_client::device::ChannelKind;
+use rhtn_client::notice::Notice;
 use rhtn_client::payload::*;
 use rhtn_client::query::KeyGrant;
 use rhtn_client::store::{Capture, Frame, SealParams, seal};
@@ -83,6 +84,15 @@ impl Net {
         self.carry(kh(client), msgs);
     }
 
+    /// Sweep again: the first client to attach swept before the second had
+    /// published, and a recipient can only attribute an initial message
+    /// from a peer whose binding it holds.
+    fn sweep(&mut self, client: &str) {
+        let pop = self.population();
+        let msgs = self.s.client(client).sweep(&pop);
+        self.carry(kh(client), msgs);
+    }
+
     /// Move a client's outgoing messages where they go, and whatever they
     /// cause in turn.
     fn carry(&mut self, from: [u8; 32], msgs: Vec<Msg>) {
@@ -140,6 +150,13 @@ impl Net {
             out.push(describe(&d));
         }
         out
+    }
+
+    /// The next item waiting for `client`, raw: what its serving node
+    /// would hand over, before the client reads it.
+    fn queued(&mut self, client: &str) -> ([u8; 32], Vec<u8>) {
+        let node = self.node_of(&kh(client));
+        self.nodes.get_mut(node).unwrap().queues.entry(kh(client)).or_default().pop_front().expect("something waiting")
     }
 
     fn send(&mut self, from: &str, to: &str, text: &str) {
@@ -208,6 +225,8 @@ fn reusable_material_is_prefetched_for_the_whole_org_as_one_sweep() {
     n.attach("bob");
     n.attach("carol");
     n.attach("alice");
+    n.sweep("bob");
+    n.sweep("carol");
     let reqs = n.requests("alice");
     let batches: Vec<&PrekeyRequest> = reqs.iter().filter(|r| matches!(r, PrekeyRequest::Batch { .. })).collect();
     assert_eq!(batches.len(), 1, "one sweep");
@@ -226,6 +245,7 @@ fn a_one_time_key_is_requested_only_when_opening_a_session() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
     n.attach("bob");
     n.attach("alice");
+    n.sweep("bob");
     // idle
     n.s.clock.set(n.s.clock.get() + 600_000);
     let msgs = n.s.client("alice").maintain();
@@ -254,6 +274,7 @@ fn the_asynchronous_construction_is_used_leaf_to_leaf_only() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
     n.attach("bob");
     n.attach("alice");
+    n.sweep("bob");
     // to the patron: on the transport session, no prekey request
     let msgs = n.s.client("alice").send_payload(kh("w1"), KIND_APPLICATION, b"to my patron").unwrap();
     assert!(matches!(msgs.as_slice(), [Msg::Transport(b)] if b == b"to my patron"));
@@ -274,6 +295,7 @@ fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
     n.attach("bob");
     n.attach("alice");
+    n.sweep("bob");
     // T's pool at N is drained
     let mut drained = 0;
     loop {
@@ -310,6 +332,7 @@ fn protocol_objects_and_application_payload_reach_their_handlers() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
     n.attach("bob");
     n.attach("alice");
+    n.sweep("bob");
     // bob, a verifier, holds a capture of alice under a record both hold;
     // alice grants against it over the same session as an application message
     let mut w = World::new();
@@ -340,6 +363,7 @@ fn payload_is_relayed_through_the_serving_node_when_no_direct_path_exists() {
     let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
     n.attach("bob");
     n.attach("alice");
+    n.sweep("bob");
     // the NATs defeat hole punching
     n.s.handles["alice"].reach.0.set(false);
     n.s.handles["bob"].reach.0.set(false);
@@ -353,4 +377,67 @@ fn payload_is_relayed_through_the_serving_node_when_no_direct_path_exists() {
     // and the reply comes back the same way
     n.send("bob", "alice", "back over the relay");
     assert!(n.collect("alice")[0].contains("back over the relay"));
+}
+
+// acceptance: PAY-16
+#[test]
+fn an_initial_session_opens_only_under_the_identity_key_bound_to_its_named_sender() {
+    // one node, so a sweep reaches every bundle: bob holds alice's
+    // verified bundle and carol's
+    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("carol");
+    n.attach("alice");
+    n.sweep("bob");
+    n.sweep("carol");
+    // carol composes an initial message to bob under carol's own keys, and
+    // it waits at bob's serving node
+    n.s.handles["carol"].reach.0.set(false);
+    n.send("carol", "bob", "not from alice");
+    let (sender, carols) = n.queued("bob");
+    assert_eq!(sender, kh("carol"));
+    // delivered under alice's name: refused, nothing opened, nothing said
+    let refused = n.s.client("bob").receive_payload(kh("alice"), &carols).unwrap_err();
+    assert!(refused.contains("not the named sender's"), "{refused}");
+    assert!(!n.s.client("bob").payload.sessions.has_session(&kh("alice")), "no session for the name it claimed");
+    assert!(n.s.notices("bob").iter().any(|(_, x)| matches!(x, Notice::PayloadUnattributable { from } if *from == kh("alice"))));
+    // the same bytes under carol's name decrypt: the message is well formed
+    // and it is carol's
+    let d = n.s.client("bob").receive_payload(kh("carol"), &carols).expect("carol's own message");
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"not from alice"), "{d:?}");
+    // a sender whose binding this client does not hold: refused, and the
+    // binding asked for, so the peer's next attempt is attributable
+    let mut m = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    m.attach("alice");
+    m.attach("bob");
+    m.s.handles["bob"].reach.0.set(false);
+    m.send("bob", "alice", "first contact");
+    let (_, first) = m.queued("alice");
+    assert!(m.s.client("alice").receive_payload(kh("bob"), &first).unwrap_err().contains("no bundle"));
+    assert!(m.s.client("alice").payload.wanted.contains(&kh("bob")), "the binding is wanted");
+    let asks = m.s.client("alice").maintain();
+    assert!(asks.iter().any(|x| matches!(x, Msg::PrekeyRequest(_))), "maintenance asks for it");
+}
+
+// acceptance: PAY-17
+#[test]
+fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
+    let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    n.attach("bob");
+    n.attach("alice");
+    n.sweep("bob");
+    n.s.handles["alice"].reach.0.set(false);
+    n.send("alice", "bob", "the real one");
+    let (_, good) = n.queued("bob");
+    // one ciphertext byte flipped: the copy fails
+    let mut corrupt = good.clone();
+    let last = corrupt.len() - 1;
+    corrupt[last] ^= 1;
+    assert!(n.s.client("bob").receive_payload(kh("alice"), &corrupt).is_err(), "the corrupted copy fails");
+    // and the pair it named is still there, so the original still opens
+    let d = n.s.client("bob").receive_payload(kh("alice"), &good).expect("the original still opens");
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"the real one"), "{d:?}");
+    // spent now: the same bytes a second time find no pair and no session
+    // is reopened
+    assert!(n.s.client("bob").receive_payload(kh("alice"), &good).is_err(), "the pair is gone once its message authenticated");
 }

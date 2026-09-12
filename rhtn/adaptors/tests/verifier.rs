@@ -67,6 +67,9 @@ async fn a_query_is_answered_at_the_node_hosting_the_verifier_and_the_subject_ge
     // attached: material published where the other can fetch it
     bob.courier.attach(vec![kh("alice")]).await;
     alice.courier.attach(vec![kh("bob")]).await;
+    // the first to attach swept before the second had published, and a
+    // recipient attributes an initial message only under the binding it holds
+    bob.courier.sweep(vec![kh("alice")]).await;
     // carol's query about alice, addressed to bob, consented by alice
     // within her open window
     let q = query("alice", "carol", "bob", 7);
@@ -121,6 +124,7 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     verifiers.install(&node);
     alice.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("alice")]).await;
+    alice.courier.sweep(vec![kh("w1")]).await;
     let q = query("w1", "carol", "alice", 9);
     let qid = q.query_id();
     let q1 = q.clone();

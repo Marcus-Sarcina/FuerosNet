@@ -111,6 +111,15 @@ impl Courier {
         self.carry(msgs).await
     }
 
+    /// Sweep the population's reusable material again
+    /// (`light-client-requirements.md` §3).  A sweep is a snapshot of what
+    /// was published when it ran, so a client that must attribute an
+    /// initial message from a peer who attached later sweeps again.
+    pub async fn sweep(self: &Arc<Self>, population: Vec<Keyhash>) -> Vec<Msg> {
+        let msgs = self.handle.with(move |c| c.sweep(&population)).await;
+        self.carry(msgs).await
+    }
+
     /// Offer `peer` the direct path: this side's candidates, gathered only
     /// where the path may be direct, sent as their own kind on whatever
     /// path exists now.  Whether an offer went.

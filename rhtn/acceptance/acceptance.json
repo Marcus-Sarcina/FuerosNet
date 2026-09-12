@@ -8044,5 +8044,59 @@
   "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer outside the horizon gathers and sends nothing.",
   "oracle": "behaviour",
   "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. A light client keeps no table, so whether the path may be direct is what the node beside it says of its horizon."
+ },
+ {
+  "id": "PAY-16",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Open an initial session only under the identity key bound to the sender it names",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §14.2.3",
+   "design §14.2.4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.2.3",
+    "text": "Identity keys sign; encryption requires KEM keys, which are distinct and must be bound to the identity."
+   },
+   {
+    "where": "design §14.2.4.2",
+    "text": "this profile instantiates it with X25519 and ML-KEM-768, matching the transport"
+   }
+  ],
+  "given": "Recipient B holds A's verified prekey bundle. C composes an initial message with C's own identity and ephemeral keys against B's bundle.",
+  "when": "The message is delivered to B named as coming from A, and then the same message named as coming from C.",
+  "then": "Named as A's it is refused, no session is opened for A, no plaintext is dispatched, and the person is told it could not be attributed. Named as C's it decrypts.",
+  "oracle": "behaviour",
+  "interpretation": "The binding of a keyhash to a payload identity key is the prekey bundle, which its subject signs. A recipient holding no bundle for the sender cannot check the binding, so it refuses and asks for the bundle; that message is not recovered."
+ },
+ {
+  "id": "PAY-17",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Spend a one-time prekey only when the message it opened authenticates",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §14.2.4",
+   "design §14.2.4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.2.4",
+    "text": "There is directly applicable prior art, specified and formally verified. The requirement below is to adopt it, not to design a replacement."
+   },
+   {
+    "where": "design §14.2.4.2",
+    "text": "one party offline having published prekeys, the other wanting to send immediately and establish a session"
+   }
+  ],
+  "given": "A sends B an initial message consuming one of B's one-time prekeys. A corrupted copy of that message, one ciphertext byte flipped, reaches B first.",
+  "when": "B takes the corrupted copy, and then the original.",
+  "then": "The corrupted copy fails and the one-time pair it named is still held; the original then opens the session and decrypts, and only then is the pair gone. A second message naming the same pair finds nothing.",
+  "oracle": "behaviour",
+  "interpretation": "PQXDH's receiving procedure deletes the one-time private key after the initial message decrypts. Deleting it on arrival lets one injected copy destroy the key the real message needs."
  }
 ]
