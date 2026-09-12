@@ -52,6 +52,29 @@ Reviewers copy the working tree, so the tree stays coherent at every commit.
 shape: the six documents, `CLAUDE.md`, `test-vectors/`, `models/`, `rhtn/`. No root
 document cites `rhtn/`; the code cites the documents.
 
+**The applications live in the workspace, and the shells beside it.**
+`rhtn/daemon`, `rhtn/cli` and `rhtn/ffi` are Cargo members; `rhtn/mobile/android`
+and `rhtn/mobile/ios` are Kotlin and Swift and cannot be. Keeping them here is not
+a preference. The acceptance catalogue is the only mechanism binding this code to
+the specification, and it binds by a filesystem walk: an entry counts as
+implemented when a marker appears in a file `acceptance/tools/catalogue.py` finds
+under the workspace. Eight of the nine manual product entries are the light client
+application's and one is the operator's, so applications elsewhere could never
+close one. Two further things break at a repository boundary: `rhtn/check.sh` is
+one verdict over one workspace, and a change crossing the boundary could not be
+green in a single run; and the conformance review copies the working tree at a
+commit, so two trees would have to be paired by hand.
+
+**The split has a trigger, not a date.** Move the applications to their own
+repository when the library carries a published version and the code's spec pin
+stops moving. They become consumers of a released crate rather than path
+dependencies, the product entries travel with them, and the gate divides along a
+seam that already exists. Two things keep that move cheap and are worth preserving
+until it happens: the application tier depends on `rhtn-ffi` alone, and nothing in
+the library depends on the applications. A repository boundary is not a licence
+boundary, so nothing about the payload library's licence (section 7) is settled by
+moving code between repositories.
+
 ### 2.1 Crates, and what each answers to
 
 | Crate | Implements | Answers to | Test oracle |
@@ -66,7 +89,10 @@ document cites `rhtn/`; the code cites the documents.
 | `rhtn-resources` (later) | The component-model runtime for hosted packages and their packaging. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5); what this crate still owes is the sandbox itself | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
 | `rhtn-adaptors` | `rhtn-client` bound to what is local to its process: the client on a thread of its own, the node beside it as serving node, the direct payload path over the transport's socket (the client's own or the node's), a hosted verifier answered on the node's request stream, and the courier. The seams the documents leave unwritten, a serving node's leg to a client attached over the wire and a client's hand-off of payload to relay, are traits with the in-process implementation behind them | design §12.6.3, §14.1.1; `wire-format.md` §5.6, §7.7.2, §9.2 | Live tests over loopback QUIC for both kinds of client |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
-| `rhtnd`, `rhtn` | The node daemon and the developer CLI | | Smoke tests |
+| `rhtn-daemon` | `rhtnd`: a node run from an operator's configuration. The configuration a node cannot derive; the lifecycle from start to signal to stop, losing no delivery in flight; and the operator's view of what the configuration exposes to the identities below it | `infra-client-requirements.md` §1, §2, §4.1, §7, §8, §10.6, §10.7; design §13, §14.1.2, §14.1.6 | PRD-06; a node started from a file serves a client and survives a restart |
+| `rhtn-cli` | `rhtn`: decode what the wire carries with the parser a node uses, mint and inspect identities, and ask a running node the read-only questions | No obligation document requires a command line. What it may send is bounded by `wire-format.md` §9.2's read-only class: §7.7, §7.9, §6.4 | Every corpus object prints; a probe resolves, fetches and queries over a real session |
+| `rhtn-ffi` | The one boundary the mobile shells bind to: the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross. No decision is taken at the boundary that is not taken below it | `light-client-requirements.md` §1.3 | The facade compiles against both shells' generated bindings |
+| `mobile/android`, `mobile/ios` | The light client application: the ceremony's channels and capture, the privacy choices, the warnings before anything irreversible, and encrypted backup. Kotlin and Swift, not Cargo members, not built by the gate | `light-client-requirements.md` §1.3, §5, §6; design §13.7.1 | PRD-01 to PRD-05 and PRD-07 to PRD-09 |
 
 **The runner is absorbed, then retired.** `rhtn-codec` grows from the runner's
 parser and takes `corpus.json` as its test suite. The runner stays until the crate
@@ -76,9 +102,13 @@ Python generator and harness stay as the other side of the differential pair.
 ### 2.2 Citation discipline in code
 
 Doc comments cite the specification the way the models do: `design §12.6.5`,
-`wire-format.md §4.1 field 8`. `Robot/modelrefcheck.py` is extended to scan `rhtn/`, with no
-exemptions, so a renumbered section fails the check rather than leaving a stale
-citation in a comment.
+`wire-format.md §4.1 field 8`. `Robot/modelrefcheck.py` scans `rhtn/` as well as
+`models/`, with no exemptions, so a renumbered section fails the check rather than
+leaving a stale citation in a comment. It reads `.rs`, `.py`, `.md` and `.toml`,
+and the shells' `.kt` and `.swift`; it skips build output and the generated stubs,
+whose citations `acceptance/tools/check.py` already checks verbatim against the
+section text. The first run over the workspace checked 637 citations and flagged
+none, and caught the first citation written after it.
 
 **Decisions made during implementation go into the specification and
 `change-log.md`, not into code comments.** design §22.2 lists them. A code comment
@@ -333,6 +363,72 @@ node's leg to a client attached over the wire, and a client's hand-off of
 payload to relay, which the wire has no frame for and no sender
 attribution in.
 
+### 5.1 The application tier
+
+**Design §24's order ends at milestone 10.** What follows is the tier above
+the library (section 2): two binaries, the boundary, and the shells. These
+milestones answer to the obligation documents rather than to a step of the
+design's order, and the catalogue's product entries are what they close.
+Nothing here may decide protocol behaviour: a rule enforced in an
+application and not in the library is absent from every other client, and
+§1.1's test disposes of it.
+
+**Milestone 11, the daemon** (`rhtn-daemon`). Exit: `rhtn-sim`'s scenarios
+rerun against daemon processes rather than in-process nodes, and a daemon
+restarted mid-scenario redelivers what it had accepted and nothing else.
+
+What it owes beyond the library. The identity is read and never minted: a
+node that generates a key when its file is missing serves under an identity
+nobody adopted, and its operator would not know. The queue's directory
+store and the prekey service's pools load before the node serves, since
+both are consumable state a restart must not reissue
+(`infra-client-requirements.md` §2, `wire-format.md` §7.8). Shutdown on
+SIGINT and SIGTERM refuses new sessions, lets deliveries in flight finish
+and persists before exit; the store contract already leaves a half-made
+delivery where it was, and the shutdown must not defeat it.
+
+Two things it does not owe. **Hosting waits on `rhtn-resources`**, so a
+daemon at this milestone brokers and does not host. And **PRD-06 closes on
+a person reading a screen**, not on a tool: the binding view showing hosted
+against brokered, the exposure the configuration creates for the identities
+below, and the roles an accessing user holds without the predicates behind
+them (`infra-client-requirements.md` §8, §10.6, §10.7).
+
+**Milestone 12, the command line** (`rhtn-cli`). Exit: every object in
+`test-vectors/corpus.json` decodes and prints from the binary, and a probe
+resolves a locator, fetches an archive and queries a catalog over a real
+session.
+
+It sends nothing outside `wire-format.md` §9.2's read-only class. A prekey
+fetch consumes a one-time key and a resource request has an application
+effect; neither belongs behind a command whose purpose is to look. It
+decodes with the parser a node uses and no other, because a second and
+laxer decoder written for convenience would disagree with the first
+invisibly.
+
+**Milestone 13, the boundary** (`rhtn-ffi`). Exit: the facade covers the
+ceremony, recovery, attach and payload, with the platform's channels,
+camera and clock arriving as callbacks, and a generated binding for one
+platform compiles against it.
+
+The facade translates and never adjudicates. The camera's metadata is
+stripped at the boundary (`light-client-requirements.md` §1.3), and the
+platform's clock is the clock: a skew a shell corrected silently would move
+a witness's tolerance check without saying so (§1.2).
+
+**Milestone 14, the shells** (`mobile/android`, `mobile/ios`). Exit: PRD-01
+to PRD-05 and PRD-07 to PRD-09 are marked, which first needs
+`acceptance/tools/catalogue.py`'s walk extended to `.kt` and `.swift`. That
+extension is the milestone's first commit, not an afterthought: until it is
+made the catalogue cannot see the tier that closes its last entries.
+
+**Order.** Milestones 11 and 12 are independent of each other and of 13; 13
+gates 14. None of them gates what the library still owes: `rhtn-resources`'s
+sandbox, which gates only the daemon's hosting, and PAY-13, which waits on
+the licence decision (section 7).
+
+**Then the split** (section 2), on its trigger rather than on a date.
+
 ---
 
 ## 6. Risks to retire, in order
@@ -360,7 +456,14 @@ attribution in.
 
 ## 7. Decisions that are the author's
 
-- Whether `rhtn/` lives in this repository (section 2) or in its own.
+- Whether `rhtn/` lives in this repository (section 2) or in its own, and
+  whether the trigger section 2 proposes for moving the applications out is
+  the right one.
+- The configuration file's format for `rhtnd`, and the argument parser for
+  `rhtn`. Each fixes a dependency, and neither is forced by any document.
+- Whether the operator's view (PRD-06) is a terminal on the host or a page
+  served to the operator alone. If it grows a frontend it leaves
+  `rhtn-daemon`, so its dependencies stay out of the library's lockfile.
 - The payload library and its licence (section 3).
 - The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
   trait.

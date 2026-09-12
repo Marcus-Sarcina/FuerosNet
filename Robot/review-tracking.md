@@ -8812,3 +8812,53 @@ Found on the way: the light-client test gates the direct path on the
 node's table, since a light client keeps none; whether a light client
 should carry a horizon of its own is a question for
 `light-client-requirements.md`.
+
+**The application tier, stubbed (2026-09-12).** The author asked for the
+file structure of the components the repository-structure assessment
+named, and for the process extrapolated into the plan. One gate-green
+commit, 4b19623. Three crates and two shells exist as scaffolds; no
+catalogue entry changed, so 284 of 294 stands, 0 flags.
+
+- **`rhtn-daemon`**, binary `rhtnd`: `config` carries the fields an
+  operator must supply that a node cannot derive, with real types and no
+  `Default`, since a default listen address or queue cap is a policy
+  choice made by omission; `service` and `operator` are doc-only, each
+  stating what it owes and against which section. `main` reports that the
+  lifecycle is not assembled and exits non-zero.
+- **`rhtn-cli`**, binary `rhtn`: `inspect`, `keys` and `probe`, doc-only.
+  It answers to no obligation document, which is written into the crate
+  doc so nothing later reads a subcommand as a requirement.
+- **`rhtn-ffi`**: `client`, `device` and `types`, doc-only. One crate so
+  the shells track one surface and a later split has one seam.
+- **`mobile/android`, `mobile/ios`**: READMEs only, not Cargo members.
+
+Package names are `rhtn-daemon` and `rhtn-cli` against the plan's table,
+which named the crates `rhtnd` and `rhtn`. The binaries keep those names,
+which is what the author specified; the packages follow the workspace's
+`rhtn-*` convention. Reversible by renaming two directories.
+
+Found on the way, and closed:
+
+- **The plan's section 2.2 check did not exist.** It requires
+  `Robot/modelrefcheck.py` to scan `rhtn/` so a renumbered section fails
+  rather than leaving a stale citation. The checker walked `models/`
+  only. Measured before changing anything: 637 code citations, 0 would
+  flag, so the discipline had been kept by hand and turning the check on
+  was free. It now reads `.rs`, `.py`, `.md`, `.toml`, `.kt` and
+  `.swift`, skipping build output and the generated stubs. It caught the
+  first citation written after it: `wire-format.md` §2.4 in the FFI
+  crate, a section that does not exist. No document fixes a display form
+  for a keyhash, so the claim was wrong rather than the number; the doc
+  comment now says rendering is the shell's and that the two shells must
+  agree.
+
+Left as it stands, and worth the author's eye:
+
+- **`Robot/refcheck.py` does not validate section citations inside
+  `Robot/` files.** It checks citations within the five specifications
+  and the rule that no root document cites `Robot/`; the `Robot/` list
+  only supplies headings for the "resolves in" hint. The plan now carries
+  112 qualified citations, checked by hand here at 0 flags. Extending a
+  checker over `Robot/` would flag `review-tracking.md`'s as-of-filing
+  references, which are deliberately not remapped, so the scope is the
+  author's call and not the assistant's.
