@@ -8945,3 +8945,64 @@ correction asked to change:
   then fails and the original still opens, which is what R03 asserts.
   Neither adaptation weakens an assertion, and both defects have workspace
   regressions of their own in PAY-16 and CER-32.
+
+**Milestone 11, the daemon (2026-09-12).** Six commits, the last gate-green,
+c6f3b1b. `rhtnd` starts from a configuration file and serves; the exit
+criterion's restart half is proved against the real binary. Two catalogue
+entries, DMN-01 and DMN-02, under a new `daemon` area; 299 of 309, 0 flags.
+
+- **The configuration fixes no dependency.** Section 7 lists the choice of
+  a format as the author's, so the placeholder is line-oriented
+  `key = value` parsed in a few dozen lines. It is strict for the reason
+  the HTTP boundary is: an unknown key, a repeated key, a missing one or a
+  value out of the range the wire fixes is an error naming its line.
+  Swapping in TOML or JSON replaces `Config::parse` and nothing else.
+- **The identity is read and never minted**, and on Unix one readable
+  beyond its owner is refused. The file holds the two seeds an identity is
+  derived from, sixty-four bytes; no document fixes that format and it is
+  the reference's, open to reversal.
+- **Consumable state is read before the transport can accept a session.**
+  A node serving before it has loaded its one-time pools reissues a key it
+  already served; one serving before its topology store replays a
+  forwarding wave. Both are written back on a signal and on a tick, so a
+  kill that never reaches the handler loses at most one interval.
+- **The operator's three views** are data plus a plain-text rendering. The
+  role view cannot leak a predicate by accident: a materialised row does
+  not record what produced it. The daemon prints the exposure at startup.
+
+Two gaps in the crates beneath, closed here because nothing worked without
+them:
+
+- **`NodeConfig` had no listen address.** `LiveNode` bound
+  `127.0.0.1:0` unconditionally, so an operator's chosen address could not
+  reach it. Absent still binds ephemeral loopback, which every existing
+  test relies on. The outward dial socket now takes an ephemeral port on
+  the same interface, so a host with several does not dial out of one it
+  was not given.
+- **An `Identity` could not be built from `KeyMaterial`.**
+  `Identity::from_key_material` is the inverse of `key_material` and the
+  way a holder turns material it was handed into keys it verifies with. A
+  keyhash alone cannot be pinned and there is no fetch path for material a
+  node lacks, which is why peers are configuration.
+
+Left owed, each recorded rather than invented:
+
+- **Telling a subject its one-time pool ran dry.**
+  `infra-client-requirements.md` §6 obliges it and no wire object carries
+  it; §7.8 says the session does, without saying how. The daemon drains
+  the list and reports it locally. A frame for it is the author's to
+  specify.
+- **Re-evaluating predicates at the four moments** §10.2 names. There is
+  no scheduler and no horizon-change pass; that is `rhtn-resources`'s, not
+  the daemon's lifecycle.
+- **The exit criterion's other half**: rerunning `rhtn-sim`'s whole
+  scenario set against daemon processes needs a harness that spawns and
+  addresses several, which is its own piece of work.
+- **PRD-06** stays open. It is manual, and where the binding and role
+  views are surfaced is not settled.
+
+Three workers ran on this: the assistant on the lifecycle, one agent
+surveying every operator obligation against what `LiveNode` already does,
+and one writing the operator views. The survey found the listen-address
+gap before any code was written, which is what made it worth spending a
+worker on.

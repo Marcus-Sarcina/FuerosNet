@@ -377,6 +377,23 @@ application and not in the library is absent from every other client, and
 rerun against daemon processes rather than in-process nodes, and a daemon
 restarted mid-scenario redelivers what it had accepted and nothing else.
 
+Done (2026-09-12), against the real binary rather than an in-process node:
+`rhtnd` starts from a configuration file and a peers file, serves a QUIC
+session at the address it reports, and a restart redelivers what was
+accepted on the next attach and nothing on the one after. The identity is
+read and never minted, and one readable beyond its owner is refused. The
+one-time pools and the topology store are read before a session can be
+accepted and written back on a signal and on a sixty-second tick. DMN-01
+and DMN-02. **Two gaps in the crates beneath had to be closed first**: a
+`NodeConfig` had no listen address, so an operator's choice could not
+reach `LiveNode`, which bound loopback unconditionally; and an `Identity`
+could not be built from the `KeyMaterial` a peer is pinned by, which is
+how a node is configured with peers it has never contacted.
+
+**The exit criterion is met in part.** The restart behaviour is proved end
+to end; rerunning `rhtn-sim`'s whole scenario set against processes is not
+done, and needs a harness that spawns and addresses several daemons.
+
 What it owes beyond the library. The identity is read and never minted: a
 node that generates a key when its file is missing serves under an identity
 nobody adopted, and its operator would not know. The queue's directory
@@ -524,6 +541,7 @@ checks it and the implementation's test suite is the first check.
 | Payload: PQXDH and Triple Ratchet integration; prekey distribution and service; binding to the hybrid identity; payload demultiplexing | design §14.2, §14.2.4; `wire-format.md` §7.8; `infra-client-requirements.md` §6 | after 5 |
 | Traversal: the serving node as STUN; candidates gathered and exchanged with the peer alone; the direct path attempted first and the relay on failure; control traffic dialled outward without traversal; no traversal outside the horizon | design §14.1.1, §12.6.3; `wire-format.md` §9.2; `infra-client-requirements.md` §7 | after 5 |
 | Resources: catalog registration, query, lifecycle and abuse reports; scope fields; request evaluation order and refusal; role table, predicates and templates; hosted-session termination on role change; no network bindings in the sandbox; package supply chain; gateways | design §11; `wire-format.md` §6, §11; `infra-client-requirements.md` §9, §10, §11; `resource-requirements.md` | after 5 |
+| Daemon lifecycle: a node started from a configuration and nothing else; the identity read and never minted; consumable state loaded before the first session and written back on the way out; a restart that redelivers what was accepted and no more | `infra-client-requirements.md` §1, §2, §4.3, §7 | 11 |
 | Product-level commitments: privacy choices, warnings before irreversible actions, client-side cycle handling, operator disclosure, retention and backup | `light-client-requirements.md` §5, §6, §7; `infra-client-requirements.md` §8; design §13.7.1 | manual, per release |
 
 **Two things the matrix does not claim.** The models establish properties of their
