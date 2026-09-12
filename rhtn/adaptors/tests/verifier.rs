@@ -158,3 +158,52 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     assert_eq!(from, kh("alice"));
     assert!(matches!(d, Dispatched::ResponseCopy(Ok(id)) if id == qid), "{d:?}");
 }
+
+// acceptance: CER-31
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_query_from_the_wrong_requester_leaves_a_waiting_request_where_it_was() {
+    // alice the verifier beside node bob, w1 the subject; carol asks
+    // legitimately and w2 replays her signed body under its own identity
+    let scene = Scene::new();
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
+    let verifiers = Verifiers::new();
+    let alice = host("alice", buffered(5000), &serving, &inboxes, &verifiers);
+    let w1 = host("w1", buffered(5000), &serving, &inboxes, &verifiers);
+    verifiers.install(&node);
+    alice.courier.attach(vec![kh("w1")]).await;
+    w1.courier.attach(vec![kh("alice")]).await;
+    alice.courier.sweep(vec![kh("w1")]).await;
+    let q = query("w1", "carol", "alice", 11);
+    let qid = q.query_id();
+    let q1 = q.clone();
+    let (signed, _) = w1
+        .handle
+        .with(move |c| {
+            c.subject.open_window([11; 32]);
+            c.consent(&q1)
+        })
+        .await
+        .expect("w1 consents");
+    let body = QueryRequest { query: q, consent: signed, selection_basis: 1 }.encode();
+    let ccfg = client_cfg("carol");
+    know(&ccfg, "bob", node.addr);
+    let AttachOutcome::Attached(c) = attach(&ccfg, &client_ep(), kh("bob"), node.addr, false).await else { panic!("carol attaches") };
+    let carols = body.clone();
+    let stream = tokio::spawn(async move { c.request(REQUEST_VERIFIER_QUERY, &carols).await });
+    assert!(until(2000, || alice.handle.with_blocking(|c| c.verifier.awaiting()) == vec![qid]).await, "carol's query waits for its grant");
+    // w2 presents the same signed body: field 2 names carol, not w2
+    let wcfg = client_cfg("w2");
+    know(&wcfg, "bob", node.addr);
+    let AttachOutcome::Attached(w) = attach(&wcfg, &client_ep(), kh("bob"), node.addr, false).await else { panic!("w2 attaches") };
+    assert!(w.request(REQUEST_VERIFIER_QUERY, &body).await.is_err(), "the wrong requester gets nothing");
+    // carol's request is still the one waiting, and its grant still answers it
+    assert_eq!(alice.handle.with_blocking(|c| c.verifier.awaiting()), vec![qid], "still pending, not cancelled");
+    let grant = KeyGrant { record: [5; 32], query_id: qid, key: [1; 32] }.encode();
+    w1.courier.send(kh("alice"), KIND_KEY_GRANT, grant).await.expect("sent");
+    let reply = tokio::time::timeout(Duration::from_secs(3), stream).await.expect("answered within the bound").unwrap().expect("answered on the stream");
+    let r = Response::read(&reply).unwrap();
+    assert_eq!((r.verifier, r.subject, r.query_id), (kh("alice"), kh("w1"), qid));
+    verify::response(&ids(), &reply, false).expect("alice's signature");
+}

@@ -8151,5 +8151,58 @@
   "then": "It returns a refusal. No offset is computed past the end of the message, in any build profile.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TRV-08",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Refuse a direct path in both directions where the local decision refuses it, whoever dialled",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §12.6.3",
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "The peers exchange addresses during setup and connect"
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "a direct connection reveals each peer's IP (P17)"
+   }
+  ],
+  "given": "Two mutually pinned peers on loopback whose local decision refuses a direct path to each other, and candidates arriving from the peer.",
+  "when": "One receives the peer's candidates, and the peer dials it directly.",
+  "then": "Nothing is gathered, nothing is dialled, and a connection the peer opens is closed unheld. Neither side reports the other reachable and no payload crosses a direct path.",
+  "oracle": "behaviour",
+  "interpretation": "The decision is local and asked again at the dial and at the accept: candidates arrive from the peer, and a peer's willingness to connect is not this side's permission."
+ },
+ {
+  "id": "CER-31",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Reject a query from the wrong requester without disturbing a legitimate request already waiting",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §5.6"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §5.6",
+    "text": "Field 2 MUST name the authenticated requester"
+   },
+   {
+    "where": "wire-format.md §5.6",
+    "text": "on a type-4 stream the querier is the transport-authenticated peer, and a mismatch is rejected"
+   }
+  ],
+  "given": "A verifier hosted in a node's process with a query pending its grant, and a second peer presenting the same signed query body under its own authenticated identity.",
+  "when": "The second request is rejected.",
+  "then": "The pending request keeps its place, and the grant arriving for it still completes its stream within the buffer. The rejected request gets nothing.",
+  "oracle": "behaviour",
+  "interpretation": "The requester is checked before the request touches state another request owns, and each registration is released only by the request that made it."
  }
 ]

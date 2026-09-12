@@ -16,9 +16,14 @@ use rhtn_client::query::QueryRequest;
 use rhtn_client::verifier::{Answer, QueryOutcome};
 use rhtn_node::runtime::{LiveNode, LocalVerifier};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::oneshot;
+
+/// A request waiting for its grant: the channel that carries the answer
+/// back to its stream, under the ticket of the request that registered it.
+type Waiting = (u64, oneshot::Sender<Answer>);
 
 #[derive(Clone)]
 struct Hosted {
@@ -30,8 +35,12 @@ struct Hosted {
 #[derive(Default)]
 pub struct Verifiers {
     hosted: Mutex<HashMap<Keyhash, Hosted>>,
-    /// Queries waiting for their grant, by id: the stream waits with them.
-    waiting: Mutex<HashMap<[u8; 32], oneshot::Sender<Answer>>>,
+    /// Queries waiting for their grant, by id, each under the ticket of
+    /// the request that registered it: one request's cleanup must not
+    /// remove another's channel, and a second request must not displace
+    /// the first.
+    waiting: Mutex<HashMap<[u8; 32], Waiting>>,
+    tickets: AtomicU64,
 }
 
 impl Verifiers {
@@ -63,18 +72,45 @@ impl Verifiers {
         let req = QueryRequest::decode(&body).ok()?;
         let hosted = self.hosted.lock().unwrap().get(&req.query.verifier).cloned()?;
         let qid = req.query.query_id();
-        // the stream waits here should the grant come later: registered
-        // before the client sees the query, so no grant slips between
+        // Field 2 names the authenticated requester (`wire-format.md`
+        // §5.6), and the check happens before this request touches state
+        // another request owns.  The client checks it again and is the
+        // authority; what it cannot do is undo a registration made in its
+        // name before it was consulted.
+        if req.query.querier != peer {
+            return None;
+        }
+        // The stream waits here should the grant come later, under a
+        // ticket of its own: a second request for the same query finds one
+        // waiting and displaces nothing.
+        let ticket = self.tickets.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
-        self.waiting.lock().unwrap().insert(qid, tx);
+        let registered = {
+            let mut w = self.waiting.lock().unwrap();
+            if let std::collections::hash_map::Entry::Vacant(e) = w.entry(qid) {
+                e.insert((ticket, tx));
+                true
+            } else {
+                false
+            }
+        };
+        let release = |me: &Self| {
+            if !registered {
+                return;
+            }
+            let mut w = me.waiting.lock().unwrap();
+            if w.get(&qid).is_some_and(|(t, _)| *t == ticket) {
+                w.remove(&qid);
+            }
+        };
         let outcome = hosted.handle.with(move |c| c.take_query(peer, &body)).await;
         let answer = match outcome {
             QueryOutcome::Closed(_) => {
-                self.waiting.lock().unwrap().remove(&qid);
+                release(&self);
                 return None;
             }
             QueryOutcome::Answered(a) => {
-                self.waiting.lock().unwrap().remove(&qid);
+                release(&self);
                 a
             }
             QueryOutcome::AwaitingGrant => {
@@ -84,7 +120,7 @@ impl Verifiers {
                     _ => {
                         // the bound passed: the client's own expiry answers
                         // `unavailable`, the key never having come
-                        self.waiting.lock().unwrap().remove(&qid);
+                        release(&self);
                         let due = hosted.handle.with(|c| c.expire()).await;
                         due.into_iter().find(|a| a.query_id == qid)?
                     }
@@ -100,7 +136,8 @@ impl Verifiers {
 
     /// A grant answered a query whose stream was waiting.
     pub fn granted(&self, answer: Answer) {
-        if let Some(tx) = self.waiting.lock().unwrap().remove(&answer.query_id) {
+        let waiting = self.waiting.lock().unwrap().remove(&answer.query_id);
+        if let Some((_, tx)) = waiting {
             let _ = tx.send(answer);
         }
     }

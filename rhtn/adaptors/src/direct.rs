@@ -138,6 +138,14 @@ impl LightDirect {
             conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unpinned");
             return false;
         };
+        // A connection this side would not have dialled is not one it
+        // accepts: the direct path is refused in both directions by the
+        // same local decision, or a peer outside the horizon opens it by
+        // dialling first.
+        if !(self.0.gate)(&peer) {
+            conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
+            return false;
+        }
         self.0.conns.lock().unwrap().insert(peer, conn.clone());
         self.0.reachable.set(peer, true);
         let l = self.clone();
@@ -174,6 +182,14 @@ impl Direct for LightDirect {
 
     fn open(&self, peer: Keyhash, candidates: Vec<Candidate>) -> Fut<'_, bool> {
         Box::pin(async move {
+            // The decision is this side's (design §12.6.3): a peer willing
+            // to connect is not permission to connect to it.  Asked again
+            // here rather than trusted from the gather, because candidates
+            // arrive from the peer and nothing else on this path consulted
+            // policy.
+            if !(self.0.gate)(&peer) {
+                return false;
+            }
             match connect_direct(&self.0.endpoint, &self.0.id, &self.0.pins, &peer, &candidates, self.0.dial_timeout).await {
                 Some(conn) => self.hold(conn),
                 None => false,

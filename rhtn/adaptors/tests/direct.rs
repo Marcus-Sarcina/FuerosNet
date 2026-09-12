@@ -85,6 +85,20 @@ fn light(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, i
     Party { handle, courier, app, reachable }
 }
 
+/// A light client whose local decision refuses every direct path: what a
+/// user choosing the relay leaves the client with.
+fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
+    let inlet = Inlet::default();
+    let gate: Gate = Arc::new(|_| false);
+    let direct = LightDirect::bind(Arc::new(id(name)), pins(), loopback(), None, None, gate, inlet.inbound()).expect("bound");
+    let reachable = direct.reachable();
+    let handle = spawn_client(name, Config::default(), reachable.clone());
+    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
+    inlet.bind(courier.inbound());
+    inboxes.host(kh(name), courier.inbound());
+    Party { handle, courier, app, reachable }
+}
+
 /// A node that is a participant: its client on the node's own socket.
 fn infra(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
     let inlet = Inlet::default();
@@ -169,4 +183,37 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     assert_eq!(c1.relayed() + c2.relayed(), relayed, "nothing more relayed");
     assert_eq!(n1.direct_state(&kh("w2")), Some(true));
     assert!(p2.handle.with_blocking(|c| c.device.direct.reachable(&kh("w1"))));
+}
+
+// acceptance: TRV-08
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
+    // carol and w1 are siblings under bob, so the horizon would allow it;
+    // the gate installed here refuses anyway, as a relay preference does
+    let mut scene = Scene::new();
+    scene.adopt("carol", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let counting = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
+    let serving: Arc<dyn Serving> = counting.clone();
+    let carol = light_refusing("carol", &serving, &inboxes);
+    let mut w1 = light("w1", &node, &serving, &inboxes);
+    carol.courier.attach(vec![kh("w1")]).await;
+    w1.courier.attach(vec![kh("carol")]).await;
+    carol.courier.sweep(vec![kh("w1")]).await;
+    // carol gathers nothing, so offers nothing
+    assert!(!carol.courier.offer(kh("w1")).await, "nothing gathered for a peer the gate refuses");
+    // w1 offers its own: carol dials none of them
+    assert!(w1.courier.offer(kh("carol")).await);
+    assert!(!until(2500, || carol.reachable.holds(&kh("w1"))).await, "carol opens nothing");
+    // and w1 dialling carol directly is closed unheld
+    assert!(!until(2500, || w1.reachable.holds(&kh("carol"))).await, "carol accepts nothing either");
+    // the payload still arrives, over the relay
+    let relayed = counting.relayed();
+    carol.courier.send(kh("w1"), KIND_APPLICATION, b"over the relay".to_vec()).await.expect("sent");
+    let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
+    assert_eq!(from, kh("carol"));
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"over the relay"), "{d:?}");
+    assert!(counting.relayed() > relayed, "the serving node carried it");
 }
