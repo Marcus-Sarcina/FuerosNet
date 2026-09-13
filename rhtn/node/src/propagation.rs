@@ -655,6 +655,7 @@ impl NodeView {
     pub fn materialise(&self) -> Snapshot {
         let mut at: Vec<(u64, Txid)> = self.store.transactions().map(|r| (r.effective, r.txid)).collect();
         at.sort();
+        let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut table = self.table.materialise();
         // the slots ride with the table: they are derived by the same fold,
         // and a restore that took one without the other would hold
@@ -675,7 +676,7 @@ impl NodeView {
         emit_bstr(&mut out, &table);
         emit_bstr(&mut out, &slots);
         table = out;
-        Snapshot { records: at.len() as u64, high: at.last().copied(), table }
+        Snapshot { folded, high: at.last().copied(), table }
     }
 
     /// Bring the derived view up to the store, replaying only what the
@@ -721,6 +722,14 @@ impl NodeView {
         let [Item::Bytes(t), Item::Bytes(s)] = parts.as_slice() else { return None };
         let mut table = Table::from_materialised(&snap.table[t.clone()])?;
         let slots = read_slots(&snap.table[s.clone()])?;
+        // **whose derived view this is, is this node's own answer and never
+        // a snapshot's.**  A copy naming another identity carries that
+        // node's subordinate slots, and installing it would lose this
+        // node's own; the client's loader already refused one and this did
+        // not.
+        if table.me.is_some_and(|m| Some(m) != self.table.me) {
+            return None;
+        }
         table.prefer = self.table.prefer.take();
         if table.me.is_none() {
             table.me = self.table.me;

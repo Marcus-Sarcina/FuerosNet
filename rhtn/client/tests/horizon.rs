@@ -10,6 +10,14 @@ use rhtn_archive::topology::Snapshot;
 use rhtn_archive::tx::*;
 use rhtn_client::horizon::{Horizon, Took, Woke};
 
+/// The transaction identifiers a horizon holds, in the order a fold takes
+/// them.
+fn sorted_txids(h: &Horizon) -> Vec<[u8; 32]> {
+    let mut at: Vec<(u64, [u8; 32])> = h.stored().filter_map(|(_, b)| Record::parse(b).ok().map(|r| (r.effective, r.txid))).collect();
+    at.sort();
+    at.into_iter().map(|(_, t)| t).collect()
+}
+
 /// `node` adopted under `patron` at `path` below `anchor`, into `series`.
 fn adopt_at(w: &mut World, node: &str, patron: &str, anchor: &str, path: Vec<u8>, nibbles: u64, series: u32) -> Record {
     let pop = w.meet(node, patron);
@@ -82,14 +90,19 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
         assert_eq!(h.distance(&kh(n)).is_some(), inside.contains(&kh(n)), "{n}");
     }
 
-    // w3 sits three edges out and its record placed it, so the copy holds
-    // a party the horizon does not: a prune is what drops it
+    // w3 sits three edges out.  Its record placed it in the map, and the
+    // answer is bounded by the horizon on the way out, so it is not
+    // placed — the bound is not something a caller has to remember to
+    // apply
     let mut h = h;
-    assert!(h.place(&kh("w3")).is_some(), "placed by its own record, horizon or not");
+    assert!(h.place(&kh("w3")).is_none(), "outside the walk, so not placed");
+    assert!(h.locator(&kh("w3")).is_none(), "nor located");
+    assert!(!h.resolvable().contains(&kh("w3")), "nor listed");
+
+    // a prune drops the storage, which is a separate act from the bound on
+    // the answers
     let dropped = h.prune();
     assert_eq!(dropped, 1, "one party forgotten");
-    assert!(h.place(&kh("w3")).is_none(), "and it is w3");
-    assert!(h.locator(&kh("w3")).is_none(), "its locator with it");
     for n in ["alice", "bob", "carol", "w1", "w2"] {
         assert!(h.place(&kh(n)).is_some(), "{n} is inside and stays");
     }
@@ -104,7 +117,7 @@ fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
     let mut h = fed("alice", &first);
     let held = h.records();
     let snap = h.materialise();
-    assert_eq!(snap.records as usize, held, "the watermark counts what went in");
+    assert_eq!(snap.folded, rhtn_archive::topology::fold_digest(sorted_txids(&h).iter()), "the watermark names what went in");
 
     // more arrives, and a wake with the earlier copy folds in only that
     let later = adopt(&mut w, "w1", "alice", vec![0x11], 2);
@@ -131,10 +144,9 @@ fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
     // whole, landing on what a replay from nothing gives
     let all = h.records();
     let damaged = Snapshot { table: b"not a table".to_vec(), ..current.clone() };
-    let overclaiming = Snapshot { records: 99, ..current.clone() };
-    let ahead = Snapshot { records: 0, high: Some((u64::MAX, [0xff; 32])), ..current.clone() };
+    let overclaiming = Snapshot { folded: [9; 32], ..current.clone() };
     let someone_elses = fed("carol", &first).materialise();
-    for (label, s) in [("damaged", Some(damaged)), ("overclaiming", Some(overclaiming)), ("ahead", Some(ahead)), ("another client's", Some(someone_elses)), ("none", None)] {
+    for (label, s) in [("damaged", Some(damaged)), ("a digest over other records", Some(overclaiming)), ("another client's", Some(someone_elses)), ("none", None)] {
         let mut v = fed("alice", &[]);
         for (_, b) in h.stored() {
             v.restore_record(b.clone());
@@ -176,4 +188,68 @@ fn what_the_patron_propagates_replaces_what_the_client_held() {
     assert_eq!(h.ingest(&moved.bytes, &ids()), Took::Duplicate);
     // what is not a record, or not signed by whom it names, changes nothing
     assert_eq!(h.ingest(b"not a record", &ids()), Took::Refused);
+}
+
+// acceptance: TOP-25
+#[test]
+fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
+    let mut w = World::new();
+    // two adoptions of w1 that differ only in the slot, so they sort at the
+    // same time and neither is the later of the two
+    let first = adopt(&mut w, "alice", "bob", vec![0x10], 1);
+    let one = adopt_at(&mut w, "w1", "bob", "bob", vec![0x21], 2, 1);
+    let other = adopt_at(&mut w, "w1", "bob", "bob", vec![0x31], 2, 1);
+    assert_ne!(one.txid, other.txid, "different records");
+
+    let taken = fed("alice", &[first.clone(), one.clone()]);
+    let snap = taken.materialise();
+
+    // a client holding the *other* record wakes with the first's snapshot.
+    // The count and the last record match; the input does not
+    let mut swapped = fed("alice", &[]);
+    for r in [&first, &other] {
+        assert!(swapped.restore_record(r.bytes.clone()));
+    }
+    let woke = swapped.wake(Some(&snap), &ids());
+    assert!(matches!(woke, Woke::Replayed { .. }), "a fold taken from other records is not reused: {woke:?}");
+    // and what it lands on is what the records it holds actually say
+    assert_eq!(swapped.place(&kh("w1")).map(|p| p.path.clone()), Some(vec![0x31]), "the record held, not the one folded");
+
+    // the honest case still folds nothing
+    let mut same = fed("alice", &[]);
+    for r in [&first, &one] {
+        assert!(same.restore_record(r.bytes.clone()));
+    }
+    assert_eq!(same.wake(Some(&snap), &ids()), Woke::Current);
+    assert_eq!(same.place(&kh("w1")).map(|p| p.path.clone()), Some(vec![0x21]));
+}
+
+// acceptance: TOP-26
+#[test]
+fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
+    let mut w = World::new();
+    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let mut h = fed("alice", &recs);
+    assert!(h.place(&kh("carol")).is_some(), "control: a sibling is inside");
+
+    // carol departs, which takes it out of the walk
+    let departure = {
+        let t = w.tick();
+        let bn = w.back("carol");
+        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        w.commit(TYPE_DEPARTURE, &body, &["carol"])
+    };
+    assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
+    assert_eq!(h.distance(&kh("carol")), None, "control: outside the walk now");
+    assert!(h.place(&kh("carol")).is_none(), "and not placed");
+
+    // **a replay lands on the same view.**  The records that placed carol
+    // are still held — the local patron is a participant in them — and the
+    // fold puts the place back in the map, so the answer has to come from
+    // the current bound rather than from the record stream
+    h.prune();
+    assert!(matches!(h.wake(None, &ids()), Woke::Replayed { .. }));
+    assert!(h.place(&kh("carol")).is_none(), "a replay does not resurrect it");
+    assert!(!h.resolvable().contains(&kh("carol")));
+    assert!(h.place(&kh("bob")).is_some(), "and the patron is still there");
 }

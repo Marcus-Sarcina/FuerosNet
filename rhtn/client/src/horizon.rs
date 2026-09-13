@@ -132,19 +132,34 @@ impl Horizon {
     }
 
     /// Where `node` sits, for a resolution this client runs itself.
+    ///
+    /// **Bounded by the horizon on the way out**
+    /// (`light-client-requirements.md` §4.2), not by remembering to prune.
+    /// A place is recorded from a record and nothing in the fold removes it
+    /// when a later record ends the relationship, so a party that has left
+    /// is still in the map until [`Horizon::prune`] drops it — and a replay
+    /// puts it back.  Reading through the current bound makes the replayed
+    /// view and the incremental one agree by construction.
     pub fn place(&self, node: &Keyhash) -> Option<&Place> {
+        self.table.distance(&self.me, node, 2)?;
         self.places.get(node)
     }
 
     /// The locator a record carried for `node`, series and counter
     /// included.  A node this client places only as an anchor has none.
+    ///
+    /// Bounded by the horizon, as [`Horizon::place`] is and for the same
+    /// reason.
     pub fn locator(&self, node: &Keyhash) -> Option<&Locator> {
+        self.table.distance(&self.me, node, 2)?;
         self.locators.get(node)
     }
 
-    /// Every node this client can place without asking anyone.
+    /// Every node this client can place without asking anyone, inside the
+    /// horizon and no wider.
     pub fn resolvable(&self) -> Vec<Keyhash> {
-        self.places.keys().copied().collect()
+        let inside = self.table.horizon(&self.me, 2);
+        self.places.keys().filter(|k| inside.contains(*k)).copied().collect()
     }
 
     /// How many adoption or sibling edges away `other` is; nothing beyond
@@ -177,11 +192,12 @@ impl Horizon {
     pub fn materialise(&self) -> Snapshot {
         let mut at: Vec<(u64, Txid)> = self.records.values().filter_map(|b| Record::parse(b).ok().map(|r| (r.effective, r.txid))).collect();
         at.sort();
+        let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut out = Vec::new();
         rhtn_codec::encode::emit_array_head(&mut out, 2);
         rhtn_codec::encode::emit_bstr(&mut out, &self.table.materialise());
         rhtn_codec::encode::emit_bstr(&mut out, &encode_places(&self.places, &self.locators));
-        Snapshot { records: at.len() as u64, high: at.last().copied(), table: out }
+        Snapshot { folded, high: at.last().copied(), table: out }
     }
 
     /// Wake: take the snapshot where it can account for the records held,

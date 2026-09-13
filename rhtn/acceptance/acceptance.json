@@ -9368,5 +9368,86 @@
   "then": "The call reports a refusal rather than success, nothing is queued at the node, and the same discipline applies to publishing a bundle and stocking a pool. An application told a message was sent stops retrying it.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TOP-25",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A fold is reused only over the record set it was taken from",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §15.1.1",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "A materialised copy carries enough to say whether it is still current, and is discarded whole when it cannot."
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Store\n  the fold's result with a watermark that says which records produced it."
+   }
+  ],
+  "given": "A party holding a materialised copy of the shape a set of records produced.",
+  "when": "One of those records is replaced by a different one, and the party wakes with the copy.",
+  "then": "The copy is discarded and the whole set replayed, and the resulting view is what the records held actually say. A watermark that counted records rather than naming them would be satisfied by the substitution, since the count and the last record are unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-26",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A replay does not resurrect a party that left the horizon",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §4.2",
+   "design §15.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "Keep it bounded by the horizon"
+   },
+   {
+    "where": "design §15.1",
+    "text": "A horizon is every node within a two-edge walk of you"
+   }
+  ],
+  "given": "A client holding the records that placed a party, and a later record ending that relationship.",
+  "when": "The party's place is read, the copy is pruned, and the whole record set is then replayed.",
+  "then": "The party is not placed at any point after the relationship ended, and the replayed view answers exactly as the incremental one did. The records that placed it are still held, so a bound applied only at pruning time would be undone by the replay.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-16",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A derived view belonging to another identity is discarded",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "design §15.1.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Discard a derived view that cannot account for your store, and replay."
+   },
+   {
+    "where": "design §15.1.1",
+    "text": "What a\nparticipant keeps is a copy of what its patron infrastructure provided"
+   }
+  ],
+  "given": "Two nodes holding the same topology records, whose own subordinate slots therefore differ.",
+  "when": "One node is started with the other's derived view beside its store.",
+  "then": "The view is discarded and the node rebuilds its own table and its own routing slots. Installing another party's fold would replace this node's slots with theirs, which is a different node's answer to a question only this node can answer.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

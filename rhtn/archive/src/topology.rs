@@ -719,7 +719,10 @@ pub fn initial_trust(known: &BTreeSet<Keyhash>, subject: &Keyhash, records: &[Re
 /// costs is the work it was meant to save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Snapshot {
-    pub records: u64,
+    /// A digest over the transaction identifiers folded in, in the order
+    /// they were folded.  **This names the input exactly**, where a count
+    /// only names how many there were.
+    pub folded: [u8; 32],
     pub high: Option<(u64, Txid)>,
     pub table: Vec<u8>,
 }
@@ -748,18 +751,41 @@ pub fn above(high: &Option<(u64, Txid)>, at: (u64, Txid)) -> bool {
     }
 }
 
+/// The digest a snapshot carries: the transaction identifiers it folded
+/// in, concatenated in the order they were folded.
+pub fn fold_digest<'a>(txids: impl Iterator<Item = &'a Txid>) -> [u8; 32] {
+    let mut acc = Vec::new();
+    for t in txids {
+        acc.extend_from_slice(t);
+    }
+    rhtn_codec::cose::sha256(&acc)
+}
+
 /// Which of `records` a snapshot has not folded in, in the order the
 /// caller holds them, or nothing where the snapshot cannot account for the
 /// set at all.
 ///
-/// **The count is the whole test** (design §15.1.1).  A record below the
-/// watermark that the snapshot never saw leaves the count short, and this
-/// side cannot tell which record that was, so the answer is to fold
-/// everything rather than to guess.  Ordering is the caller's, since it
-/// holds the records in whatever form it keeps them.
+/// **The digest is the whole test** (design §15.1.1), and it names the
+/// input rather than counting it.  A count and a high-water mark are
+/// equal for two different record sets whenever one record has been
+/// replaced by another below the mark, and the stale fold is then reused
+/// over input it was never taken from.  Recomputing the digest over what
+/// is held costs one pass and cannot be satisfied by a substitution.
+///
+/// Ordering is the caller's, since it holds the records in whatever form
+/// it keeps them; both callers sort by `(effective, txid)`, which is the
+/// order [`Table::apply`] is fed in.
 pub fn unfolded<T>(snap: &Snapshot, records: &[T], at: impl Fn(&T) -> (u64, Txid)) -> Option<Vec<usize>> {
-    let later: Vec<usize> = (0..records.len()).filter(|i| above(&snap.high, at(&records[*i]))).collect();
-    (later.len() as u64 + snap.records == records.len() as u64).then_some(later)
+    let (mut later, mut below) = (Vec::new(), Vec::new());
+    for (i, r) in records.iter().enumerate() {
+        let k = at(r);
+        if above(&snap.high, k) {
+            later.push(i);
+        } else {
+            below.push(k.1);
+        }
+    }
+    (fold_digest(below.iter()) == snap.folded).then_some(later)
 }
 
 impl Snapshot {
@@ -768,7 +794,7 @@ impl Snapshot {
         let mut out = Vec::new();
         emit_map_head(&mut out, 3);
         emit_uint(&mut out, 1);
-        emit_uint(&mut out, self.records);
+        emit_bstr(&mut out, &self.folded);
         emit_uint(&mut out, 2);
         match &self.high {
             Some((t, id)) => {
@@ -786,7 +812,8 @@ impl Snapshot {
     pub fn decode(b: &[u8]) -> Option<Snapshot> {
         let item = parse_all(b).ok()?;
         let Item::Map(m) = &item else { return None };
-        let records = map_get(m, 1).and_then(as_uint)?;
+        let Item::Bytes(f) = map_get(m, 1)? else { return None };
+        let folded: [u8; 32] = b[f.clone()].try_into().ok()?;
         let high = match map_get(m, 2)? {
             Item::Array(a) if a.is_empty() => None,
             Item::Array(a) => match a.as_slice() {
@@ -796,7 +823,7 @@ impl Snapshot {
             _ => return None,
         };
         let Item::Bytes(r) = map_get(m, 3)? else { return None };
-        Some(Snapshot { records, high, table: b[r.clone()].to_vec() })
+        Some(Snapshot { folded, high, table: b[r.clone()].to_vec() })
     }
 }
 
