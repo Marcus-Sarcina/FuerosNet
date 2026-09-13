@@ -9346,3 +9346,57 @@ means it has to. TRV-10 is the regression test, and **it was checked against
 the old code**: it fails there at the 25,000-byte case and passes on the fix.
 The first version of that test did not fail against the old code, because the
 way it reintroduced the bug missed the branch that carried it.
+
+**A recursive consistency pass, 2026-09-13.** Two audits ran against the tree,
+one over the six documents and one comparing every CDDL block to the schema and
+the encoder. Both were verified finding by finding before anything was changed;
+what follows is what held.
+
+**The documents.** Nine counts had drifted, each checkable against the thing it
+counted. The load-bearing one was `wire-format.md` §3.3, which defined
+*effective time* twice, differently, inside a MUST — and the implementation had
+always read it the way the second clause meant, so the fix was to name the two
+roles rather than to change either. A locator was described as four fields in
+§12.1 and three everywhere else. Two consolidating passages asserted the
+opposite of what they summarise. Fifteen citations resolved to a real but wrong
+section; the witness-clock rule alone was misattributed to design §8.1.2 in four
+places. And thirty-four instances of *Dunbar Org* stood in mechanical text
+against §2's ruling, swept across all five documents at once as
+`Robot/authoring-conventions.md` requires.
+
+**The implementation.** One outright interoperation failure and one silent
+value corruption, both invisible to any round trip:
+
+- `PrekeyPublication` field 1 wrapped the bundle object in a byte string where
+  §7.10 declares the object. A decoder wrong the same way in both directions
+  agrees with itself, which is why nothing caught it and why the test that pins
+  it now asserts the *shape* rather than the round trip.
+- `Locator::decode` narrowed a u32-range `seqno` with `as u32`.
+
+The rest was under-enforcement: bounds the documents state, and in several
+cases that `negative-vectors.md` already described as required, which the
+schema did not apply. Presence-record responses are the clearest case — the
+recovery form checked sorting and duplicates and the presence form did not, an
+asymmetry rather than a decision, and field 5 sits inside the signed body so an
+unsorted encoding gave one logical record two txids.
+
+**Two things found while fixing, not in either audit:**
+
+- `reply_family` existed twice, in `crypto/tests/corpus.rs` and in
+  `crypto/tests/common/mod.rs`. Adding a family to one and not the other is
+  exactly what happened, and two tests panicked on a corpus entry the third
+  accepted. The corpus runner now uses the shared table.
+- `verify.py` resolved `corpus.json` against the working directory while every
+  other read resolved against the script, so it only ran from one place.
+
+**The test vectors were regenerated** under the dependency versions
+`spec-pins.json` names, installed into an isolated directory rather than over
+the system's. `verify.py` now reads the message fixtures **by section rather
+than by absolute index**, so adding a family to one section cannot silently
+renumber another's, which is what the five new frames and two new replies would
+otherwise have done. All checks pass.
+
+**The models were re-run and all pass**, unchanged in verdict.
+
+**Owed, and the list is now short:** nothing. The `verify::record` error type is
+fixed, and the corpus debt is paid.
