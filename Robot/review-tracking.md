@@ -9127,3 +9127,59 @@ where `verify::envelope` returns an error for the same thing. The error
 types agree now; the success types still disagree about what a failing
 signature is. Seventeen call sites read that bool, so it is a wider change
 than this one and nobody has needed it yet.
+
+**The 2026-09-13 review, applied (2026-09-13).** Four findings against
+b2901b3: D01 half open, R11 a regression this assistant introduced, and
+R12 and C01 new. **All four held on verification.** Everything else from
+the previous round stayed closed and the workspace suite came back green.
+Four gate-green commits, one per finding, in the order the report proposed.
+
+- **9873eba, R11**, and the reason given for causing it was wrong. D02's
+  repair said wiping the prekey directory before writing "would have put
+  served keys back". It would not: a rewrite from memory cannot restore a
+  key memory no longer holds. The real hazard of a wipe is the window in
+  which the directory is empty, which is a different argument, and what
+  shipped instead added missing files and removed none. `save` now has one
+  rule whichever way the service is kept: make the directory match what is
+  held. DMN-07.
+- **491c0de, R12.** The topology table had arms for adoption, departure
+  and disavowal and none for a series reissue, so a reissue fell through
+  doing nothing, the binding kept the adoption's series, and a departure
+  naming the proven current series matched no binding and waited for ever.
+  The series left identifies the relationship a reissue advances, not the
+  larger number, so a re-adoption opening a higher series is untouched;
+  a reissue arriving before its adoption is held as a departure is. TOP-20.
+- **2e8a455, D01.** The rebuild left `view.archive` empty, so a restarted
+  node derived its next back-pointer from genesis and the next record it
+  signed would have opened a second chain beside its published one, every
+  record still on disk. And the own position took the adoption's series
+  rather than the binding's, so startup could publish an endpoint record
+  under a series the patron had retired. DMN-08.
+- **897ad33, C01.** The archive probe printed each record's identifier and
+  returned success without comparing one record's back-pointers with the
+  next. §7.9 is explicit that the requester verifies the chain and that a
+  holder cannot be trusted to have walked correctly. The batch's links are
+  checked now, and the reply says that newestness is the holder's claim
+  where no head was requested, which is the one thing no requester can
+  check. DMN-09.
+
+Three of the four tests were confirmed to fail with their repair backed
+out before being kept. The fourth, R11's, is a persistence sequence the
+old code could not express.
+
+Recorded rather than fixed: **the own archive is rebuilt only as far as
+the store still holds each record's predecessors.** A record whose
+predecessor was never stored, its subject having fallen outside the
+horizon, is left out rather than appended over the gap, and the daemon
+counts and reports those. Persisting the archive separately from the
+topology store would close it and is a larger change than this one.
+
+The reviewer's harness rerun at the end: **49 of 49 pass on an unmodified
+copy in the scratchpad**, the five new assertions included. No adaptation
+was needed.
+
+Found on the way, a process slip of the assistant's: C01's first gate ran
+against a tree whose clippy had already failed. The lint check and the
+gate were launched in one backgrounded chain, so its verdict was never
+read and the `&&` carried on past it. Clippy is checked and read before
+the gate is launched, not beside it.
