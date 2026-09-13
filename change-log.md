@@ -9308,3 +9308,55 @@ permission.
 recalculates** [author]. A staple decides which key to address and is not a
 trust input (§12.6.5), so a role table has nothing to recalculate from it;
 decay is the one value that moves with time alone.
+
+## 2026-09-13
+
+### 2026-09-13 (the kernel owns the network, and the interface does not)
+
+**§14.1.0 is new: one participant, one kernel** [author]. Identity, keys, the
+archive, the topology table, sessions and every byte on the wire belong to one
+component, and what a person looks at is a client of it that protocol content
+never reaches. Two reasons are given, and the stronger is that translating wire
+content through a platform's own language puts a second parser beside the
+first, which is the hazard §11.2 names for HTTP one layer down. Device input
+travels inward across the same interface, because the camera and the radios
+exist only in the platform layer. The interface's own shape is stated per
+client in the two client documents and nowhere in `wire-format.md`, none of it
+being on the wire.
+
+### 2026-09-13 (push is an endpoint the client chose, not a vendor's channel)
+
+**§14.1.5's doorbell is posted to a wake endpoint rather than sent through a
+vendor channel the patron holds a credential for.** The patron holds a URL and
+the key the body is encrypted to, authenticates itself with a key pair of its
+own, and needs to know nothing about any platform: whatever turns the post into
+a notification is behind the endpoint on the client's side. That is RFC 8030's
+shape, and taking it is what makes one obligation cover every platform.
+§14.1.4's dependency column becomes the service the client chose. A native iOS
+application is the one case still needing a per-application relay, and it is
+named as an exception rather than designed around.
+
+**The declared-degradation framing is not carried** [author]: *"The impact of
+push notifications is ambivalent with respect to privacy... responding to a
+push notification reveals only that the user is awake and received the
+notification, while responding to queued messages upon opening the client app
+gives a more intimate timing picture about when the user is free of other
+distractions and chooses to interact with the network."* §19.7 gains what the
+push service learns as accepted cost 13, opt-in and the user's service to
+choose.
+
+### 2026-09-13 (four things a client could not say to its own node)
+
+**`wire-format.md` §7.10 is new, and request types 9 to 12 with it.** A light
+client cannot serve its own prekeys, hold its own mail, or be woken by a
+service it is not connected to, and until now could say none of it: publishing
+a bundle, depositing one-time keys, handing over payload to relay and
+registering a wake endpoint each had no message. §6.2 had already given the
+fifth member of the family, a catalog registration, its own type and the reason
+that generalises to all of them.
+
+**Four explicit types rather than one submission carrying a kind** [author]: the
+request table is explicit everywhere else, and a kind tag inside a body is the
+sender-supplied discriminator §10.1 refuses for pushes. None is read-only, so
+§9.2 excludes all four from early data. `infra-client-requirements.md` §6.1 and
+`light-client-requirements.md` §4.1 carry the two sides of the obligation.

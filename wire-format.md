@@ -3095,6 +3095,75 @@ already parsing.
 **Bounded by the same array limits as everything else** (§1): 256 records per
 batch, matching the archive-reference bound it replaces.
 
+### 7.10 What a client hands its serving node
+
+**A light client cannot do four things for itself, and until now could say
+none of them.** It cannot serve its own prekeys, hold its own mail, or be woken
+by a service it is not connected to. Each of those is an act the node it is
+already attached to performs on its behalf, and each needs a message. §6.2 gave
+the fifth member of this family, a catalog registration, its own request type
+and said why: without a message, the one act that matters would be the one
+thing an attached client cannot say, and every implementation would invent its
+own.
+
+**Four request types, not one submission carrying a kind** [2026-09-13]. The
+request table is explicit for every other message and a kind tag inside a body
+is the sender-supplied discriminator §10.1 refuses for pushes, for the same
+reason: it is state every receiver must trust before it knows what it is
+reading.
+
+**None of them is read-only** (§9.2). Each changes state at the node or spends
+something, so none may be processed in early data.
+
+```
+PrekeyPublication = {          ; type 9
+  1: PrekeyBundle,             ; §7.8's bundle, signed by its subject
+}
+
+OneTimeDeposit = {             ; type 10
+  1: [ 1*256 bstr ],           ; one-time keys, opaque (§7.8)
+}
+
+RelaySubmission = {            ; type 11
+  1: keyhash,                  ; the recipient
+  2: bstr,                     ; the ciphertext, which this node cannot read
+}
+
+WakeRegistration = {           ; type 12
+  1: ? tstr .size (1..2048),   ; the endpoint to post a doorbell to (design
+                               ;   §14.1.5); ABSENT WITHDRAWS the registration
+  2: ? bstr .size (1..256),    ; the key the posted body is encrypted to
+  3: ? timestamp,              ; when the client expects the endpoint to lapse
+}
+```
+
+**The subject of a publication is the sender, and the node checks it.** A
+bundle names its subject and is signed by it (§7.8); a client publishing
+another party's bundle would be choosing the material its peers open sessions
+against. The node refuses a publication whose subject is not the authenticated
+requester.
+
+**A deposit is bounded by the array limits like everything else** (§1.3), and a
+node applies its own storage bound on top: the pool is space it lends.
+
+**A relay submission is answered before the message is delivered, not after.**
+The answer says the node took it, which is the same promise design §14.1.6's queue
+makes; delivery is the node's problem from that moment, and a sender that
+waited for delivery would be waiting on a party that may be offline for days.
+**The node refuses one for a recipient it holds no record of**, which is the
+distinction design §7.4.3 draws between offline and unknown.
+
+**A wake registration with no endpoint withdraws.** Opting out must be as
+sayable as opting in, and a client that has stopped wanting a doorbell should
+not have to wait for the endpoint to lapse. **A node keeps at most one per
+relationship**, replaces it on re-registration, and forgets it when the
+relationship ends.
+
+**The reply to each is a `Reply` (§9.2's shape) carrying a code**: 0 accepted,
+1 refused, 2 over a bound this node applies. Nothing further: a client learns
+that its node took what it said, and the node discloses nothing about the other
+clients it serves.
+
 ## 8. Session messages
 
 ### 8.0 Control frame framing
@@ -3574,6 +3643,10 @@ no continuation to preserve.
 | 6 | `ResourceRequest` (§11) |
 | 7 | `ResourceRegistration` (§6.2) |
 | 8 | `CurrencyRequest` (§7.1) |
+| 9 | `PrekeyPublication` (§7.10) |
+| 10 | `OneTimeDeposit` (§7.10) |
+| 11 | `RelaySubmission` (§7.10) |
+| 12 | `WakeRegistration` (§7.10) |
 
 **The reply carries no type tag and is framed identically otherwise** — the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
@@ -3603,7 +3676,9 @@ one-time prekey (§7.8), a spent anti-oracle count (§5), a replayed registratio
 that reverts an owner's current entry (§6.5). **Read-only lookups are unaffected** — resolution,
 archive fetch and catalog queries answer the same way however often they are
 replayed, which is what makes 0-RTT still worth having. A resource request is
-never in the read-only class, whatever the HTTP method inside (§11). §8.2's rule for `Attach` is
+never in the read-only class, whatever the HTTP method inside (§11), and
+neither is anything a client hands its serving node (§7.10): each changes state
+there or spends something. §8.2's rule for `Attach` is
 this rule's other instance, on the other stream class.
 
 - Bidirectional streams: request/response — the request types tabled above

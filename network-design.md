@@ -5028,6 +5028,43 @@ protected end to end. Addressing (§12) answers *where*; this answers *how*.
 
 ### 14.1 Session establishment and failover
 
+#### 14.1.0 One participant, one kernel
+
+**Everything this section describes belongs to one component, and the user
+interface is not part of it** [author, 2026-09-13]. Identity, keys, the
+archive, the topology table, sessions and every byte on the wire are held by a
+**kernel**; what a person looks at is a client of that kernel, and protocol
+content does not cross into it. The interface between them carries what to
+draw and what the person did, never envelopes, never signatures, never key
+material.
+
+**Two reasons, and the second is the stronger one.** A network with several
+host platforms and at least one infrastructure client would otherwise maintain
+the protocol once per platform, which is work nobody needs to do twice. And
+translating wire content through a platform's own language puts a second
+parser beside the first, which is the hazard §11.2 names for HTTP at a
+different layer: two parsers that disagree about where a message ends are a
+gap an attacker chooses.
+
+**Device input travels inward across the same interface.** The camera and the
+proximity radios exist only in the platform layer (`light-client-requirements.md`
+§1.3), so the kernel owns the network while the interface owns the hardware,
+and a capture is the kernel asking rather than taking. That inversion is the
+price of the arrangement and it is worth paying.
+
+**One kernel serves a continuous host and an intermittent one.** A server never
+leaves its loop; a phone enters it on waking, does what it can and leaves.
+Nothing in the protocol distinguishes them, because the mailbox (§14.1.6) was
+built for a client that is not there and the heartbeat exists to let a node
+know which it is dealing with. **What must be true is that the kernel can stop
+at any moment and lose nothing**, which is a property of where its state lives
+rather than of what it does.
+
+**The interface's own shape is not this document's.** What the kernel offers
+and what a client may ask are stated per client in
+`light-client-requirements.md` and `infra-client-requirements.md`; the wire
+format has nothing to say about it, since none of it is on the wire.
+
 #### 14.1.1 NAT traversal — required for the direct payload path
 
 **Control traffic needs none.** Clients dial **outward** to their serving infra
@@ -5145,38 +5182,72 @@ persistent connection it cannot count on.*
 
 | | Real-time | Central dependency | Complexity |
 |---|---|---|---|
-| A. Persistent + push | Yes | Apple/Google | High |
+| A. Persistent + push | Yes | The service the client chose | High |
 | B. Foreground + store-and-forward | No | None | Low |
 | **C. B default, push opt-in** | Optional | Only if opted in | Medium |
 
 **Decision: C, with B as the default.** §1's traffic profile is deliberate,
 occasional and foreground — presence ceremonies are synchronous by nature and
 the DNS/SSL-replacement case is request-driven, so store-and-forward at the
-patron plus fetch-on-foreground covers v1. Push is a later feature paid for in
-dependency, and **enabling it should be treated as a declared degradation of the
-trust model**, plausibly an attribute in the record the way client integrity is
-(§7.8).
+patron plus fetch-on-foreground covers v1.
+
+**The dependency is the client's, not the network's** [2026-09-13]. A client
+opting in gives its patron a **wake endpoint** it obtained from a push service
+it chose, and the patron posts a content-free body to that endpoint (§14.1.5).
+The patron holds no credential issued by a platform vendor and needs to know
+nothing about one: whatever turns the post into a notification is behind the
+endpoint, on the client's side of the arrangement. Vendor push is then one
+implementation of the doorbell rather than the doorbell itself, and the central
+party is whichever service that client picked.
+
+**The impact of push notifications is ambivalent with respect to privacy**
+[author, 2026-09-13]. This network by nature allows arbitrary users to contact
+a given node and as such accepts a certain potential for harassment and/or
+behavioral timing. On the other hand, responding to a push notification reveals
+only that the user is awake and received the notification, while responding to
+queued messages upon opening the client app gives a more intimate timing
+picture about when the user is free of other distractions and chooses to
+interact with the network.
+
+**So opting in is a choice with costs on both sides**, and neither side of it
+is a degradation of the trust model: nothing about a doorbell changes what a
+record attests or what a verifier may conclude. What the push service learns is
+an accepted cost (§19.7).
 
 #### 14.1.5 Push is a doorbell, not a mailbox
-The patron sends **content-free** pushes through OS channels that only prompt
-the user to open the app and re-establish a session; all payload moves over the
-network's own channel and notification text is rendered locally. Signal uses
-this pattern.
+The patron posts a **content-free** body to the wake endpoint a client gave it,
+which only prompts the user to open the app and re-establish a session; all
+payload moves over the network's own channel and notification text is rendered
+locally. Signal uses this pattern.
 
-**What the OS vendors still learn:** that a push went to this device at this
-time, from this app, and the frequency pattern that implies. Real, but a
-different order of magnitude from payload, and unavoidable where vendor push is
-the wake mechanism, the dependable one, though the platforms offer constrained
-alternatives (§14.1.4), for background
-delivery on mobile.
+**The endpoint is what the patron holds, and it is all the patron needs.** A
+URL to post to and the key the body is encrypted to, so the service carrying it
+cannot read even the nothing that is in it. The patron authenticates itself to
+that service with a key pair of its own rather than a credential a platform
+issued, which is what keeps a serving node able to ring the doorbell of a
+client it has never shared a vendor with. **This is the shape RFC 8030 fixed**
+for the same problem, and adopting its shape rather than a vendor's is what
+makes one obligation cover every platform.
+
+**What the push service still learns:** that a body went to this endpoint at
+this time, and the frequency pattern that implies. Real, and a different order
+of magnitude from payload. Which service that is, is the client's choice and
+not the network's.
+
+**One platform is an exception, and it is named rather than designed around.**
+A native iOS application receives a device token rather than an endpoint, and
+only a sender holding that application's own credential may use it, so
+somebody shipping such an application must operate the relay that turns a post
+into a push. That is a property of the platform, not of this design, and it
+leaves the client's user-facing behaviour the same either way.
 
 **Caveats.** iOS throttles silent (`content-available`) pushes as explicitly
 best-effort, so they cannot be relied on for anything time-sensitive; a
 user-visible notification delivers more reliably at the cost of an interruption.
-The push token is a routable identifier the patron holds, a small additional
+The endpoint is a routable identifier the patron holds, a small additional
 linkage on top of what §12.6.3 already grants. Note it is **stable while valid,
-not permanent**: Apple documents that device tokens change periodically and must
-not be cached as immutable identifiers.
+not permanent**: a push service may retire an endpoint, so a client refreshes
+it and a patron does not cache one as an immutable identifier.
 
 #### 14.1.6 The serving node as mailbox
 
@@ -7216,6 +7287,20 @@ ceremony.
    the subordinate sees. Covert only until used; answered by exit (§18.5) —
    or sidestepped entirely by a multi-subnet user, who staples from another
    line (§12.6.5).
+
+13. **A push service learns when a client had mail.** A client that opts into a
+   doorbell (§14.1.5) gives its patron an endpoint at a service of the user's
+   choosing, and that service sees a body arrive for that endpoint at that time,
+   and the frequency pattern that implies. It sees no payload, no sender and no
+   count: the body is content-free and encrypted to a key the service does not
+   hold.
+
+   **Accepted because it is opt-in, the service is the user's to choose, and
+   the alternative discloses more to a different party.** §14.1.4 sets out why
+   the timing exposure runs both ways: a client that fetches only on foreground
+   tells whoever watches it when its user chose to attend to the network, which
+   is the more intimate fact. What is not accepted is a doorbell nobody asked
+   for, which is why the default is no endpoint at all.
 
 ### 19.8 Correlation register
 

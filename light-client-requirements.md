@@ -369,6 +369,30 @@ session secrecy. The client implements them; it does not reinvent them.
 
 ---
 
+### 4.1 What you hand your serving node
+
+- **Publish your bundle and stock your pool as part of attaching**
+  (`wire-format.md` §7.10 and `wire-format.md` §7.8). A node that holds neither cannot answer for
+  you, and a peer that cannot fetch your material cannot open a session with
+  you at all.
+- **Hand payload to your node rather than waiting for the recipient.** The
+  answer says your node took it, not that it arrived; a recipient may be away
+  for days, and that is what the mailbox is for (design §14.1.6).
+- **A wake endpoint is the user's choice and nobody else's** (design §14.1.5).
+  Obtain it from a service they picked, hand it to your node with the key its
+  body is encrypted to, and refresh it: an endpoint is stable while valid, not
+  permanent.
+- **Withdraw it as readily as you registered it.** A registration with no
+  endpoint withdraws, and a user turning doorbells off should not have to wait
+  for one to lapse.
+- **Render the notice locally.** A doorbell carries nothing, so whatever the
+  person reads on the lock screen is written by this client from what it finds
+  when it reconnects, never from what was posted.
+- **Do not treat a doorbell as delivery.** It says there may be something, and
+  what there is comes over the network's own channel or not at all.
+
+---
+
 ## 5. Privacy choices the user must be able to make
 
 - **Direct versus relayed payload must be overridable**, in both directions, and

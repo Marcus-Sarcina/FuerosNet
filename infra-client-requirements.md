@@ -245,6 +245,31 @@ serving node.
   prefetching it org-wide: only the on-demand request carries intent. It falls under §1's process-and-discard obligation: serve the request,
   keep no record of who asked for whose bundle.
 
+### 6.1 What your clients hand you
+
+- **Take a prekey publication only from the subject it names**
+  (`wire-format.md` §7.10). A client publishing another party's bundle would be
+  choosing the material that party's peers open sessions against.
+- **Bound a deposit and say so.** The pool is space you lend, and a client that
+  asks for more than you lend is refused with the code rather than silently
+  trimmed.
+- **Answer a relay submission when you have taken it, not when you have
+  delivered it.** Taking it is the promise the queue already makes (design
+  §14.1.6); a sender made to wait for delivery would be waiting on a party who
+  may be away for days. Refuse one for a keyhash you hold no record of, which
+  is a different answer from offline (design §7.4.3).
+- **Hold at most one wake endpoint per relationship, and post nothing but a
+  doorbell to it** (design §14.1.5). The body carries no payload, no sender and
+  no count: it says only that there is something to come back for.
+- **Forget an endpoint when the relationship ends**, and when a client
+  withdraws it. It is a routable identifier for a person, and keeping one past
+  the reason you were given it is a retention decision made by omission
+  (design §19.4).
+- **Do not log doorbells.** When you rang is when that client had mail, and a
+  log of it is the queue event log §2 already refuses, one step removed.
+
+---
+
 ## 7. Transport
 
 - **Act as STUN and TURN** for clients attempting direct payload paths, and carry
