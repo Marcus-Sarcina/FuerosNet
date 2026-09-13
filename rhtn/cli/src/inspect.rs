@@ -65,7 +65,7 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
         out.push_str(&format!("kind      {kind}\n"));
         match kind {
             "envelope" => out.push_str(&envelope_lines(raw, ids)),
-            "presentation" => out.push_str(&format!("verdict   {}\n", said(verify::presentation(ids, raw).map(|_| ())))),
+            "presentation" => out.push_str(&presentation_lines(raw, ids)),
             k => {
                 out.push_str(&format!("schema    {}\n", said(schema::check_kind(raw, k, &item).map_err(|e| e.0.to_string()))));
                 if is_signed_kind(k) {
@@ -88,17 +88,46 @@ fn is_signed_kind(kind: &str) -> bool {
 
 fn envelope_lines<L: Lookup + ?Sized>(raw: &[u8], ids: &L) -> String {
     let mut out = String::new();
-    // the txid is over the body map and derived, never carried (§1)
-    if let Some(body) = rhtn_codec::cbor::value_slice(raw, 2) {
-        out.push_str(&format!("txid      {}\n", hex(&cose::txid(&raw[body]))));
+    match rhtn_codec::envelope::parse(raw) {
+        Err(e) => return format!("envelope  refused: {e}\n"),
+        Ok(env) => {
+            // the txid is over the body map and derived, never carried (§1)
+            out.push_str(&format!("txid      {}\n", hex(&cose::txid(&raw[env.body.clone()]))));
+            out.push_str(&format!("type      {} ({})\n", env.tx_type, tx_name(env.tx_type)));
+            out.push_str(&format!("signers   {}\n", env.signers.len()));
+            for s in &env.signers {
+                out.push_str(&format!("  {}\n", hex(s)));
+            }
+        }
     }
-    if let Some(Item::Map(m)) = parse_all(raw).ok().as_ref()
-        && let Some(t) = rhtn_codec::cbor::map_get(m, 1).and_then(rhtn_codec::cbor::as_uint)
-    {
-        out.push_str(&format!("type      {t} ({})\n", tx_name(t)));
-    }
-    out.push_str(&format!("verdict   {}\n", said(verify::envelope(ids, raw).map(|_| ()).map_err(|e| e.to_string()))));
+    out.push_str(&format!("verdict   {}\n", verdict(verify::envelope(ids, raw).map(|_| ()))));
     out
+}
+
+/// A presentation is `[envelope, slots]` (`wire-format.md` §4.5.1.3).
+///
+/// Its own verifier folds every reason into prose, so the envelope inside
+/// it is asked first: that one reports a key this holder lacks as such,
+/// and §3.4's distinction between unverifiable and failing is worth more
+/// than one line of output.
+fn presentation_lines<L: Lookup + ?Sized>(raw: &[u8], ids: &L) -> String {
+    let Some(inner) = rhtn_codec::cbor::array_item_ranges(raw, 0).and_then(|r| r.first().cloned()) else {
+        return "verdict   refused: a presentation is an array of two\n".into();
+    };
+    if let Err(verify::Failure::MissingKey(k)) = verify::envelope(ids, &raw[inner]) {
+        return format!("verdict   unverifiable: no key held for {}\n", hex(&k));
+    }
+    format!("verdict   {}\n", said(verify::presentation(ids, raw)))
+}
+
+/// A verdict that keeps §3.4's distinction: a key this holder lacks makes
+/// an object unverifiable here, which is not the same as one that fails.
+fn verdict(r: Result<(), verify::Failure>) -> String {
+    match r {
+        Ok(()) => "verified".into(),
+        Err(verify::Failure::MissingKey(k)) => format!("unverifiable: no key held for {}", hex(&k)),
+        Err(e) => format!("refused: {e}"),
+    }
 }
 
 fn tx_name(t: u64) -> &'static str {

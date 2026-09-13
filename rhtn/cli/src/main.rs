@@ -121,9 +121,6 @@ fn do_probe(rest: &[&str]) -> Result<String, String> {
     let [identity, target, addr, rest @ ..] = args.as_slice() else {
         return Err("probe <identity> <node-keyhash> <address> <ask> [...]".into());
     };
-    let me = read_identity(identity)?;
-    let target = keyhash(target)?;
-    let addr: std::net::SocketAddr = addr.parse().map_err(|_| format!("{addr} is not an address and port"))?;
     let ask = match rest {
         ["resolve", subject, anchor, path @ ..] => {
             let nibbles: Vec<u8> = path.first().map(|p| p.bytes().map(|c| c - b'0').collect()).unwrap_or_default();
@@ -137,6 +134,9 @@ fn do_probe(rest: &[&str]) -> Result<String, String> {
         ["catalog", service @ ..] => probe::Ask::Catalog { service_type: service.first().map(|s| s.to_string()) },
         _ => return Err("the ask is resolve, archive or catalog".into()),
     };
+    let target = keyhash(target)?;
+    let addr: std::net::SocketAddr = addr.parse().map_err(|_| format!("{addr} is not an address and port"))?;
+    let me = read_identity(identity)?;
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|e| e.to_string())?;
     rt.block_on(async move {
         let (session, _ep) = probe::attached(me, &peers, target, addr).await?;

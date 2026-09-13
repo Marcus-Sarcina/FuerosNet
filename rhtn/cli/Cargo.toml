@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 description = "rhtn: the developer command line — decode what the wire carries, mint and inspect identities, and probe a running node"
 
+[dev-dependencies]
+serde_json = { workspace = true }
+rhtn-sim = { path = "../sim" }
+hex = { workspace = true }
+
 [[bin]]
 name = "rhtn"
 path = "src/main.rs"

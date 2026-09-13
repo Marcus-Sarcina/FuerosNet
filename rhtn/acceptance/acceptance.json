@@ -8547,5 +8547,52 @@
   "then": "The pool is empty and the key is not served a second time. A key whose file cannot be removed is not served at all, and the reusable material alone is answered.",
   "oracle": "behaviour",
   "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. Rate-limit counters remain snapshot-based, which a crash can reset; the window bounds that and a write per request does not earn its cost."
+ },
+ {
+  "id": "DMN-05",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Decode every object the corpus carries with the parser a node uses, and say which are unverifiable rather than failing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §1",
+   "wire-format.md §3.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §3.4",
+    "text": "**A back-pointer whose record is unavailable is not a failure.**"
+   }
+  ],
+  "given": "Every byte-class entry in `test-vectors/corpus.json`, and a tool holding no identities.",
+  "when": "Each is decoded under the kind the corpus declares for it.",
+  "then": "Each prints its shape and its verdict. What the corpus expects accepted is never reported refused; what it expects refused is never reported clean; and a signed object no key is held for is reported unverifiable rather than failing.",
+  "oracle": "fixture",
+  "interpretation": "The tool decodes with the parser a node uses and no other: a second, laxer decoder written for convenience would disagree with the first invisibly."
+ },
+ {
+  "id": "DMN-06",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Ask a running node only the questions that change nothing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §9.2",
+   "wire-format.md §7.7",
+   "wire-format.md §7.9"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §9.2",
+    "text": "**Read-only lookups are unaffected** — resolution, archive fetch and catalog queries answer the same way however often they are replayed"
+   }
+  ],
+  "given": "A running node with a subordinate, its own archive and an empty catalog, and a tool attached to it as a member of its horizon.",
+  "when": "The tool resolves the subordinate, fetches the node's archive and queries its catalog, and then is asked to send something else.",
+  "then": "Each of the three is answered and printed, the archive naming the records it holds. Anything outside the read-only class is refused by the tool before it dials.",
+  "oracle": "behaviour",
+  "interpretation": "A prekey fetch consumes a one-time key and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look."
  }
 ]

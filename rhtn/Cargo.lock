@@ -637,12 +637,15 @@ dependencies = [
 name = "rhtn-cli"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "quinn",
  "rhtn-archive",
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-node",
+ "rhtn-sim",
  "rhtn-transport",
+ "serde_json",
  "tokio",
 ]
 
