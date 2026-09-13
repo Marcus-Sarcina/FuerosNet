@@ -129,3 +129,62 @@ fn the_command_line_refuses_what_it_will_not_send() {
     let (ok, _, err) = run(&["send"]);
     assert!(!ok && err.contains("Nothing here sends a request that changes state"), "{err}");
 }
+
+// acceptance: DMN-09
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_archive_batch_that_is_not_a_chain_is_refused_rather_than_reported() {
+    use rhtn_archive::chain::{ArchiveReply, ArchiveRequest};
+    use rhtn_codec::schema::Family;
+    use rhtn_transport::session::Node;
+    use std::sync::Mutex;
+    // two records bob signed that both point at genesis: each is valid on
+    // its own and the pair is not a chain
+    let g = vec![rhtn_archive::genesis(&kh("bob"))];
+    let loose = |code: u64| {
+        let body = disavowal_body(&g, &kh("bob"), &kh("carol"), 1_800_000_000 + code, Some(code));
+        envelope(TYPE_DISAVOWAL, &body, &[&test_identity("bob")])
+    };
+    let (d1, d2) = (loose(1), loose(2));
+    // a node that serves whichever batch it is told to
+    let disconnected: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let (chain, broken) = (vec![d1.clone()], vec![d1.clone(), d2.clone()]);
+    let flag = disconnected.clone();
+    let mut cfg = NodeConfig::defaults(Arc::new(test_identity("bob")), pins(), 30);
+    cfg.log = Log::recording();
+    cfg.on_request = Some(Arc::new(move |_peer, family, body| {
+        let (flag, chain, broken) = (flag.clone(), chain.clone(), broken.clone());
+        Box::pin(async move {
+            if family != Family::ArchiveRequest {
+                return None;
+            }
+            let req = ArchiveRequest::decode(&body).ok()?;
+            let records = if *flag.lock().unwrap() { broken } else { chain };
+            Some(ArchiveReply { nonce: req.nonce, records, more: false, continue_from: None }.encode())
+        })
+    }));
+    let ep = rhtn_transport::tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let addr = ep.local_addr().unwrap();
+    tokio::spawn(Node::new(cfg).serve(ep));
+
+    let dir = std::env::temp_dir().join(format!("rhtn-chain-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let me = identity_file(&dir, "carol").to_string_lossy().to_string();
+    let target = hex(&kh("bob"));
+    let peer = format!("{target}:{}", hex(&test_identity("bob").public.key_material()));
+    let at = addr.to_string();
+    let base = ["probe", "--peer", &peer, &me, &target, &at];
+
+    // one record is trivially a chain, and the reply says what was not checked
+    let (ok, out, err) = run(&[&base[..], &["archive", &target]].concat());
+    assert!(ok, "the connected batch: {err}");
+    assert!(out.contains("records   1"), "{out}");
+    assert!(out.contains("newestness is the holder's claim"), "it does not overclaim: {out}");
+    // two records that both point at genesis are not the chain claimed
+    *disconnected.lock().unwrap() = true;
+    let (ok, _, err) = run(&[&base[..], &["archive", &target]].concat());
+    assert!(!ok, "a batch that is not a chain is refused");
+    assert!(err.contains("not a chain"), "naming what it found: {err}");
+    assert!(err.contains(&hex(&rhtn_archive::record::Record::parse(&d2).unwrap().txid)), "and which record: {err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

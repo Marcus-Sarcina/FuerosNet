@@ -8677,5 +8677,31 @@
   "then": "Its next back-pointer names the record it signed rather than genesis, so the next record it signs extends the chain it published. Its own locator carries the series the reissue entered, not the one it left. A record whose predecessor the store no longer holds is left out of the chain and counted, rather than appended over the gap.",
   "oracle": "behaviour",
   "interpretation": "The bytes surviving is not the chain surviving: a store kept without the archive derived from it gives a next back-pointer of genesis, and the next record opens a second chain beside the published one while every record is still on disk."
+ },
+ {
+  "id": "DMN-09",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Verify an archive batch's own links before reporting it, and say that newestness is not among them",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.9"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.9",
+    "text": "**The requester verifies the chain itself.** Each returned record's back-pointers must match the record that follows it in the batch"
+   },
+   {
+    "where": "wire-format.md §7.9",
+    "text": "**A holder cannot be trusted to have walked correctly**"
+   }
+  ],
+  "given": "A node answering an archive fetch, serving first a connected two-record batch and then two individually valid records that both point at genesis.",
+  "when": "The requester takes each reply.",
+  "then": "The connected batch is reported with its records, and says that newestness is the holder's claim because no head was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.",
+  "oracle": "behaviour",
+  "interpretation": "The subject's own back-pointer list is the one that must match: a record carries one per signer, and only the subject's continues the subject's chain. Newestness stays uncheckable where no head was named, and saying so is part of not overclaiming."
  }
 ]

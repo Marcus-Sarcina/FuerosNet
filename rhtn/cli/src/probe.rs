@@ -17,6 +17,7 @@
 
 use rhtn_archive::catalog::{CatalogQuery, CatalogReply, REQUEST_CATALOG_QUERY};
 use rhtn_archive::chain::{ArchiveReply, ArchiveRequest, REQUEST_ARCHIVE};
+use rhtn_archive::record::Record;
 use rhtn_archive::Keyhash;
 use rhtn_crypto::{Identity, SigningIdentity};
 use rhtn_node::resolution::{REQUEST_RESOLVE, ResolveReply, ResolveRequest};
@@ -65,6 +66,31 @@ pub async fn attached(me: SigningIdentity, known: &[Identity], target: Keyhash, 
     }
 }
 
+/// Whether each record's back-pointers name the one that follows it in
+/// the batch, which arrives newest first (`wire-format.md` §7.9).
+///
+/// The subject's own list is the one that must match: a record carries one
+/// back-pointer list per signer, and only the subject's continues the
+/// subject's chain.  A record whose predecessor is absent from the batch
+/// is where the batch stops being a chain, and the caller is told which.
+fn linked(records: &[Record], subject: &Keyhash) -> Result<(), String> {
+    for (i, pair) in records.windows(2).enumerate() {
+        let (newer, older) = (&pair[0], &pair[1]);
+        let Some(back) = newer.back_pointers_of(subject) else {
+            return Err(format!("record {i} carries no back-pointers for the subject, so the batch is not its chain"));
+        };
+        if !back.contains(&older.txid) {
+            return Err(format!(
+                "the batch is not a chain: record {i} ({}) does not name record {} ({}) that follows it",
+                crate::inspect::hex(&newer.txid),
+                i + 1,
+                crate::inspect::hex(&older.txid)
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Send one ask and describe the answer.  A refusal is described, not
 /// hidden: its code is what the caller came for.
 pub async fn ask(session: &Session, ask: &Ask, nonce: [u8; 16]) -> Result<String, String> {
@@ -80,10 +106,19 @@ pub async fn ask(session: &Session, ask: &Ask, nonce: [u8; 16]) -> Result<String
             let bytes = session.request(REQUEST_ARCHIVE, &req.encode()).await?;
             let reply = ArchiveReply::decode(&bytes).map_err(|e| format!("the reply does not decode: {e}"))?;
             let mut out = format!("records   {}\nmore      {}\n", reply.records.len(), reply.more);
-            for r in &reply.records {
-                let txid = rhtn_archive::record::Record::parse(r).map(|x| crate::inspect::hex(&x.txid)).unwrap_or_else(|e| format!("unparsed: {e}"));
-                out.push_str(&format!("  {txid}\n"));
+            let parsed: Result<Vec<Record>, String> = reply.records.iter().map(|r| Record::parse(r)).collect();
+            let parsed = parsed.map_err(|e| format!("a record in the batch does not parse: {e}"))?;
+            for r in &parsed {
+                out.push_str(&format!("  {}\n", crate::inspect::hex(&r.txid)));
             }
+            // §7.9: the requester verifies the chain itself, and a holder
+            // cannot be trusted to have walked correctly.  One hash
+            // comparison per record, over records already parsed.
+            linked(&parsed, subject)?;
+            // and what no requester can check: with no head asked for
+            // there is nothing to match the first record against, so its
+            // newestness is the holder's claim and is said to be
+            out.push_str("chain     links verified; newestness is the holder's claim, no head having been requested\n");
             Ok(out)
         }
         Ask::Catalog { service_type } => {
