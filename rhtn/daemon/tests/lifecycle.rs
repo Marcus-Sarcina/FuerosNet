@@ -187,3 +187,73 @@ async fn the_daemon_refuses_to_start_on_an_identity_it_would_have_to_mint_or_sha
     }
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+/// A presence record between two parties and the adoption it supports,
+/// signed as those parties would sign them.  The daemon is the patron, so
+/// it countersigns the adoption and must verify its own signature.
+fn adoption_under(patron: &str, child: &str) -> (Vec<u8>, Vec<u8>) {
+    use rhtn_archive::record::Record;
+    use rhtn_archive::tx::*;
+    let (p, c, w) = (test_identity(patron), test_identity(child), test_identity("witness"));
+    let g = |n: &str| vec![rhtn_archive::genesis(&test_identity(n).public.keyhash)];
+    let root = rhtn_codec::cose::sha256(b"a meeting");
+    let pop = presence_record_body(&[g(patron), g(child), g("witness")], [&p.public.keyhash, &c.public.keyhash], &[Witness { keyhash: w.public.keyhash, nominated_by: p.public.keyhash, flags: 3 }], 1_800_000_000, 1_800_000_600, &root);
+    let pop = envelope(TYPE_PRESENCE, &pop, &[&p, &c, &w]);
+    let pop_id = Record::parse(&pop).unwrap().txid;
+    let (bp, bc) = (vec![pop_id], vec![pop_id]);
+    let path = rhtn_node::resolution::Path::from_indices(&[0]);
+    let a = Adoption {
+        node: c.public.keyhash,
+        patron: p.public.keyhash,
+        locator: Locator { anchor: p.public.keyhash, path: path.bytes, nibbles: path.nibbles, seqno: Seqno { series: 1, counter: 0 } },
+        timestamp: 1_800_003_600,
+        key_material: None,
+        evidence: Evidence::Presence(pop_id),
+        presented_head: None,
+        back: [&bc, &bp],
+    };
+    (pop, envelope(TYPE_ADOPTION, &adoption_body(&a), &[&c, &p]))
+}
+
+// acceptance: DMN-03
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_restart_rebuilds_the_routing_view_and_verifies_this_nodes_own_signature() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::{Decision, KIND_TRANSACTION};
+    let l = layout("rebuild");
+    // the peers file names the other signers and never this node: an
+    // operator should not have to list themselves
+    std::fs::write(
+        &l.peers,
+        ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat(),
+    )
+    .unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under("bob", "carol");
+    let slot = {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        let pop_id = rhtn_archive::record::Record::parse(&pop).unwrap().txid;
+        view.store.keep_presence(pop_id, pop.clone());
+        let me = view.me();
+        let d = view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption, &ids());
+        assert_eq!(d, Decision::Stored, "the adoption verifies without the peers file naming this node");
+        let slot = view.slot_of(&kh("carol")).expect("the child occupies a slot");
+        drop(view);
+        s.persist().expect("persists");
+        slot
+    };
+    // started again from those bytes alone
+    let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+    let view = s.node.view.lock().unwrap();
+    assert!(view.table.subordinates(&kh("bob")).contains(&kh("carol")), "the binding is back");
+    assert_eq!(view.slot_of(&kh("carol")), Some(slot), "and the slot it was in");
+    assert_eq!(view.child_at(slot as u8), Some(kh("carol")));
+    drop(view);
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+fn ids() -> Vec<rhtn_crypto::Identity> {
+    ["bob", "carol", "witness"].iter().map(|n| test_identity(n).public).collect()
+}

@@ -134,7 +134,14 @@ impl Service {
     /// its horizon (`infra-client-requirements.md` §4.3).
     pub async fn start(cfg: &Config, peers: &Path) -> Result<Service, Startup> {
         let me = Arc::new(read_identity(&cfg.identity)?);
-        let known = read_peers(peers)?;
+        // This node's own public key is in the lookup, and not because the
+        // peers file listed it: a node countersigns adoptions of its own
+        // subordinates, and one that cannot verify its own signature holds
+        // those records unverifiable for want of a key it is holding
+        // (`wire-format.md` §3.4).  Asking an operator to list themselves
+        // would make a working configuration depend on remembering to.
+        let mut known = vec![me.public.clone()];
+        known.extend(read_peers(peers)?);
         let pins = Pins::new();
         pins.pin_identity(&me.public);
         for id in &known {
@@ -142,11 +149,11 @@ impl Service {
         }
         // consumable state first, and its absence is a first start rather
         // than a failure: a directory that is not there yet is empty
-        let prekeys = match PrekeyService::load(&cfg.prekeys, PrekeyConfig::default()) {
-            Ok(p) => p,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => PrekeyService::new(PrekeyConfig::default()),
-            Err(e) => return Err(Startup::State(format!("{}: {e}", cfg.prekeys.display()))),
-        };
+        // kept at its directory rather than snapshotted into it: a
+        // one-time key is spent on disk before its reply goes out, so a
+        // stop between snapshots cannot bring a served key back
+        let prekeys = PrekeyService::at(&cfg.prekeys, PrekeyConfig::default())
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.prekeys.display())))?;
         let store = match TopologyStore::load(&cfg.topology) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
@@ -158,6 +165,10 @@ impl Service {
         let mut view = NodeView::new(me.clone(), position_of(&me.public.keyhash));
         view.store = store;
         view.prekeys = prekeys;
+        // the store holds records; the table, the slots and this node's own
+        // position are derived from them, and a restart that loaded one
+        // without the others would hold relationships it could not route on
+        view.rebuild_from_store(&known);
         if let Some((patron, _)) = &cfg.upstream {
             view.serving_node = Some(*patron);
         }

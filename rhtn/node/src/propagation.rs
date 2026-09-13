@@ -319,6 +319,54 @@ impl NodeView {
         self.table.bindings().iter().any(|b| b.node == *node && b.patron == me && b.open())
     }
 
+    /// Rebuild the derived view from the topology store, forwarding
+    /// nothing (`infra-client-requirements.md` §4.3).
+    ///
+    /// **The store is the seen-set, not the view.** It holds the records a
+    /// node accepted; the table, the routing slots and this node's own
+    /// position are derived from them, and a restart that loads one
+    /// without the others holds a relationship it cannot route on.
+    /// Resubmitting those records cannot repair it either, since the store
+    /// answers `Duplicate` and never reaches the derivation.
+    ///
+    /// Records are applied oldest first, by the effective time §3.3 orders
+    /// them by, so a binding and the ending that closes it land in the
+    /// order they were made rather than the order a map iterates.  Nothing
+    /// is sent: this is the same fold `take_object` does after it has
+    /// decided to store, without the forward that follows storing.
+    pub fn rebuild_from_store<L: Lookup + ?Sized>(&mut self, ids: &L) {
+        let mut records: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
+        records.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
+        for bytes in &records {
+            self.apply_stored(bytes, ids);
+        }
+        self.adopt_own_position();
+    }
+
+    /// Take this node's own position from the binding the table settled on,
+    /// where one exists.
+    ///
+    /// A node with no adoption is its own anchor, which is what a fresh
+    /// view assumes.  One that has been adopted holds the locator its
+    /// patron countersigned (`wire-format.md` §2.3), and a restart that
+    /// kept the assumption instead would serve as a root it is not.
+    fn adopt_own_position(&mut self) {
+        let me = self.me();
+        let mine: Vec<Locator> = self
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.node == me && b.open())
+            .filter_map(|b| self.store.transaction(&b.adoption)?.locator())
+            .collect();
+        for loc in mine {
+            if self.position.anchor == me {
+                self.position = loc.clone();
+            }
+            self.positions.insert(loc.anchor, loc);
+        }
+    }
+
     /// Take the reply to a repair, back on its request stream: the
     /// resolution it names steps, a referral is followed where a session
     /// with the next hop exists, and an arrival or a failure ends it.
