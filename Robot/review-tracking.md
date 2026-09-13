@@ -9277,3 +9277,40 @@ topology at all — nothing reads `Session.frames` on the client side, so a
 light client currently learns nothing its patron propagates. That is the
 next piece: a horizon in `rhtn-client` fed by the propagation, materialised
 the same way, answering `locator` and `distance` without asking anyone.
+
+**The client's side of §15.1.1.** `rhtn-client` now has a `horizon` module and
+`Client` holds one. It keeps the records its serving node floods, folds them
+into a table of its own, and answers `place` and `distance` from that table
+with nobody asked. `Table` gained `distance`, which is the walk that defines
+the horizon returning the round it found a party in, so membership and distance
+cannot disagree. `topology::unfolded` is the watermark test, shared by the node
+and the client rather than written twice.
+
+One reading, open to reversal: **where a node sits is a place and not a
+locator.** A resolution needs the anchor and the path (`wire-format.md`
+§7.7.3); the series and counter belong to the record that carried them. The
+anchor of a subtree has no adoption of its own in the client's records, so it
+is placed at the empty path under itself and claims no series. Claiming one
+would be asserting something nobody propagated. Both are kept: `place` for
+every node, `locator` only where a record carried one.
+
+**Not yet wired: nothing in production calls `attached::follow`.** The function
+carries stream 0's pushes into the horizon and TOP-24 exercises it over a
+channel, but no attach path in `rhtn-adaptors` invokes it, because there is no
+attach path for a light client there at all — the tests attach by hand. That is
+the same gap the FFI defect names, and both close together when `Participant`
+owns its transport.
+
+**Still owed, in the order they block each other:**
+
+1. **The FFI kernel.** `Participant::attach` and `maintain` hand wire bytes to
+   the shell for it to carry, which is the second parser design §11.2 names and
+   the opposite of §14.1.0's one kernel. The four submission types have now
+   given the courier a wire path, so the fix is unblocked: `Participant` owns
+   an endpoint, a courier and an `AttachedNode`, drives `carry`, and calls
+   `follow` on the session it attached.
+2. **The kernel interface in the client documents.** design §14.1.0 puts the
+   interface's shape there and not in the wire format; nothing is written yet.
+3. **`verify::record` returns `Ok(false)` where `verify::envelope` errors**, 17
+   call sites, recorded and unfixed.
+4. **The corpus**, as above: owed on a machine with the pinned dependencies.
