@@ -9519,3 +9519,26 @@ where `envelope`, `presentation` and `response` return an error. Seventeen call
 sites, two of which kept a deliberate three-way distinction — verified, failed,
 or unverifiable for want of the key — and still do, because `Failure` already
 carried it.
+
+### 2026-09-13 (what the kernel boundary is actually for)
+
+**§14.1.0's "never envelopes, never signatures, never key material" was not the
+author's wording and overstated the rule** [author, 2026-09-13]. The
+encapsulation exists to stop *"the intimate interpenetration of the network
+stack and its unique services and device specific services and utilities"*, not
+to forbid structured bytes from ever crossing. **Where the kernel must pass a
+cryptographic payload through the interface, it may**, at a specific
+interaction rather than through a general channel.
+
+The examples the author named: the QR display and optical return during a
+ceremony, seed material from a device or operating-system entropy source when
+generating a keypair, a secret the user types to initialise a client instance,
+and ingesting a new contact from a QR code or a contact card. The first of these
+is why the question arose. design §7 already makes the optical channel carry key
+exchange and the transcript hash, and a screen and a camera are the platform's
+by construction, so a ceremony that works with no network needs that crossing.
+
+**The test is whether the two layers stay separable**, which an application that
+relays a payload without reading it satisfies. `light-client-requirements.md`
+§9 and `infra-client-requirements.md` §8.1 carried the same overstatement and
+now carry the rule.

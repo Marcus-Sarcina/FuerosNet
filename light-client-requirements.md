@@ -530,10 +530,16 @@ on the wire.
   hold a connection and never sees a frame. Attaching, publishing, stocking,
   sweeping, relaying and registering a wake endpoint all happen inside, and
   what comes back out is the result, not the exchange.
-- **Nothing that crosses outward is an encoding.** A screen is handed a
-  verdict, a distance, a decrypted message, a mode. An interface that returned
-  bytes for the application to carry would be the second parser design §14.1.0
-  refuses, whatever the application then did with them.
+- **What crosses outward is ordinarily what to draw**: a verdict, a distance, a
+  decrypted message, a mode. Returning bytes for the application to route as a
+  matter of course would be the second parser design §14.1.0 refuses.
+- **A cryptographic payload may cross where the kernel must pass one through**
+  (design §14.1.0), at a named interaction and not as a general channel. The
+  ceremony's optical exchange is the case that arises here: the screen and the
+  camera are the transport, so the kernel hands over what to display and takes
+  back what was read. **The application relays it and does not read it** —
+  which is what keeps the two layers separable, and is the whole of the
+  obligation.
 - **Payload is decrypted before it crosses**, and ciphertext never does. The
   application receives what was written and the party the material attributes
   it to.

@@ -5044,10 +5044,20 @@ protected end to end. Addressing (§12) answers *where*; this answers *how*.
 **Everything this section describes belongs to one component, and the user
 interface is not part of it** [author, 2026-09-13]. Identity, keys, the
 archive, the topology table, sessions and every byte on the wire are held by a
-**kernel**; what a person looks at is a client of that kernel, and protocol
-content does not cross into it. The interface between them carries what to
-draw and what the person did, never envelopes, never signatures, never key
-material.
+**kernel**; what a person looks at is a client of that kernel. The interface
+between them carries what to draw and what the person did.
+
+**What the encapsulation is meant to avoid is the intimate interpenetration of
+the network stack and its unique services with device-specific services and
+utilities** [author, 2026-09-13]. It is not a rule that no cryptographic
+payload may cross: **where the kernel must pass one through the interface, it
+may**, and each such point is a specific interaction rather than a general
+channel. Some likely examples: the QR display and optical return during a
+ceremony (§7); seed material taken from a device or operating-system entropy
+source to generate a keypair; a secret the user types to initialise a client
+instance; and ingesting a new contact from a QR code, a contact card or another
+such object. **The test is whether the two layers stay separable**, not whether
+bytes with structure ever cross.
 
 **Two reasons, and the second is the stronger one.** A network with several
 host platforms and at least one infrastructure client would otherwise maintain

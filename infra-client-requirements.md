@@ -300,9 +300,11 @@ it is bound by the same line.
 - **An operator's interface reads and never speaks for the node.** What it is
   shown is state — who is attached, what is queued, what is held — and it does
   not compose, sign or send anything on the wire.
-- **What crosses to it is not an encoding.** A count, a keyhash, a time. An
+- **What crosses to it is what to draw.** A count, a keyhash, a time. An
   interface handed frames would be a second parser in the place the first one
-  already works.
+  already works, and an operator's view has no ceremony and no device, so
+  design §14.1.0's allowance for a payload that must cross does not arise
+  here.
 
 ---
 
