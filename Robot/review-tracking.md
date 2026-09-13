@@ -9301,16 +9301,48 @@ attach path for a light client there at all — the tests attach by hand. That i
 the same gap the FFI defect names, and both close together when `Participant`
 owns its transport.
 
-**Still owed, in the order they block each other:**
+**Still owed:**
 
-1. **The FFI kernel.** `Participant::attach` and `maintain` hand wire bytes to
-   the shell for it to carry, which is the second parser design §11.2 names and
-   the opposite of §14.1.0's one kernel. The four submission types have now
-   given the courier a wire path, so the fix is unblocked: `Participant` owns
-   an endpoint, a courier and an `AttachedNode`, drives `carry`, and calls
-   `follow` on the session it attached.
-2. **The kernel interface in the client documents.** design §14.1.0 puts the
-   interface's shape there and not in the wire format; nothing is written yet.
-3. **`verify::record` returns `Ok(false)` where `verify::envelope` errors**, 17
+1. **`verify::record` returns `Ok(false)` where `verify::envelope` errors**, 17
    call sites, recorded and unfixed.
-4. **The corpus**, as above: owed on a machine with the pinned dependencies.
+2. **The corpus**, as above: owed on a machine with the pinned dependencies.
+
+**The FFI kernel, done.** `Participant` owns a runtime, an endpoint, the
+session, the courier and the two readers; `attach`, `maintain`, `send`, `wake`
+and `next_event` are the surface, and none of them carries an encoding.
+`attached::follow` and the new `attached::collect` are called from there, which
+closes the other half of the gap the client's horizon left open.
+`light-client-requirements.md` §9 and `infra-client-requirements.md` §8.1 state
+the interface, which design §14.1.0 puts in the client documents. DMN-13.
+
+Two readings, open to reversal:
+
+- **The runtime is shut down in the background on drop.** A tokio runtime
+  dropped inside an asynchronous context panics, and a shell cannot know
+  whether the thread it releases a participant on is inside one. The cost is
+  that what was in flight is abandoned, which is what releasing a client means.
+- **No direct path from the facade.** design §14.1.1 gathers candidates on a
+  socket, and this endpoint dials and is never dialled, so the relay carries
+  everything. Adding it means giving the facade a listening socket, which is a
+  decision rather than an omission.
+
+**A defect found on the way, and it is the largest thing in this stretch.**
+`TraversalSocket::poll_recv` flattened the kernel's receive offload: several
+arrivals in one buffer became one datagram with the stride rewritten to the
+whole length, so the first packet of each batch was delivered and the rest were
+lost. Nothing was ever wrong, only slow, which is why no test had caught it —
+every existing message fits in one datagram. Measured against a node on
+loopback:
+
+| bytes | before | after |
+|---|---|---|
+| 1,000 | 1.8 ms | 1.8 ms |
+| 6,000 | 363 ms | 2.4 ms |
+| 25,000 | 35.3 s | 3.9 ms |
+
+The fix passes an untouched batch through with the stride it came with, and
+takes a batch apart only where a STUN datagram or the harness's own wrapping
+means it has to. TRV-10 is the regression test, and **it was checked against
+the old code**: it fails there at the 25,000-byte case and passes on the fix.
+The first version of that test did not fail against the old code, because the
+way it reintroduced the bug missed the branch that carried it.
