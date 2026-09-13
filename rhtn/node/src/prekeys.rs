@@ -149,11 +149,46 @@ impl PrekeyService {
             let e = self.issued.entry((*requester, *subject)).or_insert((now, 0));
             e.1 += 1;
             reply.one_time = Some(key);
+            // the allowance is spent with the key: a counter kept only in
+            // memory gives a requester a fresh window every time the
+            // process stops, and a kernel that wakes and sleeps stops
+            // often enough for the bound to stop binding
+            self.write_counters();
             if self.pools.get(subject).is_none_or(|p| p.is_empty()) {
                 self.exhausted.push(*subject);
             }
         }
         reply
+    }
+
+    /// Write the allowance counters where the service is kept.  One small
+    /// file beside the pools, rewritten as a key is spent, which already
+    /// costs an unlink.
+    ///
+    /// A failure here is not a refusal: the key has been served and the
+    /// count is an upper bound the window closes anyway, so losing it
+    /// grants at most one window's worth (`wire-format.md` §7.8).
+    fn write_counters(&self) {
+        let Some(dir) = &self.dir else { return };
+        let mut out = String::new();
+        for ((requester, subject), (opened, count)) in &self.issued {
+            out.push_str(&format!("{} {} {opened} {count}\n", hex(requester), hex(subject)));
+        }
+        let root = dir.join("prekeys");
+        if std::fs::create_dir_all(&root).is_ok() {
+            let _ = std::fs::write(root.join("issued"), out);
+        }
+    }
+
+    fn read_counters(&mut self, dir: &std::path::Path) {
+        let Ok(text) = std::fs::read_to_string(dir.join("prekeys").join("issued")) else { return };
+        for line in text.lines() {
+            let f: Vec<&str> = line.split_whitespace().collect();
+            let [r, s, opened, count] = f.as_slice() else { continue };
+            if let (Some(r), Some(s), Ok(opened), Ok(count)) = (unhex(r), unhex(s), opened.parse(), count.parse()) {
+                self.issued.insert((r, s), (opened, count));
+            }
+        }
     }
 
     /// Unlink the key kept under `name`, where this service is kept on
@@ -233,6 +268,7 @@ impl PrekeyService {
     /// A directory that does not exist yet is an empty service kept there.
     pub fn at(dir: &std::path::Path, cfg: PrekeyConfig) -> std::io::Result<PrekeyService> {
         let mut s = PrekeyService::load(dir, cfg)?;
+        s.read_counters(dir);
         s.dir = Some(dir.to_path_buf());
         Ok(s)
     }
@@ -268,6 +304,17 @@ impl PrekeyService {
         }
         Ok(s)
     }
+}
+
+fn unhex(s: &str) -> Option<Keyhash> {
+    if s.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
 }
 
 fn hex(k: &Keyhash) -> String {

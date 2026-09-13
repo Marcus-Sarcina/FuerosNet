@@ -278,6 +278,23 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let r = one_time_reply(&mut again, "bob", "alice", 2, 0);
     assert!(r.bundle.is_some(), "the reusable material is still served");
     assert!(r.one_time.is_none(), "and no key a second time");
+    // the allowance is spent with the key: a requester at its limit is
+    // still at it after a restart, or the bound stops binding on a client
+    // that wakes and sleeps
+    let dir2 = std::env::temp_dir().join(format!("rhtn-allow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir2);
+    std::fs::create_dir_all(&dir2).unwrap();
+    let mut kept = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600 }).unwrap();
+    kept.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+    kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]);
+    assert!(one_time_reply(&mut kept, "bob", "alice", 4, 0).one_time.is_some(), "the one bob is allowed");
+    assert!(one_time_reply(&mut kept, "bob", "alice", 5, 0).one_time.is_none(), "and no more in this window");
+    drop(kept);
+    let mut after = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600 }).unwrap();
+    assert_eq!(after.pool_size(&kh("alice")), 1, "one key left, the other spent");
+    assert!(one_time_reply(&mut after, "bob", "alice", 6, 0).one_time.is_none(), "the allowance survived the restart");
+    assert!(one_time_reply(&mut after, "carol", "alice", 7, 0).one_time.is_some(), "another requester has its own");
+    let _ = std::fs::remove_dir_all(&dir2);
     // a subject the service no longer holds a bundle for goes with it
     let empty = PrekeyService::new(PrekeyConfig::default());
     empty.save(&dir).unwrap();

@@ -8546,7 +8546,7 @@
   "when": "The key is served and the node's memory is then lost, and a node is started again from the bytes on disk.",
   "then": "The pool is empty and the key is not served a second time. A key whose file cannot be removed is not served at all, and the reusable material alone is answered.",
   "oracle": "behaviour",
-  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. Rate-limit counters remain snapshot-based, which a crash can reset; the window bounds that and a write per request does not earn its cost."
+  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. The allowance counters are spent with the key for the same reason, a counter kept only in memory giving a requester a fresh window every time the process stops."
  },
  {
   "id": "DMN-05",
@@ -8618,7 +8618,7 @@
   ],
   "given": "A prekey service loaded from a directory it is not bound to, holding one one-time key.",
   "when": "The key is served, the service is saved, and a service is loaded from that directory again.",
-  "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too.",
+  "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too. The allowance a requester has spent is still spent after a restart.",
   "oracle": "behaviour",
   "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out."
  },
