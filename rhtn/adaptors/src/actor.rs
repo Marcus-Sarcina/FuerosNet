@@ -21,7 +21,14 @@ pub struct Handle {
 impl Handle {
     /// Build the client on a thread of its own: `build` runs there, and
     /// the client lives as long as a handle does.
-    pub fn spawn(build: impl FnOnce() -> Client + Send + 'static) -> Handle {
+    ///
+    /// **A build that does not finish is an answer, not an abort.** The
+    /// client is built where it will run, so a platform that fails there
+    /// fails on that thread; the caller learns of it by the identity never
+    /// arriving, and is told so rather than left with a dead channel.
+    /// Across a language boundary the difference is a value the shell can
+    /// render against a process that went away.
+    pub fn spawn(build: impl FnOnce() -> Client + Send + 'static) -> Result<Handle, String> {
         let (tx, rx) = mpsc::channel::<Job>();
         let (ktx, krx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -31,8 +38,10 @@ impl Handle {
                 job(&mut client);
             }
         });
-        let me = krx.recv().expect("the client thread starts");
-        Handle { tx, me }
+        match krx.recv() {
+            Ok(me) => Ok(Handle { tx, me }),
+            Err(_) => Err("the client could not be built on its own thread".into()),
+        }
     }
 
     pub fn me(&self) -> Keyhash {

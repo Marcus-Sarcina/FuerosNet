@@ -251,5 +251,5 @@ pub fn device(direct: Rc<dyn DirectPath>) -> Device {
 /// A client for `name` on a thread of its own, its route choice reading
 /// `reachable`.
 pub fn spawn_client(name: &'static str, cfg: Config, reachable: Reachable) -> Handle {
-    Handle::spawn(move || Client::new(id(name), ids(), cfg, device(Rc::new(reachable))))
+    Handle::spawn(move || Client::new(id(name), ids(), cfg, device(Rc::new(reachable)))).expect("the client builds")
 }

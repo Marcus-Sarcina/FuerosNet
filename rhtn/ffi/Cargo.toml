@@ -8,3 +8,7 @@ description = "The boundary the mobile shells bind to: one facade over rhtn-clie
 rhtn-adaptors = { path = "../adaptors" }
 rhtn-archive = { path = "../archive" }
 rhtn-client = { path = "../client" }
+rhtn-crypto = { path = "../crypto" }
+
+[dev-dependencies]
+rhtn-codec = { path = "../codec" }

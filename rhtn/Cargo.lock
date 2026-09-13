@@ -705,6 +705,8 @@ dependencies = [
  "rhtn-adaptors",
  "rhtn-archive",
  "rhtn-client",
+ "rhtn-codec",
+ "rhtn-crypto",
 ]
 
 [[package]]
