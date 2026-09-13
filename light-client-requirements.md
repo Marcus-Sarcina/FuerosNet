@@ -519,7 +519,41 @@ session secrecy. The client implements them; it does not reinvent them.
 
 ---
 
-## 9. Open
+## 9. The interface between the kernel and the application
+
+design §14.1.0 puts identity, keys, the archive, the topology table, sessions
+and every byte on the wire inside a kernel, and makes what a person looks at a
+client of it. What that interface offers is stated here, since none of it is
+on the wire.
+
+- **Every session is the kernel's.** The application does not dial, does not
+  hold a connection and never sees a frame. Attaching, publishing, stocking,
+  sweeping, relaying and registering a wake endpoint all happen inside, and
+  what comes back out is the result, not the exchange.
+- **Nothing that crosses outward is an encoding.** A screen is handed a
+  verdict, a distance, a decrypted message, a mode. An interface that returned
+  bytes for the application to carry would be the second parser design §14.1.0
+  refuses, whatever the application then did with them.
+- **Payload is decrypted before it crosses**, and ciphertext never does. The
+  application receives what was written and the party the material attributes
+  it to.
+- **The hardware crosses inward** (design §14.1.0, §1.3 above): the camera, the
+  proximity radios, the clock, the random source and the person. The kernel
+  asks; the application answers; the application does not answer on the
+  person's behalf. Consent, in particular, is what they said and never what the
+  application assumed.
+- **A wake endpoint comes from outside and goes straight through.** The
+  application obtains it from the service the user picked (§4.1) and hands it
+  in; the kernel holds no relationship with that service and obtains nothing
+  itself.
+- **Refusals are values that carry their reason.** A bad length, an absent
+  session, an endpoint the node would not take: each is an answer with words in
+  it rather than a silence the application has to interpret, which is design
+  §1.1's posture at this boundary.
+
+---
+
+## 10. Open
 
 - Whether recovery should restore archive history, and how, without handing an
   attacker the same path (design §22).

@@ -87,3 +87,57 @@ async fn a_serving_node_answers_stun_at_the_address_it_serves_quic_on_and_quic_s
     let nowhere: SocketAddr = "127.0.0.1:9".parse().unwrap();
     assert!(client_sock.reflexive(nowhere, Duration::from_millis(300)).await.is_err());
 }
+
+// acceptance: TRV-10
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_message_spanning_many_datagrams_crosses_the_traversal_socket_at_once() {
+    use rhtn_crypto::identity::testkit::test_identity;
+    use rhtn_transport::tls;
+    let node = test_identity("alice");
+    let sock = TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), None).unwrap();
+    let addr = sock.addr().unwrap();
+    let server_ep = endpoint(sock.clone(), Some({
+        let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&node)).unwrap();
+        let mut q = quinn::ServerConfig::with_crypto(std::sync::Arc::new(crypto));
+        q.transport_config(std::sync::Arc::new(tls::transport_config()));
+        q
+    }))
+    .unwrap();
+    // the far side echoes each stream's length back, so a round trip
+    // measures the whole message arriving and not just its first packet
+    tokio::spawn(async move {
+        while let Some(inc) = server_ep.accept().await {
+            tokio::spawn(async move {
+                let Ok(conn) = inc.await else { return };
+                while let Ok((mut send, mut recv)) = conn.accept_bi().await {
+                    let got = recv.read_to_end(1 << 20).await.unwrap_or_default();
+                    let _ = send.write_all(&(got.len() as u32).to_be_bytes()).await;
+                    let _ = send.finish();
+                }
+            });
+        }
+    });
+
+    let me = test_identity("bob");
+    let pins = tls::Pins::new();
+    pins.pin_identity(&node.public);
+    let client_ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let conn = tls::dial(&client_ep, &me, &pins, &node.public.keyhash, addr).unwrap().await.expect("handshake");
+
+    // **A datagram is not a message.**  The kernel's receive offload hands
+    // several arrivals over in one buffer, and a socket that flattened them
+    // would deliver the first packet of each batch and lose the rest; the
+    // sender would then rebuild the message a retransmission at a time, on
+    // a backoff, and a message of a few thousand bytes would take tens of
+    // seconds instead of milliseconds.
+    for n in [1_000usize, 25_000, 200_000] {
+        let (mut s, mut r) = conn.open_bi().await.expect("stream");
+        s.write_all(&vec![7u8; n]).await.expect("written");
+        s.finish().expect("finished");
+        let mut back = [0u8; 4];
+        let echoed = tokio::time::timeout(Duration::from_secs(5), r.read_exact(&mut back)).await;
+        assert!(echoed.is_ok(), "{n} bytes did not cross within five seconds: the socket is losing packets and the sender is backing off");
+        echoed.unwrap().expect("read");
+        assert_eq!(u32::from_be_bytes(back) as usize, n, "every byte arrived, and once");
+    }
+}

@@ -26,4 +26,5 @@
 
 pub mod client;
 pub mod device;
+pub mod net;
 pub mod types;

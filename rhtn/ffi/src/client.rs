@@ -11,11 +11,13 @@
 //! or the hardware did.
 
 use crate::device::Platform;
+use crate::net::{Attached, Event, Net, Wake, pins_for};
 use crate::types::{Answer, Channel, ChannelOutcome, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
 use rhtn_client::ceremony::{Client, Config};
 use rhtn_client::device::DirectPath;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 /// A participant client, running on a thread of its own.
@@ -25,6 +27,7 @@ use std::sync::Arc;
 /// likes.
 pub struct Participant {
     handle: Handle,
+    net: Net,
 }
 
 /// What a proximity run achieved, as the shell is shown it.
@@ -112,13 +115,28 @@ impl Participant {
             .map(|k| rhtn_crypto::Identity::from_key_material(k).ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array")))
             .collect();
         let ids = ids?;
+        // this key twice, from the same seeds: the transport needs one and
+        // the client never leaves the thread that holds the other
+        let me = Arc::new(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq));
+        // the nonces this client's submissions carry come from the
+        // platform's random source, which is the only one there is
+        let random = platform.random.clone();
+        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> = Arc::new(move || {
+            let mut n = [0u8; 16];
+            let drawn = random.fill(16);
+            let take = drawn.len().min(16);
+            n[..take].copy_from_slice(&drawn[..take]);
+            n
+        });
+        let net = Net::new(me, pins_for(&ids), nonce)?;
+        let known = ids.clone();
         let handle = Handle::spawn(move || {
             let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
             let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(rhtn_client::device::NoDirectPath);
-            Client::new(me, ids, Config::default(), platform.device(direct))
+            Client::new(me, known, Config::default(), platform.device(direct))
         })
         .map_err(Refused::new)?;
-        Ok(Participant { handle })
+        Ok(Participant { handle, net })
     }
 
     /// This client's own identity.
@@ -196,21 +214,70 @@ impl Participant {
         })
     }
 
-    /// Attach to a serving node and sweep the population's prekey
-    /// material (`light-client-requirements.md` §3).  What the client says
-    /// to its node comes back as bytes for the shell's transport to carry.
-    pub fn attach(&self, serving: Id, population: Vec<Id>) -> Result<Vec<Vec<u8>>, Refused> {
-        let s = keyhash(&serving).ok_or_else(|| Refused::new("a serving node is 32 bytes"))?;
+    /// Attach to a serving node and sweep the population's prekey material
+    /// (`light-client-requirements.md` §3).
+    ///
+    /// **The session is this side's**, not the shell's (design §14.1.0).
+    /// The bundle is published, the pool stocked and the sweep run over the
+    /// wire from here; what comes back is what a screen shows, and no byte
+    /// of the protocol crosses outward.
+    ///
+    /// A second attach replaces the first, which is how a client returns to
+    /// its patron after a spell on a sibling.
+    pub fn attach(&self, serving: Id, addresses: Vec<String>, population: Vec<Id>) -> Result<Attached, Refused> {
+        let node = keyhash(&serving).ok_or_else(|| Refused::new("a serving node is 32 bytes"))?;
         let pop: Option<Vec<Keyhash>> = population.iter().map(|p| keyhash(p)).collect();
         let pop = pop.ok_or_else(|| Refused::new("a population member is 32 bytes"))?;
-        Ok(self.handle.with_blocking(move |c| c.attach(s, &pop).iter().map(bytes_of).collect()))
+        let addrs: Result<Vec<SocketAddr>, Refused> = addresses.iter().map(|a| a.parse::<SocketAddr>().map_err(|_| Refused::new(format!("{a} is not an address")))).collect();
+        let addrs = addrs?;
+        if addrs.is_empty() {
+            return Err(Refused::new("a serving node needs at least one address"));
+        }
+        self.net.attach(&self.handle, node, &addrs, pop)
     }
 
     /// Routine maintenance: rotate a prekey whose interval has elapsed,
     /// replenish a pool that has fallen low, and ask for a binding this
-    /// client wants.
-    pub fn maintain(&self) -> Vec<Vec<u8>> {
-        self.handle.with_blocking(|c| c.maintain().iter().map(bytes_of).collect())
+    /// client wants.  What that produces goes to the serving node from
+    /// here.
+    ///
+    /// Refused where nothing is attached: maintenance is a conversation
+    /// with a node, and there is no node.
+    pub fn maintain(&self) -> Result<(), Refused> {
+        self.net.maintain(&self.handle)
+    }
+
+    /// Send `bytes` of `kind` to `to`, over the direct path where one is
+    /// held and through the serving node otherwise (design §14.1.1).
+    ///
+    /// A shell's own traffic is [`crate::types::KIND_APPLICATION`]; the
+    /// other kinds are the client's own and the adaptors answer them
+    /// without a shell seeing them (design §14.2.4.6).
+    pub fn send(&self, to: Id, kind: u64, bytes: Vec<u8>) -> Result<(), Refused> {
+        let peer = keyhash(&to).ok_or_else(|| Refused::new("a recipient is 32 bytes"))?;
+        self.net.send(peer, kind, bytes)
+    }
+
+    /// Where this client asks to be rung when something is waiting
+    /// (design §14.1.5), or `None` to withdraw whatever the node holds.
+    ///
+    /// **The endpoint is the user's choice** and this side never obtains
+    /// one: the shell hands over what the person's own service gave it.
+    pub fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
+        self.net.wake(endpoint)
+    }
+
+    /// The next thing that arrived, or nothing within `timeout_ms`.
+    ///
+    /// **What crosses outward is what to draw.** Payload has already been
+    /// decrypted here and the ciphertext never leaves.
+    pub fn next_event(&self, timeout_ms: u64) -> Option<Event> {
+        self.net.next_event(timeout_ms)
+    }
+
+    /// Whether a session with a serving node is held right now.
+    pub fn attached(&self) -> bool {
+        self.net.session().is_some()
     }
 }
 
@@ -220,13 +287,6 @@ fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
         rhtn_client::device::ChannelResult::Fail => ChannelOutcome::Fail,
         rhtn_client::device::ChannelResult::Unavailable => ChannelOutcome::Unavailable,
     }
-}
-
-/// A message the client wants carried, as bytes.  Where a message is not
-/// bytes on the wire it is the ceremony's own conversation between two
-/// present devices, which the shell carries by whatever means they have.
-fn bytes_of(m: &rhtn_client::ceremony::Msg) -> Vec<u8> {
-    m.payload()
 }
 
 /// So a shell need not hold `Arc` itself.

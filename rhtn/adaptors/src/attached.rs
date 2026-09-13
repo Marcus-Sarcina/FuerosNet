@@ -8,7 +8,7 @@
 //! waits for the node to say.
 
 use crate::actor::Handle;
-use crate::serving::{Answer, Serving};
+use crate::serving::{Answer, Inbound, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::REQUEST_PREKEY;
 use rhtn_archive::submission::*;
@@ -160,3 +160,21 @@ pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(
 
 /// `TopologyPush` (`wire-format.md` §8.2).
 pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
+
+/// Carry what the serving node delivers into the client.
+///
+/// Each message is a `RelayedPayload` (`wire-format.md` §7.10): the
+/// submitter in front of the ciphertext.  **The name is a routing hint**,
+/// which is all the client uses it for — whose material to try — and never
+/// an attribution, which the material the message opens under decides.
+/// Bytes that are not that shape are dropped, since nothing can be done
+/// with a message whose sender is unknown.
+pub fn collect(inbound: Inbound, mut deliveries: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(bytes) = deliveries.recv().await {
+            if let Some((from, payload)) = rhtn_archive::submission::unrelayed(&bytes) {
+                inbound(from, payload);
+            }
+        }
+    })
+}

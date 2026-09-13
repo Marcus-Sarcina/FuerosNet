@@ -9,6 +9,11 @@ rhtn-adaptors = { path = "../adaptors" }
 rhtn-archive = { path = "../archive" }
 rhtn-client = { path = "../client" }
 rhtn-crypto = { path = "../crypto" }
+rhtn-transport = { path = "../transport" }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
 
 [dev-dependencies]
 rhtn-codec = { path = "../codec" }
+rhtn-node = { path = "../node" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

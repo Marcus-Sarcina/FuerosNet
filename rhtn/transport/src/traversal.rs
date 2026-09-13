@@ -179,28 +179,67 @@ impl AsyncUdpSocket for TraversalSocket {
                 Poll::Ready(Ok(n)) => n,
                 other => return other,
             };
-            // one datagram per slot: unwrap the NAT framing, divert STUN,
-            // and compact what remains
             let mut kept = 0;
             for i in 0..n {
-                let len = meta[i].len;
-                let mut from = meta[i].addr;
-                let mut body: Vec<u8> = bufs[i][..len].to_vec();
-                if self.nat.is_some() {
-                    match unwrap(&body) {
-                        Some((src, payload)) => {
-                            from = src;
-                            body = payload.to_vec();
-                        }
-                        None => continue,
+                let m = meta[i];
+                // **One buffer may carry several datagrams**, `stride`
+                // bytes each with the last possibly short: that is what
+                // the kernel's receive offload does, and what `stride`
+                // says.  Flattening them into one loses every packet after
+                // the first, and the sender recovers only by retransmitting
+                // on a backoff — which is minutes, not milliseconds, once
+                // a message runs to a few thousand bytes.
+                let stride = if m.stride == 0 { m.len.max(1) } else { m.stride };
+                let coalesced = m.len > stride;
+                let plain = self.nat.is_none();
+                // the fast path, and the only one a node on the real
+                // network takes: nothing to unwrap, and no STUN in the
+                // batch, so it passes exactly as it arrived and the
+                // receiver splits it by the stride it came with
+                if plain && !(0..m.len).step_by(stride).any(|o| stun::is_stun(&bufs[i][o..(o + stride).min(m.len)])) {
+                    if kept != i {
+                        let body = bufs[i][..m.len].to_vec();
+                        bufs[kept][..body.len()].copy_from_slice(&body);
                     }
-                }
-                if !self.take(from, &body) {
+                    meta[kept] = m;
+                    kept += 1;
                     continue;
                 }
-                bufs[kept][..body.len()].copy_from_slice(&body);
-                meta[kept] = RecvMeta { addr: from, len: body.len(), stride: body.len(), ecn: meta[i].ecn, dst_ip: meta[i].dst_ip };
+                // something in this batch is STUN, or the harness wrapped
+                // it: take it apart datagram by datagram and put back what
+                // passes, contiguously and at one stride
+                let mut out: Vec<u8> = Vec::with_capacity(m.len);
+                let mut from: Option<SocketAddr> = None;
+                let mut width = 0usize;
+                for off in (0..m.len).step_by(stride) {
+                    let raw = bufs[i][off..(off + stride).min(m.len)].to_vec();
+                    let (src, body) = match self.nat {
+                        Some(_) => match unwrap(&raw) {
+                            Some((s, p)) => (s, p.to_vec()),
+                            None => continue,
+                        },
+                        None => (m.addr, raw),
+                    };
+                    if !self.take(src, &body) {
+                        continue;
+                    }
+                    // one `RecvMeta` names one source, so a batch that
+                    // unwrapped to two of them yields the first source's
+                    // datagrams and drops the rest, which is a loss the
+                    // sender repairs and cannot be a wrong delivery
+                    match from {
+                        None => from = Some(src),
+                        Some(f) if f == src => {}
+                        Some(_) => continue,
+                    }
+                    width = width.max(body.len());
+                    out.extend_from_slice(&body);
+                }
+                let Some(from) = from.filter(|_| !out.is_empty()) else { continue };
+                bufs[kept][..out.len()].copy_from_slice(&out);
+                meta[kept] = RecvMeta { addr: from, len: out.len(), stride: width, ecn: m.ecn, dst_ip: m.dst_ip };
                 kept += 1;
+                let _ = coalesced;
             }
             if kept > 0 {
                 return Poll::Ready(Ok(kept));
@@ -218,8 +257,10 @@ impl AsyncUdpSocket for TraversalSocket {
         1
     }
 
+    /// What the inner socket's receive offload may coalesce into one
+    /// buffer, which this socket passes through rather than flattening.
     fn max_receive_segments(&self) -> usize {
-        1
+        self.inner.max_receive_segments()
     }
 
     fn may_fragment(&self) -> bool {

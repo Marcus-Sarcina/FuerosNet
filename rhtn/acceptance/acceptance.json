@@ -9103,5 +9103,59 @@
   "then": "Every transaction carried in a topology push is in the client's horizon and placed; none of the other three is; and the client's reader is still running afterwards.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TRV-10",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "The socket that answers STUN does not flatten what the kernel coalesces",
+  "milestone": "after-5",
+  "kind": "robustness",
+  "spec": [
+   "design §14.1.1",
+   "infra-client-requirements.md §7"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.1",
+    "text": "Infra nodes act as STUN and TURN."
+   },
+   {
+    "where": "infra-client-requirements.md §7",
+    "text": "Act as STUN and TURN for clients attempting direct payload paths"
+   }
+  ],
+  "given": "A node serving QUIC on the same socket it answers STUN Binding requests on, and a peer with a session to it.",
+  "when": "The peer sends messages of one, twenty-five and two hundred thousand bytes, each spanning many datagrams.",
+  "then": "Every message crosses whole and once, within a bound no per-packet retransmission could meet. A socket that handed several coalesced arrivals to the receiver as one datagram would deliver the first packet of each batch and lose the rest.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-13",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "The kernel holds the session, and no wire byte crosses to the shell",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.0",
+   "light-client-requirements.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.0",
+    "text": "One participant, one kernel"
+   },
+   {
+    "where": "light-client-requirements.md §4.1",
+    "text": "Publish your bundle and stock your pool as part of attaching"
+   }
+  ],
+  "given": "A shell holding only the facade, and a serving node on the network.",
+  "when": "The shell attaches, registers and withdraws a wake endpoint, sends payload to another client of that node, and asks for what arrived.",
+  "then": "The node holds the bundle and pool the attach published, the endpoint the registration gave and then nothing after the withdrawal, and the recipient's shell is handed the payload already decrypted. No method returns an encoding, and maintenance without a session is refused with its reason.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

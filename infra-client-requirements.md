@@ -291,6 +291,19 @@ serving node.
 - **Tell an operator plainly what their subordinates are exposed to** by their
   configuration and conduct (design §13).
 
+### 8.1 What an operator's interface may ask of the node
+
+design §14.1.0 puts sessions and every byte on the wire inside a kernel and
+makes what a person looks at a client of it. A node's operator has one too, and
+it is bound by the same line.
+
+- **An operator's interface reads and never speaks for the node.** What it is
+  shown is state — who is attached, what is queued, what is held — and it does
+  not compose, sign or send anything on the wire.
+- **What crosses to it is not an encoding.** A count, a keyhash, a time. An
+  interface handed frames would be a second parser in the place the first one
+  already works.
+
 ---
 
 ## 9. Package hosting

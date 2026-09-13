@@ -197,3 +197,12 @@ impl std::fmt::Display for Refused {
 }
 
 impl std::error::Error for Refused {}
+
+// --------------------------------------------------- the payload's kinds
+
+/// What a message on the end-to-end channel is (design §14.2.4.6).  A
+/// shell sends and reads the first of these; the rest are the client's own
+/// traffic and the adaptors answer them without the shell seeing them.
+pub const KIND_APPLICATION: u64 = rhtn_client::payload::KIND_APPLICATION;
+pub const KIND_KEY_GRANT: u64 = rhtn_client::payload::KIND_KEY_GRANT;
+pub const KIND_LATE_RESPONSE: u64 = rhtn_client::payload::KIND_LATE_RESPONSE;

@@ -702,11 +702,15 @@ dependencies = [
 name = "rhtn-ffi"
 version = "0.1.0"
 dependencies = [
+ "quinn",
  "rhtn-adaptors",
  "rhtn-archive",
  "rhtn-client",
  "rhtn-codec",
  "rhtn-crypto",
+ "rhtn-node",
+ "rhtn-transport",
+ "tokio",
 ]
 
 [[package]]

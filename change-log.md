@@ -9410,3 +9410,25 @@ that carried them, and the anchor of a subtree has no record of its own here,
 so it is placed at the empty path under itself and claims no series. That is
 what the anchor being the anchor means, and inventing a series for it would be
 claiming something nobody propagated.
+
+### 2026-09-13 (the kernel takes the wire, and a socket stops losing packets)
+
+**The facade no longer hands wire bytes outward.** `Participant::attach` and
+`maintain` returned encoded messages for a shell's transport to carry, which is
+the second parser design §14.1.0 refuses and the arrangement that section was
+written to end. The participant now owns an endpoint, a session, a courier and
+the two readers that carry what arrives back in; attaching, publishing,
+stocking, sweeping, relaying and registering a wake endpoint all happen inside
+it, and what crosses outward is a result. `light-client-requirements.md` §9 and
+`infra-client-requirements.md` §8.1 state the interface, which §14.1.0 says
+belongs in the client documents and not in the wire format.
+
+**A defect found on the way, in the socket a node answers STUN on.** The
+kernel's receive offload hands several arrivals over in one buffer; the socket
+was flattening them into a single datagram, which delivered the first packet of
+each batch and lost the rest. The sender then rebuilt every message a
+retransmission at a time on a backoff. Nothing was ever wrong, only slow: a
+25,000-byte message took 35 seconds instead of 4 milliseconds. It is a
+behavioural defect and not a specification question, so nothing here changes;
+`wire-format.md` §9.2's framing was always right and the socket beneath it was
+not honouring it.
