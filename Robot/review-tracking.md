@@ -9100,3 +9100,30 @@ Found on the way: `verify::presentation` returns a `String` where
 command line works around it by asking the inner envelope. Making the
 three agree is a small change nobody has needed until now, and is left
 for the author to want.
+
+**The three verifiers report the same way (2026-09-13).** One gate-green
+commit, 1c90b9c, on the author's ruling: make them consistent.
+`verify::presentation` returned a `String` where `verify::envelope` and
+`verify::record` return a typed `Failure`, so a key the holder lacked
+reached a caller as prose. §3.4's distinction between an object that
+cannot be verified here and one that is wrong survives only if the type
+carries it; folded into a string, every caller matches on wording.
+
+The change was the return type and one line. Every error path inside the
+function already converted through the `From<&str>` and `From<String>`
+impls the failure type carries, so nothing else moved. Three callers: the
+two corpus runners flatten it to prose where they compare prose and say
+so, and `rhtn-cli` asks it directly, the workaround that reached past it
+into the inner envelope now gone.
+
+A test under DEC-26 holds all three to it: a presentation verified with no
+keys held names the same missing signer the envelope inside it does, and
+one whose root does not match is invalid rather than unverifiable. 305 of
+315, 0 flags.
+
+Left as it stands, and worth the author's eye: **`verify::record` returns
+`Ok(false)` for a signature that fails** under a key the holder does have,
+where `verify::envelope` returns an error for the same thing. The error
+types agree now; the success types still disagree about what a failing
+signature is. Seventeen call sites read that bool, so it is a wider change
+than this one and nobody has needed it yet.
