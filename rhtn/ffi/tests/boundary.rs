@@ -159,6 +159,27 @@ fn sid(name: &str) -> rhtn_crypto::SigningIdentity {
     rhtn_crypto::identity::testkit::test_identity(name)
 }
 
+/// A serving node on loopback that pins the parties this test uses, with
+/// its configuration open to a test that needs a particular refusal.
+fn serving_with(name: &str, tweak: impl FnOnce(&mut NodeConfig)) -> Arc<LiveNode> {
+    let me = Arc::new(sid(name));
+    let pins = Pins::new();
+    let mut known = Vec::new();
+    for n in ["alice", "bob", "carol"] {
+        pins.pin_identity(&sid(n).public);
+        known.push(sid(n).public);
+    }
+    let p = Path::from_indices(&[]);
+    let view = NodeView::new(
+        me.clone(),
+        rhtn_archive::tx::Locator { anchor: me.public.keyhash, path: p.bytes, nibbles: p.nibbles, seqno: rhtn_archive::tx::Seqno { series: 1, counter: 0 } },
+    );
+    let mut cfg = NodeConfig::defaults(me, pins, 30);
+    cfg.log = Log::recording();
+    tweak(&mut cfg);
+    LiveNode::start(cfg, view, known, AnchorTable::new(0, Ingestion::UnverifiedGossip))
+}
+
 /// A serving node on loopback that pins the parties this test uses.
 fn serving(name: &str) -> Arc<LiveNode> {
     let me = Arc::new(sid(name));
@@ -297,4 +318,50 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     // blocking forever
     let q = p.clone();
     assert!(tokio::task::spawn_blocking(move || q.next_event(200)).await.unwrap().is_none());
+}
+
+// acceptance: DMN-15
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() {
+    // the node takes nothing for anyone: a queue cap of zero refuses the
+    // newest and tells the sender (design §14.1.6)
+    let node = serving_with("bob", |c| c.queue_cap = Some(0));
+    let addr = node.addr.to_string();
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"].iter().map(|n| material(n)).collect();
+
+    let carol = Arc::new(
+        tokio::task::spawn_blocking({
+            let known = known.clone();
+            move || Participant::start(seeds("carol"), known, platform_of(Arc::new(Shell::default()))).expect("starts")
+        })
+        .await
+        .unwrap(),
+    );
+    let alice = Arc::new(
+        tokio::task::spawn_blocking({
+            let known = known.clone();
+            move || Participant::start(seeds("alice"), known, platform_of(Arc::new(Shell { has: vec![Channel::Nfc], ..Default::default() }))).expect("starts")
+        })
+        .await
+        .unwrap(),
+    );
+    // carol publishes so alice can address it, and alice sweeps carol
+    {
+        let (q, a) = (carol.clone(), addr.clone());
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![])).await.unwrap().expect("carol attaches");
+    }
+    {
+        let (q, a) = (alice.clone(), addr.clone());
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![id("carol")])).await.unwrap().expect("alice attaches");
+    }
+    assert!(node.view.lock().unwrap().prekeys.bundle(&sid("carol").public.keyhash).is_some(), "control: the recipient's material is known");
+
+    let before = node.node.queued(&sid("carol").public.keyhash);
+    let q = alice.clone();
+    let e = tokio::task::spawn_blocking(move || q.send(id("carol"), KIND_APPLICATION, b"for carol".to_vec()))
+        .await
+        .unwrap()
+        .expect_err("the node refused it, and the application is told");
+    assert!(e.reason.contains("unsent"), "the reason says the work was not done: {e}");
+    assert_eq!(node.node.queued(&sid("carol").public.keyhash), before, "and nothing was queued");
 }

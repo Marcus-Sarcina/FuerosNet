@@ -9314,5 +9314,59 @@
   "then": "Both saves succeed, and the archive, the topology store and the derived view are all on disk afterwards. Ordinary issuance is not a condition that can stop a node persisting.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "SUB-09",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A relationship that ends takes the wake endpoint with it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §6.1",
+   "design §19.4"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6.1",
+    "text": "Forget an endpoint when the relationship ends, and when a client\n  withdraws it."
+   },
+   {
+    "where": "design §19.4",
+    "text": "a cache with no expiry is a retention decision made by omission"
+   }
+  ],
+  "given": "A node holding a wake endpoint for a client it serves, registered over the client's own session.",
+  "when": "The relationship ends: by the client's departure, by the node's disavowal of it, and by a recovery that supersedes the client's key.",
+  "then": "The endpoint is gone in each case, as it is on an explicit withdrawal, and the routing slot is empty. A registration that outlived its relationship would be a routable identifier for a person held past the reason it was given.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-15",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A message the serving node refused reaches the application as unsent",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §9",
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §9",
+    "text": "Refusals are values that carry their reason."
+   },
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The reply carries the nonce and a code and nothing further."
+   }
+  ],
+  "given": "A shell attached to a serving node that will not queue for the recipient, whose prekey material the client holds.",
+  "when": "The shell sends application payload to that recipient.",
+  "then": "The call reports a refusal rather than success, nothing is queued at the node, and the same discipline applies to publishing a bundle and stocking a pool. An application told a message was sent stops retrying it.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

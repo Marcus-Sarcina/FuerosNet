@@ -37,6 +37,30 @@ impl Inlet {
     }
 }
 
+/// What a [`Courier::carry`] could not complete, with the two reasons kept
+/// apart.  **Both are unsent work**, and a caller that ignores either
+/// reports a message delivered that is not.
+#[derive(Debug, Default)]
+pub struct Carried {
+    /// Not the adaptors' to carry: the ceremony's own conversation between
+    /// two present devices, which no document gives an encoding.
+    pub left: Vec<Msg>,
+    /// Handed to the serving node and refused by it.
+    pub refused: Vec<Msg>,
+}
+
+impl Carried {
+    fn absorb(&mut self, other: Carried) {
+        self.left.extend(other.left);
+        self.refused.extend(other.refused);
+    }
+
+    /// Whether everything travelled.
+    pub fn complete(&self) -> bool {
+        self.left.is_empty() && self.refused.is_empty()
+    }
+}
+
 pub struct Courier {
     pub handle: Handle,
     pub serving: Arc<dyn Serving>,
@@ -105,7 +129,7 @@ impl Courier {
 
     /// Attach to the serving node beside this client: what the client
     /// publishes, stocks and sweeps at attach, carried there.
-    pub async fn attach(self: &Arc<Self>, population: Vec<Keyhash>) -> Vec<Msg> {
+    pub async fn attach(self: &Arc<Self>, population: Vec<Keyhash>) -> Carried {
         let serving = self.serving.me();
         let msgs = self.handle.with(move |c| c.attach(serving, &population)).await;
         self.carry(msgs).await
@@ -115,7 +139,7 @@ impl Courier {
     /// (`light-client-requirements.md` §3).  A sweep is a snapshot of what
     /// was published when it ran, so a client that must attribute an
     /// initial message from a peer who attached later sweeps again.
-    pub async fn sweep(self: &Arc<Self>, population: Vec<Keyhash>) -> Vec<Msg> {
+    pub async fn sweep(self: &Arc<Self>, population: Vec<Keyhash>) -> Carried {
         let msgs = self.handle.with(move |c| c.sweep(&population)).await;
         self.carry(msgs).await
     }
@@ -131,33 +155,43 @@ impl Courier {
 
     /// Send `bytes` of `kind` to `to` from the client, and carry what the
     /// client says out.  What the adaptors do not carry comes back.
-    pub async fn send(self: &Arc<Self>, to: Keyhash, kind: u64, bytes: Vec<u8>) -> Result<Vec<Msg>, String> {
+    pub async fn send(self: &Arc<Self>, to: Keyhash, kind: u64, bytes: Vec<u8>) -> Result<Carried, String> {
         let msgs = self.handle.with(move |c| c.send_payload(to, kind, &bytes)).await.map_err(|e| e.to_string())?;
         Ok(self.carry(msgs).await)
     }
 
     /// Carry the client's messages where the seams go: prekey traffic to
     /// the serving node, payload on the direct path where it is held and
-    /// to the relay otherwise.  What the adaptors do not carry, the
-    /// ceremony's own conversation between two present devices, comes
-    /// back.
-    pub fn carry(self: &Arc<Self>, msgs: Vec<Msg>) -> Pin<Box<dyn Future<Output = Vec<Msg>> + Send>> {
+    /// to the relay otherwise.
+    ///
+    /// **A refusal comes back.**  A serving node that will not take a
+    /// submission answers with a code (`wire-format.md` §7.10), and a
+    /// caller told nothing would report work done that was not
+    /// (`light-client-requirements.md` §9).  The two ways a message can
+    /// fail to travel are kept apart: `left` is what the adaptors do not
+    /// carry at all, the ceremony's own conversation between two present
+    /// devices, and `refused` is what was handed over and turned down.
+    pub fn carry(self: &Arc<Self>, msgs: Vec<Msg>) -> Pin<Box<dyn Future<Output = Carried> + Send>> {
         let me = self.clone();
         Box::pin(async move {
-            let mut left = Vec::new();
+            let mut out = Carried::default();
             for m in msgs {
                 match m {
                     Msg::PublishBundle(b) => {
-                        me.serving.publish(&b).await;
+                        if !me.serving.publish(&b).await {
+                            out.refused.push(Msg::PublishBundle(b));
+                        }
                     }
                     Msg::StockOneTime(keys) => {
-                        me.serving.stock(me.me(), keys).await;
+                        if !me.serving.stock(me.me(), keys.clone()).await {
+                            out.refused.push(Msg::StockOneTime(keys));
+                        }
                     }
                     Msg::PrekeyRequest(b) => {
                         if let Some(reply) = me.serving.prekey(me.me(), &b).await {
                             let more = me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
                             if let Ok(more) = more {
-                                left.extend(me.carry(more).await);
+                                out.absorb(me.carry(more).await);
                             }
                         }
                     }
@@ -165,21 +199,25 @@ impl Courier {
                         // a delivery short of complete leaves the message
                         // with the sender, and the relay carries it (design
                         // §14.1.1)
-                        if !me.direct.deliver(to, bytes.clone()).await {
-                            me.serving.relay(me.me(), to, bytes).await;
+                        if !me.direct.deliver(to, bytes.clone()).await && !me.serving.relay(me.me(), to, bytes.clone()).await {
+                            out.refused.push(Msg::Payload { to, bytes });
                         }
                     }
                     Msg::Relay { to, bytes } => {
-                        me.serving.relay(me.me(), to, bytes).await;
+                        if !me.serving.relay(me.me(), to, bytes.clone()).await {
+                            out.refused.push(Msg::Relay { to, bytes });
+                        }
                     }
                     Msg::Transport(b) => {
                         let node = me.serving.me();
-                        me.serving.relay(me.me(), node, b).await;
+                        if !me.serving.relay(me.me(), node, b.clone()).await {
+                            out.refused.push(Msg::Transport(b));
+                        }
                     }
-                    other => left.push(other),
+                    other => out.left.push(other),
                 }
             }
-            left
+            out
         })
     }
 }

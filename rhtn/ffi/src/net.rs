@@ -165,13 +165,17 @@ impl Net {
             let tasks = vec![attached::follow(handle_for_task, frames), attached::collect(courier.inbound(), deliveries)];
             // the bundle published, the pool stocked and the population
             // swept, all over this session
-            let left = courier.attach(population).await;
-            Ok((Live { session, courier, _serving: serving, tasks }, events, mode, queued, left.len()))
+            let carried = courier.attach(population).await;
+            Ok((Live { session, courier, _serving: serving, tasks }, events, mode, queued, (carried.left.len(), carried.refused.len())))
         })?;
-        let (live, events, mode, queued, left) = built;
+        let (live, events, mode, queued, (left, refused)) = built;
         // an attach produces nothing the adaptors cannot carry: what they
         // hand back is the ceremony's own device-to-device conversation,
-        // and no ceremony is open here
+        // and no ceremony is open here.  What the node *refused* is a
+        // different answer and is reported as one
+        if refused > 0 {
+            return Err(Refused::new(format!("the serving node refused {refused} of what attaching published, stocked or swept")));
+        }
         if left > 0 {
             return Err(Refused::new(format!("{left} message(s) an attach produced had no path")));
         }
@@ -190,9 +194,21 @@ impl Net {
         Ok(())
     }
 
+    /// **A refusal is an answer, and reaches the caller as one.**  The
+    /// serving node says whether it took a submission (`wire-format.md`
+    /// §7.10), and reporting success for a message it declined would have
+    /// an application believe work was done that was not
+    /// (`light-client-requirements.md` §9).
     pub(crate) fn send(&self, to: Keyhash, kind: u64, bytes: Vec<u8>) -> Result<(), Refused> {
         let courier = self.courier()?;
-        self.rt().block_on(async move { courier.send(to, kind, bytes).await }).map(|_| ()).map_err(Refused::new)
+        let carried = self.rt().block_on(async move { courier.send(to, kind, bytes).await }).map_err(Refused::new)?;
+        if !carried.refused.is_empty() {
+            return Err(Refused::new("the serving node would not take the message: it is unsent"));
+        }
+        if !carried.left.is_empty() {
+            return Err(Refused::new("no path carried the message: it is unsent"));
+        }
+        Ok(())
     }
 
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {

@@ -276,7 +276,7 @@ impl NodeView {
                     Some((_, ended_at, _)) => {
                         let free = self.slots.get(&slot).is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node));
                         if free && !self.still_bound(&node) {
-                            self.set_slot(slot, None, *ended_at);
+                            self.relationship_ended(slot, &node, *ended_at);
                         }
                     }
                 }
@@ -317,8 +317,27 @@ impl NodeView {
             .and_then(|b| b.end.as_ref().map(|(_, a, _)| *a))
             .unwrap_or(rec.time);
         if !self.still_bound(&node) {
-            self.set_slot(slot, None, ended_at);
+            self.relationship_ended(slot, &node, ended_at);
         }
+    }
+
+    /// The relationship with `node` has ended: its routing slot is emptied,
+    /// and what this node held only because that relationship existed goes
+    /// with it.
+    ///
+    /// **A wake endpoint is a routable identifier for a person**
+    /// (`infra-client-requirements.md` §6.1, design §19.4), so keeping one
+    /// past the reason it was given is a retention decision made by
+    /// omission.  Withdrawal was already implemented and this half was
+    /// not; both ends of the obligation are the same act.
+    ///
+    /// Every transition that ends a relationship arrives here: a departure
+    /// and a disavowal through the caller above, and a recovery that
+    /// supersedes a key through the adoption branch, which reads the
+    /// settled binding rather than the transaction.
+    fn relationship_ended(&mut self, slot: u64, node: &Keyhash, at: u64) {
+        self.set_slot(slot, None, at);
+        self.wake.forget(node);
     }
 
     /// Whether this node holds an open binding to `node`.

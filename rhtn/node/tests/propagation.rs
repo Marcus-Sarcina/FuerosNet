@@ -603,3 +603,45 @@ fn every_arrival_order_of_one_replacement_leaves_the_same_slot() {
     assert!(n.table.patrons(&kh("alice")).is_empty());
     assert_eq!(n.child_at(slot as u8), None);
 }
+
+// ------------------------------- what a relationship ending takes with it
+
+/// A node holding a wake endpoint for the subordinate in slot 0.
+fn with_endpoint(s: &mut Scene, client: &str) {
+    assert_eq!(
+        s.n.wake.register(kh(client), Some("https://push.example/rhtn/a3f9".into()), Some(vec![7; 32]), None),
+        rhtn_node::wake::Registered::Held
+    );
+    assert!(s.n.wake.get(&kh(client)).is_some(), "the node holds where to ring it");
+}
+
+// acceptance: SUB-09
+#[test]
+fn a_relationship_that_ends_takes_the_wake_endpoint_with_it() {
+    // a departure by the client
+    let mut s = scene();
+    with_endpoint(&mut s, "carol");
+    let d = s.w.depart("carol", "bob", Seqno { series: 2, counter: 0 });
+    assert_eq!(s.n.receive_push(&*s.fab, &kh("alice"), &encode_push(KIND_TRANSACTION, &d.bytes), &ids()), Decision::Stored);
+    assert_eq!(s.n.slot_of(&kh("carol")), None, "control: the relationship ended and the slot is empty");
+    assert!(s.n.wake.get(&kh("carol")).is_none(), "a departure takes the endpoint with it");
+    assert!(s.n.wake.holders().is_empty(), "and leaves nothing behind under another name");
+
+    // a disavowal by the node
+    let mut s = scene();
+    with_endpoint(&mut s, "w1");
+    let v = s.w.disavow("bob", "w1", None);
+    assert_eq!(s.n.receive_push(&*s.fab, &kh("alice"), &encode_push(KIND_TRANSACTION, &v.bytes), &ids()), Decision::Stored);
+    assert_eq!(s.n.slot_of(&kh("w1")), None, "control: the relationship ended");
+    assert!(s.n.wake.get(&kh("w1")).is_none(), "a disavowal takes it too");
+
+    // and an endpoint for a party whose relationship has not ended stays,
+    // which is what makes the removal a consequence rather than a sweep
+    let mut s = scene();
+    with_endpoint(&mut s, "carol");
+    with_endpoint(&mut s, "w1");
+    let d = s.w.depart("carol", "bob", Seqno { series: 2, counter: 0 });
+    assert_eq!(s.n.receive_push(&*s.fab, &kh("alice"), &encode_push(KIND_TRANSACTION, &d.bytes), &ids()), Decision::Stored);
+    assert!(s.n.wake.get(&kh("carol")).is_none());
+    assert!(s.n.wake.get(&kh("w1")).is_some(), "the other client's endpoint is untouched");
+}
