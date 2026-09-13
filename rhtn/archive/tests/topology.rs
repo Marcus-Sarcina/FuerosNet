@@ -514,3 +514,52 @@ fn dereferenced_evidence_counts_only_once_its_signatures_verify() {
     let b = t.bindings().iter().find(|b| b.adoption == a2.txid).unwrap().clone();
     assert_eq!(b.evidence, EvidenceStatus::Satisfied);
 }
+
+// acceptance: TOP-20
+#[test]
+fn a_reissue_advances_its_relationship_and_a_departure_in_that_series_ends_it() {
+    let mut w = World::new(&["alice", "bob", "carol"]);
+    let f = w.meet("alice", "bob");
+    let a = w.adopt("bob", "alice", f.txid, 1);
+    let r = w.reissue("bob", "alice", Seqno { series: 1, counter: 5 }, 2);
+    let d = w.depart("bob", "alice", Seqno { series: 2, counter: 1 });
+    let apply = |t: &mut Table, rec: &Record, w: &World| t.apply(rec, &w.lookup(), &w.store, None);
+
+    // in order: the reissue moves the relationship and leaves it open
+    let mut t = Table::with_me(w.kh("alice"));
+    apply(&mut t, &a, &w).expect("adoption");
+    apply(&mut t, &r, &w).expect("reissue");
+    assert!(t.subordinates(&w.kh("alice")).contains(&w.kh("bob")), "a reissue does not end a relationship");
+    assert_eq!(t.bindings().iter().find(|b| b.open()).map(|b| b.series), Some(2), "it is in the series it entered");
+    // and the departure naming that series ends it
+    apply(&mut t, &d, &w).expect("departure");
+    assert!(t.subordinates(&w.kh("alice")).is_empty(), "the departure ends the relationship the reissue advanced");
+
+    // a departure naming the series left ends nothing
+    let mut t = Table::with_me(w.kh("alice"));
+    apply(&mut t, &a, &w).expect("adoption");
+    apply(&mut t, &r, &w).expect("reissue");
+    let stale = w.depart("bob", "alice", Seqno { series: 1, counter: 9 });
+    apply(&mut t, &stale, &w).expect("applies");
+    assert!(t.subordinates(&w.kh("alice")).contains(&w.kh("bob")), "the series it names is not the one open");
+
+    // the reissue arriving before its adoption is held, and settles
+    let mut t = Table::with_me(w.kh("alice"));
+    apply(&mut t, &r, &w).expect("reissue");
+    assert!(t.subordinates(&w.kh("alice")).is_empty(), "nothing to advance yet");
+    apply(&mut t, &a, &w).expect("adoption");
+    assert_eq!(t.bindings().iter().find(|b| b.open()).map(|b| b.series), Some(2), "settled when its adoption arrived");
+    apply(&mut t, &d, &w).expect("departure");
+    assert!(t.subordinates(&w.kh("alice")).is_empty());
+
+    // a re-adoption opening its own series is a different binding, which
+    // the earlier reissue never touched
+    let mut t = Table::with_me(w.kh("alice"));
+    apply(&mut t, &a, &w).expect("adoption");
+    apply(&mut t, &r, &w).expect("reissue");
+    apply(&mut t, &d, &w).expect("departure");
+    let f2 = w.meet("alice", "bob");
+    let again = w.adopt("bob", "alice", f2.txid, 7);
+    apply(&mut t, &again, &w).expect("re-adoption");
+    assert_eq!(t.bindings().iter().filter(|b| b.open()).map(|b| b.series).collect::<Vec<_>>(), vec![7]);
+}

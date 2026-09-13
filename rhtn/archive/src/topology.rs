@@ -88,6 +88,8 @@ pub enum Refusal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Applied {
     Adopted,
+    /// A reissue moved a relationship into the series it entered.
+    Reissued { node: Keyhash, patron: Keyhash, series: u32 },
     /// A recovery replaced `prior` with `successor` as the current key.
     Replaced { prior: Keyhash, successor: Keyhash },
     Ended,
@@ -139,6 +141,8 @@ pub struct Table {
     lineage: BTreeMap<Keyhash, Vec<(Keyhash, Keyhash)>>,
     pending_disavowals: Vec<PendingDisavowal>,
     pending_departures: Vec<PendingDeparture>,
+    /// Reissues whose binding has not arrived: `(node, patron, left, entered)`.
+    pending_reissues: Vec<(Keyhash, Keyhash, u32, u32)>,
     pub prefer: Option<Preference>,
 }
 
@@ -168,6 +172,7 @@ impl Table {
             lineage: self.lineage.clone(),
             pending_disavowals: self.pending_disavowals.clone(),
             pending_departures: self.pending_departures.clone(),
+            pending_reissues: self.pending_reissues.clone(),
             prefer: self.prefer.clone(),
         }
     }
@@ -432,6 +437,7 @@ impl Table {
                 self.nodes.insert(node);
                 self.nodes.insert(patron);
                 self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, evidence });
+                self.settle_pending_reissues();
                 self.settle_pending_departures();
                 self.settle_pending_disavowals();
                 let mut acks = Vec::new();
@@ -442,6 +448,39 @@ impl Table {
                         acks.push(bytes);
                     }
                 Outcome { applied, acks }
+            }
+            TYPE_REISSUE => {
+                let node = f(1)?;
+                let patron = f(2)?;
+                // A reissue leaves one series and enters another within the
+                // same relationship (`wire-format.md` §4.6): the binding
+                // follows it, so a departure naming the series now current
+                // ends the relationship this reissue advanced rather than
+                // matching nothing.
+                //
+                // **The series left is what identifies it**, not the larger
+                // number: succession is proved by the countersigned chain
+                // (§4.6.1), and a re-adoption that happens to open a higher
+                // series is a different binding this must not touch.
+                let left = rec.seqno_left().ok_or(Refusal::Structure("field 3".into()))?.series;
+                let entered = rec.seqno().ok_or(Refusal::Structure("field 4".into()))?.series;
+                let advanced = match self.bindings.iter_mut().find(|b| b.node == node && b.patron == patron && b.series == left && b.open()) {
+                    Some(b) => {
+                        b.series = entered;
+                        true
+                    }
+                    // held for the adoption it advances, as a departure is:
+                    // arrival order cannot lose a series change
+                    None => {
+                        self.pending_reissues.push((node, patron, left, entered));
+                        false
+                    }
+                };
+                if advanced {
+                    self.settle_pending_departures();
+                }
+                self.nodes.insert(node);
+                Outcome { applied: if advanced { Applied::Reissued { node, patron, series: entered } } else { Applied::Nothing }, acks: Vec::new() }
             }
             TYPE_DEPARTURE => {
                 let node = f(1)?;
@@ -502,6 +541,29 @@ impl Table {
         }
         self.bindings[i].end = Some(ending);
         true
+    }
+
+    /// Apply reissues held for a binding that has since arrived.  Run
+    /// before the departures, since a departure may name the series a
+    /// reissue is about to enter.  Repeated until nothing moves, a chain
+    /// of reissues arriving in reverse settling one link per pass.
+    fn settle_pending_reissues(&mut self) {
+        loop {
+            let mut moved = false;
+            let pending = std::mem::take(&mut self.pending_reissues);
+            for (node, patron, left, entered) in pending {
+                match self.bindings.iter_mut().find(|b| b.node == node && b.patron == patron && b.series == left && b.open()) {
+                    Some(b) => {
+                        b.series = entered;
+                        moved = true;
+                    }
+                    None => self.pending_reissues.push((node, patron, left, entered)),
+                }
+            }
+            if !moved {
+                return;
+            }
+        }
     }
 
     fn settle_pending_departures(&mut self) {

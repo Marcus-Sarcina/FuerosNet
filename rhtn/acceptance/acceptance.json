@@ -8621,5 +8621,33 @@
   "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too.",
   "oracle": "behaviour",
   "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out."
+ },
+ {
+  "id": "TOP-20",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A reissue advances the relationship it names, so a departure in the proven current series ends it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.6",
+   "wire-format.md §4.2",
+   "wire-format.md §4.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.2",
+    "text": "counter incremented within the current series"
+   },
+   {
+    "where": "wire-format.md §4.6",
+    "text": "**The new series MUST NOT be one the node has previously occupied.**"
+   }
+  ],
+  "given": "A table holding an adoption in series 1, then the patron-countersigned reissue leaving series 1 for series 2, then a departure naming series 2.",
+  "when": "Each is applied in that order, and separately with the reissue arriving before its adoption.",
+  "then": "The reissue leaves the relationship open and moves it into series 2; the departure then ends it, and the node is no longer a subordinate. A reissue arriving first is held and settles when its adoption does. A departure naming series 1 after the reissue ends nothing, and a re-adoption opening its own series is a different binding the reissue never touched.",
+  "oracle": "behaviour",
+  "interpretation": "The series left is what identifies the relationship a reissue advances, not the larger number: succession is proved by the countersigned chain, and a re-adoption that happens to open a higher series is a binding of its own."
  }
 ]
