@@ -24,7 +24,7 @@ fn one_time_reply(svc: &mut PrekeyService, requester: &str, subject: &str, n: u8
 }
 
 fn stocked(subject: &str, n: usize) -> PrekeyService {
-    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600 });
+    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, ..Default::default() });
     svc.publish(&ids(), &bundle_for(subject, b"reusable material", 1_800_000_000)).unwrap();
     svc.stock(kh(subject), (0..n).map(|i| format!("otk-{i}").into_bytes()).collect());
     svc
@@ -112,7 +112,7 @@ fn reusable_material_is_served_freely_and_consumes_nothing() {
 // acceptance: PAY-05
 #[test]
 fn one_time_issuance_is_limited_per_requester_per_subject() {
-    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 2, window_s: 3600 });
+    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 2, window_s: 3600, ..Default::default() });
     for s in ["alice", "carol"] {
         svc.publish(&ids(), &bundle_for(s, b"m", 1_800_000_000)).unwrap();
         svc.stock(kh(s), (0..5).map(|i| vec![i]).collect());
@@ -284,13 +284,13 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let dir2 = std::env::temp_dir().join(format!("rhtn-allow-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir2);
     std::fs::create_dir_all(&dir2).unwrap();
-    let mut kept = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600 }).unwrap();
+    let mut kept = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
     kept.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
     kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]);
     assert!(one_time_reply(&mut kept, "bob", "alice", 4, 0).one_time.is_some(), "the one bob is allowed");
     assert!(one_time_reply(&mut kept, "bob", "alice", 5, 0).one_time.is_none(), "and no more in this window");
     drop(kept);
-    let mut after = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600 }).unwrap();
+    let mut after = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
     assert_eq!(after.pool_size(&kh("alice")), 1, "one key left, the other spent");
     assert!(one_time_reply(&mut after, "bob", "alice", 6, 0).one_time.is_none(), "the allowance survived the restart");
     assert!(one_time_reply(&mut after, "carol", "alice", 7, 0).one_time.is_some(), "another requester has its own");

@@ -17,11 +17,17 @@ use std::collections::{BTreeMap, VecDeque};
 pub struct PrekeyConfig {
     pub one_time_per_requester_per_subject: u32,
     pub window_s: u64,
+    /// How many one-time keys a client may leave in one deposit, and how
+    /// large a pool this node lends it (`wire-format.md` §7.10).  The wire
+    /// bounds a deposit at 256; an operator may lend less, and says so
+    /// with the reply's code rather than trimming a deposit silently.
+    pub per_deposit: usize,
+    pub pool: usize,
 }
 
 impl Default for PrekeyConfig {
     fn default() -> Self {
-        PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600 }
+        PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, per_deposit: 256, pool: 1024 }
     }
 }
 

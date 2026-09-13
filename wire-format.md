@@ -3118,24 +3118,41 @@ something, so none may be processed in early data.
 ```
 PrekeyPublication = {          ; type 9
   1: PrekeyBundle,             ; §7.8's bundle, signed by its subject
+  2: bstr .size 16,            ; nonce, echoed in the reply
 }
 
 OneTimeDeposit = {             ; type 10
   1: [ 1*256 bstr ],           ; one-time keys, opaque (§7.8)
+  2: bstr .size 16,            ; nonce
 }
 
 RelaySubmission = {            ; type 11
   1: keyhash,                  ; the recipient
   2: bstr,                     ; the ciphertext, which this node cannot read
+  3: bstr .size 16,            ; nonce
 }
 
 WakeRegistration = {           ; type 12
-  1: ? tstr .size (1..2048),   ; the endpoint to post a doorbell to (design
+  1: bstr .size 16,            ; nonce
+  2: ? tstr .size (1..2048),   ; the endpoint to post a doorbell to (design
                                ;   §14.1.5); ABSENT WITHDRAWS the registration
-  2: ? bstr .size (1..256),    ; the key the posted body is encrypted to
-  3: ? timestamp,              ; when the client expects the endpoint to lapse
+  3: ? bstr .size (1..256),    ; the key the posted body is encrypted to
+  4: ? timestamp,              ; when the client expects the endpoint to lapse
+}
+
+SubmissionReply = {            ; the answer to any of the four
+  1: bstr .size 16,            ; echoes the request nonce
+  2: uint                      ; 0 accepted | 1 refused | 2 over a bound
+                               ;   this node applies
 }
 ```
+
+**A withdrawal is field 2 absent, and fields 3 and 4 absent with it.** An
+endpoint's key and lapse describe an endpoint; carrying either without one
+would be a shape with no meaning, and a decoder rejects it. **An endpoint
+arrives with its key**, for the same reason in the other direction: the body
+is encrypted to that key before it is posted, so an endpoint without one is an
+endpoint nothing can be sent to.
 
 **The subject of a publication is the sender, and the node checks it.** A
 bundle names its subject and is signed by it (§7.8); a client publishing
@@ -3159,10 +3176,28 @@ not have to wait for the endpoint to lapse. **A node keeps at most one per
 relationship**, replaces it on re-registration, and forgets it when the
 relationship ends.
 
-**The reply to each is a `Reply` (§9.2's shape) carrying a code**: 0 accepted,
-1 refused, 2 over a bound this node applies. Nothing further: a client learns
-that its node took what it said, and the node discloses nothing about the other
-clients it serves.
+**The reply carries the nonce and a code and nothing further.** A client learns
+that its node took what it said; the node discloses nothing about the other
+clients it serves, and a refusal names no reason, since every reason it could
+give is about capacity or about somebody else.
+
+**What the node hands the recipient carries the submitter in front of the
+ciphertext.**
+
+```
+RelayedPayload = [             ; what a node delivers for a submission
+  keyhash,                     ; the submitter, as this node authenticated it
+  bstr,                        ; the ciphertext, unchanged
+]
+```
+
+A recipient holds material for many peers and must choose which to try before
+it can read anything, and only the node that took the submission knows who
+handed it over. **The name is a routing hint and not an attribution.** It is
+the node's assertion, not the sender's, and a recipient that treated it as
+authorship would be letting its own node say who wrote to it; what a message
+is attributed to is decided by the material it opens under (§7.8, design
+§14.2.4).
 
 ## 8. Session messages
 

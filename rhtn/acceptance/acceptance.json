@@ -8730,5 +8730,216 @@
   "then": "The client is the identity it was given, the intent crosses as fields, the channels come back strongest first with the one that failed reported failed and nothing promoted, and each bad input comes back as a refusal carrying its reason rather than as a process that vanished.",
   "oracle": "behaviour",
   "interpretation": "The ceremony's own conversation between two present devices has no encoding any document fixes, so an intent crosses as fields for the shell to carry however the two devices manage. Randomness of short measure is refused rather than padded, a seed completed with zeroes not being one."
+ },
+ {
+  "id": "SUB-01",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A publication is taken only from the subject the bundle names",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "infra-client-requirements.md §6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The node refuses a publication whose subject is not the authenticated requester."
+   },
+   {
+    "where": "infra-client-requirements.md §6.1",
+    "text": "Take a prekey publication only from the subject it names"
+   }
+  ],
+  "given": "Node N serves clients S and T. S holds a prekey bundle signed by S; T holds one signed by T.",
+  "when": "T sends a type-9 PrekeyPublication on its own request stream carrying S's bundle, and then one carrying its own.",
+  "then": "The first reply echoes T's nonce with code 1 and N holds no bundle for S from it; the second echoes its nonce with code 0 and N holds T's bundle.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-02",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A publication and a deposit from an attached client are held and served",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "It cannot serve its own prekeys, hold its own mail, or be woken by a service it is not connected to."
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "The bundle is opaque to this protocol"
+   }
+  ],
+  "given": "Client S is attached to node N over a session and N holds nothing for S.",
+  "when": "S sends a type-9 publication of its own bundle and a type-10 deposit of k one-time keys.",
+  "then": "Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte and one of the deposited keys.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-03",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A deposit past the node's bound is refused whole, and the pool is unchanged",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "infra-client-requirements.md §6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "a node applies its own storage bound on top: the pool is space it lends"
+   },
+   {
+    "where": "infra-client-requirements.md §6.1",
+    "text": "a client that asks for more than you lend is refused with the code rather than silently trimmed"
+   }
+  ],
+  "given": "Node N lends a pool of p keys per client and client S is attached with q keys already stocked.",
+  "when": "S deposits more than p minus q keys in one type-10 request.",
+  "then": "The reply echoes S's nonce with code 2, and N's pool for S still holds exactly q keys.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-04",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A relay submission is answered when the node takes it, not when it is delivered",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10",
+   "infra-client-requirements.md §6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The answer says the node took it, which is the same promise design §14.1.6's queue makes"
+   },
+   {
+    "where": "infra-client-requirements.md §6.1",
+    "text": "Answer a relay submission when you have taken it, not when you have\n  delivered it."
+   }
+  ],
+  "given": "Node N serves clients S and R. R holds no session with N and is not reachable.",
+  "when": "S submits ciphertext for R in a type-11 request.",
+  "then": "The reply echoes S's nonce with code 0 before R has connected; N's queue for R holds one message; and when R attaches it receives that message with S's keyhash in front of the ciphertext unchanged.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-05",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A relay submission for a keyhash the node holds no record of is refused",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The node refuses one for a recipient it holds no record of"
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "the node distinguishing \"offline\" from \"no record\""
+   }
+  ],
+  "given": "Node N serves client S and holds no record of keyhash U.",
+  "when": "S submits ciphertext for U in a type-11 request.",
+  "then": "The reply echoes S's nonce with code 1, N queues nothing, and the answer is distinguishable at S from the code returned for a recipient N serves who is merely offline.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-06",
+  "area": "submission",
+  "gap": "submission",
+  "title": "One wake endpoint per relationship, replaced on re-registration",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10",
+   "design §14.1.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "A node keeps at most one per relationship"
+   },
+   {
+    "where": "design §14.1.5",
+    "text": "The endpoint is what the patron holds, and it is all the patron needs"
+   }
+  ],
+  "given": "Client S is attached to node N and has registered no endpoint.",
+  "when": "S sends a type-12 registration carrying endpoint E1 with its key, then a second carrying E2 with a different key.",
+  "then": "Both replies echo their nonces with code 0, and N holds exactly one endpoint for S, which is E2 with E2's key.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-07",
+  "area": "submission",
+  "gap": "submission",
+  "title": "A registration with no endpoint withdraws, and a key without one is malformed",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "light-client-requirements.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "An endpoint's key and lapse describe an endpoint; carrying either without one would be a shape with no meaning, and a decoder rejects it."
+   },
+   {
+    "where": "light-client-requirements.md §4.1",
+    "text": "A registration with no\n  endpoint withdraws"
+   }
+  ],
+  "given": "Client S is attached to node N with endpoint E registered.",
+  "when": "S sends a type-12 registration with field 2 absent, then one with field 2 absent and field 3 present.",
+  "then": "The first reply echoes its nonce with code 0 and N holds no endpoint for S; the second is rejected by the decoder and never reaches the register.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "SUB-08",
+  "area": "submission",
+  "gap": "submission",
+  "title": "Every reply echoes the request's nonce and says nothing else",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "A client learns that its node took what it said; the node discloses nothing about the other clients it serves, and a refusal names no reason"
+   }
+  ],
+  "given": "Client S is attached to node N.",
+  "when": "S sends one of each of the four request types, each with a distinct nonce, some of which N refuses.",
+  "then": "Each reply is a two-field map whose field 1 is the nonce of the request that drew it and whose field 2 is one of 0, 1 and 2; no reply carries any other field.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

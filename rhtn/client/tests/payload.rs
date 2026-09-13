@@ -43,7 +43,7 @@ const CLIENTS: [&str; 5] = ["alice", "bob", "carol", "w1", "w2"];
 fn net(nodes: &[&'static str], serving: &[(&'static str, &'static str)]) -> Net {
     let s = setup(&CLIENTS, &[ChannelKind::Nfc]);
     s.clock.set(1_790_000_000_000);
-    let nodes: BTreeMap<&'static str, ServingNode> = nodes.iter().map(|n| (*n, ServingNode { prekeys: PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 3, window_s: 3600 }), queues: BTreeMap::new() })).collect();
+    let nodes: BTreeMap<&'static str, ServingNode> = nodes.iter().map(|n| (*n, ServingNode { prekeys: PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 3, window_s: 3600, ..Default::default() }), queues: BTreeMap::new() })).collect();
     let served_by = serving.iter().map(|(c, n)| (kh(c), *n)).collect();
     Net { s, nodes, served_by, log: Vec::new(), delivered: Vec::new() }
 }

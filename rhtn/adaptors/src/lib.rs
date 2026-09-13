@@ -20,6 +20,7 @@
 //! behind them, so that what exists is exactly what the documents say.
 
 pub mod actor;
+pub mod attached;
 pub mod courier;
 pub mod direct;
 pub mod serving;

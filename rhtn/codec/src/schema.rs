@@ -15,6 +15,8 @@ pub enum T {
     Uint,
     Bool,
     Bstr,
+    /// A non-empty byte string of at most this many bytes.
+    BstrMax(usize),
     Tstr(usize),
     Any,
     Locator,
@@ -25,6 +27,8 @@ pub enum T {
     ServingInfra,
     Referral,
     CatalogEntries,
+    /// One-time keys as deposited, opaque and bounded (`wire-format.md` §7.10).
+    OneTimeKeys,
     Envelopes,
     Keyhashes,
     CurrencyAttestation,
@@ -52,6 +56,12 @@ pub enum Family {
     CatalogQuery,
     ResourceRequest,
     ResourceRegistration,
+    /// What a client hands its serving node (`wire-format.md` §7.10).
+    PrekeyPublication,
+    OneTimeDeposit,
+    RelaySubmission,
+    WakeRegistration,
+    SubmissionReply,
     CurrencyRequest,
     ResolveReply,
     CatalogReply,
@@ -78,6 +88,13 @@ const PREKEY_BATCH_REQUEST: Fields = &[(1, true, Keyhashes), (2, true, Nonce16)]
 const CATALOG_QUERY: Fields = &[(1, false, Tstr(64)), (2, true, Nonce16)];
 const RESOURCE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Bstr)];
 const RESOURCE_REGISTRATION: Fields = &[(1, true, CatalogEntry), (2, false, Scope), (3, true, Nonce16)];
+// §7.10: what a client hands its serving node.  The bundle and the keys are
+// opaque here, as §7.8 makes them everywhere else.
+const PREKEY_PUBLICATION: Fields = &[(1, true, Bstr), (2, true, Nonce16)];
+const ONE_TIME_DEPOSIT: Fields = &[(1, true, OneTimeKeys), (2, true, Nonce16)];
+const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Bstr), (3, true, Nonce16)];
+const WAKE_REGISTRATION: Fields = &[(1, true, Nonce16), (2, false, Tstr(2048)), (3, false, BstrMax(256)), (4, false, Uint)];
+const SUBMISSION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const CURRENCY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
 const RESOLVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false, ServingInfra), (4, false, Uint), (5, false, Referral)];
 const CATALOG_REPLY: Fields = &[(1, true, Nonce16), (2, true, CatalogEntries), (3, false, Tstr(64))];
@@ -109,6 +126,11 @@ pub fn fields(f: Family) -> Option<Fields> {
         CatalogQuery => CATALOG_QUERY,
         ResourceRequest => RESOURCE_REQUEST,
         ResourceRegistration => RESOURCE_REGISTRATION,
+        PrekeyPublication => PREKEY_PUBLICATION,
+        OneTimeDeposit => ONE_TIME_DEPOSIT,
+        RelaySubmission => RELAY_SUBMISSION,
+        WakeRegistration => WAKE_REGISTRATION,
+        SubmissionReply => SUBMISSION_REPLY,
         CurrencyRequest => CURRENCY_REQUEST,
         ResolveReply => RESOLVE_REPLY,
         CatalogReply => CATALOG_REPLY,
@@ -251,6 +273,10 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         Bstr => {
             bs(b, &v).ok_or(Error("not bstr"))?;
         }
+        BstrMax(max) => match bs(b, &v).map(|s| s.len()) {
+            Some(n) if n >= 1 && n <= max => {}
+            _ => return Err(Error("bstr shape")),
+        },
         Tstr(max) => match v {
              Item::Text(ref r) if !r.is_empty() && r.len() <= max => {}
             _ => return Err(Error("tstr shape")),
@@ -301,6 +327,15 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
              let Item::Map(ref m) = v else { unreachable!() };
             if map_get(m, 3).and_then(as_uint) == Some(0) {
                 return Err(Error("referral advances nothing"));
+            }
+        }
+        OneTimeKeys => {
+            let Item::Array(ref a) = v else { return Err(Error("one-time keys not array")) };
+            if a.is_empty() || a.len() > 256 {
+                return Err(Error("a deposit is 1 to 256 keys"));
+            }
+            if !a.iter().all(|k| matches!(k, Item::Bytes(_))) {
+                return Err(Error("a one-time key is a byte string"));
             }
         }
         CatalogEntries => {
@@ -424,6 +459,25 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     }
                     if map_get(m, 4).and_then(as_uint).unwrap_or(0) > 1 {
                         return Err(Error("failure code out of range"));
+                    }
+                }
+                Family::WakeRegistration => {
+                    // a withdrawal is field 2 absent, and its key and lapse
+                    // absent with it: they describe an endpoint, and either
+                    // without one is a shape with no meaning
+                    // (`wire-format.md` §7.10)
+                    if map_get(m, 2).is_none() && (map_get(m, 3).is_some() || map_get(m, 4).is_some()) {
+                        return Err(Error("a withdrawal carries no key and no lapse"));
+                    }
+                    // an endpoint the node cannot encrypt to is one it
+                    // cannot post the body of a doorbell to
+                    if map_get(m, 2).is_some() && map_get(m, 3).is_none() {
+                        return Err(Error("an endpoint without the key its body is encrypted to"));
+                    }
+                }
+                Family::SubmissionReply => {
+                    if map_get(m, 2).and_then(as_uint).unwrap_or(9) > 2 {
+                        return Err(Error("submission code out of range"));
                     }
                 }
                 Family::TopologyPush => {

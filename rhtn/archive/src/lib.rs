@@ -20,6 +20,7 @@ pub mod locator;
 pub mod prekey;
 pub mod record;
 pub mod series;
+pub mod submission;
 pub mod topology;
 pub mod tx;
 pub mod walk;

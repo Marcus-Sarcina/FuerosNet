@@ -220,4 +220,3 @@ pub fn decode_batch_reply(b: &[u8]) -> Result<Vec<PrekeyReply>, String> {
     let parts = array_item_ranges(b, 0).ok_or("batch reply not an array")?;
     parts.into_iter().map(|r| PrekeyReply::decode(&b[r])).collect()
 }
-

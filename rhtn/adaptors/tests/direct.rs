@@ -10,8 +10,9 @@ use common::*;
 use rhtn_adaptors::actor::Handle;
 use rhtn_adaptors::courier::{Courier, Inlet};
 use rhtn_adaptors::direct::{Direct, Gate, LightDirect, NodeDirect, Reachable};
-use rhtn_adaptors::serving::{Inboxes, LocalNode, Serving};
+use rhtn_adaptors::serving::{Answer, Inboxes, LocalNode, Serving};
 use rhtn_archive::Keyhash;
+use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::{Config, Dispatched};
 use rhtn_client::payload::KIND_APPLICATION;
 use rhtn_node::runtime::LiveNode;
@@ -52,18 +53,21 @@ impl Serving for Counting {
     fn serves(&self, client: &Keyhash) -> bool {
         self.inner.serves(client)
     }
-    fn publish(&self, bytes: &[u8]) -> bool {
+    fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
         self.inner.publish(bytes)
     }
-    fn stock(&self, subject: Keyhash, keys: Vec<Vec<u8>>) {
+    fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
         self.inner.stock(subject, keys)
     }
-    fn prekey(&self, from: Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+    fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.prekey(from, body)
     }
-    fn relay(&self, from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> bool {
+    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> Answer<'a, bool> {
         self.relays.fetch_add(1, Ordering::SeqCst);
         self.inner.relay(from, to, bytes)
+    }
+    fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
+        self.inner.wake(client, endpoint)
     }
 }
 

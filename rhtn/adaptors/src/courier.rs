@@ -148,11 +148,13 @@ impl Courier {
             for m in msgs {
                 match m {
                     Msg::PublishBundle(b) => {
-                        me.serving.publish(&b);
+                        me.serving.publish(&b).await;
                     }
-                    Msg::StockOneTime(keys) => me.serving.stock(me.me(), keys),
+                    Msg::StockOneTime(keys) => {
+                        me.serving.stock(me.me(), keys).await;
+                    }
                     Msg::PrekeyRequest(b) => {
-                        if let Some(reply) = me.serving.prekey(me.me(), &b) {
+                        if let Some(reply) = me.serving.prekey(me.me(), &b).await {
                             let more = me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
                             if let Ok(more) = more {
                                 left.extend(me.carry(more).await);
@@ -164,15 +166,15 @@ impl Courier {
                         // with the sender, and the relay carries it (design
                         // §14.1.1)
                         if !me.direct.deliver(to, bytes.clone()).await {
-                            me.serving.relay(me.me(), to, bytes);
+                            me.serving.relay(me.me(), to, bytes).await;
                         }
                     }
                     Msg::Relay { to, bytes } => {
-                        me.serving.relay(me.me(), to, bytes);
+                        me.serving.relay(me.me(), to, bytes).await;
                     }
                     Msg::Transport(b) => {
                         let node = me.serving.me();
-                        me.serving.relay(me.me(), node, b);
+                        me.serving.relay(me.me(), node, b).await;
                     }
                     other => left.push(other),
                 }

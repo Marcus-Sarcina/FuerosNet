@@ -27,8 +27,10 @@ pub mod resolution;
 pub mod resources;
 pub mod runtime;
 pub mod store;
+pub mod submissions;
 pub mod trust;
 pub mod view;
+pub mod wake;
 
 pub use rhtn_archive::{Keyhash, Txid};
 

@@ -311,7 +311,8 @@ impl LiveNode {
         let verifier: Arc<Mutex<Option<LocalVerifier>>> = Arc::default();
         let hosted_verifier = verifier.clone();
         let on_request: RequestHandler = Arc::new(move |peer, family, body| {
-            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) = (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone(), hosted_verifier.clone());
+            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) =
+                (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone(), hosted_verifier.clone());
             Box::pin(async move {
                 // over the requester's allowance the stream fails, and nothing
                 // about the request is kept
@@ -368,6 +369,28 @@ impl LiveNode {
                         let me = view.me();
                         let table = view.table.clone_for(me);
                         Some(view.resources.serve(&me, &table, &peer, &body).encode())
+                    }
+                    // the four things a client hands the node serving it
+                    // (`wire-format.md` §7.10).  Each is about the peer that
+                    // sent it, so the authenticated requester is the subject,
+                    // the pool's owner, the submitter and the endpoint's
+                    // holder, and none of the four can name another party
+                    Family::PrekeyPublication => {
+                        let mut view = v.lock().unwrap();
+                        let i = ids_for_requests.lock().unwrap();
+                        crate::submissions::publication(&mut view, &i, &peer, &body)
+                    }
+                    Family::OneTimeDeposit => {
+                        let mut view = v.lock().unwrap();
+                        crate::submissions::deposit(&mut view, &peer, &body)
+                    }
+                    Family::RelaySubmission => {
+                        let node = s.lock().unwrap().clone();
+                        crate::submissions::relay(node.as_ref(), &peer, &body)
+                    }
+                    Family::WakeRegistration => {
+                        let mut view = v.lock().unwrap();
+                        crate::submissions::wake(&mut view, &peer, &body)
                     }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;

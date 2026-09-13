@@ -9360,3 +9360,19 @@ request table is explicit everywhere else, and a kind tag inside a body is the
 sender-supplied discriminator §10.1 refuses for pushes. None is read-only, so
 §9.2 excludes all four from early data. `infra-client-requirements.md` §6.1 and
 `light-client-requirements.md` §4.1 carry the two sides of the obligation.
+
+### 2026-09-13 (what the node hands the recipient, now that it composes it)
+
+**`wire-format.md` §7.10 gains `RelayedPayload`.** A node taking a relay
+submission composes what the recipient later collects, so the shape stopped
+being one implementation's private business the moment the submission became a
+message. It is the submitter's keyhash in front of the ciphertext, and the
+section says what that name is worth: a routing hint that tells a recipient
+which of its peers' material to try, never an attribution, since it is the
+node's assertion rather than the sender's.
+
+**An endpoint arrives with its key**, stated alongside the rule that a
+withdrawal carries neither. The two are the same rule read in both directions:
+the body is encrypted to the key before it is posted, so an endpoint without
+one is an endpoint nothing can be sent to, and a key without an endpoint
+describes nothing.

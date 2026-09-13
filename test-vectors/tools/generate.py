@@ -2439,6 +2439,29 @@ r_cur = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
 r_cur_no = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
                   (e_uint(2), e_uint(1))])
 
+# §7.10: the four a client hands the node serving it.  Every one is about
+# the client that sends it, so none of them names a subject, an owner or a
+# sender: the node takes that from the session.
+f_pub = frame(9, e_map([(e_uint(1), prekey),
+                        (e_uint(2), e_bstr(NONCE(b'publication')))]))
+otks = [H(b'rhtn-test-vectors:one-time-deposit:' + bytes([i])) for i in range(3)]
+f_dep = frame(10, e_map([(e_uint(1), e_arr([e_bstr(k) for k in otks])),
+                         (e_uint(2), e_bstr(NONCE(b'deposit')))]))
+f_relay = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                           (e_uint(2), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))),
+                           (e_uint(3), e_bstr(NONCE(b'relay')))]))
+f_wake = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake'))),
+                          (e_uint(2), e_tstr('https://push.example/rhtn/a3f9')),
+                          (e_uint(3), e_bstr(H(b'rhtn-test-vectors:wake-endpoint-key'))),
+                          (e_uint(4), e_uint(1_800_090_000))]))
+# a withdrawal: field 2 absent, and 3 and 4 absent with it
+f_wake_off = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-withdraw')))]))
+r_sub = e_map([(e_uint(1), e_bstr(NONCE(b'publication'))), (e_uint(2), e_uint(0))])
+r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'deposit'))), (e_uint(2), e_uint(2))])
+# what the node then delivers for a relay submission: the submitter in
+# front of the ciphertext, an array and not a map
+relayed = e_arr([e_bstr(alice.keyhash), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))])
+
 _msg_pairs = [
     ('Attach (frame 1) — carrying the currency attestation and two capability parameters, one greased', f_attach),
     ('AttachAck (frame 2) — primary mode, one sibling with full KeyMaterial, heartbeat 300 s', f_ack),
@@ -2457,6 +2480,11 @@ _msg_pairs = [
     ('ResourceRequest (request 6) — an HTTP/1.1 GET inside the frame', f_rr),
     ('ResourceRegistration (request 7) — the signed catalog entry, requested scope absent', f_reg),
     ('CurrencyRequest (request 8)', f_cur),
+    ('PrekeyPublication (request 9) — the subject\'s own bundle, published by the subject', f_pub),
+    ('OneTimeDeposit (request 10) — three keys, opaque to the node', f_dep),
+    ('RelaySubmission (request 11) — ciphertext for carol, which this node cannot read', f_relay),
+    ('WakeRegistration (request 12) — endpoint, its key, and when the client expects it to lapse', f_wake),
+    ('WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it', f_wake_off),
 ]
 def hkdf_sha256(ikm, info, length=32):
     prk = hmac.new(b'\x00' * 32, ikm, hashlib.sha256).digest()  # empty salt
@@ -2496,6 +2524,8 @@ _reply_pairs = [
     ('CurrencyReply — attestation follows', r_cur),
     ('CurrencyReply — 1 cannot issue', r_cur_no),
     ('ResourceRegistrationReply — 0 recorded', r_reg),
+    ('SubmissionReply — 0 accepted, echoing the publication\'s nonce', r_sub),
+    ('SubmissionReply — 2 over a bound this node applies, echoing the deposit\'s nonce', r_sub_bound),
 ]
 _e2e_pairs = [
     ('KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record\'s first query', kg),
@@ -2540,11 +2570,25 @@ are byte-identical to their fixtures in `records.md` and `transactions.md`.
 
 ## Requests (bidirectional streams)
 
-{chr(10).join(_msg_md[8:17])}
+{chr(10).join(_msg_md[8:22])}
+
+## What the node delivers for a relay submission
+
+`wire-format.md` §7.10's `RelayedPayload`: the submitter's keyhash in front of
+the ciphertext, composed by the node that took the submission and not by
+either end. The name is a routing hint — it tells a recipient which peer's
+material to try — and never an attribution, which the material the message
+opens under decides.
+
+**RelayedPayload — alice's submission as carol collects it** ({len(relayed)} bytes):
+
+```
+{hexblock(relayed)}
+```
 
 ## Replies
 
-{chr(10).join(_msg_md[17:29])}
+{chr(10).join(_msg_md[22:36])}
 
 ## End-to-end payloads
 
@@ -2552,7 +2596,7 @@ Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
 request/reply stream. Their on-channel framing and type discrimination are the
 open demultiplexing decision; the bytes below are the objects alone.
 
-{chr(10).join(_msg_md[29:])}
+{chr(10).join(_msg_md[36:])}
 
 ## Session traces (canonical bar 9's trace class)
 
@@ -2634,6 +2678,7 @@ for fid, by, kind in [
     ('P-abuse', abuse, 'AbuseReport'), ('P-anchor', anchor, 'AnchorEntry'),
     ('P-subtree-ack', ack, 'SubtreeAck'), ('P-prekey', prekey, 'PrekeyBundle'),
     ('P-verification-query', rec_query, 'VerificationQuery'),
+    ('P-relayed', relayed, 'RelayedPayload'),
 ]:
     reg(fid, 'bytes', ACC(kind), by)
 for i, (cap, by) in enumerate(_msg_pairs):
