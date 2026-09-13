@@ -8493,5 +8493,59 @@
   "then": "Nothing is gathered, nothing is dialled, and the connection the peer opens is closed before anything on it is read. Neither node reports the other reachable.",
   "oracle": "behaviour",
   "interpretation": "The gather already asked; the dial and the accept ask the same question, because candidates arrive from the peer and a peer's willingness to connect is not this node's permission."
+ },
+ {
+  "id": "DMN-03",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Rebuild the routing view from the records a restart finds, and verify your own signature without being told your own key",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "wire-format.md §3.4"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "**Keep the topology store across a restart — it is your seen-set.**"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Remove a child on departure or disavowal. A stale entry refers requesters to a node that will not answer for that path."
+   }
+  ],
+  "given": "A daemon that accepted an adoption of a child it countersigned, holds the child in a routing slot, and has persisted. Its peers file names the other signers and not the daemon itself.",
+  "when": "It is stopped and started again from those bytes.",
+  "then": "The adoption verifies without the peers file naming this node, the table holds the binding, and the child occupies the slot it did before. Resubmitting the record is a duplicate and changes nothing.",
+  "oracle": "behaviour",
+  "interpretation": "The store is the seen-set and not the view: the table, the slots and this node's own position are derived from the records it holds. A node that has been adopted takes the position its patron countersigned rather than assuming it is a root."
+ },
+ {
+  "id": "DMN-04",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Spend a one-time key on disk before its reply goes out, so no stop can bring it back",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.8",
+   "infra-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "**Consume one-time keys on serving them**"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "**Only the one-time key is consumed on serving.** The reusable material may be returned any number of times to anyone."
+   }
+  ],
+  "given": "A node whose pool holds one one-time key, kept in a directory, with no snapshot taken after the key is served.",
+  "when": "The key is served and the node's memory is then lost, and a node is started again from the bytes on disk.",
+  "then": "The pool is empty and the key is not served a second time. A key whose file cannot be removed is not served at all, and the reusable material alone is answered.",
+  "oracle": "behaviour",
+  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. Rate-limit counters remain snapshot-based, which a crash can reset; the window bounds that and a write per request does not earn its cost."
  }
 ]

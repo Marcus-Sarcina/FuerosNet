@@ -32,9 +32,23 @@ impl Default for PrekeyConfig {
 pub struct PrekeyService {
     pub cfg: PrekeyConfig,
     bundles: BTreeMap<Keyhash, Vec<u8>>,
-    pools: BTreeMap<Keyhash, VecDeque<Vec<u8>>>,
+    /// Each key under the name it is kept at, so serving one can unlink it.
+    pools: BTreeMap<Keyhash, VecDeque<(String, Vec<u8>)>>,
     issued: BTreeMap<(Keyhash, Keyhash), (u64, u32)>,
     exhausted: Vec<Keyhash>,
+    /// Where the pools are kept, once an owner has said.
+    ///
+    /// **A one-time key is spent on disk before its reply goes out.** It
+    /// is served once and never again (`wire-format.md` §7.8), and a
+    /// snapshot taken later cannot carry that: a stop between snapshots
+    /// would bring a served key back, and a second initiator would be
+    /// handed material whose private half was already consumed.  Absent,
+    /// nothing is written and the pools live in memory alone, which is
+    /// what a harness wants.
+    dir: Option<std::path::PathBuf>,
+    /// The next name to keep a key under.  Names only have to be distinct
+    /// and to sort in the order the keys were stocked.
+    seq: u64,
 }
 
 impl PrekeyService {
@@ -49,13 +63,32 @@ impl PrekeyService {
         if !b.verify(ids)? {
             return Err("bundle signature fails".into());
         }
+        // written through where the service is kept, for the same reason
+        // the keys are: what is held and what is stored never differ, and
+        // a pool whose bundle is missing is a subject a restart drops
+        if let Some(dir) = &self.dir {
+            let d = dir.join("prekeys").join(hex(&b.subject));
+            std::fs::create_dir_all(&d).and_then(|_| std::fs::write(d.join("bundle"), bytes)).map_err(|e| e.to_string())?;
+        }
         self.bundles.insert(b.subject, bytes.to_vec());
         Ok(b.subject)
     }
 
-    /// Add one-time keys to a subject's pool, as uploaded.
+    /// Add one-time keys to a subject's pool, as uploaded.  Where the
+    /// service is kept on disk each is written as it arrives, so what is
+    /// held and what is stored never differ.
     pub fn stock(&mut self, subject: Keyhash, keys: Vec<Vec<u8>>) {
-        self.pools.entry(subject).or_default().extend(keys);
+        for k in keys {
+            let name = format!("otk-{:012}", self.seq);
+            self.seq += 1;
+            if let Some(dir) = &self.dir {
+                let d = dir.join("prekeys").join(hex(&subject));
+                if std::fs::create_dir_all(&d).and_then(|_| std::fs::write(d.join(&name), &k)).is_err() {
+                    continue;
+                }
+            }
+            self.pools.entry(subject).or_default().push_back((name, k));
+        }
     }
 
     pub fn bundle(&self, subject: &Keyhash) -> Option<&Vec<u8>> {
@@ -104,15 +137,35 @@ impl PrekeyService {
         if e.1 >= self.cfg.one_time_per_requester_per_subject {
             return reply;
         }
-        if let Some(pool) = self.pools.get_mut(subject)
-            && let Some(key) = pool.pop_front() {
-                e.1 += 1;
-                reply.one_time = Some(key);
-                if pool.is_empty() {
-                    self.exhausted.push(*subject);
-                }
+        let taken = self.pools.get_mut(subject).and_then(|p| p.pop_front());
+        if let Some((name, key)) = taken {
+            // spent on disk first: a key whose file cannot be removed is
+            // not served at all, since serving it would leave it able to
+            // come back
+            if !self.forget(subject, &name) {
+                self.pools.entry(*subject).or_default().push_front((name, key));
+                return reply;
             }
+            let e = self.issued.entry((*requester, *subject)).or_insert((now, 0));
+            e.1 += 1;
+            reply.one_time = Some(key);
+            if self.pools.get(subject).is_none_or(|p| p.is_empty()) {
+                self.exhausted.push(*subject);
+            }
+        }
         reply
+    }
+
+    /// Unlink the key kept under `name`, where this service is kept on
+    /// disk.  Whether it is gone: a service with no directory has nothing
+    /// to remove and nothing can resurrect it.
+    fn forget(&self, subject: &Keyhash, name: &str) -> bool {
+        let Some(dir) = &self.dir else { return true };
+        let p = dir.join("prekeys").join(hex(subject)).join(name);
+        match std::fs::remove_file(&p) {
+            Ok(()) => true,
+            Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+        }
     }
 
     /// The subjects whose pools were drained since last asked: what this
@@ -128,22 +181,40 @@ impl PrekeyService {
         self.issued.retain(|_, (opened, _)| now.saturating_sub(*opened) < w);
     }
 
-    /// Persist the bundles and pools, and nothing else: no requester and
-    /// no request is written (`infra-client-requirements.md` §6).
+    /// Persist the bundles and whatever pool material is not yet on disk,
+    /// and nothing else: no requester and no request is written
+    /// (`infra-client-requirements.md` §6).
+    ///
+    /// **It does not rewrite the tree.** A key served since the last call
+    /// was unlinked as it was served, and wiping the directory to write a
+    /// snapshot would put it back.  Every write here is of something still
+    /// held.
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
         let root = dir.join("prekeys");
-        if root.exists() {
-            std::fs::remove_dir_all(&root)?;
-        }
         for (subject, bundle) in &self.bundles {
             let d = root.join(hex(subject));
             std::fs::create_dir_all(&d)?;
             std::fs::write(d.join("bundle"), bundle)?;
-            for (i, k) in self.pools.get(subject).map(|p| p.iter().collect::<Vec<_>>()).unwrap_or_default().iter().enumerate() {
-                std::fs::write(d.join(format!("otk-{i:06}")), k)?;
+        }
+        for (subject, pool) in &self.pools {
+            let d = root.join(hex(subject));
+            std::fs::create_dir_all(&d)?;
+            for (name, k) in pool {
+                if !d.join(name).exists() {
+                    std::fs::write(d.join(name), k)?;
+                }
             }
         }
         Ok(())
+    }
+
+    /// The service kept at `dir`: what is there is loaded, and from here
+    /// on a key is written as it is stocked and unlinked as it is served.
+    /// A directory that does not exist yet is an empty service kept there.
+    pub fn at(dir: &std::path::Path, cfg: PrekeyConfig) -> std::io::Result<PrekeyService> {
+        let mut s = PrekeyService::load(dir, cfg)?;
+        s.dir = Some(dir.to_path_buf());
+        Ok(s)
     }
 
     pub fn load(dir: &std::path::Path, cfg: PrekeyConfig) -> std::io::Result<PrekeyService> {
@@ -165,7 +236,15 @@ impl PrekeyService {
                 }
             }
             keys.sort();
-            s.pools.insert(b.subject, keys.into_iter().map(|(_, k)| k).collect());
+            // names carry the order the keys were stocked in, and the
+            // counter resumes past the highest so a new key never takes a
+            // name a served one had
+            for (name, _) in &keys {
+                if let Some(n) = name.strip_prefix("otk-").and_then(|n| n.parse::<u64>().ok()) {
+                    s.seq = s.seq.max(n + 1);
+                }
+            }
+            s.pools.insert(b.subject, keys.into_iter().collect());
         }
         Ok(s)
     }

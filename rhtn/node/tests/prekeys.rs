@@ -217,3 +217,39 @@ fn a_bundle_is_stored_and_served_without_its_blob_being_read() {
     assert!(svc.publish(&ids(), &renamed).is_err());
     assert_eq!(svc.bundle(&kh("alice")), Some(&bundle));
 }
+
+// acceptance: DMN-04
+#[test]
+fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
+    let dir = std::env::temp_dir().join(format!("rhtn-otk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let key = {
+        // a service kept at the directory, holding one key
+        let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+        s.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+        s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]);
+        assert_eq!(s.pool_size(&kh("alice")), 1);
+        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [1; 16] }.encode();
+        let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
+        let key = r.one_time.expect("served");
+        assert_eq!(s.pool_size(&kh("alice")), 0, "gone from memory");
+        // and the memory is lost here, with no save after the reply
+        key
+    };
+    // started again from the bytes on disk alone
+    let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+    assert_eq!(s.pool_size(&kh("alice")), 0, "the served key did not come back");
+    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [2; 16] }.encode();
+    let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
+    assert!(r.bundle.is_some(), "the reusable material is still served");
+    assert!(r.one_time.is_none(), "and no one-time key is served a second time");
+    assert_ne!(r.one_time.as_deref(), Some(&key[..]));
+    // a service with no directory keeps its pool in memory as before
+    let mut m = PrekeyService::new(PrekeyConfig::default());
+    m.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+    m.stock(kh("alice"), vec![b"in memory".to_vec()]);
+    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [3; 16] }.encode();
+    assert!(PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap()).unwrap().one_time.is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
