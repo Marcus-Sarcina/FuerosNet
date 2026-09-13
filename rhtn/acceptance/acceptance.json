@@ -8654,7 +8654,7 @@
   "id": "DMN-08",
   "area": "daemon",
   "gap": "daemon",
-  "title": "A restart puts back this node's own chain and the series its relationship is now in",
+  "title": "A restart puts back this node's own chain from the archive it keeps, and the series its relationship is now in",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -8674,9 +8674,9 @@
   ],
   "given": "A node that has signed and stored a record of its own, and whose relationship a stored patron-countersigned reissue has moved into a later series.",
   "when": "It is stopped and started again from those bytes.",
-  "then": "Its next back-pointer names the record it signed rather than genesis, so the next record it signs extends the chain it published. Its own locator carries the series the reissue entered, not the one it left. A record whose predecessor the store no longer holds is left out of the chain and counted, rather than appended over the gap.",
+  "then": "Its next back-pointer names the record it signed rather than genesis, so the next record it signs extends the chain it published. Its own locator carries the series the reissue entered, not the one it left.",
   "oracle": "behaviour",
-  "interpretation": "The bytes surviving is not the chain surviving: a store kept without the archive derived from it gives a next back-pointer of genesis, and the next record opens a second chain beside the published one while every record is still on disk."
+  "interpretation": "A key's own archive is not its topology store and is not derived from one [author, 2026-09-13]: the store is a seen-set the horizon bounds, and the archive is the key's own signed history from its first transaction, which nothing prunes. They are persisted apart."
  },
  {
   "id": "DMN-09",

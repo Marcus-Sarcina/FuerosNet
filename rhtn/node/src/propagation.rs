@@ -41,18 +41,18 @@ pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
 
 /// `TopologyPush` (`wire-format.md` §10.1): the body-kind tag and the object
 /// byte-for-byte.  That is the only wrapper field permitted.
-/// What a rebuild put back (`infra-client-requirements.md` §4.3), for an
-/// operator who is owed the difference between an empty store and one
-/// whose records could not all be chained.
+/// What a rebuild put back (`infra-client-requirements.md` §4.3): the
+/// table, the routing slots and this node's own position, derived from
+/// the records the store holds.
+///
+/// **This key's own archive is not among them** [author, 2026-09-13].
+/// The store is a seen-set the horizon bounds; the archive is the key's
+/// own signed history, which nothing prunes, so it is state of its own
+/// and is kept and restored as such.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rebuilt {
     /// Transactions the store held.
     pub records: usize,
-    /// Records back in this node's own archive.
-    pub archived: usize,
-    /// Records this node signed whose predecessor the store no longer
-    /// holds, and which are therefore not in the chain.
-    pub unchained: usize,
 }
 
 pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
@@ -354,37 +354,8 @@ impl NodeView {
         for bytes in &records {
             self.apply_stored(bytes, ids);
         }
-        let unchained = self.rebuild_own_archive(&records);
         self.adopt_own_position();
-        Rebuilt { records: records.len(), archived: self.archive.len(), unchained }
-    }
-
-    /// Put back into this node's own archive every stored record it
-    /// signed, oldest first.
-    ///
-    /// **The bytes surviving is not the chain surviving.** A restart that
-    /// kept the store and left the archive empty derives its next
-    /// back-pointer from genesis, so the next record this node signs opens
-    /// a second chain beside the one it already published, and §3.1's
-    /// continuity is broken while every record is still on disk.
-    ///
-    /// Returns the records that could not be appended.  A predecessor the
-    /// store never held, its subject having fallen outside the horizon, is
-    /// not fetchable from here; the record is left out rather than
-    /// appended over a gap, and the caller is told how many.
-    fn rebuild_own_archive(&mut self, records: &[Vec<u8>]) -> usize {
-        let me = self.me();
-        let mut unchained = 0;
-        for bytes in records {
-            let Ok(rec) = Record::parse(bytes) else { continue };
-            if !rec.signers.contains(&me) {
-                continue;
-            }
-            if self.archive.append(rec).is_err() {
-                unchained += 1;
-            }
-        }
-        unchained
+        Rebuilt { records: records.len() }
     }
 
     /// Take this node's own position from the binding the table settled on,

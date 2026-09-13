@@ -63,6 +63,14 @@ pub struct Config {
     /// node that forgets it replays a forwarding wave
     /// (`infra-client-requirements.md` §4.3).
     pub topology: PathBuf,
+    /// Where this node's own archive is kept.
+    ///
+    /// **Not the topology store, and not derived from it** [author,
+    /// 2026-09-13].  The store holds what this node accepted about others
+    /// and its horizon bounds it; the archive is this key's own signed
+    /// history from its first transaction, which no horizon bounds
+    /// (design §10, `wire-format.md` §3.1).
+    pub archive: PathBuf,
 }
 
 /// Why a configuration was refused: the line it was on, and what was wrong
@@ -138,8 +146,8 @@ impl Config {
         // an unknown key is a refusal, not something to ignore: a
         // misspelled one would otherwise take a value the operator meant
         // to set
-        const KEYS: [&str; 10] =
-            ["identity", "listen", "upstream", "queue", "queue-cap", "heartbeat", "ingestion", "allowance", "prekeys", "topology"];
+        const KEYS: [&str; 11] =
+            ["identity", "listen", "upstream", "queue", "queue-cap", "heartbeat", "ingestion", "allowance", "prekeys", "topology", "archive"];
         if let Some((k, _, n)) = seen.iter().find(|(k, _, _)| !KEYS.contains(&k.as_str())) {
             return Err(at(*n, format!("`{k}` is not a configuration key")));
         }
@@ -150,6 +158,7 @@ impl Config {
         let (queue, _) = need("queue")?;
         let (prekeys, _) = need("prekeys")?;
         let (topology, _) = need("topology")?;
+        let (archive, _) = need("archive")?;
 
         let upstream = match take("upstream") {
             None => None,
@@ -205,6 +214,7 @@ impl Config {
             request_allowance: (count, window),
             prekeys: PathBuf::from(prekeys),
             topology: PathBuf::from(topology),
+            archive: PathBuf::from(archive),
         })
     }
 }

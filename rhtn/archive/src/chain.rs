@@ -140,6 +140,57 @@ impl Archive {
         if self.heads.is_empty() { vec![genesis(&self.key)] } else { self.heads.iter().copied().collect() }
     }
 
+    /// Write this archive to `dir`: one file per record, named by its
+    /// txid, and nothing else.
+    ///
+    /// **A key's own archive is not its topology store.** The store is a
+    /// seen-set of what a node accepted about others and is bounded by its
+    /// horizon; the archive is this key's own signed history from its
+    /// first transaction, which nothing prunes and no horizon bounds
+    /// (design §10, `wire-format.md` §3.1).  Deriving one from the other
+    /// loses whatever the horizon excluded, so they are kept apart.
+    ///
+    /// The heads are not written: they are where the back-pointers do not
+    /// reach, and `load` recomputes them from the records themselves.
+    pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
+        let root = dir.join("archive");
+        std::fs::create_dir_all(&root)?;
+        for (txid, rec) in &self.records {
+            let p = root.join(hex(txid));
+            if !p.exists() {
+                std::fs::write(p, &rec.bytes)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Read an archive for `key` from `dir`, or an empty one where nothing
+    /// is there yet.
+    ///
+    /// Records are appended oldest first, so each finds the predecessors
+    /// its back-pointers name and the heads come out where the chain ends.
+    /// A file that does not parse, or that this key did not sign, is not
+    /// this archive's and is left alone.
+    pub fn load(dir: &std::path::Path, key: Keyhash) -> std::io::Result<Archive> {
+        let mut a = Archive::new(key);
+        let root = dir.join("archive");
+        let Ok(rd) = std::fs::read_dir(&root) else { return Ok(a) };
+        let mut records: Vec<Record> = Vec::new();
+        for e in rd.flatten() {
+            if let Ok(bytes) = std::fs::read(e.path())
+                && let Ok(rec) = Record::parse(&bytes)
+                && rec.signers.contains(&key)
+            {
+                records.push(rec);
+            }
+        }
+        records.sort_by_key(|r| (r.effective, r.txid));
+        for rec in records {
+            let _ = a.append(rec);
+        }
+        Ok(a)
+    }
+
     pub fn heads(&self) -> Vec<Txid> {
         self.heads.iter().copied().collect()
     }
@@ -351,4 +402,8 @@ impl Fetch for Archive {
     fn fetch(&self, txid: &Txid) -> Option<Vec<u8>> {
         self.records.get(txid).map(|r| r.bytes.clone())
     }
+}
+
+fn hex(b: &[u8; 32]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }

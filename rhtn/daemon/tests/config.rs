@@ -11,6 +11,7 @@ listen = 127.0.0.1:7431
 queue = /var/lib/rhtn/queue
 prekeys = /var/lib/rhtn/prekeys
 topology = /var/lib/rhtn/topology
+archive = /var/lib/rhtn/archive
 heartbeat = 30
 ingestion = unverified-gossip
 allowance = 120/60
@@ -27,7 +28,7 @@ fn a_complete_configuration_reads_and_a_missing_key_has_no_default() {
     assert_eq!(c.queue_cap, None, "absent is uncapped");
     // every required key is required: none of them has a default, because a
     // default here is a policy choice made by omission
-    for key in ["identity", "listen", "queue", "prekeys", "topology", "heartbeat", "ingestion", "allowance"] {
+    for key in ["identity", "listen", "queue", "prekeys", "topology", "archive", "heartbeat", "ingestion", "allowance"] {
         let without: String = GOOD.lines().filter(|l| !l.starts_with(key)).collect::<Vec<_>>().join("\n");
         let e = Config::parse(&without).unwrap_err();
         assert!(e.what.contains(key) && e.what.contains("no default"), "{key}: {e}");
@@ -38,9 +39,9 @@ fn a_complete_configuration_reads_and_a_missing_key_has_no_default() {
 fn an_unknown_or_repeated_key_is_refused_naming_its_line() {
     let e = Config::parse(&format!("{GOOD}listne = 127.0.0.1:1\n")).unwrap_err();
     assert!(e.what.contains("listne") && e.what.contains("not a configuration key"), "{e}");
-    assert_eq!(e.line, 10, "the line it was on");
+    assert_eq!(e.line, 11, "the line it was on");
     let e = Config::parse(&format!("{GOOD}heartbeat = 60\n")).unwrap_err();
-    assert!(e.what.contains("already set on line 7"), "{e}");
+    assert!(e.what.contains("already set on line 8"), "{e}");
     let e = Config::parse(&format!("{GOOD}nonsense\n")).unwrap_err();
     assert!(e.what.contains("not `key = value`"), "{e}");
 }

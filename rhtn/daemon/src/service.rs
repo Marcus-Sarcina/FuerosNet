@@ -113,6 +113,7 @@ pub struct Service {
     /// shutdown writes them to the same places startup read them from.
     prekeys: std::path::PathBuf,
     topology: std::path::PathBuf,
+    archive: std::path::PathBuf,
     /// Whether this node runs a backend of its own for any resource, which
     /// is what an operator is told (`infra-client-requirements.md` §10.6).
     /// No resource is bound from a configuration yet, so it is false until
@@ -162,19 +163,20 @@ impl Service {
         std::fs::create_dir_all(&cfg.queue).map_err(|e| Startup::State(format!("{}: {e}", cfg.queue.display())))?;
         let queue = Arc::new(rhtn_node::queue::DirStore::new(&cfg.queue));
 
+        let archive = rhtn_archive::chain::Archive::load(&cfg.archive, me.public.keyhash)
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.archive.display())))?;
+
         let mut view = NodeView::new(me.clone(), position_of(&me.public.keyhash));
         view.store = store;
         view.prekeys = prekeys;
+        // this key's own signed history, kept apart from the seen-set: the
+        // horizon bounds one and nothing bounds the other [author,
+        // 2026-09-13]
+        view.archive = archive;
         // the store holds records; the table, the slots and this node's own
         // position are derived from them, and a restart that loaded one
         // without the others would hold relationships it could not route on
-        let rebuilt = view.rebuild_from_store(&known);
-        if rebuilt.unchained > 0 {
-            eprintln!(
-                "rhtnd: {} of this node's own records could not be chained: the store no longer holds a predecessor",
-                rebuilt.unchained
-            );
-        }
+        view.rebuild_from_store(&known);
         if let Some((patron, _)) = &cfg.upstream {
             view.serving_node = Some(*patron);
         }
@@ -209,7 +211,7 @@ impl Service {
                 }
             }
         };
-        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), hosts_resources: false, _upstream: upstream })
+        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), archive: cfg.archive.clone(), hosts_resources: false, _upstream: upstream })
     }
 
     /// What this node's configuration exposes the identities below it to
@@ -242,6 +244,7 @@ impl Service {
     pub fn persist(&self) -> Result<(), std::io::Error> {
         let view = self.node.view.lock().unwrap();
         view.prekeys.save(&self.prekeys)?;
+        view.archive.save(&self.archive)?;
         view.store.save(&self.topology)
     }
 
