@@ -7,6 +7,7 @@
 
 use crate::config::Config;
 use rhtn_archive::Keyhash;
+use rhtn_archive::topology::{Restored, Snapshot};
 use rhtn_crypto::{Identity, SigningIdentity};
 use rhtn_node::prekeys::{PrekeyConfig, PrekeyService};
 use rhtn_node::resolution::AnchorTable;
@@ -18,6 +19,10 @@ use rhtn_transport::tls::Pins;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
+
+/// The derived view, kept in the topology directory beside the records it
+/// is a fold of.  A store copied without it simply replays.
+const DERIVED: &str = "derived";
 
 /// Why a daemon would not start.  Every one of these is reported and none
 /// is worked around: a node that repairs its own configuration serves
@@ -175,8 +180,18 @@ impl Service {
         view.archive = archive;
         // the store holds records; the table, the slots and this node's own
         // position are derived from them, and a restart that loaded one
-        // without the others would hold relationships it could not route on
-        view.rebuild_from_store(&known);
+        // without the others would hold relationships it could not route on.
+        // The derived state is written out beside the store, so a wake
+        // folds in what arrived since rather than replaying the history
+        // [author, 2026-09-13]; a snapshot that cannot account for what the
+        // store holds is discarded and the whole fold runs
+        let snap = std::fs::read(cfg.topology.join(DERIVED)).ok().and_then(|b| Snapshot::decode(&b));
+        match view.restore_materialised(snap.as_ref(), &known) {
+            Restored::Replayed { replayed } if snap.is_some() => {
+                eprintln!("rhtnd: the derived state did not match the store; replayed {replayed} records");
+            }
+            _ => {}
+        }
         if let Some((patron, _)) = &cfg.upstream {
             view.serving_node = Some(*patron);
         }
@@ -245,7 +260,12 @@ impl Service {
         let view = self.node.view.lock().unwrap();
         view.prekeys.save(&self.prekeys)?;
         view.archive.save(&self.archive)?;
-        view.store.save(&self.topology)
+        view.store.save(&self.topology)?;
+        // the derived state last, so it is never newer than the store it
+        // claims to be a fold of: a snapshot ahead of its store would be
+        // discarded on the next start, which costs a replay, while a
+        // snapshot behind is exactly the case the watermark handles
+        std::fs::write(self.topology.join(DERIVED), view.materialise().encode())
     }
 
     /// Serve until signalled, then stop.

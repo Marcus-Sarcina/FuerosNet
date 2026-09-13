@@ -8941,5 +8941,59 @@
   "then": "Each reply is a two-field map whose field 1 is the nonce of the request that drew it and whose field 2 is one of 0, 1 and 2; no reply carries any other field.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "DMN-11",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A wake folds in what arrived since, rather than replaying the store",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §15.1.1",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "the whole transaction history must not be replayed on every wake"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Store the fold's result with a watermark that says which records produced it."
+   }
+  ],
+  "given": "A node has run, accepted a set of topology records, and written its store and its derived view.",
+  "when": "It is stopped, further records are added to its store, and it is started again.",
+  "then": "The table, the routing slots and the node's own position are what a full replay of the whole store would produce, and only the records above the derived view's watermark went through the fold.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-12",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A derived view that cannot account for the store is discarded whole",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §15.1.1",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "A materialised copy carries enough to say whether it is still current, and is discarded whole when it cannot."
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Discard a derived view that cannot account for your store, and replay."
+   }
+  ],
+  "given": "A node with a written store and a written derived view.",
+  "when": "The derived view is damaged, or a record is added to the store that sorts at or below the view's watermark, and the node is started.",
+  "then": "The view is discarded, the whole store is replayed, and the resulting table and slots equal what a node with no derived view at all would hold.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

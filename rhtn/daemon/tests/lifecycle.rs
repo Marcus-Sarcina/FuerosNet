@@ -256,7 +256,7 @@ async fn a_restart_rebuilds_the_routing_view_and_verifies_this_nodes_own_signatu
 }
 
 fn ids() -> Vec<rhtn_crypto::Identity> {
-    ["bob", "carol", "witness"].iter().map(|n| test_identity(n).public).collect()
+    ["bob", "carol", "w1", "witness"].iter().map(|n| test_identity(n).public).collect()
 }
 
 /// A disavowal by `patron` of `node`, on `back`, as that patron signs it.
@@ -300,5 +300,136 @@ async fn a_restart_puts_back_this_nodes_own_chain_and_its_current_series() {
     assert_eq!(view.archive.next_back_pointers(), vec![signed], "the next record extends the published chain, not genesis");
     assert_ne!(view.archive.next_back_pointers(), vec![rhtn_archive::genesis(&kh("bob"))]);
     drop(view);
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+/// A view for bob with the store loaded and nothing derived yet: what a
+/// materialised copy has to agree with.
+fn bare(cfg: &rhtn_daemon::config::Config) -> rhtn_node::view::NodeView {
+    let me = std::sync::Arc::new(test_identity("bob"));
+    let mut view = rhtn_node::view::NodeView::new(me.clone(), rhtn_archive::tx::Locator { anchor: me.public.keyhash, path: Vec::new(), nibbles: 0, seqno: rhtn_archive::tx::Seqno { series: 1, counter: 0 } });
+    view.store = rhtn_node::store::TopologyStore::load(&cfg.topology).expect("the store reads");
+    view
+}
+
+/// The routing slots as a view holds them: the number and who is in it.
+type Slots = Vec<(u64, Option<[u8; 32]>)>;
+
+/// The table and the slots a full replay of the whole store produces.
+fn replayed(cfg: &rhtn_daemon::config::Config) -> (Vec<[u8; 32]>, Slots) {
+    let mut view = bare(cfg);
+    view.rebuild_from_store(&ids());
+    let subs = view.table.subordinates(&kh("bob")).into_iter().collect();
+    let slots = view.slots.iter().map(|(n, s)| (*n, s.occupant)).collect();
+    (subs, slots)
+}
+
+// acceptance: DMN-11
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_wake_folds_in_what_arrived_since_rather_than_replaying_the_store() {
+    use rhtn_archive::topology::{Restored, Snapshot};
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::{Decision, KIND_TRANSACTION};
+    let l = layout("materialise");
+    std::fs::write(&l.peers, ["carol", "w1", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under("bob", "carol");
+    // one adoption accepted, then written out with the derived view beside
+    // the store
+    {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        view.store.keep_presence(rhtn_archive::record::Record::parse(&pop).unwrap().txid, pop.clone());
+        let me = view.me();
+        assert_eq!(view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption, &ids()), Decision::Stored);
+        drop(view);
+        s.persist().expect("persists");
+    }
+    let before = std::fs::read(cfg.topology.join("derived")).expect("the derived view is written");
+    let snap = Snapshot::decode(&before).expect("and it reads");
+    assert_eq!(snap.records, 1, "one transaction folded in");
+    // a second adoption is added to the store without the derived view
+    // being told: it sorts above the watermark, so a wake folds it alone
+    let (pop2, adoption2) = adoption_under("bob", "w1");
+    {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+        let mut view = s.node.view.lock().unwrap();
+        view.store.keep_presence(rhtn_archive::record::Record::parse(&pop2).unwrap().txid, pop2.clone());
+        let me = view.me();
+        assert_eq!(view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption2, &ids()), Decision::Stored);
+        drop(view);
+        s.persist().expect("persists");
+    }
+    // started once more: the second record is the only one folded, and the
+    // view is what a full replay would have produced
+    let s = Service::start(&cfg, &l.peers).await.expect("starts a third time");
+    let view = s.node.view.lock().unwrap();
+    let held: Vec<[u8; 32]> = view.table.subordinates(&kh("bob")).into_iter().collect();
+    let slots: Slots = view.slots.iter().map(|(n, sl)| (*n, sl.occupant)).collect();
+    drop(view);
+    let (subs, replay_slots) = replayed(&cfg);
+    assert_eq!(held, subs, "the same table a replay produces");
+    assert_eq!(slots, replay_slots, "and the same slots");
+    assert!(held.contains(&kh("carol")) && held.contains(&kh("w1")), "both bindings, one from the fold and one from the snapshot");
+    // and the fold, run against the snapshot the second stop wrote, touches
+    // nothing: the snapshot already accounts for the whole store
+    {
+        let snap = Snapshot::decode(&std::fs::read(cfg.topology.join("derived")).unwrap()).unwrap();
+        assert_eq!(snap.records, 2);
+        let mut fresh = bare(&cfg);
+        assert_eq!(fresh.restore_materialised(Some(&snap), &ids()), Restored::Current, "nothing replayed and nothing folded");
+        assert_eq!(fresh.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), subs);
+    }
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-12
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
+    use rhtn_archive::topology::{Restored, Snapshot};
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::{Decision, KIND_TRANSACTION};
+    let l = layout("mismatch");
+    std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under("bob", "carol");
+    {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        view.store.keep_presence(rhtn_archive::record::Record::parse(&pop).unwrap().txid, pop.clone());
+        let me = view.me();
+        assert_eq!(view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption, &ids()), Decision::Stored);
+        drop(view);
+        s.persist().expect("persists");
+    }
+    let good = Snapshot::decode(&std::fs::read(cfg.topology.join("derived")).unwrap()).unwrap();
+    let expected: Vec<[u8; 32]> = replayed(&cfg).0;
+    let fresh = || bare(&cfg);
+    // a view whose table bytes do not read
+    let damaged = Snapshot { table: b"not a table".to_vec(), ..good.clone() };
+    let mut v = fresh();
+    assert_eq!(v.restore_materialised(Some(&damaged), &ids()), Restored::Replayed { replayed: 1 });
+    assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected, "the same answer a replay gives");
+    // a view claiming more records than the store holds
+    let overclaiming = Snapshot { records: 9, ..good.clone() };
+    let mut v = fresh();
+    assert_eq!(v.restore_materialised(Some(&overclaiming), &ids()), Restored::Replayed { replayed: 1 });
+    assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected);
+    // a watermark above everything the store holds, so the record the view
+    // does not claim to have folded sorts below it and cannot be counted
+    let ahead = Snapshot { records: 0, high: Some((u64::MAX, [0xff; 32])), ..good.clone() };
+    let mut v = fresh();
+    assert_eq!(v.restore_materialised(Some(&ahead), &ids()), Restored::Replayed { replayed: 1 });
+    assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected);
+    // and no view at all
+    let mut v = fresh();
+    assert_eq!(v.restore_materialised(None, &ids()), Restored::Replayed { replayed: 1 });
+    assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected);
+    // the good one, for contrast: taken, and nothing replayed
+    let mut v = fresh();
+    assert_eq!(v.restore_materialised(Some(&good), &ids()), Restored::Current);
+    assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected);
     let _ = std::fs::remove_dir_all(&l.dir);
 }

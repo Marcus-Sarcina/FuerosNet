@@ -9376,3 +9376,21 @@ withdrawal carries neither. The two are the same rule read in both directions:
 the body is encrypted to the key before it is posted, so an endpoint without
 one is an endpoint nothing can be sent to, and a key without an endpoint
 describes nothing.
+
+### 2026-09-13 (the derived view is stored as derived)
+
+**design §15.1.1 is new**: what a participant keeps of its own horizon. Three
+rulings sit in it, all the author's. A participant persists enough to resolve
+every node in its horizon directly, for the two jobs it cannot ask anyone
+else — routing around a patron that is not answering, and calculating trust
+distance. The version its patron infrastructure propagates is always the system
+of record, so a local copy is a cache and never a second authority. And the
+copy is materialised rather than recomputed: **the whole transaction history
+must not be replayed on every wake**.
+
+**A materialised copy carries a watermark and is discarded whole when that
+watermark cannot account for the records it claims to be a fold of.** It is a
+cache of a pure function of a record set, so the failure that matters is
+noticing that the set has moved; the cost of a stale copy is then the work it
+was meant to save, never a wrong answer. `infra-client-requirements.md` §4.3
+and `light-client-requirements.md` §4.2 carry the two sides.

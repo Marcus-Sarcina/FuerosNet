@@ -5717,6 +5717,37 @@ natural one usually is. **But it also means *h* is now the most over-loaded
 parameter in the design**, and a change to it for one reason silently moves seven
 other things. Anyone proposing to tune *h* should be shown this table.
 
+#### 15.1.1 What a participant keeps of its own horizon
+
+**A participant holds enough of its horizon to resolve every node in it
+directly** [author, 2026-09-13], for two jobs it must do without asking anyone:
+route around a patron that is not answering, and calculate trust distance. Routing
+around an unavailable patron is the case that settles it: a participant that had
+to ask its patron for the region's shape could not do that job at the one moment
+it is needed.
+
+**The propagated version is always the system of record** [author]. What a
+participant keeps is a copy of what its patron infrastructure provided, and on
+any disagreement the propagated version wins and the local copy is rewritten.
+That is what keeps §15.1's "no shared trust state" true while a copy exists:
+this is not a second authority, it is one party's cache of another's
+propagation, and it is never presented as more than that.
+
+**The copy is materialised, not recomputed** [author]. The derived shape is a
+function of the transactions a participant has accepted, and recomputing it
+means replaying all of them; **the whole transaction history must not be
+replayed on every wake** [author]. A light client woken by a doorbell (§14.1.5)
+is the case that names the cost, and it is the same fold on a node that
+restarts. So the derived state is stored as derived state, beside the
+transactions it came from.
+
+**A materialised copy carries enough to say whether it is still current**, and
+is discarded whole when it cannot. It is a cache of a pure function of a record
+set, so the honest failure is to notice that the record set has moved and run
+the fold: the cost of a stale or damaged copy is then the work it was meant to
+save, and never a wrong answer. Nothing here fixes how the copy or its
+watermark is encoded, which is local storage and no counterparty's business.
+
 ### 15.2 The rootward memo
 
 **Full transactions flood within the horizon; a minified memo of every membership

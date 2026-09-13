@@ -6,6 +6,8 @@ use crate::record::{Record, SigStatus};
 use crate::tx::*;
 use crate::walk::Fetch;
 use crate::{Keyhash, Txid};
+use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
+use rhtn_codec::encode::*;
 use rhtn_crypto::SigningIdentity;
 use rhtn_crypto::verify::{self, Lookup};
 use std::cmp::Ordering;
@@ -672,4 +674,396 @@ pub fn initial_trust(known: &BTreeSet<Keyhash>, subject: &Keyhash, records: &[Re
         }
     }
     out
+}
+
+// ----------------------------------------------- the table, materialised
+
+/// The derived table written out, so a party that wakes need not replay
+/// the transactions that produced it.
+///
+/// **The store stays the system of record.** This is a cache of a pure
+/// function of it, carrying enough to say whether it is still that
+/// function's value: the number of records folded in and the highest
+/// `(effective, txid)` among them, which is the order [`Table::apply`] is
+/// fed in.  A snapshot that cannot account for what the store holds is
+/// discarded and the replay runs, so the worst a stale or damaged one
+/// costs is the work it was meant to save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Snapshot {
+    pub records: u64,
+    pub high: Option<(u64, Txid)>,
+    pub table: Vec<u8>,
+}
+
+/// What a restore did, which a caller reports rather than assumes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Restored {
+    /// The snapshot was the store's value: nothing was replayed.
+    Current,
+    /// The snapshot was behind and `folded` later records brought it up.
+    Extended { folded: usize },
+    /// No usable snapshot, or one the store had moved under: `replayed`
+    /// records went through `apply` from nothing.
+    Replayed { replayed: usize },
+}
+
+/// Whether `(effective, txid)` sorts after everything a snapshot folded in.
+///
+/// A record at or below the high-water is one the snapshot either already
+/// holds or should have: either way this side cannot tell which, and the
+/// answer is to replay rather than to guess.
+pub fn above(high: &Option<(u64, Txid)>, at: (u64, Txid)) -> bool {
+    match high {
+        None => true,
+        Some(h) => at > *h,
+    }
+}
+
+impl Snapshot {
+    /// The bytes as they go to disk.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        emit_uint(&mut out, self.records);
+        emit_uint(&mut out, 2);
+        match &self.high {
+            Some((t, id)) => {
+                emit_array_head(&mut out, 2);
+                emit_uint(&mut out, *t);
+                emit_bstr(&mut out, id);
+            }
+            None => emit_array_head(&mut out, 0),
+        }
+        emit_uint(&mut out, 3);
+        emit_bstr(&mut out, &self.table);
+        out
+    }
+
+    pub fn decode(b: &[u8]) -> Option<Snapshot> {
+        let item = parse_all(b).ok()?;
+        let Item::Map(m) = &item else { return None };
+        let records = map_get(m, 1).and_then(as_uint)?;
+        let high = match map_get(m, 2)? {
+            Item::Array(a) if a.is_empty() => None,
+            Item::Array(a) => match a.as_slice() {
+                [Item::Uint(t), Item::Bytes(r)] => Some((*t, b[r.clone()].try_into().ok()?)),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        let Item::Bytes(r) = map_get(m, 3)? else { return None };
+        Some(Snapshot { records, high, table: b[r.clone()].to_vec() })
+    }
+}
+
+fn emit_kh_set(out: &mut Vec<u8>, s: &BTreeSet<Keyhash>) {
+    emit_array_head(out, s.len());
+    for k in s {
+        emit_bstr(out, k);
+    }
+}
+
+fn emit_txid_set(out: &mut Vec<u8>, s: &BTreeSet<Txid>) {
+    emit_array_head(out, s.len());
+    for k in s {
+        emit_bstr(out, k);
+    }
+}
+
+fn bytes_of(b: &[u8], it: &Item) -> Option<Vec<u8>> {
+    match it {
+        Item::Bytes(r) => Some(b[r.clone()].to_vec()),
+        _ => None,
+    }
+}
+
+fn kh_of(b: &[u8], it: &Item) -> Option<Keyhash> {
+    bytes_of(b, it)?.try_into().ok()
+}
+
+fn kh_list(b: &[u8], it: &Item) -> Option<Vec<Keyhash>> {
+    let Item::Array(a) = it else { return None };
+    a.iter().map(|x| kh_of(b, x)).collect()
+}
+
+fn uint_of(it: &Item) -> Option<u64> {
+    as_uint(it)
+}
+
+impl Table {
+    /// Write the derived state out.  **Not the records**: what is here is
+    /// what replaying them produced, and the records themselves are the
+    /// store's business.
+    ///
+    /// The acknowledgement policy and the recovery preference are not
+    /// written.  Both are the operator's standing choices rather than
+    /// derived state, and a party that read its own policy back out of a
+    /// cache would be taking last run's decision for this run's.
+    pub fn materialise(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 10);
+
+        emit_uint(&mut out, 1);
+        match &self.me {
+            Some(k) => emit_bstr(&mut out, k),
+            None => emit_bstr(&mut out, &[]),
+        }
+
+        emit_uint(&mut out, 2);
+        emit_array_head(&mut out, self.bindings.len());
+        for b in &self.bindings {
+            emit_array_head(&mut out, 8);
+            emit_bstr(&mut out, &b.node);
+            emit_bstr(&mut out, &b.patron);
+            emit_uint(&mut out, b.series as u64);
+            emit_bstr(&mut out, &b.adoption);
+            emit_uint(&mut out, b.from);
+            match &b.end {
+                None => emit_array_head(&mut out, 0),
+                Some((txid, at, end)) => {
+                    emit_array_head(&mut out, 4);
+                    emit_bstr(&mut out, txid);
+                    emit_uint(&mut out, *at);
+                    match end {
+                        End::Departure => {
+                            emit_uint(&mut out, 0);
+                            emit_array_head(&mut out, 0);
+                        }
+                        End::Disavowal(code) => {
+                            emit_uint(&mut out, 1);
+                            match code {
+                                Some(c) => {
+                                    emit_array_head(&mut out, 1);
+                                    emit_uint(&mut out, *c);
+                                }
+                                None => emit_array_head(&mut out, 0),
+                            }
+                        }
+                        End::Superseded(k) => {
+                            emit_uint(&mut out, 2);
+                            emit_array_head(&mut out, 1);
+                            emit_bstr(&mut out, k);
+                        }
+                    }
+                }
+            }
+            match &b.anchor {
+                Some(a) => emit_bstr(&mut out, a),
+                None => emit_bstr(&mut out, &[]),
+            }
+            emit_uint(&mut out, matches!(b.evidence, EvidenceStatus::Satisfied) as u64);
+        }
+
+        emit_uint(&mut out, 3);
+        emit_kh_set(&mut out, &self.nodes);
+        emit_uint(&mut out, 4);
+        emit_txid_set(&mut out, &self.held);
+
+        emit_uint(&mut out, 5);
+        emit_array_head(&mut out, self.acks.len());
+        for a in &self.acks {
+            emit_array_head(&mut out, 4);
+            emit_bstr(&mut out, &a.adoption);
+            emit_bstr(&mut out, &a.grandpatron);
+            emit_bstr(&mut out, &a.node);
+            emit_bstr(&mut out, &a.bytes);
+        }
+
+        emit_uint(&mut out, 6);
+        emit_kh_set(&mut out, &self.infra);
+
+        emit_uint(&mut out, 7);
+        emit_array_head(&mut out, self.attached.len());
+        for (client, patrons) in &self.attached {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, client);
+            emit_array_head(&mut out, patrons.len());
+            for p in patrons {
+                emit_bstr(&mut out, p);
+            }
+        }
+
+        emit_uint(&mut out, 8);
+        emit_array_head(&mut out, self.lineage.len());
+        for (prior, succs) in &self.lineage {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, prior);
+            emit_array_head(&mut out, succs.len());
+            for (s, p) in succs {
+                emit_array_head(&mut out, 2);
+                emit_bstr(&mut out, s);
+                emit_bstr(&mut out, p);
+            }
+        }
+
+        // what arrived out of order and is still waiting for the record it
+        // refers to: dropping these would silently un-end a relationship a
+        // disavowal already closed
+        emit_uint(&mut out, 9);
+        emit_array_head(&mut out, self.pending_disavowals.len() + self.pending_departures.len());
+        for (p, n, at, txid, code) in &self.pending_disavowals {
+            emit_array_head(&mut out, 6);
+            emit_uint(&mut out, 0);
+            emit_bstr(&mut out, p);
+            emit_bstr(&mut out, n);
+            emit_uint(&mut out, *at);
+            emit_bstr(&mut out, txid);
+            match code {
+                Some(c) => {
+                    emit_array_head(&mut out, 1);
+                    emit_uint(&mut out, *c);
+                }
+                None => emit_array_head(&mut out, 0),
+            }
+        }
+        for (n, p, series, txid, at) in &self.pending_departures {
+            emit_array_head(&mut out, 6);
+            emit_uint(&mut out, 1);
+            emit_bstr(&mut out, n);
+            emit_bstr(&mut out, p);
+            emit_uint(&mut out, *at);
+            emit_bstr(&mut out, txid);
+            emit_array_head(&mut out, 1);
+            emit_uint(&mut out, *series as u64);
+        }
+
+        emit_uint(&mut out, 10);
+        emit_array_head(&mut out, self.pending_reissues.len());
+        for (n, p, left, entered) in &self.pending_reissues {
+            emit_array_head(&mut out, 4);
+            emit_bstr(&mut out, n);
+            emit_bstr(&mut out, p);
+            emit_uint(&mut out, *left as u64);
+            emit_uint(&mut out, *entered as u64);
+        }
+
+        out
+    }
+
+    /// Read a materialised table back.  Nothing here is trusted for its
+    /// content — the bytes are this party's own — but a shape that does
+    /// not read is discarded whole rather than read part-way, since a
+    /// table missing half its bindings is worse than no table at all.
+    pub fn from_materialised(b: &[u8]) -> Option<Table> {
+        let item = parse_all(b).ok()?;
+        let Item::Map(m) = &item else { return None };
+        let mut t = Table::new();
+
+        let me = bytes_of(b, map_get(m, 1)?)?;
+        t.me = (!me.is_empty()).then(|| me.try_into().ok()).flatten();
+
+        let Item::Array(bindings) = map_get(m, 2)? else { return None };
+        for row in bindings {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 8 {
+                return None;
+            }
+            let end = match &f[5] {
+                Item::Array(e) if e.is_empty() => None,
+                Item::Array(e) if e.len() == 4 => {
+                    let txid: Txid = kh_of(b, &e[0])?;
+                    let at = uint_of(&e[1])?;
+                    let Item::Array(arg) = &e[3] else { return None };
+                    let kind = match (uint_of(&e[2])?, arg.as_slice()) {
+                        (0, []) => End::Departure,
+                        (1, []) => End::Disavowal(None),
+                        (1, [c]) => End::Disavowal(Some(uint_of(c)?)),
+                        (2, [k]) => End::Superseded(kh_of(b, k)?),
+                        _ => return None,
+                    };
+                    Some((txid, at, kind))
+                }
+                _ => return None,
+            };
+            let anchor = bytes_of(b, &f[6])?;
+            t.bindings.push(Binding {
+                node: kh_of(b, &f[0])?,
+                patron: kh_of(b, &f[1])?,
+                series: uint_of(&f[2])?.try_into().ok()?,
+                adoption: kh_of(b, &f[3])?,
+                from: uint_of(&f[4])?,
+                end,
+                anchor: (!anchor.is_empty()).then(|| anchor.try_into().ok()).flatten(),
+                evidence: if uint_of(&f[7])? == 1 { EvidenceStatus::Satisfied } else { EvidenceStatus::Unevaluated },
+            });
+        }
+
+        t.nodes = kh_list(b, map_get(m, 3)?)?.into_iter().collect();
+        t.held = kh_list(b, map_get(m, 4)?)?.into_iter().collect();
+
+        let Item::Array(acks) = map_get(m, 5)? else { return None };
+        for row in acks {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 4 {
+                return None;
+            }
+            t.acks.push(Ack { adoption: kh_of(b, &f[0])?, grandpatron: kh_of(b, &f[1])?, node: kh_of(b, &f[2])?, bytes: bytes_of(b, &f[3])? });
+        }
+
+        t.infra = kh_list(b, map_get(m, 6)?)?.into_iter().collect();
+
+        let Item::Array(attached) = map_get(m, 7)? else { return None };
+        for row in attached {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 2 {
+                return None;
+            }
+            t.attached.insert(kh_of(b, &f[0])?, kh_list(b, &f[1])?);
+        }
+
+        let Item::Array(lineage) = map_get(m, 8)? else { return None };
+        for row in lineage {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 2 {
+                return None;
+            }
+            let Item::Array(succs) = &f[1] else { return None };
+            let mut out = Vec::with_capacity(succs.len());
+            for s in succs {
+                let Item::Array(pair) = s else { return None };
+                if pair.len() != 2 {
+                    return None;
+                }
+                out.push((kh_of(b, &pair[0])?, kh_of(b, &pair[1])?));
+            }
+            t.lineage.insert(kh_of(b, &f[0])?, out);
+        }
+
+        let Item::Array(pending) = map_get(m, 9)? else { return None };
+        for row in pending {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 6 {
+                return None;
+            }
+            let (a, c, at, txid) = (kh_of(b, &f[1])?, kh_of(b, &f[2])?, uint_of(&f[3])?, kh_of(b, &f[4])?);
+            let Item::Array(arg) = &f[5] else { return None };
+            match uint_of(&f[0])? {
+                0 => {
+                    let code = match arg.as_slice() {
+                        [] => None,
+                        [c] => Some(uint_of(c)?),
+                        _ => return None,
+                    };
+                    t.pending_disavowals.push((a, c, at, txid, code));
+                }
+                1 => {
+                    let [s] = arg.as_slice() else { return None };
+                    t.pending_departures.push((a, c, uint_of(s)?.try_into().ok()?, txid, at));
+                }
+                _ => return None,
+            }
+        }
+
+        let Item::Array(reissues) = map_get(m, 10)? else { return None };
+        for row in reissues {
+            let Item::Array(f) = row else { return None };
+            if f.len() != 4 {
+                return None;
+            }
+            t.pending_reissues.push((kh_of(b, &f[0])?, kh_of(b, &f[1])?, uint_of(&f[2])?.try_into().ok()?, uint_of(&f[3])?.try_into().ok()?));
+        }
+
+        Some(t)
+    }
 }

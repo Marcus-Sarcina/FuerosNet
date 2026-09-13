@@ -153,6 +153,15 @@ guarantee, which is a floor rather than a ceiling.
   suppression is a property of the store rather than of a separate cache. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
+- **Keep the derived view too, and keep it beside the store** (design §15.1.1).
+  Your table, your routing slots and your own position are a fold over the
+  records you hold, and folding them again is work paid on every start. Store
+  the fold's result with a watermark that says which records produced it.
+- **Discard a derived view that cannot account for your store, and replay.** It
+  is a cache of a pure function, so the only safe response to a mismatch is the
+  whole fold — never a partial repair, and never a view kept because it is
+  probably close. Write it after the store it claims to be a fold of, so it is
+  never the newer of the two.
 
 ### 4.4 How you learn an infra child's endpoints
 

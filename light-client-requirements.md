@@ -393,6 +393,29 @@ session secrecy. The client implements them; it does not reinvent them.
 
 ---
 
+### 4.2 What you keep of your horizon
+
+- **Persist enough to resolve every node in your trust horizon directly**
+  (design §15.1.1), for routing around a patron that is not answering and for
+  calculating trust distance. The first is what settles it: the party you would
+  ask for the shape of your neighbourhood is the party that is down.
+- **Your patron's propagated version is the system of record.** What you hold
+  is a copy of what your patron infrastructure gave you; where the two differ,
+  the propagated version wins and yours is rewritten. Never present yours as
+  authority, to a user or to a counterparty.
+- **Materialise it, so a wake does not replay your transaction history**
+  (design §15.1.1). Store the derived shape as derived, with a watermark saying
+  which records produced it, and on waking fold in only what arrived since.
+- **Discard the copy whole when its watermark cannot account for what you
+  hold**, and rebuild. A cache that cannot prove it is current is one you have
+  to earn again; keeping a partial one to save the work is how a client comes
+  to route on a relationship that ended.
+- **Keep it bounded by the horizon** (design §15.1). Nodes leave it, and a copy
+  that only ever grew would hold topology about parties you no longer have a
+  reason to know anything about.
+
+---
+
 ## 5. Privacy choices the user must be able to make
 
 - **Direct versus relayed payload must be overridable**, in both directions, and

@@ -9,14 +9,14 @@
 use crate::resolution::Path;
 use crate::store::{Decision, Horizon, KIND_TRANSACTION};
 use crate::view::{NodeView, Slot};
-use crate::{Adjacency, Keyhash};
+use crate::{Adjacency, Keyhash, Txid};
 use rhtn_archive::record::Record;
-use rhtn_archive::topology::Evaluation;
+use rhtn_archive::topology::{Evaluation, Restored, Snapshot, Table, above};
 use rhtn_archive::tx::{self, Locator, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_DISAVOWAL};
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_crypto::verify::Lookup;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The horizon as it stood when an object arrived, so the borrow of the
 /// table ends before the store is touched.  The storage rule asks at h = 2
@@ -618,4 +618,115 @@ impl NodeView {
         self.archive.append(rec.clone()).ok()?;
         Some(rec)
     }
+}
+
+// ------------------------------------------ the derived view, materialised
+
+/// The derived view written out, so a node that wakes does not replay its
+/// whole store to find out where it stands.
+///
+/// **The store remains the system of record** (`infra-client-requirements.md`
+/// §4.3): everything here is a function of it, and everything here is
+/// discarded the moment it cannot be shown to still be that function's
+/// value.  What a wake saves is the fold, not the truth.
+impl NodeView {
+    /// The derived state as it goes to disk: the table, the routing slots
+    /// this node's own subordinates occupy, and the watermark that says
+    /// which store this was derived from.
+    pub fn materialise(&self) -> Snapshot {
+        let mut at: Vec<(u64, Txid)> = self.store.transactions().map(|r| (r.effective, r.txid)).collect();
+        at.sort();
+        let mut table = self.table.materialise();
+        // the slots ride with the table: they are derived by the same fold,
+        // and a restore that took one without the other would hold
+        // relationships it could not route on
+        let mut slots = Vec::new();
+        emit_map_head(&mut slots, self.slots.len());
+        for (n, s) in &self.slots {
+            emit_uint(&mut slots, *n);
+            emit_array_head(&mut slots, 2);
+            match &s.occupant {
+                Some(k) => emit_bstr(&mut slots, k),
+                None => emit_bstr(&mut slots, &[]),
+            }
+            emit_uint(&mut slots, s.timestamp);
+        }
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 2);
+        emit_bstr(&mut out, &table);
+        emit_bstr(&mut out, &slots);
+        table = out;
+        Snapshot { records: at.len() as u64, high: at.last().copied(), table }
+    }
+
+    /// Bring the derived view up to the store, replaying only what the
+    /// snapshot cannot account for.
+    ///
+    /// A snapshot is used when it parses **and** the store's records above
+    /// its watermark are exactly the ones it does not claim to have folded
+    /// in.  Anything else — a record that arrived late and sorts below the
+    /// watermark, a store that lost records, a snapshot from another
+    /// node — fails that count and the whole fold runs.  **The failure is
+    /// slow, never wrong**, which is the property that lets this be a
+    /// cache at all.
+    pub fn restore_materialised<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Restored {
+        let mut all: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
+        all.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
+        let usable = snap.and_then(|s| self.take_snapshot(s)).and_then(|later| {
+            let s = snap?;
+            let above: Vec<&Vec<u8>> = all
+                .iter()
+                .filter(|b| Record::parse(b).is_ok_and(|r| above(&s.high, (r.effective, r.txid))))
+                .collect();
+            // the count is the whole test: a record below the watermark
+            // that the snapshot never saw would leave this short
+            (above.len() as u64 + s.records == all.len() as u64).then(|| (later, above.into_iter().cloned().collect::<Vec<_>>()))
+        });
+        match usable {
+            Some((_, later)) => {
+                for bytes in &later {
+                    self.apply_stored(bytes, ids);
+                }
+                self.adopt_own_position();
+                if later.is_empty() { Restored::Current } else { Restored::Extended { folded: later.len() } }
+            }
+            None => {
+                let n = self.rebuild_from_store(ids).records;
+                Restored::Replayed { replayed: n }
+            }
+        }
+    }
+
+    /// Install a snapshot's table and slots, keeping what is this run's
+    /// rather than last run's: the recovery preference is a standing
+    /// choice the operator sets, and reading it back out of a cache would
+    /// take a decision that was not made now.
+    fn take_snapshot(&mut self, snap: &Snapshot) -> Option<()> {
+        let item = parse_all(&snap.table).ok()?;
+        let Item::Array(parts) = &item else { return None };
+        let [Item::Bytes(t), Item::Bytes(s)] = parts.as_slice() else { return None };
+        let mut table = Table::from_materialised(&snap.table[t.clone()])?;
+        let slots = read_slots(&snap.table[s.clone()])?;
+        table.prefer = self.table.prefer.take();
+        if table.me.is_none() {
+            table.me = self.table.me;
+        }
+        self.table = table;
+        self.slots = slots;
+        Some(())
+    }
+}
+
+fn read_slots(b: &[u8]) -> Option<BTreeMap<u64, Slot>> {
+    let item = parse_all(b).ok()?;
+    let Item::Map(m) = &item else { return None };
+    let mut out = BTreeMap::new();
+    for (k, v) in m {
+        let Item::Uint(n) = k else { return None };
+        let Item::Array(f) = v else { return None };
+        let [Item::Bytes(o), Item::Uint(t)] = f.as_slice() else { return None };
+        let occ = &b[o.clone()];
+        out.insert(*n, Slot { occupant: (!occ.is_empty()).then(|| occ.try_into().ok()).flatten(), timestamp: *t });
+    }
+    Some(out)
 }
