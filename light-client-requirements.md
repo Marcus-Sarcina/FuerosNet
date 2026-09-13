@@ -92,7 +92,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   subject countersigned is an unsolicited key release; treat one as malformed rather
   than opening your store.
 - **Withhold a presence record's disclosable fields by default** (design §8.1.1),
-  revealing them only on the user's instruction. Ten of the eleven exchanges that
+  revealing them only on the user's instruction. Nine of the eleven exchanges that
   receive a record need none of them, so the default is the correct one and the
   reverse would make the mechanism decorative.
 - **Tell the user what revealing location means** at the one exchange where it has a
@@ -296,7 +296,7 @@ session secrecy. The client implements them; it does not reinvent them.
   at an endpoint that is online by definition and already run over an
   authenticated transport — the `rhtn/1` session, or the service's own TLS on a
   brokered connection (design §14.2.4, `resource-requirements.md` §3).
-- **Prefetch reusable prekey material for the whole Dunbar Org as a batch request**
+- **Prefetch reusable prekey material for the whole trust horizon as a batch request**
   (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
   someone rotated — rather than intent to message. Fetching on demand instead
@@ -511,7 +511,7 @@ session secrecy. The client implements them; it does not reinvent them.
   losing access to having departed a patron (design §11.5).
 - **Do not present resources the user cannot use.** The serving node filters its
   catalog page by what the viewer holds; the client should not re-expand it.
-- **Access is gated by current membership in the resource owner's Dunbar Org**
+- **Access is gated by current membership in the resource owner's trust horizon**
   (design §11.2), so it changes without any action by the user, on joining,
   departing, or crossing a tenure boundary. The departure warning in §6 above is
   the case worth warning about, since the user is acting deliberately and the

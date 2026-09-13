@@ -9432,3 +9432,48 @@ retransmission at a time on a backoff. Nothing was ever wrong, only slow: a
 behavioural defect and not a specification question, so nothing here changes;
 `wire-format.md` §9.2's framing was always right and the socket beneath it was
 not honouring it.
+
+### 2026-09-13 (a consistency pass across the document set)
+
+**Counts that had drifted, each checkable against the thing it counts.** §1's
+twelve signing roles against a thirteen-row table that §1.1 already called
+thirteen; `query_id` as a five-entry map when it hashes six fields; the
+disclosure table's ten-of-eleven when nine of its eleven rows read *None* — the
+ten-of-eleven figure is location's alone and design §8.1.1 keeps it; the
+horizon's seventh job when §15.1's table makes prefetch scope the eighth; nine
+leaves where the encoding fixes exactly seven; two propagation patterns over
+three bullets; three honest limits over four; three adaptation paths over four.
+
+**The load-bearing one was §3.3's monotonicity rule**, which defined *effective
+time* as `finalized_at` and then, in the next clause and inside a MUST, as
+`started_at`. Both readings were in use because the rule genuinely reads one of
+each: a record's effective time is what it presents to a successor, its own
+floor is what the rule holds it to, and the asymmetry is the point — a record
+must not have *begun* before its predecessor *finished*. The two are now named
+separately and the reason is stated.
+
+**A locator is three fields.** design §12.1 described four, counting a
+signature that §12.6.1 and `wire-format.md` §2.3 both put in the `SignedLocator`
+wrapper. The rule that routing information must be authenticated by the party it
+describes survives where it belongs: the envelope supplies it inside a
+transaction, the wrapper supplies it at introduction.
+
+**Two consolidating passages asserted the opposite of what they summarise.**
+§19.1.2 said the queue's encryption question was settled nowhere, which §14.2.4
+settled and §19.5's table records; and that the metadata/content distinction had
+not been written down, which is what §14.2.1 exists to do. §19.7's item 7 still
+called push a declared degradation of the trust model, which §14.1.4 does not;
+the number is kept as a tombstone pointing at item 13.
+
+**Trust horizon is the operative term in mechanical text** (§2), and thirty-four
+instances of *Dunbar Org* in mechanical text across five documents now say so.
+The introduction, §1.1, §1.4, the glossary rows, the `dunbar` scope token and
+the two quoted policy phrases keep the theory name, which is what the glossary
+sanctions.
+
+**And a set of citations that resolved to a real but wrong section**: the
+witness-clock rule attributed to design §8.1.2 in four places when it is
+`light-client-requirements.md` §1.2; four references in chapter 11 pointing at
+§15's horizon parameters for the role table, the access gate and the resource's
+own business; the post-quantum horizon attributed to §7.1 rather than §5.1; and
+a citation to C13, withdrawn 2026-08-22, made as though it were live.

@@ -402,7 +402,7 @@ everything**, including a resource keyhash that names nothing — otherwise a st
 enumerates what you host by watching which lookups differ.
 
 **Above the patron level, membership alone does not admit.** A node adopted into
-your subtree lands inside your Dunbar Org automatically, which means **a subordinate
+your subtree lands inside your trust horizon automatically, which means **a subordinate
 can put strangers inside your gate without asking you**. Require your own
 `SubtreeAck` (`wire-format.md` §7.5) before granting such a node access to
 resources you host (design §11.2.1).
@@ -432,14 +432,14 @@ resources you host (design §11.2.1).
   let a `SubtreeAck` stand in for evidence about who someone is.
 
 
-**Current membership in the owner's Dunbar Org is a precondition for all resource
+**Current membership in the owner's trust horizon is a precondition for all resource
 access.** Every other predicate sits behind it, and no grant of any kind reaches
 outside it (`resource-requirements.md` §7.1.1). Departure therefore revokes
 everything, uniformly.
 
 ### 10.2 Hold a role table; treat predicates as a macro over it
 
-**Materialise role assignments per resource, one row per Dunbar Org member**
+**Materialise role assignments per resource, one row per member of the trust horizon**
 (design §11.4). **Authorisation at request time is a lookup**, never a predicate
 evaluation — that makes it deterministic, cheap, and readable by the operator who
 configured it. **A row carries at most 64 roles**

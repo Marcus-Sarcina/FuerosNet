@@ -45,7 +45,7 @@ Three things this buys beyond interoperability:
   itself**, which this profile must supply. RFC 9052's `Sig_structure` context
   string is `"Signature"` or `"Signature1"`, distinguishing *COSE structure types*,
   not application roles. **COSE does not give role
-  separation for free**, and this protocol has **twelve** signing roles, and will acquire more. See
+  separation for free**, and this protocol has **thirteen** signing roles, and will acquire more. See
   §1.1-§1.4 for the required profile rules.
 - **A place to put the algorithm identifier.** RFC 9052 requires `alg` to be
   authenticated but permits it either in the protected header **or as externally
@@ -102,7 +102,7 @@ and are not reused.*
 
 **Four hashes carry no tag, and their safety is structural rather than tagged**:
 `txid` (a body map, whose first key is always 0), `keyhash` (the two-element
-`KeyMaterial` array), `query_id` (a five-entry map whose first key is 1), and
+`KeyMaterial` array), `query_id` (a six-entry map whose first key is 1), and
 the genesis value (exactly 32 raw bytes, shorter than any other preimage here).
 Their preimage languages are pairwise disjoint from the first bytes, so no
 digest can be reinterpreted across roles without a SHA-256 collision. **The
@@ -203,14 +203,14 @@ malformed, not merely unusual.
 | Path length | 24 nibbles (depth 24 at f=10 exceeds any plausible network) |
 | Prekey bundle blob | 4 KB. A PQXDH bundle is an ML-KEM-768 encapsulation key (1,184 B) plus signed prekeys and their signatures — roughly 1.5–2 KB, so this is a DoS ceiling with headroom rather than a capacity figure |
 | Merge back-pointers per signer | 8 |
-| Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. A bound of 16 was unsatisfiable: two well-connected participants each require 10 |
+| Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. Sixteen does not fit: two well-connected participants require ten each |
 | Asserted locations per record | 4 |
 | Corroborations per record | 16 (one per witness) |
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
-| NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — **peering carries exactly one `NetworkPoint` per endpoint** (§4.4), and was struck from this row when the ninth vector review caught the contradiction |
+| NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` per endpoint** (§4.4) |
 | `CatalogEntry`, total encoded bytes | 2048 |
-| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the Dunbar Org population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
+| `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
 | Unknown extension value | **1024 bytes of encoded CBOR** — the complete encoded slice for the value, which is measurable for every value type and is what bounds parser work. Not the aggregate of contained byte/text content |
 | `Capabilities` map entries | 64 |
@@ -291,7 +291,7 @@ counter   = uint                   ; U32 RANGE. Monotone WITHIN one series
 ; encoding is always shortest-form deterministic CBOR.
 ```
 
-**Identities are referenced by hash, never by key** (design §8.1). An **ML-DSA-44**
+**Identities are referenced by hash, never by key** (design §5.1). An **ML-DSA-44**
 public key is ~1.3 KB and the larger parameter sets are bigger still; a hash is 32
 bytes. Full key material appears only in `KeyMaterial`
 (§2.2), transmitted on first contact and pinned thereafter.
@@ -464,7 +464,7 @@ SignedLocator = {
   3: COSE_Sign1      ; BY THE SUBJECT over canonical CBOR of fields 1-2;
                      ; external_aad = "rhtn/1:locator".
                      ; Classical only: a locator's relevance expires when the
-                     ; node next moves, so §7.1's post-quantum horizon does
+                     ; node next moves, so design §5.1's horizon does
                      ; not apply
 }
 ```
@@ -649,18 +649,31 @@ Rules a validator checks from the record alone. All were previously unstated.
 No maximum age or future tolerance applies; a decoder has no authoritative clock
 to check against and inventing one would make validity depend on the reader.
 
-**But effective time is not merely evidentiary, and MUST be monotonic against
-the committed back-pointers — for every transaction type.** A record's
-**effective time** is `finalized_at` for a presence record and the transaction
-`timestamp` (§1) for every other type. For each signer, the current record's
-effective time — `started_at` for a presence record, `timestamp` otherwise —
-MUST be greater than or equal to the effective time of **every** record its key 0
-list names, every predecessor in a merge list checked; and a presence record's
-`finalized_at` MUST be greater than or equal to its `started_at`. **A record
-violating any of these is malformed.** Stated for all types because §5.4's
-pruning and §3.2's chronology bound rely on effective time being monotonic along
-**every** verified chain — a rule binding presence records alone would let a
-non-presence transaction bridge backward through the chain and break both.
+**But time is not merely evidentiary, and MUST be monotonic against the
+committed back-pointers — for every transaction type.** A record has two times
+and the rule reads one of each:
+
+- Its **effective time**, which is what it presents to a successor, is
+  `finalized_at` for a presence record and the transaction `timestamp` (§1) for
+  every other type.
+- Its **own floor**, which is what the rule holds it to, is `started_at` for a
+  presence record and the same `timestamp` otherwise.
+
+For each signer, the current record's own floor MUST be greater than or equal
+to the **effective time** of every record its key 0 list names, every
+predecessor in a merge list checked; and a presence record's `finalized_at`
+MUST be greater than or equal to its `started_at`. **A record violating any of
+these is malformed.**
+
+**The asymmetry is the point, for presence records.** A record must not have
+*begun* before its predecessor *finished*, which is what comparing `started_at`
+against `finalized_at` says. Comparing finish against finish would admit a
+ceremony that opened while the one it names was still running.
+
+**Stated for all types** because §5.4's pruning and §3.2's chronology bound rely
+on time being monotonic along **every** verified chain — a rule binding presence
+records alone would let a non-presence transaction bridge backward through the
+chain and break both.
 
 **Without that bound, backdating collapses verification.** `started_at` determines
 the 730-day window, so *n* — and therefore the selection threshold — is computed
@@ -679,7 +692,7 @@ with no global time.
 effective time is admissible, including days in the future, so the bound closes
 backdating without licensing the claimed day: what limits an implausible
 `started_at` is a witness declining to attest a ceremony dated far from its own
-clock (design §8.1.2) — not anything checkable here. *(With deterministic
+clock (`light-client-requirements.md` §1.2) — not anything checkable here. *(With deterministic
 selection retired, there is no sample to reroll; the claimed day now decides only
 the qualification window, §5.3.)*
 
@@ -791,10 +804,10 @@ logical signer contributes **two entries**.
 **Why not a composite algorithm identifier.** Concatenating both signatures under
 one private-use `alg` would keep the entry count at one per signer, but it would
 require inventing an algorithm the COSE registry does not define, and no standard
-tooling could verify it. Two standard entries stay within RFC 9052, let each
-component be verified independently, and support §7's staged migration — a
-verifier may check the classical component for a fast path and the post-quantum
-one when the decision warrants it.
+tooling could verify it. Two standard entries stay within RFC 9052 and let each
+component be verified independently — a verifier may check the classical
+component for a fast path and the post-quantum one when the decision warrants
+it.
 
 ### 3.6 Canonicality and version
 
@@ -844,8 +857,8 @@ Scope = uint / [uint, uint] / [uint, [ + keyhash ]]
       ; 0 self | 1 down(n) | 2 up(n) | 4 siblings
       ; 5 dunbar | 6 list([keyhash])
       ; 3 is RETIRED and MUST NOT be reused. It encoded sub(n), "the subtree
-      ;   rooted n levels above the owner", which described a shape the Dunbar
-      ;   Org does not have (design §15.1); a decoder meeting tag 3 rejects
+      ;   rooted n levels above the owner", which described a shape a trust
+      ;   horizon does not have (design §15.1); a decoder meeting tag 3 rejects
       ; forms taking a depth encode as [tag, n]; list encodes as [6, [...]]
       ; the list is in ASCENDING KEYHASH ORDER WITH NO DUPLICATES, and
       ;   violating either is malformed. The list is signed, so a decoder
@@ -1014,8 +1027,7 @@ face matches some subject, without ever signing which old identity that continue
 **Structural rule**: both fields are **required**, and field 2 carries **at
 least one** response. `[+ …]` is the grammar, so an absent field 2 and a
 present-but-empty array are both malformed — the second by §1's rule that empty
-arrays are never encoded. **The optionality that once made this grammar awkward is
-gone with the lost-key variant**: there is one procedure, and it needs both halves.
+arrays are never encoded. **Neither half is optional**: there is one procedure, and it needs both.
 
 **Field 3 is a `COSE_Sign`**, not a `COSE_Sign1` — the old identity is hybrid, so it
 contributes two entries like any other logical signer (§3.5).
@@ -1183,7 +1195,7 @@ because dropping the old patron was never a network operation (design §6.2).
 
 But it has a property worth stating: when the new patron lies **inside the old
 patron's replication horizon**, it already holds the node's history through
-sibling replication (§4.4), so **no archive presentation or re-verification is
+sibling replication (design §3.4), so **no archive presentation or re-verification is
 needed and trust history is preserved**. Implementations MUST NOT force
 re-verification in this case.
 
@@ -1269,10 +1281,11 @@ about the node:
 subnet incompatible is asserting something about *that subnet*, not about the
 subordinate, who may have joined it entirely reasonably.
 
-**Codes carry inference risk beyond their text.** `32` beside a known resource and
-a revocation date reconstructs specifics the enumeration was meant to withhold
-(design §19.8, C13). The banding does not change this; it makes the *severity*
-legible without making the *particulars* so.
+**The banding makes severity legible without making particulars so.** A code
+says which band a patron placed an ending in and nothing about the reasoning
+behind it. design §19.8 tested the composition that would undo that — a code
+read beside a known resource and a revocation date — and withdrew it: the only
+party holding both halves is the disavowing patron, who already knows them.
 
 ### 4.4 Peering (type 4)
 
@@ -1706,7 +1719,7 @@ separately here.
 | Late verifier response (§7.4) | **None.** References `txid` |
 | Capture key grant (§7.3) | **None.** References `txid` |
 
-**Ten of eleven exchanges need none of it**, which is what makes the mechanism worth
+**Nine of eleven exchanges need none of it**, which is what makes the mechanism worth
 its 0.3%. **A conforming client withholds by default and reveals on the holder's
 instruction**, rather than the reverse.
 
@@ -2007,7 +2020,7 @@ queries**:
   reader's.
 - **Responses that are present count content-blind** — match, no-match,
   inconclusive, unavailable each fill a slot; content is evidence weighed by
-  policy (design §15.1), never an input to structural validity.
+  policy (design §16.1), never an input to structural validity.
 
 **There is no `pending` on the wire.** A reachable verifier that cannot
 evaluate answers `unavailable`, under its own signature; an unreachable one
@@ -2324,7 +2337,7 @@ qualifying set and the asker makes progress within it.
 mechanism.** A single answering node answers for at most **itself plus the ≤110
 users it serves** (design §11.5, design §12.6.1), so a reply that truncates comes from a
 node holding more entries of one service type than it has owners to own them. The
-bound is per *answering node* and not per horizon — a Dunbar Org is larger (design
+bound is per *answering node* and not per horizon — a trust horizon is larger (design
 §15.1), and no single node answers for all of it. **The continuation is a hint for an
 unusual case, not the normal path through a catalog.** It is also near its own
 ceiling: at 2 KB an entry, 128 maximum-sized entries no longer fit one 256 KB frame
@@ -2456,7 +2469,7 @@ make structural validity depend on the reader's topology, and a node would rejec
 object its neighbour accepts. **Store it, forward it if the forwarding rule says to,
 and grant nothing from it.**
 
-**No scope reaches outside the owner's Dunbar Org**, `list` included (design §11.4).
+**No scope reaches outside the owner's trust horizon**, `list` included (design §11.4).
 A scope naming a position outside it is not an error; it simply matches nobody the
 evaluator can see.
 
@@ -2480,7 +2493,7 @@ CurrencyAttestation = {
   7: COSE_Sign1        ; BY THE ISSUER over canonical CBOR of fields 1-6;
                        ; external_aad = "rhtn/1:currency". Classical only: an
                        ; attestation's relevance expires with it (~10 h), well
-                       ; inside §7.1's post-quantum horizon.
+                       ; inside design §5.1's post-quantum horizon.
 }
 ```
 
@@ -2602,7 +2615,7 @@ AnchorEntry = {
 }
 ```
 
-**Key hashes, not keys** (design §8.1). Full PQ keys would blow the table by ~18×.
+**Key hashes, not keys** (design §5). Full PQ keys would blow the table by ~18×.
 The table is an index, not a credential store. **Full keys are not fetched during
 resolution** — they arrive from attaching, from a transaction naming the node, or not
 at all (above).
@@ -2706,7 +2719,7 @@ SubtreeAck = {
   5: COSE_Sign1        ; BY THE GRANDPATRON over fields 1-4;
                        ; external_aad = "rhtn/1:subtree-ack".
                        ; Classical only: it lapses with the relationship it
-                       ; describes, well inside §7.1's post-quantum horizon
+                       ; describes, well inside design §5.1's horizon
 }
 ```
 
@@ -2827,7 +2840,7 @@ who the request is addressed to.
 #### 7.7.2 Descent is through infrastructure only
 
 **A path is not walked node by node.** Intermediate nodes may be light clients,
-which are neither always online nor independently reachable (§4.3, design §14.1.1).
+which are neither always online nor independently reachable (design §12.6.1).
 Resolution therefore descends **only through infra nodes**, and terminates at the
 **serving infra node** for the target, the nearest infrastructure ancestor, which
 is the node the target attaches to (design §14.1.2).
@@ -2933,7 +2946,7 @@ answer retains is denial (design §12.6.1, design §18.4).
 
 **The reply is not signed.** It conveys where to try next, and the requester
 authenticates the endpoint it reaches by ordinary means at contact time (design
-§8.1, the anchor table is an index, not a credential store). A wrong or hostile
+design §12.2, the anchor table is an index, not a credential store). A wrong or hostile
 reply causes a failed connection, not a false identity.
 
 **Failure codes** for field 4, with the disposition each implies — stated
@@ -3024,7 +3037,7 @@ reusable material alone, a **declared reduction in forward secrecy for the first
 message**, not a failure. Everything after it is covered by the ratchet.
 
 **The split exists so that blanket prefetch is affordable.** A client prefetching
-reusable material for its whole Dunbar Org (design §14.2.4) consumes nothing
+reusable material for its whole trust horizon (design §14.2.4) consumes nothing
 scarce, and **leaves one-time-key depletion meaningful as a signal.** Under
 blanket prefetch of one-time keys, exhaustion would be the normal state and an
 attacker draining a pool would be indistinguishable from ordinary traffic.
@@ -3097,14 +3110,13 @@ batch, matching the archive-reference bound it replaces.
 
 ### 7.10 What a client hands its serving node
 
-**A light client cannot do four things for itself, and until now could say
-none of them.** It cannot serve its own prekeys, hold its own mail, or be woken
-by a service it is not connected to. Each of those is an act the node it is
-already attached to performs on its behalf, and each needs a message. §6.2 gave
-the fifth member of this family, a catalog registration, its own request type
-and said why: without a message, the one act that matters would be the one
-thing an attached client cannot say, and every implementation would invent its
-own.
+**Four things a light client cannot do for itself.** It cannot publish its own
+prekey bundle, stock its own one-time pool, hold its own mail, or be woken by a
+service it is not connected to. Each is an act the node it is already attached
+to performs on its behalf, and each needs a message. §6.2 gives the fifth member
+of this family, a catalog registration, its own request type and says why:
+without a message, the one act that matters would be the one thing an attached
+client cannot say, and every implementation would invent its own.
 
 **Four request types, not one submission carrying a kind** [2026-09-13]. The
 request table is explicit for every other message and a kind tag inside a body
@@ -3480,7 +3492,7 @@ TopologyMemo = {
                        ;   only party this object speaks for
   2: Locator,          ; the patron's OWN position
   3: uint,             ; the subordinate SLOT: one nibble, 0-9, the child index
-                       ;   under field 2's path (§2.2)
+                       ;   under field 2's path (§2.1)
   4: timestamp,        ; the underlying transaction's own timestamp, copied —
                        ;   not a fresh clock reading. Orders two statements by
                        ;   THIS patron about THIS slot, and nothing else
@@ -4134,7 +4146,7 @@ requester is told.
    running, which is step 6, and not that a `CatalogEntry` was ever published, which
    is optional (design §11.5). Collapsing a stopped package into absence would answer
    code 1 where another host answers code 2 for the same deployment.
-2. **Membership** in that resource owner's Dunbar Org → code 1. Nothing further is
+2. **Membership** in that resource owner's trust horizon → code 1. Nothing further is
    evaluated or disclosed.
 3. **Subtree acknowledgement** → code 4 if absent.
 4. **The role row** → code 5 if it grants no `connect` (design §11.4). **A lookup,
@@ -4169,7 +4181,7 @@ that returns an application-level error returns it inside field 2 with code 0 �
 **the network delivered it**. Conflating the two would let an application error
 look like a gateway refusal.
 
-**A requester inside the owner's Dunbar Org gets a specific reason; one outside
+**A requester inside the owner's trust horizon gets a specific reason; one outside
 gets `refused` and nothing more.** The membership gate (design §11.2) runs first,
 so the node already knows which it is talking to.
 

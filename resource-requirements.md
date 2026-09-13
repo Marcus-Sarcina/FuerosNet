@@ -221,7 +221,7 @@ vignette.
 
 **A resource is neighbourhood-scale; a resource application can be any scale.** A
 **resource application** is the wider system your package is one instance of (design
-§11.0.1). §7.1.1 bounds a resource to its owner's Dunbar Org. **That is not a ceiling
+§11.0.1). §7.1.1 bounds a resource to its owner's trust horizon. **That is not a ceiling
 on what can be built**: a subnet-wide or cross-subnet service is **many local
 instances**, each hosted by a patron, each administering its own team, with the
 resource application handling instance-to-instance connection in its own
@@ -258,13 +258,13 @@ cannot tolerate capability-based confinement cannot be contained (§9). Acceptin
 arbitrary binaries would forfeit both properties, and they are the ones the whole
 design rests on.
 
-**Three adaptation paths, with very different costs:**
+**Four adaptation paths, with very different costs:**
 
 | Starting point | Path | Cost |
 |---|---|---|
 | **New software** | Built to the package contract directly | Lowest, the contract is the target |
 | **Existing local software** | Port: package format, role declaration, sandbox tolerance | Moderate. The sandbox is the part most likely to require changes, since it constrains filesystem and network access the software may assume |
-| **Existing SaaS** | Adaptor brokering the gateway credential to the vendor's own auth | **Potentially very low see below** |
+| **Existing SaaS** | Adaptor brokering the gateway credential to the vendor's own auth | **Potentially very low; see below** |
 | **Existing distributed system** | Homeserver or bridge (§4's gateway category) | Highest, and inherits §11's operator asymmetry |
 
 **The SaaS case is much cheaper per vendor than a bespoke integration, and this
@@ -315,7 +315,7 @@ exclusive control of a secure element.
 
 ### 5.2 The middle band: systems that resist brokered login
 
-Between the SSO case above and the rootkit case below sits a
+Between the SSO case and §5.1's rootkit case, both above, sits a
 band of systems whose **session-creation** resists brokering. These are not
 philosophical incompatibilities; they are concrete mechanisms that assume a direct
 vendor-to-user relationship.
@@ -330,8 +330,8 @@ path:**
 | Privacy from the vendor | Low, the vendor sees the user directly | High — user IPs hidden |
 | §11 exposure | Low | **High, the node becomes a content chokepoint** |
 
-**Default to brokering.** Proxying hides users from the vendor, which is
-which some operators will want, but it makes the infra node a data chokepoint — precisely what design §14.2
+**Default to brokering.** Proxying hides users from the vendor, which some
+operators will want, but it makes the infra node a data chokepoint — precisely what design §14.2
 works to prevent for payload, and it breaks the systems below.
 
 **What resists brokering specifically:**
@@ -432,7 +432,7 @@ Affordances the UI should offer:
 - All my direct clients
 - All my clients and grand-clients
 - Every node at [relative tier] with [trust above threshold]
-- All Dunbar nodes joined before [date]
+- Every node in my trust horizon that joined before [date]
 - **Named individual nodes.** See §7.1.2
 
 **Access changes without anyone acting.** A node joining the subtree gains access;
@@ -442,7 +442,7 @@ one departing loses it; one crossing a tenure boundary gains it silently. Under 
 correct.** Access follows the org chart, and it extends design §11.2's departure
 warning to a wider surface. None of it produces an event anyone sees.
 
-**Design §11.2 states the general rule**, including what happens to in-flight state
+**design §11.2 states the general rule**, including what happens to in-flight state
 when an owner moves. It is a protocol fact and belongs there; this section describes
 what an implementation does with it.
 
@@ -456,7 +456,7 @@ and roles, or it receives nothing. The distinction matters only for understandin
 why a structurally valid member may be absent.
 
 
-**Current membership in the resource owner's Dunbar Org is a precondition for all
+**Current membership in the resource owner's trust horizon is a precondition for all
 resource access.** It is not one predicate among others; it is the gate every
 other predicate sits behind. **No grant of any kind reaches outside it.**
 
@@ -478,9 +478,10 @@ Consequences, all simplifications:
   scope vocabulary topping out at `dunbar`, and it means **resources are
   neighbourhood-scale by construction**, not subnet-scale or network-scale.
 
-**Resource access eligibility is one of the horizon's jobs** (design §15.1): resource access
-eligibility. Worth adding to that table, since *h* was already the most over-loaded
-parameter in the design.
+**Resource access eligibility is one of the horizon's jobs**, and design §15.1's
+table carries it as one. That table is also the argument against tuning *h* for
+this reason alone: it is the most over-loaded parameter in the design, and a
+change made here moves seven other things.
 
 #### 7.1.2 Individual assignment within the org
 
@@ -521,7 +522,7 @@ since they are rarely thinking *0.6* and usually thinking *the people I trust mo
 #### 7.2.1 Predicate classes, and what each one depends on
 
 **A predicate is a macro, not the mechanism.** What authorises a request is a
-materialised table — one row per Dunbar Org member per resource, consulted as a
+materialised table — one row per resource per member of the trust horizon, consulted as a
 lookup (design §11.4). The predicate is how an operator writes that table quickly; it
 expands at configuration time into assignments the operator can see and adjust. The
 classes below differ in **what an assignment depends on besides the member**, which
@@ -552,7 +553,7 @@ that decides who enters the horizon (design §11.2.1) rather than on the trust m
 and those two settings are one decision rather than two.
 
 **A relative predicate also has to be re-scored across the table, not per member.**
-Design §11.4 re-evaluates when a node enters or leaves the horizon; for the classes
+design §11.4 re-evaluates when a node enters or leaves the horizon; for the classes
 above that means scoring the entrant and dropping the leaver's rows, but a quantile
 moves for *everyone* when the count changes. An implementation that scores only the
 changed member leaves rows that no longer follow the predicate — stale in both
@@ -622,7 +623,8 @@ protocol.
 
 **It also creates a trust relationship the trust model does not represent:** a
 subnet's members trust their patron's judgment about which packages to run. Nothing
-in §9 expresses that, and it is not obviously reducible to the existing metric.
+in design §16 expresses that, and it is not obviously reducible to the existing
+metric.
 
 **Declare what you need in the manifest.** Storage, compute, hardware capabilities, a
 persistent address, anything a requesting client must supply. **A node that cannot meet
