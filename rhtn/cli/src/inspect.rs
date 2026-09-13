@@ -65,7 +65,7 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
         out.push_str(&format!("kind      {kind}\n"));
         match kind {
             "envelope" => out.push_str(&envelope_lines(raw, ids)),
-            "presentation" => out.push_str(&presentation_lines(raw, ids)),
+            "presentation" => out.push_str(&format!("verdict   {}\n", verdict(verify::presentation(ids, raw)))),
             k => {
                 out.push_str(&format!("schema    {}\n", said(schema::check_kind(raw, k, &item).map_err(|e| e.0.to_string()))));
                 if is_signed_kind(k) {
@@ -102,22 +102,6 @@ fn envelope_lines<L: Lookup + ?Sized>(raw: &[u8], ids: &L) -> String {
     }
     out.push_str(&format!("verdict   {}\n", verdict(verify::envelope(ids, raw).map(|_| ()))));
     out
-}
-
-/// A presentation is `[envelope, slots]` (`wire-format.md` §4.5.1.3).
-///
-/// Its own verifier folds every reason into prose, so the envelope inside
-/// it is asked first: that one reports a key this holder lacks as such,
-/// and §3.4's distinction between unverifiable and failing is worth more
-/// than one line of output.
-fn presentation_lines<L: Lookup + ?Sized>(raw: &[u8], ids: &L) -> String {
-    let Some(inner) = rhtn_codec::cbor::array_item_ranges(raw, 0).and_then(|r| r.first().cloned()) else {
-        return "verdict   refused: a presentation is an array of two\n".into();
-    };
-    if let Err(verify::Failure::MissingKey(k)) = verify::envelope(ids, &raw[inner]) {
-        return format!("verdict   unverifiable: no key held for {}\n", hex(&k));
-    }
-    format!("verdict   {}\n", said(verify::presentation(ids, raw)))
 }
 
 /// A verdict that keeps §3.4's distinction: a key this holder lacks makes

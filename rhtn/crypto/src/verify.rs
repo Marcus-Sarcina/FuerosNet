@@ -303,7 +303,13 @@ const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention"
 /// A partial presentation (§4.5.1): the embedded envelope verified wholesale,
 /// then the seven slots' digests recomputed over the exact received
 /// encodings and checked against the body's committed root.
-pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), String> {
+///
+/// **It fails the way its siblings fail.** A key the holder lacks reaches
+/// a caller as [`Failure::MissingKey`] naming that key, because §3.4's
+/// distinction between an object that cannot be verified here and one
+/// that is wrong survives only if the type carries it: folded into prose
+/// it is a string every caller would have to match on.
+pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Failure> {
     let __outer_item = parse_all(pres).map_err(|e| format!("cbor: {e}"))?;
     let Item::Array(outer) = &__outer_item else {
         return Err("presentation not array".into());
@@ -313,7 +319,7 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Stri
     }
     let ranges = array_item_ranges(pres, 0).ok_or("walk")?;
     let env_bytes = &pres[ranges[0].clone()];
-    envelope(ids, env_bytes).map_err(|e| e.to_string())?;
+    envelope(ids, env_bytes)?;
     let Item::Array(slots) = &outer[1] else { return Err("slots not array".into()) };
     if slots.len() != 7 {
         return Err("slot count".into());

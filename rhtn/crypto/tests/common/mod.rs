@@ -107,7 +107,7 @@ pub fn decode(ids: &[Identity], id: &str, kind: &str, bytes: &[u8]) -> Result<()
             schema::check_unsigned(reply_family(id), bytes, 0).map_err(|e| e.0.into())
         }
         "envelope" => verify::envelope(ids, bytes).map(|_| ()).map_err(|e| e.to_string()),
-        "presentation" => verify::presentation(ids, bytes),
+        "presentation" => verify::presentation(ids, bytes).map_err(|e| e.to_string()),
         "body" => {
             let item = parse_all(bytes).map_err(|e| e.0)?;
             schema::check_body(bytes, &item).map_err(|e| e.0.into())

@@ -103,7 +103,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 (_, Err(err)) => Err(format!("must parse but: {err}")),
                 ("accept", Ok(item)) => match kind {
                     "envelope" => verify::envelope(&ids, &raw).map(|_| ()).map_err(|e| e.to_string()),
-                    "presentation" => verify::presentation(&ids, &raw),
+                    "presentation" => verify::presentation(&ids, &raw).map_err(|e| e.to_string()),
                     k if verified_record_kind(k) && !stale => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
                         (Err(e2), _) => Err(e2.0.into()),
                         (Ok(()), Ok(true)) => Ok(()),

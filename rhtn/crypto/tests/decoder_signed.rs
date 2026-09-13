@@ -462,3 +462,32 @@ fn dec_25_a_classical_signature_declaring_another_algorithm_is_refused() {
     let e = verify::response(&ids, &replace_value(&resp, 0, 7, &consent), false).unwrap_err().to_string();
     assert!(e.contains("consent"), "{e}");
 }
+
+// acceptance: DEC-26
+#[test]
+fn a_presentation_reports_a_key_it_lacks_the_way_its_siblings_do() {
+    // the three verifiers over signed objects report the same way: a key
+    // the holder does not have is that key's absence, named, and not a
+    // failure of the object (`wire-format.md` §3.4)
+    let pres = fixture("P-presented-minimal").bytes;
+    let held = identities();
+    assert_eq!(verify::presentation(&held, &pres), Ok(()), "it verifies under the keys it names");
+    // held by nobody: the envelope inside it names a signer, and that is
+    // what comes back
+    let none: Vec<Identity> = Vec::new();
+    match verify::presentation(&none, &pres) {
+        Err(verify::Failure::MissingKey(k)) => {
+            assert_eq!(k.len(), 32, "the keyhash of the signer that is missing");
+            // and the envelope on its own says the same about the same key
+            let outer = array_item_ranges(&pres, 0).unwrap();
+            assert!(matches!(verify::envelope(&none, &pres[outer[0].clone()]), Err(verify::Failure::MissingKey(e)) if e == k));
+        }
+        other => panic!("a missing key is not a refusal: {other:?}"),
+    }
+    // a presentation whose root does not match is invalid, which is the
+    // other arm and stays one
+    let mut broken = pres.clone();
+    let last = broken.len() - 1;
+    broken[last] ^= 1;
+    assert!(matches!(verify::presentation(&held, &broken), Err(verify::Failure::Invalid(_))));
+}
