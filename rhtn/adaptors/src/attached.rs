@@ -7,6 +7,7 @@
 //! one beside a node in the same process answers from memory; this one
 //! waits for the node to say.
 
+use crate::actor::Handle;
 use crate::serving::{Answer, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::REQUEST_PREKEY;
@@ -123,3 +124,39 @@ impl Serving for AttachedNode {
         })
     }
 }
+
+/// Carry what the serving node propagates into the client's horizon
+/// (design §15.1.1).
+///
+/// A light client learns its neighbourhood from stream 0, the same flood a
+/// node forwards (`wire-format.md` §10.1), and nothing else tells it.  The
+/// task ends when the session does, which is the same lifetime the copy's
+/// currency has: the next attach brings whatever arrived meanwhile.
+///
+/// **What is propagated wins.** Everything the client holds here is a copy
+/// of what came down this channel, so an ingest never asks whether the
+/// local copy disagreed.
+pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(u64, Vec<u8>)>) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some((frame_type, body)) = frames.recv().await {
+            // stream 0 carries memos too, and a memo is a node's routing
+            // aid rather than a client's (`wire-format.md` §10.2)
+            if frame_type != FRAME_TOPOLOGY_PUSH {
+                continue;
+            }
+            let Ok((kind, object)) = rhtn_node::propagation::decode_push(&body) else { continue };
+            if kind != rhtn_node::store::KIND_TRANSACTION {
+                continue;
+            }
+            handle
+                .with(move |c| {
+                    let known = c.known.clone();
+                    c.horizon.ingest(&object, &known);
+                })
+                .await;
+        }
+    })
+}
+
+/// `TopologyPush` (`wire-format.md` §8.2).
+pub const FRAME_TOPOLOGY_PUSH: u64 = 5;

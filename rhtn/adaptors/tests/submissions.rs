@@ -232,3 +232,47 @@ async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
     let mismatched = SubmissionReply::code([5; 16], SUBMISSION_ACCEPTED).encode();
     assert_eq!(SubmissionReply::decode(&mismatched).unwrap().nonce, [5; 16]);
 }
+
+// ------------------------------- what a serving node propagates to a client
+
+/// A record that adopts `node` under `patron`, signed by both, on a
+/// meeting between them.
+fn adoption(scene: &mut Scene, node: &str, patron: &str, path: &[u8]) -> Vec<u8> {
+    scene.adopt(node, patron, "bob", path).bytes
+}
+
+// acceptance: TOP-24
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn what_the_serving_node_floods_reaches_the_clients_horizon_and_nothing_else_does() {
+    let mut scene = Scene::new();
+    let alice = adoption(&mut scene, "alice", "bob", &[0]);
+    let carol = adoption(&mut scene, "carol", "bob", &[1]);
+    let handle = spawn_client("alice", rhtn_client::ceremony::Config::default(), rhtn_adaptors::direct::Reachable::default());
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let task = rhtn_adaptors::attached::follow(handle.clone(), rx);
+
+    // stream 0's topology push is what a client learns from
+    tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &alice))).unwrap();
+    tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &carol))).unwrap();
+    assert!(until(3000, || handle.with_blocking(|c| c.horizon.records()) == 2).await, "both records reach the horizon");
+    let placed = handle.with_blocking(|c| (c.horizon.place(&kh("carol")).cloned(), c.horizon.distance(&kh("carol"))));
+    assert_eq!(placed.0.map(|p| p.anchor), Some(kh("bob")), "carol is placed from what was flooded");
+    assert_eq!(placed.1, Some(1), "and is one edge away: a sibling under the same patron");
+
+    // a memo is a node's routing aid and not a client's, and a push
+    // carrying something other than a transaction is not topology either
+    let memo = adoption(&mut scene, "w1", "carol", &[1, 0]);
+    tx.send((6, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &memo))).unwrap();
+    tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(99, &memo))).unwrap();
+    tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, b"not a push".to_vec())).unwrap();
+    // one that is topology, to show the reader survived the three above
+    let w2 = adoption(&mut scene, "w2", "alice", &[0, 0]);
+    tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &w2))).unwrap();
+    assert!(until(3000, || handle.with_blocking(|c| c.horizon.records()) == 3).await, "the fourth is taken");
+    assert_eq!(handle.with_blocking(|c| c.horizon.distance(&kh("w1"))), None, "and the memo's record never arrived");
+    assert_eq!(handle.with_blocking(|c| c.horizon.distance(&kh("w2"))), Some(1), "the subordinate did");
+
+    // the follower ends with the session that fed it
+    drop(tx);
+    assert!(tokio::time::timeout(std::time::Duration::from_secs(3), task).await.is_ok(), "the task ends when the channel closes");
+}

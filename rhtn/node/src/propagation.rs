@@ -11,7 +11,7 @@ use crate::store::{Decision, Horizon, KIND_TRANSACTION};
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash, Txid};
 use rhtn_archive::record::Record;
-use rhtn_archive::topology::{Evaluation, Restored, Snapshot, Table, above};
+use rhtn_archive::topology::{Evaluation, Restored, Snapshot, Table, unfolded};
 use rhtn_archive::tx::{self, Locator, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_DISAVOWAL};
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
@@ -672,18 +672,13 @@ impl NodeView {
     pub fn restore_materialised<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Restored {
         let mut all: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
         all.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
-        let usable = snap.and_then(|s| self.take_snapshot(s)).and_then(|later| {
-            let s = snap?;
-            let above: Vec<&Vec<u8>> = all
-                .iter()
-                .filter(|b| Record::parse(b).is_ok_and(|r| above(&s.high, (r.effective, r.txid))))
-                .collect();
-            // the count is the whole test: a record below the watermark
-            // that the snapshot never saw would leave this short
-            (above.len() as u64 + s.records == all.len() as u64).then(|| (later, above.into_iter().cloned().collect::<Vec<_>>()))
+        let usable = snap.and_then(|s| {
+            let later = unfolded(s, &all, |b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default())?;
+            self.take_snapshot(s)?;
+            Some(later.into_iter().map(|i| all[i].clone()).collect::<Vec<_>>())
         });
         match usable {
-            Some((_, later)) => {
+            Some(later) => {
                 for bytes in &later {
                     self.apply_stored(bytes, ids);
                 }

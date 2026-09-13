@@ -6,6 +6,7 @@
 //! in-process [`Harness`] moves them and records every path they take.
 
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
+use crate::horizon::Horizon;
 use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
 use crate::payload::{self, PayloadError, PayloadState};
@@ -237,6 +238,10 @@ pub struct Client {
     pub recovery_responses: Vec<Vec<u8>>,
     /// Payload confidentiality: material, sessions and what waits.
     pub payload: PayloadState,
+    /// What this client keeps of its own horizon (design §15.1.1): a copy
+    /// of what its serving node propagated, kept so a patron that is not
+    /// answering can be routed around.
+    pub horizon: Horizon,
     active: Option<Active>,
     witnessing: Option<WitnessRequest>,
 }
@@ -267,7 +272,7 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {

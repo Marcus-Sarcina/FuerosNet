@@ -245,6 +245,35 @@ impl Table {
         seen
     }
 
+    /// How many adoption or sibling edges separate `me` from `other`,
+    /// searching no further than `h`.  Nothing where `other` is not within
+    /// `h` edges, which at `h = 2` is design §15.1's horizon.
+    ///
+    /// **The same walk that defines the region measures inside it**
+    /// (design §15.1.1), so a party's distance and its membership are one
+    /// question asked twice and cannot come back disagreeing.
+    pub fn distance(&self, me: &Keyhash, other: &Keyhash, h: usize) -> Option<usize> {
+        if me == other {
+            return Some(0);
+        }
+        let mut seen: BTreeSet<Keyhash> = BTreeSet::from([*me]);
+        let mut frontier: BTreeSet<Keyhash> = seen.clone();
+        for d in 1..=h {
+            let mut next = BTreeSet::new();
+            for x in &frontier {
+                next.extend(self.patrons(x));
+                next.extend(self.subordinates(x));
+                next.extend(self.siblings(x));
+            }
+            frontier = next.difference(&seen).copied().collect();
+            if frontier.contains(other) {
+                return Some(d);
+            }
+            seen.extend(frontier.iter().copied());
+        }
+        None
+    }
+
     /// design §15.1's h = 2: the ball a node stores topology for.
     pub fn in_h_store(&self, me: &Keyhash, x: &Keyhash) -> bool {
         self.horizon(me, 2).contains(x)
@@ -717,6 +746,20 @@ pub fn above(high: &Option<(u64, Txid)>, at: (u64, Txid)) -> bool {
         None => true,
         Some(h) => at > *h,
     }
+}
+
+/// Which of `records` a snapshot has not folded in, in the order the
+/// caller holds them, or nothing where the snapshot cannot account for the
+/// set at all.
+///
+/// **The count is the whole test** (design §15.1.1).  A record below the
+/// watermark that the snapshot never saw leaves the count short, and this
+/// side cannot tell which record that was, so the answer is to fold
+/// everything rather than to guess.  Ordering is the caller's, since it
+/// holds the records in whatever form it keeps them.
+pub fn unfolded<T>(snap: &Snapshot, records: &[T], at: impl Fn(&T) -> (u64, Txid)) -> Option<Vec<usize>> {
+    let later: Vec<usize> = (0..records.len()).filter(|i| above(&snap.high, at(&records[*i]))).collect();
+    (later.len() as u64 + snap.records == records.len() as u64).then_some(later)
 }
 
 impl Snapshot {

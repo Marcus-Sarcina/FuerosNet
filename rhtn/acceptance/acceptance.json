@@ -8995,5 +8995,113 @@
   "then": "The view is discarded, the whole store is replayed, and the resulting table and slots equal what a node with no derived view at all would hold.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TOP-21",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A client places every node in its horizon from what its patron propagated",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §15.1.1",
+   "light-client-requirements.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "A participant holds enough of its horizon to resolve every node in it directly"
+   },
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "Persist enough to resolve every node in your trust horizon directly"
+   }
+  ],
+  "given": "A light client attached to a serving node that floods it the adoptions forming a subtree around it.",
+  "when": "The client is asked where each node it holds a record for sits, and how far away each is, with its serving node unreachable. The copy is then pruned.",
+  "then": "Every node within a two-edge walk is placed from the client's own state and its distance equals the number of adoption or sibling edges to it; a node beyond the walk has no distance, and a party in no record at all has neither a place nor a distance. A prune then drops every party the horizon does not hold, and a second prune has nothing left to do.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-22",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A wake folds in what arrived since, and an unaccountable snapshot is discarded",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §15.1.1",
+   "light-client-requirements.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "A materialised copy carries enough to say whether it is still current, and is discarded whole when it cannot."
+   },
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "Discard the copy whole when its watermark cannot account for what you\n  hold"
+   }
+  ],
+  "given": "A client holding propagated records and a materialised copy of the shape they produce.",
+  "when": "It wakes with that copy, then wakes with one that is damaged, one claiming more records than it holds, and none at all.",
+  "then": "The first folds in only the records above the copy's watermark; each of the others replays every record held; and all four leave the same table and the same locators.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-23",
+  "area": "topology",
+  "gap": "topology",
+  "title": "The propagated version is the system of record, and replaces what was held",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §15.1.1",
+   "light-client-requirements.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §15.1.1",
+    "text": "The propagated version is always the system of record"
+   },
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "where the two differ,\n  the propagated version wins and yours is rewritten"
+   }
+  ],
+  "given": "A client holding a locator for a node, learned from an earlier propagation.",
+  "when": "Its serving node propagates a later record placing that node somewhere else, and then a record ending a binding the client holds.",
+  "then": "The client answers with the later locator and not the earlier, the ended binding is gone from its table, and nothing the client held before is preferred to what was propagated.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "TOP-24",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A client learns its horizon from the flood its serving node forwards",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1.1",
+   "design §15.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "your serving node, and the clients attached to you"
+   },
+   {
+    "where": "design §15.1.1",
+    "text": "What a\nparticipant keeps is a copy of what its patron infrastructure provided"
+   }
+  ],
+  "given": "A light client attached to a serving node, holding no topology.",
+  "when": "The node sends topology pushes on stream 0, interleaved with a memo, a push whose body kind is not a transaction, and a frame that is not a push at all.",
+  "then": "Every transaction carried in a topology push is in the client's horizon and placed; none of the other three is; and the client's reader is still running afterwards.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

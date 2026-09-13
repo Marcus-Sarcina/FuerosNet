@@ -40,6 +40,7 @@
 pub mod catalog;
 pub mod ceremony;
 pub mod device;
+pub mod horizon;
 pub mod keys;
 pub mod notice;
 pub mod payload;

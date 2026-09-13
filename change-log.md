@@ -9394,3 +9394,19 @@ cache of a pure function of a record set, so the failure that matters is
 noticing that the set has moved; the cost of a stale copy is then the work it
 was meant to save, never a wrong answer. `infra-client-requirements.md` §4.3
 and `light-client-requirements.md` §4.2 carry the two sides.
+
+### 2026-09-13 (a client that keeps its own horizon)
+
+**`rhtn-client` holds topology for the first time.** A light client learned
+nothing its patron propagated: nothing on the client side read stream 0. It now
+keeps the records the serving node floods it, folds them into a table of its
+own, and answers two questions from that table without asking anyone — where a
+node sits, and how many adoption or sibling edges away it is.
+
+**Where a node sits is a place, not a locator.** A resolution needs the anchor a
+path is relative to and the path (`wire-format.md` §7.7.3), and both are in
+every adoption. The series and the counter are not: they belong to the record
+that carried them, and the anchor of a subtree has no record of its own here,
+so it is placed at the empty path under itself and claims no series. That is
+what the anchor being the anchor means, and inventing a series for it would be
+claiming something nobody propagated.
