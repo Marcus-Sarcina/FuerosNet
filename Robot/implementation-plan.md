@@ -446,6 +446,21 @@ stripped at the boundary (`light-client-requirements.md` §1.3), and the
 platform's clock is the clock: a skew a shell corrected silently would move
 a witness's tolerance check without saying so (§1.2).
 
+Done in part (2026-09-13). The facade carries the value types, the
+platform's six objects inward and the client's operations outward, and a
+test drives a client through it from a shell's own hardware: the intent
+crosses as fields, the channels come back strongest first with nothing
+promoted, and every refusal is a value carrying its reason. DMN-10. The
+one piece of real work at the crossing is that a shell hands over objects
+usable from any thread while the client reaches its device through `Rc`
+and never leaves its own, so each is wrapped once inside that thread.
+
+**The exit criterion's other half waits on section 7.** No binding is
+generated, because no generator is adopted: `uniffi` is the candidate and
+the choice is the author's. Until it is made the facade is plain Rust with
+no borrow and no generic across the boundary, which is what a generator
+reads whichever one is chosen.
+
 **Milestone 14, the shells** (`mobile/android`, `mobile/ios`). Exit: PRD-01
 to PRD-05 and PRD-07 to PRD-09 are marked, which first needs
 `acceptance/tools/catalogue.py`'s walk extended to `.kt` and `.swift`. That

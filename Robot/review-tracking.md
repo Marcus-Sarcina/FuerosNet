@@ -9183,3 +9183,52 @@ against a tree whose clippy had already failed. The lint check and the
 gate were launched in one backgrounded chain, so its verdict was never
 read and the `&&` carried on past it. Clippy is checked and read before
 the gate is launched, not beside it.
+
+**A key's own archive is its own state, and milestone 13's boundary
+(2026-09-13).** Two gate-green commits before this one and fd3efdb with
+it; 310 of 320, 0 flags.
+
+**The archive ruling** (a05b361). The assistant had the daemon derive its
+archive from the topology store on restart, and recorded the resulting
+gap as a limit. The author's ruling is that the premise was wrong: **a
+key's own archive is not its topology store and is not derived from one.**
+The store is a seen-set of what a node accepted about others and its
+horizon bounds it; the archive is the key's own signed history from its
+first transaction, which nothing prunes. `Archive` gained `save` and
+`load` of its own, one file per record named by its txid, heads recomputed
+on load rather than written. The configuration names an archive directory,
+startup reads it and shutdown writes it. The rebuild from the store is now
+only what is genuinely derived: the table, the slots and the own position.
+DMN-08 was revised to the ruling rather than left describing the reading
+it replaced, and the gap it recorded is gone, nothing being derived.
+
+**Milestone 13, the boundary** (92035ba, fd3efdb). The facade carries
+value types with no borrow and no generic, the platform's six objects
+inward, and the client's operations outward. The one piece of real work is
+that a shell hands over objects usable from any thread while the client
+reaches its device through `Rc` and never leaves the thread it runs on, so
+each object is wrapped once inside that thread. Three rules are kept at
+the crossing rather than assumed: pixels come inward and nothing the
+pipeline attached comes with them, the platform's clock is the clock, and
+randomness of short measure is refused rather than padded. DMN-10.
+
+Found on the way, and fixed: **`Handle::spawn` panicked when the build
+failed**, so a platform that failed on the client's thread reached the
+caller as a dead channel. Across a language boundary that is a process
+that vanished rather than an answer, so the spawn reports it and the
+facade turns it into a refusal carrying its reason. The two other callers
+were unaffected.
+
+Two readings are the assistant's, open to reversal:
+
+- **An intent crosses as fields, not as bytes.** What two present devices
+  tell each other when a ceremony opens has no encoding any document
+  fixes, so the shell carries it however the two manage and rebuilds it on
+  the other side. Giving it a wire encoding would be inventing one.
+- **The biometric engine is not the shell's to supply.** Design §22.2
+  leaves the real one open and the reference recognises nobody, so the
+  platform object list has six members and not seven.
+
+**The exit criterion's other half waits on the author.** No binding is
+generated because no generator is adopted; section 7 lists the choice as
+his. The facade is shaped for one whichever is chosen.
