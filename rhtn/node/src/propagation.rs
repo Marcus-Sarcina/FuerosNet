@@ -41,6 +41,20 @@ pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
 
 /// `TopologyPush` (`wire-format.md` §10.1): the body-kind tag and the object
 /// byte-for-byte.  That is the only wrapper field permitted.
+/// What a rebuild put back (`infra-client-requirements.md` §4.3), for an
+/// operator who is owed the difference between an empty store and one
+/// whose records could not all be chained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rebuilt {
+    /// Transactions the store held.
+    pub records: usize,
+    /// Records back in this node's own archive.
+    pub archived: usize,
+    /// Records this node signed whose predecessor the store no longer
+    /// holds, and which are therefore not in the chain.
+    pub unchained: usize,
+}
+
 pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 2);
@@ -334,13 +348,43 @@ impl NodeView {
     /// order they were made rather than the order a map iterates.  Nothing
     /// is sent: this is the same fold `take_object` does after it has
     /// decided to store, without the forward that follows storing.
-    pub fn rebuild_from_store<L: Lookup + ?Sized>(&mut self, ids: &L) {
+    pub fn rebuild_from_store<L: Lookup + ?Sized>(&mut self, ids: &L) -> Rebuilt {
         let mut records: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
         records.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
         for bytes in &records {
             self.apply_stored(bytes, ids);
         }
+        let unchained = self.rebuild_own_archive(&records);
         self.adopt_own_position();
+        Rebuilt { records: records.len(), archived: self.archive.len(), unchained }
+    }
+
+    /// Put back into this node's own archive every stored record it
+    /// signed, oldest first.
+    ///
+    /// **The bytes surviving is not the chain surviving.** A restart that
+    /// kept the store and left the archive empty derives its next
+    /// back-pointer from genesis, so the next record this node signs opens
+    /// a second chain beside the one it already published, and §3.1's
+    /// continuity is broken while every record is still on disk.
+    ///
+    /// Returns the records that could not be appended.  A predecessor the
+    /// store never held, its subject having fallen outside the horizon, is
+    /// not fetchable from here; the record is left out rather than
+    /// appended over a gap, and the caller is told how many.
+    fn rebuild_own_archive(&mut self, records: &[Vec<u8>]) -> usize {
+        let me = self.me();
+        let mut unchained = 0;
+        for bytes in records {
+            let Ok(rec) = Record::parse(bytes) else { continue };
+            if !rec.signers.contains(&me) {
+                continue;
+            }
+            if self.archive.append(rec).is_err() {
+                unchained += 1;
+            }
+        }
+        unchained
     }
 
     /// Take this node's own position from the binding the table settled on,
@@ -352,12 +396,20 @@ impl NodeView {
     /// kept the assumption instead would serve as a root it is not.
     fn adopt_own_position(&mut self) {
         let me = self.me();
+        // the series is the binding's, not the adoption's: a reissue moved
+        // the relationship on, and publishing an endpoint record under the
+        // series it left would name a line the patron has retired
+        // (`wire-format.md` §2.3, §4.6.1)
         let mine: Vec<Locator> = self
             .table
             .bindings()
             .iter()
             .filter(|b| b.node == me && b.open())
-            .filter_map(|b| self.store.transaction(&b.adoption)?.locator())
+            .filter_map(|b| {
+                let mut loc = self.store.transaction(&b.adoption)?.locator()?;
+                loc.seqno = rhtn_archive::tx::Seqno { series: b.series, counter: loc.seqno.counter };
+                Some(loc)
+            })
             .collect();
         for loc in mine {
             if self.position.anchor == me {

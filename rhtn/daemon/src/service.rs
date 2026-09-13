@@ -168,7 +168,13 @@ impl Service {
         // the store holds records; the table, the slots and this node's own
         // position are derived from them, and a restart that loaded one
         // without the others would hold relationships it could not route on
-        view.rebuild_from_store(&known);
+        let rebuilt = view.rebuild_from_store(&known);
+        if rebuilt.unchained > 0 {
+            eprintln!(
+                "rhtnd: {} of this node's own records could not be chained: the store no longer holds a predecessor",
+                rebuilt.unchained
+            );
+        }
         if let Some((patron, _)) = &cfg.upstream {
             view.serving_node = Some(*patron);
         }

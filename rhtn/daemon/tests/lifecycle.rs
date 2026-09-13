@@ -257,3 +257,47 @@ async fn a_restart_rebuilds_the_routing_view_and_verifies_this_nodes_own_signatu
 fn ids() -> Vec<rhtn_crypto::Identity> {
     ["bob", "carol", "witness"].iter().map(|n| test_identity(n).public).collect()
 }
+
+/// A disavowal by `patron` of `node`, on `back`, as that patron signs it.
+fn disavowal(patron: &str, node: &str, back: &[[u8; 32]], t: u64) -> Vec<u8> {
+    use rhtn_archive::tx::*;
+    let body = disavowal_body(back, &kh(patron), &kh(node), t, None);
+    envelope(TYPE_DISAVOWAL, &body, &[&test_identity(patron)])
+}
+
+// acceptance: DMN-08
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_restart_puts_back_this_nodes_own_chain_and_its_current_series() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::{Decision, KIND_TRANSACTION};
+    let l = layout("continuity");
+    std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under("bob", "carol");
+    let signed = {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        let pop_id = rhtn_archive::record::Record::parse(&pop).unwrap().txid;
+        view.store.keep_presence(pop_id, pop.clone());
+        let me = view.me();
+        assert_eq!(view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption, &ids()), Decision::Stored);
+        // bob disavows carol, on the back-pointers its own archive gives
+        let back = view.archive.next_back_pointers();
+        let d = disavowal("bob", "carol", &back, 1_800_007_200);
+        assert_eq!(view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &d, &ids()), Decision::Stored);
+        view.archive.append(rhtn_archive::record::Record::parse(&d).unwrap()).expect("its own record");
+        let txid = rhtn_archive::record::Record::parse(&d).unwrap().txid;
+        assert_eq!(view.archive.next_back_pointers(), vec![txid], "the chain runs through it");
+        drop(view);
+        s.persist().expect("persists");
+        txid
+    };
+    // started again from those bytes alone
+    let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+    let view = s.node.view.lock().unwrap();
+    assert_eq!(view.archive.next_back_pointers(), vec![signed], "the next record extends the published chain, not genesis");
+    assert_ne!(view.archive.next_back_pointers(), vec![rhtn_archive::genesis(&kh("bob"))]);
+    drop(view);
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

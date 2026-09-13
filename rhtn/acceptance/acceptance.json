@@ -8649,5 +8649,33 @@
   "then": "The reissue leaves the relationship open and moves it into series 2; the departure then ends it, and the node is no longer a subordinate. A reissue arriving first is held and settles when its adoption does. A departure naming series 1 after the reissue ends nothing, and a re-adoption opening its own series is a different binding the reissue never touched.",
   "oracle": "behaviour",
   "interpretation": "The series left is what identifies the relationship a reissue advances, not the larger number: succession is proved by the countersigned chain, and a re-adoption that happens to open a higher series is a binding of its own."
+ },
+ {
+  "id": "DMN-08",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A restart puts back this node's own chain and the series its relationship is now in",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §3.1",
+   "wire-format.md §2.3",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "**Keep the topology store across a restart — it is your seen-set.**"
+   },
+   {
+    "where": "wire-format.md §3.1",
+    "text": "A signer with no prior transaction uses the genesis value"
+   }
+  ],
+  "given": "A node that has signed and stored a record of its own, and whose relationship a stored patron-countersigned reissue has moved into a later series.",
+  "when": "It is stopped and started again from those bytes.",
+  "then": "Its next back-pointer names the record it signed rather than genesis, so the next record it signs extends the chain it published. Its own locator carries the series the reissue entered, not the one it left. A record whose predecessor the store no longer holds is left out of the chain and counted, rather than appended over the gap.",
+  "oracle": "behaviour",
+  "interpretation": "The bytes surviving is not the chain surviving: a store kept without the archive derived from it gives a next back-pointer of genesis, and the next record opens a second chain beside the published one while every record is still on disk."
  }
 ]
