@@ -8439,5 +8439,59 @@
   "then": "The material is delivered once, on the first attach. The store then holds nothing for that client and the second attach delivers nothing.",
   "oracle": "behaviour",
   "interpretation": "A node serving before it has loaded its one-time pools reissues a key it already served, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session."
+ },
+ {
+  "id": "PRP-22",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "Keep a routing slot a later adoption filled when the earlier adoption it replaced arrives last",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.2",
+   "infra-client-requirements.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Remove a child on departure or disavowal. A stale entry refers requesters to a node that will not answer for that path."
+   },
+   {
+    "where": "wire-format.md §4.2",
+    "text": "counter incremented within the current series"
+   }
+  ],
+  "given": "A node receiving, in this order, the departure that ends adoption A1 of a child, then adoption A2 of the same child in a new relationship series, and then A1 itself.",
+  "when": "A1 is applied last, its own binding already ended by the departure.",
+  "then": "The table stays bound through A2 and the child's slot stays occupied. Every arrival order of the same three records leaves the same table and the same slot.",
+  "oracle": "behaviour",
+  "interpretation": "Which relationship a record changes is the table's answer and not the record's, so a row is emptied only where no open binding holds it, whichever record arrives last."
+ },
+ {
+  "id": "TRV-09",
+  "area": "traversal",
+  "gap": "traversal",
+  "title": "Refuse a direct path at an infrastructure node in both directions where the local decision refuses it",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §12.6.3",
+   "design §14.1.1"
+  ],
+  "rule": [
+   {
+    "where": "design §12.6.3",
+    "text": "The peers exchange addresses during setup and connect"
+   },
+   {
+    "where": "design §14.1.1",
+    "text": "a direct connection reveals each peer's IP (P17)"
+   }
+  ],
+  "given": "Two mutually pinned nodes with no topology relationship, so each lies outside the other's horizon, and the candidates of one supplied to the other by hand.",
+  "when": "One is asked to gather for the other, then to open on those candidates, and then the other dials it directly.",
+  "then": "Nothing is gathered, nothing is dialled, and the connection the peer opens is closed before anything on it is read. Neither node reports the other reachable.",
+  "oracle": "behaviour",
+  "interpretation": "The gather already asked; the dial and the accept ask the same question, because candidates arrive from the peer and a peer's willingness to connect is not this node's permission."
  }
 ]

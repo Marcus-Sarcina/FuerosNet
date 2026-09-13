@@ -255,8 +255,13 @@ impl NodeView {
                 let binding = self.table.bindings().iter().find(|b| b.adoption == rec.txid).cloned();
                 match binding.as_ref().and_then(|b| b.end.as_ref()) {
                     None => self.set_slot(slot, Some(node), rec.time),
+                    // This adoption's own binding has ended, and a later
+                    // one may hold the slot: an ended binding cannot empty
+                    // a row a live one supports, whichever record arrives
+                    // last (`wire-format.md` §4.2, §2.3).
                     Some((_, ended_at, _)) => {
-                        if self.slots.get(&slot).is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node)) {
+                        let free = self.slots.get(&slot).is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node));
+                        if free && !self.still_bound(&node) {
                             self.set_slot(slot, None, *ended_at);
                         }
                     }
@@ -290,19 +295,28 @@ impl NodeView {
     /// record does not stamp the row with its own late arrival.
     fn clear_if_unbound(&mut self, slot: u64, node: Keyhash, rec: &Record) {
         let me = self.me();
-        let (still_bound, ended_at) = {
-            let bs = self.table.bindings();
-            let still = bs.iter().any(|b| b.node == node && b.patron == me && b.open());
-            let at = bs
-                .iter()
-                .find(|b| b.node == node && b.patron == me && b.end.as_ref().is_some_and(|(t, _, _)| *t == rec.txid))
-                .and_then(|b| b.end.as_ref().map(|(_, a, _)| *a))
-                .unwrap_or(rec.time);
-            (still, at)
-        };
-        if !still_bound {
+        let ended_at = self
+            .table
+            .bindings()
+            .iter()
+            .find(|b| b.node == node && b.patron == me && b.end.as_ref().is_some_and(|(t, _, _)| *t == rec.txid))
+            .and_then(|b| b.end.as_ref().map(|(_, a, _)| *a))
+            .unwrap_or(rec.time);
+        if !self.still_bound(&node) {
             self.set_slot(slot, None, ended_at);
         }
+    }
+
+    /// Whether this node holds an open binding to `node`.
+    ///
+    /// **The one question every slot update asks.** Which relationship a
+    /// record changes is the table's answer and not the record's, so a
+    /// row is emptied only where the table says nothing holds it: a
+    /// departure from a series already left, and an adoption already
+    /// ended, are both history arriving late.
+    fn still_bound(&self, node: &Keyhash) -> bool {
+        let me = self.me();
+        self.table.bindings().iter().any(|b| b.node == *node && b.patron == me && b.open())
     }
 
     /// Take the reply to a repair, back on its request stream: the

@@ -597,6 +597,12 @@ pub struct NodeConfig {
     /// a subordinate it serves queues; one for a keyhash it has no record of
     /// is a different answer (design §14.1.2, §7.4.3).
     pub serves: Predicate,
+    /// Whether a direct payload path with `keyhash` is one this node
+    /// permits (design §12.6.3).  The decision is local and the same in
+    /// both directions: a connection this node would not have dialled is
+    /// not one it accepts, or a peer opens the path by dialling first.
+    /// Everything is permitted by default, which is what a harness wants.
+    pub accepts_direct: Predicate,
     /// Replicate a client's reachability to this node's siblings, so a
     /// sibling answering in failover knows the client's status
     /// (design §14.1.2).  The wire assigns no frame for this.
@@ -637,6 +643,7 @@ impl NodeConfig {
             in_subtree: Arc::new(|_| true),
             filter: None,
             serves: Arc::new(|_| true),
+            accepts_direct: Arc::new(|_| true),
             replicate: None,
             on_control: None,
             on_direct: None,
@@ -828,6 +835,10 @@ impl Node {
                     conn.close(VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
                     return Err("direct path from an unpinned peer or with no handler".into());
                 };
+                if !(self.cfg.accepts_direct)(&peer) {
+                    conn.close(VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
+                    return Err("direct path from a peer this node does not permit one with".into());
+                }
                 self.log.push(Event::DirectOpened);
                 let mut streams = vec![first];
                 loop {

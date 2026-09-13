@@ -217,3 +217,34 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     assert!(matches!(&d, Dispatched::Application(b) if b == b"over the relay"), "{d:?}");
     assert!(counting.relayed() > relayed, "the serving node carried it");
 }
+
+// acceptance: TRV-09
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_infrastructure_node_opens_no_direct_path_it_would_not_have_gathered_for() {
+    // two roots with no relationship between them: each is outside the
+    // other's horizon, and each holds the other's transport pin
+    let scene = Scene::new();
+    let n1 = live_node("w1", scene.table("w1", &["w1"]), "w1", &[]);
+    let n2 = live_node("w2", scene.table("w2", &["w2"]), "w2", &[]);
+    assert!(!n1.permits_direct(&kh("w2")), "outside the horizon");
+    assert!(!n2.permits_direct(&kh("w1")), "and in the other direction too");
+    // n2 gathers for itself, by asking for a peer it does permit: its own
+    // candidates are what n1 would be given
+    let cands = n2.gather().await;
+    assert!(!cands.is_empty(), "n2 has candidates of its own");
+    // n1 gathers nothing for n2, and opening on n2's candidates by hand
+    // dials nothing either
+    assert!(n1.prepare_direct(&kh("w2")).await.is_none(), "nothing gathered");
+    assert!(!n1.open_direct(kh("w2"), &pins(), &cands).await, "and nothing dialled");
+    assert_eq!(n1.direct_state(&kh("w2")), None, "no path was even attempted");
+    // nor does n2 accept what n1 opens: the same decision on the way in
+    let c1 = n1.gather().await;
+    assert!(!n2.open_direct(kh("w1"), &pins(), &c1).await);
+    assert!(until(2000, || n2.direct_state(&kh("w1")).is_none()).await);
+    // the adaptor above it reports the same, and its payload takes the relay
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(n1.clone(), inboxes.clone());
+    let p1 = infra("w1", &n1, &serving, &inboxes);
+    assert!(!p1.courier.offer(kh("w2")).await, "no offer for a peer it may not reach");
+    assert!(!p1.reachable.holds(&kh("w2")));
+}

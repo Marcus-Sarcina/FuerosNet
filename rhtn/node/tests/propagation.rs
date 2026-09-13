@@ -571,3 +571,35 @@ fn a_delayed_ending_of_an_earlier_binding_leaves_a_later_one_and_its_slot_alone(
     assert_eq!(n.child_at(slot as u8), None);
     assert_eq!(n.slots[&slot].timestamp, d2.time, "dated by the ending that closed it");
 }
+
+// acceptance: PRP-22
+#[test]
+fn every_arrival_order_of_one_replacement_leaves_the_same_slot() {
+    // alice adopted under bob, departed, adopted again in a new series:
+    // three records, and the row must not depend on which arrives last
+    let mut w = World::new();
+    let (a1, _) = w.adopt("alice", "bob", 1);
+    let d1 = w.depart("alice", "bob", Seqno { series: 1, counter: 1 });
+    let (a2, _) = w.adopt("alice", "bob", 2);
+    let slot = rhtn_node::view::NodeView::slot_from(&a1.locator().unwrap()).unwrap();
+    let fab = Fabric::with(&[kh("alice")]);
+    // the order the reviewer's second schedule uses: the ending first, the
+    // live adoption next, and the adoption it replaced last
+    for order in [[&d1, &a2, &a1], [&a1, &a2, &d1], [&a2, &a1, &d1], [&a1, &d1, &a2]] {
+        let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+        for r in order {
+            assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &ids()), Decision::Stored);
+        }
+        assert!(n.table.patrons(&kh("alice")).contains(&kh("bob")), "bound through the later adoption");
+        assert_eq!(n.child_at(slot as u8), Some(kh("alice")), "and the slot with it, whatever the order");
+        assert_eq!(n.slot_of(&kh("alice")), Some(slot));
+    }
+    // and the ending that closes the binding actually open still empties it
+    let d2 = w.depart("alice", "bob", Seqno { series: 2, counter: 1 });
+    let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    for r in [&a1, &d1, &a2, &d2] {
+        assert_eq!(n.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &ids()), Decision::Stored);
+    }
+    assert!(n.table.patrons(&kh("alice")).is_empty());
+    assert_eq!(n.child_at(slot as u8), None);
+}

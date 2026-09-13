@@ -397,6 +397,11 @@ impl LiveNode {
         cfg.on_direct = Some(Arc::new(move |peer, bytes| {
             let _ = dtx.send((peer, bytes));
         }));
+        // and the same decision on the way in: a connection this node
+        // would not have dialled is refused before it is read, which is
+        // where the address would otherwise be disclosed (design §12.6.3)
+        let av = view.clone();
+        cfg.accepts_direct = Arc::new(move |peer| permits_direct(&av, peer));
         // one socket for QUIC and STUN (design §14.1.1): the node answers
         // Binding Requests at the address it serves on, which the operator
         // chooses (`infra-client-requirements.md` §7)
@@ -516,6 +521,14 @@ impl LiveNode {
     /// Whether it opened; a failure is remembered and not retried until
     /// the next opening.
     pub async fn open_direct(&self, peer: Keyhash, pins: &rhtn_transport::tls::Pins, candidates: &[rhtn_transport::traversal::Candidate]) -> bool {
+        // The decision is this node's own (design §12.6.3).  Candidates
+        // arrive from the peer, and a peer willing to connect is not
+        // permission to connect to it, so the same question `prepare_direct`
+        // asks before gathering is asked again here, which is the entry
+        // every caller reaches.
+        if !permits_direct(&self.view, &peer) {
+            return false;
+        }
         let me = self.node.cfg.identity.clone();
         let conn = rhtn_transport::traversal::connect_direct(&self.endpoint, &me, pins, &peer, candidates, self.dial_timeout).await;
         let mut d = self.direct.lock().unwrap();
@@ -529,6 +542,12 @@ impl LiveNode {
                 false
             }
         }
+    }
+
+    /// Whether a direct path with `peer` is one this node permits: inside
+    /// the horizon absent an override (design §12.6.3).
+    pub fn permits_direct(&self, peer: &Keyhash) -> bool {
+        permits_direct(&self.view, peer)
     }
 
     /// The direct path's state toward `peer`: `Some(true)` held,
@@ -658,4 +677,16 @@ pub fn pump_client(session: &mut Session, serving: Keyhash, view: Arc<Mutex<Node
         }
     });
     adj
+}
+
+/// Whether a direct payload path with `peer` is one this node permits:
+/// inside the horizon absent an override (design §12.6.3).
+///
+/// **Asked at the gather, at the dial and at the accept.** The decision is
+/// this node's own and the same in every direction: candidates arrive from
+/// the peer, and a peer willing to connect is not permission to connect to
+/// it, nor to accept what it opens.
+fn permits_direct(view: &Arc<Mutex<NodeView>>, peer: &Keyhash) -> bool {
+    let view = view.lock().unwrap();
+    view.payload_path(peer, crate::peering::PathOverride::None) == crate::peering::PayloadPath::Direct
 }
