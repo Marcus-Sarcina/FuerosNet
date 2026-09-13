@@ -9006,3 +9006,55 @@ surveying every operator obligation against what `LiveNode` already does,
 and one writing the operator views. The survey found the listen-address
 gap before any code was written, which is what made it worth spending a
 worker on.
+
+**The 2026-09-12 review, second round, applied (2026-09-12).** Five
+findings against ad1ae25: F04 and R04 reported partially resolved, and
+D01 to D03 newly identified in the daemon written that day. **All five
+held on verification.** Ten of the previous round's twelve stayed closed
+and the workspace suite came back green, the traversal assertion included.
+
+- **d88d5a7, F04 and R04.** Both earlier commits fixed the branch their
+  reproduction exercised and left the same defect on a sibling branch.
+  F04's adoption branch read only the binding of the record in hand, so an
+  adoption already ended arriving last cleared a slot a live binding held;
+  the question now lives in one place, `still_bound`, and every branch
+  asks it. R04's node path never asked the local decision at all:
+  `LiveNode::open_direct` asks it now, being the entry every caller
+  reaches, and `NodeConfig` gained `accepts_direct` so a connection this
+  node would not have dialled is closed before anything on it is read.
+  PRP-22, TRV-09.
+- **06e0ccf, D01 and D03.** The daemon loaded the topology store and
+  assigned it without deriving anything from it, so a restart held
+  relationships it could not route on and resubmitting the records could
+  not repair it, the store answering `Duplicate` before the derivation.
+  `NodeView::rebuild_from_store` folds the stored records oldest first
+  through the same path `take_object` uses after it has decided to store,
+  forwarding nothing, and takes this node's own position from the binding
+  its patron countersigned rather than assuming a root. The daemon's own
+  public key is in the verification lookup and not because a peers file
+  listed it: a node countersigns its subordinates' adoptions, and asking
+  an operator to list themselves makes a working configuration depend on
+  remembering to. DMN-03.
+- **6cc2078, D02.** One-time keys were consumed in memory and written on
+  a tick, so a stop between snapshots returned a key already served. The
+  pool is now kept rather than snapshotted: each key is written as it is
+  stocked and unlinked as it is served, before the reply goes out, and a
+  key whose file cannot be removed is not served at all. Bundles are
+  written through for the same reason, a pool whose bundle is missing
+  being a subject a restart drops. `save` no longer wipes the tree, which
+  would have put served keys back. DMN-04.
+
+Recorded rather than fixed: **rate-limit counters stay snapshot-based**, so
+a stop can reset a requester's window. The window bounds it and a disk
+write per request does not earn its cost. Reversible if that trade is
+wrong.
+
+Found on the way: the two daemon commits were gated together rather than
+one each. Batch three's edits were made while batch two's gate was still
+running, which left that verdict ambiguous, so the tree was gated once
+more as a whole and both commits taken from that run.
+
+The reviewer's harness rerun at the end: **43 of 43 pass on an unmodified
+copy in the scratchpad**, the five new assertions included. No adaptation
+was needed this round, the repairs having changed no surface the harness
+calls.
