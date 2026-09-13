@@ -9232,3 +9232,48 @@ Two readings are the assistant's, open to reversal:
 **The exit criterion's other half waits on the author.** No binding is
 generated because no generator is adopted; section 7 lists the choice as
 his. The facade is shaped for one whichever is chosen.
+
+**What a client hands its serving node** (4122220). §7.10 and request types
+9 to 12 went in end to end: the objects in `rhtn-archive`, the four frame
+types and the wake registration's shape in the codec, the node's handlers
+and its wake register, and `AttachedNode` on the client side. `Serving`
+became asynchronous, because one of its two implementations now waits for
+a node to answer.
+
+Two things the work produced that were not asked for:
+
+- **`RelayedPayload` had to be written.** A node taking a submission
+  composes what the recipient later collects, so the shape stopped being
+  one implementation's private business the moment the submission became a
+  message. §7.10 carries it, and says the name in front is a routing hint
+  and not an attribution.
+- **A deposit's keys were being stored with their CBOR headers.** The
+  decoder walked item ranges where it wanted contents, so every one-time
+  key served would have been six bytes of item rather than the key. The
+  first end-to-end test caught it, which is the argument for the test
+  running against a real node over the wire rather than against the
+  service in memory.
+
+**Owed: the corpus is not regenerated.** The generator gained
+constructions for the four frames, the withdrawal, two submission replies
+and the relayed payload, but `test-vectors/tools/spec-pins.json` names
+`dilithium-py 1.4.0` and `cryptography 50.0.1`, and this machine has
+neither the first nor that version of the second. Regenerating under
+different dependencies is the substitution the pins exist to catch, so the
+run is owed on a machine that has them, with `--accept-spec-change` after
+the constructions are audited against the specification diff.
+
+**The derived view is stored as derived.** design §15.1.1 states the three
+rulings; `infra-client-requirements.md` §4.3 and
+`light-client-requirements.md` §4.2 carry the two sides. The node side is
+implemented: `Table::materialise`/`from_materialised`, `Snapshot` with a
+watermark, and `NodeView::restore_materialised`, which folds only what
+sorts above the watermark and replays the whole store whenever the counts
+do not add up. The daemon writes it into the topology directory after the
+store, so it is never the newer of the two. DMN-11 and DMN-12.
+
+**Owed: the light client's side of §15.1.1.** The client crate holds no
+topology at all — nothing reads `Session.frames` on the client side, so a
+light client currently learns nothing its patron propagates. That is the
+next piece: a horizon in `rhtn-client` fed by the propagation, materialised
+the same way, answering `locator` and `distance` without asking anyone.
