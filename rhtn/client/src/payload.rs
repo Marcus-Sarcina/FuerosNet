@@ -241,7 +241,7 @@ pub struct Prefetched {
 /// names, PQXDH, and a blob this construction reads.
 pub fn read_bundle<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Prefetched, String> {
     let b = PrekeyBundle::parse(bytes)?;
-    if !b.verify(ids)? {
+    if b.verify(ids).is_err() {
         return Err("bundle signature fails".into());
     }
     if b.construction != CONSTRUCTION_PQXDH {

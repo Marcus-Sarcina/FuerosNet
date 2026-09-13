@@ -177,7 +177,7 @@ fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     let node = &n.nodes["w1"];
     let b = PrekeyBundle::parse(node.prekeys.bundle(&kh("alice")).expect("N holds a bundle for S")).unwrap();
     assert_eq!((b.subject, b.construction), (kh("alice"), 1), "field 2 equal to 1");
-    assert_eq!(b.verify(&ids()), Ok(true), "a signature by S under the prekey tag over fields 1 to 4");
+    assert_eq!(b.verify(&ids()), Ok(()), "a signature by S under the prekey tag over fields 1 to 4");
     assert!(node.prekeys.pool_size(&kh("alice")) > 0, "a non-empty one-time pool");
     assert_eq!(node.prekeys.pool_size(&kh("alice")), n.s.client("alice").payload.cfg.pool_target);
     // the blob reads as this construction's material

@@ -524,10 +524,30 @@ check(ab[1] == KH['c5'], 'abuse report: field 1 is both the resource and the sig
 # ---------------------------------------------------------------- messages (bar 9)
 ms = read('messages.md')
 blocks = re.findall(r'```\n([0-9a-f\n]+?)```', ms)
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 3, 3, 4, 5, 6, 7, 8]
+
+# The blocks are read by SECTION rather than by absolute index, so adding a
+# family to one section does not silently renumber another's fixtures.
+def section_blocks(name):
+    start = ms.index('## ' + name)
+    rest = ms[start + 3:]
+    nxt = rest.index('\n## ')
+    return re.findall(r'```\n([0-9a-f\n]+?)```', rest[:nxt])
+
+control = section_blocks('Control frames (stream 0)')
+requests = section_blocks('Requests (bidirectional streams)')
+relayed_blocks = section_blocks('What the node delivers for a relay submission')
+replies = section_blocks('Replies')
+e2e = section_blocks('End-to-end payloads')
+check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
+      'messages: every fixture block belongs to a named section')
+
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+framed = control + requests
+check(len(framed) == len(EXPECT_FRAMES),
+      f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
 frames_ok = 0
 frame_objs = []
-for i, hexs in enumerate(blocks[:17]):
+for i, hexs in enumerate(framed):
     b = bytes.fromhex(hexs.replace('\n', ''))
     n = int.from_bytes(b[:4], 'big')
     obj = canonical(b[4:])
@@ -535,11 +555,32 @@ for i, hexs in enumerate(blocks[:17]):
             and obj[0] == EXPECT_FRAMES[i])
     frames_ok += good
     frame_objs.append(obj)
-check(frames_ok == 17, 'messages: all 17 frames length-prefixed, canonical, correctly typed')
+check(frames_ok == len(EXPECT_FRAMES),
+      f'messages: all {len(EXPECT_FRAMES)} frames length-prefixed, canonical, correctly typed')
+unframed = replies + e2e
 replies_ok = sum(canonical(bytes.fromhex(h.replace('\n', ''))) is not None
-                 for h in blocks[17:31])
-check(replies_ok == 14, 'messages: all 12 replies and 2 end-to-end payloads canonical')
-late_obj = canonical(bytes.fromhex(blocks[30].replace('\n', '')))
+                 for h in unframed)
+check(replies_ok == len(unframed),
+      f'messages: all {len(replies)} replies and {len(e2e)} end-to-end payloads canonical')
+
+# `RelayedPayload` (§7.10): the submitter in front of the ciphertext, an
+# array and not a map, and the submitter is a keyhash
+rp = canonical(bytes.fromhex(relayed_blocks[0].replace('\n', '')))
+check(isinstance(rp, list) and len(rp) == 2 and len(bytes.fromhex(rp[0])) == 32,
+      'RelayedPayload: a two-element array whose first member is a keyhash')
+
+# the four submissions carry the shapes §7.10 fixes
+pub = frame_objs[EXPECT_FRAMES.index(9)][1]
+check(isinstance(pub[1], dict), 'PrekeyPublication: field 1 is the bundle object, not a byte string')
+dep = frame_objs[EXPECT_FRAMES.index(10)][1]
+check(isinstance(dep[1], list) and 1 <= len(dep[1]) <= 256,
+      'OneTimeDeposit: field 1 is one to 256 keys')
+wake_on = frame_objs[EXPECT_FRAMES.index(12)][1]
+wake_off = frame_objs[len(EXPECT_FRAMES) - 1][1]
+check(2 in wake_on and 3 in wake_on, 'WakeRegistration: an endpoint arrives with its key')
+check(set(wake_off) == {1}, 'WakeRegistration: a withdrawal is the nonce alone')
+
+late_obj = canonical(bytes.fromhex(e2e[-1].replace('\n', '')))
 lr = late_obj[3]
 lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
 check(verify_sig(BY[lr[1]], -8, bytes.fromhex(lr[9][3]),
@@ -549,7 +590,7 @@ push_body = frame_objs[5][1]
 adopt_env_hex = re.search(r'#### Envelope bytes — final, all four signatures real.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 check(push_body[2] == adopt_env_hex.group(1).replace('\n', ''),
       'TopologyPush carries the first adoption envelope byte-for-byte')
-srv = canonical(bytes.fromhex(blocks[17].replace('\n', '')))
+srv = canonical(bytes.fromhex(replies[0].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
@@ -589,7 +630,7 @@ check(H(b'rhtn/1:ceremony' + _pair[0] + _pair[1]).hex() == pcm.group(3).replace(
 
 # ---------------------------------------------------------------- corpus.json (bar 6)
 import json as _json
-corpus = _json.load(open('corpus.json', encoding='utf-8'))
+corpus = _json.load(open(os.path.join(HERE, 'corpus.json'), encoding='utf-8'))
 check(corpus['format'] == 'rhtn-test-corpus/1' and len(corpus['entries']) >= 160,
       f"corpus: format tag present, {len(corpus['entries'])} entries")
 ids = [e['id'] for e in corpus['entries']]

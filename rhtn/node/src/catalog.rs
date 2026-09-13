@@ -103,7 +103,7 @@ impl CatalogService {
         let reg = ResourceRegistration::decode(body).ok()?;
         let refused = RegistrationReply { nonce: reg.nonce, code: REGISTRATION_REFUSED }.encode();
         let Ok(entry) = CatalogEntry::parse(&reg.entry) else { return Some(refused) };
-        if entry.owner != *peer || entry.verify(ids) != Ok(true) {
+        if entry.owner != *peer || entry.verify(ids).is_err() {
             return Some(refused);
         }
         if let Some(held) = self.entries.get(&entry.resource)
@@ -159,7 +159,7 @@ impl CatalogService {
     /// owner; nothing carries it further.
     pub fn take_report<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<Keyhash, String> {
         let r = AbuseReport::parse(bytes)?;
-        if !r.verify(ids)? {
+        if r.verify(ids).is_err() {
             return Err("not signed by the resource it names".into());
         }
         let owner = self.entries.get(&r.resource).map(|h| h.owner).ok_or("no owner known for the resource")?;

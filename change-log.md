@@ -9477,3 +9477,45 @@ witness-clock rule attributed to design §8.1.2 in four places when it is
 §15's horizon parameters for the role table, the access gate and the resource's
 own business; the post-quantum horizon attributed to §7.1 rather than §5.1; and
 a citation to C13, withdrawn 2026-08-22, made as though it were live.
+
+### 2026-09-13 (the encoding the documents describe, and the one the code wrote)
+
+A pass comparing every CDDL block in `wire-format.md` against the schema that
+enforces it and the encoder that produces it.
+
+**One outright interoperation failure.** §7.10 declares `PrekeyPublication`
+field 1 as `PrekeyBundle`, the object §7.8 defines; the implementation wrapped
+that object in a byte string. It round-tripped against itself perfectly and
+would have failed against every conformant peer, in both directions, on a
+request type a light client sends at every attach. `PrekeyReply` field 2, the
+catalog registration's entry, the attach's attestation and three others were
+already spliced correctly, which is what made this one an oversight rather than
+a convention.
+
+**One silent value corruption.** §2's `seqno` bounds both members to the u32
+range; the decoder narrowed with `as u32`. A peer sending a series of 2^32
+would have been read as 0, and the two parties would then have disagreed about
+which series a node was on with nothing raised on either side. Refused now, at
+the schema and at the object decoder both.
+
+**And a long tail of bounds the documents state and nothing enforced**: the
+catalog entry's four field widths, which matter because an entry is
+owner-signed and re-served byte for byte; the verification query's profile and
+identifiers; the verifier response's own identifiers, its signature — field 9
+carries no `?` and was not required at all — and the conditional matrix §4.5
+states in full; the presence record's responses, which `check_recovery` sorted
+and `check_presence` did not, so one logical record had two valid txids; the
+back-pointer widths and merge ordering; the proximity channels' enumerations;
+the ASN's range; and the key material in four slots, which had a strict checker
+the schema never called.
+
+**`selection_basis` reached the verifier as 0–2** where field 10 carries 0–3.
+The tier-aligned renumbering of 2026-09-03 postdates §5.6's sentence and says
+so in place; a selector claiming `3 discretionary fill` had no way to send it.
+
+**And the fourth signature verifier now fails like its three siblings.**
+`verify::record` returned `Ok(false)` for a signature that does not verify,
+where `envelope`, `presentation` and `response` return an error. Seventeen call
+sites, two of which kept a deliberate three-way distinction — verified, failed,
+or unverifiable for want of the key — and still do, because `Failure` already
+carried it.

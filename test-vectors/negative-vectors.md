@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `81a5dd6b7ea1ab004dc0976ae0cf6eb8d4df1ce677e873b20de4204e9f6e59eb` · network-design.md `b034b39d486665e75083a00928127a61cfca3b35b5a2e0a99e116c1c6b88579b`
+**Pinned**: wire-format.md `7862d27bb2bcb5c24fbb3f658dc0017d0d6a934cd342535df77d6a61759024b6` · network-design.md `bc59e9b2528a5e78c794d3bc777643a802dd948fb22af26fa2437c8df647c754`
 
 ## The result model is structured, not a single status
 
@@ -181,6 +181,30 @@ photo comparison without its template version is unverifiable as evidence:
 | T25 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T26 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
 | T28 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash, ties by ascending subject keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding; the tie is D15's one-verifier-both-participants case. An implementation preserving assembly order emits bytes a validator rejects |
+
+### What a client hands its serving node (§7.10)
+
+The four submission types carry two conditional rules, and both are the
+decoder's rather than a node's policy:
+
+| # | Input | Violation |
+|---|---|---|
+| T32 | A `WakeRegistration` with field 2 absent and field 3 or field 4 present | §7.10: a withdrawal carries no key and no lapse. The key and the lapse describe an endpoint, so either without one is a shape with no meaning |
+| T33 | A `WakeRegistration` carrying field 2 with field 3 absent | §7.10's mirror: the body is encrypted to the key before it is posted, so an endpoint with no key is an endpoint nothing can be sent to |
+| T34 | A `PrekeyPublication` whose field 1 is a byte string wrapping the bundle rather than the bundle map | §7.10 declares field 1 as `PrekeyBundle`, the object §7.8 defines, spliced in as `PrekeyReply` field 2 splices it. The wrapping round-trips against itself and fails against every conformant peer |
+| T35 | An `OneTimeDeposit` whose field 1 is an empty array, or carries more than 256 entries, or holds an entry that is not a byte string | §7.10's `[ 1*256 bstr ]` |
+| T36 | A `SubmissionReply` whose field 2 is outside 0–2 | §7.10: accepted, refused, over a bound, and §1's unknown-enum rule on a closed enumeration |
+
+### `CatalogEntry` field widths (§6.1)
+
+An entry is owner-signed and re-served byte for byte, so a width one side
+admits and another refuses propagates rather than stopping where it arrived:
+
+| # | Input | Violation |
+|---|---|---|
+| T37 | A `CatalogEntry` whose field 3 is empty or over 64 bytes, or field 4 empty or over 128 | §6.1's `tstr .size` bounds on service type and instance name |
+| T38 | A `CatalogEntry` whose field 5 is empty or over 256 bytes, or field 7 present and empty or over 1024 | §6.1's `bstr .size` bounds on the connection endpoint and the metadata analogue |
+| T39 | A `CatalogEntry` whose field 1 or field 2 is not 32 bytes | §6.1: both are keyhashes, and the total-size bound does not imply the field widths |
 
 ## B. Context-dependent — bytes plus external state, structured result
 

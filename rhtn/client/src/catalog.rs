@@ -56,7 +56,7 @@ impl Sweep {
     pub fn take<L: Lookup + ?Sized>(&mut self, ids: &L, portion: &mut Portion, reply: &CatalogReply, full_page: usize) -> Step {
         for bytes in &reply.entries {
             if let Ok(e) = CatalogEntry::parse(bytes)
-                && e.verify(ids) == Ok(true) {
+                && e.verify(ids).is_ok() {
                     portion.entries.insert(e.resource, bytes.clone());
                 }
         }
@@ -134,5 +134,5 @@ pub struct Shown {
 }
 
 pub fn page<L: Lookup + ?Sized>(ids: &L, served: &[(Vec<u8>, Vec<String>)]) -> Vec<Shown> {
-    served.iter().filter_map(|(b, roles)| CatalogEntry::parse(b).ok().filter(|e| e.verify(ids) == Ok(true)).map(|entry| Shown { entry, roles: roles.clone() })).collect()
+    served.iter().filter_map(|(b, roles)| CatalogEntry::parse(b).ok().filter(|e| e.verify(ids).is_ok()).map(|entry| Shown { entry, roles: roles.clone() })).collect()
 }

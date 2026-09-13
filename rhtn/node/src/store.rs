@@ -57,7 +57,7 @@ impl EndpointRecord {
     /// holder has is a failure, never gossip.
     pub fn signature_checks<L: Lookup + ?Sized>(&self, ids: &L) -> Option<bool> {
         match verify::record(ids, "EndpointRecord", &self.bytes) {
-            Ok(v) => Some(v),
+            Ok(()) => Some(true),
             Err(verify::Failure::MissingKey(_)) => None,
             Err(verify::Failure::Invalid(_)) => Some(false),
         }

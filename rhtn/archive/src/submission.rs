@@ -70,7 +70,10 @@ impl PrekeyPublication {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
         emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.bundle);
+        // the bundle is the object `wire-format.md` §7.10 names, spliced in as
+        // §7.8 encoded it — not a byte string wrapping it, which is what a
+        // conformant peer would refuse
+        out.extend_from_slice(&self.bundle);
         emit_uint(&mut out, 2);
         emit_bstr(&mut out, &self.nonce);
         out
@@ -80,7 +83,8 @@ impl PrekeyPublication {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyPublication, b, 0).map_err(|e| e.0)?;
         let Item::Map(m) = &item else { return Err("not a map".into()) };
-        Ok(PrekeyPublication { bundle: bytes_at(b, m, 1)?, nonce: nonce_at(b, m, 2)? })
+        let bundle = value_slice(b, 1).ok_or("field 1")?;
+        Ok(PrekeyPublication { bundle: b[bundle].to_vec(), nonce: nonce_at(b, m, 2)? })
     }
 }
 

@@ -163,7 +163,7 @@ fn a_grandpatron_acknowledges_under_standing_policy() {
     let out = t.apply(&adoption, &w.lookup(), &w, Some(&issuer)).unwrap();
     assert_eq!(out.acks.len(), 1);
     let ack = &out.acks[0];
-    assert_eq!(verify::record(&w.lookup(), "SubtreeAck", ack), Ok(true), "G's signature over fields 1-4 with rhtn/1:subtree-ack");
+    assert_eq!(verify::record(&w.lookup(), "SubtreeAck", ack), Ok(()), "G's signature over fields 1-4 with rhtn/1:subtree-ack");
     let item = rhtn_codec::cbor::parse_all(ack).unwrap();
     let rhtn_codec::cbor::Item::Map(m) = &item else { panic!() };
     let field = |k| match rhtn_codec::cbor::map_get(m, k) { Some(rhtn_codec::cbor::Item::Bytes(r)) => ack[r.clone()].to_vec(), _ => panic!() };
@@ -222,7 +222,7 @@ fn an_acknowledgement_alone_creates_no_binding() {
     let unknown_adoption: Txid = rhtn_codec::cose::sha256(b"an adoption H never saw");
     let now = w.tick();
     let ack = subtree_ack(w.id("alice"), &unknown_adoption, &w.kh("carol"), now);
-    assert_eq!(verify::record(&w.lookup(), "SubtreeAck", &ack), Ok(true), "the signature verifies");
+    assert_eq!(verify::record(&w.lookup(), "SubtreeAck", &ack), Ok(()), "the signature verifies");
     assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(false));
     assert_eq!(h.patrons(&w.kh("carol")), set(&[]));
     assert!(!h.subordinates(&w.kh("bob")).contains(&w.kh("carol")));

@@ -341,7 +341,7 @@ impl AnchorEntry {
         // unknown only for want of the key: a signature that fails or is
         // malformed under a key this holder has is a failure
         match verify::record(ids, "AnchorEntry", &self.bytes) {
-            Ok(v) => Some(v),
+            Ok(()) => Some(true),
             Err(verify::Failure::MissingKey(_)) => None,
             Err(verify::Failure::Invalid(_)) => Some(false),
         }
@@ -774,10 +774,8 @@ impl LocatorStore {
             Ok(s) => s,
             Err(e) => return LocatorOutcome::Malformed(e),
         };
-        match sl.verify(ids) {
-            Ok(true) => {}
-            Ok(false) => return LocatorOutcome::Malformed("subject signature fails".into()),
-            Err(e) => return LocatorOutcome::Malformed(e),
+        if let Err(e) = sl.verify(ids) {
+            return LocatorOutcome::Malformed(e);
         }
         let sq = sl.locator.seqno;
         if self.abandoned.contains(&(sl.subject, sq.series)) {

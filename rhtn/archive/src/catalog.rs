@@ -216,7 +216,7 @@ impl CatalogEntry {
     }
 
     /// Signed by the owner it names.
-    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
+    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<(), String> {
         verify::record(ids, "CatalogEntry", &self.bytes).map_err(|e| e.to_string())
     }
 }
@@ -274,7 +274,7 @@ impl AbuseReport {
     }
 
     /// Signed by the key whose keyhash is field 1, and no other.
-    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
+    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<(), String> {
         verify::record(ids, "AbuseReport", &self.bytes).map_err(|e| e.to_string())
     }
 }

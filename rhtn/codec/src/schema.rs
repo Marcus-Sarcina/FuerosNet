@@ -15,6 +15,10 @@ pub enum T {
     Uint,
     Bool,
     Bstr,
+    /// The `[series, counter]` pair, both in the u32 range.
+    Seqno,
+    /// The two-key array §2.2 fixes exactly.
+    KeyMaterial,
     /// A non-empty byte string of at most this many bytes.
     BstrMax(usize),
     Tstr(usize),
@@ -90,7 +94,7 @@ const RESOURCE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Bstr)];
 const RESOURCE_REGISTRATION: Fields = &[(1, true, CatalogEntry), (2, false, Scope), (3, true, Nonce16)];
 // §7.10: what a client hands its serving node.  The bundle and the keys are
 // opaque here, as §7.8 makes them everywhere else.
-const PREKEY_PUBLICATION: Fields = &[(1, true, Bstr), (2, true, Nonce16)];
+const PREKEY_PUBLICATION: Fields = &[(1, true, PrekeyBundle), (2, true, Nonce16)];
 const ONE_TIME_DEPOSIT: Fields = &[(1, true, OneTimeKeys), (2, true, Nonce16)];
 const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Bstr), (3, true, Nonce16)];
 const WAKE_REGISTRATION: Fields = &[(1, true, Nonce16), (2, false, Tstr(2048)), (3, false, BstrMax(256)), (4, false, Uint)];
@@ -105,12 +109,12 @@ const CURRENCY_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false,
 const RESOURCE_REGISTRATION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const KEY_GRANT: Fields = &[(1, true, Bytes32), (2, true, Bytes32), (3, true, Bytes32)];
 const LATE_RESPONSE: Fields = &[(1, true, Bytes32), (2, true, Keyhash), (3, true, VerifierResponse)];
-const LOCATOR: Fields = &[(1, true, Keyhash), (2, true, Path), (3, true, Any)];
+const LOCATOR: Fields = &[(1, true, Keyhash), (2, true, Path), (3, true, Seqno)];
 const PATH: Fields = &[(1, true, Bstr), (2, true, Uint)];
-const SIBLING_REF: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, false, Any)];
+const SIBLING_REF: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, false, KeyMaterial)];
 const NETWORK_POINT: Fields = &[(1, true, Bstr), (2, false, Uint), (3, false, Uint)];
-const SERVING_INFRA: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Path), (4, false, Any)];
-const REFERRAL: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Uint), (4, false, Any)];
+const SERVING_INFRA: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Path), (4, false, KeyMaterial)];
+const REFERRAL: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Uint), (4, false, KeyMaterial)];
 
 pub fn fields(f: Family) -> Option<Fields> {
     use Family::*;
@@ -217,6 +221,10 @@ fn network_point_at(b: &[u8], at: usize, signed: bool) -> Result<(), Error> {
         && (port == 0 || port > 65535 || port == 7431) {
             return Err(Error("port invalid"));
         }
+    // four-byte ASNs, per RFC 6793 as §4.4 cites it
+    if map_get(m, 2).and_then(as_uint).is_some_and(|asn| asn > u32::MAX as u64) {
+        return Err(Error("ASN outside the u32 range"));
+    }
     Ok(())
 }
 
@@ -272,6 +280,15 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         }
         Bstr => {
             bs(b, &v).ok_or(Error("not bstr"))?;
+        }
+        Seqno => {
+            seqno_of(Some(&v))?;
+        }
+        KeyMaterial => {
+            // §2.2 fixes the shape exactly, and a strict check already
+            // exists; the schema is where it belongs, so a slot carrying
+            // something else fails here rather than at pin time
+            crate::cose::check_key_material(slice)?;
         }
         BstrMax(max) => match bs(b, &v).map(|s| s.len()) {
             Some(n) if n >= 1 && n <= max => {}
@@ -400,8 +417,11 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
             }
             let qs = &b[parts[0].clone()];
             check_kind(qs, "VerificationQuery", &parse_all(qs)?)?;
+            // the same closed enumeration the verifier echoes into field 10
+            // (`wire-format.md` §5.5, §5.6): a selector claiming
+            // `3 discretionary fill` had no way to send it
             let (sb, _) = p.item(parts[2].start)?;
-            if as_uint(&sb).unwrap_or(9) > 2 {
+            if as_uint(&sb).unwrap_or(9) > 3 {
                 return Err(Error("selection basis out of range"));
             }
             Ok(())
@@ -615,11 +635,36 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         }
         "VerifierResponse" => {
             let Item::Map(m) = item else { return Err(Error("not map")) };
+            // fields 1, 2, 3 and 9 carry no `?` in the CDDL, and 9 is the
+            // signature that authenticates the rest: a response reached
+            // through a `LateResponse` or a presence body must not arrive
+            // here with none of them (`wire-format.md` §4.5)
+            for (f, w) in [(1u64, 32usize), (2, 32), (3, 32)] {
+                if keyhash_at(b, m, f).map(|k| k.len()) != Some(w) {
+                    return Err(Error("verifier response identifier width"));
+                }
+            }
+            map_get(m, 9).ok_or(Error("verifier signature required"))?;
             if map_get(m, 4).and_then(as_uint).ok_or(Error("no result"))? > 3 {
                 return Err(Error("result out of range"));
             }
             if map_get(m, 5).and_then(as_uint).is_some_and(|x| x > 2) {
                 return Err(Error("basis out of range"));
+            }
+            // §4.5's conditional-field matrix: a basis where the verifier
+            // evaluated and none where it did not, and a template version for
+            // a photo basis and none otherwise
+            let result = map_get(m, 4).and_then(as_uint).unwrap_or(9);
+            let basis = map_get(m, 5).and_then(as_uint);
+            if (result <= 2) != basis.is_some() {
+                return Err(Error("basis does not follow the result"));
+            }
+            let version = map_get(m, 6).and_then(as_uint);
+            if matches!(basis, Some(0) | Some(2)) != version.is_some() {
+                return Err(Error("template version does not follow the basis"));
+            }
+            if version.is_some_and(|v| v > 65535) {
+                return Err(Error("template version out of range"));
             }
             match map_get(m, 10).and_then(as_uint) {
                 Some(sb) if sb > 3 => return Err(Error("selection_basis out of range")),
@@ -677,6 +722,29 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
                 return Err(Error("channel count"));
             }
+            // each channel's kind and outcome are closed enumerations, and
+            // §1.2 rejects an unknown value in a known enumerated field
+            // (`wire-format.md` §4.5)
+            for c in ch {
+                let Item::Map(cm) = c else { return Err(Error("channel not map")) };
+                match map_get(cm, 1).and_then(as_uint) {
+                    Some(1..=4) => {}
+                    _ => return Err(Error("channel kind out of range")),
+                }
+                match map_get(cm, 2).and_then(as_uint) {
+                    Some(0..=2) => {}
+                    _ => return Err(Error("channel outcome out of range")),
+                }
+                match map_get(cm, 4) {
+                    Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 128 => {}
+                    None => {}
+                    _ => return Err(Error("channel evidence out of range")),
+                }
+            }
+            match map_get(m, 2).and_then(as_uint) {
+                Some(1..=4) => {}
+                _ => return Err(Error("strongest channel out of range")),
+            }
             Ok(())
         }
         "Scope" => match item {
@@ -708,6 +776,28 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             for f in [1u64, 2, 3, 4, 5, 8] {
                 map_get(m, f).ok_or(Error("missing required"))?;
+            }
+            // an entry is owner-signed and re-served byte for byte, so a
+            // field this side admits and a conformant peer refuses would
+            // propagate as a disagreement rather than stop here
+            // (`wire-format.md` §6.1)
+            for (f, w) in [(1u64, 32usize), (2, 32)] {
+                if keyhash_at(b, m, f).map(|k| k.len()) != Some(w) {
+                    return Err(Error("catalog entry keyhash width"));
+                }
+            }
+            for (f, max) in [(3u64, 64usize), (4, 128)] {
+                match map_get(m, f) {
+                    Some(Item::Text(r)) if !r.is_empty() && r.len() <= max => {}
+                    _ => return Err(Error("catalog entry text out of range")),
+                }
+            }
+            for (f, max, required) in [(5u64, 256usize, true), (7, 1024, false)] {
+                match map_get(m, f) {
+                    Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= max => {}
+                    None if !required => {}
+                    _ => return Err(Error("catalog entry byte string out of range")),
+                }
             }
             Ok(())
         }
@@ -749,6 +839,19 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if map_get(m, 5).and_then(as_uint).is_some_and(|v| v > 65535) {
                 return Err(Error("template version over uint16"));
             }
+            // the subject, the querier, the pre-commitment and the profile
+            // all carry widths (`wire-format.md` §5.1), and an unbounded
+            // profile is an unbounded allocation on a request stream
+            for f in [1u64, 2, 3] {
+                if keyhash_at(b, m, f).map(|k| k.len()) != Some(32) {
+                    return Err(Error("query identifier width"));
+                }
+            }
+            match map_get(m, 4) {
+                Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 4096 => {}
+                _ => return Err(Error("fuzzed profile out of range")),
+            }
+            map_get(m, 5).and_then(as_uint).ok_or(Error("template version required"))?;
             Ok(())
         }
         "Witness" => {
@@ -759,6 +862,18 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "body" => check_body(b, item),
+        // what a node delivers for a relay submission (`wire-format.md`
+        // §7.10): the submitter in front of the ciphertext, an array and
+        // not a map
+        "RelayedPayload" => match item {
+            Item::Array(a) if a.len() == 2 => {
+                match (&a[0], &a[1]) {
+                    (Item::Bytes(f), Item::Bytes(_)) if f.len() == 32 => Ok(()),
+                    _ => Err(Error("relayed payload shape")),
+                }
+            }
+            _ => Err(Error("relayed payload is a two-element array")),
+        },
         _ => Ok(()),
     }
 }
@@ -787,7 +902,15 @@ fn seqno_of(it: Option<&Item>) -> Result<(u64, u64), Error> {
     if a.len() != 2 {
         return Err(Error("seqno arity"));
     }
-    Ok((as_uint(&a[0]).ok_or(Error("seqno series"))?, as_uint(&a[1]).ok_or(Error("seqno counter"))?))
+    let (series, counter) = (as_uint(&a[0]).ok_or(Error("seqno series"))?, as_uint(&a[1]).ok_or(Error("seqno counter"))?);
+    // both are U32 range (`wire-format.md` §2.3).  **Refused rather than
+    // narrowed**: a value that does not fit is malformed, and truncating it
+    // would leave two parties holding different beliefs about which series a
+    // node is on with nothing raised on either side
+    if series > u32::MAX as u64 || counter > u32::MAX as u64 {
+        return Err(Error("seqno outside the u32 range"));
+    }
+    Ok((series, counter))
 }
 
 /// The 32-byte value at `key` of the map `m` over `b`, where there is one.
@@ -806,10 +929,27 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
     let Item::Array(lists) = map_get(m, 0).ok_or(Error("key 0"))? else {
         return Err(Error("key0 not array"));
     };
+    if lists.is_empty() {
+        return Err(Error("key 0 carries one list per signer, and there is a signer"));
+    }
     for l in lists {
         let Item::Array(hs) = l else { return Err(Error("list")) };
         if hs.is_empty() || hs.len() > MERGE_BACK_POINTERS_PER_SIGNER {
             return Err(Error("back-pointer bound"));
+        }
+        // each entry is a 32-byte txid, and **a merge list is sorted**
+        // (§3.1): one logical merge, one encoding, one txid
+        let mut prev: Option<&[u8]> = None;
+        for h in hs {
+            let Item::Bytes(r) = h else { return Err(Error("back-pointer not a byte string")) };
+            if r.len() != 32 {
+                return Err(Error("back-pointer width"));
+            }
+            let this = &b[r.clone()];
+            if prev.is_some_and(|p| this <= p) {
+                return Err(Error("a merge list is sorted ascending and repeats nothing"));
+            }
+            prev = Some(this);
         }
     }
     // extension bounds on the body map (§1.3): bodies name keys 0 through 9
@@ -1077,6 +1217,29 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         }
         if resp.is_empty() {
             return Err(Error("empty response array must be omitted"));
+        }
+        // **One set, one encoding** (§4.5): ascending by verifier keyhash,
+        // ties by ascending subject, and no verifier twice for one subject
+        // (§5.5).  Field 5 is inside the signed body, so an unsorted
+        // encoding gives the same logical record a second txid — the same
+        // rule `check_recovery` applies to the recovery form, which is why
+        // its absence here was an asymmetry rather than a decision.
+        let mut prev: Option<(&[u8], &[u8])> = None;
+        for r in resp {
+            let Item::Map(x) = r else { return Err(Error("response not map")) };
+            check_kind(b, "VerifierResponse", r)?;
+            let verifier = keyhash_at(b, x, 1).ok_or(Error("response verifier"))?;
+            let subject = keyhash_at(b, x, 2).ok_or(Error("response subject"))?;
+            if !keys.contains(&subject) {
+                return Err(Error("a response names a subject who is not a participant"));
+            }
+            if verifier == subject {
+                return Err(Error("a response's verifier is its subject"));
+            }
+            if prev.is_some_and(|p| (verifier, subject) <= p) {
+                return Err(Error("responses unsorted, or one verifier twice for one subject"));
+            }
+            prev = Some((verifier, subject));
         }
     }
     Ok(())

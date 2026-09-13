@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `81a5dd6b7ea1ab00…`, `network-design.md` `b034b39d486665e7…` and `light-client-requirements.md` `6bb4286d5a2d9101…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `7862d27bb2bcb5c2…`, `network-design.md` `bc59e9b2528a5e78…` and `light-client-requirements.md` `04db8a2d8066cebe…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -499,6 +499,62 @@ fea411768be0beda6680eca05c6ce6c7d1de49639c1d050901035071b5e97425
 000000388208a20158208410def778a5de3a25991aba399716bc8eccfda9ad57
 d4ea8a0c8dcfc852aa6a0250b47726402c6bd7c1ec5962ca894492d2
 ```
+**PrekeyPublication (request 9) — the subject's own bundle, published by the subject** (211 bytes, length prefix included):
+
+```
+000000cf8209a201a50158208410def778a5de3a25991aba399716bc8eccfda9
+ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba6
+1a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e25134
+1f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510058443a10127a0f658
+40b41656e418fd1cb558477031bfc44dbf9d427cd613bae2e8c4ba49db883b67
+629cfc4bb54e744a4a76084fcf7c0010a7ae7550069a3fc3760151ad6c58e911
+020250c378a562ee11fbff3124ce3f63f99175
+```
+**OneTimeDeposit (request 10) — three keys, opaque to the node** (129 bytes, length prefix included):
+
+```
+0000007d820aa201835820843aa21792ec7ab11513879f35807be2d2597e25a2
+1b5139f43d9a6ffad3f6ac5820dc1dd4b52edd76e572951b1de565b409b9592c
+a4633231031ffca4af91d5346c582052038250fec5fb4184e8fa37080e43f74b
+9fb720242a1d72388b0038a8fcd4e70250d0dc58af3e99a8406d7eb8e10d7bd9
+eb
+```
+**RelaySubmission (request 11) — ciphertext for carol, which this node cannot read** (95 bytes, length prefix included):
+
+```
+0000005b820ba301582071591ef14497c49bd95fc61e243ccc9e2d041f54d210
+e89ad6654f61554a2cf202582018564c22b6674f09a7ca123ddfd4b071a45df4
+8054715c17e4945aabdcb238c40350eee185c6d2aaa010d92f3b656634ca91
+```
+**WakeRegistration (request 12) — endpoint, its key, and when the client expects it to lapse** (99 bytes, length prefix included):
+
+```
+0000005f820ca40150727e0cf02d74eb27aa6a712d38badb6f02781e68747470
+733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb
+7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076041a6b
+4b3190
+```
+**WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it** (25 bytes, length prefix included):
+
+```
+00000015820ca101505bb3999edb24fe7ca438a873fafa8e37
+```
+
+## What the node delivers for a relay submission
+
+`wire-format.md` §7.10's `RelayedPayload`: the submitter's keyhash in front of
+the ciphertext, composed by the node that took the submission and not by
+either end. The name is a routing hint — it tells a recipient which peer's
+material to try — and never an attribution, which the material the message
+opens under decides.
+
+**RelayedPayload — alice's submission as carol collects it** (69 bytes):
+
+```
+8258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc8
+52aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945a
+abdcb238c4
+```
 
 ## Replies
 
@@ -873,6 +929,16 @@ a20150b47726402c6bd7c1ec5962ca894492d20201
 
 ```
 a2015071b5e974259b3aff3d013b1c67cc9fe30200
+```
+**SubmissionReply — 0 accepted, echoing the publication's nonce** (21 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+a20150c378a562ee11fbff3124ce3f63f991750200
+```
+**SubmissionReply — 2 over a bound this node applies, echoing the deposit's nonce** (21 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+a20150d0dc58af3e99a8406d7eb8e10d7bd9eb0202
 ```
 
 ## End-to-end payloads

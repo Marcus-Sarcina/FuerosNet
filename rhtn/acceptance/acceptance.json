@@ -2534,7 +2534,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §3",
-    "text": "Prefetch reusable prekey material for the whole Dunbar Org as a batch request"
+    "text": "Prefetch reusable prekey material for the whole trust horizon as a batch request"
    },
    {
     "where": "wire-format.md §7.8",
@@ -4410,7 +4410,7 @@
    },
    {
     "where": "wire-format.md §4.2.1",
-    "text": "it already holds the node's history through sibling replication (§4.4), so no archive presentation or re-verification is needed and trust history is preserved"
+    "text": "it already holds the node's history through\nsibling replication (design §3.4), so **no archive presentation or re-verification is\nneeded and trust history is preserved**"
    }
   ],
   "given": "Light client L is adopted under infra node P; T is P's sibling and holds L's history through sibling replication.",
@@ -8218,7 +8218,7 @@
   "rule": [
    {
     "where": "wire-format.md §6.8",
-    "text": "No scope reaches outside the owner's Dunbar Org, `list` included"
+    "text": "No scope reaches outside the owner's trust horizon, `list` included"
    },
    {
     "where": "wire-format.md §6.8",
@@ -8324,7 +8324,7 @@
   "rule": [
    {
     "where": "wire-format.md §3.3",
-    "text": "the current record's effective time — `started_at` for a presence record, `timestamp` otherwise — MUST be greater than or equal to the effective time of every record its key 0 list names"
+    "text": "the current record's own floor MUST be greater than or equal\nto the **effective time** of every record its key 0 list names"
    },
    {
     "where": "wire-format.md §4.6.1",
@@ -8772,7 +8772,7 @@
   "rule": [
    {
     "where": "wire-format.md §7.10",
-    "text": "It cannot serve its own prekeys, hold its own mail, or be woken by a service it is not connected to."
+    "text": "It cannot publish its own\nprekey bundle, stock its own one-time pool, hold its own mail, or be woken by a\nservice it is not connected to."
    },
    {
     "where": "wire-format.md §7.8",
@@ -9156,6 +9156,82 @@
   "when": "The shell attaches, registers and withdraws a wake endpoint, sends payload to another client of that node, and asks for what arrived.",
   "then": "The node holds the bundle and pool the attach published, the endpoint the registration gave and then nothing after the withdrawal, and the recipient's shell is handed the payload already decrypted. No method returns an encoding, and maintenance without a session is refused with its reason.",
   "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-28",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "A structured field is the object the grammar names, never a byte string wrapping it",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "1: PrekeyBundle,             ; §7.8's bundle, signed by its subject"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "The bundle is opaque to this protocol"
+   }
+  ],
+  "given": "A decoder holding the grammar for a request type whose field is declared as a structured object.",
+  "when": "It is given that field encoded as a byte string wrapping the object's own encoding, and then encoded as the object itself.",
+  "then": "The wrapping is refused and the object accepted. A decoder that wraps on the way out and unwraps on the way in round-trips against itself and fails against every conformant peer, which no self-test can see.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-29",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "A value outside a declared range is refused, never narrowed to fit",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2",
+   "wire-format.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2",
+    "text": "series    = uint                   ; U32 RANGE. ARBITRARY, never ordered"
+   },
+   {
+    "where": "wire-format.md §1.2",
+    "text": "Unknown *values* in a known enumerated field MUST be rejected"
+   }
+  ],
+  "given": "A decoder reading a locator whose series and counter the grammar bounds to the u32 range.",
+  "when": "It is given a series of 2^32 and a counter of 2^32.",
+  "then": "Both are refused as malformed. Narrowing either to fit would leave two parties holding different beliefs about which series a node is on, with nothing raised on either side, which is worse than a rejection.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "DEC-30",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "A conditional field stands or falls with the field it describes",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "An endpoint's key and lapse describe an endpoint; carrying either without one would be a shape with no meaning, and a decoder rejects it."
+   }
+  ],
+  "given": "A decoder reading a wake registration.",
+  "when": "It is given a registration with no endpoint but a key, one with no endpoint but a lapse, one with an endpoint and no key, and a withdrawal carrying the nonce alone.",
+  "then": "The first three are refused and the withdrawal accepted, at the decoder rather than at a node's policy.",
+  "oracle": "fixture",
   "interpretation": null
  }
 ]

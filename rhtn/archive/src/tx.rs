@@ -104,9 +104,14 @@ impl Locator {
         // decoding boundary as at the schema's
         rhtn_codec::schema::packed_path(&path, nibbles).map_err(|e| e.0)?;
         let Some(Item::Array(sq)) = map_get(m, 3) else { return Err("locator field 3".into()) };
+        // both members are U32 range (`wire-format.md` §2.3).  **Refused
+        // rather than narrowed**: narrowing would have two parties holding
+        // different beliefs about which series a node is on, with nothing
+        // raised on either side
+        let narrow = |v: u64| u32::try_from(v).map_err(|_| "seqno outside the u32 range".to_string());
         let seqno = Seqno {
-            series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
-            counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32,
+            series: narrow(as_uint(sq.first().ok_or("series")?).ok_or("series")?)?,
+            counter: narrow(as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")?)?,
         };
         Ok(Locator { anchor, path, nibbles, seqno })
     }

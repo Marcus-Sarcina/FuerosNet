@@ -632,7 +632,7 @@ impl Table {
     pub fn take_ack<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<bool, String> {
         let item = rhtn_codec::cbor::parse_all(bytes).map_err(|e| e.0)?;
         rhtn_codec::schema::check_kind(bytes, "SubtreeAck", &item).map_err(|e| e.0)?;
-        if !verify::record(ids, "SubtreeAck", bytes).map_err(|e| e.to_string())? {
+        if verify::record(ids, "SubtreeAck", bytes).map_err(|e| e.to_string()).is_err() {
             return Err("grandpatron signature fails".into());
         }
         let rhtn_codec::cbor::Item::Map(m) = &item else { return Err("map".into()) };

@@ -183,7 +183,7 @@ fn the_owners_signature_is_returned_unchanged_and_none_is_added() {
         let reply = query(&svc, &scopes, asker, None).unwrap();
         assert_eq!(reply.entries, vec![e.clone()], "byte-for-byte to {asker}");
         let parsed = CatalogEntry::parse(&reply.entries[0]).unwrap();
-        assert_eq!(parsed.verify(&ids()), Ok(true), "O's signature");
+        assert_eq!(parsed.verify(&ids()), Ok(()), "O's signature");
         assert!(!reply.encode().windows(32).any(|w| w == kh("alice")), "nothing by H");
     }
 }

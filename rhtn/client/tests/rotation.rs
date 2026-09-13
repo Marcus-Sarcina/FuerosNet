@@ -44,7 +44,7 @@ fn two_relationships() -> (World, Archive) {
 fn seqno_of(seal: &[u8]) -> (Seqno, Locator) {
     let sl = SignedLocator::parse(seal).unwrap();
     assert_eq!(sl.subject, kh("alice"));
-    assert_eq!(sl.verify(&ids()), Ok(true), "self-signed by alice");
+    assert_eq!(sl.verify(&ids()), Ok(()), "self-signed by alice");
     (sl.locator.seqno, sl.locator)
 }
 

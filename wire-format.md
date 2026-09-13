@@ -2080,7 +2080,8 @@ is rejected**, which is what field 7's rule already required and the wire could 
 previously carry.
 
 **How `selection_basis` reaches the verifier** [2026-09-02]: the third element,
-a bare uint 0–2. Response field 10 is the selector's claim inside the
+a bare uint 0–3, the same closed enumeration field 10 carries and the same one
+design §8.1 names. Response field 10 is the selector's claim inside the
 verifier's signature, and no earlier element carried it — the specified
 response was unconstructible from the specified request. It travels outside
 every signature because the transport already authenticates the requester, who

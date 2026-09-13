@@ -401,7 +401,7 @@ fn dec_19_a_cose_container_departing_from_the_profile_is_rejected() {
 
     // (c) a standalone COSE_Sign1: the endpoint record's signature slot
     let er = fixture("P-endpointrecord").bytes.clone();
-    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(true));
+    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(()));
     let r4 = value_slice(&er, 4).unwrap();
     assert!(verify::record(&ids, "EndpointRecord", &with_cose_item(&er, r4.start, 2, &h00)).is_err(), "sign1 payload present");
 }
@@ -443,7 +443,7 @@ fn dec_25_a_classical_signature_declaring_another_algorithm_is_refused() {
     emit_map_head(&mut sign1, 0);
     emit_null(&mut sign1);
     emit_bstr(&mut sign1, &sig);
-    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(true), "the fixture verifies");
+    assert_eq!(verify::record(&ids, "EndpointRecord", &er), Ok(()), "the fixture verifies");
     let e = verify::record(&ids, "EndpointRecord", &replace_value(&er, 0, 4, &sign1)).unwrap_err().to_string();
     assert!(e.contains("algorithm"), "{e}");
     // (b) a consent signature inside a verifier response, the same way

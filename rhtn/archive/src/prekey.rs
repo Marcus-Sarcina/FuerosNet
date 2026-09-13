@@ -74,7 +74,7 @@ impl PrekeyBundle {
     }
 
     /// Signed by the subject it names.
-    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
+    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<(), String> {
         verify::record(ids, "PrekeyBundle", &self.bytes).map_err(|e| e.to_string())
     }
 }

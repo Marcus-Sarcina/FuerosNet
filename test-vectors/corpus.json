@@ -1,9 +1,9 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "81a5dd6b7ea1ab004dc0976ae0cf6eb8d4df1ce677e873b20de4204e9f6e59eb",
-  "network-design.md": "b034b39d486665e75083a00928127a61cfca3b35b5a2e0a99e116c1c6b88579b",
-  "light-client-requirements.md": "6bb4286d5a2d9101f11b5c30746bf4fca2fcf59a0e8a1a99d32bc561223fc26d"
+  "wire-format.md": "7862d27bb2bcb5c24fbb3f658dc0017d0d6a934cd342535df77d6a61759024b6",
+  "network-design.md": "bc59e9b2528a5e78c794d3bc777643a802dd948fb22af26fa2437c8df647c754",
+  "light-client-requirements.md": "04db8a2d8066cebecca8e905087da9cc837eb0a6998185b953982c8541451393"
  },
  "classes": {
   "bytes": "hex is the complete input",
@@ -319,6 +319,15 @@
    "hex": "a701582037f827013ad509ef5a4d30abed1c99f06c8c554e83b8c68f4c497fe6458a3ae402582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf20358202a80b848fa376605a16c302c11809820ada7c9e79bbc416e49742e8cfa14a1d1045820e48ff49ee33b5e5f19e019da77304c1fcb74bf6ec6084c870eb5110def3553e90503065820532fe9ddfc9ede0a8a70e1f384b2e6aa079fe6ae2a7f387f7bbf75426633a86007582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf2"
   },
   {
+   "id": "P-relayed",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "RelayedPayload"
+   },
+   "hex": "8258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945aabdcb238c4"
+  },
+  {
    "id": "P-frame-01",
    "class": "bytes",
    "expect": {
@@ -489,6 +498,56 @@
    "note": "CurrencyRequest (request 8)"
   },
   {
+   "id": "P-frame-18",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "frame"
+   },
+   "hex": "000000cf8209a201a50158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510058443a10127a0f65840b41656e418fd1cb558477031bfc44dbf9d427cd613bae2e8c4ba49db883b67629cfc4bb54e744a4a76084fcf7c0010a7ae7550069a3fc3760151ad6c58e911020250c378a562ee11fbff3124ce3f63f99175",
+   "note": "PrekeyPublication (request 9) \u2014 the subject's own bundle, published by the subject"
+  },
+  {
+   "id": "P-frame-19",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "frame"
+   },
+   "hex": "0000007d820aa201835820843aa21792ec7ab11513879f35807be2d2597e25a21b5139f43d9a6ffad3f6ac5820dc1dd4b52edd76e572951b1de565b409b9592ca4633231031ffca4af91d5346c582052038250fec5fb4184e8fa37080e43f74b9fb720242a1d72388b0038a8fcd4e70250d0dc58af3e99a8406d7eb8e10d7bd9eb",
+   "note": "OneTimeDeposit (request 10) \u2014 three keys, opaque to the node"
+  },
+  {
+   "id": "P-frame-20",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "frame"
+   },
+   "hex": "0000005b820ba301582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf202582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945aabdcb238c40350eee185c6d2aaa010d92f3b656634ca91",
+   "note": "RelaySubmission (request 11) \u2014 ciphertext for carol, which this node cannot read"
+  },
+  {
+   "id": "P-frame-21",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "frame"
+   },
+   "hex": "0000005f820ca40150727e0cf02d74eb27aa6a712d38badb6f02781e68747470733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076041a6b4b3190",
+   "note": "WakeRegistration (request 12) \u2014 endpoint, its key, and when the client expects it to lapse"
+  },
+  {
+   "id": "P-frame-22",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "frame"
+   },
+   "hex": "00000015820ca101505bb3999edb24fe7ca438a873fafa8e37",
+   "note": "WakeRegistration \u2014 the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it"
+  },
+  {
    "id": "P-reply-01",
    "class": "bytes",
    "expect": {
@@ -619,6 +678,28 @@
    "hex": "a2015071b5e974259b3aff3d013b1c67cc9fe30200",
    "note": "ResourceRegistrationReply \u2014 0 recorded",
    "family": "ResourceRegistrationReply"
+  },
+  {
+   "id": "P-reply-13",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "reply"
+   },
+   "hex": "a20150c378a562ee11fbff3124ce3f63f991750200",
+   "note": "SubmissionReply \u2014 0 accepted, echoing the publication's nonce",
+   "family": "SubmissionReply"
+  },
+  {
+   "id": "P-reply-14",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "reply"
+   },
+   "hex": "a20150d0dc58af3e99a8406d7eb8e10d7bd9eb0202",
+   "note": "SubmissionReply \u2014 2 over a bound this node applies, echoing the deposit's nonce",
+   "family": "SubmissionReply"
   },
   {
    "id": "P-e2e-01",

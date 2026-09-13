@@ -32,7 +32,7 @@ impl SignedLocator {
     }
 
     /// Signed by the subject; a bare `Locator` presented alone is rejected.
-    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<bool, String> {
+    pub fn verify<L: Lookup + ?Sized>(&self, ids: &L) -> Result<(), String> {
         verify::record(ids, "SignedLocator", &self.bytes).map_err(|e| e.to_string())
     }
 }

@@ -9,35 +9,23 @@ use rhtn_codec::frame::{self, Stream};
 use rhtn_codec::schema::{self, Family};
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::verify;
-use rhtn_crypto::Identity;
 
-pub const NAMES: [&str; 25] = [
-    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11",
-    "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5",
-];
+mod common;
 
-pub fn corpus() -> serde_json::Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json");
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-pub fn identities() -> Vec<Identity> {
-    NAMES.iter().map(|n| test_identity(n).public).collect()
-}
+pub use common::{NAMES, corpus, identities};
 
 /// The reply family a corpus reply entry belongs to, as the corpus states
 /// it on the entry.
+///
+/// **The name table is `common`'s**, and is not repeated here: two copies
+/// of it disagreed once, when a family was added to one and not the other,
+/// and the corpus entry that named it panicked in the tests that used the
+/// other copy.
 fn reply_family(e: &serde_json::Value) -> Family {
     let name = e["family"].as_str().unwrap_or_else(|| panic!("{}: no reply family stated", e["id"]));
-    match name {
-        "ResolveReply" => Family::ResolveReply,
-        "ArchiveReply" => Family::ArchiveReply,
-        "PrekeyReply" => Family::PrekeyReply,
-        "CatalogReply" => Family::CatalogReply,
-        "ResourceResponse" => Family::ResourceResponse,
-        "CurrencyReply" => Family::CurrencyReply,
-        "ResourceRegistrationReply" => Family::ResourceRegistrationReply,
-        other => panic!("{}: unknown reply family {other}", e["id"]),
+    match common::family_by_name(name) {
+        Some(f) => f,
+        None => panic!("{}: unknown reply family {name}", e["id"]),
     }
 }
 
@@ -106,8 +94,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                     "presentation" => verify::presentation(&ids, &raw).map_err(|e| e.to_string()),
                     k if verified_record_kind(k) && !stale => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
                         (Err(e2), _) => Err(e2.0.into()),
-                        (Ok(()), Ok(true)) => Ok(()),
-                        (Ok(()), Ok(false)) => Err("record signature fails".into()),
+                        (Ok(()), Ok(())) => Ok(()),
                         (Ok(()), Err(e2)) => Err(e2.to_string()),
                     },
                     _ => schema::check_kind(&raw, kind, &item).map_err(|e| e.0.into()),
@@ -120,7 +107,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 },
                 ("reject", Ok(item)) => {
                     let schema_ok = schema::check_kind(&raw, kind, &item).is_ok();
-                    let sig_fails = verified_record_kind(kind) && !stale && matches!(verify::record(&ids, kind, &raw), Ok(false));
+                    let sig_fails = verified_record_kind(kind) && !stale && verify::record(&ids, kind, &raw).is_err();
                     if !schema_ok || sig_fails {
                         Ok(())
                     } else if implemented_kind(kind) || verified_record_kind(kind) {
@@ -197,6 +184,6 @@ fn implemented_kind(kind: &str) -> bool {
         "VerifierResponse" | "Locator" | "NetworkPoint" | "LocationEvidence" | "Proximity" | "Scope" | "Capabilities"
             | "CatalogEntry" | "CurrencyAttestation" | "ResolveReply" | "ResourceResponse" | "ArchiveRequest"
             | "PrekeyBundle" | "PrekeyBatchRequest" | "Witness" | "body" | "SignedLocator" | "VerificationQuery"
-            | "CatalogReply"
+            | "CatalogReply" | "RelayedPayload"
     )
 }

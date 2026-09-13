@@ -140,10 +140,9 @@ fn said(r: Result<(), String>) -> String {
     }
 }
 
-fn signature(r: Result<bool, verify::Failure>) -> String {
+fn signature(r: Result<(), verify::Failure>) -> String {
     match r {
-        Ok(true) => "verified".into(),
-        Ok(false) => "fails under the key it names".into(),
+        Ok(()) => "verified".into(),
         // a key this holder lacks is not a failure: the object is
         // unverifiable here and may verify elsewhere (`wire-format.md` §3.4)
         Err(verify::Failure::MissingKey(k)) => format!("unverifiable: no key held for {}", hex(&k)),

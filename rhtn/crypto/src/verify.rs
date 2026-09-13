@@ -274,7 +274,7 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
 
 /// A standalone `COSE_Sign1` record under its named signer: the signature
 /// slot, role tag and signer field per kind (§7).
-pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<bool, Failure> {
+pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(), Failure> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let __m_item = parse_all(raw).map_err(|_| "cbor")?;
     let Item::Map(m) = &__m_item else { return Err("not map".into()) };
@@ -295,7 +295,10 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<boo
         return Err("a standalone signature carries a header beyond alg, or an algorithm other than the profile's".into());
     }
     let payload = map_without_key(raw, slot).ok_or("payload")?;
-    Ok(id.verify_ed(&sig, &cose::sig_structure_sign1(&prot, tag, &payload)))
+    if !id.verify_ed(&sig, &cose::sig_structure_sign1(&prot, tag, &payload)) {
+        return Err("the standalone signature does not verify under the key the object names".into());
+    }
+    Ok(())
 }
 
 const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention", "p1.integrity", "p1.retention", "proximity"];

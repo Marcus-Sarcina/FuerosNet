@@ -66,7 +66,7 @@ impl PrekeyService {
     /// it names, and nothing of its blob is read.
     pub fn publish<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<Keyhash, String> {
         let b = PrekeyBundle::parse(bytes)?;
-        if !b.verify(ids)? {
+        if b.verify(ids).is_err() {
             return Err("bundle signature fails".into());
         }
         // written through where the service is kept, for the same reason

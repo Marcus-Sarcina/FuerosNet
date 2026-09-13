@@ -34,9 +34,9 @@ fn stocked(subject: &str, n: usize) -> PrekeyService {
 fn the_corpus_prekey_objects_read_here() {
     let b = PrekeyBundle::parse(&fixture("P-prekey")).unwrap();
     assert_eq!((b.subject, b.construction), (kh("alice"), CONSTRUCTION_PQXDH));
-    assert_eq!(b.verify(&ids()), Ok(true));
+    assert_eq!(b.verify(&ids()), Ok(()));
     let wrong = PrekeyBundle::parse(&fixture("N-wrong-signer-prekey")).unwrap();
-    assert_ne!(wrong.verify(&ids()), Ok(true), "signed by a key the bundle does not name");
+    assert!(wrong.verify(&ids()).is_err(), "signed by a key the bundle does not name");
     let f11 = fixture("P-frame-11");
     let f12 = fixture("P-frame-12");
     let body = |f: &[u8]| {

@@ -1,6 +1,6 @@
 # Test identities
 
-Generated against `wire-format.md` `81a5dd6b7ea1ab00…`, `network-design.md` `b034b39d486665e7…` and `light-client-requirements.md` `6bb4286d5a2d9101…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `7862d27bb2bcb5c2…`, `network-design.md` `bc59e9b2528a5e78…` and `light-client-requirements.md` `04db8a2d8066cebe…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.

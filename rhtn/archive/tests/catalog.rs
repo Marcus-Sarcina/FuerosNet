@@ -28,15 +28,15 @@ fn the_corpus_catalog_entry_and_abuse_report_read_and_verify_and_their_forgeries
     assert_eq!((e.owner, e.service_type.as_str(), e.instance.as_str()), (w.kh("bob"), "rhtn-forum", "The Reading Room"));
     assert_eq!(e.endpoint, b"quic://198.51.100.7:4433");
     assert_eq!((e.metadata.as_deref(), e.data_practice, e.connect_scope.clone()), (Some(&b"v=1"[..]), Some(1), None));
-    assert_eq!(e.verify(&ids), Ok(true));
+    assert_eq!(e.verify(&ids), Ok(()));
     let wrong = CatalogEntry::parse(&fixture("N-wrong-signer-catalog")).unwrap();
-    assert_ne!(wrong.verify(&ids), Ok(true), "signed by a key the entry does not name as owner");
+    assert!(wrong.verify(&ids).is_err(), "signed by a key the entry does not name as owner");
     let scoped = CatalogEntry::parse(&fixture("P-catalog-scoped")).unwrap();
     assert_eq!(scoped.connect_scope, Some(Scope::Dunbar));
     // built here, an entry with the same fields is the same bytes
     let f = EntryFields { resource: e.resource, service_type: e.service_type.clone(), instance: e.instance.clone(), endpoint: e.endpoint.clone(), connect_scope: None, metadata: e.metadata.clone(), data_practice: e.data_practice };
     let mine = CatalogEntry::build(w.id("bob"), &f);
-    assert_eq!(CatalogEntry::parse(&mine).unwrap().verify(&ids), Ok(true));
+    assert_eq!(CatalogEntry::parse(&mine).unwrap().verify(&ids), Ok(()));
     let (a, b) = (CatalogEntry::parse(&mine).unwrap(), e.clone());
     assert_eq!((a.resource, a.owner, a.endpoint, a.data_practice), (b.resource, b.owner, b.endpoint, b.data_practice));
     // the abuse report: by the resource it names, and not by another key
@@ -46,7 +46,7 @@ fn the_corpus_catalog_entry_and_abuse_report_read_and_verify_and_their_forgeries
     // the resource's own key is not in the roster: unverifiable here, and the forgery under carol fails
     assert!(r.verify(&ids).is_err());
     let forged = AbuseReport::parse(&fixture("N-wrong-signer-abuse")).unwrap();
-    assert_ne!(forged.verify(&ids), Ok(true));
+    assert!(forged.verify(&ids).is_err());
 }
 
 #[test]

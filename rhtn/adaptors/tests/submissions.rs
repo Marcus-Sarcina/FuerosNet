@@ -96,6 +96,14 @@ async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
 async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     let node = node_with("bob", |_, _| {});
     let carol = attach_light("carol", &node).await;
+    // field 1 is the bundle object `wire-format.md` §7.10 names, not a byte
+    // string wrapping it: a peer applying the CDDL would refuse the wrapping,
+    // and a round trip against ourselves cannot tell the difference
+    let published = PrekeyPublication { bundle: bundle("carol"), nonce: [1; 16] }.encode();
+    let rhtn_codec::cbor::Item::Map(ref m) = rhtn_codec::cbor::parse_all(&published).unwrap() else { panic!("a map") };
+    assert!(matches!(rhtn_codec::cbor::map_get(m, 1), Some(rhtn_codec::cbor::Item::Map(_))), "field 1 is the bundle, spliced in");
+    assert_eq!(PrekeyPublication::decode(&published).unwrap().bundle, bundle("carol"), "and it reads back whole");
+
     assert!(carol.serving.publish(&bundle("carol")).await, "the node takes the bundle");
     assert!(carol.serving.stock(carol.me, keys(3)).await, "and the deposit");
     // a fetch by a different client returns what carol published, byte for

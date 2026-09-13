@@ -29,7 +29,7 @@ fn kh(b: &[u8], m: &[(Item, Item)], k: u64) -> Option<Keyhash> {
 pub fn parse_attestation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Attestation, String> {
     let item = parse_all(bytes).map_err(|e| e.0)?;
     rhtn_codec::schema::check_kind(bytes, "CurrencyAttestation", &item).map_err(|e| e.0)?;
-    if !verify::record(ids, "CurrencyAttestation", bytes).map_err(|e| e.to_string())? {
+    if verify::record(ids, "CurrencyAttestation", bytes).map_err(|e| e.to_string()).is_err() {
         return Err("issuer signature fails".into());
     }
     let Item::Map(m) = &item else { return Err("map".into()) };
