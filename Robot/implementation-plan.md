@@ -423,6 +423,19 @@ decodes with the parser a node uses and no other, because a second and
 laxer decoder written for convenience would disagree with the first
 invisibly.
 
+Done (2026-09-12). Every byte-class corpus entry decodes and prints from
+the binary under the kind the corpus declares, and a probe resolves,
+fetches an archive and queries a catalog against a running node over a
+real session. `inspect` prints the shape in diagnostic notation, an
+envelope's derived txid and its signers, and reports a signed object no
+key is held for as unverifiable rather than failing, which is §3.4's
+distinction. `keys` mints an identity readable by its owner alone,
+refuses to replace one, never prints a private half, and reproduces the
+seeds `test-vectors/keys.md` derives. DMN-05 and DMN-06. The argument
+parser is hand-rolled, for the reason the daemon's configuration format
+is: section 7 lists the choice of one as the author's, and taking none
+leaves it open.
+
 **Milestone 13, the boundary** (`rhtn-ffi`). Exit: the facade covers the
 ceremony, recovery, attach and payload, with the platform's channels,
 camera and clock arriving as callbacks, and a generated binding for one

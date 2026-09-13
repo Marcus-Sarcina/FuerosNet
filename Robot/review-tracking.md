@@ -9058,3 +9058,45 @@ The reviewer's harness rerun at the end: **43 of 43 pass on an unmodified
 copy in the scratchpad**, the five new assertions included. No adaptation
 was needed this round, the repairs having changed no surface the harness
 calls.
+
+**Milestone 12, the command line (2026-09-12).** Three commits, the last
+gate-green, 69df096. Both halves of the exit criterion are met: every
+byte-class corpus entry decodes and prints from the binary, and a probe
+resolves, fetches an archive and queries a catalog against a running node
+over a real session. DMN-05 and DMN-06; 305 of 315, 0 flags.
+
+- **`inspect` decodes with the parser a node uses and no other.** It
+  prints the shape in diagnostic notation, an envelope's derived txid,
+  type and signers, and the verdict under whatever kind the caller says
+  the object is. A refusal is a line of output rather than an error,
+  because the reason the strict decoder gives is what the reader came for.
+- **`keys`** mints an identity readable by its owner alone, refuses to
+  replace one in place, never prints a private half, and reproduces the
+  seeds the vectors derive so a mismatch shows from one command.
+- **`probe`** attaches and sends one of the three request types §9.2 calls
+  read-only. Nothing else is reachable from it, and the ask is checked
+  before anything is read from disk or dialled.
+
+The argument parser is hand-rolled, as the daemon's configuration format
+is and for the same reason: section 7 lists the choice of one as the
+author's, and taking none leaves it open. About sixty lines, reaching only
+what three subcommands need.
+
+Two defects of the assistant's own, found by the corpus test rather than
+by reading:
+
+- **The envelope lines read the wrong fields.** They guessed at map keys
+  and printed one record's txid for another and "adoption" for every type.
+  The envelope's own parser gives both, and is used now.
+- **Every signed object came back "refused".** The doc comment claimed
+  §3.4's distinction between unverifiable and failing while the code
+  folded a missing key into a refusal, for envelopes and presentations
+  though not for standalone records. The presentation verifier reports in
+  prose rather than a typed failure, so the envelope inside it is asked
+  first and its typed answer is the one printed.
+
+Found on the way: `verify::presentation` returns a `String` where
+`verify::envelope` and `verify::record` return a typed `Failure`. The
+command line works around it by asking the inner envelope. Making the
+three agree is a small change nobody has needed until now, and is left
+for the author to want.
