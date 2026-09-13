@@ -44,9 +44,13 @@ pub fn deposit(view: &mut NodeView, peer: &Keyhash, body: &[u8]) -> Option<Vec<u
     let cfg = view.prekeys.cfg.clone();
     let code = if d.keys.len() > cfg.per_deposit || view.prekeys.pool_size(peer) + d.keys.len() > cfg.pool {
         SUBMISSION_OVER_BOUND
-    } else {
-        view.prekeys.stock(*peer, d.keys);
+    } else if view.prekeys.stock(*peer, d.keys) {
         SUBMISSION_ACCEPTED
+    } else {
+        // **accepted means the node took them.**  A deposit it could not
+        // store is refused, not acknowledged: a client told its pool was
+        // replenished stops replenishing it
+        SUBMISSION_REFUSED
     };
     Some(SubmissionReply::code(d.nonce, code).encode())
 }

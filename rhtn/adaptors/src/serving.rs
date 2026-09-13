@@ -122,10 +122,7 @@ impl Serving for LocalNode {
     }
 
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
-        Box::pin(async move {
-            self.node.view.lock().unwrap().prekeys.stock(subject, keys);
-            true
-        })
+        Box::pin(async move { self.node.view.lock().unwrap().prekeys.stock(subject, keys) })
     }
 
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

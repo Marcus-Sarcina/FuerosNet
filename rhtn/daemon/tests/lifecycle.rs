@@ -433,3 +433,49 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     assert_eq!(v.table.subordinates(&kh("bob")).into_iter().collect::<Vec<_>>(), expected);
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+// acceptance: DMN-14
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    let l = layout("issuance-save");
+    std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let s = Service::start(&cfg, &l.peers).await.expect("starts");
+    {
+        let mut view = s.node.view.lock().unwrap();
+        let bundle = rhtn_archive::prekey::PrekeyBundle::build(&test_identity("carol"), rhtn_archive::prekey::CONSTRUCTION_PQXDH, b"reusable material", 1_800_000_000);
+        view.prekeys.publish(&ids(), &bundle).expect("published");
+        assert!(view.prekeys.stock(kh("carol"), vec![b"the only one-time key".to_vec()]), "stocked");
+    }
+    // a save before any issuance, so the failure below can only be the
+    // issuance's
+    s.persist().expect("persists before serving anything");
+
+    let served = {
+        let mut view = s.node.view.lock().unwrap();
+        let now = view.now();
+        let req = rhtn_archive::prekey::PrekeyRequest::One { subject: kh("carol"), one_time: true, nonce: [1; 16] }.encode();
+        let reply = view.prekeys.answer(&kh("witness"), &req, now).expect("answered");
+        rhtn_archive::prekey::PrekeyReply::decode(&reply).unwrap().one_time.is_some()
+    };
+    assert!(served, "a one-time key was served, which is the condition under test");
+
+    // a bookkeeping file beside the pools, which is what the issuance
+    // counter used to be: **a stray file is not a stale subject
+    // directory**, and treating it as one turned every later save into
+    // `NotADirectory` before the archive, the store or the derived view
+    // reached disk
+    std::fs::write(cfg.prekeys.join("prekeys").join("issued"), b"a file, not a subject").unwrap();
+
+    // **ordinary issuance is not a condition that can stop a node
+    // persisting** (`infra-client-requirements.md` §4.3): the archive, the
+    // store and the derived view all have to reach disk afterwards
+    s.persist().expect("persists after serving a one-time key");
+    s.persist().expect("and again");
+    assert!(cfg.topology.join("derived").exists(), "the derived view is written");
+    assert!(cfg.archive.exists(), "and the archive");
+    assert!(cfg.topology.join("tx").exists(), "and the topology store");
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

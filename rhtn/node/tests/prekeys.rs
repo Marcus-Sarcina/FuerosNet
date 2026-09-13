@@ -26,7 +26,7 @@ fn one_time_reply(svc: &mut PrekeyService, requester: &str, subject: &str, n: u8
 fn stocked(subject: &str, n: usize) -> PrekeyService {
     let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, ..Default::default() });
     svc.publish(&ids(), &bundle_for(subject, b"reusable material", 1_800_000_000)).unwrap();
-    svc.stock(kh(subject), (0..n).map(|i| format!("otk-{i}").into_bytes()).collect());
+    assert!(svc.stock(kh(subject), (0..n).map(|i| format!("otk-{i}").into_bytes()).collect()), "the pool takes the deposit");
     svc
 }
 
@@ -115,7 +115,7 @@ fn one_time_issuance_is_limited_per_requester_per_subject() {
     let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 2, window_s: 3600, ..Default::default() });
     for s in ["alice", "carol"] {
         svc.publish(&ids(), &bundle_for(s, b"m", 1_800_000_000)).unwrap();
-        svc.stock(kh(s), (0..5).map(|i| vec![i]).collect());
+        assert!(svc.stock(kh(s), (0..5).map(|i| vec![i]).collect()), "the pool takes the deposit");
     }
     // L = 2: the first two carry keys, the third is served no one-time key
     assert!(one_time_reply(&mut svc, "bob", "alice", 1, 100).one_time.is_some());
@@ -142,7 +142,7 @@ fn the_subject_is_told_when_its_pool_is_exhausted() {
     assert_eq!(svc.take_exhausted(), vec![kh("alice")], "the last key served: the subject is told");
     assert!(svc.take_exhausted().is_empty(), "told once");
     // the subject replenishes, and the next drain tells again
-    svc.stock(kh("alice"), vec![b"fresh".to_vec()]);
+    assert!(svc.stock(kh("alice"), vec![b"fresh".to_vec()]), "the pool takes the deposit");
     one_time_reply(&mut svc, "w1", "alice", 3, 0);
     assert_eq!(svc.take_exhausted(), vec![kh("alice")]);
 }
@@ -228,7 +228,7 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
         // a service kept at the directory, holding one key
         let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
         s.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-        s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]);
+        assert!(s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]), "the pool takes the deposit");
         assert_eq!(s.pool_size(&kh("alice")), 1);
         let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [1; 16] }.encode();
         let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
@@ -248,7 +248,7 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     // a service with no directory keeps its pool in memory as before
     let mut m = PrekeyService::new(PrekeyConfig::default());
     m.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    m.stock(kh("alice"), vec![b"in memory".to_vec()]);
+    assert!(m.stock(kh("alice"), vec![b"in memory".to_vec()]), "the pool takes the deposit");
     let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [3; 16] }.encode();
     assert!(PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap()).unwrap().one_time.is_some());
     let _ = std::fs::remove_dir_all(&dir);
@@ -264,7 +264,7 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     // serving a key touches memory alone
     let mut svc = PrekeyService::new(PrekeyConfig::default());
     svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    svc.stock(kh("alice"), vec![b"the only one-time key".to_vec()]);
+    assert!(svc.stock(kh("alice"), vec![b"the only one-time key".to_vec()]), "the pool takes the deposit");
     svc.save(&dir).unwrap();
     let mut svc = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
     assert_eq!(svc.pool_size(&kh("alice")), 1, "the snapshot round-trips");
@@ -278,26 +278,115 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let r = one_time_reply(&mut again, "bob", "alice", 2, 0);
     assert!(r.bundle.is_some(), "the reusable material is still served");
     assert!(r.one_time.is_none(), "and no key a second time");
-    // the allowance is spent with the key: a requester at its limit is
-    // still at it after a restart, or the bound stops binding on a client
-    // that wakes and sleeps
+    // **the allowance is memory alone, and a restart opens a fresh window**
+    // (`infra-client-requirements.md` §6): persisting it would mean keeping
+    // a line naming the requester and the subject, which is the record
+    // this service must not keep.  What a restart cannot refill is the
+    // pool, and that is the bound that matters
     let dir2 = std::env::temp_dir().join(format!("rhtn-allow-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir2);
     std::fs::create_dir_all(&dir2).unwrap();
     let mut kept = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
     kept.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]);
+    assert!(kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]), "the pool takes the deposit");
     assert!(one_time_reply(&mut kept, "bob", "alice", 4, 0).one_time.is_some(), "the one bob is allowed");
     assert!(one_time_reply(&mut kept, "bob", "alice", 5, 0).one_time.is_none(), "and no more in this window");
     drop(kept);
     let mut after = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
-    assert_eq!(after.pool_size(&kh("alice")), 1, "one key left, the other spent");
-    assert!(one_time_reply(&mut after, "bob", "alice", 6, 0).one_time.is_none(), "the allowance survived the restart");
-    assert!(one_time_reply(&mut after, "carol", "alice", 7, 0).one_time.is_some(), "another requester has its own");
+    assert_eq!(after.pool_size(&kh("alice")), 1, "one key left, the other spent: the budget survives");
+    assert!(one_time_reply(&mut after, "bob", "alice", 6, 0).one_time.is_some(), "the window is fresh, and the last key goes");
+    assert_eq!(after.pool_size(&kh("alice")), 0, "which is where the pool, not the counter, is the bound");
+    assert!(one_time_reply(&mut after, "carol", "alice", 7, 0).one_time.is_none(), "nothing left for anyone, whatever their allowance");
     let _ = std::fs::remove_dir_all(&dir2);
     // a subject the service no longer holds a bundle for goes with it
     let empty = PrekeyService::new(PrekeyConfig::default());
     empty.save(&dir).unwrap();
     assert!(PrekeyService::load(&dir, PrekeyConfig::default()).unwrap().subjects().is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ------------------------------- what the service keeps, and what it does not
+
+// acceptance: PAY-18
+#[test]
+fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
+    let dir = std::env::temp_dir().join(format!("rhtn-prekey-privacy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut svc = PrekeyService::at(&dir, PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, ..Default::default() }).unwrap();
+    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+    assert!(svc.stock(kh("alice"), (0..3).map(|i| vec![i]).collect()), "the pool takes the deposit");
+
+    // bob asks for a one-time key of alice's, and gets one
+    let r = one_time_reply(&mut svc, "bob", "alice", 1, 1_800_000_000);
+    assert!(r.one_time.is_some(), "a key is served");
+    svc.save(&dir).expect("the state writes back");
+
+    // **nothing on disk names the pair.**  A file recording that bob asked
+    // for alice's bundle is the intent-to-message event
+    // `infra-client-requirements.md` §6 says to discard
+    let (bob, alice) = (kh("bob"), kh("alice"));
+    let mut checked = 0usize;
+    let mut stack = vec![dir.clone()];
+    while let Some(p) = stack.pop() {
+        for e in std::fs::read_dir(&p).into_iter().flatten().flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let body = std::fs::read(&path).unwrap_or_default();
+            let text = String::from_utf8_lossy(&body).to_string();
+            let hexed = |k: &[u8; 32]| k.iter().map(|b| format!("{b:02x}")).collect::<String>();
+            assert!(!text.contains(&hexed(&bob)), "{} names the requester", path.display());
+            assert!(
+                !body.windows(32).any(|w| w == bob) || path.file_name().is_some_and(|n| n == "bundle"),
+                "{} carries the requester's keyhash",
+                path.display()
+            );
+            let _ = alice;
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "the service wrote something, so the sweep looked at something");
+
+    // the allowance still binds inside its window, in memory
+    for n in 2..=4u8 {
+        assert!(one_time_reply(&mut svc, "bob", "alice", n, 1_800_000_000).one_time.is_some() || svc.pool_size(&kh("alice")) == 0);
+    }
+    assert!(one_time_reply(&mut svc, "bob", "alice", 9, 1_800_000_000).one_time.is_none(), "over the allowance, or out of keys");
+
+    // and a restart opens a fresh window, which costs the rate and not the
+    // budget: the keys already served are gone
+    let left = svc.pool_size(&kh("alice"));
+    svc.save(&dir).expect("writes back");
+    let after = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+    assert_eq!(after.pool_size(&kh("alice")), left, "a restart refills nobody's pool");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// acceptance: PAY-19
+#[test]
+fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("rhtn-prekey-unwritable-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut svc = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+    assert!(svc.stock(kh("alice"), vec![b"before".to_vec()]), "a writable pool takes a deposit");
+
+    // the subject's directory stops accepting new files, which is the
+    // deterministic form of a node that cannot store what it was handed
+    let subject = dir.join("prekeys").join(kh("alice").iter().map(|b| format!("{b:02x}")).collect::<String>());
+    std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let held = svc.pool_size(&kh("alice"));
+
+    assert!(!svc.stock(kh("alice"), vec![b"one".to_vec(), b"two".to_vec()]), "the node could not take them");
+    assert_eq!(svc.pool_size(&kh("alice")), held, "and holds none of them, not even the first");
+
+    // what the deposit did write before failing is gone, so the pool and
+    // the answer agree
+    std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let names: Vec<String> = std::fs::read_dir(&subject).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("otk-")).collect();
+    assert_eq!(names.len(), held, "no half-written key outlived the refusal");
     let _ = std::fs::remove_dir_all(&dir);
 }

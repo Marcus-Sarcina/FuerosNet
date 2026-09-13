@@ -103,7 +103,9 @@ impl Net {
                 Msg::PublishBundle(b) => {
                     self.nodes.get_mut(node).unwrap().prekeys.publish(&ids(), &b).expect("a bundle by the client");
                 }
-                Msg::StockOneTime(keys) => self.nodes.get_mut(node).unwrap().prekeys.stock(from, keys),
+                Msg::StockOneTime(keys) => {
+                    assert!(self.nodes.get_mut(node).unwrap().prekeys.stock(from, keys), "the pool takes the deposit");
+                }
                 Msg::PrekeyRequest(req) => {
                     // a single-subject request goes to that subject's serving
                     // node; a sweep to the requester's own

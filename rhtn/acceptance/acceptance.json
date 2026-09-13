@@ -9233,5 +9233,86 @@
   "then": "The first three are refused and the withdrawal accepted, at the decoder rather than at a node's policy.",
   "oracle": "fixture",
   "interpretation": null
+ },
+ {
+  "id": "PAY-18",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Serving a one-time key leaves no record of who asked for whose bundle",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §6",
+   "design §19.8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "serve the request,\n  keep no record of who asked for whose bundle."
+   },
+   {
+    "where": "design §19.8",
+    "text": "an ordinary fetch names a population rather than a person and carries no intent signal"
+   }
+  ],
+  "given": "A node whose prekey service is kept on disk, holding a published bundle and a stocked pool for a subject.",
+  "when": "A requester is served a one-time key, the node writes its state back, and the rate-limit window later expires.",
+  "then": "Nothing anywhere under the node's directories contains the requester's keyhash beside the subject's, at any point. The allowance still binds within a window in memory, and a restart opens a fresh one, which costs the rate and not the budget since a served key is unlinked before its reply.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-19",
+  "area": "payload",
+  "gap": "payload",
+  "title": "A deposit the node cannot store whole is refused, not acknowledged",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "infra-client-requirements.md §6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "A deposit is bounded by the array limits like everything else"
+   },
+   {
+    "where": "infra-client-requirements.md §6.1",
+    "text": "a client that asks for more than you lend is refused with the code rather than silently trimmed"
+   }
+  ],
+  "given": "A node serving a client whose bundle it holds, with its prekey service kept somewhere it cannot write.",
+  "when": "The client deposits one-time keys.",
+  "then": "The reply refuses, the pool holds none of the deposited keys, and nothing partially written survives. A client is never told a pool was replenished that was not.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-14",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Serving a one-time key does not stop the node writing its state back",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "infra-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Keep the topology store across a restart — it is your seen-set."
+   },
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Consume one-time keys on serving them"
+   }
+  ],
+  "given": "A daemon started from a configuration, holding a published bundle and a stocked pool.",
+  "when": "It serves a one-time key to a requester and then writes its state back, twice.",
+  "then": "Both saves succeed, and the archive, the topology store and the derived view are all on disk afterwards. Ordinary issuance is not a condition that can stop a node persisting.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]
