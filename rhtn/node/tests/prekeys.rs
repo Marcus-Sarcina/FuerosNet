@@ -253,3 +253,34 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     assert!(PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap()).unwrap().one_time.is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// acceptance: DMN-07
+#[test]
+fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
+    let dir = std::env::temp_dir().join(format!("rhtn-snap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // a detached service: loaded from the directory, not bound to it, so
+    // serving a key touches memory alone
+    let mut svc = PrekeyService::new(PrekeyConfig::default());
+    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
+    svc.stock(kh("alice"), vec![b"the only one-time key".to_vec()]);
+    svc.save(&dir).unwrap();
+    let mut svc = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
+    assert_eq!(svc.pool_size(&kh("alice")), 1, "the snapshot round-trips");
+    let r = one_time_reply(&mut svc, "bob", "alice", 1, 0);
+    assert!(r.one_time.is_some(), "served");
+    assert_eq!(svc.pool_size(&kh("alice")), 0);
+    // the save that follows makes the directory match what is held
+    svc.save(&dir).unwrap();
+    let mut again = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
+    assert_eq!(again.pool_size(&kh("alice")), 0, "the served key did not survive the snapshot");
+    let r = one_time_reply(&mut again, "bob", "alice", 2, 0);
+    assert!(r.bundle.is_some(), "the reusable material is still served");
+    assert!(r.one_time.is_none(), "and no key a second time");
+    // a subject the service no longer holds a bundle for goes with it
+    let empty = PrekeyService::new(PrekeyConfig::default());
+    empty.save(&dir).unwrap();
+    assert!(PrekeyService::load(&dir, PrekeyConfig::default()).unwrap().subjects().is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}

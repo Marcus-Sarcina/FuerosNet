@@ -181,27 +181,47 @@ impl PrekeyService {
         self.issued.retain(|_, (opened, _)| now.saturating_sub(*opened) < w);
     }
 
-    /// Persist the bundles and whatever pool material is not yet on disk,
-    /// and nothing else: no requester and no request is written
+    /// Make the directory match what is held: write what is missing and
+    /// remove what is not held.  No requester and no request is written
     /// (`infra-client-requirements.md` §6).
     ///
-    /// **It does not rewrite the tree.** A key served since the last call
-    /// was unlinked as it was served, and wiping the directory to write a
-    /// snapshot would put it back.  Every write here is of something still
-    /// held.
+    /// **One rule, whichever way the service is kept.** A service bound to
+    /// a directory already has disk and memory in step, so this removes
+    /// nothing; a detached one is snapshotted, and a key it served is gone
+    /// from the directory because it is gone from the pool.  Adding
+    /// without removing would leave a served key on disk for the next load
+    /// to hand out again, and wiping the directory first would open a
+    /// window in which a stop loses everything.
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
         let root = dir.join("prekeys");
         for (subject, bundle) in &self.bundles {
             let d = root.join(hex(subject));
             std::fs::create_dir_all(&d)?;
             std::fs::write(d.join("bundle"), bundle)?;
-        }
-        for (subject, pool) in &self.pools {
-            let d = root.join(hex(subject));
-            std::fs::create_dir_all(&d)?;
-            for (name, k) in pool {
+            let held: std::collections::BTreeSet<&str> = self.pools.get(subject).into_iter().flatten().map(|(n, _)| n.as_str()).collect();
+            for (name, k) in self.pools.get(subject).into_iter().flatten() {
                 if !d.join(name).exists() {
                     std::fs::write(d.join(name), k)?;
+                }
+            }
+            // a key this service no longer holds is one it served: it does
+            // not survive the snapshot that follows
+            if let Ok(rd) = std::fs::read_dir(&d) {
+                for f in rd.flatten() {
+                    let name = f.file_name().to_string_lossy().to_string();
+                    if name.starts_with("otk-") && !held.contains(name.as_str()) {
+                        std::fs::remove_file(f.path())?;
+                    }
+                }
+            }
+        }
+        // and a subject whose bundle is gone is gone: a pool without one is
+        // a subject `load` skips anyway
+        if let Ok(rd) = std::fs::read_dir(&root) {
+            let kept: std::collections::BTreeSet<String> = self.bundles.keys().map(hex).collect();
+            for e in rd.flatten() {
+                if !kept.contains(&e.file_name().to_string_lossy().to_string()) {
+                    std::fs::remove_dir_all(e.path())?;
                 }
             }
         }

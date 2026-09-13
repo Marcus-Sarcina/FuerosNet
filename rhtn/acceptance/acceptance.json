@@ -8594,5 +8594,32 @@
   "then": "Each of the three is answered and printed, the archive naming the records it holds. Anything outside the read-only class is refused by the tool before it dials.",
   "oracle": "behaviour",
   "interpretation": "A prekey fetch consumes a one-time key and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look."
+ },
+ {
+  "id": "DMN-07",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A snapshot holds what is held: a served one-time key does not survive the save that follows it",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.8",
+   "infra-client-requirements.md §6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "**Consume one-time keys on serving them**"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "**Only the one-time key is consumed on serving.** The reusable material may be returned any number of times to anyone."
+   }
+  ],
+  "given": "A prekey service loaded from a directory it is not bound to, holding one one-time key.",
+  "when": "The key is served, the service is saved, and a service is loaded from that directory again.",
+  "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too.",
+  "oracle": "behaviour",
+  "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out."
  }
 ]
