@@ -59,6 +59,7 @@ all six.
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
 | `envelope-shape` | The envelope is the four-key map §3.2 fixes, and an unknown key in it is refused | decoder | DEC-05 | DEC-09 |
+| `locator-nibble-in-range` | A path nibble is 0–9; 10–15 are malformed, and the packed length and pad nibble are fixed | decoder | DEC-23, CER-40 | DEC-23 |
 | `cose-profile` | Entries in canonical order, one hybrid pair, no carried payload, no header beyond alg and kid | decoder | — | DEC-17, DEC-19 |
 | `declared-algorithm` | A signature's declared algorithm is held to the profile before it is verified | verifier | — | DEC-25 |
 | `body-matches-type` | The body is checked against the type its envelope names | decoder | — | DEC-22 |
@@ -96,6 +97,8 @@ because its evidence field is where three different histories arrive.
 | `exactly-one-evidence` | Exactly one of fields 6, 8 and 9 is present; none is malformed and two is malformed | decoder | REC-01 | DEC-20 |
 | `locator-under-patron` | The locator is the patron's path in the subnet being adopted into, with one nibble added | client | CER-33, CER-34 | gap |
 | `self-anchor-suffices` | A party with no ancestor names itself, so a newly minted root can adopt | client | CER-33, PRT-05 | gap |
+| `locator-index-is-free` | The index a patron issues is one no subordinate of its already holds, in that subnet | client | CER-40 | CER-41 |
+| `fanout-cap` | A patron has at most ten subordinates, which is the ten values a nibble carries | client | CER-41 | CER-41 |
 | `series-opens-at-zero` | A relationship's series opens at counter 0 | table | ARC-04 | DEC-22 |
 | `presence-is-between-these-two` | An adoption's named presence record must be between the two parties named | table | gap | TOP-12 |
 | `evidence-verified-before-counted` | Dereferenced evidence counts only once its own signatures verify | table | gap | TOP-19 |
@@ -107,6 +110,15 @@ because its evidence field is where three different histories arrive.
 | `second-binding-stands` | Adopting elsewhere leaves the old binding in view | table | TOP-02 | gap |
 | `key-replaced-on-recovery` | A recovery adoption inside the horizon replaces the old key with the successor | table | TOP-15 | gap |
 | `presented-prefix-unbroken` | A history presented from an earlier head verifies as an unbroken prefix | table | ARC-12 | ARC-19 |
+
+**Two conditions added on the author's reading** [2026-09-14], and the
+second was a live defect: `propose_adoption` appended nibble `0x00`
+unconditionally, so **every subordinate a patron adopted got index 0** —
+ten parties at one address, and the routing slot beneath it holding one
+occupant. A patron now issues the lowest index it has not already used in
+that subnet, read from its own archive, and refuses an eleventh. It is
+enforced at the issuer because that is the party that can: a holder
+elsewhere may not have the other ten, which is design §1.1's test.
 
 **Gaps.** `self-anchor-suffices` and `locator-under-patron` have no
 negative: nothing asserts that a patron with no position *in the subnet it
@@ -126,14 +138,26 @@ evidence which *is* good is counted. `second-binding-stands` and
 | `one-signature-only` | The old patron does not sign a departure, and a decoder must not expect a second signature | decoder | TOP-03 | gap |
 | `ends-only-the-named` | A departure ends the relationship its series names and nothing else | table | TOP-03, TOP-18 | PRP-21, PRP-22 |
 | `counter-advances-strictly` | The relationship's counter advances strictly on departure | table | ARC-04 | gap |
-| `departed-becomes-root` | A node with no other binding is left in the table as a root | table | TOP-04 | gap |
+| `departed-becomes-root` | A node with no other binding reads as a root in the holder's own table, and is out of the horizon where it was | table | TOP-04 | TOP-33 |
 | `order-independent` | The binding a departure names ends whichever of the two arrives first | table | TOP-18 | PRP-22 |
 | `reissue-advances-relationship` | A departure in the proven current series ends the relationship a reissue moved | table | TOP-20 | REC-09 |
 | `move-inside-horizon` | A move within the replication horizon is accepted without archive presentation | table | REP-04 | gap |
 
-**Gaps.** Four conditions have no negative. `one-signature-only` is the
+**Gaps.** Three conditions have no negative. `one-signature-only` is the
 sharpest: nothing asserts that a departure carrying a second signature is
 refused, which is exactly the shape §4.2 calls out.
+
+**On `departed-becomes-root`, and which table** [author, 2026-09-14]. Two
+facts, and the first was being stated in a way that invited the second to
+be forgotten. In **the holder's own fold** the departed party stays a node
+it knows about — it still has the records naming it — and with no patron
+left it reads as a root, which is §4.2's own word: a departure is *required
+for a node to become a root*. But the **horizon walks open bindings**, so
+the party is gone from the place it left: neither the old patron nor a
+sibling adopted afterwards can reach it there. §4.2 states that
+consequence the other way round — without a departure a node that adopts
+elsewhere *remains in the old subtree's view indefinitely* — and TOP-33
+asserts it.
 
 ---
 
@@ -255,11 +279,11 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 77 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 80 conditions drawn from the documents,
 and of them:
 
-- 32 hold on both sides
-- 37 have one polarity only
+- 36 hold on both sides
+- 36 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware
 
