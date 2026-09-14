@@ -9533,3 +9533,37 @@ and the licence. Catalogue 349 of 359, 0 flags.
   it is Apache-2.0 WITH LLVM-exception, so no licence question arises.
   Compile cost: a cold build of the crate is about 40 seconds on this
   machine and the gate's wall clock is visibly longer than before.
+
+**Endpoint records mark a node infra, on the author's ruling (2026-09-14).**
+One gate-green commit, f6069e1. The question DMN-18 was left open on is
+closed: `wire-format.md` §7.6's *published by infra nodes only* is the
+marking rule, and holding a record is what tells a node. Catalogue 350 of
+360, 0 flags.
+
+- **The mark follows storage, not the wire.** `accept_endpoint` already
+  refuses a record for a node more than two edges out, so the horizon
+  bounds the set without a second rule. Derived rather than kept: a rebuild
+  from the store reaches it again, and the rebuild restates the node's own
+  mark because replacing the table is the one operation that could lose it.
+  No unmarking — §7.6 gives a record a successor and no retraction.
+- **Two more missing callers under it, and this is now three of the same
+  shape in two days.** `replay_to` had no production caller, so §10.1.3's
+  reconciliation never ran: an endpoint record published before any session
+  existed reached nobody, and two parties that connected after their records
+  were made never exchanged them. A session coming up now replays both ways.
+  The pattern in all three — `Gateway::bind`, `NodeView.attached`,
+  `replay_to` — is a library function that is correct, tested, and called
+  only by tests. **Worth a sweep of its own**: what else in `rhtn-node` and
+  below is public, exercised, and reached by nothing that runs.
+- **The periodic half of §10.1.3 is not implemented.** It asks for a
+  periodic reconciliation with siblings and the patron; the interval is an
+  operator's number and no document states one.
+- **DMN-18 now starts N after N has been adopted**, which is the order a
+  deployment has. It failed the other way round for a real reason rather
+  than a timing one: a record for a node the patron has never heard of is
+  outside its store reach, is dropped, and nothing re-offers it. Writing the
+  scenario in the deployment's order was the fix, not a sleep.
+- **One assertion was weakened and re-verified.** `sim`'s PRP-01 asserted P
+  received zero topology frames; it now measures from what N reconciled at
+  attach. Forwarding back to the arrival peer still fails it, which is the
+  claim it was written for.

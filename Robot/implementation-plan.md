@@ -407,15 +407,22 @@ none of its clients whatever its configuration said. The transport now calls
 an `on_attach` hook as a session is inserted and removed, and the runtime
 installs one that maintains the set. PRP-23 holds it.
 
-**What DMN-18 does not assert is which node the answer names.** `mark_infra`
-is called in one place, by `NodeView::new` for the node itself; nothing in a
-running node ever marks another node as infrastructure, so the nearest infra
-ancestor a table can see is always itself. Whether publishing an endpoint
-record is the evidence that marks a publisher infra — `wire-format.md` §7.6
-says only infra nodes publish — is a question for the author, and inventing
-an answer would put a protocol decision in the application tier that section
-2 forbids. The scenario asserts the shape of the reply and leaves the naming
-open; the catalogue entry records the same in its interpretation.
+**Which node the answer names was settled by the author** [2026-09-14]:
+publishing an endpoint record is what marks a node infrastructure, which is
+what `wire-format.md` §7.6's *published by infra nodes only* already said.
+A stored record now marks its subject, the mark is re-derived on a rebuild
+rather than kept beside the store, and there is no unmarking — §7.6 gives a
+record a successor and no retraction. DMN-18 asserts the referral again, and
+PRP-24 holds the marking on its own.
+
+**Two more callers were missing under it**, both the same shape as the
+attach hook. Nothing in a running node called `replay_to`, so §10.1.3's
+reconciliation — *a replay of the same frames* — never ran: two parties that
+connected after their records were made never exchanged them, and an
+endpoint record published before a session existed reached nobody. A session
+coming up now replays, in both directions. **The periodic half is still
+absent**: §10.1.3 asks for a periodic reconciliation with siblings and the
+patron, and its interval is an operator's number that no document states.
 
 What it owes beyond the library. The identity is read and never minted: a
 node that generates a key when its file is missing serves under an identity
