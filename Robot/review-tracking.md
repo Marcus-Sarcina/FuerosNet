@@ -9489,3 +9489,47 @@ no gradle, swiftc, adb or xcodebuild exists on this machine. PAY-13 waits on
 the payload-library licence decision. B01's residue is a shaping question, not
 a defect: whether the facade should offer a named consent interaction rather
 than a general byte pipe.
+
+**`rhtn-resources`, the sandbox, and the daemon's hosting (2026-09-13).** Two
+gate-green commits, 966c553 and 4b2da5e. This is the last thing the library
+owed that was not waiting on a decision; what remains of that list is PAY-13
+and the licence. Catalogue 349 of 359, 0 flags.
+
+- **What the crate enforces is an absence.**
+  `infra-client-requirements.md` §9.2 does not ask for narrow scopes
+  carefully granted — *the hooks do not exist* — so `Sandbox::admit` is
+  mostly a list of what a package may not ask for. The check on the
+  functions **inside** the offered instance turned out to be the
+  load-bearing half: without it a package asking this host for `topology`
+  is admitted and fails later at link time, which is a worse answer to
+  give an operator than a refusal naming the hook.
+- **Every check was verified by breaking the thing it tests.** Removing
+  the instance check, removing the hook check and disabling fuel each fail
+  the test that claims them, and the memory ceiling was confirmed to track
+  the number it is given at three different values rather than stopping
+  somewhere of its own. One probe was inconclusive rather than failing —
+  a hundred fuel units is enough for the echo package, because the
+  canonical ABI's copying is the host's work and not the guest's — and the
+  loop test is what actually pins fuel.
+- **`Gateway::bind` had no production caller**, so `view.resources` was
+  empty at every node and every resource request answered refused. The
+  same shape as the attach hook earlier in the day, and found the same
+  way: by running the thing end to end against a process rather than
+  against a view a test had filled in.
+- **A `host` line names a manifest rather than a component**, because §9.1
+  puts the capability declaration in the manifest that ships with the
+  package. An operator writing role names into their own configuration
+  would be declaring them on the package's behalf, and `Gateway::set_row`
+  already refuses a role the binding does not declare — which is how the
+  first cut failed, and the failure was the design telling me where the
+  declaration belongs. The manifest and the component are now checked
+  against each other in both directions.
+- **The supply chain is not implemented and is not claimed.** §9.1 names
+  signing, provenance and an update channel and calls them a distribution
+  problem rather than a protocol one. A manifest that agrees with its
+  component is not a manifest anybody vouched for, and the plan says so
+  where it records the crate as built.
+- **`wasmtime` 48 is the dependency**, which section 3 had already chosen;
+  it is Apache-2.0 WITH LLVM-exception, so no licence question arises.
+  Compile cost: a cold build of the crate is about 40 seconds on this
+  machine and the gate's wall clock is visibly longer than before.

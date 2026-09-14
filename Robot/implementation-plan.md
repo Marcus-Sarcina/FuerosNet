@@ -86,7 +86,7 @@ moving code between repositories.
 | `rhtn-node` | Serving; queue; currency issuance and escalation; resolution and anchor table; endpoint records; subtree acknowledgement; prekey service; sibling replication; topology propagation and the rootward memo; role table and hosted-session lifecycle; catalog | `infra-client-requirements.md` §1 to §4, §6, §10, §11; design §3.4, §12, §14.1.2, §14.1.6, §15; `wire-format.md` §6, §7.1, §7.2, §7.5, §7.6, §7.7, §7.8, §10 | Sim scenarios from `tla/`; `wire-only/currency` and `tla/IssuerAuthorisation` as tests; queue and heartbeat tests (section 8) |
 | `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling | `light-client-requirements.md` §1 to §8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
 | `rhtn-policy` | The reference flow metric; the conformance test; the policy interface | design §16, §17; `models/simulation/flow_metric.py` | The four regression cases carried across; fixed-graph expected scores |
-| `rhtn-resources` (later) | The component-model runtime for hosted packages and their packaging. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5); what this crate still owes is the sandbox itself | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
+| `rhtn-resources` | The component-model sandbox a hosted package runs in: what it may import, what one request may spend, and the `Backend` a gateway hands a request to. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5) | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
 | `rhtn-adaptors` | `rhtn-client` bound to what is local to its process: the client on a thread of its own, the node beside it as serving node, the direct payload path over the transport's socket (the client's own or the node's), a hosted verifier answered on the node's request stream, and the courier. The seams the documents leave unwritten, a serving node's leg to a client attached over the wire and a client's hand-off of payload to relay, are traits with the in-process implementation behind them | design §12.6.3, §14.1.1; `wire-format.md` §5.6, §7.7.2, §9.2 | Live tests over loopback QUIC for both kinds of client |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
 | `rhtn-daemon` | `rhtnd`: a node run from an operator's configuration. The configuration a node cannot derive; the lifecycle from start to signal to stop, losing no delivery in flight; and the operator's view of what the configuration exposes to the identities below it | `infra-client-requirements.md` §1, §2, §4.1, §7, §8, §10.6, §10.7; design §13, §14.1.2, §14.1.6 | PRD-06; a node started from a file serves a client and survives a restart |
@@ -491,9 +491,37 @@ extension is the milestone's first commit, not an afterthought: until it is
 made the catalogue cannot see the tier that closes its last entries.
 
 **Order.** Milestones 11 and 12 are independent of each other and of 13; 13
-gates 14. None of them gates what the library still owes: `rhtn-resources`'s
-sandbox, which gates only the daemon's hosting, and PAY-13, which waits on
-the licence decision (section 7).
+gates 14. None of them gates what the library still owes, and what it owed
+is now one item: PAY-13, which waits on the licence decision (section 7).
+
+**`rhtn-resources`, built (2026-09-13).** The sandbox and the daemon's
+hosting, in one commit each. `Sandbox::admit` compiles a component and
+refuses one importing a dataset the node holds, a platform capability, or a
+hook inside the host's own instance that the host does not have; `serve`
+runs one request in its own store, under a memory ceiling and an
+instruction budget, and reports a package that spent its budget apart from
+one that broke — `infra-client-requirements.md` §9 makes those different
+facts. `Hosted` is the `Backend` a `Gateway` already knew how to call.
+RSC-30 to RSC-35.
+
+**The daemon binds what its configuration names**, which nothing did
+before: `Gateway::bind` had no production caller, so a `view.resources` was
+empty at every node and every resource request answered refused. A
+`resources` key names a hosting file, `host` and `grant` a line at a time,
+and a `host` line names a **manifest** rather than a component — what a
+package declares is the package's (§9.1), and an operator writing role
+names into their own file would be declaring them on its behalf. The
+manifest and the component are checked against each other in both
+directions. Every package is admitted and every grant checked before any is
+bound, so a file refused at its last line binds nothing from its first, and
+a daemon that will not host what it was given says so and does not start.
+DMN-19 to DMN-21.
+
+**What is not here is the supply chain.** §9.1 names signing, provenance
+and an update channel, and calls them a distribution problem rather than a
+protocol one. None of the three is implemented and none is claimed: a
+manifest that agrees with its component is not a manifest anybody vouched
+for.
 
 **Then the split** (section 2), on its trigger rather than on a date.
 
