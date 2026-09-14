@@ -9512,16 +9512,16 @@
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
-   "wire-format.md \u00a77.7.1",
-   "design \u00a712.6.1"
+   "wire-format.md §7.7.1",
+   "design §12.6.1"
   ],
   "rule": [
    {
-    "where": "wire-format.md \u00a77.7.1",
+    "where": "wire-format.md §7.7.1",
     "text": "The serving node resolves on the client's behalf and returns the\nresult."
    },
    {
-    "where": "design \u00a712.6.1",
+    "where": "design §12.6.1",
     "text": "empty means the addressed party is the node itself, non-empty means the\nlast hop forwards to an attached client"
    }
   ],
@@ -9530,5 +9530,166 @@
   "then": "It answers on the stream with the nonce it was asked with, and either serves the request itself with a residual suffix and endpoints or refers onward with a positive advance and endpoints. A subject on a path it holds no record for is a stated failure rather than a hang or a silence.",
   "oracle": "behaviour",
   "interpretation": "Which node the answer names is not fixed here. Nothing in a running node marks another node as infrastructure, so the nearest infrastructure ancestor a table can see is the node itself; whether publishing an endpoint record is what marks a publisher infra is unsettled."
+ },
+ {
+  "id": "RSC-30",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A package reaching past the two bindings is not admitted",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §9.2",
+   "resource-requirements.md §9"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9.2",
+    "text": "No host binding exposes network transaction primitives to a package."
+   },
+   {
+    "where": "resource-requirements.md §9",
+    "text": "A plugin receives exactly the host bindings it is granted and nothing else"
+   }
+  ],
+  "given": "A host offering a package two bindings, its request and its response, and no others.",
+  "when": "Packages are presented that import a dataset the host holds, a platform capability, or a hook inside the host's own instance that the host does not have.",
+  "then": "Each is refused before it is instantiated, and the refusal names what was asked for rather than reporting a link failure. A package importing nothing is admitted, so the refusal is about the request and not about the sandbox. A package the host cannot call, and bytes that are not a component, are refused as what they are.",
+  "oracle": "behaviour",
+  "interpretation": "The instance the two bindings live in, and the entry the host calls, are the reference implementation's names; no document fixes them."
+ },
+ {
+  "id": "RSC-31",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A package is handed its request and gives back its answer",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §9.2",
+   "design §11"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9.2",
+    "text": "and its own request traffic, and nothing else: no topology, no liveness state,\nno queue contents, no prekey requests, no role-evaluation inputs"
+   },
+   {
+    "where": "design §11",
+    "text": "The resource never reads network state."
+   }
+  ],
+  "given": "An admitted package that hands back what it is given.",
+  "when": "Two requests are served through it in turn, and a package that answers nothing is served once.",
+  "then": "It sees the message the node built and nothing beside it, and the second request is not the first one's. A package that answers nothing has answered nothing, and the host does not invent a body for it.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-32",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A package that will not stop is stopped, and costs the next caller nothing",
+  "milestone": "after-5",
+  "kind": "robustness",
+  "spec": [
+   "infra-client-requirements.md §9"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9",
+    "text": "one that cannot be confined cannot be contained"
+   },
+   {
+    "where": "infra-client-requirements.md §9",
+    "text": "not meeting a package's requirements is ordinary capacity, not a conformance failure"
+   }
+  ],
+  "given": "A package that never returns, and a package that breaks, each admitted with a budget for one request.",
+  "when": "Each is served, and a working package on the same host is served after them.",
+  "then": "The one that will not stop is stopped and reported as having spent its budget; the one that breaks is reported as a defect, which is the different fact an operator acts on differently. Each request carries its own budget, so a second attempt is stopped again rather than inheriting the first one's exhaustion, and the working package is unaffected.",
+  "oracle": "behaviour",
+  "interpretation": "What one request may spend is an operator's number. No document fixes a figure, and the reference's defaults are a starting point rather than a rule."
+ },
+ {
+  "id": "RSC-33",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A package that grows without bound is bounded",
+  "milestone": "after-5",
+  "kind": "robustness",
+  "spec": [
+   "infra-client-requirements.md §9",
+   "resource-requirements.md §8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9",
+    "text": "one that cannot be confined cannot be contained"
+   },
+   {
+    "where": "resource-requirements.md §8",
+    "text": "A node that cannot meet\nthose requirements cannot host you, and remains conforming"
+   }
+  ],
+  "given": "A package that grows its memory until it is refused, and a package that answers with more than the host will carry.",
+  "when": "Each is served under a stated ceiling.",
+  "then": "The growing package is refused more memory rather than trapping the host, and stops at the ceiling it was given rather than at one it chose. The oversized answer is refused as an answer, with its size stated, rather than reported as a defect in the package.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-34",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A stopped package is unavailable rather than broken",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §9",
+   "resource-requirements.md §8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9",
+    "text": "You may decline to host a package you cannot support."
+   },
+   {
+    "where": "resource-requirements.md §8",
+    "text": "A node that cannot meet\nthose requirements cannot host you, and remains conforming"
+   }
+  ],
+  "given": "An admitted package serving requests.",
+  "when": "The host stops it without unbinding it.",
+  "then": "It reports itself as not running, which is the question the gateway asks before it hands anything over, and a request that reaches it anyway is refused rather than served.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "RSC-35",
+  "area": "resources",
+  "gap": "resources",
+  "title": "What reaches a package through the gateway is the credential and the request",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "resource-requirements.md §3",
+   "design §11"
+  ],
+  "rule": [
+   {
+    "where": "resource-requirements.md §3",
+    "text": "The credential travels as request headers"
+   },
+   {
+    "where": "design §11",
+    "text": "The node evaluates access and presents\nthe result as a credential; the resource sees an authenticated principal holding\nroles"
+   }
+  ],
+  "given": "A gateway with a sandboxed package bound to it, and a row granting the requester connect and one application role.",
+  "when": "A resource request is evaluated and handed on.",
+  "then": "What crosses is the four credential headers, the authority the node addressed the package by, and the requester's own request. Nothing about the network crosses with it.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

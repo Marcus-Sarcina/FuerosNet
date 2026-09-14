@@ -1,0 +1,13 @@
+[package]
+name = "rhtn-resources"
+version = "0.1.0"
+edition = "2024"
+description = "The component-model sandbox a hosted package runs in: what the host hands it, what it may reach, and what it costs before it is stopped"
+
+[dependencies]
+rhtn-node = { path = "../node" }
+wasmtime = { version = "48", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "gc-drc", "anyhow", "parallel-compilation"] }
+
+[dev-dependencies]
+rhtn-archive = { path = "../archive" }
+wat = "1"
