@@ -9,7 +9,7 @@ use common::harness::*;
 use common::*;
 use rhtn_archive::locator::{COUNTER_MAX, SignedLocator};
 use rhtn_archive::record::Record;
-use rhtn_archive::tx::{Locator, Seqno};
+
 use rhtn_client::ceremony::*;
 use rhtn_client::device::ChannelKind;
 use rhtn_client::query::{Basis, Response, Verdict, prior_key_of};
@@ -25,7 +25,6 @@ const PARTIES: [&str; 6] = ["alice", "alice2", "bob", "carol", "w1", "w2"];
 /// adoption's messages begin.
 fn recovered() -> (Setup, [u8; 32], usize) {
     let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
-    s.client("w1").position = Some(Locator::root(kh("w1"), Seqno { series: 1, counter: 0 }));
     s.run("alice", "bob", &["w2"], &[]).unwrap();
     s.run("alice", "carol", &["w2"], &[]).unwrap();
     s.face_off("alice", "w1");

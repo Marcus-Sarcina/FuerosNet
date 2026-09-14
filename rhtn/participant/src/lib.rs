@@ -276,6 +276,23 @@ impl Instrument {
                 Ok(vec![format!("signed {}", hex(&c.witness_sign(carry::take_proposed(proposed)?, carry::take_back(back)?).map_err(|e| e.reason)?))])
             }
             ["envelope", body, entries] => Ok(vec![format!("envelope {}", hex(&rhtn_ffi::client::presence_envelope(bytes(body)?, carry::take_entries(entries)?)))]),
+
+            // the adoption, on the record the ceremony produced
+            ["where"] => Ok(c.anchors().iter().map(|a| format!("anchor {}", hex(a))).collect()),
+            ["where", anchor] => Ok(vec![match c.position_in(id(anchor)?) {
+                None => "position none".into(),
+                Some(p) => format!("position {}", hex(&p)),
+            }]),
+            ["adopt", anchor, node, presence, series, back] => {
+                let s: u32 = series.parse().map_err(|_| format!("`{series}` is not a series"))?;
+                let back: Result<Vec<Vec<u8>>, String> = carry_list(back).iter().map(|x| bytes(x)).collect();
+                Ok(vec![format!("adoption {}", hex(&c.propose_adoption(id(anchor)?, id(node)?, id(presence)?, s, back?).map_err(|e| e.reason)?))])
+            }
+            ["sign", body] => Ok(vec![format!("signed {}", hex(&c.sign_body(bytes(body)?)))]),
+            ["adoption-envelope", body, entries] => {
+                Ok(vec![format!("envelope {}", hex(&rhtn_ffi::client::adoption_envelope(bytes(body)?, carry::take_entries(entries)?)))])
+            }
+            ["take-adoption", envelope] => Ok(vec![format!("adopted {}", hex(&c.take_adoption(bytes(envelope)?).map_err(|e| e.reason)?))]),
             ["finalize", envelope] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, None).map_err(|e| e.reason)?))]),
             ["finalize", envelope, set] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, Some(carry::take_revealed(set)?)).map_err(|e| e.reason)?))]),
 
@@ -457,6 +474,15 @@ envelope <body> <signer>:<signature>,...
                           the envelope the record travels in
 finalize <envelope> [<disclosures>]
                           take the finished record
+
+And the adoption on it:
+
+where [<anchor>]          the subnets this client is in, or where it sits in one
+adopt <anchor> <node> <presence> <series> <back>
+                          as a patron: the adoption body, in that subnet
+sign <body>               sign a body proposed or shown
+adoption-envelope <body> <signer>:<signature>,...
+take-adoption <envelope>  take it; it is also what says where you now sit
 channel                   what the hardware has been declared to do
 channel <name> <outcome> [<m>]
                           declare it; `none` clears one back to unavailable

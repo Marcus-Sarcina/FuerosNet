@@ -191,6 +191,19 @@ pub struct WitnessRequest {
     pub channels: Vec<ChannelOutcome>,
 }
 
+/// What a patron is proposing, beside who and into which subnet.
+///
+/// Grouped because the four move together: the evidence the binding rests
+/// on, the series of the relationship line it opens, the head a recovering
+/// subject presented, and the key material an adoption of a party the
+/// patron is introducing carries.
+pub struct Adopting {
+    pub evidence: Evidence,
+    pub series: u32,
+    pub presented_head: Option<Txid>,
+    pub key_material: Option<Vec<u8>>,
+}
+
 /// The state of the one ceremony this client is a participant in.
 struct Active {
     counterparty: Keyhash,
@@ -228,8 +241,20 @@ pub struct Client {
     pub acquaintance: Acquaintance,
     pub cfg: Config,
     pub device: Device,
-    /// As a patron: the position this client adopts under, when it is one.
-    pub position: Option<Locator>,
+    /// Where this client sits, in each subnet it is in.
+    ///
+    /// **Absent an adoption it self-anchors**: `wire-format.md` §2.1 names
+    /// the empty path the self-anchor case, and design Appendix A has a
+    /// root name itself. That is a position like any other, which is what
+    /// makes adopting somebody as a newly minted root ordinary rather than
+    /// a case needing anything special [author, 2026-09-14].
+    ///
+    /// **One per subnet**, because a party adopted under two patrons is in
+    /// two of them (`wire-format.md` §2.3's one series per patron
+    /// relationship, §7.6's one record per line) and a subordinate's
+    /// locator is its patron's path *in that subnet* with a nibble added.
+    /// A single position could not say which tree an adoption was into.
+    positions: BTreeMap<Keyhash, Locator>,
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -272,7 +297,7 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, position: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -688,8 +713,20 @@ impl Client {
     /// As a patron: the adoption body for `node` under my position, the
     /// evidence checked against the body's own fields before anything is
     /// signed (`wire-format.md` §4.1).
-    pub fn propose_adoption(&self, node: Keyhash, evidence: Evidence, series: u32, presented_head: Option<Txid>, node_back: &[Txid], key_material: Option<Vec<u8>>) -> Result<Vec<u8>, Abort> {
-        let pos = self.position.as_ref().ok_or(Abort::PatronRefused("no position".into()))?;
+    pub fn propose_adoption(&self, node: Keyhash, node_back: &[Txid], what: Adopting) -> Result<Vec<u8>, Abort> {
+        self.propose_adoption_in(self.anchor(), node, node_back, what)
+    }
+
+    /// The same, naming the subnet to adopt into.
+    ///
+    /// **Which tree matters and is the patron's to say.** A patron in two
+    /// subnets sits at a different path in each, and the locator it issues
+    /// is its path in the one it is adopting into; adopting "somewhere"
+    /// would put the subordinate at an address the other subnet cannot
+    /// read.
+    pub fn propose_adoption_in(&self, anchor: Keyhash, node: Keyhash, node_back: &[Txid], what: Adopting) -> Result<Vec<u8>, Abort> {
+        let Adopting { evidence, series, presented_head, key_material } = what;
+        let pos = self.position_in(&anchor).ok_or_else(|| Abort::PatronRefused(format!("no position under {}", hex8(&anchor))))?;
         let mut path = pos.path.clone();
         let nibbles = pos.nibbles + 1;
         if pos.nibbles % 2 == 0 { path.push(0x00) }
@@ -706,14 +743,61 @@ impl Client {
         self.id.sign_entries(aad::ENVELOPE, body)
     }
 
-    /// Take a finalized adoption I signed: appended and kept.
+    /// Take a finalized adoption I signed: appended, kept, and — where it
+    /// is an adoption *of me* — folded into where I sit.
     pub fn take_adoption(&mut self, envelope: &[u8]) -> Result<Txid, Abort> {
         let rec = Record::parse(envelope).map_err(Abort::Record)?;
         verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
         let t = rec.txid;
         self.archive.append(rec).map_err(Abort::Record)?;
         self.store.records.insert(t, envelope.to_vec());
+        self.adopt_own_positions();
         Ok(t)
+    }
+
+    /// Where this client sits in the subnet `anchor` names.
+    ///
+    /// **A party with no ancestor names itself**, so asking for a position
+    /// under this client's own key always answers: that is the
+    /// self-anchor, not a missing value (`wire-format.md` §2.1).
+    #[must_use]
+    pub fn position_in(&self, anchor: &Keyhash) -> Option<Locator> {
+        if let Some(p) = self.positions.get(anchor) {
+            return Some(p.clone());
+        }
+        (*anchor == self.keyhash()).then(|| Locator::root(self.keyhash(), Seqno { series: 1, counter: 0 }))
+    }
+
+    /// Every subnet this client has a position in, its own first.
+    #[must_use]
+    pub fn anchors(&self) -> Vec<Keyhash> {
+        let mut out = vec![self.keyhash()];
+        out.extend(self.positions.keys().copied().filter(|a| *a != self.keyhash()));
+        out
+    }
+
+    /// The subnet this client acts in when nothing names one: the first it
+    /// was adopted into, or its own while it has no patron.
+    #[must_use]
+    pub fn anchor(&self) -> Keyhash {
+        self.positions.keys().copied().find(|a| *a != self.keyhash()).unwrap_or_else(|| self.keyhash())
+    }
+
+    /// Fold this client's own adoptions into where it sits, one per
+    /// subnet.  Derived from the archive rather than kept beside it, so a
+    /// restored archive reaches the same answer; a later adoption in a
+    /// subnet replaces the earlier, which is what a reissue is.
+    fn adopt_own_positions(&mut self) {
+        let me = self.keyhash();
+        let mine: Vec<Locator> = self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_ADOPTION && r.field_hash(1) == Some(me))
+            .filter_map(|r| r.locator())
+            .collect();
+        for loc in mine {
+            self.positions.insert(loc.anchor, loc);
+        }
     }
 
     /// The chain proving my series under `patron`, presented when asked
@@ -1077,7 +1161,7 @@ impl Harness {
     pub fn run_adoption(&mut self, node: Keyhash, patron: Keyhash, node_nominees: Vec<Keyhash>, patron_nominees: Vec<Keyhash>, series: u32) -> Result<Txid, Abort> {
         let pop = self.run(node, patron, node_nominees, patron_nominees)?;
         let node_back = self.client(&node).back_pointers();
-        let body = self.client(&patron).propose_adoption(node, Evidence::Presence(pop), series, None, &node_back, None)?;
+        let body = self.client(&patron).propose_adoption(node, &node_back, Adopting { evidence: Evidence::Presence(pop), series, presented_head: None, key_material: None })?;
         let m = self.send(patron, node, Msg::AdoptionBody(body));
         let Msg::AdoptionBody(body) = m else { unreachable!() };
         let n_entries = self.client(&node).sign_body(&body);
@@ -1148,7 +1232,7 @@ impl Harness {
         let Msg::RecoveryProposal { block, presented_head } = m else { unreachable!() };
         let node_back = self.client(&subject).back_pointers();
         let km = self.client(&subject).id.public.key_material();
-        let body = self.client(&patron).propose_adoption(subject, Evidence::Recovery(block), series, presented_head, &node_back, Some(km))?;
+        let body = self.client(&patron).propose_adoption(subject, &node_back, Adopting { evidence: Evidence::Recovery(block), series, presented_head, key_material: Some(km) })?;
         let m = self.send(patron, subject, Msg::AdoptionBody(body));
         let Msg::AdoptionBody(body) = m else { unreachable!() };
         let s_entries = self.client(&subject).sign_body(&body);

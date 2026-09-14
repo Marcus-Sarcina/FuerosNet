@@ -593,6 +593,64 @@ impl Participant {
         self.handle.with_blocking(move |c| c.witness_sign(&p, &b).map_err(|a| Refused::new(format!("{a:?}"))))
     }
 
+    /// Where this client sits in the subnet `anchor` names, or nothing
+    /// where it is in no such subnet.  **Asking under its own key always
+    /// answers**: a party with no ancestor names itself
+    /// (`wire-format.md` §2.1).
+    #[must_use]
+    pub fn position_in(&self, anchor: Id) -> Option<Vec<u8>> {
+        let a = keyhash(&anchor)?;
+        self.handle.with_blocking(move |c| {
+            c.position_in(&a).map(|p| {
+                let mut out = Vec::new();
+                p.emit(&mut out);
+                out
+            })
+        })
+    }
+
+    /// Every subnet this client has a position in, its own first.
+    #[must_use]
+    pub fn anchors(&self) -> Vec<Id> {
+        self.handle.with_blocking(|c| c.anchors().iter().map(id_of).collect())
+    }
+
+    /// As a patron: the adoption body putting `node` one hop below this
+    /// client, in the subnet `anchor` names.
+    ///
+    /// **Which tree is the patron's to say**, because a patron in two
+    /// subnets sits at a different path in each and the address it issues
+    /// is its path in the one it is adopting into.
+    pub fn propose_adoption(&self, anchor: Id, node: Id, presence: Id, series: u32, node_back: Vec<Vec<u8>>) -> Result<Vec<u8>, Refused> {
+        let a = keyhash(&anchor).ok_or_else(|| Refused::new("an anchor is 32 bytes"))?;
+        let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
+        let p = keyhash(&presence).ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
+        let back = back_inward(&[node_back])?.remove(0);
+        self.handle.with_blocking(move |c| {
+            c.propose_adoption_in(
+                a,
+                n,
+                &back,
+                rhtn_client::ceremony::Adopting { evidence: rhtn_archive::tx::Evidence::Presence(p), series, presented_head: None, key_material: None },
+            )
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
+    }
+
+    /// Sign a body this client proposed or was shown, as its subject or
+    /// its patron.
+    #[must_use]
+    pub fn sign_body(&self, body: Vec<u8>) -> Vec<u8> {
+        self.handle.with_blocking(move |c| c.sign_body(&body))
+    }
+
+    /// Take a finalized adoption this client signed.  Where it is an
+    /// adoption of this client, it is also what tells it where it now
+    /// sits.
+    pub fn take_adoption(&self, envelope: Vec<u8>) -> Result<Id, Refused> {
+        self.handle.with_blocking(move |c| c.take_adoption(&envelope).map(|t| t.to_vec()).map_err(|e| Refused::new(format!("{e:?}"))))
+    }
+
     /// Take the finished record.  A participant is given the disclosures
     /// with it; a witness is not, and holds the record without them.
     pub fn finalize(&self, envelope: Vec<u8>, set: Option<Vec<Revealed>>) -> Result<Id, Refused> {
@@ -610,6 +668,13 @@ impl Participant {
 pub fn presence_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
     let e: Vec<(Keyhash, Vec<u8>)> = entries.into_iter().filter_map(|(k, v)| keyhash(&k).map(|k| (k, v))).collect();
     rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_PRESENCE, &body, &e)
+}
+
+/// The envelope an adoption travels in.
+#[must_use]
+pub fn adoption_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
+    let e: Vec<(Keyhash, Vec<u8>)> = entries.into_iter().filter_map(|(k, v)| keyhash(&k).map(|k| (k, v))).collect();
+    rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_ADOPTION, &body, &e)
 }
 
 fn basis_of(b: u32) -> Result<rhtn_client::selection::SelectionBasis, Refused> {

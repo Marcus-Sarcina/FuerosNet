@@ -9880,5 +9880,86 @@
   "then": "Both devices name the ceremony the same thing, the counterparty weighs the channels the other achieved, each captures the other under the key that party supplied, each nominee answers its own nominator's ask, and the record is proposed, signed by both participants over the disclosures and by both witnesses without them, and finalised. Every signer names the same record.",
   "oracle": "behaviour",
   "interpretation": "The token each step produces is this instrument's encoding, not the protocol's: design §7 has the ceremony cross whatever channel the two devices have and fixes none, which is why the boundary carries it as fields."
+ },
+ {
+  "id": "CER-33",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A client self-anchors until it is adopted, and a newly minted root can adopt",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.1",
+   "design §2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.1",
+    "text": "It is the\nself-anchor case: a root has no ancestor to name, so it names itself, and\nthe path from itself to itself has no hops."
+   },
+   {
+    "where": "design §2",
+    "text": "or itself: a root self-anchors, with an empty path"
+   }
+  ],
+  "given": "A client with nothing configured, no records, and no adoption of its own.",
+  "when": "It is asked where it sits, and then adopts somebody.",
+  "then": "Its position under its own key is the self-anchor: the empty path, no hops, because there is no ancestor to name. It sits in no other party's subnet. Adopting is ordinary from there — no genesis, no configuration, nothing granted — and the subordinate lands one hop below it in the root's own subnet.",
+  "oracle": "behaviour",
+  "interpretation": "Holding no position was never a state the documents describe. A patron needs its own path because a subordinate's locator is that path with a nibble added, and a party with no ancestor has one."
+ },
+ {
+  "id": "CER-34",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A client adopted into two trees holds a position in each",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.3",
+   "wire-format.md §2.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "One series per patron relationship is the expected\nshape - a node bound under two patrons keeps two"
+   },
+   {
+    "where": "wire-format.md §2.1",
+    "text": "a root has no ancestor to name, so it names itself"
+   }
+  ],
+  "given": "A party adopted under two roots, in a series of its own for each relationship.",
+  "when": "It is asked where it sits, and then adopts somebody into each subnet in turn, and into one it is in neither of.",
+  "then": "It holds a position in both subnets and in its own, each line carrying its own series, and neither adoption has replaced the other. An adoption names the subnet it is into, and the address it issues is the patron's path in that subnet; the two differ. A subnet it holds no position in has no address to issue and the proposal is refused saying so.",
+  "oracle": "behaviour",
+  "interpretation": "Which tree an adoption goes into is the patron's to say. Adopting somewhere unnamed would put the subordinate at an address the other subnet cannot read."
+ },
+ {
+  "id": "PRT-05",
+  "area": "participant",
+  "gap": "participant",
+  "title": "A newly minted root adopts on the record it just made",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.1",
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.1",
+    "text": "a root has no ancestor to name, so it names itself"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "The node and the patron MUST differ - a node cannot hold authority over\nitself"
+   }
+  ],
+  "given": "Four participant processes, none configured as anything and none adopted by anybody.",
+  "when": "Two of them meet in a ceremony, and the one that has never been adopted proposes an adoption of the other on that record, in its own subnet.",
+  "then": "The patron's position is the self-anchor and it sits in nobody else's subnet, which is the whole of what it needs to be one. Both sign the same body, both take the record, and both name it the same. Taking it is what tells the subordinate where it now sits: it is in the patron's subnet and still in its own, with nothing configured on either side and nothing granted.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]
