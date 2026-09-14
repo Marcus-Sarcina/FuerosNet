@@ -1328,6 +1328,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rhtn-participant"
+version = "0.1.0"
+dependencies = [
+ "rhtn-crypto",
+ "rhtn-ffi",
+ "rhtn-sim",
+ "rhtn-transport",
+]
+
+[[package]]
 name = "rhtn-policy"
 version = "0.1.0"
 dependencies = [

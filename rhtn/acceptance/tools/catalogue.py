@@ -24,7 +24,7 @@ PREFIX = {"DEC": "decoder", "TRN": "transport", "SES": "session", "QUE": "queue"
           "REP": "replication-peering", "PRP": "propagation", "CUR": "currency",
           "MET": "metric", "CER": "ceremony", "REC": "recovery", "PAY": "payload",
           "RSC": "resources", "PRD": "product", "TRV": "traversal",
-          "DMN": "daemon", "SUB": "submission"}
+          "DMN": "daemon", "SUB": "submission", "PRT": "participant"}
 GAPS = list(dict.fromkeys(PREFIX.values()))
 MILESTONES = {1, 2, 3, 4, 5, "after-5", "manual"}
 KINDS = {"positive", "negative", "must-accept", "liveness", "robustness", "manual", "withdrawn"}

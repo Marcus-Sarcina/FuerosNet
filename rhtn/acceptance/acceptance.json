@@ -9804,5 +9804,54 @@
   "then": "Holding the record is what marks its publisher, so the nearest infrastructure node above a party below it moves from this node to the publisher. A record outside store reach marks nothing, because the mark follows storage and never the wire. A rebuild reaches the same set from the store, and does not lose the node's own mark.",
   "oracle": "behaviour",
   "interpretation": "There is no unmarking: §7.6 gives a record a successor and no retraction, so a node that stopped being infrastructure leaves its records standing in every horizon that stored them."
+ },
+ {
+  "id": "PRT-01",
+  "area": "participant",
+  "gap": "participant",
+  "title": "Two participant processes exchange payload through a daemon",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §3",
+   "design §14.2.4"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Publish a prekey bundle and keep it stocked."
+   },
+   {
+    "where": "design §14.2.4",
+    "text": "A batch request names the population it sweeps; a single-subject\nrequest is visibly targeted"
+   }
+  ],
+  "given": "A node process started from its own configuration, and two participant processes each started from an identity file and told nothing else.",
+  "when": "One attaches and publishes, the other attaches naming it and sweeps it, the first attaches again naming the second, and payload is sent.",
+  "then": "Each attach reports the node it reached and that the session is the primary one. The payload comes out of the recipient's events decrypted, having crossed two sockets and a process that never held the plaintext. Nothing is asserted from inside a process: every claim is what one printed or what arrived at one.",
+  "oracle": "behaviour",
+  "interpretation": "The order of the three attaches is the protocol's: a bundle must be published before it can be swept, and a recipient attributes an initial message only under a binding it already holds."
+ },
+ {
+  "id": "PRT-02",
+  "area": "participant",
+  "gap": "participant",
+  "title": "An instrument reports what it was told the hardware did, and nothing more",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Obtain the strongest proximity channel the hardware supports, and record\n  which was achieved. Never present a weaker channel as a stronger one"
+   }
+  ],
+  "given": "A participant process running on a machine with no proximity radio and no camera pointed at anybody.",
+  "when": "Channels are declared, cleared, and asked about, and commands are given that name no channel and no identity.",
+  "then": "It supports nothing until something is declared, reports declarations strongest first, promotes none of them, and treats a cleared channel as unsupported again. The standing answer to a question put to the person is to decline. A command it does not understand is refused with what was wrong, not ignored.",
+  "oracle": "behaviour",
+  "interpretation": "A declaration is evidence about a scenario rather than about hardware, which is the whole difference between an instrument and a client, and is why this claims none of the product entries."
  }
 ]

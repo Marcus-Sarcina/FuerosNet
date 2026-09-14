@@ -295,7 +295,7 @@ unsafe extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
 }
 
-fn write_identity(path: &Path, name: &str) {
+pub fn write_identity(path: &Path, name: &str) {
     let mut bytes = rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes()).to_vec();
     bytes.extend_from_slice(&rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes()));
     std::fs::write(path, &bytes).expect("the identity file");

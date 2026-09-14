@@ -11,6 +11,7 @@
 
 pub mod daemons;
 pub mod packages;
+pub mod participants;
 pub mod mesh;
 pub mod nat;
 pub mod path;
