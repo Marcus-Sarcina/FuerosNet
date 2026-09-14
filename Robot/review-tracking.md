@@ -9660,9 +9660,24 @@ into several trees concurrently is expected. Catalogue 356 of 366, 0 flags.
   record per line, and `NodeView` has held positions per subnet all along;
   the client had one, so a second adoption would have overwritten the
   first. Nothing tested it because nothing could adopt at all.
-- **Still open, and narrower than it was.** `Horizon` keys the places and
-  locators it holds *about other parties* by node alone, with the comment
-  that a later record replaces the earlier. For a party in two subnets that
-  is the same collapse one level out. It is separable from this fix, it
-  touches the materialised snapshot's encoding, and it is worth doing
-  next.
+- **Closed the same day**, bd42d45. `Horizon` keyed the places and
+  locators it holds *about other parties* by party alone; they are keyed
+  by party and subnet now, and `place`/`locator` gave way to `places_of`
+  and `place_in`, `locators_of` and `locator_in` — a caller taking one of
+  several without saying which asserts something the records do not.
+  **The stored shape did not change, and the prediction that it would was
+  wrong**: the row already carried the party and the anchor as separate
+  fields, because a place is a path relative to one, so keying by both
+  puts two rows where there was one. A snapshot written before it reads
+  back the same. TOP-27.
+
+**What the horizon fix also showed (2026-09-14).** Nothing in production
+reads `Horizon` beyond `ingest`: `place`, `locator`, `resolvable`,
+`distance`, `prune`, `materialise` and `wake` are called by tests alone.
+That is not the same defect as the four — the surface is correct and the
+tests exercise it — but it is the same shape, and it means
+`light-client-requirements.md` §4.2's whole point, that a client routes
+around an unanswering patron without asking anyone, has no caller. **What
+would close it is a reader**: the client's own resolution path, and the
+direct-versus-relayed decision design §12.6.3 makes from whether a peer is
+inside the horizon. Worth scoping as work rather than folding into a fix.
