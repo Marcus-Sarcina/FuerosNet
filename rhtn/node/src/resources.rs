@@ -58,6 +58,8 @@ pub enum RowError {
 #[derive(Default)]
 pub struct Gateway {
     bindings: BTreeMap<Keyhash, Binding>,
+    /// Grants standing over the owner's horizon, by resource.
+    standing: BTreeMap<Keyhash, Row>,
     rows: BTreeMap<(Keyhash, Keyhash), Row>,
     /// Hosted sessions: the identifier under which a resource sees a
     /// principal, minted per (member, resource).
@@ -112,6 +114,59 @@ impl Gateway {
 
     pub fn row(&self, resource: &Keyhash, member: &Keyhash) -> Option<&Row> {
         self.rows.get(&(*resource, *member))
+    }
+
+    /// A grant standing over every member of the owner's trust horizon.
+    ///
+    /// **This is the simplest predicate there is** — the one
+    /// `infra-client-requirements.md` §10.1 calls membership being the
+    /// outer gate — and it is held rather than evaluated because §10.1
+    /// answers *from the row, not by evaluating a predicate*: what a
+    /// request reads is a row that was already there.
+    pub fn stand(&mut self, resource: Keyhash, row: Row) -> Result<(), RowError> {
+        if !self.bindings.contains_key(&resource) {
+            return Err(RowError::NoSuchResource);
+        }
+        if row.roles.len() > MAX_ROLES {
+            return Err(RowError::TooWide(row.roles.len()));
+        }
+        self.standing.insert(resource, row);
+        Ok(())
+    }
+
+    /// Expand every standing grant over the owner's horizon as it is now,
+    /// and say how many rows were written and dropped.
+    ///
+    /// **Called when membership moves, not when a request arrives**
+    /// (§10.2's four moments, none of them a request): a new member is
+    /// scored against the standing grants and given rows, and a departing
+    /// one has theirs removed. A member with a row of their own that the
+    /// operator set is left alone — the standing grant is a floor under
+    /// the table, not a thing that overwrites it.
+    pub fn refresh(&mut self, table: &Table) -> (usize, usize) {
+        let (mut granted, mut dropped) = (0, 0);
+        let standing: Vec<(Keyhash, Row)> = self.standing.iter().map(|(k, r)| (*k, r.clone())).collect();
+        for (resource, row) in standing {
+            let Some(owner) = self.bindings.get(&resource).map(|b| b.owner) else { continue };
+            let members = table.horizon(&owner, 2);
+            for m in &members {
+                if self.rows.contains_key(&(resource, *m)) {
+                    continue;
+                }
+                if self.set_row(resource, *m, row.clone()).is_ok() {
+                    granted += 1;
+                }
+            }
+            // a party gone from the org: §10.2 has a departing one's rows
+            // removed, and §10.5 has the row change end the session
+            let gone: Vec<Keyhash> = self.rows.keys().filter(|(r, m)| *r == resource && !members.contains(m)).map(|(_, m)| *m).collect();
+            for m in gone {
+                self.rows.remove(&(resource, m));
+                self.sessions.remove(&(m, resource));
+                dropped += 1;
+            }
+        }
+        (granted, dropped)
     }
 
     /// A member gone from the org: every row and session of theirs goes.

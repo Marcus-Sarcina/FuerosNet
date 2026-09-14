@@ -111,6 +111,11 @@ struct HostEntry {
     owner: String,
     authority: String,
     manifest: std::path::PathBuf,
+    /// A grant standing over every member of the owner's trust horizon
+    /// (`infra-client-requirements.md` §10.1, §10.2), rather than one
+    /// party at a time.
+    #[serde(default)]
+    standing: Vec<String>,
     #[serde(default)]
     grant: Vec<GrantEntry>,
 }
@@ -135,6 +140,7 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
 
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
     let mut grants: Vec<(Keyhash, Keyhash, Row)> = Vec::new();
+    let mut standing: Vec<(Keyhash, Row)> = Vec::new();
 
     for h in &file.host {
         let named = |what: &str| format!("{}: {what}", h.manifest.display());
@@ -156,26 +162,13 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
 
         for g in &h.grant {
             let member = keyhash(&g.member).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", g.member)))?;
-            let connect = g.roles.iter().any(|r| r == "connect");
-            let mut application = BTreeSet::new();
-            for r in &g.roles {
-                if r == "connect" {
-                    continue;
-                }
-                if RESERVED_ROLES.contains(&r.as_str()) {
-                    return Err(at(0, format!("`{r}` is reserved for the node's own evaluation and is not an application role")));
-                }
-                if !package.roles.contains(r) {
-                    return Err(at(0, format!("`{r}` is not a role that package declared")));
-                }
-                application.insert(r.clone());
-            }
-            if application.len() > MAX_ROLES {
-                return Err(at(0, format!("{} roles is wider than a credential header carries", application.len())));
-            }
-            grants.push((res, member, Row { roles: application, connect }));
+            grants.push((res, member, row_of(&g.roles, &package.roles)?));
         }
 
+        if !h.standing.is_empty() {
+            let row = row_of(&h.standing, &package.roles)?;
+            standing.push((res, row));
+        }
         hosts.push((res, Binding { owner, authority: h.authority.clone(), backend: Some(Arc::new(Hosted::new(sandbox))), declared_roles: package.roles }));
     }
 
@@ -186,7 +179,38 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
     for (res, member, row) in grants {
         gateway.set_row(res, member, row).map_err(|e| at(0, format!("{e:?}")))?;
     }
+    for (res, row) in standing {
+        gateway.stand(res, row).map_err(|e| at(0, format!("{e:?}")))?;
+    }
     Ok(bound)
+}
+
+/// A role list from the operator, checked against what the package
+/// declared.
+///
+/// `connect` is the gate `resource-requirements.md` §3 reserves for the
+/// node's own evaluation, which is why it appears here and never reaches
+/// the package: the roles a package is told about are the rest of the
+/// list.
+fn row_of(named: &[String], declared: &BTreeSet<String>) -> Result<Row, Refused> {
+    let connect = named.iter().any(|r| r == "connect");
+    let mut application = BTreeSet::new();
+    for r in named {
+        if r == "connect" {
+            continue;
+        }
+        if RESERVED_ROLES.contains(&r.as_str()) {
+            return Err(at(0, format!("`{r}` is reserved for the node's own evaluation and is not an application role")));
+        }
+        if !declared.contains(r) {
+            return Err(at(0, format!("`{r}` is not a role that package declared")));
+        }
+        application.insert(r.clone());
+    }
+    if application.len() > MAX_ROLES {
+        return Err(at(0, format!("{} roles is wider than a credential header carries", application.len())));
+    }
+    Ok(Row { roles: application, connect })
 }
 
 /// Read a package's manifest, and where its component sits.

@@ -235,6 +235,14 @@ impl NodeView {
                     if let Some(slot) = self.apply_stored(object, ids) {
                         self.originate_memo(adj, slot);
                     }
+                    // **membership moved, so the role table moves with
+                    // it** (`infra-client-requirements.md` §10.2): a node
+                    // entering the horizon is scored against the standing
+                    // grants and given rows, one leaving has theirs
+                    // removed. None of the four moments is a request,
+                    // which is why this is here and not in `serve`.
+                    let table = self.table.clone_for(self.me());
+                    self.resources.refresh(&table);
                 }
                 // **an endpoint record is what says its subject is
                 // infrastructure** (`wire-format.md` §7.6: published by

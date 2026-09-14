@@ -647,3 +647,50 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
     let roles: Vec<String> = http::headers_of(&seen).into_iter().filter(|(k, _)| k == "rhtn-roles").map(|(_, v)| v).collect();
     assert_eq!(roles, vec!["read".to_string()], "the application role, and neither reserved name");
 }
+
+// acceptance: RSC-36
+#[test]
+fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = Gateway::default();
+    g.bind(R1, Binding { owner: kh("alice"), authority: "r1.internal".into(), backend: Some(backend), declared_roles: BTreeSet::from(["reader".to_string()]) });
+
+    // **a grant standing over the org, not one party at a time.**
+    // `infra-client-requirements.md` §10.1 makes membership the outer gate
+    // and §10.2 keeps the answer a lookup: what a request reads is a row
+    // that was already there.
+    let row = Row { roles: BTreeSet::from(["reader".to_string()]), connect: true };
+    g.stand(R1, row.clone()).expect("a grant over the owner's horizon");
+    assert!(g.row(&R1, &kh("bob")).is_none(), "and nothing is written until it is expanded");
+
+    let (granted, dropped) = g.refresh(&sc.table);
+    assert!(granted >= 3, "the owner's horizon, expanded: {granted} rows");
+    assert_eq!(dropped, 0);
+    for inside in ["alice", "bob", "carol", "w1"] {
+        assert_eq!(g.row(&R1, &kh(inside)).map(|r| r.connect), Some(true), "{inside} is in the owner's horizon");
+    }
+    assert!(g.row(&R1, &kh("w2")).is_none(), "w2 hangs off w3 and is outside it");
+
+    // a second expansion over the same membership writes nothing: the
+    // moments §10.2 names are membership changes, not requests
+    assert_eq!(g.refresh(&sc.table), (0, 0), "nothing moved, so nothing to do");
+
+    // **a row the operator set is a floor the standing grant does not
+    // overwrite**: it is the same table, and the operator's entry is the
+    // more specific statement about that party
+    let wider = Row { roles: BTreeSet::new(), connect: false };
+    g.set_row(R1, kh("bob"), wider.clone()).expect("the operator's own row");
+    assert_eq!(g.refresh(&sc.table), (0, 0));
+    assert_eq!(g.row(&R1, &kh("bob")), Some(&wider), "left as the operator wrote it");
+
+    // and a party that leaves the org has its rows and its session removed
+    let mut w = World::new();
+    let (a_b, _) = w.adopt("bob", "alice", 1);
+    let narrowed = table_with(kh("alice"), &w, &[&a_b], &["alice"]);
+    let (granted, dropped) = g.refresh(&narrowed);
+    assert_eq!(granted, 0);
+    assert!(dropped >= 2, "carol and w1 left: {dropped} rows dropped");
+    assert!(g.row(&R1, &kh("carol")).is_none(), "the departing party's row goes");
+    assert_eq!(g.row(&R1, &kh("bob")).map(|r| r.connect), Some(false), "and the one still inside is untouched");
+}

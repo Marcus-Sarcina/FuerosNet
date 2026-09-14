@@ -50,6 +50,7 @@ pub mod record;
 pub mod rotation;
 pub mod selection;
 pub mod store;
+pub mod trust;
 pub mod subject;
 pub mod verifier;
 

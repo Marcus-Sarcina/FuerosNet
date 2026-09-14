@@ -349,3 +349,34 @@ fn a_client_holds_the_addresses_of_the_infrastructure_in_its_horizon() {
     h.prune();
     assert_eq!(h.reachable_infra().len(), 1, "the party that left took its address with it");
 }
+
+// acceptance: MET-09
+#[test]
+fn a_client_weighs_trust_distance_from_its_own_copy_and_asks_nobody() {
+    // alice under bob with carol as a sibling, and w2 a nephew under carol
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w2", "carol", vec![0x21], 2),
+    ];
+    let h = fed("alice", &recs);
+
+    // **the first ring is what the metric asks for**: the parties one
+    // adoption or sibling edge away, which is where a client's own
+    // evidence is densest
+    let ring: std::collections::BTreeSet<_> = h.adjacent().into_iter().collect();
+    assert_eq!(ring, [kh("bob"), kh("carol")].into_iter().collect(), "the patron and the sibling");
+    assert!(!ring.contains(&kh("w2")), "and not the nephew, two edges out");
+    assert!(!ring.contains(&kh("alice")), "nor itself");
+
+    // and the evidence the policy sees is that copy, folded: one edge per
+    // open binding, with nobody asked
+    let mut c = rhtn_client::ceremony::Client::new(common::id("alice"), common::ids(), Default::default(), harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 7, 0).0);
+    c.horizon = h;
+    let ev = c.evidence();
+    assert_eq!(ev.adoptions.len(), 3, "one edge per open binding in the copy: {:?}", ev.adoptions);
+    assert!(ev.adoptions.contains(&(kh("bob"), kh("alice"))), "including its own");
+    assert!(ev.horizon().contains(&kh("w2")), "and the metric's own walk reaches the nephew");
+    assert!(c.standing(&kh("carol")).is_finite(), "and a score comes out of it rather than a question");
+}

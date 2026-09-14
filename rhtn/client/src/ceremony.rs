@@ -41,11 +41,26 @@ pub struct Config {
     pub subject: SubjectConfig,
     pub verifier: VerifierConfig,
     pub payload: payload::PayloadConfig,
+    /// The trust policy this client computes standing with: the reference
+    /// metric unless something substitutes one (design §16.1).  **Nothing
+    /// the client stores or sends consults it** (design §16.4), so a
+    /// client running a substitute produces the same wire traffic.
+    pub policy: std::sync::Arc<dyn rhtn_policy::Policy<Keyhash>>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { clock_tolerance_s: 300, retention_years: 2, template_version: 1, capture: Default::default(), seal: SealParams::default(), subject: SubjectConfig::default(), verifier: VerifierConfig::default(), payload: payload::PayloadConfig::default() }
+        Config {
+            clock_tolerance_s: 300,
+            retention_years: 2,
+            template_version: 1,
+            capture: Default::default(),
+            seal: SealParams::default(),
+            subject: SubjectConfig::default(),
+            verifier: VerifierConfig::default(),
+            payload: payload::PayloadConfig::default(),
+            policy: std::sync::Arc::new(rhtn_policy::ReferenceMetric::default()),
+        }
     }
 }
 

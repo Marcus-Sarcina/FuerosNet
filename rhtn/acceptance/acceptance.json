@@ -10069,5 +10069,59 @@
   "then": "The list it is told is a fold over the node's own table: its siblings, not its patron. Each is named with the key material that authenticates it, since one whose material the client lacks is unusable rather than dialled unauthenticated. The address is the one the endpoint record carried, and a sibling the node has no address for is left out rather than named unreachably.",
   "oracle": "behaviour",
   "interpretation": "§8.2 gives a SiblingRef one to eight network points and no way to say none, which is the wire agreeing that a failover target nobody can reach is not one."
+ },
+ {
+  "id": "RSC-36",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A standing grant follows the owner's horizon in and out",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.2",
+   "infra-client-requirements.md §10.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "A new member is\nscored against standing predicates and given rows; a departing one has theirs\nremoved."
+   },
+   {
+    "where": "infra-client-requirements.md §10.1",
+    "text": "You answer from the row,\nnot by evaluating a predicate"
+   }
+  ],
+  "given": "A resource bound at a node, with a grant standing over every member of its owner's trust horizon.",
+  "when": "The grant is expanded, expanded again over unchanged membership, expanded over a party the operator gave a row of their own, and expanded after two parties have left the org.",
+  "then": "Every member of the owner's horizon has a row and nobody outside it does. An expansion over unchanged membership writes nothing, because the moments that call for one are membership changes and not requests. A row the operator set is left as they wrote it. A departing party's row and hosted session are both removed.",
+  "oracle": "behaviour",
+  "interpretation": "The standing grant is the simplest predicate there is, the one §10.1 calls membership being the outer gate. Richer predicate classes are §10.2's and are not here."
+ },
+ {
+  "id": "MET-09",
+  "area": "metric",
+  "gap": "metric",
+  "title": "A client weighs trust distance from its own copy, and asks nobody",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §4.2",
+   "design §16.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "for routing around a patron that is not answering and for\n  calculating trust distance"
+   },
+   {
+    "where": "design §16.2",
+    "text": "nothing here is a retained entitlement"
+   }
+  ],
+  "given": "A client holding the records its serving node propagated: a patron, a sibling and a nephew.",
+  "when": "It is asked which parties are one edge away, and its policy is asked for a score.",
+  "then": "The first ring is the patron and the sibling, not the nephew and not itself. The evidence its policy sees is one edge per open binding in the copy, its own included, and a score comes out of it rather than a question for somebody else.",
+  "oracle": "behaviour",
+  "interpretation": "A client's fold has two sources where a node's has three: it is not a party to a peering and holds none, so its graph is its horizon's adoptions plus the meetings it was present at."
  }
 ]

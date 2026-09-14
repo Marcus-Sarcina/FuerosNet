@@ -1253,6 +1253,7 @@ dependencies = [
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-node",
+ "rhtn-policy",
  "rhtn-transport",
  "serde_json",
 ]

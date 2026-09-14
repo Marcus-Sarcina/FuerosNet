@@ -8,6 +8,7 @@ description = "RHTN participant client: verifier selection, consent and key gran
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
+rhtn-policy = { path = "../policy" }
 aws-lc-rs = "1.18"
 
 [dev-dependencies]

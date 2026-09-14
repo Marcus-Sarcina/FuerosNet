@@ -270,6 +270,15 @@ impl Horizon {
         out
     }
 
+    /// The parties one adoption or sibling edge away.
+    ///
+    /// **Named because the flow metric asks for it**: an evaluator builds
+    /// its graph from the edges it holds, and the first ring is where a
+    /// client's own evidence is densest.
+    pub fn adjacent(&self) -> Vec<Keyhash> {
+        self.table.horizon(&self.me, 1).into_iter().filter(|k| *k != self.me).collect()
+    }
+
     /// How many adoption or sibling edges away `other` is; nothing beyond
     /// the horizon.
     pub fn distance(&self, other: &Keyhash) -> Option<usize> {
