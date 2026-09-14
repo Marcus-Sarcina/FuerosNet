@@ -96,11 +96,14 @@ for e in entries:
     if not isinstance(holds, list) or not holds:
         flags.append(f"{e['id']}: `holds` is a non-empty list of [type, condition] pairs"); continue
     for pair in holds:
-        if not (isinstance(pair, list) and len(pair) == 2 and pair[0] in TRANSACTIONS and isinstance(pair[1], str) and CONDITION_RE.match(pair[1])):
-            flags.append(f"{e['id']}: {pair!r} is not a [type, condition] pair"); continue
+        ok = (isinstance(pair, list) and len(pair) in (2, 3) and pair[0] in TRANSACTIONS
+              and isinstance(pair[1], str) and CONDITION_RE.match(pair[1])
+              and (len(pair) == 2 or pair[2] in ("+", "-")))
+        if not ok:
+            flags.append(f"{e['id']}: {pair!r} is not a [type, condition] or [type, condition, side]"); continue
         if e["kind"] == "withdrawn":
             continue
-        side = POLARITY.get(e["kind"])
+        side = pair[2] if len(pair) == 3 else POLARITY.get(e["kind"])
         if side is None:
             flags.append(f"{e['id']}: kind {e['kind']!r} takes no side, so it cannot hold a condition"); continue
         paired[(pair[0], pair[1])].add(side)

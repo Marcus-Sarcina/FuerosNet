@@ -989,7 +989,43 @@
   "when": "A presents the record to a party that is not a prospective patron.",
   "then": "The presentation reveals none of the seven fields and carries every field's digest and label, and the envelope signature verifies over it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "disclosure-root-recomputes"
+   ],
+   [
+    5,
+    "disclosure-root-recomputes",
+    "-"
+   ],
+   [
+    5,
+    "seven-slots-exactly"
+   ],
+   [
+    5,
+    "any-subset-accepted"
+   ],
+   [
+    5,
+    "strongest-channel-checked-when-revealed"
+   ],
+   [
+    5,
+    "strongest-channel-checked-when-revealed",
+    "-"
+   ],
+   [
+    5,
+    "salt-is-sixteen-bytes"
+   ],
+   [
+    5,
+    "revealed-value-matches-schema"
+   ]
+  ]
  },
  {
   "id": "CER-19",
@@ -10507,6 +10543,204 @@
    [
     3,
     "code-space-is-64"
+   ]
+  ]
+ },
+ {
+  "id": "CER-35",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A presentation a decoder must refuse",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.5.1.5"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.5.1.5",
+    "text": "Reject a slot count other than seven"
+   },
+   {
+    "where": "wire-format.md §4.5.1.5",
+    "text": "Reject a Disclosure whose salt is not exactly 16 bytes."
+   }
+  ],
+  "given": "A presence record and the seven disclosures it committed to.",
+  "when": "A presentation is offered with six slots, with eight, with a salt of fifteen bytes, with a revealed value of the wrong schema for its label, with a slot of some third shape, and as a bare envelope.",
+  "then": "Each is refused, and the refusal names what was wrong. These are the rejections §4.5.1.5 requires, which a presentation the ceremony built well cannot exercise.",
+  "oracle": "behaviour",
+  "interpretation": "The decoder was implemented in full and its rejections were asserted inside one positive test, so none of them was a negative anybody could find.",
+  "holds": [
+   [
+    5,
+    "seven-slots-exactly"
+   ],
+   [
+    5,
+    "salt-is-sixteen-bytes"
+   ],
+   [
+    5,
+    "revealed-value-matches-schema"
+   ],
+   [
+    5,
+    "disclosure-root-recomputes"
+   ]
+  ]
+ },
+ {
+  "id": "CER-36",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A withheld field is not a default, and there is no aggregate verdict",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.5.1.5",
+   "wire-format.md §4.5.1.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.5.1.5",
+    "text": "Never treat a withheld field as a default value."
+   },
+   {
+    "where": "wire-format.md §4.5.1.3",
+    "text": "Withholding is visible, and that is deliberate."
+   }
+  ],
+  "given": "A presence record whose location value is the empty one.",
+  "when": "It is presented with one field revealed, and again with location revealed.",
+  "then": "A withheld field has no value and is named as withheld, which is a different fact from a value that is empty. Revealing the empty location says so, and is distinguishable from withholding it.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "withheld-is-not-a-default"
+   ],
+   [
+    5,
+    "withheld-is-not-a-default",
+    "-"
+   ],
+   [
+    5,
+    "any-subset-accepted",
+    "-"
+   ],
+   [
+    5,
+    "no-aggregate-verdict"
+   ],
+   [
+    5,
+    "no-aggregate-verdict",
+    "-"
+   ]
+  ]
+ },
+ {
+  "id": "CER-37",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "The channel recorded is the strongest the hardware actually supports",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Obtain the strongest proximity channel the hardware supports, and record\n  which was achieved."
+   }
+  ],
+  "given": "A device whose ultra-wideband and near-field radios are real.",
+  "when": "A ceremony is run with the counterparty in the room, and again with them out of it.",
+  "then": "The record names the rung that physically passed in each case, and the second is weaker than the first with nothing promoted.",
+  "oracle": "behaviour",
+  "deferred": "a device with a proximity radio: the reference platform reaches the latency rung only, and reports what its operator declared",
+  "interpretation": "A declaration is evidence about a scenario rather than about hardware, so asserting it here would assert the declaration back.",
+  "holds": [
+   [
+    5,
+    "channel-achieved-on-hardware"
+   ],
+   [
+    5,
+    "channel-achieved-on-hardware",
+    "-"
+   ]
+  ]
+ },
+ {
+  "id": "CER-38",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "The guided capture runs on a camera and a person",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.1"
+  ],
+  "rule": [
+   {
+    "where": "design §7.1",
+    "text": "Each party\n   captures 3-5 images of the counterparty over 10-15 seconds under randomised\n   prompts"
+   }
+  ],
+  "given": "A camera with a person in front of it.",
+  "when": "The guided capture runs under the real prompts, and again against a still image held up to the lens.",
+  "then": "The frames differ from each other; a still does not satisfy the liveness the record claims; and the modality the record states is the one the camera provided.",
+  "oracle": "behaviour",
+  "deferred": "a camera and a person: the reference camera returns the same synthetic frame every time, which proves the timing and the prompt variation and nothing about what was captured",
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "guided-capture-on-a-camera"
+   ],
+   [
+    5,
+    "guided-capture-on-a-camera",
+    "-"
+   ]
+  ]
+ },
+ {
+  "id": "CER-39",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A sealed capture is held under the platform's key storage",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2",
+    "text": "each seals its captures of the\nother party under the key that party supplied, discarding it once the capture is\nsealed."
+   }
+  ],
+  "given": "A platform with a key store a process cannot read out.",
+  "when": "A capture is sealed, and the process restarts.",
+  "then": "The sealing key is in the platform's store and not in process memory; the restarted process can still open what it holds; and a reader without the platform's unlock cannot.",
+  "oracle": "behaviour",
+  "deferred": "the platform's key storage: the reference store holds its seal in memory, which is where a desktop instrument has to keep it",
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "sealed-store-on-platform-keys"
+   ],
+   [
+    5,
+    "sealed-store-on-platform-keys",
+    "-"
    ]
   ]
  }

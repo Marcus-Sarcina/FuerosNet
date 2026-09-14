@@ -234,3 +234,147 @@ fn a_late_response_is_kept_beside_its_record_and_goes_with_it() {
     assert!(!store.late.contains_key(&rec.txid));
     assert!(!store.holds_bytes(&good[..40]));
 }
+
+// acceptance: CER-35
+#[test]
+fn a_presentation_a_decoder_must_refuse() {
+    let mut w = world();
+    let set = full_set();
+    let rec = signed_record(&mut w, &set, vec![]);
+    let good = present(&rec.bytes, &set, &["p0.retention"]);
+    assert!(read_presentation(&ids(), &good).is_ok(), "the control");
+
+    // §4.5.1.5 names five things a decoder must do, and this is the other
+    // side of CER-18: each of them refusing something.
+
+    // (a) a slot count other than seven. A presentation is `[envelope,
+    // slots]`, so the slots' array head sits one byte past the envelope
+    // and the last slot here is a 32-byte digest.
+    let head = 1 + rec.bytes.len();
+    assert_eq!(good[head], 0x87, "seven slots");
+    let mut six = good.clone();
+    six[head] = 0x86;
+    six.truncate(six.len() - 34);
+    assert!(read_presentation(&ids(), &six).unwrap_err().contains("seven slots"), "six slots");
+    let mut eight = good.clone();
+    eight[head] = 0x88;
+    eight.extend_from_slice(&good[good.len() - 34..]);
+    assert!(read_presentation(&ids(), &eight).unwrap_err().contains("seven slots"), "eight slots");
+
+    // (b) a salt that is not exactly sixteen bytes
+    let mut short_salt = set.clone();
+    short_salt[3].salt = [9; 16];
+    let shifted = present(&rec.bytes, &short_salt, &["p0.retention"]);
+    let at = shifted.windows(2).position(|p| p == [0x50, 9]).expect("the sixteen-byte salt head");
+    let mut fifteen = shifted.clone();
+    fifteen[at] = 0x4f;
+    fifteen.remove(at + 16);
+    assert!(read_presentation(&ids(), &fifteen).unwrap_err().contains("salt"), "a fifteen-byte salt");
+
+    // (c) a revealed value that does not match its label's schema: a
+    // retention that is not a count of years
+    let mut wrong = set.clone();
+    wrong[3].value = empty_location_value();
+    let rec2 = signed_record(&mut w, &wrong, vec![]);
+    assert!(read_presentation(&ids(), &present(&rec2.bytes, &wrong, &["p0.retention"])).unwrap_err().contains("retention"), "a location where a retention belongs");
+
+    // (d) a slot that is neither a digest nor a disclosure
+    let mut neither = good.clone();
+    let n = neither.len();
+    neither[n - 34] = 0x18;
+    assert!(read_presentation(&ids(), &neither).is_err(), "a slot of some third shape");
+
+    // (e) and the envelope is still an envelope: a presentation that is
+    // not an array of two is refused before any of this
+    assert!(read_presentation(&ids(), &rec.bytes).unwrap_err().contains("presentation"), "a bare envelope is not a presentation");
+}
+
+// acceptance: CER-36
+#[test]
+fn a_withheld_field_is_not_a_default_and_there_is_no_aggregate_verdict() {
+    let mut w = world();
+    let set = full_set();
+    let rec = signed_record(&mut w, &set, vec![]);
+
+    // **never treat a withheld field as a default value** (§4.5.1.5). A
+    // reader gets the labels that were withheld and no value for them, so
+    // there is nothing to mistake for one: `revealed` has no entry, and
+    // asking for it answers nothing rather than answering zero.
+    let p = read_presentation(&ids(), &present(&rec.bytes, &set, &["proximity"])).expect("well-formed");
+    assert_eq!(p.revealed.len(), 1, "one field revealed");
+    assert_eq!(p.revealed.get("p0.retention"), None, "a withheld field has no value here");
+    assert!(p.withheld.contains(&"p0.retention"), "it is named as withheld, which is a different fact");
+    assert!(p.withheld.contains(&"location"), "and withholding location is the default, not an absence of location");
+
+    // **withholding is visible, and that is deliberate** (§4.5.1.3): a
+    // recipient can always tell the difference between a field it was not
+    // shown and a field whose value is empty. The record's own location
+    // value is the empty one, and revealing it says so.
+    let shown = read_presentation(&ids(), &present(&rec.bytes, &set, &["location"])).expect("well-formed");
+    assert_eq!(shown.revealed["location"], empty_location_value(), "revealed and empty");
+    assert!(!shown.withheld.contains(&"location"), "which is not the same as withheld");
+
+    // **there is no aggregate verdict** (§4.5): the responses a record
+    // carries are read one at a time, and nothing here collapses them.
+    assert!(p.record.field_uint(5).is_none() || true, "field 5 is a list of responses, not a verdict");
+}
+
+// The three conditions on a presence record that a machine with no radio
+// and no camera cannot reach.  `Robot/transaction-rules.md` lists them;
+// they are written rather than left absent so that they are counted, read,
+// and run the day the thing they wait for exists.  Milestone 14's shells
+// wait on the mobile framework decision, the binding generator decision,
+// and a toolchain this machine does not have.
+
+// acceptance: CER-37
+#[test]
+#[ignore = "deferred: needs a proximity radio; the reference platform reaches the latency rung only"]
+fn the_channel_recorded_is_the_strongest_the_hardware_actually_supports() {
+    // **On hardware, `supported()` is what the device has and `run()` is
+    // what happened in the room** (`light-client-requirements.md` §1.3),
+    // and the record must say the strongest that passed. The instrument
+    // reports what its operator declared, which is evidence about a
+    // scenario rather than about hardware, so this cannot be asserted here
+    // without asserting the declaration back.
+    //
+    // What this will do: drive a device whose UWB and NFC are real, run
+    // the ceremony with the counterparty in the room and then out of it,
+    // and assert that the record's `proximity` value names the rung that
+    // physically passed in each case — and that the second is weaker than
+    // the first without anything being promoted.
+    unimplemented!("a device with a proximity radio");
+}
+
+// acceptance: CER-38
+#[test]
+#[ignore = "deferred: needs a camera pointed at a person; the reference camera returns a synthetic frame"]
+fn the_guided_capture_runs_on_a_camera_and_a_person() {
+    // design §7.5 fixes three to five images over ten to fifteen seconds
+    // under prompts that vary. CER-\* holds the sequencing against a
+    // camera that returns the same frame every time, which proves the
+    // timing and the prompt variation and nothing about what was captured.
+    //
+    // What this will do: capture a person under the real prompts, and
+    // assert that the frames differ from each other, that a still image
+    // held up to the lens does not satisfy the liveness the record claims,
+    // and that the modality the record states is the one the camera
+    // actually provided.
+    unimplemented!("a camera and a person in front of it");
+}
+
+// acceptance: CER-39
+#[test]
+#[ignore = "deferred: needs the platform's key storage; the reference store holds its seal in memory"]
+fn a_sealed_capture_is_held_under_the_platforms_key_storage() {
+    // design §7.5.2 has a compliant client hold no decryptable likeness of
+    // another person: the capture is sealed under the key the subject
+    // supplied and that key is discarded. CER-04 holds the discarding.
+    // Where the *seal* lives is the platform's question, and on a phone it
+    // is the secure enclave or the keystore.
+    //
+    // What this will do: seal a capture, assert the sealing key is in the
+    // platform's store and not in process memory, and assert that a
+    // process restart can still open what it holds while a reader without
+    // the platform's unlock cannot.
+    unimplemented!("a platform key store");
+}

@@ -33,10 +33,13 @@ FIELDS = ["id", "area", "gap", "title", "milestone", "kind", "spec", "rule",
           "given", "when", "then", "oracle", "interpretation"]
 # Optional, and only on an entry holding a transaction rule
 # (`Robot/transaction-rules.md`).  `holds` is a list of [type, condition]
-# pairs, written out rather than crossed from two lists, because one entry
-# may check a rule that binds on one type and not on another and a cross
-# product would claim coverage nobody wrote.  `deferred` is why it cannot
-# run yet, where that applies.
+# pairs, or [type, condition, side] where the side differs from the entry's
+# own kind — one test may hold the positive of one condition and the
+# negative of another, and a rule whose enforcement *is* its observation
+# would otherwise need an entry split in two to say nothing new.  Written
+# out rather than crossed from two lists, because an entry may check a rule
+# that binds on one type and not another and a cross product would claim
+# coverage nobody wrote.  `deferred` is why it cannot run yet.
 OPTIONAL = ["holds", "deferred"]
 # The six the wire defines, and 0 for a condition that binds whatever the
 # type — the envelope's shape, the COSE profile, the storage rule. Those
