@@ -9400,3 +9400,92 @@ otherwise have done. All checks pass.
 
 **Owed, and the list is now short:** nothing. The `verify::record` error type is
 fixed, and the corpus debt is paid.
+
+**The 2026-09-13 review, second round, applied (2026-09-13).** Eight findings
+against the tree after the consistency pass: S01-S05, H01, H02 and B01, with
+a Rust harness that reproduces each. **Seven held on verification and one did
+not.** Four gate-green commits, in the order the author approved.
+
+- **74f35e6, B01.** The reviewer read design §14.1.0's "never envelopes,
+  never signatures, never key material" as forbidding `Participant::consent`
+  to return an encoded COSE signature across the FFI boundary. Put to the
+  author, who ruled the sentence **was not his wording** and overstated the
+  rule: where the kernel must pass a cryptographic payload through the UI it
+  may, and he named the cases — the ceremony's QR display and optical return,
+  seed material from a device entropy source, a user-input secret at
+  initialisation, and ingesting a contact from a QR or a contact card. What
+  the encapsulation is for is keeping the network stack and device-specific
+  services out of each other. §14.1.0 was rewritten in those terms, and
+  `light-client-requirements.md` §9 and `infra-client-requirements.md` §8.1
+  with it. **B01 dissolves as a conformance failure**; what survives is a
+  shaping question — whether the facade should offer a named interaction
+  rather than a general byte pipe — which is not a defect and is not urgent.
+- **2c1edaa, S04 and S01.** Issuance kept a per-requester counter file naming
+  the subject asked for, which `infra-client-requirements.md` §6 forbids
+  keeping at all; the counters are gone rather than expired, since a record
+  that expires is a record. And `stock` reported success when a key failed to
+  write, so a node acknowledged an accepted deposit it had not taken. It is
+  now `#[must_use]`, rolls back the keys it did write, and the submission
+  path answers `SUBMISSION_REFUSED`.
+- **5cbd1d8, S02, S05 and S03.** A relationship ending now forgets the wake
+  endpoint with it, in the one place both the unbinding and the departure
+  paths pass through. `save`'s cleanup walked its own directory and tried to
+  descend into the files in it. And the FFI `send` reported success for a
+  submission the serving node refused: the courier now carries back what was
+  refused and what was left, and the shell is told.
+- **dd22e70, H01 and H02.** A materialised snapshot was accepted on a count
+  and a high-water mark, which two different record sets can share, and from
+  any identity at all. It now carries a fold over the txids it was taken from
+  and is refused if it names another node. And a client's horizon placed and
+  resolved without bound, so replaying retained records resurrected a place
+  the horizon no longer holds; `place`, `locator` and `resolvable` are now
+  bounded at distance two.
+
+**The reviewer's own suite was rerun** rather than only the workspace's: 57 of
+its 58 tests pass, the one failure being B01's, which asserts the sentence the
+author withdrew.
+
+**Milestone 11's exit criterion, met (2026-09-13).** One gate-green commit,
+a2ab981. `rhtn-sim` gained `Daemons`, which spawns several `rhtnd` processes,
+writes each an identity at 0600, a peers file excluding itself and a
+configuration naming its upstream, reads the address back off the process's
+first line of output, and can stop and restart any of them by name. Two
+scenarios run against it and neither reads a view: every claim is made over a
+session or from what a process wrote. DMN-17 and DMN-18. Catalogue 340 of 350,
+0 flags.
+
+- **The finding was in the library, not the daemon.** `NodeView.attached` was
+  populated by no production code — only by tests reaching into the view — so
+  a running daemon forwarded the flood to none of its clients whatever its
+  configuration said. `wire-format.md` §10.1.1 counts "the clients attached to
+  you" among the adjacencies a stored transaction goes to, so this was silent
+  under-delivery to the parties a serving node exists for, and no in-process
+  scenario could have shown it because every one of them set the field itself.
+  The transport calls an `on_attach` hook as a session is inserted and as it is
+  removed; the runtime installs one. PRP-23.
+- **What DMN-18 leaves open, and why it is not an omission.** `mark_infra` is
+  called in one place, by `NodeView::new` for the node itself. Nothing in a
+  running node marks another node as infrastructure, so the nearest infra
+  ancestor a table can see is always the node itself and it answers `Serving`
+  for itself with the residual that identifies the target. `wire-format.md`
+  §7.6 says only infra nodes publish endpoint records, which is the only
+  documented signal, but reading it as *the* marking rule is a protocol
+  decision and the plan's section 2 puts those outside this tier. **Put to the
+  author.** The scenario asserts the reply's shape — the nonce it was asked
+  with, a residual and endpoints on a serving answer, a positive advance and
+  endpoints on a referral, a stated failure for a path held no record of — and
+  the catalogue entry carries the same in its interpretation.
+- **Two documents corrected on the way.** `wire-format.md` §7.7.3 repeated the
+  word across a wrapped citation, reading "(design design §12.2". The
+  reference checkers pass either way, since they resolve the section and not
+  the prose. Committed on its own; **that commit's message misnames the
+  section as §7.7.2**, and is left uncorrected rather than rewriting pushed
+  history.
+
+**Still owed above the library.** Milestone 14, the mobile shells, is blocked
+on two decisions from section 7 — the mobile framework for the ceremony track
+and the binding generator, with `uniffi` the candidate — and on a toolchain:
+no gradle, swiftc, adb or xcodebuild exists on this machine. PAY-13 waits on
+the payload-library licence decision. B01's residue is a shaping question, not
+a defect: whether the facade should offer a named consent interaction rather
+than a general byte pipe.

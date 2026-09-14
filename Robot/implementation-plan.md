@@ -390,9 +390,32 @@ reach `LiveNode`, which bound loopback unconditionally; and an `Identity`
 could not be built from the `KeyMaterial` a peer is pinned by, which is
 how a node is configured with peers it has never contacted.
 
-**The exit criterion is met in part.** The restart behaviour is proved end
-to end; rerunning `rhtn-sim`'s whole scenario set against processes is not
-done, and needs a harness that spawns and addresses several daemons.
+**The exit criterion is met** (2026-09-13). `rhtn-sim` gained the harness it
+needed: `Daemons` spawns several `rhtnd` processes, writes each an identity,
+a peers file and a configuration naming its upstream, and reads back the
+address the process reports, so a scenario can start, stop and restart any
+of them by name. Two scenarios run against it, and each makes every claim
+over a session or from what a process wrote rather than by reading a view:
+a transaction crosses two processes and survives a restart of the second
+(DMN-17), and a daemon answers a resolution on a stream from topology it
+was pushed over a session (DMN-18).
+
+**The finding that came out of it was in the library, not the daemon.** A
+node's set of attached clients was populated by no production code — only
+by tests reaching into the view — so a running daemon forwarded the flood to
+none of its clients whatever its configuration said. The transport now calls
+an `on_attach` hook as a session is inserted and removed, and the runtime
+installs one that maintains the set. PRP-23 holds it.
+
+**What DMN-18 does not assert is which node the answer names.** `mark_infra`
+is called in one place, by `NodeView::new` for the node itself; nothing in a
+running node ever marks another node as infrastructure, so the nearest infra
+ancestor a table can see is always itself. Whether publishing an endpoint
+record is the evidence that marks a publisher infra — `wire-format.md` §7.6
+says only infra nodes publish — is a question for the author, and inventing
+an answer would put a protocol decision in the application tier that section
+2 forbids. The scenario asserts the shape of the reply and leaves the naming
+open; the catalogue entry records the same in its interpretation.
 
 What it owes beyond the library. The identity is read and never minted: a
 node that generates a key when its file is missing serves under an identity
