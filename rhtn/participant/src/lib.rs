@@ -24,6 +24,7 @@
 //! beginning with a word that says what it is. Everything a script needs
 //! to tell the two apart is in that first word.
 
+pub mod carry;
 pub mod terminal;
 
 use rhtn_ffi::client::Participant;
@@ -63,10 +64,18 @@ impl Instrument {
     /// from.
     pub fn start(identity: &Path, peers: Option<&Path>) -> Result<Instrument, String> {
         let seeds = read_identity(identity)?;
-        let known = match peers {
-            None => Vec::new(),
-            Some(p) => read_peers(p)?,
-        };
+        // **this participant's own key is in the lookup, and not because
+        // the peers file listed it.**  A participant signs the records it
+        // is a party to, and one that cannot verify its own signature
+        // holds them unverifiable for want of a key it is holding
+        // (`wire-format.md` §3.4).  The daemon learned this about its own
+        // identity; nothing had asked it of a client, because nothing had
+        // ever started one outside a test that passed every key in.
+        let (ed, pq): ([u8; 32], [u8; 32]) = (seeds[..32].try_into().expect("64 bytes"), seeds[32..].try_into().expect("64 bytes"));
+        let mut known = vec![rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq).public.key_material()];
+        if let Some(p) = peers {
+            known.extend(read_peers(p)?);
+        }
         let shell = Arc::new(Terminal::default());
         let p = platform(shell.clone(), shell.clone(), shell.clone(), shell.clone(), shell.clone(), shell.clone());
         let client = Participant::start(seeds, known, p).map_err(|e| e.reason)?;
@@ -173,6 +182,103 @@ impl Instrument {
                 Ok(vec!["answer no".into()])
             }
 
+            _ => self.ceremony(f),
+        }
+    }
+
+    /// The ceremony, a step a command.
+    ///
+    /// **Each step's product is a token this instrument's operator carries
+    /// to the other device.** design §7 has the two parties in each other's
+    /// presence over a channel neither the protocol nor this fixes; a
+    /// harness copying a token between two processes is the analogue of a
+    /// screen and a camera, and is as much of the presence as a machine
+    /// with no camera can have.
+    fn ceremony(&self, f: &[&str]) -> Result<Vec<String>, String> {
+        let c = &self.client;
+        match f {
+            ["begin", counterparty, rest @ ..] => {
+                let (nominees, initiator) = match rest {
+                    [] => (Vec::new(), false),
+                    ["initiator"] => (Vec::new(), true),
+                    [n] => (carry_ids(n)?, false),
+                    [n, "initiator"] => (carry_ids(n)?, true),
+                    _ => return Err("begin <counterparty> [<nominee>,...] [initiator]".into()),
+                };
+                let i = c.begin(id(counterparty)?, nominees, initiator).map_err(|e| e.reason)?;
+                Ok(vec![format!("intent {}", carry::pack_intent(&i))])
+            }
+            ["intent", from, blob] => {
+                let i = carry::take_intent(blob)?;
+                let id = c.take_intent(id(from)?, i).map_err(|e| e.reason)?;
+                Ok(vec![format!("ceremony {}", hex(&id))])
+            }
+            ["ceremony"] => Ok(vec![c.ceremony().map_or("ceremony none".into(), |i| format!("ceremony {}", hex(&i)))]),
+
+            ["proximity"] => {
+                let a = c.proximity().map_err(|e| e.reason)?;
+                Ok(vec![format!("channels {}", carry::pack_channels(&a))])
+            }
+            ["take-channels", blob] => {
+                c.take_channels(carry::take_channels(blob)?).map_err(|e| e.reason)?;
+                Ok(vec!["channels taken".into()])
+            }
+
+            ["capture-key"] => Ok(vec![format!("capture-key {}", hex(&c.capture_key().map_err(|e| e.reason)?))]),
+            ["capture", key] => {
+                c.capture(bytes(key)?).map_err(|e| e.reason)?;
+                Ok(vec!["captured".into()])
+            }
+
+            ["verifiers"] => Ok(c.select_verifiers().map_err(|e| e.reason)?.iter().map(|s| format!("verifier {} basis={}", hex(&s.verifier), s.basis)).collect()),
+            ["query", verifier] => Ok(vec![format!("query {}", hex(&c.query_for(id(verifier)?).map_err(|e| e.reason)?))]),
+            ["consent", query] => Ok(vec![match c.consent(bytes(query)?).map_err(|e| e.reason)? {
+                None => "consent none".into(),
+                Some(s) => format!("consent {}", hex(&s)),
+            }]),
+            ["request", query, consent, basis] => {
+                let b: u32 = basis.parse().map_err(|_| format!("`{basis}` is not a selection basis"))?;
+                Ok(vec![format!("request {}", hex(&c.request(bytes(query)?, bytes(consent)?, b).map_err(|e| e.reason)?))])
+            }
+            ["take-query", from, blob] => Ok(vec![answered(c.take_query(id(from)?, bytes(blob)?).map_err(|e| e.reason)?)]),
+            ["take-grant", from, blob] => Ok(vec![answered(c.take_grant(id(from)?, bytes(blob)?).map_err(|e| e.reason)?)]),
+            ["take-response", blob] => {
+                c.take_response(bytes(blob)?).map_err(|e| e.reason)?;
+                Ok(vec!["response taken".into()])
+            }
+            ["gathered"] => Ok(vec![format!("gathered {}", joined(&c.gathered()))]),
+            ["responses"] => Ok(c.responses().iter().map(|r| format!("response verifier={} subject={} answer={:?}", hex(&r.verifier), hex(&r.subject), r.answer)).collect()),
+
+            ["nominees"] => {
+                let (mine, theirs) = c.nominees();
+                Ok(vec![format!("nominees mine={} theirs={}", joined(&mine), joined(&theirs))])
+            }
+            ["witness-ask"] => Ok(vec![format!("witness-ask {}", carry::pack_ask(&c.witness_ask().map_err(|e| e.reason)?))]),
+            ["take-witness-ask", blob] => Ok(vec![match c.take_witness_ask(carry::take_ask(blob)?) {
+                None => "declined".into(),
+                Some(flags) => format!("witnessing {flags}"),
+            }]),
+
+            ["back-pointers"] => Ok(vec![format!("back-pointers {}", joined(&c.back_pointers()))]),
+            ["propose", theirs, witnesses] => {
+                let theirs: Result<Vec<Vec<u8>>, String> = carry_list(theirs).iter().map(|x| bytes(x)).collect();
+                let w = carry::take_witnesses(witnesses)?;
+                let (p, set) = c.propose(theirs?, w).map_err(|e| e.reason)?;
+                Ok(vec![format!("proposed {}", carry::pack_proposed(&p)), format!("disclosures {}", carry::pack_revealed(&set))])
+            }
+            ["signers", proposed] => Ok(vec![format!("signers {}", joined(&carry::take_proposed(proposed)?.signers()))]),
+            ["body", proposed, back] => Ok(vec![format!("body {}", hex(&c.body(carry::take_proposed(proposed)?, carry::take_back(back)?).map_err(|e| e.reason)?))]),
+            ["review-and-sign", proposed, set, back] => Ok(vec![format!(
+                "signed {}",
+                hex(&c.review_and_sign(carry::take_proposed(proposed)?, carry::take_revealed(set)?, carry::take_back(back)?).map_err(|e| e.reason)?)
+            )]),
+            ["witness-sign", proposed, back] => {
+                Ok(vec![format!("signed {}", hex(&c.witness_sign(carry::take_proposed(proposed)?, carry::take_back(back)?).map_err(|e| e.reason)?))])
+            }
+            ["envelope", body, entries] => Ok(vec![format!("envelope {}", hex(&rhtn_ffi::client::presence_envelope(bytes(body)?, carry::take_entries(entries)?)))]),
+            ["finalize", envelope] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, None).map_err(|e| e.reason)?))]),
+            ["finalize", envelope, set] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, Some(carry::take_revealed(set)?)).map_err(|e| e.reason)?))]),
+
             _ => Err(format!("`{}` is not a command; `help` lists them", f.join(" "))),
         }
     }
@@ -198,6 +304,34 @@ impl Instrument {
         out.push("events done".into());
         Ok(out)
     }
+}
+
+fn answered(a: Option<rhtn_ffi::client::Answered>) -> String {
+    match a {
+        None => "awaiting-grant".into(),
+        Some(a) => format!(
+            "answered query={} querier={} subject={}",
+            hex(&a.query),
+            hex(&a.to_querier),
+            a.to_subject.map_or("-".into(), |(k, b)| format!("{}:{}", hex(&k), hex(&b)))
+        ),
+    }
+}
+
+fn joined(v: &[Vec<u8>]) -> String {
+    if v.is_empty() { "-".into() } else { v.iter().map(|x| hex(x)).collect::<Vec<_>>().join(",") }
+}
+
+fn carry_list(s: &str) -> Vec<&str> {
+    if s == "-" { Vec::new() } else { s.split(',').collect() }
+}
+
+fn carry_ids(s: &str) -> Result<Vec<Vec<u8>>, String> {
+    carry_list(s).iter().map(|x| id(x)).collect()
+}
+
+fn bytes(s: &str) -> Result<Vec<u8>, String> {
+    unhex(s).ok_or_else(|| format!("`{s}` is not hex"))
 }
 
 fn id(s: &str) -> Result<Vec<u8>, String> {
@@ -287,6 +421,42 @@ maintain                  rotate, replenish and ask for what is due
 send <to> <kind> <hex>    payload, over the direct path or through the node
 wake <url> <key> [<at>]   where to be rung; `wake off` withdraws it
 events [<ms>]             what arrived; waits <ms> for the first
+
+The ceremony, a step a command. Each step's product is one token, to be
+carried to the other device by whatever the two have between them:
+
+begin <party> [<nominee>,...] [initiator]
+                          open a ceremony; prints the intent to carry
+intent <from> <intent>    take theirs; prints the ceremony id
+ceremony                  the ceremony id, once both intents have crossed
+proximity                 run the channels; prints what to carry
+take-channels <channels>  take what their hardware achieved
+capture-key               the key your captures will be sealed under
+capture <key>             capture them under the key they sent
+verifiers                 the verifiers selected, and the basis of each
+query <verifier>          the query to put to one of them
+consent <query>           the subject's consent, or none
+request <query> <consent> <basis>
+                          the request that carries all three
+take-query <from> <request>       as a verifier
+take-grant <from> <grant>         as a verifier
+take-response <response>  a verifier's answer about the counterparty
+gathered                  the responses this client holds, to carry
+responses                 the same, as a screen would show them
+nominees                  who each side nominated
+witness-ask               what to ask a nominee
+take-witness-ask <ask>    answer one, as a nominee
+back-pointers             this signer's back-pointers
+propose <responses> <witnesses>
+                          the record; prints the proposal and disclosures
+signers <proposal>        everybody who signs it, in order
+body <proposal> <back>    the body every signer signs over
+review-and-sign <proposal> <disclosures> <back>     as a participant
+witness-sign <proposal> <back>                      as a witness
+envelope <body> <signer>:<signature>,...
+                          the envelope the record travels in
+finalize <envelope> [<disclosures>]
+                          take the finished record
 channel                   what the hardware has been declared to do
 channel <name> <outcome> [<m>]
                           declare it; `none` clears one back to unavailable

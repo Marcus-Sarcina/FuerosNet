@@ -9853,5 +9853,32 @@
   "then": "It supports nothing until something is declared, reports declarations strongest first, promotes none of them, and treats a cleared channel as unsupported again. The standing answer to a question put to the person is to decline. A command it does not understand is refused with what was wrong, not ignored.",
   "oracle": "behaviour",
   "interpretation": "A declaration is evidence about a scenario rather than about hardware, which is the whole difference between an instrument and a client, and is why this claims none of the product entries."
+ },
+ {
+  "id": "PRT-04",
+  "area": "participant",
+  "gap": "participant",
+  "title": "A ceremony runs to a record between four processes",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §1.1",
+   "design §7.5.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "Nominate witnesses only from the counterparty's neighbourhood, never from your\n  own"
+   },
+   {
+    "where": "design §7.5.2",
+    "text": "each seals its captures of the\nother party under the key that party supplied, discarding it once the capture is\nsealed."
+   }
+  ],
+  "given": "Four participant processes, each started from its own identity file and told nothing else, two of them meeting and two nominated to witness.",
+  "when": "The ceremony is run a step at a time, each step's product carried between processes the way a screen and a camera would otherwise carry it.",
+  "then": "Both devices name the ceremony the same thing, the counterparty weighs the channels the other achieved, each captures the other under the key that party supplied, each nominee answers its own nominator's ask, and the record is proposed, signed by both participants over the disclosures and by both witnesses without them, and finalised. Every signer names the same record.",
+  "oracle": "behaviour",
+  "interpretation": "The token each step produces is this instrument's encoding, not the protocol's: design §7 has the ceremony cross whatever channel the two devices have and fixes none, which is why the boundary carries it as fields."
  }
 ]

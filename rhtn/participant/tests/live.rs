@@ -131,3 +131,102 @@ fn a_participant_reads_its_identity_and_never_mints_one() {
         assert!(String::from_utf8_lossy(&run(&open).stderr).contains("readable beyond its owner"));
     }
 }
+
+// acceptance: PRT-04
+#[test]
+fn a_ceremony_runs_to_a_record_between_four_processes() {
+    let cast = ["alice", "bob", "carol", "w1"];
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "ceremony");
+    for n in cast {
+        set.start(n, &cast);
+    }
+    let (a, b) = (hex(&kh("alice")), hex(&kh("bob")));
+
+    // **the hardware is declared on both sides and they must agree.**  A
+    // channel one device passed and the other did not is a disagreement
+    // the record has to settle, so each side weighs the same pair of lists
+    for n in ["alice", "bob"] {
+        set.get(n).must("channel latency pass 30");
+    }
+    // and the person consents, which they have to be asked for and which
+    // defaults to declining: every question a client puts is whether to
+    // release something
+    for n in cast {
+        set.get(n).must("answer yes");
+    }
+
+    // 1. intents cross.  Each nominates a witness from the other's
+    // neighbourhood; the harness copying a token between two processes is
+    // what a screen and a camera would otherwise be
+    let ia = one(set.get("alice").must(&format!("begin {b} {} initiator", hex(&kh("carol")))), "intent ");
+    let ib = one(set.get("bob").must(&format!("begin {a} {}", hex(&kh("w1")))), "intent ");
+    let ca = one(set.get("bob").must(&format!("intent {a} {ia}")), "ceremony ");
+    let cb = one(set.get("alice").must(&format!("intent {b} {ib}")), "ceremony ");
+    assert_eq!(ca, cb, "both devices name the ceremony the same thing");
+
+    // 2. proximity, and the counterparty weighs what was achieved
+    let ch = one(set.get("alice").must("proximity"), "channels ");
+    set.get("bob").must(&format!("take-channels {ch}"));
+
+    // 3. capture keys cross, then each captures the other under theirs.
+    // A client holds no decryptable likeness: the key is discarded once
+    // the capture is sealed (design §7.5.2).
+    let ka = one(set.get("alice").must("capture-key"), "capture-key ");
+    let kb = one(set.get("bob").must("capture-key"), "capture-key ");
+    set.get("bob").must(&format!("capture {ka}"));
+    set.get("alice").must(&format!("capture {kb}"));
+
+    // 4. witnesses: each nominator asks its own nominee, and an acceptance
+    // is what puts that witness on the record
+    let ask_a = one(set.get("alice").must("witness-ask"), "witness-ask ");
+    let ask_b = one(set.get("bob").must("witness-ask"), "witness-ask ");
+    let f_a = one(set.get("carol").must(&format!("take-witness-ask {ask_a}")), "witnessing ");
+    let f_b = one(set.get("w1").must(&format!("take-witness-ask {ask_b}")), "witnessing ");
+    let witnesses = format!("{}:{a}:{f_a},{}:{b}:{f_b}", hex(&kh("carol")), hex(&kh("w1")));
+
+    // 5. the proposal, from the counterparty's responses and the witnesses
+    let theirs = one(set.get("bob").must("gathered"), "gathered ");
+    let made = set.get("alice").must(&format!("propose {theirs} {witnesses}"));
+    let proposal = one(made.clone(), "proposed ");
+    let disclosures = one(made, "disclosures ");
+
+    // 6. every signer's back-pointers, in signer order, then the body they
+    // all sign over
+    let signers: Vec<String> = one(set.get("alice").must(&format!("signers {proposal}")), "signers ").split(',').map(str::to_string).collect();
+    let named: Vec<&str> = signers.iter().map(|s| cast.iter().find(|n| hex(&kh(n)) == *s).copied().expect("a signer in the cast")).collect();
+    let back: Vec<String> = named.iter().map(|n| one(set.get(n).must("back-pointers"), "back-pointers ")).collect();
+    let back = back.join(";");
+    let body = one(set.get("alice").must(&format!("body {proposal} {back}")), "body ");
+
+    // 7. each signs what it is: a participant reviews the disclosures it
+    // is committing to, a witness never sees them
+    let mut entries = Vec::new();
+    for (n, k) in named.iter().zip(&signers) {
+        let signed = if *n == "alice" || *n == "bob" {
+            one(set.get(n).must(&format!("review-and-sign {proposal} {disclosures} {back}")), "signed ")
+        } else {
+            one(set.get(n).must(&format!("witness-sign {proposal} {back}")), "signed ")
+        };
+        entries.push(format!("{k}:{signed}"));
+    }
+
+    // 8. and every signer holds the finished record, the participants with
+    // the disclosures and the witnesses without
+    let envelope = one(set.get("alice").must(&format!("envelope {body} {}", entries.join(","))), "envelope ");
+    let mut txids = Vec::new();
+    for n in &named {
+        let command = if *n == "alice" || *n == "bob" { format!("finalize {envelope} {disclosures}") } else { format!("finalize {envelope}") };
+        txids.push(one(set.get(n).must(&command), "finalized "));
+    }
+    assert!(txids.windows(2).all(|w| w[0] == w[1]), "one record, and every signer names it the same: {txids:?}");
+    assert_eq!(txids.len(), 4, "two participants and two witnesses signed it");
+}
+
+/// The one line beginning `prefix`, without it.
+fn one(lines: Vec<String>, prefix: &str) -> String {
+    lines
+        .iter()
+        .find_map(|l| l.strip_prefix(prefix))
+        .unwrap_or_else(|| panic!("no `{}` in {lines:?}", prefix.trim()))
+        .to_string()
+}

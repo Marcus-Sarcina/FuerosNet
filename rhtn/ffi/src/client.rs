@@ -98,6 +98,170 @@ pub struct Response {
     pub answer: Answer,
 }
 
+
+/// A witness's place on a record (`wire-format.md` §4.5 field 4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Witnessing {
+    pub witness: Id,
+    pub nominated_by: Id,
+    pub flags: u64,
+}
+
+/// What a nominee is asked to witness.
+///
+/// Like [`Intent`], the wire does not carry this: a nominee is asked over
+/// whatever the three devices have between them, and no document fixes an
+/// encoding for the asking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WitnessAsk {
+    pub ceremony: Id,
+    pub participants: Vec<Id>,
+    pub started_at: u64,
+    pub channels: Vec<Achieved>,
+}
+
+/// The record two parties are proposing, before anybody has signed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Proposed {
+    pub started_at: u64,
+    pub finalized_at: u64,
+    pub participants: Vec<Id>,
+    pub witnesses: Vec<Witnessing>,
+    /// Signed `VerifierResponse`s, in the order the body carries them.
+    pub responses: Vec<Vec<u8>>,
+    pub root: Vec<u8>,
+}
+
+/// One of the seven values a record discloses, with the salt it is hashed
+/// under (`wire-format.md` §4.5.1.1).  The seven arrive in label order and
+/// the label is carried so a shell can show which is which.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Revealed {
+    pub label: String,
+    pub salt: Vec<u8>,
+    pub value: Vec<u8>,
+}
+
+/// A verifier's answer: the copy for the querier, and the copy for the
+/// subject where one is owed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Answered {
+    pub query: Id,
+    pub to_querier: Vec<u8>,
+    pub to_subject: Option<(Id, Vec<u8>)>,
+}
+
+impl Witnessing {
+    fn of(w: &rhtn_archive::tx::Witness) -> Witnessing {
+        Witnessing { witness: id_of(&w.keyhash), nominated_by: id_of(&w.nominated_by), flags: w.flags }
+    }
+
+    fn inward(&self) -> Result<rhtn_archive::tx::Witness, Refused> {
+        Ok(rhtn_archive::tx::Witness {
+            keyhash: keyhash(&self.witness).ok_or_else(|| Refused::new("a witness is 32 bytes"))?,
+            nominated_by: keyhash(&self.nominated_by).ok_or_else(|| Refused::new("a nominator is 32 bytes"))?,
+            flags: self.flags,
+        })
+    }
+}
+
+impl WitnessAsk {
+    fn of(r: &rhtn_client::ceremony::WitnessRequest) -> WitnessAsk {
+        WitnessAsk {
+            ceremony: r.ceremony_id.to_vec(),
+            participants: r.participants.iter().map(id_of).collect(),
+            started_at: r.started_at,
+            channels: r.channels.iter().map(|c| Achieved { channel: Channel::of(c.kind), outcome: outcome_of(c.result), resolution_m: c.resolution_m }).collect(),
+        }
+    }
+
+    fn inward(&self) -> Result<rhtn_client::ceremony::WitnessRequest, Refused> {
+        let ceremony: [u8; 32] = self.ceremony.as_slice().try_into().map_err(|_| Refused::new("a ceremony id is 32 bytes"))?;
+        let p: Option<Vec<Keyhash>> = self.participants.iter().map(|k| keyhash(k)).collect();
+        let p = p.ok_or_else(|| Refused::new("a participant is 32 bytes"))?;
+        let participants: [Keyhash; 2] = p.try_into().map_err(|_| Refused::new("a ceremony has two participants"))?;
+        Ok(rhtn_client::ceremony::WitnessRequest { ceremony_id: ceremony, participants, started_at: self.started_at, channels: self.channels.iter().map(inward_channel).collect() })
+    }
+}
+
+impl Proposed {
+    fn of(p: &rhtn_client::record::Proposal) -> Proposed {
+        Proposed {
+            started_at: p.started_at,
+            finalized_at: p.finalized_at,
+            participants: p.participants.iter().map(id_of).collect(),
+            witnesses: p.witnesses.iter().map(Witnessing::of).collect(),
+            responses: p.responses.clone(),
+            root: p.root.to_vec(),
+        }
+    }
+
+    fn inward(&self) -> Result<rhtn_client::record::Proposal, Refused> {
+        let p: Option<Vec<Keyhash>> = self.participants.iter().map(|k| keyhash(k)).collect();
+        let p = p.ok_or_else(|| Refused::new("a participant is 32 bytes"))?;
+        let participants: [Keyhash; 2] = p.try_into().map_err(|_| Refused::new("a ceremony has two participants"))?;
+        let witnesses: Result<Vec<_>, Refused> = self.witnesses.iter().map(|w| w.inward()).collect();
+        Ok(rhtn_client::record::Proposal {
+            started_at: self.started_at,
+            finalized_at: self.finalized_at,
+            participants,
+            witnesses: witnesses?,
+            responses: self.responses.clone(),
+            root: self.root.as_slice().try_into().map_err(|_| Refused::new("a disclosure root is 32 bytes"))?,
+        })
+    }
+
+    /// Everybody who signs this record: the two participants and the
+    /// witnesses, which is what a shell needs to know who to carry it to.
+    #[must_use]
+    pub fn signers(&self) -> Vec<Id> {
+        self.inward().map(|p| p.signers().iter().map(id_of).collect()).unwrap_or_default()
+    }
+}
+
+/// The seven disclosures, out and back.
+///
+/// **Label order is the record's, not the shell's** (`wire-format.md`
+/// §4.5.1.1): the seven come back in the order they went out, and one
+/// carrying a label that does not belong at its position is refused rather
+/// than sorted into place.
+fn revealed_of(set: &rhtn_client::record::DisclosureSet) -> Vec<Revealed> {
+    set.iter().map(|d| Revealed { label: d.label.to_string(), salt: d.salt.to_vec(), value: d.value.clone() }).collect()
+}
+
+fn revealed_inward(set: &[Revealed]) -> Result<rhtn_client::record::DisclosureSet, Refused> {
+    if set.len() != rhtn_client::record::LABELS.len() {
+        return Err(Refused::new(format!("a disclosure set is {} values, not {}", rhtn_client::record::LABELS.len(), set.len())));
+    }
+    let mut out: Vec<rhtn_client::record::Disclosure> = Vec::with_capacity(set.len());
+    for (i, r) in set.iter().enumerate() {
+        let label = rhtn_client::record::LABELS[i];
+        if r.label != label {
+            return Err(Refused::new(format!("disclosure {i} is `{}` where the record's order has `{label}`", r.label)));
+        }
+        out.push(rhtn_client::record::Disclosure {
+            label,
+            salt: r.salt.as_slice().try_into().map_err(|_| Refused::new("a salt is 16 bytes"))?,
+            value: r.value.clone(),
+        });
+    }
+    out.try_into().map_err(|_| Refused::new("a disclosure set is seven values"))
+}
+
+fn inward_channel(a: &Achieved) -> rhtn_client::device::ChannelOutcome {
+    rhtn_client::device::ChannelOutcome { kind: a.channel.kind(), result: a.outcome.result(), resolution_m: a.resolution_m }
+}
+
+fn answered_of(a: &rhtn_client::verifier::Answer) -> Answered {
+    Answered { query: a.query_id.to_vec(), to_querier: a.to_querier.clone(), to_subject: Some((id_of(&a.to_subject.0), a.to_subject.1.clone())) }
+}
+
+fn back_inward(back: &[Vec<Vec<u8>>]) -> Result<Vec<Vec<rhtn_archive::Txid>>, Refused> {
+    back.iter()
+        .map(|one| one.iter().map(|t| t.as_slice().try_into().map_err(|_| Refused::new("a transaction id is 32 bytes"))).collect())
+        .collect()
+}
+
 impl Participant {
     /// Start a client on a thread of its own.
     ///
@@ -278,6 +442,183 @@ impl Participant {
     /// Whether a session with a serving node is held right now.
     pub fn attached(&self) -> bool {
         self.net.session().is_some()
+    }
+
+    /// The ceremony this client is in, once both intents have crossed.
+    #[must_use]
+    pub fn ceremony(&self) -> Option<Id> {
+        self.handle.with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
+    }
+
+    /// Take what the counterparty's hardware achieved.
+    ///
+    /// **Both sides weigh the same pair of lists**, which is why this
+    /// crosses rather than each side trusting its own: a channel one
+    /// device passed and the other did not is a disagreement the record
+    /// has to settle (`light-client-requirements.md` §1.3).
+    pub fn take_channels(&self, theirs: Vec<Achieved>) -> Result<(), Refused> {
+        let ch: Vec<_> = theirs.iter().map(inward_channel).collect();
+        self.handle.with_blocking(move |c| c.take_channels(&ch).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// The key this client's own captures will be sealed under, for the
+    /// counterparty to capture with (design §7.5.2).
+    pub fn capture_key(&self) -> Result<Vec<u8>, Refused> {
+        self.handle.with_blocking(|c| c.capture_key().map(|k| k.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// Run the guided capture of the counterparty, sealed under the key
+    /// they supplied.  **The key is discarded once the capture is sealed**,
+    /// so this client holds no decryptable likeness of them.
+    pub fn capture(&self, their_key: Vec<u8>) -> Result<(), Refused> {
+        let k: [u8; 32] = their_key.as_slice().try_into().map_err(|_| Refused::new("a capture key is 32 bytes"))?;
+        self.handle.with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// The query to put to one selected verifier (`wire-format.md` §5.5),
+    /// encoded as the verifier will read it.
+    pub fn query_for(&self, verifier: Id) -> Result<Vec<u8>, Refused> {
+        let v = keyhash(&verifier).ok_or_else(|| Refused::new("a verifier is 32 bytes"))?;
+        self.handle.with_blocking(move |c| c.query_for(v).map(|q| q.encode()).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// The request that carries a query, the subject's consent and the
+    /// basis the verifier was selected on.
+    pub fn request(&self, query: Vec<u8>, consent: Vec<u8>, basis: u32) -> Result<Vec<u8>, Refused> {
+        let b = basis_of(basis)?;
+        self.handle.with_blocking(move |c| {
+            let q = rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
+            Ok(c.request(&q, consent, b))
+        })
+    }
+
+    /// Take a request put to this client as a verifier.
+    ///
+    /// Nothing where the grant it needs has not arrived — it waits, bounded
+    /// — and a refusal where the input is not evidence, since **no signed
+    /// response is fabricated** for one.
+    pub fn take_query(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
+        let f = keyhash(&from).ok_or_else(|| Refused::new("a requester is 32 bytes"))?;
+        self.handle.with_blocking(move |c| match c.take_query(f, &bytes) {
+            rhtn_client::verifier::QueryOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+            rhtn_client::verifier::QueryOutcome::AwaitingGrant => Ok(None),
+            rhtn_client::verifier::QueryOutcome::Closed(why) => Err(Refused::new(why)),
+        })
+    }
+
+    /// Take a capture key released to this client as a verifier.
+    pub fn take_grant(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
+        let f = keyhash(&from).ok_or_else(|| Refused::new("a subject is 32 bytes"))?;
+        self.handle.with_blocking(move |c| match c.take_grant(f, &bytes) {
+            rhtn_client::verifier::GrantOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+            rhtn_client::verifier::GrantOutcome::Buffered | rhtn_client::verifier::GrantOutcome::Ignored => Ok(None),
+            rhtn_client::verifier::GrantOutcome::Rejected(why) => Err(Refused::new(why)),
+        })
+    }
+
+    /// Take a verifier's response about the counterparty.
+    pub fn take_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        self.handle.with_blocking(move |c| c.take_response(&bytes).map_err(Refused::new))
+    }
+
+    /// The responses gathered so far, as they will sit in the body.
+    #[must_use]
+    pub fn gathered(&self) -> Vec<Vec<u8>> {
+        self.handle.with_blocking(|c| c.responses())
+    }
+
+    /// Who each side nominated: this client's, then the counterparty's.
+    #[must_use]
+    pub fn nominees(&self) -> (Vec<Id>, Vec<Id>) {
+        self.handle.with_blocking(|c| {
+            let (mine, theirs) = c.nominees();
+            (mine.iter().map(id_of).collect(), theirs.iter().map(id_of).collect())
+        })
+    }
+
+    /// What this client asks its nominees to witness.
+    pub fn witness_ask(&self) -> Result<WitnessAsk, Refused> {
+        self.handle.with_blocking(|c| c.witness_request().map(|r| WitnessAsk::of(&r)).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// Answer an ask put to this client as a nominee: the flags it will
+    /// sign under, or nothing where it declines.
+    #[must_use]
+    pub fn take_witness_ask(&self, ask: WitnessAsk) -> Option<u64> {
+        let Ok(r) = ask.inward() else { return None };
+        self.handle.with_blocking(move |c| c.take_witness_request(&r))
+    }
+
+    /// The back-pointers this client will put in its own signer entry
+    /// (`wire-format.md` §3.1).
+    #[must_use]
+    pub fn back_pointers(&self) -> Vec<Vec<u8>> {
+        self.handle.with_blocking(|c| c.back_pointers().iter().map(|t| t.to_vec()).collect())
+    }
+
+    /// Propose the record, given the counterparty's responses and the
+    /// witnesses who accepted.  The disclosures come back with it: they are
+    /// what the record commits to and what a holder may later reveal.
+    pub fn propose(&self, theirs: Vec<Vec<u8>>, witnesses: Vec<Witnessing>) -> Result<(Proposed, Vec<Revealed>), Refused> {
+        let w: Result<Vec<_>, Refused> = witnesses.iter().map(|x| x.inward()).collect();
+        let w = w?;
+        self.handle
+            .with_blocking(move |c| c.propose(theirs, w).map(|(p, set)| (Proposed::of(&p), revealed_of(&set))).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// The body every signer signs over, given each signer's back-pointers
+    /// in signer order.
+    pub fn body(&self, proposal: Proposed, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
+        let p = proposal.inward()?;
+        let b = back_inward(&back)?;
+        Ok(p.body(&b))
+    }
+
+    /// Review a proposal as a participant and sign it, or refuse.
+    ///
+    /// **The disclosures are reviewed, not taken on trust**: a participant
+    /// signing a root it has not seen the values behind would be committing
+    /// to a record it cannot read.
+    pub fn review_and_sign(&self, proposal: Proposed, set: Vec<Revealed>, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
+        let p = proposal.inward()?;
+        let d = revealed_inward(&set)?;
+        let b = back_inward(&back)?;
+        self.handle.with_blocking(move |c| c.review_and_sign(&p, &d, &b).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// Sign a proposal as a witness, which sees no disclosures.
+    pub fn witness_sign(&self, proposal: Proposed, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
+        let p = proposal.inward()?;
+        let b = back_inward(&back)?;
+        self.handle.with_blocking(move |c| c.witness_sign(&p, &b).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+
+    /// Take the finished record.  A participant is given the disclosures
+    /// with it; a witness is not, and holds the record without them.
+    pub fn finalize(&self, envelope: Vec<u8>, set: Option<Vec<Revealed>>) -> Result<Id, Refused> {
+        let d = match set {
+            None => None,
+            Some(s) => Some(revealed_inward(&s)?),
+        };
+        self.handle.with_blocking(move |c| c.finalize(&envelope, d.as_ref()).map(|t| t.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))
+    }
+}
+
+/// The envelope a presence record travels in, from the body every signer
+/// signed and each signer's entry (`wire-format.md` §3.2).
+#[must_use]
+pub fn presence_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
+    let e: Vec<(Keyhash, Vec<u8>)> = entries.into_iter().filter_map(|(k, v)| keyhash(&k).map(|k| (k, v))).collect();
+    rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_PRESENCE, &body, &e)
+}
+
+fn basis_of(b: u32) -> Result<rhtn_client::selection::SelectionBasis, Refused> {
+    match b {
+        0 => Ok(rhtn_client::selection::SelectionBasis::Met),
+        1 => Ok(rhtn_client::selection::SelectionBasis::InHorizon),
+        2 => Ok(rhtn_client::selection::SelectionBasis::Reachable),
+        3 => Ok(rhtn_client::selection::SelectionBasis::Discretionary),
+        _ => Err(Refused::new(format!("{b} is not a selection basis (`wire-format.md` §5.5 fixes 0 to 3)"))),
     }
 }
 
