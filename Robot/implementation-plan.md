@@ -566,17 +566,22 @@ signed — the rule `wire-format.md` §3.4 states and the daemon already holds
 its own identity to. Nothing had asked it of a client, because nothing had
 ever started one outside a test that passed every key in.
 
-**What is left is the adoption leg, and it is not a matter of writing the
-commands.** An adoption is proposed by the patron under **its own
-position**, and a client that has never been adopted holds none: `Client`
-starts with `position: None` and `propose_adoption` refuses without one.
-The two ways to close it are both decisions rather than code. Either the
-node adopts, which needs `rhtnd` to expose an operator action and so waits
-on section 7's open question of whether the operator's view is a terminal
-on the host or a page; or a participant stands as a root, which is a
-genesis fact the design has rules about and which an instrument should not
-mint for itself on the strength of a command. **Put to the author rather
-than invented.**
+**The adoption leg closed on the author's question, not on a decision**
+[2026-09-14]. Asked why a position was an input at all, since adopting as
+a newly minted root is ordinary and adoption into several trees is
+expected, and the premise did not survive the asking: `Client` held
+`position: Option<Locator>`, written by nothing but one line of one test
+and read by `propose_adoption` alone, so no client could ever adopt
+anybody. A client now self-anchors — `wire-format.md` §2.1 names the empty
+path the self-anchor case and design §2 has a root name itself — and holds
+one position per subnet, derived from its own archive the way a node
+derives its own. PRT-05 runs a newly minted root adopting on the record it
+just made, across four processes, with nothing configured on either side.
+
+**The framing that had to be withdrawn was mine.** Standing as a root was
+called a genesis fact an instrument should not mint; it is not one. A root
+self-anchors by definition, `Locator::root` is a constructor in
+`rhtn-archive`, and `rhtnd` mints exactly this for itself at every start.
 
 **Order.** Milestones 11 and 12 are independent of each other and of 13; 13
 gates 14, and 13 and 15 finish together. None of them gates what the library still owes, and what it owed

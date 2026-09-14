@@ -9633,3 +9633,36 @@ process. Catalogue 353 of 363, 0 flags.
   holds none. Either `rhtnd` gains an operator action to adopt, which waits
   on section 7's terminal-or-page question, or a participant stands as a
   root, which is a genesis fact an instrument should not mint for itself.
+
+**The position question, and what it dissolved (2026-09-14).** One
+gate-green commit, ffb9cb0. Asked why a position was an input to adoption
+at all, given that adopting as a newly minted root is ordinary and adoption
+into several trees concurrently is expected. Catalogue 356 of 366, 0 flags.
+
+- **The answer was that it should not have been an input.** A patron does
+  need its own path, because a subordinate's locator is that path with a
+  nibble added. What was wrong was requiring it to be supplied from
+  outside and defaulting to none.
+- **`Client.position` was written by nothing but a test**: one reader,
+  `propose_adoption`, and one writer, a line in `client/tests/recovery.rs`.
+  No client could ever adopt anybody. **Fourth of these in two days** —
+  `Gateway::bind`, `NodeView.attached`, `replay_to`, and now this — which
+  makes the sweep already noted overdue rather than merely worth doing.
+- **The framing that had to be withdrawn was this assistant's.** Standing
+  as a root was called a genesis fact an instrument should not mint. It is
+  not one: `wire-format.md` §2.1 names the empty path the self-anchor case,
+  design §2's vocabulary says a root self-anchors, `Locator::root` is a
+  constructor, and `rhtnd` mints exactly this for itself at every start.
+  The mistake was reading *genesis formation of a transaction* — which the
+  conformance harness does test — as covering a party's own anchor.
+- **The second half was invisible until it was asked for.** `wire-format.md`
+  §2.3 keeps one series per patron relationship and §7.6 one endpoint
+  record per line, and `NodeView` has held positions per subnet all along;
+  the client had one, so a second adoption would have overwritten the
+  first. Nothing tested it because nothing could adopt at all.
+- **Still open, and narrower than it was.** `Horizon` keys the places and
+  locators it holds *about other parties* by node alone, with the comment
+  that a later record replaces the earlier. For a party in two subnets that
+  is the same collapse one level out. It is separable from this fix, it
+  touches the materialised snapshot's encoding, and it is worth doing
+  next.
