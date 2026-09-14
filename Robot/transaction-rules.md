@@ -193,19 +193,19 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `signatures-are-classical` | Both signatures in an ordinary record are `COSE_Sign1` and classical only | decoder | gap | gap |
 | `consent-is-classical` | The consent signature is classical everywhere | decoder | gap | gap |
 | `verifier-auth-hybrid-in-recovery` | Verifier authentication is hybrid only inside a `Recovery` block | decoder | REC-03 | gap |
-| `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | CER-18 | gap |
-| `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | gap |
-| `salt-is-sixteen-bytes` | A `Disclosure` whose salt is not exactly sixteen bytes is rejected | decoder | gap | gap |
-| `revealed-value-matches-schema` | A revealed value that does not match its label's schema is rejected | decoder | gap | gap |
-| `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | CER-18 | gap |
-| `withheld-is-not-a-default` | A withheld field is never treated as a default value | decoder | gap | gap |
-| `no-aggregate-verdict` | There is no aggregate verdict; collapsing the responses into one boolean is a policy act | client | gap | gap |
-| `strongest-channel-checked-when-revealed` | §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | CER-18 | gap |
+| `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | CER-18 | CER-18, CER-35 |
+| `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | CER-35 |
+| `salt-is-sixteen-bytes` | A `Disclosure` whose salt is not exactly sixteen bytes is rejected | decoder | CER-18 | CER-35 |
+| `revealed-value-matches-schema` | A revealed value that does not match its label's schema is rejected | decoder | CER-18 | CER-35 |
+| `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | CER-18 | CER-36 |
+| `withheld-is-not-a-default` | A withheld field is never treated as a default value | decoder | CER-36 | CER-36 |
+| `no-aggregate-verdict` | There is no aggregate verdict; collapsing the responses into one boolean is a policy act | client | CER-36 | CER-36 |
+| `strongest-channel-checked-when-revealed` | §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | CER-18 | CER-18 |
 | `strongest-is-what-passed` | The record says the strongest channel that passed, and nothing is promoted | client | CER-01 | CER-02 |
-| `channel-achieved-on-hardware` | The channel recorded is the strongest the hardware actually supports | client, platform | **deferred** | **deferred** |
-| `guided-capture-on-a-camera` | Three to five images over ten to fifteen seconds under prompts that vary, from a real camera | client, platform | **deferred** | **deferred** |
+| `channel-achieved-on-hardware` | The channel recorded is the strongest the hardware actually supports | client, platform | **deferred** CER-37 | **deferred** CER-37 |
+| `guided-capture-on-a-camera` | Three to five images over ten to fifteen seconds under prompts that vary, from a real camera | client, platform | **deferred** CER-38 | **deferred** CER-38 |
 | `capture-sealed-under-subjects-key` | The capture is sealed under the key the subject supplied and the key discarded | client | CER-04 | gap |
-| `sealed-store-on-platform-keys` | The sealed store is held under the platform's key storage | client, platform | **deferred** | **deferred** |
+| `sealed-store-on-platform-keys` | The sealed store is held under the platform's key storage | client, platform | **deferred** CER-39 | **deferred** CER-39 |
 
 **Deferred, and what each waits for.** The three marked `deferred` need a
 device: a proximity radio for UWB and NFC, a camera pointed at a person for
@@ -215,12 +215,18 @@ generator decision, and a toolchain this machine does not have. The
 instrument reaches the `latency` rung and reports what it was told, which
 is honest and is not the same claim.
 
-**Gaps.** The decoder for a presented record is implemented in full and
-CER-18 exercises four of §4.5.1.5's rules — but as one positive entry, so
-every one of them is one-sided: the *rejections* it makes inside that test
-are asserted and not recorded as negatives anybody can find. The record's
-own shape rules, which the ceremony tests never reach because the ceremony
-builds well-formed records, are untested outright.
+**The presentation is closed** (2026-09-14): every §4.5.1.5 rule holds on
+both sides, and the three hardware conditions are written and ignored with
+what each waits for. What remains on this type is the record's *own* shape
+rules — the witness fields, and which signatures are classical — which the
+ceremony tests never reach because a ceremony builds well-formed records.
+
+**And one thing the catalogue had to learn.** A rule whose enforcement *is*
+its observation — *never treat a withheld field as a default* is the same
+assertion read twice — was being split into two entries that said nothing
+new. An entry may now name the side each condition it holds is on, so one
+test can hold the positive of one and the negative of another without
+ceremony.
 
 ---
 
@@ -252,9 +258,9 @@ entry on both sides of a condition. An entry has one kind and cannot be
 both; the checker found all three. Six transaction types, 77 conditions drawn from the documents,
 and of them:
 
-- 24 hold on both sides
-- 41 have one polarity only
-- 9 have neither
+- 32 hold on both sides
+- 37 have one polarity only
+- 5 have neither
 - 3 are deferred on hardware
 
 **The shape of the gaps is not random.** They cluster where a rule is
