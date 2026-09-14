@@ -263,8 +263,8 @@ async fn what_the_serving_node_floods_reaches_the_clients_horizon_and_nothing_el
     tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &alice))).unwrap();
     tx.send((rhtn_adaptors::attached::FRAME_TOPOLOGY_PUSH, rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &carol))).unwrap();
     assert!(until(3000, || handle.with_blocking(|c| c.horizon.records()) == 2).await, "both records reach the horizon");
-    let placed = handle.with_blocking(|c| (c.horizon.place(&kh("carol")).cloned(), c.horizon.distance(&kh("carol"))));
-    assert_eq!(placed.0.map(|p| p.anchor), Some(kh("bob")), "carol is placed from what was flooded");
+    let placed = handle.with_blocking(|c| (c.horizon.places_of(&kh("carol")).into_iter().cloned().collect::<Vec<_>>(), c.horizon.distance(&kh("carol"))));
+    assert_eq!(placed.0.iter().map(|p| p.anchor).collect::<Vec<_>>(), vec![kh("bob")], "carol is placed from what was flooded, in the one subnet it was flooded in");
     assert_eq!(placed.1, Some(1), "and is one edge away: a sibling under the same patron");
 
     // a memo is a node's routing aid and not a client's, and a push

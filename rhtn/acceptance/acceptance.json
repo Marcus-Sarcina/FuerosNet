@@ -9961,5 +9961,32 @@
   "then": "The patron's position is the self-anchor and it sits in nobody else's subnet, which is the whole of what it needs to be one. Both sign the same body, both take the record, and both name it the same. Taking it is what tells the subordinate where it now sits: it is in the patron's subnet and still in its own, with nothing configured on either side and nothing granted.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "TOP-27",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A party in two subnets is placed in both, and neither replaces the other",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.3",
+   "design §15.1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "One series per patron relationship is the expected\nshape - a node bound under two patrons keeps two"
+   },
+   {
+    "where": "design §15.1.1",
+    "text": "A participant holds enough of its horizon to resolve every node in it\ndirectly"
+   }
+  ],
+  "given": "A client holding records that place one party under a patron in one subnet and under another patron in a second.",
+  "when": "It is asked where that party is, in each subnet and in one it was not placed in, and its derived copy is materialised and woken from.",
+  "then": "Both places are held and each says what it is relative to; a subnet it was not placed in has none. Each line carries its own series. The party is one party for everything counted by party: listed once among what can be resolved. Both places come back out of the materialised copy.",
+  "oracle": "behaviour",
+  "interpretation": "A path in one subnet says nothing about a path in another, so a copy holding one of two would hold an answer it could not qualify. The stored row already carried the party and the anchor separately, so keying by both puts two rows where there was one and leaves what a row says alone."
  }
 ]

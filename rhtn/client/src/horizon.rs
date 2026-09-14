@@ -45,6 +45,9 @@ pub struct Place {
     pub nibbles: u64,
 }
 
+/// A party, and the subnet a place of theirs is in.
+pub type Placement = (Keyhash, Keyhash);
+
 /// What ingesting a propagated record did here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Took {
@@ -74,11 +77,18 @@ pub struct Horizon {
     /// asking anyone (design §15.1.1).  A node's own adoption puts it
     /// here; the anchor its path is relative to is here too, at the empty
     /// path, which is what that anchor being the anchor means.
-    places: BTreeMap<Keyhash, Place>,
+    ///
+    /// **Keyed by party *and* subnet.**  A party adopted under two patrons
+    /// is in two of them (`wire-format.md` §2.3: a node bound under two
+    /// patrons keeps two series), and its path in one says nothing about
+    /// its path in the other.  Keyed by party alone the second record
+    /// would replace the first, and this client would hold one of the two
+    /// places a party actually has with no way to tell which.
+    places: BTreeMap<Placement, Place>,
     /// The locator as propagated, for the nodes a record placed.  A party
     /// this client only knows the position of, because a subordinate's
     /// record named it as an anchor, is in `places` and not here.
-    locators: BTreeMap<Keyhash, Locator>,
+    locators: BTreeMap<Placement, Locator>,
 }
 
 impl Horizon {
@@ -124,11 +134,11 @@ impl Horizon {
     /// the propagated version the system of record here.
     fn note_locator(&mut self, rec: &Record) {
         let (Some(node), Some(loc)) = (rec.field_hash(1), rec.locator()) else { return };
-        self.places.insert(node, Place { anchor: loc.anchor, path: loc.path.clone(), nibbles: loc.nibbles });
+        self.places.insert((node, loc.anchor), Place { anchor: loc.anchor, path: loc.path.clone(), nibbles: loc.nibbles });
         // the anchor a path is relative to sits at the empty path under
         // itself: a fact the record states rather than one derived from it
-        self.places.entry(loc.anchor).or_insert(Place { anchor: loc.anchor, path: Vec::new(), nibbles: 0 });
-        self.locators.insert(node, loc);
+        self.places.entry((loc.anchor, loc.anchor)).or_insert(Place { anchor: loc.anchor, path: Vec::new(), nibbles: 0 });
+        self.locators.insert((node, loc.anchor), loc);
     }
 
     /// Where `node` sits, for a resolution this client runs itself.
@@ -140,9 +150,23 @@ impl Horizon {
     /// is still in the map until [`Horizon::prune`] drops it — and a replay
     /// puts it back.  Reading through the current bound makes the replayed
     /// view and the incremental one agree by construction.
-    pub fn place(&self, node: &Keyhash) -> Option<&Place> {
+    /// Every subnet this client can place `node` in, ordered by anchor.
+    ///
+    /// **Plural because a party may be in more than one**, and a caller
+    /// that took one of several without saying which would be asserting
+    /// something the records do not.
+    pub fn places_of(&self, node: &Keyhash) -> Vec<&Place> {
+        if self.table.distance(&self.me, node, 2).is_none() {
+            return Vec::new();
+        }
+        self.places.range((*node, [0; 32])..=(*node, [0xff; 32])).map(|(_, p)| p).collect()
+    }
+
+    /// Where `node` sits in the subnet `anchor` names, if this client can
+    /// place it there.
+    pub fn place_in(&self, node: &Keyhash, anchor: &Keyhash) -> Option<&Place> {
         self.table.distance(&self.me, node, 2)?;
-        self.places.get(node)
+        self.places.get(&(*node, *anchor))
     }
 
     /// The locator a record carried for `node`, series and counter
@@ -150,16 +174,27 @@ impl Horizon {
     ///
     /// Bounded by the horizon, as [`Horizon::place`] is and for the same
     /// reason.
-    pub fn locator(&self, node: &Keyhash) -> Option<&Locator> {
+    pub fn locators_of(&self, node: &Keyhash) -> Vec<&Locator> {
+        if self.table.distance(&self.me, node, 2).is_none() {
+            return Vec::new();
+        }
+        self.locators.range((*node, [0; 32])..=(*node, [0xff; 32])).map(|(_, l)| l).collect()
+    }
+
+    /// The locator a record carried for `node` in the subnet `anchor`
+    /// names.
+    pub fn locator_in(&self, node: &Keyhash, anchor: &Keyhash) -> Option<&Locator> {
         self.table.distance(&self.me, node, 2)?;
-        self.locators.get(node)
+        self.locators.get(&(*node, *anchor))
     }
 
     /// Every node this client can place without asking anyone, inside the
     /// horizon and no wider.
     pub fn resolvable(&self) -> Vec<Keyhash> {
         let inside = self.table.horizon(&self.me, 2);
-        self.places.keys().filter(|k| inside.contains(*k)).copied().collect()
+        let mut out: Vec<Keyhash> = self.places.keys().map(|(n, _)| *n).filter(|n| inside.contains(n)).collect();
+        out.dedup();
+        out
     }
 
     /// How many adoption or sibling edges away `other` is; nothing beyond
@@ -178,13 +213,14 @@ impl Horizon {
     /// rebuild.
     pub fn prune(&mut self) -> usize {
         let inside = self.table.horizon(&self.me, 2);
-        let before = self.places.len();
-        self.places.retain(|k, _| inside.contains(k));
-        self.locators.retain(|k, _| inside.contains(k));
+        let parties = |m: &BTreeMap<Placement, Place>| m.keys().map(|(n, _)| *n).collect::<std::collections::BTreeSet<_>>().len();
+        let before = parties(&self.places);
+        self.places.retain(|(n, _), _| inside.contains(n));
+        self.locators.retain(|(n, _), _| inside.contains(n));
         self.records.retain(|_, b| {
             Record::parse(b).is_ok_and(|r| r.participants().iter().any(|p| inside.contains(p)) || r.field_hash(1).is_some_and(|k| inside.contains(&k)) || r.field_hash(2).is_some_and(|k| inside.contains(&k)))
         });
-        before - self.places.len()
+        before - parties(&self.places)
     }
 
     /// The derived shape as it goes to local storage, with the watermark
@@ -280,13 +316,18 @@ impl Horizon {
 /// One row per node placed: the place, and the locator where a record
 /// carried one.  An empty locator field is a node placed as an anchor and
 /// nothing more.
-fn encode_places(places: &BTreeMap<Keyhash, Place>, locators: &BTreeMap<Keyhash, Locator>) -> Vec<u8> {
+/// **The row shape is unchanged by the key.**  It already carried the
+/// party and the anchor as separate fields, because a place is a path
+/// relative to one; keying by both puts two rows where there was one and
+/// leaves what a row says alone.
+fn encode_places(places: &BTreeMap<Placement, Place>, locators: &BTreeMap<Placement, Locator>) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
     emit_array_head(&mut out, places.len());
     for (k, p) in places {
+        let (node, _) = k;
         emit_array_head(&mut out, 5);
-        emit_bstr(&mut out, k);
+        emit_bstr(&mut out, node);
         emit_bstr(&mut out, &p.anchor);
         emit_bstr(&mut out, &p.path);
         emit_uint(&mut out, p.nibbles);
@@ -302,7 +343,7 @@ fn encode_places(places: &BTreeMap<Keyhash, Place>, locators: &BTreeMap<Keyhash,
     out
 }
 
-type Placed = (BTreeMap<Keyhash, Place>, BTreeMap<Keyhash, Locator>);
+type Placed = (BTreeMap<Placement, Place>, BTreeMap<Placement, Locator>);
 
 fn decode_places(b: &[u8]) -> Option<Placed> {
     use rhtn_codec::cbor::{Item, parse_all};
@@ -312,10 +353,11 @@ fn decode_places(b: &[u8]) -> Option<Placed> {
     for row in rows {
         let Item::Array(f) = row else { return None };
         let [Item::Bytes(k), Item::Bytes(a), Item::Bytes(p), Item::Uint(n), Item::Bytes(l)] = f.as_slice() else { return None };
-        let key: Keyhash = b[k.clone()].try_into().ok()?;
-        places.insert(key, Place { anchor: b[a.clone()].try_into().ok()?, path: b[p.clone()].to_vec(), nibbles: *n });
+        let node: Keyhash = b[k.clone()].try_into().ok()?;
+        let anchor: Keyhash = b[a.clone()].try_into().ok()?;
+        places.insert((node, anchor), Place { anchor, path: b[p.clone()].to_vec(), nibbles: *n });
         if !l.is_empty() {
-            locators.insert(key, Locator::decode(&b[l.clone()]).ok()?);
+            locators.insert((node, anchor), Locator::decode(&b[l.clone()]).ok()?);
         }
     }
     Some((places, locators))

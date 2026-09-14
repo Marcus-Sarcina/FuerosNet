@@ -69,11 +69,11 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
     // with nobody asked: bob the patron, w1 the subordinate, carol the
     // sibling, w2 the nephew
     for n in ["bob", "carol", "w1", "w2"] {
-        assert!(h.place(&kh(n)).is_some(), "{n} is placed");
+        assert!(!h.places_of(&kh(n)).is_empty(), "{n} is placed");
     }
-    assert_eq!(h.place(&kh("w1")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 2)), "a subordinate, from its own record");
-    assert_eq!(h.place(&kh("bob")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 0)), "the anchor, at the empty path");
-    assert!(h.locator(&kh("bob")).is_none(), "and with no locator, since no record carried one for it");
+    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 2)), "a subordinate, from its own record");
+    assert_eq!(h.place_in(&kh("bob"), &kh("bob")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 0)), "the anchor, at the empty path");
+    assert!(h.locators_of(&kh("bob")).is_empty(), "and with no locator, since no record carried one for it");
 
     // and the distance is the number of adoption or sibling edges
     assert_eq!(h.distance(&kh("alice")), Some(0), "itself");
@@ -95,8 +95,8 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
     // placed — the bound is not something a caller has to remember to
     // apply
     let mut h = h;
-    assert!(h.place(&kh("w3")).is_none(), "outside the walk, so not placed");
-    assert!(h.locator(&kh("w3")).is_none(), "nor located");
+    assert!(h.places_of(&kh("w3")).is_empty(), "outside the walk, so not placed");
+    assert!(h.locators_of(&kh("w3")).is_empty(), "nor located");
     assert!(!h.resolvable().contains(&kh("w3")), "nor listed");
 
     // a prune drops the storage, which is a separate act from the bound on
@@ -104,7 +104,7 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
     let dropped = h.prune();
     assert_eq!(dropped, 1, "one party forgotten");
     for n in ["alice", "bob", "carol", "w1", "w2"] {
-        assert!(h.place(&kh(n)).is_some(), "{n} is inside and stays");
+        assert!(!h.places_of(&kh(n)).is_empty(), "{n} is inside and stays");
     }
     assert_eq!(h.prune(), 0, "and a second prune has nothing to do");
 }
@@ -163,7 +163,9 @@ fn what_the_patron_propagates_replaces_what_the_client_held() {
     let mut recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
     recs.push(adopt(&mut w, "w1", "carol", vec![0x21], 2));
     let mut h = fed("alice", &recs);
-    let first = h.locator(&kh("w1")).cloned().expect("placed");
+    // both of w1's records name bob's subnet, so this is one place
+    // moving and not two places held
+    let first = h.locator_in(&kh("w1"), &kh("bob")).cloned().expect("placed");
     assert_eq!((first.nibbles, first.path.clone()), (2, vec![0x21]));
 
     // w1 leaves carol and is adopted by alice, deeper and on a new series:
@@ -179,7 +181,7 @@ fn what_the_patron_propagates_replaces_what_the_client_held() {
 
     let moved = adopt_at(&mut w, "w1", "alice", "bob", vec![0x11], 2, 2);
     assert_eq!(h.ingest(&moved.bytes, &ids()), Took::Applied);
-    let now = h.locator(&kh("w1")).cloned().expect("still placed");
+    let now = h.locator_in(&kh("w1"), &kh("bob")).cloned().expect("still placed");
     assert_eq!((now.nibbles, now.path.clone(), now.seqno.series), (2, vec![0x11], 2), "the later locator, not the earlier");
     assert_ne!((now.path, now.seqno.series), (first.path, first.seqno.series));
     assert!(h.table.subordinates(&kh("alice")).contains(&kh("w1")), "and the binding the propagation made");
@@ -213,7 +215,7 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
     let woke = swapped.wake(Some(&snap), &ids());
     assert!(matches!(woke, Woke::Replayed { .. }), "a fold taken from other records is not reused: {woke:?}");
     // and what it lands on is what the records it holds actually say
-    assert_eq!(swapped.place(&kh("w1")).map(|p| p.path.clone()), Some(vec![0x31]), "the record held, not the one folded");
+    assert_eq!(swapped.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x31]), "the record held, not the one folded");
 
     // the honest case still folds nothing
     let mut same = fed("alice", &[]);
@@ -221,7 +223,7 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
         assert!(same.restore_record(r.bytes.clone()));
     }
     assert_eq!(same.wake(Some(&snap), &ids()), Woke::Current);
-    assert_eq!(same.place(&kh("w1")).map(|p| p.path.clone()), Some(vec![0x21]));
+    assert_eq!(same.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x21]));
 }
 
 // acceptance: TOP-26
@@ -230,7 +232,7 @@ fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
     let mut w = World::new();
     let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
     let mut h = fed("alice", &recs);
-    assert!(h.place(&kh("carol")).is_some(), "control: a sibling is inside");
+    assert!(!h.places_of(&kh("carol")).is_empty(), "control: a sibling is inside");
 
     // carol departs, which takes it out of the walk
     let departure = {
@@ -241,7 +243,7 @@ fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
     assert_eq!(h.distance(&kh("carol")), None, "control: outside the walk now");
-    assert!(h.place(&kh("carol")).is_none(), "and not placed");
+    assert!(h.places_of(&kh("carol")).is_empty(), "and not placed");
 
     // **a replay lands on the same view.**  The records that placed carol
     // are still held — the local patron is a participant in them — and the
@@ -249,7 +251,45 @@ fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
     // the current bound rather than from the record stream
     h.prune();
     assert!(matches!(h.wake(None, &ids()), Woke::Replayed { .. }));
-    assert!(h.place(&kh("carol")).is_none(), "a replay does not resurrect it");
+    assert!(h.places_of(&kh("carol")).is_empty(), "a replay does not resurrect it");
     assert!(!h.resolvable().contains(&kh("carol")));
-    assert!(h.place(&kh("bob")).is_some(), "and the patron is still there");
+    assert!(!h.places_of(&kh("bob")).is_empty(), "and the patron is still there");
+}
+
+// acceptance: TOP-27
+#[test]
+fn a_party_in_two_subnets_is_placed_in_both_and_neither_replaces_the_other() {
+    // w1 sits under alice in bob's subnet and under carol in carol's own:
+    // `wire-format.md` §2.3 keeps one series per patron relationship, so
+    // these are two lines rather than one superseding the other
+    let mut w = World::new();
+    let mut recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "w1", "alice", vec![0x11], 2)];
+    recs.push(adopt_at(&mut w, "w1", "carol", "carol", vec![0x30], 1, 2));
+    let h = fed("alice", &recs);
+
+    // **both places are held, and each says where it is relative to.** A
+    // path in one subnet says nothing about a path in the other, so a
+    // client holding one of the two would hold an answer it could not
+    // qualify.
+    let both = h.places_of(&kh("w1"));
+    assert_eq!(both.len(), 2, "two subnets, two places: {both:?}");
+    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x11], 2)), "under alice, in bob's subnet");
+    assert_eq!(h.place_in(&kh("w1"), &kh("carol")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x30], 1)), "under carol, in carol's");
+    assert_eq!(h.place_in(&kh("w1"), &kh("alice")), None, "and in no subnet it was not placed in");
+
+    let series: Vec<u32> = h.locators_of(&kh("w1")).iter().map(|l| l.seqno.series).collect();
+    assert_eq!(series.len(), 2, "one locator per line");
+    assert_ne!(series[0], series[1], "each line carries its own series");
+
+    // it is one party for everything counted by party: listed once, and
+    // forgotten once
+    assert_eq!(h.resolvable().iter().filter(|k| **k == kh("w1")).count(), 1, "one party, however many subnets");
+    let carried = h.materialise();
+    let mut waking = Horizon::new(kh("alice"));
+    for (_, b) in h.stored() {
+        waking.restore_record(b.clone());
+    }
+    assert_eq!(waking.wake(Some(&carried), &ids()), Woke::Current, "the snapshot accounts for what is held");
+    assert_eq!(waking.places_of(&kh("w1")).len(), 2, "and both places come back out of it");
+    assert_eq!(waking.place_in(&kh("w1"), &kh("carol")).map(|p| p.path.clone()), Some(vec![0x30]));
 }
