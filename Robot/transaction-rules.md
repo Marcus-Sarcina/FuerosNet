@@ -11,7 +11,15 @@ that. One organised by transaction can.
 
 **The method.** For every transaction the wire defines, enumerate the
 conditions that govern what a node does with it, from the documents rather
-than from the code. For each condition, name the component that enforces
+than from the code.
+
+**Coverage is read from the tests, not from the citations.** The first pass
+built these tables by asking which entries cite `wire-format.md` §4.x, and
+understated §4.5 badly: CER-18 holds five of that section's rules and cites
+`light-client-requirements.md` §1.3 and design §8.1.1.3, because those are
+where the *obligation* is stated and the wire is where the *encoding* is.
+A survey by citation finds the tests somebody filed under a section, which
+is not the same question. For each condition, name the component that enforces
 it, and require **two** tests: one that the condition is honoured when it
 holds, and one that it is enforced when it does not. A condition with only
 one polarity is a gap, and is listed as one.
@@ -86,11 +94,11 @@ because its evidence field is where three different histories arrive.
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
 | `exactly-one-evidence` | Exactly one of fields 6, 8 and 9 is present; none is malformed and two is malformed | decoder | REC-01 | DEC-20 |
-| `locator-under-patron` | The locator is the patron's path in the subnet being adopted into, with one nibble added | client | CER-33, CER-34 | CER-34 |
+| `locator-under-patron` | The locator is the patron's path in the subnet being adopted into, with one nibble added | client | CER-33, CER-34 | gap |
 | `self-anchor-suffices` | A party with no ancestor names itself, so a newly minted root can adopt | client | CER-33, PRT-05 | gap |
 | `series-opens-at-zero` | A relationship's series opens at counter 0 | table | ARC-04 | DEC-22 |
-| `presence-is-between-these-two` | An adoption's named presence record must be between the two parties named | table | TOP-19 | TOP-12 |
-| `evidence-verified-before-counted` | Dereferenced evidence counts only once its own signatures verify | table | TOP-19 | TOP-19 |
+| `presence-is-between-these-two` | An adoption's named presence record must be between the two parties named | table | gap | TOP-12 |
+| `evidence-verified-before-counted` | Dereferenced evidence counts only once its own signatures verify | table | gap | TOP-19 |
 | `recovery-both-halves` | A recovery carries an old-key proof and at least one matching verifier response; neither substitutes for the other | decoder | REC-01 | REC-02 |
 | `recovery-successor-bound` | The successor statement names the same successor and patron as the enclosing adoption | verifier | REC-01 | REC-02 |
 | `recovery-response-shape` | Every response's field 8 equals `prior_key`, its subject equals the adopted node, its verifier differs from its subject, `selection_basis` is 0, and duplicates from one verifier are malformed | decoder | REC-03 | DEC-20 |
@@ -100,9 +108,12 @@ because its evidence field is where three different histories arrive.
 | `key-replaced-on-recovery` | A recovery adoption inside the horizon replaces the old key with the successor | table | TOP-15 | gap |
 | `presented-prefix-unbroken` | A history presented from an earlier head verifies as an unbroken prefix | table | ARC-12 | ARC-19 |
 
-**Gaps.** `self-anchor-suffices` has no negative: nothing asserts that a
-patron with no position *in the subnet it names* is refused — the check
-exists and only the positive path is held. `second-binding-stands` and
+**Gaps.** `self-anchor-suffices` and `locator-under-patron` have no
+negative: nothing asserts that a patron with no position *in the subnet it
+names* is refused — the check exists and only the positive path is held.
+`presence-is-between-these-two` and `evidence-verified-before-counted` have
+no positive, which is the more dangerous way round: nothing asserts that
+evidence which *is* good is counted. `second-binding-stands` and
 `key-replaced-on-recovery` have no negatives. `transfer-parties-differ` and
 `plain-rotation-carries-nothing` have no positives.
 
@@ -132,16 +143,18 @@ The least covered of the six: three entries, none of them negative.
 
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
-| `ends-only-the-named` | A disavowal ends one relationship and nothing else | table | TOP-05 | gap |
-| `applies-regardless-of-time` | It is applied on verification whatever its timestamp | table | TOP-06 | gap |
-| `ordered-in-patrons-slot` | Field 3 orders it within the patron's own slot, by the patron's timestamp | table | TOP-17 | gap |
-| `reason-is-enumerated` | Field 4 is an enumerated code and never free text | decoder | gap | gap |
-| `reason-band-is-structural` | Codes 0–31 are without prejudice, 32–63 with; the band is retained and evaluated | table | gap | gap |
-| `code-space-is-64` | The code space is 64 values, and a code outside it is malformed | decoder | gap | gap |
+| `ends-only-the-named` | A disavowal ends one relationship and nothing else | table | TOP-05 | TOP-29 |
+| `applies-regardless-of-time` | It is applied on verification whatever its timestamp | table | TOP-06 | TOP-29 |
+| `ordered-in-patrons-slot` | Field 3 orders it within the patron's own slot, by the patron's timestamp | table | TOP-17 | TOP-30 |
+| `reason-is-enumerated` | Field 4 is an enumerated code and never free text | decoder | TOP-31 | DEC-31 |
+| `reason-band-is-structural` | Codes 0–31 are without prejudice, 32–63 with; the band is retained and evaluated | table | TOP-31 | TOP-32 |
+| `code-space-is-64` | The code space is 64 values, and a code outside it is malformed | decoder | TOP-31 | DEC-31 |
 
-**Gaps.** Every condition on this type lacks a negative and three lack
-both. A disavowal is the network's only negative attestation; the band is
-what makes its severity legible, and nothing tests either.
+**Closed** (2026-09-14). All six hold on both sides. Writing them found one
+real gap: the reason code was carried and round-tripped and **nothing read
+the band**, so no policy could act on an unfamiliar code the way §4.3
+describes — which is the whole reason the space is banded. `End` answers
+`with_prejudice` now.
 
 ---
 
@@ -180,14 +193,14 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `signatures-are-classical` | Both signatures in an ordinary record are `COSE_Sign1` and classical only | decoder | gap | gap |
 | `consent-is-classical` | The consent signature is classical everywhere | decoder | gap | gap |
 | `verifier-auth-hybrid-in-recovery` | Verifier authentication is hybrid only inside a `Recovery` block | decoder | REC-03 | gap |
-| `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | gap | gap |
-| `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | gap | gap |
+| `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | CER-18 | gap |
+| `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | gap |
 | `salt-is-sixteen-bytes` | A `Disclosure` whose salt is not exactly sixteen bytes is rejected | decoder | gap | gap |
 | `revealed-value-matches-schema` | A revealed value that does not match its label's schema is rejected | decoder | gap | gap |
-| `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | gap | gap |
+| `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | CER-18 | gap |
 | `withheld-is-not-a-default` | A withheld field is never treated as a default value | decoder | gap | gap |
 | `no-aggregate-verdict` | There is no aggregate verdict; collapsing the responses into one boolean is a policy act | client | gap | gap |
-| `strongest-channel-checked-when-revealed` | §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | gap | gap |
+| `strongest-channel-checked-when-revealed` | §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | CER-18 | gap |
 | `strongest-is-what-passed` | The record says the strongest channel that passed, and nothing is promoted | client | CER-01 | CER-02 |
 | `channel-achieved-on-hardware` | The channel recorded is the strongest the hardware actually supports | client, platform | **deferred** | **deferred** |
 | `guided-capture-on-a-camera` | Three to five images over ten to fifteen seconds under prompts that vary, from a real camera | client, platform | **deferred** | **deferred** |
@@ -202,9 +215,12 @@ generator decision, and a toolchain this machine does not have. The
 instrument reaches the `latency` rung and reports what it was told, which
 is honest and is not the same claim.
 
-**Gaps.** Fifteen conditions with neither side. The disclosure
-construction — §4.5.1.5's five explicit decoder rules — has no test at all,
-and it is the part a recipient of a presented record depends on entirely.
+**Gaps.** The decoder for a presented record is implemented in full and
+CER-18 exercises four of §4.5.1.5's rules — but as one positive entry, so
+every one of them is one-sided: the *rejections* it makes inside that test
+are asserted and not recorded as negatives anybody can find. The record's
+own shape rules, which the ceremony tests never reach because the ceremony
+builds well-formed records, are untested outright.
 
 ---
 
@@ -230,13 +246,15 @@ and it is the part a recipient of a presented record depends on entirely.
 
 **Counted rather than characterised**, and counted by
 `Robot/matrixcheck.py` rather than by hand — the first draft of this
-paragraph said sixty-two conditions and twenty on both sides, and was wrong
-about both. Six transaction types, 77 conditions drawn from the documents,
+paragraph said sixty-two conditions and twenty on both sides, and the
+second said twenty-one after three rows had been written with the same
+entry on both sides of a condition. An entry has one kind and cannot be
+both; the checker found all three. Six transaction types, 77 conditions drawn from the documents,
 and of them:
 
-- 21 hold on both sides
-- 37 have one polarity only
-- 16 have neither
+- 24 hold on both sides
+- 41 have one polarity only
+- 9 have neither
 - 3 are deferred on hardware
 
 **The shape of the gaps is not random.** They cluster where a rule is
@@ -245,3 +263,10 @@ construction in the decoder, the disavowal's reason bands in the table, the
 acquaintance edges in the metric. That is the same shape as the four found
 on 2026-09-14 — a rule correctly implemented with nothing exercising it —
 and it is what a catalogue organised by finding cannot show.
+
+**Closing them is the work, and the counts above move as it goes.** The
+catalogue carries the pairing itself — an entry holding a transaction rule
+names the `[type, condition]` pairs it holds, and `acceptance/tools/check.py`
+flags a condition with one polarity — so a gap closed here is a gap the
+gate stops complaining about, and a gap opened by a new rule is one it
+starts complaining about.
