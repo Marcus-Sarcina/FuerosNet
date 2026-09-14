@@ -130,6 +130,10 @@ Kept to what earns its place:
   step 9.
 - **`wasmtime`** for the component-model sandbox when `rhtn-resources` arrives
   (`infra-client-requirements.md` §9.2).
+- **`toml`** for the operator's two files, the `rhtnd` configuration and the
+  hosting file [author, 2026-09-14]. Not for the package manifest, which is
+  the package's own file and what §9.1's signing will sign — a signed object
+  wants a canonical encoding and TOML has none.
 - **`uniffi`** to expose `rhtn-client` to Kotlin and Swift when the mobile track
   starts. The ceremony's channels (`light-client-requirements.md` §1.3) need camera,
   NFC and UWB, which exist only there.
@@ -562,8 +566,12 @@ for.
 - Whether `rhtn/` lives in this repository (section 2) or in its own, and
   whether the trigger section 2 proposes for moving the applications out is
   the right one.
-- The configuration file's format for `rhtnd`, and the argument parser for
-  `rhtn`. Each fixes a dependency, and neither is forced by any document.
+- ~~The configuration file's format for `rhtnd`~~ — **TOML** [author,
+  2026-09-14], for the operator's two files; the peers file stays a list
+  and the package manifest is left as it is, being the package's own and
+  the thing a supply chain will sign. The argument parser for `rhtn` is
+  still open. Each fixes a dependency, and neither is forced by any
+  document.
 - Whether the operator's view (PRD-06) is a terminal on the host or a page
   served to the operator alone. If it grows a frontend it leaves
   `rhtn-daemon`, so its dependencies stay out of the library's lockfile.

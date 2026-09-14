@@ -9567,3 +9567,32 @@ marking rule, and holding a record is what tells a node. Catalogue 350 of
   received zero topology frames; it now measures from what N reconciled at
   attach. Forwarding back to the arrival peer still fails it, which is the
   claim it was written for.
+
+**The operator's two files moved to TOML (2026-09-14).** One gate-green
+commit, 8bb6d4d, on the author's decision. Catalogue 350 of 360, 0 flags.
+
+- **The two files stay two, on a different argument.** The repeated-key
+  reason for splitting them is gone with the format; what survives is that
+  packages and grants are what an operator regenerates, and doing so should
+  not mean rewriting the identity and the paths beside them.
+- **A grant nests inside its package**, which removes an error rather than
+  catching one: a grant naming a resource nothing hosts is not expressible.
+- **Hand validation is only what a document fixes**: the heartbeat's range,
+  an allowance of zero, a keyhash's form, the ingestion boundary, a package
+  budget of zero. Those fields read through `toml::Spanned`, so a refusal
+  still names a line. Deserialisation's own messages are better than what
+  they replace — an unknown key now comes with the list of keys expected —
+  and only the missing-field wording is rewritten.
+- **The manifest is untouched.** It is the package's file and what §9.1's
+  signing will sign; a signed object wants a canonical encoding and TOML
+  has none. If signing lands, the choice is canonical CBOR or a custom
+  section inside the component, so there is one artefact to sign.
+- **One timeout was raised, and it took some care to be sure that was
+  honest.** The daemon scenarios failed on a dial after the TOML change,
+  which is exactly when a regression would look like this. It reproduced
+  under twelve busy cores and did not reproduce for the scenario alone,
+  which is what said it was the machine: the three run beside each other,
+  each starting processes, one compiling a WebAssembly component before it
+  serves, and five seconds of post-quantum handshake is not enough on a
+  loaded box. Thirty seconds now, re-confirmed under twenty-four busy
+  cores. Nothing in those scenarios is a claim about handshake latency.
