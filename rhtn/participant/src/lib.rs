@@ -161,6 +161,7 @@ impl Instrument {
                 Ok(out)
             }
             ["resolvable"] => Ok(vec![format!("resolvable {}", joined(&self.client.resolvable()))]),
+            ["reachable"] => Ok(self.client.reachable().iter().map(|(n, a)| format!("reachable {} at={}", hex(n), if a.is_empty() { "-".into() } else { a.join(",") })).collect()),
             ["distance", node] => Ok(vec![match self.client.distance(id(node)?) {
                 None => "distance none".into(),
                 Some(d) => format!("distance {d}"),
@@ -459,6 +460,7 @@ wake <url> <key> [<at>]   where to be rung; `wake off` withdraws it
 events [<ms>]             what arrived; waits <ms> for the first
 horizon                   what this client holds of its neighbourhood
 resolvable                everybody it can place without asking anyone
+reachable                 the infrastructure it can reach, and where
 distance <node>           adoption or sibling edges away, inside the horizon
 holds <txid>              whether it holds that transaction
 prune                     drop what has left the horizon

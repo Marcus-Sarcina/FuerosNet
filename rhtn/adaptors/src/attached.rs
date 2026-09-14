@@ -156,13 +156,20 @@ pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(
                 continue;
             }
             let Ok((kind, object)) = rhtn_node::propagation::decode_push(&body) else { continue };
-            if kind != rhtn_node::store::KIND_TRANSACTION {
-                continue;
-            }
+            // **both kinds matter to a client.** The transactions are the
+            // shape of its neighbourhood; the endpoint records are the
+            // addresses in it, and §7.6 has only infra nodes publish one,
+            // so holding one is also what says which parties are
+            // infrastructure. A client that took the first and dropped the
+            // second would hold a map with nowhere on it.
             handle
                 .with(move |c| {
                     let known = c.known.clone();
-                    c.horizon.ingest(&object, &known);
+                    match kind {
+                        rhtn_node::store::KIND_TRANSACTION => c.horizon.ingest(&object, &known),
+                        rhtn_node::store::KIND_ENDPOINT_RECORD => c.horizon.ingest_endpoint(&object, &known),
+                        _ => rhtn_client::horizon::Took::Refused,
+                    };
                 })
                 .await;
         }

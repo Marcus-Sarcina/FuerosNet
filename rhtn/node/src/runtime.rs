@@ -300,11 +300,57 @@ impl LiveNode {
             let mut v = attached.lock().unwrap();
             if up {
                 v.attached.insert(peer);
-                v.replay_to(&reconcile, &peer);
             } else {
                 v.attached.remove(&peer);
+                return;
             }
+            drop(v);
+            // **the replay is spawned, not run here.**  This hook is on
+            // the accept path, between the ack and the session being
+            // handed back; writing a store's worth of frames from it races
+            // the ack on the same stream, and a client that reads a known
+            // frame before the ack is entitled to refuse the attach. It
+            // also holds the view lock for as long as the store is large.
+            let (v, a) = (attached.clone(), reconcile.clone());
+            tokio::spawn(async move {
+                v.lock().unwrap().replay_to(&a, &peer);
+            });
         }));
+
+        // **what a client fails over to, named at the moment it attaches**
+        // (`wire-format.md` §8.2, design §14.1.2).  A sibling is unusable
+        // to a client that lacks its key material — §4 says treat it so
+        // rather than dial it unauthenticated, and there is no fetch path
+        // because the party that would serve one is the node that is down
+        // — so the material goes with the name, and the addresses come
+        // from the endpoint records this node holds. **A sibling this node
+        // has no address for is not named at all**: §8.2 gives a
+        // `SiblingRef` one to eight `NetworkPoint`s and no way to say
+        // none, which is the wire agreeing that a failover target nobody
+        // can reach is not one.
+        let (sv, si) = (view.clone(), ids.clone());
+        cfg.siblings = Arc::new(move || {
+            let v = sv.lock().unwrap();
+            let known = si.lock().unwrap();
+            let me = v.me();
+            v.table
+                .siblings(&me)
+                .into_iter()
+                .filter_map(|k| {
+                    let mut endpoints: Vec<NetworkPoint> =
+                        v.store.endpoint(&k).map(|e| e.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect()).unwrap_or_default();
+                    endpoints.truncate(8);
+                    if endpoints.is_empty() {
+                        return None;
+                    }
+                    Some(rhtn_transport::session::SiblingRef {
+                        keyhash: k,
+                        endpoints,
+                        key_material: known.iter().find(|i| i.keyhash == k).map(rhtn_crypto::Identity::key_material),
+                    })
+                })
+                .collect()
+        });
 
         // request streams: resolution and currency, answered from the view
         let (v, c, an, s) = (view.clone(), currency.clone(), anchors.clone(), slot.clone());

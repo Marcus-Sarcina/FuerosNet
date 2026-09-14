@@ -293,3 +293,59 @@ fn a_party_in_two_subnets_is_placed_in_both_and_neither_replaces_the_other() {
     assert_eq!(waking.places_of(&kh("w1")).len(), 2, "and both places come back out of it");
     assert_eq!(waking.place_in(&kh("w1"), &kh("carol")).map(|p| p.path.clone()), Some(vec![0x30]));
 }
+
+/// An endpoint record for `name`, as only an infra node publishes
+/// (`wire-format.md` §7.6).
+fn endpoints(name: &str, port: u16, series: u32, counter: u32) -> (Vec<u8>, rhtn_transport::session::NetworkPoint) {
+    let point = rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(port as u64));
+    let bytes = rhtn_node::resolution::endpoint_record(&common::id(name), std::slice::from_ref(&point), Seqno { series, counter });
+    (bytes, point)
+}
+
+// acceptance: TOP-28
+#[test]
+fn a_client_holds_the_addresses_of_the_infrastructure_in_its_horizon() {
+    let mut w = World::new();
+    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1), adopt(&mut w, "w3", "w2", vec![0x21, 0x10], 3)];
+    let mut h = fed("alice", &recs);
+
+    // **nothing says who is infrastructure until a record does.** §7.6 has
+    // only infra nodes publish one, and a light client's endpoints arrive
+    // when it attaches and are nobody else's to hold, so holding a record
+    // is the whole of the evidence.
+    assert!(!h.table.is_infra(&kh("bob")), "the patron has published nothing yet");
+    assert!(h.reachable_infra().is_empty(), "so this client can reach nobody without asking");
+
+    let (rec, point) = endpoints("bob", 7001, 1, 1);
+    assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Applied);
+    assert!(h.table.is_infra(&kh("bob")), "and holding it is what says so");
+    assert_eq!(h.endpoints_of(&kh("bob")), vec![point.encode_bytes()], "with where it answers");
+    assert_eq!(h.reachable_infra().len(), 1, "one party this client can reach on its own");
+
+    // a later counter in the same line replaces; an older one does not
+    let (moved, elsewhere) = endpoints("bob", 7002, 1, 2);
+    assert_eq!(h.ingest_endpoint(&moved, &ids()), Took::Applied);
+    assert_eq!(h.endpoints_of(&kh("bob")), vec![elsewhere.encode_bytes()], "the later record, not the earlier");
+    assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Duplicate, "and the earlier one is not news");
+
+    // **bounded by the horizon, like everything else here.** w3 sits three
+    // edges out: an address for a party this client cannot place is an
+    // address it has no use for.
+    let (far, _) = endpoints("w3", 7003, 1, 1);
+    assert_eq!(h.ingest_endpoint(&far, &ids()), Took::Refused, "outside the walk");
+    assert!(h.endpoints_of(&kh("w3")).is_empty());
+
+    // and a prune takes the addresses with the places
+    let (sib, _) = endpoints("carol", 7004, 1, 1);
+    assert_eq!(h.ingest_endpoint(&sib, &ids()), Took::Applied);
+    assert_eq!(h.reachable_infra().len(), 2);
+    let departure = {
+        let t = w.tick();
+        let bn = w.back("carol");
+        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        w.commit(TYPE_DEPARTURE, &body, &["carol"])
+    };
+    assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
+    h.prune();
+    assert_eq!(h.reachable_infra().len(), 1, "the party that left took its address with it");
+}

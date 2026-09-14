@@ -573,6 +573,9 @@ pub type ControlHandler = Arc<dyn Fn([u8; 32], u64, Vec<u8>) + Send + Sync>;
 /// transport can see an attach otherwise, so a node that is not told keeps
 /// an empty set and forwards the flood to nobody it serves.
 pub type AttachHook = Arc<dyn Fn([u8; 32], bool) + Send + Sync>;
+
+/// What a node says its siblings are, asked at each attach.
+pub type SiblingList = Arc<dyn Fn() -> Vec<SiblingRef> + Send + Sync>;
 /// Payload delivered on the direct path (design §14.1.1): the
 /// authenticated peer and one message.
 pub type DirectHandler = Arc<dyn Fn([u8; 32], Vec<u8>) + Send + Sync>;
@@ -587,7 +590,14 @@ pub struct NodeConfig {
     pub pins: Pins,
     /// Seconds, 1..=3600; unset by design §21.1, chosen by the operator.
     pub interval_secs: u64,
-    pub siblings: Vec<SiblingRef>,
+    /// The siblings this node names to a client attaching to it
+    /// (`wire-format.md` §8.2).
+    ///
+    /// **Asked for at each attach rather than fixed at start**, because it
+    /// is a fold over a table that moves: a sibling adopted this morning
+    /// is one this client can fail over to this afternoon, and a list
+    /// frozen at start would be the set the node had before it had any.
+    pub siblings: SiblingList,
     /// Published capabilities by id.  A greased entry is added per session.
     pub capabilities: BTreeMap<u64, Vec<u8>>,
     /// Local attach policy: false refuses with close code 1.
@@ -649,7 +659,7 @@ impl NodeConfig {
             identity,
             pins,
             interval_secs,
-            siblings: Vec::new(),
+            siblings: Arc::new(Vec::new),
             capabilities: BTreeMap::new(),
             policy: Arc::new(|_| true),
             in_subtree: Arc::new(|_| true),
@@ -917,7 +927,7 @@ impl Node {
         let known: Vec<u64> = caps.keys().copied().collect();
         let (gid, gval) = grease(&known);
         caps.insert(gid, gval);
-        let ack = AttachAck { mode, siblings: self.cfg.siblings.clone(), interval: self.cfg.interval_secs, queued, capabilities: caps };
+        let ack = AttachAck { mode, siblings: (self.cfg.siblings)(), interval: self.cfg.interval_secs, queued, capabilities: caps };
         sender.frame(FRAME_ATTACH_ACK, &ack.encode()).await.map_err(|e| e.to_string())?;
         self.log.push(Event::Attached { mode });
         let reach = Arc::new(Mutex::new(Reachability::Reachable));
@@ -1339,7 +1349,18 @@ pub async fn fresh_attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, servin
         if let Some(km) = &sib.key_material {
             let _ = cfg.pins.pin(sib.keyhash, km);
         }
-        let addrs = cfg.addresses.lock().unwrap().get(&sib.keyhash).cloned().unwrap_or_default();
+        // **the ack carried the sibling's endpoints, and they are the
+        // point of carrying them**: §4's rule is that the list is pushed
+        // at attach because it cannot be discovered once the serving node
+        // is dark, and an address book this client filled in beforehand is
+        // exactly what it would not have.
+        let mut addrs = cfg.addresses.lock().unwrap().get(&sib.keyhash).cloned().unwrap_or_default();
+        for p in &sib.endpoints {
+            let a = p.socket();
+            if !addrs.contains(&a) {
+                addrs.push(a);
+            }
+        }
         match attach_any(cfg, endpoint, sib.keyhash, &addrs, early).await {
             AttachOutcome::Attached(s) => return AttachOutcome::Attached(s),
             other => last = other,

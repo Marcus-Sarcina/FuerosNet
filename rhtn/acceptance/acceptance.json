@@ -10015,5 +10015,59 @@
   "then": "The adoption reaches the node, which stores it and floods it, so the other attached party learns of its own adoption from the flood rather than from having signed it, and places its patron one edge away. The node still holds it in what it wrote when it stopped. The ceremony's own record does not travel: design §15 puts presence in the attestation class, pull rather than push.",
   "oracle": "behaviour",
   "interpretation": "A client cannot flood and does not try. What it can do is offer the one node it is attached to a transaction it signed, which is the same edge §10.1.1 already counts read in the other direction."
+ },
+ {
+  "id": "TOP-28",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A client holds the addresses of the infrastructure in its horizon",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.6",
+   "light-client-requirements.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Published by infra nodes only."
+   },
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "the party you would\n  ask for the shape of your neighbourhood is the party that is down"
+   }
+  ],
+  "given": "A client holding the records its serving node propagated.",
+  "when": "Endpoint records arrive for a party in its horizon, for the same party on a later and an earlier counter, and for a party three edges out; and a party then leaves and the copy is pruned.",
+  "then": "Holding a record is what says its publisher is infrastructure, and it comes with where that party answers. A later counter in the same line replaces; an earlier one is not news. A record for a party the client cannot place is refused, because an address for one is an address it has no use for. A prune takes the addresses with the places.",
+  "oracle": "behaviour",
+  "interpretation": "Nothing else carries an infra node's address to a client: a light client's endpoints arrive when it attaches and are nobody else's to hold, which is why §7.6's record is the whole of the evidence."
+ },
+ {
+  "id": "SES-25",
+  "area": "session",
+  "gap": "session",
+  "title": "A node names its own siblings, and says where they answer",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2",
+   "light-client-requirements.md §4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "2: ? [ + SiblingRef ],   ; OPTIONAL - absent means the serving node has no"
+   },
+   {
+    "where": "light-client-requirements.md §4",
+    "text": "Treat a sibling whose KeyMaterial you lack as unusable"
+   }
+  ],
+  "given": "A node whose table holds two siblings, and an endpoint record for one of them.",
+  "when": "A client attaches to it.",
+  "then": "The list it is told is a fold over the node's own table: its siblings, not its patron. Each is named with the key material that authenticates it, since one whose material the client lacks is unusable rather than dialled unauthenticated. The address is the one the endpoint record carried, and a sibling the node has no address for is left out rather than named unreachably.",
+  "oracle": "behaviour",
+  "interpretation": "§8.2 gives a SiblingRef one to eight network points and no way to say none, which is the wire agreeing that a failover target nobody can reach is not one."
  }
 ]

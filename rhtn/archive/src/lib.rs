@@ -16,6 +16,7 @@
 pub mod catalog;
 pub mod chain;
 pub mod currency;
+pub mod endpoint;
 pub mod locator;
 pub mod prekey;
 pub mod record;

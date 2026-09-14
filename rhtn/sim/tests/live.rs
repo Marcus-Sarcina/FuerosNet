@@ -263,3 +263,58 @@ async fn requests_past_the_allowance_fail_the_stream() {
     assert_eq!((answered, failed), (3, 3), "three within the allowance, three past it");
     assert_eq!(n.limits.per_window, 3);
 }
+
+// acceptance: SES-25
+#[tokio::test]
+async fn a_node_names_its_own_siblings_and_says_where_they_answer() {
+    // P over N, S1 and S2: N's siblings are S1 and S2, and N holds an
+    // endpoint record for S1 alone
+    let mut s = Signers::new();
+    let a_n = s.adopt("bob", "alice", "alice", &[0], 1);
+    let a_s1 = s.adopt("carol", "alice", "alice", &[1], 2);
+    let a_s2 = s.adopt("w1", "alice", "alice", &[2], 3);
+    let records = [&a_n, &a_s1, &a_s2];
+    let infra = ["alice", "bob", "carol", "w1"];
+    let mut view = view_of("bob", table_of("bob", &s, &records, &infra), "alice", &[0], s.clock);
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(7777));
+    let er = rhtn_node::resolution::endpoint_record(&id("carol"), std::slice::from_ref(&point), rhtn_archive::tx::Seqno { series: 2, counter: 1 });
+    view.store.accept(rhtn_node::store::KIND_ENDPOINT_RECORD, &er, &kh("alice"), &ids(), &Anywhere);
+
+    let n = LiveNode::start(node_cfg("bob", I), view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let ccfg = client_cfg("c1");
+    know(&ccfg, "bob", n.addr);
+    let sess = match attach(&ccfg, &client_ep(), kh("bob"), n.addr, false).await {
+        AttachOutcome::Attached(x) => x,
+        other => panic!("attaches: {other:?}"),
+    };
+
+    // **the list is a fold over the node's own table**, not a thing its
+    // operator wrote down: S1 and S2 because they share N's patron, and
+    // not P, which does not.
+    let named: std::collections::BTreeSet<[u8; 32]> = sess.ack.siblings.iter().map(|r| r.keyhash).collect();
+    assert_eq!(named, [kh("carol")].into_iter().collect(), "the sibling it has an address for");
+    assert!(!named.contains(&kh("alice")), "and not its patron, which is not a sibling");
+    assert!(!named.contains(&kh("w1")), "nor the sibling it holds no endpoint record for");
+
+    // the key material goes with the name, because a sibling whose
+    // material the client lacks is one it must treat as unusable rather
+    // than dial unauthenticated (`light-client-requirements.md` §4)
+    assert!(sess.ack.siblings.iter().all(|r| r.key_material.is_some()), "each named with what authenticates it");
+
+    // **and the address comes from the endpoint record the node holds.**
+    // §7.6 is the only carrier there is for an infra node's address, and
+    // §8.2 gives a `SiblingRef` one to eight points and no way to say
+    // none — so a sibling this node has no address for is left out rather
+    // than named unreachably.
+    let s1 = sess.ack.siblings.iter().find(|r| r.keyhash == kh("carol")).expect("S1");
+    assert_eq!(s1.endpoints, vec![point], "where S1 said it answers");
+}
+
+/// A horizon that takes everything, for a test seeding a store directly.
+struct Anywhere;
+
+impl rhtn_node::store::Horizon for Anywhere {
+    fn within(&self, _x: &[u8; 32], _h: usize) -> bool {
+        true
+    }
+}

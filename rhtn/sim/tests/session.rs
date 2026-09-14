@@ -36,7 +36,10 @@ fn pair(n_filter: Option<OutboundFilter>) -> Pair {
         c
     });
     let mut ncfg = node_cfg("alice", I);
-    ncfg.siblings = vec![sibling_ref("bob", s.addr)];
+    ncfg.siblings = {
+        let list = vec![sibling_ref("bob", s.addr)];
+        std::sync::Arc::new(move || list.clone())
+    };
     ncfg.filter = n_filter;
     let n = Running::start(ncfg);
     let cfg = client_cfg("carol");
@@ -229,7 +232,10 @@ async fn partitioned() -> Partitioned {
     });
     let sib = s.node.clone();
     let mut ncfg = node_cfg("alice", I);
-    ncfg.siblings = vec![sibling_ref("bob", s.addr)];
+    ncfg.siblings = {
+        let list = vec![sibling_ref("bob", s.addr)];
+        std::sync::Arc::new(move || list.clone())
+    };
     // N replicates a client's reachability to its sibling
     ncfg.replicate = Some(Arc::new(move |client, r| sib.note_reachability(client, r)));
     let n = Running::start(ncfg);
@@ -338,7 +344,10 @@ async fn a_client_collects_from_its_own_serving_node_when_it_returns() {
     });
     let ncfg = {
         let mut c = node_cfg("alice", I);
-        c.siblings = vec![sibling_ref("bob", s.addr)];
+        c.siblings = {
+        let list = vec![sibling_ref("bob", s.addr)];
+        std::sync::Arc::new(move || list.clone())
+    };
         c
     };
     let n = Running::start(ncfg);
@@ -408,7 +417,11 @@ async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
     assert_eq!(set, [kh("w1"), kh("w2")].into_iter().collect());
     assert!(!set.contains(&kh("c1")), "Q is P's sibling, not S's");
     let mut cfg = node_cfg("alice", I);
-    cfg.siblings = set.iter().map(|k| known.iter().find(|(x, _)| x == k).map(|(_, a)| sibling_ref(if *k == kh("w1") { "w1" } else { "w2" }, *a)).unwrap()).collect();
+    cfg.siblings = {
+        let list: Vec<rhtn_transport::session::SiblingRef> =
+            set.iter().map(|k| known.iter().find(|(x, _)| x == k).map(|(_, a)| sibling_ref(if *k == kh("w1") { "w1" } else { "w2" }, *a)).unwrap()).collect();
+        std::sync::Arc::new(move || list.clone())
+    };
     let s = Running::start(cfg);
     let ccfg = client_cfg("carol");
     know(&ccfg, "alice", s.addr);

@@ -164,7 +164,10 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let ack_body_fx = &ap[aparts[1].clone()];
     let ack_fx_decoded = AttachAck::decode(ack_body_fx, &parse_all(ack_body_fx).unwrap()).unwrap();
     let mut ncfg = node_cfg("bob", ack_fx_decoded.interval);
-    ncfg.siblings = ack_fx_decoded.siblings.clone();
+    ncfg.siblings = {
+        let list = ack_fx_decoded.siblings.clone();
+        std::sync::Arc::new(move || list.clone())
+    };
     ncfg.capabilities = ack_fx_decoded.capabilities.iter().filter(|(k, _)| **k == named).map(|(k, v)| (*k, v.clone())).collect();
     ncfg.pins.pin_identity(&test_identity(who).public);
     let (node, addr) = spawn_node(ncfg);
@@ -496,7 +499,10 @@ async fn ses_03_first_heartbeat_after_one_interval_at_counter_0_then_one_per_int
 #[tokio::test]
 async fn ses_04_one_lost_beat_does_not_fail_over() {
     let mut cfg = node_cfg("bob", 1);
-    cfg.siblings = vec![sibling("carol", 4009)];
+    cfg.siblings = {
+        let list = vec![sibling("carol", 4009)];
+        std::sync::Arc::new(move || list.clone())
+    };
     cfg.filter = Some(Arc::new(|t, bytes| if t == 3 && heartbeat_counter(bytes) == Some(1) { None } else { Some(bytes.to_vec()) }));
     let (_node, addr) = spawn_node(cfg);
     let ccfg = client_cfg("alice");

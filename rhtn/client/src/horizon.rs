@@ -16,6 +16,7 @@
 
 use crate::{Keyhash, Txid};
 use rhtn_archive::record::Record;
+use rhtn_archive::endpoint::EndpointRecord;
 use rhtn_archive::topology::{Evaluation, Snapshot, Table, unfolded};
 use rhtn_archive::tx::Locator;
 use rhtn_crypto::verify::Lookup;
@@ -89,15 +90,87 @@ pub struct Horizon {
     /// this client only knows the position of, because a subordinate's
     /// record named it as an anchor, is in `places` and not here.
     locators: BTreeMap<Placement, Locator>,
+    /// Where the infrastructure in this horizon answers, from the endpoint
+    /// records the patron flooded (`wire-format.md` §7.6).
+    ///
+    /// **Only infra nodes publish one**, so holding a record is also what
+    /// says its publisher is infrastructure — the same evidence a node
+    /// reads it as [author, 2026-09-14]. Without these a client holds a
+    /// shape with no addresses in it: it can say who its patron's siblings
+    /// are and not reach any of them.
+    endpoints: BTreeMap<(Keyhash, u32), EndpointRecord>,
 }
 
 impl Horizon {
     pub fn new(me: Keyhash) -> Horizon {
-        Horizon { me, records: BTreeMap::new(), table: Table::with_me(me), places: BTreeMap::new(), locators: BTreeMap::new() }
+        Horizon { me, records: BTreeMap::new(), table: Table::with_me(me), places: BTreeMap::new(), locators: BTreeMap::new(), endpoints: BTreeMap::new() }
     }
 
     pub fn me(&self) -> Keyhash {
         self.me
+    }
+
+    /// Take an endpoint record the serving node propagated.
+    ///
+    /// Bounded by the same horizon the records are: one for a party this
+    /// client cannot place is not a party it has any use for an address
+    /// of.
+    pub fn ingest_endpoint<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
+        let Ok(er) = EndpointRecord::parse(bytes) else { return Took::Refused };
+        if er.signature_checks(ids) == Some(false) {
+            return Took::Refused;
+        }
+        if self.table.distance(&self.me, &er.node, 2).is_none() {
+            return Took::Refused;
+        }
+        let key = (er.node, er.seqno.series);
+        if let Some(held) = self.endpoints.get(&key)
+            && held.seqno.counter >= er.seqno.counter
+        {
+            return Took::Duplicate;
+        }
+        // **holding it is what marks the publisher infrastructure**: §7.6
+        // has only infra nodes publish, and nothing else distinguishes the
+        // two from outside.
+        self.table.mark_infra(er.node);
+        self.endpoints.insert(key, er);
+        Took::Applied
+    }
+
+    /// Where `node` says it answers, across every line it published on,
+    /// as the `NetworkPoint`s were encoded.
+    ///
+    /// **Left encoded on the way out** because the type that reads one
+    /// belongs to the transport, and a client's copy of its own
+    /// neighbourhood has no business depending on a socket library.
+    pub fn endpoints_of(&self, node: &Keyhash) -> Vec<Vec<u8>> {
+        if self.table.distance(&self.me, node, 2).is_none() {
+            return Vec::new();
+        }
+        let mut out: Vec<Vec<u8>> = Vec::new();
+        for (_, e) in self.endpoints.range((*node, 0)..=(*node, u32::MAX)) {
+            for p in &e.endpoints {
+                if !out.contains(p) {
+                    out.push(p.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// The infrastructure this client can reach without asking anyone: the
+    /// parties in its horizon that have published an endpoint record, with
+    /// where each answers.
+    ///
+    /// **This is what routing around an unanswering node is made of**
+    /// (`light-client-requirements.md` §4.2): a client that had to ask its
+    /// patron where the alternatives are cannot use them when the patron
+    /// is the thing that is down.
+    pub fn reachable_infra(&self) -> Vec<(Keyhash, Vec<Vec<u8>>)> {
+        let inside = self.table.horizon(&self.me, 2);
+        let mut seen: Vec<Keyhash> = self.endpoints.keys().map(|(n, _)| *n).filter(|n| inside.contains(n)).collect();
+        seen.dedup();
+        seen.into_iter().map(|n| (n, self.endpoints_of(&n))).collect()
     }
 
     pub fn holds(&self, txid: &Txid) -> bool {
@@ -217,6 +290,7 @@ impl Horizon {
         let before = parties(&self.places);
         self.places.retain(|(n, _), _| inside.contains(n));
         self.locators.retain(|(n, _), _| inside.contains(n));
+        self.endpoints.retain(|(n, _), _| inside.contains(n));
         self.records.retain(|_, b| {
             Record::parse(b).is_ok_and(|r| r.participants().iter().any(|p| inside.contains(p)) || r.field_hash(1).is_some_and(|k| inside.contains(&k)) || r.field_hash(2).is_some_and(|k| inside.contains(&k)))
         });

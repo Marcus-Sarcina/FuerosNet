@@ -459,6 +459,27 @@ impl Participant {
         })
     }
 
+    /// The infrastructure this client can reach without asking anyone:
+    /// the parties in its horizon that published an endpoint record, and
+    /// where each says it answers.
+    ///
+    /// **This is what failing over is made of.** A client that had to ask
+    /// its patron where the alternatives are cannot use them when the
+    /// patron is what is down (`light-client-requirements.md` §4.2).
+    #[must_use]
+    pub fn reachable(&self) -> Vec<(Id, Vec<String>)> {
+        self.handle.with_blocking(|c| {
+            c.horizon
+                .reachable_infra()
+                .into_iter()
+                .map(|(n, points)| {
+                    let addrs = points.iter().filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok()).map(|p| p.socket().to_string()).collect();
+                    (id_of(&n), addrs)
+                })
+                .collect()
+        })
+    }
+
     /// Everybody this client can place without asking anyone.
     #[must_use]
     pub fn resolvable(&self) -> Vec<Id> {
