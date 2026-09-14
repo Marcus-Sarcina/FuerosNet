@@ -9596,3 +9596,40 @@ commit, 8bb6d4d, on the author's decision. Catalogue 350 of 360, 0 flags.
   serves, and five seconds of post-quantum handshake is not enough on a
   loaded box. Thirty seconds now, re-confirmed under twenty-four busy
   cores. Nothing in those scenarios is a claim about handshake latency.
+
+**The instrument, `rhtnp` (2026-09-14).** Two gate-green commits, 5fa788a
+and 78e62ae, on the author's word. The client had been finished and tested
+for weeks in a process nothing outside a test ever started; this is the
+process. Catalogue 353 of 363, 0 flags.
+
+- **What it claims and what it refuses to claim.** PRT-01 runs a payload
+  between two `rhtnp` processes through an `rhtnd` process. PRT-04 runs a
+  ceremony between four, to a record every signer names the same. It marks
+  **none** of PRD-01 to PRD-09: those are obligations about what a user is
+  shown and when they are asked, and a command read from standard input is
+  not a person.
+- **Every proximity channel is unavailable until it is told otherwise**,
+  and that was the design decision worth making carefully.
+  `light-client-requirements.md` §1.3 forbids presenting a weaker channel
+  as a stronger one, so a machine with no radio and no camera pointed at
+  anybody supports none, and the instrument reports what its operator
+  declares. A declaration is evidence about a scenario rather than about
+  hardware, which is the whole difference between an instrument and a
+  client. The alternative — quietly passing a latency channel — would have
+  been the exact failure §1.3 names.
+- **Two more things nothing outside a test had ever needed.** A
+  participant's own key was not in its own lookup, so it could not verify
+  a record it had just signed: `wire-format.md` §3.4's rule, which the
+  daemon holds its own identity to and which nothing had asked of a client.
+  And `rhtn-ffi` carried six of the ceremony's operations and not the rest,
+  so no shell could have run one; the facade now carries them as values, in
+  the shape `Intent` already had.
+- **The ceremony's encoding is the instrument's own and says so.** design
+  §7 has the conversation cross whatever channel the two devices have and
+  fixes none, which is why the boundary carries fields. A harness copying a
+  token between two processes is the analogue of a screen and a camera.
+- **The adoption leg is open and is a decision, not code.** A patron
+  proposes under its own position and a client that has never been adopted
+  holds none. Either `rhtnd` gains an operator action to adopt, which waits
+  on section 7's terminal-or-page question, or a participant stands as a
+  root, which is a genesis fact an instrument should not mint for itself.

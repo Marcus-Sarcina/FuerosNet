@@ -89,6 +89,7 @@ moving code between repositories.
 | `rhtn-resources` | The component-model sandbox a hosted package runs in: what it may import, what one request may spend, and the `Backend` a gateway hands a request to. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5) | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
 | `rhtn-adaptors` | `rhtn-client` bound to what is local to its process: the client on a thread of its own, the node beside it as serving node, the direct payload path over the transport's socket (the client's own or the node's), a hosted verifier answered on the node's request stream, and the courier. The seams the documents leave unwritten, a serving node's leg to a client attached over the wire and a client's hand-off of payload to relay, are traits with the in-process implementation behind them | design §12.6.3, §14.1.1; `wire-format.md` §5.6, §7.7.2, §9.2 | Live tests over loopback QUIC for both kinds of client |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
+| `rhtn-participant` | `rhtnp`: a participant a person or a script can run. One command a line on standard input, the terminal standing in for the six platform objects, and nothing kept between runs. **An instrument and not a product**: it claims none of the product entries, because a command read from standard input is not a person | `light-client-requirements.md` §1.3, §3; design §14.1.0, §14.2.4 | PRT-01 onward; a ceremony and a payload between processes rather than inside one |
 | `rhtn-daemon` | `rhtnd`: a node run from an operator's configuration. The configuration a node cannot derive; the lifecycle from start to signal to stop, losing no delivery in flight; and the operator's view of what the configuration exposes to the identities below it | `infra-client-requirements.md` §1, §2, §4.1, §7, §8, §10.6, §10.7; design §13, §14.1.2, §14.1.6 | PRD-06; a node started from a file serves a client and survives a restart |
 | `rhtn-cli` | `rhtn`: decode what the wire carries with the parser a node uses, mint and inspect identities, and ask a running node the read-only questions | No obligation document requires a command line. What it may send is bounded by `wire-format.md` §9.2's read-only class: §7.7, §7.9, §6.4 | Every corpus object prints; a probe resolves, fetches and queries over a real session |
 | `rhtn-ffi` | The one boundary the mobile shells bind to: the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross. No decision is taken at the boundary that is not taken below it | `light-client-requirements.md` §1.3 | The facade compiles against both shells' generated bindings |
@@ -489,6 +490,11 @@ one piece of real work at the crossing is that a shell hands over objects
 usable from any thread while the client reaches its device through `Rc`
 and never leaves its own, so each is wrapped once inside that thread.
 
+**The facade now carries the ceremony too** (2026-09-14), which milestone
+15 needed and which this milestone owed: channels exchanged, capture keys,
+queries and grants, witness asks, the proposal, review and signature, and
+finalisation, each as values in the shape `Intent` already had.
+
 **The exit criterion's other half waits on section 7.** No binding is
 generated, because no generator is adopted: `uniffi` is the candidate and
 the choice is the author's. Until it is made the facade is plain Rust with
@@ -501,8 +507,79 @@ to PRD-05 and PRD-07 to PRD-09 are marked, which first needs
 extension is the milestone's first commit, not an afterthought: until it is
 made the catalogue cannot see the tier that closes its last entries.
 
+**Milestone 15, the instrument** (`rhtn-participant`). Exit: two `rhtnp`
+processes, driven by a script, complete a ceremony with witnesses and
+verifiers, take an adoption from a running `rhtnd`, and exchange payload —
+every step over real sockets, none of it inside one process.
+
+**Why it is here and not in section 5's order.** Design §24's order ends at
+the library, and the tier above it goes daemon, command line, boundary,
+shells. Nothing in that list is a person using the network, and the shells
+wait on two decisions and a toolchain. The client itself has been finished
+and tested for longer than any of them, in a process that nothing outside a
+test ever started. What was missing was never a library.
+
+**It claims none of the product entries, deliberately.** PRD-01 to PRD-09
+are obligations about what a user is shown and when they are asked; a
+command read from standard input is not a person, and an instrument that
+marked them would be marking them falsely.
+
+Done in part (2026-09-14). The process starts from an identity file it
+reads and never mints, attaches to a serving node, publishes and sweeps,
+sends and receives payload, registers and withdraws a wake endpoint, and
+runs maintenance. Two `rhtnp` processes and one `rhtnd` process exchange a
+payload with nothing asserted from inside any of them. PRT-01, PRT-02.
+
+**The terminal stands in for the platform's six objects, and says so.**
+Clock and randomness are the machine's. The camera returns a frame that is
+the same frame every time, which proves no less than a real one would while
+design §22.2 leaves the biometric profile open and the reference engine
+recognises nobody. The person is a standing answer rather than a prompt,
+because standard input is the command channel and a question read from
+there would race the script. **And every proximity channel is unavailable
+until the instrument is told what happened** —
+`light-client-requirements.md` §1.3 forbids presenting a weaker channel as
+a stronger one, and a machine with no radio and no camera pointed at
+anybody supports none. A declaration is evidence about a scenario rather
+than about hardware, which is the whole difference between an instrument
+and a client.
+
+**The ceremony runs between processes** (2026-09-14). Four `rhtnp`
+processes, two meeting and two nominated to witness, reach a record every
+signer names the same. PRT-04. That needed the boundary to carry the rest
+of what `rhtn-client` has — channels exchanged, capture keys, queries and
+grants, witness asks, the proposal, review and signature, finalisation —
+which is milestone 13's own work and is now done: the facade carries them
+as values, following the shape `Intent` already had.
+
+**A step's product is one token the instrument's operator carries.**
+design §7 has the ceremony cross whatever channel the two devices have and
+fixes no encoding, which is why `rhtn-ffi` carries it as fields; a shell
+must therefore choose one, and a harness copying a token between two
+processes is the analogue of a screen and a camera. The encoding is the
+instrument's and is not protocol: two instruments agreeing on another would
+interoperate with each other and nothing else, which is what §7 leaves open.
+
+**The finding was in the client's own entry point.** A participant's key
+was not in its own lookup, so it could not verify a record it had just
+signed — the rule `wire-format.md` §3.4 states and the daemon already holds
+its own identity to. Nothing had asked it of a client, because nothing had
+ever started one outside a test that passed every key in.
+
+**What is left is the adoption leg, and it is not a matter of writing the
+commands.** An adoption is proposed by the patron under **its own
+position**, and a client that has never been adopted holds none: `Client`
+starts with `position: None` and `propose_adoption` refuses without one.
+The two ways to close it are both decisions rather than code. Either the
+node adopts, which needs `rhtnd` to expose an operator action and so waits
+on section 7's open question of whether the operator's view is a terminal
+on the host or a page; or a participant stands as a root, which is a
+genesis fact the design has rules about and which an instrument should not
+mint for itself on the strength of a command. **Put to the author rather
+than invented.**
+
 **Order.** Milestones 11 and 12 are independent of each other and of 13; 13
-gates 14. None of them gates what the library still owes, and what it owed
+gates 14, and 13 and 15 finish together. None of them gates what the library still owes, and what it owed
 is now one item: PAY-13, which waits on the licence decision (section 7).
 
 **`rhtn-resources`, built (2026-09-13).** The sandbox and the daemon's
