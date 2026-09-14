@@ -9681,3 +9681,47 @@ around an unanswering patron without asking anyone, has no caller. **What
 would close it is a reader**: the client's own resolution path, and the
 direct-versus-relayed decision design §12.6.3 makes from whether a peer is
 inside the horizon. Worth scoping as work rather than folding into a fix.
+
+**The four applications of the horizon, built (2026-09-14).** The author
+named them: propagating new adoption, recovery and PoP transactions; an
+alternate route around an unavailable infra node; populating resource
+permissions tables; and identifying distance-1 nodes for flow. Three
+gate-green commits. Catalogue 362 of 372, 0 flags. **None of the four was
+working, and each was broken in the same shape**: something correct with
+nothing computing its input or reading its output.
+
+- **Propagation.** `Msg::Record` fell through the courier into `left` — what
+  the adaptors do not carry at all — so a ceremony ended in a record only
+  its signers held and an adoption on it went the same way. `Serving` gains
+  `propagate`; `Client` keeps an outbox; the boundary carries it as soon as
+  the record exists. PRT-06.
+- **What actually travels, and the test that got it wrong first.** The
+  first PRT-06 asserted the *presence record* reaching the node. design §15
+  puts presence in the attestation class — pull, not push — and
+  `wire-format.md` §10.1's topology class is adoptions, departures,
+  disavowals, peerings and reissues. The adoption is what travels.
+- **Failover needed three fixes, any one of which alone left it dead.**
+  `NodeConfig.siblings` was set by nothing, so every ack carried an empty
+  list into a cache the transport does read. The ack's endpoints were
+  ignored in favour of an address book §4 says a client would not have. And
+  a client dropped endpoint records off the flood, holding a shape with no
+  addresses in it. `EndpointRecord` moved to `rhtn-archive`, both sides
+  reading one. SES-25, TOP-28.
+- **A sibling with no address is not named**, because §8.2 gives a
+  `SiblingRef` one to eight points and no way to say none. The first draft
+  named them and the ack would not decode — the wire agreeing that a
+  failover target nobody can reach is not one.
+- **And it surfaced a bug of this assistant's from the morning**: the
+  reconciliation replay ran inside the attach hook, on the accept path, so
+  a node whose store was non-empty raced the ack and the client refused the
+  attach. Spawned now.
+- **Role tables** follow the owner's horizon through a standing grant,
+  re-expanded when a stored transaction moves the table — §10.2's moments
+  are none of them a request. RSC-36.
+- **Trust distance** is the client's own fold now, two sources where a node
+  has three. MET-09.
+- **Still open, and named rather than papered over.** Nothing pulls a
+  presence record to a node, so `keep_presence` has no production caller
+  and `evidence()`'s acquaintance edges are empty at a node — the metric
+  there runs on adoptions alone. The pull path design §15 describes is the
+  work that closes it.
