@@ -8,7 +8,7 @@ use std::process::ExitCode;
 const USAGE: &str = "\
 usage: rhtnd <configuration> [<peers>]
 
-  <configuration>  the operator's `key = value` file
+  <configuration>  the operator's TOML configuration
   <peers>          hex KeyMaterial, one per line, for the peers this node
                    authenticates; defaults to `peers` beside the
                    configuration

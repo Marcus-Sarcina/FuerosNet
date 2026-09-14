@@ -16,6 +16,8 @@ rhtn-transport = { path = "../transport" }
 rhtn-codec = { path = "../codec" }
 rhtn-resources = { path = "../resources" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }

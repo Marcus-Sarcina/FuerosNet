@@ -6,20 +6,31 @@
 //! §1).  Nothing here is protocol: a field that could be derived from the
 //! topology would be a second source of truth for it.
 //!
-//! **The format fixes no dependency**, which is the point: the plan lists
-//! the choice of one as the author's, so the placeholder is a line-oriented
-//! `key = value` file parsed here in a few dozen lines.  Swapping in TOML
-//! or JSON later replaces [`Config::parse`] and nothing else.
+//! **The format is TOML** [author, 2026-09-14].  The line-oriented
+//! placeholder this replaced could not repeat a key, which is why the
+//! packages a node hosts had to live in a file of their own, and its
+//! positional values had nowhere to put a name: `allowance`, `upstream`
+//! and the resource limits were each a small parser over a string.  They
+//! are tables now.
 //!
 //! **It is strict, for the same reason the HTTP boundary is.** An unknown
 //! key, a repeated key, a missing one or a value that does not parse is an
 //! error naming its line. An operator who misspells a key is told, rather
-//! than served a default they did not choose.
+//! than served a default they did not choose — and TOML's own message
+//! lists the keys it expected, which the placeholder's could not.
+//!
+//! **What is validated here is what a document fixes or a wire refuses**,
+//! never what deserialising already settled: the heartbeat's range, an
+//! allowance that would serve nobody, a keyhash's form, and an ingestion
+//! boundary that must be named rather than guessed.  Each of those carries
+//! the line it was written on, because the fields they check are read
+//! through [`toml::Spanned`].
 
 use rhtn_archive::Keyhash;
 use rhtn_node::resolution::Ingestion;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use toml::Spanned;
 
 /// A node's configuration as its operator writes it.
 ///
@@ -84,7 +95,9 @@ pub struct Config {
 }
 
 /// Why a configuration was refused: the line it was on, and what was wrong
-/// with it.  Line 0 means the file as a whole.
+/// with it.  Line 0 means the file as a whole — and TOML's own errors
+/// carry their position inside the message, so a shape error reads as one
+/// whether or not this field is set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invalid {
     pub line: usize,
@@ -120,6 +133,53 @@ fn keyhash(s: &str) -> Option<Keyhash> {
     Some(out)
 }
 
+/// The file's own shape, before anything is checked against a document.
+///
+/// Separate from [`Config`] because the two answer different questions:
+/// this one is what TOML can settle by itself, and `Config` is what the
+/// crates beneath will be handed.  The fields read through `Spanned` are
+/// the ones with a rule over them, so a refusal can say where.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct File {
+    identity: PathBuf,
+    listen: Spanned<String>,
+    queue: PathBuf,
+    prekeys: PathBuf,
+    topology: PathBuf,
+    archive: PathBuf,
+    heartbeat: Spanned<u64>,
+    ingestion: Spanned<String>,
+    allowance: Spanned<Allowance>,
+    #[serde(rename = "queue-cap")]
+    queue_cap: Option<usize>,
+    upstream: Option<Spanned<Upstream>>,
+    resources: Option<PathBuf>,
+    #[serde(rename = "resource-limits")]
+    resource_limits: Option<Spanned<Limits>>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Allowance {
+    requests: u32,
+    seconds: u64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Upstream {
+    node: String,
+    addresses: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Limits {
+    memory: usize,
+    fuel: u64,
+}
+
 impl Config {
     /// Read a configuration from `path`.
     pub fn read(path: &Path) -> Result<Config, Invalid> {
@@ -127,60 +187,39 @@ impl Config {
         Config::parse(&text)
     }
 
-    /// Parse a configuration.  Blank lines and lines whose first
-    /// non-blank character is `#` are ignored; every other line is
-    /// `key = value`.
+    /// Parse a configuration.
+    ///
+    /// Deserialising settles the shape; what follows are the rules a
+    /// document states and TOML cannot know.
     pub fn parse(text: &str) -> Result<Config, Invalid> {
-        let mut seen: Vec<(String, String, usize)> = Vec::new();
-        for (i, raw) in text.lines().enumerate() {
-            let n = i + 1;
-            let line = raw.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let Some((k, v)) = line.split_once('=') else {
-                return Err(at(n, "not `key = value`"));
-            };
-            let (k, v) = (k.trim().to_string(), v.trim().to_string());
-            if k.is_empty() {
-                return Err(at(n, "empty key"));
-            }
-            if let Some((_, _, first)) = seen.iter().find(|(x, _, _)| *x == k) {
-                return Err(at(n, format!("`{k}` was already set on line {first}")));
-            }
-            seen.push((k, v, n));
-        }
-        let take = |key: &str| seen.iter().find(|(k, _, _)| k == key).map(|(_, v, n)| (v.as_str(), *n));
-        let need = |key: &str| take(key).ok_or_else(|| at(0, format!("`{key}` is not set, and has no default")));
+        let f: File = toml::from_str(text).map_err(|e| shape(text, &e))?;
 
-        // an unknown key is a refusal, not something to ignore: a
-        // misspelled one would otherwise take a value the operator meant
-        // to set
-        const KEYS: [&str; 13] = [
-            "identity", "listen", "upstream", "queue", "queue-cap", "heartbeat", "ingestion", "allowance", "prekeys", "topology", "archive",
-            "resources", "resource-limits",
-        ];
-        if let Some((k, _, n)) = seen.iter().find(|(k, _, _)| !KEYS.contains(&k.as_str())) {
-            return Err(at(*n, format!("`{k}` is not a configuration key")));
+        let listen: SocketAddr = f.listen.get_ref().parse().map_err(|_| at(line_at(text, &f.listen), "`listen` is not an address and port"))?;
+
+        let heartbeat_secs = *f.heartbeat.get_ref();
+        if !(1..=3600).contains(&heartbeat_secs) {
+            return Err(at(line_at(text, &f.heartbeat), "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)"));
         }
 
-        let (identity, _) = need("identity")?;
-        let (listen, ln) = need("listen")?;
-        let listen: SocketAddr = listen.parse().map_err(|_| at(ln, "`listen` is not an address and port"))?;
-        let (queue, _) = need("queue")?;
-        let (prekeys, _) = need("prekeys")?;
-        let (topology, _) = need("topology")?;
-        let (archive, _) = need("archive")?;
+        let ingestion = match f.ingestion.get_ref().as_str() {
+            "verified-on-acceptance" => Ingestion::VerifiedOnAcceptance,
+            "unverified-gossip" => Ingestion::UnverifiedGossip,
+            _ => return Err(at(line_at(text, &f.ingestion), "`ingestion` is `verified-on-acceptance` or `unverified-gossip`")),
+        };
 
-        let upstream = match take("upstream") {
+        let a = f.allowance.get_ref();
+        if a.requests == 0 || a.seconds == 0 {
+            return Err(at(line_at(text, &f.allowance), "an `allowance` of zero admits nothing and serves nobody"));
+        }
+        let request_allowance = (a.requests, a.seconds);
+
+        let upstream = match &f.upstream {
             None => None,
-            Some((v, n)) => {
-                let (key, addrs) = v.split_once(char::is_whitespace).ok_or_else(|| at(n, "`upstream` is a keyhash then its addresses"))?;
-                let key = keyhash(key.trim()).ok_or_else(|| at(n, "`upstream` keyhash is not 64 lower-case hex digits"))?;
-                let addrs: Result<Vec<SocketAddr>, Invalid> = addrs
-                    .split(',')
-                    .map(|a| a.trim().parse::<SocketAddr>().map_err(|_| at(n, format!("`{}` is not an address and port", a.trim()))))
-                    .collect();
+            Some(u) => {
+                let n = line_at(text, u);
+                let key = keyhash(&u.get_ref().node).ok_or_else(|| at(n, "`upstream.node` is not 64 lower-case hex digits"))?;
+                let addrs: Result<Vec<SocketAddr>, Invalid> =
+                    u.get_ref().addresses.iter().map(|a| a.parse::<SocketAddr>().map_err(|_| at(n, format!("`{a}` is not an address and port")))).collect();
                 let addrs = addrs?;
                 if addrs.is_empty() {
                     return Err(at(n, "`upstream` names no address"));
@@ -189,60 +228,57 @@ impl Config {
             }
         };
 
-        let queue_cap = match take("queue-cap") {
+        let resource_limits = match &f.resource_limits {
             None => None,
-            Some((v, n)) => Some(v.parse::<usize>().map_err(|_| at(n, "`queue-cap` is not a count"))?),
-        };
-
-        let (heartbeat_secs, hn) = need("heartbeat")?;
-        let heartbeat_secs: u64 = heartbeat_secs.parse().map_err(|_| at(hn, "`heartbeat` is not a count of seconds"))?;
-        if !(1..=3600).contains(&heartbeat_secs) {
-            return Err(at(hn, "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)"));
-        }
-
-        let (ingestion, in_) = need("ingestion")?;
-        let ingestion = match ingestion {
-            "verified-on-acceptance" => Ingestion::VerifiedOnAcceptance,
-            "unverified-gossip" => Ingestion::UnverifiedGossip,
-            _ => return Err(at(in_, "`ingestion` is `verified-on-acceptance` or `unverified-gossip`")),
-        };
-
-        let resources = take("resources").map(|(v, _)| PathBuf::from(v));
-        let resource_limits = match take("resource-limits") {
-            None => None,
-            Some((v, n)) => {
-                let (mem, fuel) = v.split_once(char::is_whitespace).ok_or_else(|| at(n, "`resource-limits` is a memory ceiling in bytes then an instruction budget"))?;
-                let mem: usize = mem.trim().parse().map_err(|_| at(n, "`resource-limits` memory ceiling is not a count of bytes"))?;
-                let fuel: u64 = fuel.trim().parse().map_err(|_| at(n, "`resource-limits` instruction budget is not a count"))?;
-                if mem == 0 || fuel == 0 {
-                    return Err(at(n, "`resource-limits` of zero admits a package and then runs none of it"));
+            Some(l) => {
+                let (memory, fuel) = (l.get_ref().memory, l.get_ref().fuel);
+                if memory == 0 || fuel == 0 {
+                    return Err(at(line_at(text, l), "a `resource-limits` of zero admits a package and then runs none of it"));
                 }
-                Some((mem, fuel))
+                Some((memory, fuel))
             }
         };
 
-        let (allowance, an) = need("allowance")?;
-        let (count, window) = allowance.split_once('/').ok_or_else(|| at(an, "`allowance` is `requests/seconds`"))?;
-        let count: u32 = count.trim().parse().map_err(|_| at(an, "`allowance` request count is not a number"))?;
-        let window: u64 = window.trim().parse().map_err(|_| at(an, "`allowance` window is not a count of seconds"))?;
-        if count == 0 || window == 0 {
-            return Err(at(an, "`allowance` of zero admits nothing and serves nobody"));
-        }
-
         Ok(Config {
-            identity: PathBuf::from(identity),
+            identity: f.identity,
             listen,
             upstream,
-            queue: PathBuf::from(queue),
-            queue_cap,
+            queue: f.queue,
+            queue_cap: f.queue_cap,
             heartbeat_secs,
             ingestion,
-            request_allowance: (count, window),
-            prekeys: PathBuf::from(prekeys),
-            topology: PathBuf::from(topology),
-            archive: PathBuf::from(archive),
-            resources,
+            request_allowance,
+            prekeys: f.prekeys,
+            topology: f.topology,
+            archive: f.archive,
+            resources: f.resources,
             resource_limits,
         })
     }
+}
+
+/// Turn a deserialiser's complaint into this module's.
+///
+/// **Only the missing-field wording is rewritten.** Serde says "missing
+/// field", which is true and says nothing about why there is no default;
+/// the rest of what TOML reports — the key it did not expect, the ones it
+/// did, the duplicate, the line and column — is better than anything this
+/// module wrote by hand, and is passed through.
+fn shape(text: &str, e: &toml::de::Error) -> Invalid {
+    let m = e.message();
+    let line = e.span().map_or(0, |s| line_of(text, s.start));
+    if let Some(rest) = m.strip_prefix("missing field ") {
+        return at(line, format!("{rest} is not set, and has no default"));
+    }
+    at(line, e.to_string())
+}
+
+/// The line a spanned value starts on.
+fn line_at<T>(text: &str, s: &Spanned<T>) -> usize {
+    line_of(text, s.span().start)
+}
+
+/// The 1-based line a byte offset falls on.
+fn line_of(text: &str, at: usize) -> usize {
+    text[..at.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1
 }

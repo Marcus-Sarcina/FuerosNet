@@ -6,14 +6,26 @@
 //! configuration rather than protocol: nothing a peer sees is decided in
 //! this file, and a node that hosts nothing is conforming.
 //!
-//! The file is a line at a time, in the shape of the peers file, because
-//! the number of packages and the number of grants are both open and the
-//! configuration refuses a repeated key:
+//! The file is TOML, and stays a file of its own now that it need not be:
+//! what a node hosts and who may reach it is what changes most often, and
+//! an operator regenerating it should not be rewriting the identity, the
+//! listen address and the paths beside it.
 //!
-//! ```text
-//! host  <resource keyhash> <owner keyhash> <authority> <manifest path>
-//! grant <resource keyhash> <member keyhash> connect,reader,writer
+//! ```toml
+//! [[host]]
+//! resource  = "<keyhash>"
+//! owner     = "<keyhash>"
+//! authority = "shop.internal"
+//! manifest  = "packages/shop/manifest"
+//!
+//! [[host.grant]]
+//! member = "<keyhash>"
+//! roles  = ["connect", "reader", "writer"]
 //! ```
+//!
+//! **A grant sits inside the package it grants on**, which is what the
+//! nesting buys: a grant naming a resource nothing hosts was an error the
+//! line format could express and this one cannot.
 //!
 //! **A `host` line names a manifest, not a component.** What a package
 //! declares is the package's, and §9.1 puts the declaration in the
@@ -49,7 +61,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Why a hosting file was refused: the line it was on, and what was wrong
-/// with it.  Line 0 means the file as a whole.
+/// with it.  Line 0 means the file as a whole, which is where everything
+/// but a shape error lands — a package that will not run is about the
+/// package and not about a line in this file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {
     pub line: usize,
@@ -82,112 +96,95 @@ fn keyhash(s: &str) -> Option<Keyhash> {
     Some(out)
 }
 
+/// The file's own shape, before any package is read.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct File {
+    #[serde(default)]
+    host: Vec<HostEntry>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostEntry {
+    resource: String,
+    owner: String,
+    authority: String,
+    manifest: std::path::PathBuf,
+    #[serde(default)]
+    grant: Vec<GrantEntry>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GrantEntry {
+    member: String,
+    roles: Vec<String>,
+}
+
 /// Read `path` and bind what it names into `gateway`.
 ///
-/// **Every package is admitted before any is bound.** A file naming one
-/// package the sandbox refuses leaves the node hosting none of them rather
-/// than some of them: a half-applied configuration is one the operator did
-/// not write, and `service.rs` reports rather than repairs.
+/// **Every package is admitted before any is bound**, and every grant is
+/// checked before that. A file naming one package the sandbox refuses, or
+/// one role the package never declared, leaves the node hosting none of
+/// them rather than some of them: a half-applied configuration is one the
+/// operator did not write, and `service.rs` reports rather than repairs.
 pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize, Refused> {
     let text = std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+    let file: File = toml::from_str(&text).map_err(|e| at(e.span().map_or(0, |s| text[..s.start.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1), e.to_string()))?;
+
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
-    let mut grants: Vec<(Keyhash, Keyhash, Row, usize)> = Vec::new();
+    let mut grants: Vec<(Keyhash, Keyhash, Row)> = Vec::new();
 
-    for (i, raw) in text.lines().enumerate() {
-        let n = i + 1;
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
+    for h in &file.host {
+        let named = |what: &str| format!("{}: {what}", h.manifest.display());
+        let res = keyhash(&h.resource).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", h.resource)))?;
+        let owner = keyhash(&h.owner).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", h.owner)))?;
+        if hosts.iter().any(|(r, _)| *r == res) {
+            return Err(at(0, format!("`{}` is hosted twice", h.resource)));
         }
-        let mut f = line.split_whitespace();
-        match f.next() {
-            Some("host") => {
-                let (Some(res), Some(owner), Some(authority), Some(package)) = (f.next(), f.next(), f.next(), f.next()) else {
-                    return Err(at(n, "`host` is a resource keyhash, an owner keyhash, an authority and a manifest path"));
-                };
-                if f.next().is_some() {
-                    return Err(at(n, "`host` takes four fields"));
-                }
-                let res = keyhash(res).ok_or_else(|| at(n, "the resource keyhash is not 64 lower-case hex digits"))?;
-                let owner = keyhash(owner).ok_or_else(|| at(n, "the owner keyhash is not 64 lower-case hex digits"))?;
-                if hosts.iter().any(|(r, _)| *r == res) {
-                    return Err(at(n, "that resource is already hosted on an earlier line"));
-                }
-                let (manifest, component) = read_manifest(Path::new(package)).map_err(|e| at(n, format!("{package}: {e}")))?;
-                let package_ = instantiate(&manifest).map_err(|e| at(n, format!("{package}: {e}")))?;
-                let bytes = std::fs::read(&component).map_err(|e| at(n, format!("{}: {e}", component.display())))?;
-                let sandbox = Sandbox::admit(&bytes, limits).map_err(|e| at(n, format!("{}: {e}", component.display())))?;
-                let mut declared: Vec<String> = manifest.imports.clone();
-                declared.sort();
-                declared.dedup();
-                if sandbox.reaches() != declared {
-                    return Err(at(
-                        n,
-                        format!("{package}: the manifest declares {declared:?} and the component reaches {:?}", sandbox.reaches()),
-                    ));
-                }
-                hosts.push((
-                    res,
-                    Binding {
-                        owner,
-                        authority: authority.to_string(),
-                        backend: Some(Arc::new(Hosted::new(sandbox))),
-                        declared_roles: package_.roles,
-                    },
-                ));
-            }
-            Some("grant") => {
-                let (Some(res), Some(member), Some(roles)) = (f.next(), f.next(), f.next()) else {
-                    return Err(at(n, "`grant` is a resource keyhash, a member keyhash and a comma-separated role list"));
-                };
-                if f.next().is_some() {
-                    return Err(at(n, "`grant` takes three fields, and a role list carries no spaces"));
-                }
-                let res = keyhash(res).ok_or_else(|| at(n, "the resource keyhash is not 64 lower-case hex digits"))?;
-                let member = keyhash(member).ok_or_else(|| at(n, "the member keyhash is not 64 lower-case hex digits"))?;
-                let named: Vec<&str> = roles.split(',').map(str::trim).filter(|r| !r.is_empty()).collect();
-                let connect = named.contains(&"connect");
-                let mut application = BTreeSet::new();
-                for r in named {
-                    if r == "connect" {
-                        continue;
-                    }
-                    if RESERVED_ROLES.contains(&r) {
-                        return Err(at(n, format!("`{r}` is reserved for the node's own evaluation and is not an application role")));
-                    }
-                    application.insert(r.to_string());
-                }
-                grants.push((res, member, Row { roles: application, connect }, n));
-            }
-            Some(other) => return Err(at(n, format!("`{other}` is not `host` or `grant`"))),
-            None => continue,
+        let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
+        let package = instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
+        let bytes = std::fs::read(&component).map_err(|e| at(0, format!("{}: {e}", component.display())))?;
+        let sandbox = Sandbox::admit(&bytes, limits).map_err(|e| at(0, format!("{}: {e}", component.display())))?;
+        let mut declared: Vec<String> = manifest.imports.clone();
+        declared.sort();
+        declared.dedup();
+        if sandbox.reaches() != declared {
+            return Err(at(0, named(&format!("the manifest declares {declared:?} and the component reaches {:?}", sandbox.reaches()))));
         }
-    }
 
-    // every grant is checked against the package it names before any of
-    // them is applied, for the same reason the packages are all admitted
-    // first: a file the operator did not write is worse than none
-    for (res, _, row, n) in &grants {
-        let Some((_, binding)) = hosts.iter().find(|(r, _)| r == res) else {
-            // a grant for a resource nothing hosts is a typo with no
-            // effect, and keeping it silently would leave the operator
-            // believing they granted something
-            return Err(at(*n, "no `host` line names that resource"));
-        };
-        if row.roles.len() > MAX_ROLES {
-            return Err(at(*n, format!("{} roles is wider than a credential header carries", row.roles.len())));
+        for g in &h.grant {
+            let member = keyhash(&g.member).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", g.member)))?;
+            let connect = g.roles.iter().any(|r| r == "connect");
+            let mut application = BTreeSet::new();
+            for r in &g.roles {
+                if r == "connect" {
+                    continue;
+                }
+                if RESERVED_ROLES.contains(&r.as_str()) {
+                    return Err(at(0, format!("`{r}` is reserved for the node's own evaluation and is not an application role")));
+                }
+                if !package.roles.contains(r) {
+                    return Err(at(0, format!("`{r}` is not a role that package declared")));
+                }
+                application.insert(r.clone());
+            }
+            if application.len() > MAX_ROLES {
+                return Err(at(0, format!("{} roles is wider than a credential header carries", application.len())));
+            }
+            grants.push((res, member, Row { roles: application, connect }));
         }
-        if let Some(r) = row.roles.iter().find(|r| !binding.declared_roles.contains(*r)) {
-            return Err(at(*n, format!("`{r}` is not a role that package declared")));
-        }
+
+        hosts.push((res, Binding { owner, authority: h.authority.clone(), backend: Some(Arc::new(Hosted::new(sandbox))), declared_roles: package.roles }));
     }
 
     let bound = hosts.len();
     for (res, binding) in hosts {
         gateway.bind(res, binding);
     }
-    for (res, member, row, n) in grants {
-        gateway.set_row(res, member, row).map_err(|e| at(n, format!("{e:?}")))?;
+    for (res, member, row) in grants {
+        gateway.set_row(res, member, row).map_err(|e| at(0, format!("{e:?}")))?;
     }
     Ok(bound)
 }

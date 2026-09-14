@@ -101,6 +101,36 @@ impl Daemons {
         p
     }
 
+    /// The identity, peers and configuration one daemon starts from.
+    ///
+    /// One writer for both `start` and `refuses`, because a second copy
+    /// drifts: the bare keys must precede every table header or TOML puts
+    /// them inside the last one, and that is easy to get right once and
+    /// wrong twice.
+    fn write_files(&self, name: &str, dir: &Path, peers: &[&str], up: Option<&(String, SocketAddr)>) -> (PathBuf, PathBuf) {
+        let (config, peers_path) = (dir.join("rhtnd.conf"), dir.join("peers"));
+        write_identity(&dir.join("identity.key"), name);
+        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
+        std::fs::write(&peers_path, list).expect("the peers file");
+        let mut text = String::new();
+        if self.hosting.iter().any(|h| h == name) {
+            text.push_str(&format!("resources = \"{}\"\n", dir.join("hosting").display()));
+        }
+        text.push_str(&format!(
+            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
+            dir.join("identity.key").display(),
+            dir.join("queue").display(),
+            dir.join("prekeys").display(),
+            dir.join("topology").display(),
+            dir.join("archive").display()
+        ));
+        if let Some((key, addr)) = up {
+            text.push_str(&format!("\n[upstream]\nnode = \"{key}\"\naddresses = [\"{addr}\"]\n"));
+        }
+        std::fs::write(&config, text).expect("the configuration");
+        (config, peers_path)
+    }
+
     /// Start `name`, authenticating `peers`, with `upstream` as its patron
     /// where it has one.  Returns where it bound.
     ///
@@ -113,25 +143,7 @@ impl Daemons {
         });
         let dir = self.root.join(name);
         std::fs::create_dir_all(&dir).expect("a directory for the daemon");
-        let (config, peers_path) = (dir.join("rhtnd.conf"), dir.join("peers"));
-        write_identity(&dir.join("identity.key"), name);
-        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
-        std::fs::write(&peers_path, list).expect("the peers file");
-        let mut text = format!(
-            "identity = {}\nlisten = 127.0.0.1:0\nqueue = {}\nprekeys = {}\ntopology = {}\narchive = {}\nheartbeat = 30\ningestion = unverified-gossip\nallowance = 120/60\n",
-            dir.join("identity.key").display(),
-            dir.join("queue").display(),
-            dir.join("prekeys").display(),
-            dir.join("topology").display(),
-            dir.join("archive").display()
-        );
-        if let Some((key, addr)) = &up {
-            text.push_str(&format!("upstream = {key} {addr}\n"));
-        }
-        if self.hosting.iter().any(|h| h == name) {
-            text.push_str(&format!("resources = {}\n", dir.join("hosting").display()));
-        }
-        std::fs::write(&config, text).expect("the configuration");
+        let (config, peers_path) = self.write_files(name, &dir, peers, up.as_ref());
         let mut d = Daemon {
             name: name.to_string(),
             keyhash: test_identity(name).public.keyhash,
@@ -153,22 +165,7 @@ impl Daemons {
     /// of what an operator gets.
     pub fn refuses(&mut self, name: &str, peers: &[&str]) -> String {
         let dir = self.dir(name);
-        let (config, peers_path) = (dir.join("rhtnd.conf"), dir.join("peers"));
-        write_identity(&dir.join("identity.key"), name);
-        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
-        std::fs::write(&peers_path, list).expect("the peers file");
-        let mut text = format!(
-            "identity = {}\nlisten = 127.0.0.1:0\nqueue = {}\nprekeys = {}\ntopology = {}\narchive = {}\nheartbeat = 30\ningestion = unverified-gossip\nallowance = 120/60\n",
-            dir.join("identity.key").display(),
-            dir.join("queue").display(),
-            dir.join("prekeys").display(),
-            dir.join("topology").display(),
-            dir.join("archive").display()
-        );
-        if self.hosting.iter().any(|h| h == name) {
-            text.push_str(&format!("resources = {}\n", dir.join("hosting").display()));
-        }
-        std::fs::write(&config, text).expect("the configuration");
+        let (config, peers_path) = self.write_files(name, &dir, peers, None);
         let out = Command::new(&self.exe).arg(&config).arg(&peers_path).output().expect("the daemon runs");
         assert!(!out.status.success(), "{name} was expected not to start, and it did");
         format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))

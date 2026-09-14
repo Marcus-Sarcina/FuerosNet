@@ -50,7 +50,7 @@ fn layout(tag: &str) -> Layout {
     std::fs::write(
         &config,
         format!(
-            "identity = {}\nlisten = 127.0.0.1:0\nqueue = {}\nprekeys = {}\ntopology = {}\narchive = {}\nheartbeat = 30\ningestion = unverified-gossip\nallowance = 120/60\n",
+            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
             dir.join("identity.key").display(),
             queue.display(),
             dir.join("prekeys").display(),

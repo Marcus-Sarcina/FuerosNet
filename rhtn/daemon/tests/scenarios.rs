@@ -52,7 +52,13 @@ fn client_cfg(name: &str) -> ClientConfig {
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
         tls: Arc::new(Mutex::new(Default::default())),
-        connect_timeout: Duration::from_secs(5),
+        // **a dial's patience, and not a claim.**  Nothing in these
+        // scenarios is about how fast a handshake completes; what makes
+        // this generous is that they run beside each other, each starting
+        // its own processes, one of which compiles a WebAssembly component
+        // before it serves.  Five seconds of post-quantum handshake on a
+        // loaded machine is a test that fails for the machine's reasons.
+        connect_timeout: Duration::from_secs(30),
         on_reachability: None,
         log: Log::default(),
     }
@@ -289,11 +295,10 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     set.hosting(
         "alice",
         &format!(
-            "# what this node hosts, and who may reach it\nhost {} {} shop.internal {}\ngrant {} {} connect,reader\n",
+            "# what this node hosts, and who may reach it\n[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\n\n[[host.grant]]\nmember = \"{}\"\nroles = [\"connect\", \"reader\"]\n",
             hex(&shop),
             hex(&kh("w1")),
             manifest.display(),
-            hex(&shop),
             hex(&kh("w1"))
         ),
     );
@@ -326,6 +331,14 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     std::fs::write(&bad, rhtn_sim::packages::reaching("wasi:sockets/network@0.2.0")).expect("a package on disk");
     let bad_manifest = set.dir("bob").join("bad.manifest");
     std::fs::write(&bad_manifest, "roles = reader\ncomponent = bad.wasm\n").expect("a manifest that does not mention it");
-    set.hosting("bob", &format!("host {} {} shop.internal {}\n", hex(&shop), hex(&kh("w1")), bad_manifest.display()));
+    set.hosting(
+        "bob",
+        &format!(
+            "[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\n",
+            hex(&shop),
+            hex(&kh("w1")),
+            bad_manifest.display()
+        ),
+    );
     assert!(set.refuses("bob", &CAST).contains("wasi:sockets/network@0.2.0"), "the daemon says which binding it would not give");
 }
