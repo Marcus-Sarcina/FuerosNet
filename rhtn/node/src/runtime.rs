@@ -284,11 +284,23 @@ impl LiveNode {
         // attach: a node never told holds an empty set, forwards the flood
         // to nobody it serves, and stores none of their own transactions
         // either, since §10.1.1's `h_store` counts them too.
+        //
+        // **And a new adjacency is where reconciliation belongs.**
+        // §10.1.3 makes reconciliation a replay of the same frames rather
+        // than a mechanism of its own, and a session coming up is the
+        // moment two stores have never been compared: without this the
+        // party that attaches sees nothing this node already holds, and an
+        // endpoint record made before the session existed reaches nobody.
+        // The section also asks for a *periodic* replay with siblings and
+        // the patron, which is not here: its interval is an operator's
+        // number and no document states one.
         let attached = view.clone();
+        let reconcile = adjacency.clone();
         cfg.on_attach = Some(Arc::new(move |peer, up| {
             let mut v = attached.lock().unwrap();
             if up {
                 v.attached.insert(peer);
+                v.replay_to(&reconcile, &peer);
             } else {
                 v.attached.remove(&peer);
             }
@@ -508,6 +520,11 @@ impl LiveNode {
             AttachOutcome::Attached(mut session) => {
                 *self.upstream_addr.lock().unwrap() = Some(session.conn.remote_address());
                 self.adjacency.upstream.lock().unwrap().insert(serving, UpstreamSession { outbound: session.outbound.clone(), conn: session.conn.clone() });
+                // the same reconciliation from the attaching side: the
+                // patron accepted a session and holds nothing this node
+                // has, including the endpoint record that says this node
+                // is infrastructure (`wire-format.md` §7.6, §10.1.3)
+                self.view.lock().unwrap().replay_to(&self.adjacency, &serving);
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
                 let (v, i, a, s) = (self.view.clone(), self.ids.clone(), self.adjacency.clone(), self.adjacency.node.clone());

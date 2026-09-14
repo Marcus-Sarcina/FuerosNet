@@ -88,6 +88,11 @@ async fn tree() -> Tree {
 #[tokio::test]
 async fn a_push_crosses_two_real_sessions() {
     let mut t = tree().await;
+    // **what P has already heard is not zero.**  N reconciled when it
+    // attached (`wire-format.md` §10.1.3), which handed P the endpoint
+    // record N published at start; the claim below is about the push, so
+    // it is measured from here rather than from nothing
+    let before = t.p.node.log.count(|e| matches!(e, Event::Received { frame_type: 5 }));
     // w1 adopted under N: its patron is N itself, so it is in N's h_store,
     // and one edge below P's subordinate, so in P's
     let obj = t.signers.adopt("w1", "bob", "alice", &[0, 3], 3);
@@ -116,7 +121,11 @@ async fn a_push_crosses_two_real_sessions() {
     let held = t.c_view.lock().unwrap().store.transaction(&obj.txid).map(|r| r.bytes.clone()).unwrap();
     assert_eq!(held, obj.bytes, "byte for byte");
     // and P did not get it back: N's forwarding excluded the arrival session
-    assert!(t.p.node.log.count(|e| matches!(e, Event::Received { frame_type: 5 })) == 0, "nothing came back up to P");
+    assert_eq!(
+        t.p.node.log.count(|e| matches!(e, Event::Received { frame_type: 5 })),
+        before,
+        "nothing came back up to P"
+    );
     drop(t.upstream);
 }
 

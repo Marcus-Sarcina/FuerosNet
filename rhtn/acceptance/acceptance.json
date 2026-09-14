@@ -9512,24 +9512,29 @@
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
-   "wire-format.md §7.7.1",
+   "wire-format.md §7.6",
+   "wire-format.md §10.1.3",
    "design §12.6.1"
   ],
   "rule": [
    {
-    "where": "wire-format.md §7.7.1",
-    "text": "The serving node resolves on the client's behalf and returns the\nresult."
+    "where": "wire-format.md §7.6",
+    "text": "Published by infra nodes only."
+   },
+   {
+    "where": "wire-format.md §10.1.3",
+    "text": "reconciliation is a\nreplay of the same frames rather than a distinct mechanism"
    },
    {
     "where": "design §12.6.1",
-    "text": "empty means the addressed party is the node itself, non-empty means the\nlast hop forwards to an attached client"
+    "text": "A node refers when the\npath leads into another infra node's subtree, and answers when it does not."
    }
   ],
-  "given": "A daemon process started from its own configuration with nothing pre-seeded, and a client attached to it over a session.",
-  "when": "Two adoptions are pushed into it over a session, and a resolution for the party at the end of the resulting path is then requested on a stream.",
-  "then": "It answers on the stream with the nonce it was asked with, and either serves the request itself with a residual suffix and endpoints or refers onward with a positive advance and endpoints. A subject on a path it holds no record for is a stated failure rather than a hang or a silence.",
+  "given": "A daemon process started with nothing pre-seeded, and a client attached to it over a session.",
+  "when": "Two adoptions are pushed into it over a session, a second process is then started as the subject of the first adoption, a resolution is requested for the party at the end of the path, and a further client attaches after every record has arrived.",
+  "then": "It answers on the stream with the nonce it was asked with, and refers to the second process rather than serving for itself, because that process published an endpoint record and only infra nodes publish. The referral advances at least one nibble and names where to reach the next hop. The client that attached late is replayed the records it never saw arrive. A subject on a path it holds no record for is a stated failure rather than a hang or a silence.",
   "oracle": "behaviour",
-  "interpretation": "Which node the answer names is not fixed here. Nothing in a running node marks another node as infrastructure, so the nearest infrastructure ancestor a table can see is the node itself; whether publishing an endpoint record is what marks a publisher infra is unsettled."
+  "interpretation": "A session coming up is where the replay happens. The section also asks for a periodic reconciliation with siblings and patron, whose interval no document states; that half is not implemented."
  },
  {
   "id": "RSC-30",
@@ -9772,5 +9777,32 @@
   "then": "Each is refused at configuration with the line and the name, rather than at request time. A file refused anywhere in it binds nothing from anywhere else in it. A grant of the declared roles is applied, and a grant without connect is a row an operator may write.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "PRP-24",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "An endpoint record is what says its publisher is infrastructure",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.6",
+   "design §12.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.6",
+    "text": "Published by infra nodes only."
+   },
+   {
+    "where": "design §12.6.1",
+    "text": "A node refers when the\npath leads into another infra node's subtree, and answers when it does not."
+   }
+  ],
+  "given": "A node holding a subtree three edges deep, whose table marks nobody but itself as infrastructure.",
+  "when": "An endpoint record for a node inside its store reach arrives, and one for a node outside it, and the table is later rebuilt from the store alone.",
+  "then": "Holding the record is what marks its publisher, so the nearest infrastructure node above a party below it moves from this node to the publisher. A record outside store reach marks nothing, because the mark follows storage and never the wire. A rebuild reaches the same set from the store, and does not lose the node's own mark.",
+  "oracle": "behaviour",
+  "interpretation": "There is no unmarking: §7.6 gives a record a successor and no retraction, so a node that stopped being infrastructure leaves its records standing in every horizon that stored them."
  }
 ]

@@ -179,7 +179,11 @@ impl Table {
         }
     }
 
-    /// Mark a node as infrastructure (design §12.6.3).
+    /// Mark a node as infrastructure.
+    ///
+    /// A node marks itself, and marks another when it holds an endpoint
+    /// record it published: `wire-format.md` §7.6 has only infra nodes
+    /// publish, which makes the record the evidence [author, 2026-09-14].
     pub fn mark_infra(&mut self, k: Keyhash) {
         self.infra.insert(k);
         self.nodes.insert(k);

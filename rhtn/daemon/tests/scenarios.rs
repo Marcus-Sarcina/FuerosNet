@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const CAST: [&str; 5] = ["alice", "bob", "carol", "w1", "witness"];
+const CAST: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "witness"];
 
 fn id(n: &str) -> SigningIdentity {
     test_identity(n)
@@ -206,7 +206,6 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     use rhtn_node::resolution::{Path, REQUEST_RESOLVE, ResolveReply, ResolveRequest};
     let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "resolve");
     let p_addr = set.start("alice", &CAST, None);
-    set.start("bob", &CAST, Some("alice"));
 
     // the topology the daemon will answer from arrives the way any peer's
     // does: over a session, into a process that was told nothing
@@ -224,32 +223,50 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     }
     assert!(awaits(&mut observer, c_adopt.txid, 5000).await, "and the second");
 
+    // **N starts after it has been adopted**, which is the order a
+    // deployment has: a node is adopted, its patron countersigns, and the
+    // node then attaches.  It matters here because an endpoint record for
+    // a node P has never heard of is outside P's store reach and is
+    // dropped, and nothing re-offers it.
+    set.start("bob", &CAST, Some("alice"));
+
     // **the answer comes off a request stream against the process.**  P is
     // the anchor, so it walks the path from itself over the table those two
-    // records built
+    // records built — and it refers rather than answering because N
+    // published an endpoint record, which `wire-format.md` §7.6 has only
+    // an infra node do [author, 2026-09-14].  The record reaches P when N
+    // attaches and reconciles, so this waits for it rather than assuming
+    // the attach has completed.
     let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Path::from_indices(&[0, 2]).bytes, nibbles: 2, nonce: [8; 16] };
-    let bytes = observer.request(REQUEST_RESOLVE, &req.encode()).await.expect("the daemon answers on the stream");
-    let reply = ResolveReply::decode(&bytes).expect("a reply");
-    assert_eq!(reply.nonce(), [8; 16], "the nonce it was asked with");
-    match reply {
-        // **which node it names is not asserted here.**  A node's table
-        // learns nobody else is infrastructure — nothing in a running node
-        // ever marks another one — so the nearest infrastructure ancestor
-        // it can see is always itself, and it answers for itself with the
-        // residual that identifies the target.  Whether an endpoint record
-        // is what marks a publisher infra (`wire-format.md` §7.6: only
-        // infra nodes publish) is a question for the author, so this
-        // asserts what is unambiguous and leaves that open.
-        ResolveReply::Serving { serving, .. } => {
-            assert!(!serving.residual.is_empty(), "a residual suffix identifies the party below the node named");
-            assert!(!serving.endpoints.is_empty(), "with somewhere to reach it");
-        }
-        ResolveReply::Referral { referral, .. } => {
+    let mut last = None;
+    for _ in 0..50 {
+        let bytes = observer.request(REQUEST_RESOLVE, &req.encode()).await.expect("the daemon answers on the stream");
+        let reply = ResolveReply::decode(&bytes).expect("a reply");
+        assert_eq!(reply.nonce(), [8; 16], "the nonce it was asked with");
+        if let ResolveReply::Referral { referral, .. } = reply {
+            assert_eq!(referral.next, kh("bob"), "P refers into the subtree of the infra node one hop down");
             assert!(referral.advances >= 1, "a referral that advances nothing is a loop");
             assert!(!referral.endpoints.is_empty(), "and names where the next hop is");
+            last = None;
+            break;
         }
-        other => panic!("a resolution the daemon holds the topology for: {other:?}"),
+        // the whole reply is a page of key material; what a failure needs
+        // is which answer it settled on
+        last = Some(match reply {
+            ResolveReply::Serving { serving, .. } => format!("serving {}, residual {:?}", hex(&serving.node), serving.residual.bytes),
+            ResolveReply::Failure { code, .. } => format!("failure {code}"),
+            ResolveReply::Referral { .. } => unreachable!("taken above"),
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    assert!(last.is_none(), "P never learned N is infrastructure, and answered {}", last.unwrap_or_default());
+
+    // **a party that attaches late is reconciled with, not left behind.**
+    // §10.1.3 makes reconciliation a replay of the same frames, and this
+    // one arrives after every record did: nothing is pushed to it, and it
+    // is handed what the process holds because its session came up.
+    let mut late = attach_to("w2", kh("alice"), p_addr).await;
+    assert!(awaits(&mut late, c_adopt.txid, 5000).await, "the store it never saw arrive is replayed to it");
 
     // a subject in no record it holds is a failure it can state, not a hang
     let unknown = ResolveRequest { subject: kh("w1"), anchor: kh("alice"), path: Path::from_indices(&[9]).bytes, nibbles: 1, nonce: [9; 16] };

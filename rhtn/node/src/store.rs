@@ -210,6 +210,20 @@ impl TopologyStore {
         self.endpoints.iter().filter(|((s, _), _)| s == subject).map(|(_, h)| &h.record).collect()
     }
 
+    /// The nodes this store holds an endpoint record for.
+    ///
+    /// **`wire-format.md` §7.6 has only infra nodes publish**, so holding
+    /// a record is what tells a node that another node is infrastructure
+    /// [author, 2026-09-14].  The record is the only carrier of that fact
+    /// there is: a light client's endpoints arrive when it attaches and it
+    /// holds no static address, so nothing else distinguishes the two from
+    /// outside.  Storage already bounds this to the horizon, since
+    /// `accept_endpoint` refuses a record for a node further than two
+    /// edges away.
+    pub fn publishers(&self) -> BTreeSet<Keyhash> {
+        self.endpoints.keys().map(|(n, _)| *n).collect()
+    }
+
     pub fn endpoint_in(&self, subject: &Keyhash, series: u32) -> Option<&EndpointRecord> {
         self.endpoints.get(&(*subject, series)).map(|h| &h.record)
     }

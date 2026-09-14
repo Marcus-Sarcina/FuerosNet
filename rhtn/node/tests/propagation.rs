@@ -700,3 +700,51 @@ async fn a_running_node_learns_who_is_attached_to_it_and_forwards_to_them() {
     drop(session);
     assert!(until(5000, || !node.view.lock().unwrap().attached.contains(&kh("carol"))).await, "and forgotten when the session ends");
 }
+
+// acceptance: PRP-24
+#[test]
+fn an_endpoint_record_is_what_says_its_publisher_is_infrastructure() {
+    // **the scene's own table is not used here.**  `table_with` marks the
+    // names it is given, which is what every other test in this file
+    // wants and is exactly the state a running node has to derive for
+    // itself.  This one starts from a table that marks nobody.
+    let mut w = World::new();
+    let (a_n, _) = w.adopt("bob", "alice", 1);
+    let (a_s1, _) = w.adopt("carol", "bob", 2);
+    let (a_s2, _) = w.adopt("w1", "bob", 3);
+    let (a_s3, _) = w.adopt("w2", "carol", 4);
+    let records = [&a_n, &a_s1, &a_s2, &a_s3];
+    // the node's own mark and nobody else's, which is where a running
+    // node starts
+    let mut n = view("bob", table_with(kh("bob"), &w, &records, &["bob"]), "alice", &[0]);
+    n.set_now(w.clock + 3600);
+    let fab = Fabric::with(&[kh("alice"), kh("carol"), kh("w1")]);
+
+    assert!(n.table.is_infra(&kh("bob")), "a node is infrastructure to itself");
+    for other in ["alice", "carol", "w1", "w2"] {
+        assert!(!n.table.is_infra(&kh(other)), "{other} has published nothing, and nothing else says it");
+    }
+    assert_eq!(n.table.serving_node(&kh("w2")), Some(kh("bob")), "so the nearest one it can see above S3 is itself");
+
+    // S1 publishes, which `wire-format.md` §7.6 has only an infra node do
+    let rec = er("carol", &[point(1, 5000)], Seqno { series: 2, counter: 1 });
+    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &rec), &ids()), Decision::Stored);
+    assert!(n.table.is_infra(&kh("carol")), "and holding the record is what tells N");
+    assert_eq!(n.table.serving_node(&kh("w2")), Some(kh("carol")), "S3 is served by S1 now, not by N");
+    assert!(!n.table.is_infra(&kh("w1")), "and nobody else is marked by it");
+
+    // a record for a node outside the store reach marks nothing, because
+    // the mark follows storage and never the wire
+    let far = er("w4", &[point(1, 5001)], Seqno { series: 9, counter: 1 });
+    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &far), &ids()), Decision::OutOfStore);
+    assert!(!n.table.is_infra(&kh("w4")));
+
+    // and the mark is derived, so a restart that replays reaches it again
+    let mut fresh = view("bob", table_with(kh("bob"), &w, &records, &[]), "alice", &[0]);
+    assert!(!fresh.table.is_infra(&kh("bob")), "a table nothing has marked");
+    std::mem::swap(&mut fresh.store, &mut n.store);
+    assert!(!fresh.table.is_infra(&kh("carol")), "the table it starts from holds no mark");
+    fresh.rebuild_from_store(&ids());
+    assert!(fresh.table.is_infra(&kh("carol")), "the store it replays carries the record that makes one");
+    assert!(fresh.table.is_infra(&kh("bob")), "and a rebuild does not lose the node's own mark");
+}

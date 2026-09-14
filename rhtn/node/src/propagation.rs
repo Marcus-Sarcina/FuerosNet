@@ -7,7 +7,7 @@
 //! reads one.
 
 use crate::resolution::Path;
-use crate::store::{Decision, Horizon, KIND_TRANSACTION};
+use crate::store::{Decision, EndpointRecord, Horizon, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash, Txid};
 use rhtn_archive::record::Record;
@@ -236,6 +236,18 @@ impl NodeView {
                         self.originate_memo(adj, slot);
                     }
                 }
+                // **an endpoint record is what says its subject is
+                // infrastructure** (`wire-format.md` §7.6: published by
+                // infra nodes only) [author, 2026-09-14].  Nothing else
+                // carries the fact: a light client's endpoints arrive when
+                // it attaches, so a node that did not read this from a
+                // record would hold no infrastructure but itself and could
+                // never refer (design §12.6.1).
+                if kind == KIND_ENDPOINT_RECORD
+                    && let Ok(er) = EndpointRecord::parse(object)
+                {
+                    self.table.mark_infra(er.node);
+                }
             }
             Decision::Conflict { subject, .. } => {
                 // repair by re-resolving (§10.1.2, §7.7)
@@ -373,8 +385,29 @@ impl NodeView {
         for bytes in &records {
             self.apply_stored(bytes, ids);
         }
+        self.mark_infrastructure();
         self.adopt_own_position();
         Rebuilt { records: records.len() }
+    }
+
+    /// Mark this node, and every node this store holds an endpoint record
+    /// for, as infrastructure.
+    ///
+    /// The derivation is a fold over the store rather than a thing kept
+    /// beside it, so a restart that replays reaches the same set and one
+    /// that folds a snapshot reaches it too.  This node's own mark is
+    /// restated here because a rebuild replaces the table, and the mark
+    /// `NodeView::new` made would otherwise be lost by the one operation
+    /// that is supposed to reconstruct it.  There is no unmarking: §7.6
+    /// gives a record a successor and no retraction, and a node that
+    /// stopped being infrastructure would leave the records it published
+    /// standing in every horizon that stored them.
+    fn mark_infrastructure(&mut self) {
+        let me = self.me();
+        self.table.mark_infra(me);
+        for n in self.store.publishers() {
+            self.table.mark_infra(n);
+        }
     }
 
     /// Take this node's own position from the binding the table settled on,
@@ -702,6 +735,10 @@ impl NodeView {
                 for bytes in &later {
                     self.apply_stored(bytes, ids);
                 }
+                // the snapshot's own table carries the marks it folded in,
+                // and this covers the records that arrived after it: a
+                // watermark over transactions says nothing about them
+                self.mark_infrastructure();
                 self.adopt_own_position();
                 if later.is_empty() { Restored::Current } else { Restored::Extended { folded: later.len() } }
             }
