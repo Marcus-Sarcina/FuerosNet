@@ -2947,7 +2947,7 @@ answer retains is denial (design §12.6.1, design §18.4).
 
 **The reply is not signed.** It conveys where to try next, and the requester
 authenticates the endpoint it reaches by ordinary means at contact time (design
-design §12.2, the anchor table is an index, not a credential store). A wrong or hostile
+§12.2, the anchor table is an index, not a credential store). A wrong or hostile
 reply causes a failed connection, not a false identity.
 
 **Failure codes** for field 4, with the disposition each implies — stated
