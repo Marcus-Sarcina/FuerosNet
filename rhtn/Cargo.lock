@@ -1288,6 +1288,7 @@ dependencies = [
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-node",
+ "rhtn-resources",
  "rhtn-sim",
  "rhtn-transport",
  "tokio",
@@ -1339,8 +1340,8 @@ version = "0.1.0"
 dependencies = [
  "rhtn-archive",
  "rhtn-node",
+ "rhtn-sim",
  "wasmtime",
- "wat",
 ]
 
 [[package]]
@@ -1356,6 +1357,7 @@ dependencies = [
  "rhtn-transport",
  "serde_json",
  "tokio",
+ "wat",
 ]
 
 [[package]]

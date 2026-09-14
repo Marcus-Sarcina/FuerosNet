@@ -66,6 +66,10 @@ pub struct Daemons {
     root: PathBuf,
     /// In the order they were started, which is the order they are stopped.
     daemons: Vec<Daemon>,
+    /// Hosting files written before a daemon starts, by name.  A scenario
+    /// that gives a daemon packages writes them first, because the daemon
+    /// admits them before it serves.
+    hosting: Vec<String>,
 }
 
 impl Daemons {
@@ -76,7 +80,25 @@ impl Daemons {
         let root = std::env::temp_dir().join(format!("rhtn-daemons-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("a directory for the set");
-        Daemons { exe: exe.into(), root, daemons: Vec::new() }
+        Daemons { exe: exe.into(), root, daemons: Vec::new(), hosting: Vec::new() }
+    }
+
+    /// The directory `name`'s files live in, made if it is not there yet,
+    /// so a scenario can put a package beside the configuration before the
+    /// process reads either.
+    pub fn dir(&self, name: &str) -> PathBuf {
+        let d = self.root.join(name);
+        std::fs::create_dir_all(&d).expect("a directory for the daemon");
+        d
+    }
+
+    /// Write `name`'s hosting file, to be named by the configuration when
+    /// it starts.  Called before `start`.
+    pub fn hosting(&mut self, name: &str, text: &str) -> PathBuf {
+        let p = self.dir(name).join("hosting");
+        std::fs::write(&p, text).expect("the hosting file");
+        self.hosting.push(name.to_string());
+        p
     }
 
     /// Start `name`, authenticating `peers`, with `upstream` as its patron
@@ -106,6 +128,9 @@ impl Daemons {
         if let Some((key, addr)) = &up {
             text.push_str(&format!("upstream = {key} {addr}\n"));
         }
+        if self.hosting.iter().any(|h| h == name) {
+            text.push_str(&format!("resources = {}\n", dir.join("hosting").display()));
+        }
         std::fs::write(&config, text).expect("the configuration");
         let mut d = Daemon {
             name: name.to_string(),
@@ -120,6 +145,33 @@ impl Daemons {
         let addr = d.addr;
         self.daemons.push(d);
         addr
+    }
+
+    /// Start `name` expecting it not to come up, and return what it said
+    /// on the way out.  A configuration a daemon will not accept is part
+    /// of what a configuration file is for, and the message is the whole
+    /// of what an operator gets.
+    pub fn refuses(&mut self, name: &str, peers: &[&str]) -> String {
+        let dir = self.dir(name);
+        let (config, peers_path) = (dir.join("rhtnd.conf"), dir.join("peers"));
+        write_identity(&dir.join("identity.key"), name);
+        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
+        std::fs::write(&peers_path, list).expect("the peers file");
+        let mut text = format!(
+            "identity = {}\nlisten = 127.0.0.1:0\nqueue = {}\nprekeys = {}\ntopology = {}\narchive = {}\nheartbeat = 30\ningestion = unverified-gossip\nallowance = 120/60\n",
+            dir.join("identity.key").display(),
+            dir.join("queue").display(),
+            dir.join("prekeys").display(),
+            dir.join("topology").display(),
+            dir.join("archive").display()
+        );
+        if self.hosting.iter().any(|h| h == name) {
+            text.push_str(&format!("resources = {}\n", dir.join("hosting").display()));
+        }
+        std::fs::write(&config, text).expect("the configuration");
+        let out = Command::new(&self.exe).arg(&config).arg(&peers_path).output().expect("the daemon runs");
+        assert!(!out.status.success(), "{name} was expected not to start, and it did");
+        format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
     }
 
     pub fn get(&self, name: &str) -> &Daemon {
@@ -184,11 +236,23 @@ fn spawn(exe: &Path, config: &Path, peers: &Path, slot: &mut Option<Child>) -> S
         .arg(config)
         .arg(peers)
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap_or_else(|e| panic!("{} starts: {e}", exe.display()));
     let mut out = BufReader::new(child.stdout.take().expect("stdout"));
+    let mut err = child.stderr.take().expect("stderr");
     let mut line = String::new();
     out.read_line(&mut line).expect("the daemon says where it is serving");
+    // a daemon that refused its configuration said why before it exited,
+    // and a harness that swallows that turns every configuration mistake
+    // into the same unhelpful failure
+    if line.trim().is_empty() {
+        use std::io::Read;
+        let mut said = String::new();
+        let _ = err.read_to_string(&mut said);
+        let _ = child.wait();
+        panic!("the daemon did not start: {}", said.trim());
+    }
     let addr = line
         .trim()
         .rsplit_once(' ')
@@ -246,6 +310,7 @@ fn write_identity(path: &Path, name: &str) {
     }
 }
 
-fn hex(b: &[u8]) -> String {
+/// Lower-case hex, which is the only form a keyhash is written in.
+pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }

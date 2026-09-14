@@ -14,6 +14,7 @@ use rhtn_node::resolution::AnchorTable;
 use rhtn_node::runtime::{LiveNode, RateLimit};
 use rhtn_node::store::TopologyStore;
 use rhtn_node::view::NodeView;
+use rhtn_resources::Limits;
 use rhtn_transport::session::NodeConfig;
 use rhtn_transport::tls::Pins;
 use std::path::Path;
@@ -36,6 +37,8 @@ pub enum Startup {
     Peers(String),
     /// State that must survive a restart could not be read.
     State(String),
+    /// A package the configuration named could not be hosted.
+    Hosting(String),
 }
 
 impl std::fmt::Display for Startup {
@@ -44,6 +47,7 @@ impl std::fmt::Display for Startup {
             Startup::Identity(s) => write!(f, "identity: {s}"),
             Startup::Peers(s) => write!(f, "peers: {s}"),
             Startup::State(s) => write!(f, "state: {s}"),
+            Startup::Hosting(s) => write!(f, "hosting: {s}"),
         }
     }
 }
@@ -121,8 +125,7 @@ pub struct Service {
     archive: std::path::PathBuf,
     /// Whether this node runs a backend of its own for any resource, which
     /// is what an operator is told (`infra-client-requirements.md` §10.6).
-    /// No resource is bound from a configuration yet, so it is false until
-    /// `rhtn-resources` gives the daemon packages to host.
+    /// True when the hosting file bound at least one package.
     hosts_resources: bool,
     /// The upstream session, held for as long as the daemon runs: dropping
     /// it ends the attachment.
@@ -196,6 +199,19 @@ impl Service {
             view.serving_node = Some(*patron);
         }
 
+        // the packages this node was told to host, admitted before it
+        // serves: a node that binds a resource it cannot run answers a
+        // request with an unavailable it could have refused at start
+        let hosts_resources = match &cfg.resources {
+            None => false,
+            Some(path) => {
+                let (memory, fuel) = cfg.resource_limits.unwrap_or((Limits::default().memory, Limits::default().fuel));
+                let limits = Limits { memory, fuel, ..Limits::default() };
+                let bound = crate::hosting::apply(&mut view.resources, path, limits).map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                bound > 0
+            }
+        };
+
         let mut node_cfg = NodeConfig::defaults(me.clone(), pins.clone(), cfg.heartbeat_secs);
         node_cfg.listen = Some(cfg.listen);
         node_cfg.queue = queue;
@@ -226,7 +242,7 @@ impl Service {
                 }
             }
         };
-        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), archive: cfg.archive.clone(), hosts_resources: false, _upstream: upstream })
+        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), archive: cfg.archive.clone(), hosts_resources, _upstream: upstream })
     }
 
     /// What this node's configuration exposes the identities below it to

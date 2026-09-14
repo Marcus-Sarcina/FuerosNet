@@ -10,6 +10,7 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-transport = { path = "../transport" }
 rhtn-node = { path = "../node" }
+wat = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
 

@@ -71,6 +71,16 @@ pub struct Config {
     /// history from its first transaction, which no horizon bounds
     /// (design §10, `wire-format.md` §3.1).
     pub archive: PathBuf,
+    /// Where the packages this node hosts are listed, and who may reach
+    /// them (`infra-client-requirements.md` §9, §10).  Absent hosts
+    /// nothing, which §9 makes a conforming state rather than a defect:
+    /// **not meeting a package's requirements is ordinary capacity**, and
+    /// declining to host at all is the same fact.
+    pub resources: Option<PathBuf>,
+    /// What one request to a hosted package may spend: a memory ceiling in
+    /// bytes and an instruction budget.  The values are the operator's; no
+    /// document fixes either.
+    pub resource_limits: Option<(usize, u64)>,
 }
 
 /// Why a configuration was refused: the line it was on, and what was wrong
@@ -146,8 +156,10 @@ impl Config {
         // an unknown key is a refusal, not something to ignore: a
         // misspelled one would otherwise take a value the operator meant
         // to set
-        const KEYS: [&str; 11] =
-            ["identity", "listen", "upstream", "queue", "queue-cap", "heartbeat", "ingestion", "allowance", "prekeys", "topology", "archive"];
+        const KEYS: [&str; 13] = [
+            "identity", "listen", "upstream", "queue", "queue-cap", "heartbeat", "ingestion", "allowance", "prekeys", "topology", "archive",
+            "resources", "resource-limits",
+        ];
         if let Some((k, _, n)) = seen.iter().find(|(k, _, _)| !KEYS.contains(&k.as_str())) {
             return Err(at(*n, format!("`{k}` is not a configuration key")));
         }
@@ -195,6 +207,20 @@ impl Config {
             _ => return Err(at(in_, "`ingestion` is `verified-on-acceptance` or `unverified-gossip`")),
         };
 
+        let resources = take("resources").map(|(v, _)| PathBuf::from(v));
+        let resource_limits = match take("resource-limits") {
+            None => None,
+            Some((v, n)) => {
+                let (mem, fuel) = v.split_once(char::is_whitespace).ok_or_else(|| at(n, "`resource-limits` is a memory ceiling in bytes then an instruction budget"))?;
+                let mem: usize = mem.trim().parse().map_err(|_| at(n, "`resource-limits` memory ceiling is not a count of bytes"))?;
+                let fuel: u64 = fuel.trim().parse().map_err(|_| at(n, "`resource-limits` instruction budget is not a count"))?;
+                if mem == 0 || fuel == 0 {
+                    return Err(at(n, "`resource-limits` of zero admits a package and then runs none of it"));
+                }
+                Some((mem, fuel))
+            }
+        };
+
         let (allowance, an) = need("allowance")?;
         let (count, window) = allowance.split_once('/').ok_or_else(|| at(an, "`allowance` is `requests/seconds`"))?;
         let count: u32 = count.trim().parse().map_err(|_| at(an, "`allowance` request count is not a number"))?;
@@ -215,6 +241,8 @@ impl Config {
             prekeys: PathBuf::from(prekeys),
             topology: PathBuf::from(topology),
             archive: PathBuf::from(archive),
+            resources,
+            resource_limits,
         })
     }
 }

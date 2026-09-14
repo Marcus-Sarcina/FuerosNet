@@ -13,7 +13,7 @@ use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::{Identity, SigningIdentity};
 use rhtn_node::propagation::encode_push;
 use rhtn_node::store::KIND_TRANSACTION;
-use rhtn_sim::daemons::Daemons;
+use rhtn_sim::daemons::{Daemons, hex};
 use rhtn_transport::session::*;
 use rhtn_transport::tls::{self, Pins};
 use std::collections::BTreeMap;
@@ -255,4 +255,60 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     let unknown = ResolveRequest { subject: kh("w1"), anchor: kh("alice"), path: Path::from_indices(&[9]).bytes, nibbles: 1, nonce: [9; 16] };
     let bytes = observer.request(REQUEST_RESOLVE, &unknown.encode()).await.expect("answered");
     assert!(matches!(ResolveReply::decode(&bytes).expect("a reply"), ResolveReply::Failure { .. }), "a path it cannot walk is a stated failure");
+}
+
+// acceptance: DMN-19
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request_to_it() {
+    use rhtn_archive::catalog::{REQUEST_RESOURCE, ResourceRequest, ResourceResponse, STATUS_DELIVERED, STATUS_REFUSED};
+
+    let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "hosting");
+    let package = set.dir("alice").join("echo.wasm");
+    std::fs::write(&package, rhtn_sim::packages::echo()).expect("a package on disk");
+    let manifest = set.dir("alice").join("echo.manifest");
+    std::fs::write(&manifest, "roles = reader,writer\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n").expect("its manifest beside it");
+    let shop = [9u8; 32];
+    let absent = [5u8; 32];
+    set.hosting(
+        "alice",
+        &format!(
+            "# what this node hosts, and who may reach it\nhost {} {} shop.internal {}\ngrant {} {} connect,reader\n",
+            hex(&shop),
+            hex(&kh("w1")),
+            manifest.display(),
+            hex(&shop),
+            hex(&kh("w1"))
+        ),
+    );
+    let addr = set.start("alice", &CAST, None);
+
+    let s = attach_to("w1", kh("alice"), addr).await;
+    let req = ResourceRequest { resource: shop, message: b"GET /orders HTTP/1.1\r\nhost: ignored\r\naccept: application/json\r\n\r\n".to_vec() };
+    let bytes = s.request(REQUEST_RESOURCE, &req.encode()).await.expect("the daemon answers on the stream");
+    let answer = ResourceResponse::decode(&bytes).expect("a reply");
+    assert_eq!(answer.status, STATUS_DELIVERED, "the process ran the package its configuration named");
+    let body = String::from_utf8(answer.body.expect("a body")).expect("text");
+
+    // the package hands back what it was given, so this is the whole of
+    // what crossed into it out of a real node
+    for header in ["rhtn-principal:", "rhtn-roles: reader", "rhtn-audience:", "rhtn-session:", "host: shop.internal"] {
+        assert!(body.contains(header), "the package is handed {header}, and {body:?} does not carry it");
+    }
+    for absent_header in ["rhtn-topology", "rhtn-liveness", "rhtn-queue", "rhtn-patron"] {
+        assert!(!body.contains(absent_header), "and nothing about the network: {absent_header}");
+    }
+
+    // a resource this node was not told to host is refused, not answered
+    let other = ResourceRequest { resource: absent, message: b"GET / HTTP/1.1\r\n\r\n".to_vec() };
+    let bytes = s.request(REQUEST_RESOURCE, &other.encode()).await.expect("answered");
+    assert_eq!(ResourceResponse::decode(&bytes).expect("a reply").status, STATUS_REFUSED, "nothing is bound for it");
+
+    // and a daemon whose hosting file names a package it cannot admit does
+    // not come up half configured
+    let bad = set.dir("bob").join("bad.wasm");
+    std::fs::write(&bad, rhtn_sim::packages::reaching("wasi:sockets/network@0.2.0")).expect("a package on disk");
+    let bad_manifest = set.dir("bob").join("bad.manifest");
+    std::fs::write(&bad_manifest, "roles = reader\ncomponent = bad.wasm\n").expect("a manifest that does not mention it");
+    set.hosting("bob", &format!("host {} {} shop.internal {}\n", hex(&shop), hex(&kh("w1")), bad_manifest.display()));
+    assert!(set.refuses("bob", &CAST).contains("wasi:sockets/network@0.2.0"), "the daemon says which binding it would not give");
 }

@@ -141,12 +141,12 @@ impl Sandbox {
             // does not exist, and the refusal has to say which one.
             if let wasmtime::component::types::ComponentItem::ComponentInstance(inst) = item.ty {
                 for (f, _) in inst.exports(&engine) {
-                    if !offered().contains(&f) {
+                    let Some(k) = offered().iter().position(|o| *o == f) else {
                         return Err(Refusal::UnknownImport(format!("{name}#{f}")));
-                    }
+                    };
+                    imports.push(HOST_EXPORTS[k].to_string());
                 }
             }
-            imports.push(name.to_string());
         }
         if !component.component_type().exports(&engine).any(|(n, _)| n == GUEST_ENTRY) {
             return Err(Refusal::NoEntry);
@@ -154,6 +154,10 @@ impl Sandbox {
 
         let mut linker: Linker<Call> = Linker::new(&engine);
         if !imports.is_empty() {
+            // the instance is defined whole where any of it was asked for:
+            // a component importing one of the two still links against an
+            // instance carrying both, and asking for one is not a promise
+            // not to be handed the other's name
             let mut inst = linker.instance(HOST_INSTANCE).map_err(|e| Refusal::NotAComponent(e.to_string()))?;
             inst.func_new("request", |store: wasmtime::StoreContextMut<'_, Call>, _: wasmtime::component::types::ComponentFunc, _: &[Val], out: &mut [Val]| {
                 out[0] = Val::List(store.data().request.iter().map(|b| Val::U8(*b)).collect());
@@ -181,10 +185,15 @@ impl Sandbox {
 
     /// The host bindings this package asked for, in the manifest's own
     /// vocabulary, so a caller can compare them against a declaration
-    /// without knowing how a component names an import.
+    /// without knowing how a component names an import.  Sorted, because
+    /// what a package reaches is a set and a manifest is compared against
+    /// it rather than against an order.
     #[must_use]
-    pub fn declared(&self) -> Vec<String> {
-        if self.imports.is_empty() { Vec::new() } else { HOST_EXPORTS.iter().map(|s| (*s).to_string()).collect() }
+    pub fn reaches(&self) -> Vec<String> {
+        let mut out = self.imports.clone();
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// Run one request.

@@ -9691,5 +9691,86 @@
   "then": "What crosses is the four credential headers, the authority the node addressed the package by, and the requester's own request. Nothing about the network crosses with it.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "DMN-19",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A daemon hosts the package its configuration names, and serves a request to it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §9",
+   "resource-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9",
+    "text": "A package must\ndeclare its roles, tolerate the sandbox, and accept the node's credential"
+   },
+   {
+    "where": "resource-requirements.md §3",
+    "text": "The credential travels as request headers"
+   }
+  ],
+  "given": "A daemon process whose configuration names a hosting file, and a package on disk beside its manifest.",
+  "when": "A client attached to that process sends a resource request for the resource the file names, and then for one it does not.",
+  "then": "The process admits the package before it serves, runs it, and answers on the stream with what the package returned. What crossed into the package is the credential headers, the authority the node addressed it by and the requester's own request, and nothing about the network. A resource nothing was bound for is refused rather than answered. A hosting file naming a package the sandbox would not admit stops the process from starting, and the operator is told which binding it would not give.",
+  "oracle": "behaviour",
+  "interpretation": "The hosting file's shape is the reference implementation's, in the same class as the configuration format section 7 leaves to the author."
+ },
+ {
+  "id": "DMN-20",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A manifest that does not describe its component is refused",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §9.1",
+   "resource-requirements.md §8"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §9.1",
+    "text": "Capability declaration in the manifest"
+   },
+   {
+    "where": "resource-requirements.md §8",
+    "text": "Declare what you need in the manifest."
+   }
+  ],
+  "given": "A package whose component reaches both host bindings.",
+  "when": "It is presented with a manifest that declares neither, one that declares a binding the host does not have, and manifests that are missing a component, repeat a key, carry an unknown key, or claim a reserved role.",
+  "then": "Each is refused before the package is bound, and the operator is shown both what the manifest declared and what the component reaches. A manifest that says what its component does is admitted.",
+  "oracle": "behaviour",
+  "interpretation": "Agreement between a manifest and its component is not a supply chain: signing, provenance and the update channel are what §9.1 leaves open, and none of them is here."
+ },
+ {
+  "id": "DMN-21",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A grant is checked against the package before anything is bound",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §10.2",
+   "resource-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "the operator hears about it at configuration time, never a requester at request\ntime"
+   },
+   {
+    "where": "resource-requirements.md §3",
+    "text": "discover and connect are\nreserved for the node's own evaluation (design §11.4) and never appear here"
+   }
+  ],
+  "given": "A hosting file binding a package that declares two roles.",
+  "when": "Grants are written for a role the package did not declare, for a name reserved to the node's own evaluation, and for a resource no line hosts, and a file is presented whose last line is refused.",
+  "then": "Each is refused at configuration with the line and the name, rather than at request time. A file refused anywhere in it binds nothing from anywhere else in it. A grant of the declared roles is applied, and a grant without connect is a row an operator may write.",
+  "oracle": "behaviour",
+  "interpretation": null
  }
 ]

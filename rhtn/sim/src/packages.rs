@@ -1,6 +1,10 @@
 //! Packages to run in the sandbox, written as component text so a test
 //! needs no wasm toolchain to build one.
 //!
+//! They live here rather than beside one crate's tests because two
+//! different harnesses want them: `rhtn-resources` runs them directly, and
+//! a daemon scenario writes one to disk for a process to admit.
+//!
 //! Each is the smallest component that makes one claim testable.  The
 //! arena module exists because a lowered `list<u8>` needs a memory and a
 //! `cabi_realloc` to land in, and the module that calls the lowered import

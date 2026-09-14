@@ -1,8 +1,6 @@
 //! What a hosted package may reach, and what it costs before it is stopped.
 
-mod common;
-
-use common::*;
+use rhtn_sim::packages::*;
 use rhtn_node::resources::{Backend, HOST_EXPORTS};
 use rhtn_resources::{HOST_INSTANCE, Hosted, Limits, Refusal, Sandbox};
 
@@ -20,7 +18,8 @@ fn a_package_reaching_past_the_two_bindings_is_not_admitted() {
     // below are about what was asked for
     assert!(Sandbox::admit(&silent(), Limits::default()).is_ok(), "a package that imports nothing is admitted");
     let ok = Sandbox::admit(&echo(), Limits::default()).expect("the two bindings are offered");
-    assert_eq!(ok.declared(), HOST_EXPORTS.to_vec(), "and they are the manifest's own two names");
+    assert_eq!(ok.reaches(), HOST_EXPORTS.to_vec(), "and it says which, in the manifest's own vocabulary");
+    assert!(Sandbox::admit(&silent(), Limits::default()).expect("admitted").reaches().is_empty(), "a package that reaches nothing says so");
 
     // the datasets §9.2 names, each asked for the way a package would ask
     for elsewhere in [

@@ -10,4 +10,4 @@ wasmtime = { version = "48", default-features = false, features = ["runtime", "c
 
 [dev-dependencies]
 rhtn-archive = { path = "../archive" }
-wat = "1"
+rhtn-sim = { path = "../sim" }
