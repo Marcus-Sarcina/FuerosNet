@@ -206,6 +206,16 @@ pub struct WitnessRequest {
     pub channels: Vec<ChannelOutcome>,
 }
 
+/// The last nibble of a locator's path: the index its patron put it at.
+fn index_of(loc: &Locator) -> Option<u8> {
+    if loc.nibbles == 0 {
+        return None;
+    }
+    let i = (loc.nibbles - 1) as usize;
+    let byte = *loc.path.get(i / 2)?;
+    Some(if i.is_multiple_of(2) { byte >> 4 } else { byte & 0x0f })
+}
+
 /// What a patron is proposing, beside who and into which subnet.
 ///
 /// Grouped because the four move together: the evidence the binding rests
@@ -756,15 +766,56 @@ impl Client {
     pub fn propose_adoption_in(&self, anchor: Keyhash, node: Keyhash, node_back: &[Txid], what: Adopting) -> Result<Vec<u8>, Abort> {
         let Adopting { evidence, series, presented_head, key_material } = what;
         let pos = self.position_in(&anchor).ok_or_else(|| Abort::PatronRefused(format!("no position under {}", hex8(&anchor))))?;
+        let index = self.free_index(&anchor)?;
         let mut path = pos.path.clone();
         let nibbles = pos.nibbles + 1;
-        if pos.nibbles % 2 == 0 { path.push(0x00) }
+        if pos.nibbles.is_multiple_of(2) {
+            path.push(index << 4);
+        } else {
+            let last = path.len() - 1;
+            path[last] |= index;
+        }
         let locator = Locator { anchor: pos.anchor, path, nibbles, seqno: Seqno { series, counter: 0 } };
         let back = self.archive.next_back_pointers();
         let a = Adoption { node, patron: self.keyhash(), locator, timestamp: self.now_s(), key_material, evidence, presented_head, back: [node_back, &back] };
         let body = adoption_body(&a);
         verify::adoption_evidence(&self.known, &body).map_err(|e| Abort::PatronRefused(e.to_string()))?;
         Ok(body)
+    }
+
+    /// The lowest subordinate index this client has not already issued in
+    /// the subnet `anchor` names.
+    ///
+    /// **Ten slots and no eleventh.** design §3.1 gives every node at most
+    /// `f = 10` subordinates and `wire-format.md` §2.1 gives a path nibble
+    /// the values 0 to 9, which is the same ten counted twice: the index
+    /// *is* the slot. Two subordinates at one index would be two parties at
+    /// one address, and the routing slot beneath it holds one occupant.
+    ///
+    /// **Read from this client's own archive**, which is the only complete
+    /// record of what it has issued. A holder elsewhere may not have the
+    /// other adoptions and so cannot check this; the patron always can,
+    /// which is design §1.1's test answered in the patron's favour.
+    fn free_index(&self, anchor: &Keyhash) -> Result<u8, Abort> {
+        let me = self.keyhash();
+        // a relationship this client can see has ended frees the index it
+        // held.  **Where it can see none, every index it issued stays
+        // taken**: a patron that cannot observe a departure has no grounds
+        // to reissue the slot, and reissuing one it was wrong about would
+        // put two parties at one address.
+        let ended: BTreeSet<Keyhash> =
+            self.horizon.table.bindings().iter().filter(|b| b.patron == me && b.end.is_some()).map(|b| b.node).collect();
+        let mut taken: BTreeSet<u8> = BTreeSet::new();
+        for rec in self.archive.records().filter(|r| r.tx_type == TYPE_ADOPTION) {
+            let (Some(patron), Some(node), Some(loc)) = (rec.field_hash(2), rec.field_hash(1), rec.locator()) else { continue };
+            if patron != me || loc.anchor != *anchor || ended.contains(&node) {
+                continue;
+            }
+            if let Some(i) = index_of(&loc) {
+                taken.insert(i);
+            }
+        }
+        (0..10).find(|i| !taken.contains(i)).ok_or_else(|| Abort::PatronRefused("all ten subordinate slots are taken (design §3.1: at most f = 10 subordinates)".into()))
     }
 
     /// Sign a body I proposed or was shown, as its subject or its patron.

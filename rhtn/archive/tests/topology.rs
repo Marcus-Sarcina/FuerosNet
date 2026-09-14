@@ -101,15 +101,50 @@ fn a_departure_ends_only_the_named_relationship() {
 
 // acceptance: TOP-04
 #[test]
-fn a_departed_node_with_no_other_binding_is_a_root() {
+fn a_departed_node_with_no_other_binding_is_a_root_in_the_holders_own_table() {
     let (mut w, mut t) = patron_with_one();
     let (n, p) = (w.kh("carol"), w.kh("alice"));
     let dep = w.depart("carol", "alice", Seqno { series: 1, counter: 1 });
     let out = t.apply(&dep, &w.lookup(), &w, None);
     assert!(out.is_ok(), "no error for a patronless node");
+
+    // **which table, and what "a root" means here** [author, 2026-09-14].
+    // This is the holder's own fold, and the holder still has records
+    // naming the departed party — so it stays a node it knows about, and
+    // with no patron left it reads as a root, which is §4.2's own word:
+    // a departure is *required for a node to become a root*.
     assert_eq!(t.patrons(&n), set(&[]));
     assert!(t.is_node(&n) && t.is_root(&n));
     assert!(!t.subordinates(&p).contains(&n));
+}
+
+// acceptance: TOP-33
+#[test]
+fn a_departed_node_is_out_of_the_horizon_at_the_place_it_left() {
+    let (mut w, mut t) = patron_with_one();
+    let (n, p) = (w.kh("carol"), w.kh("alice"));
+    assert!(t.horizon(&p, 2).contains(&n), "inside before it leaves");
+    assert!(t.horizon(&n, 2).contains(&p), "and each way round");
+
+    let dep = w.depart("carol", "alice", Seqno { series: 1, counter: 1 });
+    assert!(t.apply(&dep, &w.lookup(), &w, None).is_ok());
+
+    // **reading as a root is not the same as still being in view.** The
+    // horizon walks open bindings, so the party that left is gone from the
+    // place it left: neither the old patron nor anyone who reached it only
+    // through that binding can still see it there, and §4.2 says exactly
+    // why a departure is required — without it a node that adopts
+    // elsewhere *remains in the old subtree's view indefinitely*.
+    assert!(!t.horizon(&p, 2).contains(&n), "the old patron no longer sees it");
+    assert!(!t.horizon(&n, 2).contains(&p), "nor it the old patron");
+    assert_eq!(t.distance(&p, &n, 2), None, "there is no walk between them any more");
+
+    // a sibling that only reached it through that patron loses it too
+    let fw = w.meet("alice", "w1");
+    let aw = w.adopt("w1", "alice", fw.txid, 4);
+    apply(&mut t, &w, &fw);
+    apply(&mut t, &w, &aw);
+    assert!(!t.horizon(&w.kh("w1"), 2).contains(&n), "a sibling of the patron never reaches the departed party");
 }
 
 // acceptance: TOP-05

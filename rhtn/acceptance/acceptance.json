@@ -6458,7 +6458,7 @@
   "id": "TOP-04",
   "area": "topology",
   "gap": "topology",
-  "title": "Leave a departed node in the table as a root when it has no other binding",
+  "title": "A departed node with no other binding is a root in the holder's own table",
   "milestone": 3,
   "kind": "positive",
   "spec": [
@@ -6478,9 +6478,15 @@
   ],
   "given": "O's table holding N under P and under nobody else.",
   "when": "O verifies N's departure from P.",
-  "then": "O's table answers N's patrons = {} and still lists N as a node; N is removed from P's subordinates; no error is raised for a patronless node.",
+  "then": "It stays a node the holder knows about, because the holder still has the records naming it, and with no patron left it reads as a root — which is §4.2's own word: a departure is required for a node to become a root. It is no longer among its old patron's subordinates.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": "Which table this is about matters [author, 2026-09-14]: it is the holder's own fold over the records it has, and reading as a root there says nothing about whether anyone can still reach the party where it used to be.",
+  "holds": [
+   [
+    2,
+    "departed-becomes-root"
+   ]
+  ]
  },
  {
   "id": "TOP-05",
@@ -7483,7 +7489,18 @@
   "when": "Each locator is decoded; the request is decoded, and the same path is asked for its hop indices by another route.",
   "then": "The four well-formed paths are accepted. Each departure is rejected, naming the byte length, the nibble value or the pad nibble. The request is refused at decoding, and the hop-index operation on the malformed path returns without indexing past its bytes. An implementation that checks the nibble ceiling alone and then indexes by the claimed count fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "locator-nibble-in-range"
+   ],
+   [
+    0,
+    "locator-nibble-in-range",
+    "+"
+   ]
+  ]
  },
  {
   "id": "TOP-18",
@@ -10741,6 +10758,108 @@
     5,
     "sealed-store-on-platform-keys",
     "-"
+   ]
+  ]
+ },
+ {
+  "id": "TOP-33",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A departed node is out of the horizon at the place it left",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.2",
+    "text": "Without it, a node that adopts\nelsewhere remains in the old subtree's view indefinitely"
+   }
+  ],
+  "given": "A patron with one subordinate, each inside the other's horizon.",
+  "when": "The subordinate departs, and a sibling is then adopted under the same patron.",
+  "then": "Neither the old patron nor the departed party can see the other: the horizon walks open bindings, so there is no walk between them and no distance either way. A sibling adopted afterwards never reaches the departed party at all. Reading as a root in a holder's table is not the same as still being in view where it was.",
+  "oracle": "behaviour",
+  "interpretation": "§4.2 states the consequence the other way round — without a departure a node that adopts elsewhere stays in the old subtree's view — so this is the rule's own reason, asserted.",
+  "holds": [
+   [
+    2,
+    "departed-becomes-root"
+   ]
+  ]
+ },
+ {
+  "id": "CER-40",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A patron issues each subordinate its own index, and stops at ten",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §3.1",
+   "wire-format.md §2.1"
+  ],
+  "rule": [
+   {
+    "where": "design §3.1",
+    "text": "has exactly one patron, and every node has at most f = 10 subordinates."
+   },
+   {
+    "where": "wire-format.md §2.1",
+    "text": "Nibble values MUST be 0-9"
+   }
+  ],
+  "given": "A patron with no ancestor, adopting from its own subnet.",
+  "when": "It adopts three parties in turn.",
+  "then": "Each lands one hop below it in its own subnet, at an index no other subordinate holds, and every index is a value a path nibble may carry.",
+  "oracle": "behaviour",
+  "interpretation": "The index is the slot: design §3.1 gives ten subordinates and §2.1 gives a nibble ten values, which is the same ten counted twice.",
+  "holds": [
+   [
+    1,
+    "locator-index-is-free"
+   ],
+   [
+    0,
+    "locator-nibble-in-range"
+   ]
+  ]
+ },
+ {
+  "id": "CER-41",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "An eleventh subordinate has no slot to be put in",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §3.1"
+  ],
+  "rule": [
+   {
+    "where": "design §3.1",
+    "text": "has exactly one patron, and every node has at most f = 10 subordinates."
+   }
+  ],
+  "given": "A patron that has already issued ten adoptions, each in its archive.",
+  "when": "It is asked to adopt an eleventh.",
+  "then": "The ten take the ten indices a nibble has, none of them twice, and the eleventh is refused because there is no slot to put it in.",
+  "oracle": "behaviour",
+  "interpretation": "Refused by the party that can tell. A holder elsewhere may not have the other ten and could not check this; the patron always can, which is design §1.1's test answered in the patron's favour.",
+  "holds": [
+   [
+    1,
+    "locator-index-is-free"
+   ],
+   [
+    1,
+    "fanout-cap"
+   ],
+   [
+    1,
+    "fanout-cap",
+    "+"
    ]
   ]
  }

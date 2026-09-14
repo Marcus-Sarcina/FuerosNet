@@ -93,3 +93,65 @@ fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
     let e = s.client("bob").propose_adoption_in(kh("w3"), kh("w1"), &back, what()).expect_err("refused");
     assert!(format!("{e:?}").contains("no position"), "{e:?}");
 }
+
+// acceptance: CER-40
+#[test]
+fn a_patron_issues_each_subordinate_its_own_index_and_stops_at_ten() {
+    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let me = kh("alice");
+
+    // **ten slots and no eleventh.** design §3.1 gives every node at most
+    // f = 10 subordinates and `wire-format.md` §2.1 gives a path nibble
+    // the values 0 to 9: the same ten counted twice, because the index
+    // *is* the slot. Two subordinates at one index would be two parties at
+    // one address.
+    let mut issued = std::collections::BTreeSet::new();
+    for n in ["bob", "carol", "w1"] {
+        met(&mut s, n, "alice");
+        s.h.run_adoption(kh(n), me, vec![kh("w2")], vec![kh("w3")], 1).unwrap_or_else(|e| panic!("{n}: {e:?}"));
+        let loc = s.client(n).position_in(&me).expect("where it was put");
+        assert_eq!(loc.anchor, me, "in the patron's own subnet");
+        assert_eq!(loc.nibbles, 1, "one hop below a root");
+        assert!(issued.insert(loc.path[0] >> 4), "index {} was issued twice", loc.path[0] >> 4);
+    }
+    assert_eq!(issued.len(), 3, "three subordinates, three indices: {issued:?}");
+    assert!(issued.iter().all(|i| *i <= 9), "and every one a nibble the path may carry");
+}
+
+// acceptance: CER-41
+#[test]
+fn an_eleventh_subordinate_has_no_slot_to_be_put_in() {
+    // a patron with no ancestor, adopting from its own subnet
+    let mut w = common::World::new();
+    let mut c = rhtn_client::ceremony::Client::new(
+        common::id("alice"),
+        common::ids(),
+        Default::default(),
+        common::harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 11, 0).0,
+    );
+    let me = kh("alice");
+    // a subordinate's first transaction points at the genesis value its
+    // own key derives (`wire-format.md` §3.1)
+    let back = |n: &str| vec![rhtn_archive::genesis(&kh(n))];
+    let what = || Adopting { evidence: rhtn_archive::tx::Evidence::Presence([9; 32]), series: 1, presented_head: None, key_material: None };
+
+    // ten adoptions this client signed as patron, each one landing in its
+    // archive, which is where it reads its own issuance from
+    let subordinates = ["bob", "carol", "w1", "w2", "w3", "w4", "c1", "c2", "c3", "c4"];
+    let mut issued = std::collections::BTreeSet::new();
+    for n in subordinates {
+        let body = c.propose_adoption_in(me, kh(n), &back(n), what()).unwrap_or_else(|e| panic!("{n}: {e:?}"));
+        let rec = w.commit(rhtn_archive::tx::TYPE_ADOPTION, &body, &[n, "alice"]);
+        let loc = rec.locator().expect("a locator");
+        assert!(issued.insert(loc.path[0] >> 4), "index {} was issued twice", loc.path[0] >> 4);
+        c.take_adoption(&rec.bytes).unwrap_or_else(|e| panic!("{n}: {e:?}"));
+    }
+    assert_eq!(issued, (0..10u8).collect(), "ten subordinates take the ten indices a nibble has");
+
+    // **the eleventh is refused, and refused by the party that can tell.**
+    // A holder elsewhere may not have the other ten and could not check
+    // this; the patron always can, which is design §1.1's test answered in
+    // the patron's favour.
+    let e = c.propose_adoption_in(me, kh("c5"), &back("c5"), what()).expect_err("no slot left");
+    assert!(format!("{e:?}").contains("ten subordinate slots"), "{e:?}");
+}
