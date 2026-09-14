@@ -72,6 +72,15 @@ pub trait Serving: Send + Sync {
     /// Register, refresh or withdraw where this node rings the caller
     /// (design §14.1.5).  No endpoint withdraws.
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool>;
+    /// Hand the node a transaction this client made, for it to store and
+    /// flood (`wire-format.md` §10.1).
+    ///
+    /// **A client originates and does not forward.** It is a leaf: the
+    /// records it makes are its own, and the one party that can put them
+    /// into the flood is the node serving it, which §10.1.1 already counts
+    /// it an adjacency of. Nothing comes back — the push is not a request
+    /// and §10.1.3 defines no acknowledgement, deliberately.
+    fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool>;
 }
 
 /// The node this client lives beside, as its serving node.
@@ -123,6 +132,21 @@ impl Serving for LocalNode {
 
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
         Box::pin(async move { self.node.view.lock().unwrap().prekeys.stock(subject, keys) })
+    }
+
+    /// The node beside this client takes it the way it takes one off the
+    /// wire, arriving from the client: stored where the client is in its
+    /// store reach, and forwarded to every adjacency but this one.
+    fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let from = self.node.me();
+            let mut view = self.node.view.lock().unwrap();
+            let ids = self.node.ids.lock().unwrap();
+            matches!(
+                view.take_object(&self.node.adjacency, &from, rhtn_node::store::KIND_TRANSACTION, &bytes, &*ids),
+                rhtn_node::store::Decision::Stored | rhtn_node::store::Decision::Duplicate
+            )
+        })
     }
 
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

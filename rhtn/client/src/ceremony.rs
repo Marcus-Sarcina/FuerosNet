@@ -258,6 +258,16 @@ pub struct Client {
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
+    /// Records this client made and has not yet handed to its serving
+    /// node.
+    ///
+    /// **A client cannot flood and does not try.** What it can do is give
+    /// the one node it is attached to a transaction it signed; §10.1's
+    /// forwarding rule does the rest. Kept here rather than returned from
+    /// the call that made the record, because the call that made it is the
+    /// ceremony's and the carrying is the adaptors', and the two happen on
+    /// different sides of the boundary.
+    outbox: Vec<Msg>,
     /// As a recovering subject: the responses gathered at recovery
     /// meetings, verified, awaiting the block.
     pub recovery_responses: Vec<Vec<u8>>,
@@ -297,7 +307,7 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -645,6 +655,10 @@ impl Client {
             self.refresh_acquaintance();
         }
         self.witnessing = None;
+        // the record goes up to be flooded, whether this client was a
+        // participant or a witness: a witness holds it and its signature
+        // is in it, so it is as much the witness's to propagate
+        self.outbox.push(Msg::Record(envelope.to_vec()));
         Ok(txid)
     }
 }
@@ -752,7 +766,13 @@ impl Client {
         self.archive.append(rec).map_err(Abort::Record)?;
         self.store.records.insert(t, envelope.to_vec());
         self.adopt_own_positions();
+        self.outbox.push(Msg::Record(envelope.to_vec()));
         Ok(t)
+    }
+
+    /// What this client has made and not yet handed up, taken away.
+    pub fn outbox(&mut self) -> Vec<Msg> {
+        std::mem::take(&mut self.outbox)
     }
 
     /// Where this client sits in the subnet `anchor` names.
@@ -867,7 +887,9 @@ impl Client {
     /// elapsed, and replenish the pool when it has fallen low.
     pub fn maintain(&mut self) -> Vec<Msg> {
         let now = self.now_s();
-        let mut out = Vec::new();
+        // anything made since the last carry goes up with the routine
+        // traffic, so a record whose own carry was missed is not stranded
+        let mut out = self.outbox();
         if self.payload.keys.due_for_rotation(now, &self.payload.cfg) {
             let random = self.device.random.clone();
             let mut fresh = |out: &mut [u8]| random.fill(out);

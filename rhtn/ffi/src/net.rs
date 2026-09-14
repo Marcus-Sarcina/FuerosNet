@@ -185,6 +185,24 @@ impl Net {
         Ok(Attached { serving: id_of(&node), primary: mode == 0, queued })
     }
 
+    /// Carry whatever the client has made and not yet handed up.
+    ///
+    /// **Called after every step that finishes a record**, rather than
+    /// left to the next maintenance: a transaction nobody has seen is one
+    /// the network cannot act on, and the party that made it is the only
+    /// one that can offer it.
+    pub(crate) fn carry_outbox(&self, handle: &Handle) -> Result<(), Refused> {
+        let Ok(courier) = self.courier() else { return Ok(()) };
+        let carried = self.rt().block_on(async move {
+            let msgs = handle.with(|c| c.outbox()).await;
+            courier.carry(msgs).await
+        });
+        if !carried.refused.is_empty() {
+            return Err(Refused::new("the serving node would not take the record: it is unpropagated"));
+        }
+        Ok(())
+    }
+
     pub(crate) fn maintain(&self, handle: &Handle) -> Result<(), Refused> {
         let courier = self.courier()?;
         self.rt().block_on(async move {

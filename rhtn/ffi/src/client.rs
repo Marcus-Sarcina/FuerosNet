@@ -439,6 +439,60 @@ impl Participant {
         self.net.next_event(timeout_ms)
     }
 
+    /// What this client holds of its own neighbourhood, and what it can
+    /// do with it without asking anyone (design §15.1.1).
+    ///
+    /// **This is the whole point of keeping a copy.** A participant that
+    /// had to ask its patron where somebody is cannot route around a
+    /// patron that is not answering, and cannot weigh trust distance
+    /// either (`light-client-requirements.md` §4.2).
+    #[must_use]
+    pub fn places(&self) -> Vec<Placed> {
+        self.handle.with_blocking(|c| {
+            c.horizon
+                .resolvable()
+                .into_iter()
+                .flat_map(|n| {
+                    c.horizon.places_of(&n).into_iter().map(move |p| Placed { node: id_of(&n), anchor: id_of(&p.anchor), path: p.path.clone(), nibbles: p.nibbles }).collect::<Vec<_>>()
+                })
+                .collect()
+        })
+    }
+
+    /// Everybody this client can place without asking anyone.
+    #[must_use]
+    pub fn resolvable(&self) -> Vec<Id> {
+        self.handle.with_blocking(|c| c.horizon.resolvable().iter().map(id_of).collect())
+    }
+
+    /// How many adoption or sibling edges away a party is, or nothing
+    /// beyond the horizon.
+    #[must_use]
+    pub fn distance(&self, node: Id) -> Option<u32> {
+        let k = keyhash(&node)?;
+        self.handle.with_blocking(move |c| c.horizon.distance(&k).map(|d| d as u32))
+    }
+
+    /// Whether this client holds the transaction `txid` names, in its own
+    /// archive or in what its patron propagated.
+    #[must_use]
+    pub fn holds(&self, txid: Id) -> bool {
+        let Some(t) = keyhash(&txid) else { return false };
+        self.handle.with_blocking(move |c| c.horizon.holds(&t) || c.archive.get(&t).is_some())
+    }
+
+    /// How many records the copy is a fold over.
+    #[must_use]
+    pub fn records(&self) -> u64 {
+        self.handle.with_blocking(|c| c.horizon.records() as u64)
+    }
+
+    /// Drop what has left the horizon, and say how many parties were
+    /// forgotten (`light-client-requirements.md` §4.2).
+    pub fn prune(&self) -> u64 {
+        self.handle.with_blocking(|c| c.horizon.prune() as u64)
+    }
+
     /// Whether a session with a serving node is held right now.
     pub fn attached(&self) -> bool {
         self.net.session().is_some()
@@ -648,7 +702,9 @@ impl Participant {
     /// adoption of this client, it is also what tells it where it now
     /// sits.
     pub fn take_adoption(&self, envelope: Vec<u8>) -> Result<Id, Refused> {
-        self.handle.with_blocking(move |c| c.take_adoption(&envelope).map(|t| t.to_vec()).map_err(|e| Refused::new(format!("{e:?}"))))
+        let t = self.handle.with_blocking(move |c| c.take_adoption(&envelope).map(|t| t.to_vec()).map_err(|e| Refused::new(format!("{e:?}"))))?;
+        self.net.carry_outbox(&self.handle)?;
+        Ok(t)
     }
 
     /// Take the finished record.  A participant is given the disclosures
@@ -658,8 +714,23 @@ impl Participant {
             None => None,
             Some(s) => Some(revealed_inward(&s)?),
         };
-        self.handle.with_blocking(move |c| c.finalize(&envelope, d.as_ref()).map(|t| t.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))
+        let t = self.handle.with_blocking(move |c| c.finalize(&envelope, d.as_ref()).map(|t| t.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))?;
+        // **the record goes up as soon as it exists.** A ceremony that
+        // ended in a record nobody else will ever see did the work and
+        // none of the good.
+        self.net.carry_outbox(&self.handle)?;
+        Ok(t)
     }
+}
+
+/// Where a party sits, as a shell is shown it: one of these per subnet
+/// they are in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placed {
+    pub node: Id,
+    pub anchor: Id,
+    pub path: Vec<u8>,
+    pub nibbles: u64,
 }
 
 /// The envelope a presence record travels in, from the body every signer

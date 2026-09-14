@@ -144,12 +144,12 @@ fn a_ceremony_runs_to_a_record_between_four_processes() {
     // of the steps: both devices name it the same, each nominee answers
     // its own nominator, the participants sign over the disclosures and
     // the witnesses without them, and all four name one record.
-    let txid = ceremony(&mut set, &cast);
+    let txid = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
     assert_eq!(txid.len(), 64, "a record is named by a 32-byte txid: {txid}");
 }
 
 /// The one line beginning `prefix`, without it.
-fn one(lines: Vec<String>, prefix: &str) -> String {
+fn line(lines: Vec<String>, prefix: &str) -> String {
     lines
         .iter()
         .find_map(|l| l.strip_prefix(prefix))
@@ -174,17 +174,17 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     assert!(set.get("alice").must(&format!("where {a}"))[0].starts_with("position "), "and it knows where it sits in it");
     assert_eq!(set.get("alice").must(&format!("where {b}")), ["position none"], "it sits in nobody else's");
 
-    let pop = ceremony(&mut set, &cast);
+    let pop = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
 
     // the patron proposes under its own anchor, both sign the same body,
     // and each takes the record it signed
-    let back = one(set.get("bob").must("back-pointers"), "back-pointers ");
-    let body = one(set.get("alice").must(&format!("adopt {a} {b} {pop} 1 {back}")), "adoption ");
-    let sig_b = one(set.get("bob").must(&format!("sign {body}")), "signed ");
-    let sig_a = one(set.get("alice").must(&format!("sign {body}")), "signed ");
-    let envelope = one(set.get("alice").must(&format!("adoption-envelope {body} {b}:{sig_b},{a}:{sig_a}")), "envelope ");
-    let t_a = one(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
-    let t_b = one(set.get("bob").must(&format!("take-adoption {envelope}")), "adopted ");
+    let back = line(set.get("bob").must("back-pointers"), "back-pointers ");
+    let body = line(set.get("alice").must(&format!("adopt {a} {b} {pop} 1 {back}")), "adoption ");
+    let sig_b = line(set.get("bob").must(&format!("sign {body}")), "signed ");
+    let sig_a = line(set.get("alice").must(&format!("sign {body}")), "signed ");
+    let envelope = line(set.get("alice").must(&format!("adoption-envelope {body} {b}:{sig_b},{a}:{sig_a}")), "envelope ");
+    let t_a = line(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
+    let t_b = line(set.get("bob").must(&format!("take-adoption {envelope}")), "adopted ");
     assert_eq!(t_a, t_b, "one adoption, and both name it the same");
 
     // **and taking it is what tells the subordinate where it now sits.**
@@ -199,55 +199,120 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
 /// One ceremony between alice and bob, witnessed by carol and w1, to the
 /// record both hold.  The steps are PRT-04's; what this returns is what an
 /// adoption is evidence of.
-fn ceremony(set: &mut Participants, cast: &[&str]) -> String {
-    let (a, b) = (hex(&kh("alice")), hex(&kh("bob")));
-    for n in ["alice", "bob"] {
+fn ceremony(set: &mut Participants, cast: &[&str], one: &str, two: &str, wa: &str, wb: &str) -> String {
+    let (a, b) = (hex(&kh(one)), hex(&kh(two)));
+    for n in [one, two] {
         set.get(n).must("channel latency pass 30");
     }
     for n in cast {
         set.get(n).must("answer yes");
     }
-    let ia = one(set.get("alice").must(&format!("begin {b} {} initiator", hex(&kh("carol")))), "intent ");
-    let ib = one(set.get("bob").must(&format!("begin {a} {}", hex(&kh("w1")))), "intent ");
-    let ca = one(set.get("bob").must(&format!("intent {a} {ia}")), "ceremony ");
-    let cb = one(set.get("alice").must(&format!("intent {b} {ib}")), "ceremony ");
+    let ia = line(set.get(one).must(&format!("begin {b} {} initiator", hex(&kh(wa)))), "intent ");
+    let ib = line(set.get(two).must(&format!("begin {a} {}", hex(&kh(wb)))), "intent ");
+    let ca = line(set.get(two).must(&format!("intent {a} {ia}")), "ceremony ");
+    let cb = line(set.get(one).must(&format!("intent {b} {ib}")), "ceremony ");
     assert_eq!(ca, cb, "both devices name the ceremony the same thing");
-    let ch = one(set.get("alice").must("proximity"), "channels ");
-    set.get("bob").must(&format!("take-channels {ch}"));
-    let ka = one(set.get("alice").must("capture-key"), "capture-key ");
-    let kb = one(set.get("bob").must("capture-key"), "capture-key ");
-    set.get("bob").must(&format!("capture {ka}"));
-    set.get("alice").must(&format!("capture {kb}"));
-    let ask_a = one(set.get("alice").must("witness-ask"), "witness-ask ");
-    let ask_b = one(set.get("bob").must("witness-ask"), "witness-ask ");
-    let f_a = one(set.get("carol").must(&format!("take-witness-ask {ask_a}")), "witnessing ");
-    let f_b = one(set.get("w1").must(&format!("take-witness-ask {ask_b}")), "witnessing ");
-    let witnesses = format!("{}:{a}:{f_a},{}:{b}:{f_b}", hex(&kh("carol")), hex(&kh("w1")));
-    let theirs = one(set.get("bob").must("gathered"), "gathered ");
-    let made = set.get("alice").must(&format!("propose {theirs} {witnesses}"));
-    let proposal = one(made.clone(), "proposed ");
-    let disclosures = one(made, "disclosures ");
-    let signers: Vec<String> = one(set.get("alice").must(&format!("signers {proposal}")), "signers ").split(',').map(str::to_string).collect();
+    let ch = line(set.get(one).must("proximity"), "channels ");
+    set.get(two).must(&format!("take-channels {ch}"));
+    let ka = line(set.get(one).must("capture-key"), "capture-key ");
+    let kb = line(set.get(two).must("capture-key"), "capture-key ");
+    set.get(two).must(&format!("capture {ka}"));
+    set.get(one).must(&format!("capture {kb}"));
+    let ask_a = line(set.get(one).must("witness-ask"), "witness-ask ");
+    let ask_b = line(set.get(two).must("witness-ask"), "witness-ask ");
+    let f_a = line(set.get(wa).must(&format!("take-witness-ask {ask_a}")), "witnessing ");
+    let f_b = line(set.get(wb).must(&format!("take-witness-ask {ask_b}")), "witnessing ");
+    let witnesses = format!("{}:{a}:{f_a},{}:{b}:{f_b}", hex(&kh(wa)), hex(&kh(wb)));
+    let theirs = line(set.get(two).must("gathered"), "gathered ");
+    let made = set.get(one).must(&format!("propose {theirs} {witnesses}"));
+    let proposal = line(made.clone(), "proposed ");
+    let disclosures = line(made, "disclosures ");
+    let signers: Vec<String> = line(set.get(one).must(&format!("signers {proposal}")), "signers ").split(',').map(str::to_string).collect();
     let named: Vec<&str> = signers.iter().map(|s| cast.iter().find(|n| hex(&kh(n)) == *s).copied().expect("a signer in the cast")).collect();
-    let back: Vec<String> = named.iter().map(|n| one(set.get(n).must("back-pointers"), "back-pointers ")).collect();
+    let back: Vec<String> = named.iter().map(|n| line(set.get(n).must("back-pointers"), "back-pointers ")).collect();
     let back = back.join(";");
-    let body = one(set.get("alice").must(&format!("body {proposal} {back}")), "body ");
+    let body = line(set.get(one).must(&format!("body {proposal} {back}")), "body ");
     let mut entries = Vec::new();
     for (n, k) in named.iter().zip(&signers) {
-        let signed = if *n == "alice" || *n == "bob" {
-            one(set.get(n).must(&format!("review-and-sign {proposal} {disclosures} {back}")), "signed ")
+        let signed = if *n == one || *n == two {
+            line(set.get(n).must(&format!("review-and-sign {proposal} {disclosures} {back}")), "signed ")
         } else {
-            one(set.get(n).must(&format!("witness-sign {proposal} {back}")), "signed ")
+            line(set.get(n).must(&format!("witness-sign {proposal} {back}")), "signed ")
         };
         entries.push(format!("{k}:{signed}"));
     }
-    let envelope = one(set.get("alice").must(&format!("envelope {body} {}", entries.join(","))), "envelope ");
+    let envelope = line(set.get(one).must(&format!("envelope {body} {}", entries.join(","))), "envelope ");
     let mut txids = Vec::new();
     for n in &named {
-        let command = if *n == "alice" || *n == "bob" { format!("finalize {envelope} {disclosures}") } else { format!("finalize {envelope}") };
-        txids.push(one(set.get(n).must(&command), "finalized "));
+        let command = if *n == one || *n == two { format!("finalize {envelope} {disclosures}") } else { format!("finalize {envelope}") };
+        txids.push(line(set.get(n).must(&command), "finalized "));
     }
     assert!(txids.windows(2).all(|w| w[0] == w[1]), "one record, and every signer names it the same: {txids:?}");
     assert_eq!(txids.len(), 4, "two participants and two witnesses signed it");
     txids.remove(0)
+}
+
+// acceptance: PRT-06
+#[test]
+fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
+    // everybody pins everybody, the node included: a client cannot attach
+    // to a node whose key it does not hold (`wire-format.md` §9.1)
+    let all = ["bob", "alice", "carol", "w1", "w2"];
+    let cast = ["alice", "carol", "w1", "w2"];
+    let mut nodes = Daemons::new(rhtnd(), "originate");
+    let addr = nodes.start("bob", &all, None);
+
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "originate");
+    for n in cast {
+        set.start(n, &all);
+    }
+    // the two parties are attached; the witnesses are not, and do not need
+    // to be — a ceremony is between devices in each other's presence
+    let node = hex(&kh("bob"));
+    for n in ["alice", "carol"] {
+        set.get(n).must(&format!("attach {node} {addr}"));
+    }
+
+    let pop = ceremony(&mut set, &cast, "alice", "carol", "w1", "w2");
+
+    // **the adoption is what travels.** design §15 puts presence records
+    // in the attestation class — *pull, not push*, stored by participants,
+    // their patrons and witnesses — and the topology class is adoptions,
+    // departures, disavowals, peerings and reissues (`wire-format.md`
+    // §10.1). So the ceremony's own record stays with its signers and the
+    // adoption made on it is what the node is offered.
+    let (a, c) = (hex(&kh("alice")), hex(&kh("carol")));
+    let back = line(set.get("carol").must("back-pointers"), "back-pointers ");
+    let body = line(set.get("alice").must(&format!("adopt {a} {c} {pop} 1 {back}")), "adoption ");
+    let sig_c = line(set.get("carol").must(&format!("sign {body}")), "signed ");
+    let sig_a = line(set.get("alice").must(&format!("sign {body}")), "signed ");
+    let envelope = line(set.get("alice").must(&format!("adoption-envelope {body} {c}:{sig_c},{a}:{sig_a}")), "envelope ");
+    let txid = line(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
+
+    // **it went up because the party that made it offered it, and came
+    // back down because the node flooded it.** A client cannot flood; the
+    // one node it is attached to can, and `wire-format.md` §10.1.1 already
+    // counts an attached client an adjacency — which is the same edge read
+    // in each direction. Carol learns of its own adoption from the flood,
+    // not from having signed it.
+    let mut landed = false;
+    for _ in 0..50 {
+        if line(set.get("carol").must(&format!("holds {txid}")), "holds ") == "true" {
+            landed = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(landed, "the adoption came back down to the other client");
+    assert_eq!(line(set.get("carol").must(&format!("distance {a}")), "distance "), "1", "and carol places its patron one edge away");
+
+    // and it is in what the process wrote when it stopped, not in a view
+    nodes.stop("bob");
+    let held = nodes.get("bob").topology().join("tx");
+    let names: Vec<String> = std::fs::read_dir(&held)
+        .expect("a topology store")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    assert!(names.contains(&txid), "the node holds the transaction its client made: {names:?}");
 }

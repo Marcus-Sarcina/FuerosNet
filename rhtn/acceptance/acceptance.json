@@ -9988,5 +9988,32 @@
   "then": "Both places are held and each says what it is relative to; a subnet it was not placed in has none. Each line carries its own series. The party is one party for everything counted by party: listed once among what can be resolved. Both places come back out of the materialised copy.",
   "oracle": "behaviour",
   "interpretation": "A path in one subnet says nothing about a path in another, so a copy holding one of two would hold an answer it could not qualify. The stored row already carried the party and the anchor separately, so keying by both puts two rows where there was one and leaves what a row says alone."
+ },
+ {
+  "id": "PRT-06",
+  "area": "participant",
+  "gap": "participant",
+  "title": "A transaction a client makes reaches the node that serves it, and comes back down",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1",
+   "design §15"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1",
+    "text": "A node pushes topology it is a party to"
+   },
+   {
+    "where": "design §15",
+    "text": "stored by participants, their patrons, and witnesses; fetched on demand by evaluators"
+   }
+  ],
+  "given": "A node process, two client processes attached to it, and two more that are not.",
+  "when": "The two attached parties meet in a ceremony and one adopts the other on that record.",
+  "then": "The adoption reaches the node, which stores it and floods it, so the other attached party learns of its own adoption from the flood rather than from having signed it, and places its patron one edge away. The node still holds it in what it wrote when it stopped. The ceremony's own record does not travel: design §15 puts presence in the attestation class, pull rather than push.",
+  "oracle": "behaviour",
+  "interpretation": "A client cannot flood and does not try. What it can do is offer the one node it is attached to a transaction it signed, which is the same edge §10.1.1 already counts read in the other direction."
  }
 ]

@@ -116,6 +116,17 @@ impl Serving for AttachedNode {
         })
     }
 
+    /// Frame 5 on stream 0, which is the one channel a transaction
+    /// travels on (`wire-format.md` §10.1).  Not a request: §10.1.3
+    /// defines no acknowledgement and the answer here is only whether the
+    /// frame left.
+    fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let Some(s) = (self.session)() else { return false };
+            s.send_control(FRAME_TOPOLOGY_PUSH, &rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &bytes))
+        })
+    }
+
     fn wake<'a>(&'a self, _client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
         Box::pin(async move {
             let nonce = (self.nonce)();

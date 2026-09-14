@@ -149,6 +149,25 @@ impl Instrument {
                 Ok(vec!["wake set".into()])
             }
 
+            // what this client holds of its own neighbourhood
+            ["horizon"] => {
+                let mut out = vec![format!("records {}", self.client.records())];
+                out.extend(
+                    self.client
+                        .places()
+                        .iter()
+                        .map(|p| format!("place {} anchor={} path={} nibbles={}", hex(&p.node), hex(&p.anchor), hex(&p.path), p.nibbles)),
+                );
+                Ok(out)
+            }
+            ["resolvable"] => Ok(vec![format!("resolvable {}", joined(&self.client.resolvable()))]),
+            ["distance", node] => Ok(vec![match self.client.distance(id(node)?) {
+                None => "distance none".into(),
+                Some(d) => format!("distance {d}"),
+            }]),
+            ["holds", txid] => Ok(vec![format!("holds {}", self.client.holds(id(txid)?))]),
+            ["prune"] => Ok(vec![format!("pruned {}", self.client.prune())]),
+
             ["events"] => self.events(0),
             ["events", ms] => self.events(ms.parse::<u64>().map_err(|_| format!("`{ms}` is not a count of milliseconds"))?),
 
@@ -438,6 +457,11 @@ maintain                  rotate, replenish and ask for what is due
 send <to> <kind> <hex>    payload, over the direct path or through the node
 wake <url> <key> [<at>]   where to be rung; `wake off` withdraws it
 events [<ms>]             what arrived; waits <ms> for the first
+horizon                   what this client holds of its neighbourhood
+resolvable                everybody it can place without asking anyone
+distance <node>           adoption or sibling edges away, inside the horizon
+holds <txid>              whether it holds that transaction
+prune                     drop what has left the horizon
 
 The ceremony, a step a command. Each step's product is one token, to be
 carried to the other device by whatever the two have between them:

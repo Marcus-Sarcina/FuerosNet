@@ -69,6 +69,10 @@ impl Serving for Counting {
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
         self.inner.wake(client, endpoint)
     }
+
+    fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool> {
+        self.inner.propagate(bytes)
+    }
 }
 
 /// A light client beside `node` on a socket of its own; whether the path

@@ -208,6 +208,17 @@ impl Courier {
                             out.refused.push(Msg::Relay { to, bytes });
                         }
                     }
+                    // **a client originates and does not forward.** The
+                    // records it makes are its own, and the one party that
+                    // can put them into the flood is the node serving it
+                    // (`wire-format.md` §10.1.1 counts an attached client
+                    // an adjacency, which is the same edge read the other
+                    // way).
+                    Msg::Record(b) => {
+                        if !me.serving.propagate(b.clone()).await {
+                            out.refused.push(Msg::Record(b));
+                        }
+                    }
                     Msg::Transport(b) => {
                         let node = me.serving.me();
                         if !me.serving.relay(me.me(), node, b.clone()).await {
