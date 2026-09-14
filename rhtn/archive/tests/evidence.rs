@@ -335,3 +335,33 @@ fn a_transfer_whose_former_patron_is_a_participant_is_malformed() {
     let rec = parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).expect("well formed");
     assert_eq!(rec.check_signatures(&w.lookup()), SigStatus::Verified);
 }
+
+// acceptance: DEC-31
+#[test]
+fn a_disavowals_reason_is_an_enumerated_code_inside_a_space_of_sixty_four() {
+    let mut w = World::new(&["alice", "bob"]);
+    let pop = w.meet("alice", "bob");
+    w.adopt("bob", "alice", pop.txid, 1);
+    let (ka, kb) = (w.kh("alice"), w.kh("bob"));
+    let t = w.clock + 1;
+    let body = |code: Option<u64>| disavowal_body(&w.back("alice"), &ka, &kb, t, code);
+
+    // **the space is 64 values** (`wire-format.md` §4.3), banded at 32 so
+    // prejudice is structural. Both ends of it are a code, and the field
+    // is optional: a disavowal may state no reason at all.
+    for c in [None, Some(0), Some(31), Some(32), Some(63)] {
+        assert!(parsed(&w, TYPE_DISAVOWAL, &body(c), &["alice"]).is_ok(), "code {c:?} is inside the space");
+    }
+    assert!(body_err(&body(Some(64))).contains("out of space"), "64 is one past the end");
+    assert!(body_err(&body(Some(255))).contains("out of space"));
+
+    // **and it is a code, never free text** (§4.3): free-form text on a
+    // permanently published record is a defamation surface with no
+    // recourse, which is the whole reason the field is an enumeration.
+    let mut prose = body(Some(0));
+    let r = value_slice(&prose, 4).expect("the reason");
+    assert_eq!(r.len(), 1, "a one-byte code");
+    // 0x64 is a four-byte text string: `why?`
+    prose.splice(r.clone(), [0x64, b'w', b'h', b'y', b'?']);
+    assert!(body_err(&prose).contains("code uint"), "a reason that is not a uint");
+}

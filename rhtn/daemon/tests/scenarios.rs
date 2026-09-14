@@ -53,12 +53,14 @@ fn client_cfg(name: &str) -> ClientConfig {
         addresses: Arc::new(Mutex::new(Default::default())),
         tls: Arc::new(Mutex::new(Default::default())),
         // **a dial's patience, and not a claim.**  Nothing in these
-        // scenarios is about how fast a handshake completes; what makes
-        // this generous is that they run beside each other, each starting
-        // its own processes, one of which compiles a WebAssembly component
-        // before it serves.  Five seconds of post-quantum handshake on a
-        // loaded machine is a test that fails for the machine's reasons.
-        connect_timeout: Duration::from_secs(30),
+        // scenarios is about how fast a handshake completes.  What makes
+        // this generous is the gate: `check.sh` fences every long job at
+        // `nice -n 19` and eight jobs, deliberately, and the daemons these
+        // tests spawn inherit that — so a post-quantum handshake here
+        // competes with a whole workspace's tests at the lowest priority
+        // the scheduler has.  A failure at two minutes on loopback is a
+        // real one; a failure at five seconds is the fence.
+        connect_timeout: Duration::from_secs(120),
         on_reachability: None,
         log: Log::default(),
     }
@@ -172,12 +174,12 @@ async fn a_transaction_crosses_two_daemon_processes_and_survives_a_restart() {
     for r in [&n_pop, &n_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, n_adopt.txid, 5000).await, "N stored its own adoption and forwarded it");
+    assert!(awaits(&mut observer, n_adopt.txid, 30_000).await, "N stored its own adoption and forwarded it");
 
     for r in [&w_pop, &w_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, w_adopt.txid, 5000).await, "and the adoption under N crossed both processes");
+    assert!(awaits(&mut observer, w_adopt.txid, 30_000).await, "and the adoption under N crossed both processes");
 
     // **the process wrote down what it accepted.**  A stop is a SIGTERM,
     // and the daemon writes its state back on the way out
@@ -200,7 +202,7 @@ async fn a_transaction_crosses_two_daemon_processes_and_survives_a_restart() {
         push(&injector2, &r.bytes);
     }
     assert!(
-        awaits(&mut back, c_adopt.txid, 5000).await,
+        awaits(&mut back, c_adopt.txid, 30_000).await,
         "the restarted process still holds the binding that puts a subordinate of N in its reach"
     );
     let _ = ids();
@@ -223,11 +225,11 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     for r in [&n_pop, &n_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, n_adopt.txid, 5000).await, "the first binding landed");
+    assert!(awaits(&mut observer, n_adopt.txid, 30_000).await, "the first binding landed");
     for r in [&c_pop, &c_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, c_adopt.txid, 5000).await, "and the second");
+    assert!(awaits(&mut observer, c_adopt.txid, 30_000).await, "and the second");
 
     // **N starts after it has been adopted**, which is the order a
     // deployment has: a node is adopted, its patron countersigns, and the
@@ -272,7 +274,7 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     // one arrives after every record did: nothing is pushed to it, and it
     // is handed what the process holds because its session came up.
     let mut late = attach_to("w2", kh("alice"), p_addr).await;
-    assert!(awaits(&mut late, c_adopt.txid, 5000).await, "the store it never saw arrive is replayed to it");
+    assert!(awaits(&mut late, c_adopt.txid, 30_000).await, "the store it never saw arrive is replayed to it");
 
     // a subject in no record it holds is a failure it can state, not a hang
     let unknown = ResolveRequest { subject: kh("w1"), anchor: kh("alice"), path: Path::from_indices(&[9]).bytes, nibbles: 1, nonce: [9; 16] };

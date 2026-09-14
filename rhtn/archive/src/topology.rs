@@ -22,6 +22,30 @@ pub enum End {
     Superseded(Keyhash),
 }
 
+impl End {
+    /// Whether the patron made an adverse judgment, where the ending was a
+    /// disavowal that stated a reason.
+    ///
+    /// **The band is the whole point of the code space**
+    /// (`wire-format.md` §4.3): 64 values with bit 5 carrying the
+    /// distinction, so a policy can act correctly on a code it has never
+    /// seen — `code >= 32` and nothing else — without a lookup table and
+    /// without a specification update. Reading the code and never reading
+    /// the band would leave every future assignment a flag day, which is
+    /// the thing the banding exists to prevent.
+    ///
+    /// Nothing here weights it: §4.3 says a trust policy *may* reasonably
+    /// weight the stated reason, and design §16.4 keeps what a node stores
+    /// and forwards independent of its policy.
+    #[must_use]
+    pub fn with_prejudice(&self) -> Option<bool> {
+        match self {
+            End::Disavowal(Some(code)) => Some(*code >= 32),
+            _ => None,
+        }
+    }
+}
+
 /// Whether an adoption's evidence has been dereferenced (`wire-format.md`
 /// §3.4): structural verification does not dereference it, and a holder
 /// that cannot may still hold the binding as a position.

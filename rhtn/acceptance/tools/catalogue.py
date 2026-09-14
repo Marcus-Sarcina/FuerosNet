@@ -31,6 +31,18 @@ KINDS = {"positive", "negative", "must-accept", "liveness", "robustness", "manua
 ORACLES = {"fixture", "model", "behaviour"}
 FIELDS = ["id", "area", "gap", "title", "milestone", "kind", "spec", "rule",
           "given", "when", "then", "oracle", "interpretation"]
+# Optional, and only on an entry holding a transaction rule
+# (`Robot/transaction-rules.md`).  `holds` is a list of [type, condition]
+# pairs, written out rather than crossed from two lists, because one entry
+# may check a rule that binds on one type and not on another and a cross
+# product would claim coverage nobody wrote.  `deferred` is why it cannot
+# run yet, where that applies.
+OPTIONAL = ["holds", "deferred"]
+# The six the wire defines, and 0 for a condition that binds whatever the
+# type — the envelope's shape, the COSE profile, the storage rule. Those
+# are checked before the type is looked at, so pairing them per type would
+# manufacture six demands where the rule makes one.
+TRANSACTIONS = {0, 1, 2, 3, 4, 5, 7}
 
 ID_RE = re.compile(r"^([A-Z]{3})-(\d{2})$")
 CITE_RE = re.compile(r"^(design|wire-format\.md|light-client-requirements\.md|"
@@ -38,6 +50,7 @@ CITE_RE = re.compile(r"^(design|wire-format\.md|light-client-requirements\.md|"
                      r"(?:§([0-9]+(?:\.[0-9]+)*)|Appendix ([A-Z](?:\.[0-9]+)?))$")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(?:Appendix\s+)?([0-9A-Z][0-9A-Za-z.]*)[\s.]")
 MARKER_RE = re.compile(r"acceptance:\s*([A-Z]{3}-\d{2})")
+CONDITION_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
 
 def load():

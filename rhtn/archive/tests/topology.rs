@@ -24,6 +24,11 @@ fn apply(t: &mut Table, w: &World, rec: &Record) -> Outcome {
     t.apply(rec, &w.lookup(), w, None).unwrap_or_else(|e| panic!("{:?} refused: {e:?}", rec.tx_type))
 }
 
+/// The same, for a test that expects a refusal.
+fn offer(t: &mut Table, w: &World, rec: &Record) -> Result<Outcome, String> {
+    t.apply(rec, &w.lookup(), w, None).map_err(|e| format!("{e:?}"))
+}
+
 /// A world with patron alice over carol, and a table holding it.
 fn patron_with_one() -> (World, Table) {
     let mut w = World::new(&["alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5"]);
@@ -562,4 +567,95 @@ fn a_reissue_advances_its_relationship_and_a_departure_in_that_series_ends_it() 
     let again = w.adopt("bob", "alice", f2.txid, 7);
     apply(&mut t, &again, &w).expect("re-adoption");
     assert_eq!(t.bindings().iter().filter(|b| b.open()).map(|b| b.series).collect::<Vec<_>>(), vec![7]);
+}
+
+// acceptance: TOP-29
+#[test]
+fn a_disavowal_that_does_not_verify_ends_nothing_however_it_is_timed() {
+    let (mut w, mut t) = two_patrons();
+    let (n, p) = (w.kh("bob"), w.kh("alice"));
+    assert!(t.patrons(&n).contains(&p), "the binding stands before any of this");
+
+    // **the negative of TOP-06.** A disavowal takes effect when signed and
+    // its timestamp orders it and nothing else; what makes it take effect
+    // is that it verifies. One that does not is not a late disavowal, it
+    // is not a disavowal.
+    let mut forged = w.disavow("alice", "bob", Some(0));
+    let last = forged.bytes.len() - 1;
+    forged.bytes[last] ^= 0xff;
+    let forged = Record::parse(&forged.bytes).expect("still parses; it is the signature that is wrong");
+    assert!(offer(&mut t, &w, &forged).is_err(), "a broken signature is refused");
+    assert!(t.patrons(&n).contains(&p), "and the relationship it named is untouched");
+
+    // nor does one naming a relationship that does not exist end anything
+    let stranger = w.disavow("alice", "w2", Some(0));
+    let before = t.subordinates(&p);
+    let _ = offer(&mut t, &w, &stranger);
+    assert_eq!(t.subordinates(&p), before, "a pair with no binding has none to end");
+}
+
+// acceptance: TOP-30
+#[test]
+fn a_disavowal_orders_nothing_another_party_signed() {
+    let (mut w, mut t) = two_patrons();
+    let (n, q) = (w.kh("bob"), w.kh("carol"));
+
+    // carol adopted bob after alice did; alice now disavows bob at a
+    // timestamp of its own choosing, years past anything carol signed
+    assert!(t.patrons(&n).contains(&q), "the second binding stands");
+    let far = w.disavow_at("alice", "bob", Some(1), 4_000_000_000);
+    assert_eq!(apply(&mut t, &w, &far).applied, Applied::Ended);
+
+    // **field 3 orders the disavowal within the patron's own slot**
+    // (§4.3): the adoption that filled the slot and this record came from
+    // one party's clock. A patron can stamp its own record whenever it
+    // likes — §4.3 has no notice period for exactly that reason — and the
+    // stamp reaches nothing another party signed.
+    assert!(t.patrons(&n).contains(&q), "carol's binding is untouched by alice's clock");
+    assert!(!t.subordinates(&w.kh("alice")).contains(&n), "and alice's own is ended");
+    assert!(t.is_node(&n), "bob is still a node, with one patron instead of two");
+}
+
+// acceptance: TOP-31
+#[test]
+fn a_disavowals_band_is_readable_without_a_lookup_table() {
+    let (mut w, mut t) = two_patrons();
+    let n = w.kh("bob");
+
+    // **codes 0-31 are without prejudice, 32-63 with** (`wire-format.md`
+    // §4.3), and bit 5 carries the distinction so a policy can act on a
+    // code it has never seen without a lookup table and without a
+    // specification update
+    let dis = w.disavow("alice", "bob", Some(4));
+    assert_eq!(apply(&mut t, &w, &dis).applied, Applied::Ended);
+    assert_eq!(band(&t, &n, &w.kh("alice")), Some(false), "code 4 is incompatible subnet membership, and alleges nothing");
+
+    let (mut w2, mut t2) = two_patrons();
+    let adverse = w2.disavow("alice", "bob", Some(32));
+    assert_eq!(apply(&mut t2, &w2, &adverse).applied, Applied::Ended);
+    assert_eq!(band(&t2, &w2.kh("bob"), &w2.kh("alice")), Some(true), "32 opens the upper band");
+}
+
+// acceptance: TOP-32
+#[test]
+fn an_unfamiliar_disavowal_code_is_banded_rather_than_refused_and_none_bands_as_nothing() {
+    // **an exception to the unknown-enum rule** (`wire-format.md` §4.3):
+    // rejecting an unfamiliar code would make every future assignment a
+    // flag day, which is the thing the banding exists to prevent
+    let (mut w, mut t) = two_patrons();
+    let unassigned = w.disavow("alice", "bob", Some(47));
+    assert_eq!(apply(&mut t, &w, &unassigned).applied, Applied::Ended, "an unassigned code is not a reason to refuse");
+    assert_eq!(band(&t, &w.kh("bob"), &w.kh("alice")), Some(true), "47 sits in the upper band, so the patron judged");
+
+    // and a disavowal stating no reason bands as nothing rather than as
+    // the benign half: saying nothing is not saying without prejudice
+    let (mut w2, mut t2) = two_patrons();
+    let silent = w2.disavow("alice", "bob", None);
+    assert_eq!(apply(&mut t2, &w2, &silent).applied, Applied::Ended);
+    assert_eq!(band(&t2, &w2.kh("bob"), &w2.kh("alice")), None, "no code is no judgment either way");
+}
+
+/// Whether the patron judged, from the ending the table recorded.
+fn band(t: &Table, node: &[u8; 32], patron: &[u8; 32]) -> Option<bool> {
+    t.bindings().iter().find(|b| b.node == *node && b.patron == *patron).and_then(|b| b.end.clone()).expect("an ending").2.with_prejudice()
 }

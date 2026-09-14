@@ -47,7 +47,13 @@
   "when": "N and P sign an adoption of N under P; afterwards N signs a departure from P and P signs a disavowal of another subordinate.",
   "then": "The adoption's key 0 is [[h_N], [h_P]] in that order, node then patron. N's departure carries key 0 [[txid(adoption)]] and P's disavowal carries key 0 [[txid(adoption)]]: each signer's next record back-points to the adoption.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "back-pointers"
+   ]
+  ]
  },
  {
   "id": "ARC-03",
@@ -70,7 +76,13 @@
   "when": "The adoption is verified structurally, then a walker follows N's chain backward from the adoption, fetching each named predecessor.",
   "then": "Structural verification does not report the adoption malformed. The walk of N's chain fetches h_P, finds that N is not a signer of that record, and reports N's chain as not reaching back past the adoption; it reports no complete prefix for N from that head.",
   "oracle": "behaviour",
-  "interpretation": "The section names the symptom, a walked chain that does not reach back, and no verdict word; the test reads a fetched predecessor that the named signer did not sign as that symptom, reported distinctly from malformed."
+  "interpretation": "The section names the symptom, a walked chain that does not reach back, and no verdict word; the test reads a fetched predecessor that the named signer did not sign as that symptom, reported distinctly from malformed.",
+  "holds": [
+   [
+    0,
+    "back-pointers"
+   ]
+  ]
  },
  {
   "id": "ARC-04",
@@ -102,7 +114,13 @@
   "when": "N signs a departure from P and O verifies it.",
   "then": "The departure's field 3 is {s, c} with the same series s and c strictly greater than 0; O accepts it as newer than the adoption within series s. A second departure from N carrying {s, c} again, with different contents, is not accepted as newer.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "series-opens-at-zero"
+   ]
+  ]
  },
  {
   "id": "ARC-05",
@@ -151,7 +169,13 @@
   "when": "N signs two departures back-pointing to that head, one with timestamp exactly t0 and one with timestamp t_now plus thirty days; the verifier checks each.",
   "then": "Both verify as structurally valid; neither is reported malformed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "effective-time"
+   ]
+  ]
  },
  {
   "id": "ARC-07",
@@ -307,7 +331,13 @@
   "when": "S presents adoption field 7 = txid(r_j) for some j less than R, and the patron walks back from it, fetching from S.",
   "then": "The walk reports the range r_j back to genesis as unbroken and rooted at genesis. The records after r_j are neither fetched nor reported missing, and the presentation is not rejected for naming a head that is not S's newest record.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "presented-prefix-unbroken"
+   ]
+  ]
  },
  {
   "id": "ARC-13",
@@ -335,7 +365,13 @@
   "when": "The walk reaches r_c and requests its predecessor, which S does not serve.",
   "then": "The result names the range from the head to r_c as unbroken and r_c as the range's root, a checkpoint distinguished from genesis; the unfetched record before r_c is reported as lying beyond the checkpoint, and no record is reported malformed.",
   "oracle": "behaviour",
-  "interpretation": "The design says a checkpoint supplies a root and wire-format.md §3.4 says an unfetchable predecessor is incomplete rather than malformed; the test reads a stop at a countersigned reissue as a result distinct from a stop at an ordinary unfetchable record, which no sentence states."
+  "interpretation": "The design says a checkpoint supplies a root and wire-format.md §3.4 says an unfetchable predecessor is incomplete rather than malformed; the test reads a stop at a countersigned reissue as a result distinct from a stop at an ordinary unfetchable record, which no sentence states.",
+  "holds": [
+   [
+    7,
+    "chain-reissue-not-before-its-record"
+   ]
+  ]
  },
  {
   "id": "ARC-14",
@@ -476,7 +512,13 @@
   "when": "They run a presence ceremony to completion.",
   "then": "The finalized record's proximity channels carry an NFC entry as the strongest achieved, and no UWB entry.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "strongest-is-what-passed"
+   ]
+  ]
  },
  {
   "id": "CER-02",
@@ -503,7 +545,13 @@
   "when": "They run a presence ceremony to completion.",
   "then": "The record's proximity channels carry optical and nothing ranked above it; no NFC or UWB entry appears.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "strongest-is-what-passed"
+   ]
+  ]
  },
  {
   "id": "CER-03",
@@ -1787,7 +1835,13 @@
   "when": "The envelope is presented to the decoder and verifier.",
   "then": "structural = valid and signatures[signer, alg] = verified for all 36 entries. An implementation carrying an independently asserted envelope ceiling below 36 entries or below 18 logical signers reports malformed here and fails conformance.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "envelope-shape"
+   ]
+  ]
  },
  {
   "id": "DEC-06",
@@ -1902,7 +1956,13 @@
   "when": "The envelope is presented to the decoder and verifier.",
   "then": "structural = malformed, even though all four body signatures verify over the unchanged body; the object is not accepted with the envelope-level key preserved.",
   "oracle": "behaviour",
-  "interpretation": "The Envelope map's own keys (version, type, signatures) sit outside every signature's coverage, so §1.2's rule for keys outside a signature's coverage is read as reaching the envelope map; §3 does not say so in as many words, and D2's preservation rule is read as scoped to the signed body."
+  "interpretation": "The Envelope map's own keys (version, type, signatures) sit outside every signature's coverage, so §1.2's rule for keys outside a signature's coverage is read as reaching the envelope map; §3 does not say so in as many words, and D2's preservation rule is read as scoped to the signed body.",
+  "holds": [
+   [
+    0,
+    "envelope-shape"
+   ]
+  ]
  },
  {
   "id": "DEC-10",
@@ -3006,7 +3066,17 @@
   "when": "N receives the TopologyPush carrying it.",
   "then": "N stores the transaction, and one TopologyPush frame carrying the object byte-for-byte is observed on each of the sessions to S1, S2, Q and C, and none on the session to P.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "forward-if-stored"
+   ],
+   [
+    0,
+    "storage-reach"
+   ]
+  ]
  },
  {
   "id": "PRP-02",
@@ -3037,7 +3107,17 @@
   "when": "N receives the TopologyPush.",
   "then": "N's store does not gain the transaction and no TopologyPush follows on any of N's sessions. Nothing in the frame told N how far to forward; the decision came from N's own store.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "forward-if-stored"
+   ],
+   [
+    0,
+    "storage-reach"
+   ]
+  ]
  },
  {
   "id": "PRP-03",
@@ -3956,7 +4036,21 @@
   "when": "S's client assembles the adoption.",
   "then": "The adoption carries field 6 and neither field 8 nor field 9; field 6's responses are sorted ascending by verifier keyhash and include a `match`; field 6's field 3 is a hybrid COSE_Sign by k1 over the successor statement naming k1, k2 and P under the successor tag, and the corpus validator accepts the envelope.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "exactly-one-evidence"
+   ],
+   [
+    1,
+    "recovery-both-halves"
+   ],
+   [
+    1,
+    "recovery-successor-bound"
+   ]
+  ]
  },
  {
   "id": "REC-02",
@@ -3978,7 +4072,17 @@
   "when": "P evaluates each.",
   "then": "P countersigns neither and records no binding for either.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "recovery-both-halves"
+   ],
+   [
+    1,
+    "recovery-successor-bound"
+   ]
+  ]
  },
  {
   "id": "REC-03",
@@ -4004,7 +4108,13 @@
   "when": "V's client signs its response.",
   "then": "The response's field 9 is a detached COSE_Sign with one Ed25519 and one ML-DSA-65 entry that both verify under V, and field 7 is a single classical COSE_Sign1 by S's new key.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "recovery-response-shape"
+   ]
+  ]
  },
  {
   "id": "REC-04",
@@ -4094,7 +4204,13 @@
   "when": "S's client acts on the suspicion.",
   "then": "For each relationship, in order, a self-signed locator at the maximum counter is produced, then a type-7 reissue whose field 3 equals that maximum and whose field 4 is a fresh series at counter 0, countersigned by that patron.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    7,
+    "new-series-at-counter-zero"
+   ]
+  ]
  },
  {
   "id": "REC-07",
@@ -4170,7 +4286,13 @@
   "when": "A validly signed locator for S in s1 at a counter above every s1 record H holds arrives, then a locator in s2 at counter 1.",
   "then": "The s1 locator is rejected; the s2 locator is installed.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    2,
+    "reissue-advances-relationship"
+   ]
+  ]
  },
  {
   "id": "REC-10",
@@ -6288,7 +6410,13 @@
   "when": "O verifies a departure signed by N alone with field 2 = P1.",
   "then": "O's table answers N's patrons = {P2}; N is no longer among P1's subordinates and no longer a sibling of P1's other children; N's binding under P2 is unchanged.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    2,
+    "ends-only-the-named"
+   ]
+  ]
  },
  {
   "id": "TOP-04",
@@ -6339,7 +6467,13 @@
   "when": "O verifies a disavowal signed by P alone with field 2 = N and reason code 0.",
   "then": "O's table answers N's patrons = {Q}; N is removed from P's subordinates; M's patrons still include N; N remains a node in the table.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "ends-only-the-named"
+   ]
+  ]
  },
  {
   "id": "TOP-06",
@@ -6366,7 +6500,13 @@
   "when": "O verifies a disavowal of N by P whose timestamp is t_now plus seven days and not earlier than the effective time of P's predecessor record.",
   "then": "O's table removes N from P's subordinates on verification; the relationship is not held open until the timestamp, and the record is not rejected for its timestamp.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "applies-regardless-of-time"
+   ]
+  ]
  },
  {
   "id": "TOP-07",
@@ -6500,7 +6640,13 @@
   "when": "A and B sign a formation presence record, subtype 1 with no witnesses, no verifier responses and genesis back-pointers, then an adoption of B under A whose field 8 names that record; both tables verify both.",
   "then": "Both tables answer: A's patrons = {}, A's subordinates = {B}, B's patrons = {A}. Each archive holds the formation record as its first transaction and the adoption as its second, the adoption's back-pointer for each signer naming the formation record.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "formation-is-genesis-rooted"
+   ]
+  ]
  },
  {
   "id": "TOP-12",
@@ -6651,7 +6797,13 @@
   "when": "P's records are read after the three, in any arrival order.",
   "then": "P's slot k shows N present from t1, empty from t2, and N present again from t3 under the new series; the relationship's status at any time is decided from P's own timestamps and nothing another party signed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "ordered-in-patrons-slot"
+   ]
+  ]
  },
  {
   "id": "TRN-01",
@@ -7172,7 +7324,17 @@
   "when": "Each is parsed as a record.",
   "then": "The two valid adoptions parse, and the recovery control verifies. Each variant is rejected at the structural layer, before any signature is checked, naming the rule it broke. An implementation that verifies each embedded signature without checking whom it is about fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "exactly-one-evidence"
+   ],
+   [
+    1,
+    "recovery-response-shape"
+   ]
+  ]
  },
  {
   "id": "DEC-21",
@@ -7207,7 +7369,13 @@
   "when": "Each is parsed as a record, or checked as a body.",
   "then": "The genesis-rooted formation parses. Each variant is rejected: the arbitrary and the established key's back-pointers as not the genesis value, the flipped normal record as a formation carrying witnesses, the flipped formation as a normal record without witnesses, and the equal participants as one identity. An implementation that checks the subtype's range and nothing the subtype conditions fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    5,
+    "formation-is-genesis-rooted"
+   ]
+  ]
  },
  {
   "id": "DEC-22",
@@ -7239,7 +7407,17 @@
   "when": "Each is parsed as a record, or checked as a body.",
   "then": "The departure parses as type 2 and is rejected as type 1 for want of a locator: the type comes from the envelope, never from the body's shape. Each one-identity body is rejected, as are the reissue at counter 1 and the peering without its presence record. An implementation that classifies a body by its fields and applies whichever rules the shape suggests fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    1,
+    "series-opens-at-zero"
+   ],
+   [
+    7,
+    "new-series-at-counter-zero"
+   ]
+  ]
  },
  {
   "id": "DEC-23",
@@ -7301,7 +7479,17 @@
   "when": "O applies the departure before its adoption; and applies the three records in each of their six arrival orders.",
   "then": "After the departure and then the adoption, N is not among P's subordinates: the departure is held and settled against the adoption its series names. In every order the series-1 binding is ended and the series-2 binding stands open, so N's patrons are {P} by the re-adoption alone. A departure applied twice ends nothing the second time. An implementation that discards a departure arriving before its adoption, or ends whichever open binding it finds first, fails.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    2,
+    "ends-only-the-named"
+   ],
+   [
+    2,
+    "order-independent"
+   ]
+  ]
  },
  {
   "id": "QUE-17",
@@ -8282,7 +8470,13 @@
   "when": "D1 is applied.",
   "then": "The table stays bound through A2 and the child's slot stays occupied, so resolution and the memo still name it. A departure ending the binding that is actually open does empty the slot, dated by that ending.",
   "oracle": "behaviour",
-  "interpretation": "Which relationship an ending closes is the table's answer, not the record's: the slot follows the settled bindings, as the adoption branch already did."
+  "interpretation": "Which relationship an ending closes is the table's answer, not the record's: the slot follows the settled bindings, as the adoption branch already did.",
+  "holds": [
+   [
+    2,
+    "ends-only-the-named"
+   ]
+  ]
  },
  {
   "id": "DEC-27",
@@ -8335,7 +8529,21 @@
   "when": "The chain is read.",
   "then": "It is refused on chronology, as the archive's own append would refuse it. The same chain with the reissue dated 101 is accepted, and only then may it prove a series and abandon the old one.",
   "oracle": "behaviour",
-  "interpretation": "The predecessor is in the presentation, so this is not the unavailable-history case; the presented path is held to the rule the append path already applies."
+  "interpretation": "The predecessor is in the presentation, so this is not the unavailable-history case; the presented path is held to the rule the append path already applies.",
+  "holds": [
+   [
+    0,
+    "effective-time"
+   ],
+   [
+    1,
+    "presented-prefix-unbroken"
+   ],
+   [
+    7,
+    "chain-reissue-not-before-its-record"
+   ]
+  ]
  },
  {
   "id": "CER-32",
@@ -8465,7 +8673,17 @@
   "when": "A1 is applied last, its own binding already ended by the departure.",
   "then": "The table stays bound through A2 and the child's slot stays occupied. Every arrival order of the same three records leaves the same table and the same slot.",
   "oracle": "behaviour",
-  "interpretation": "Which relationship a record changes is the table's answer and not the record's, so a row is emptied only where no open binding holds it, whichever record arrives last."
+  "interpretation": "Which relationship a record changes is the table's answer and not the record's, so a row is emptied only where no open binding holds it, whichever record arrives last.",
+  "holds": [
+   [
+    2,
+    "ends-only-the-named"
+   ],
+   [
+    2,
+    "order-independent"
+   ]
+  ]
  },
  {
   "id": "TRV-09",
@@ -8648,7 +8866,13 @@
   "when": "Each is applied in that order, and separately with the reissue arriving before its adoption.",
   "then": "The reissue leaves the relationship open and moves it into series 2; the departure then ends it, and the node is no longer a subordinate. A reissue arriving first is held and settles when its adoption does. A departure naming series 1 after the reissue ends nothing, and a re-adoption opening its own series is a different binding the reissue never touched.",
   "oracle": "behaviour",
-  "interpretation": "The series left is what identifies the relationship a reissue advances, not the larger number: succession is proved by the countersigned chain, and a re-adoption that happens to open a higher series is a binding of its own."
+  "interpretation": "The series left is what identifies the relationship a reissue advances, not the larger number: succession is proved by the countersigned chain, and a re-adoption that happens to open a higher series is a binding of its own.",
+  "holds": [
+   [
+    2,
+    "reissue-advances-relationship"
+   ]
+  ]
  },
  {
   "id": "DMN-08",
@@ -9475,7 +9699,13 @@
   "when": "A transaction in the node's store reach arrives from a third party, and the client's session later ends.",
   "then": "The node stores it and forwards it to the attached client, and treats the client's own transactions as within its store. After the session ends it forwards nothing further to that party. A node told nothing about its attaches holds an empty set and serves the flood to none of its clients, whatever its configuration says.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "holds": [
+   [
+    0,
+    "forward-if-stored"
+   ]
+  ]
  },
  {
   "id": "DMN-17",
@@ -10123,5 +10353,161 @@
   "then": "The first ring is the patron and the sibling, not the nephew and not itself. The evidence its policy sees is one edge per open binding in the copy, its own included, and a score comes out of it rather than a question for somebody else.",
   "oracle": "behaviour",
   "interpretation": "A client's fold has two sources where a node's has three: it is not a party to a peering and holds none, so its graph is its horizon's adoptions plus the meetings it was present at."
+ },
+ {
+  "id": "TOP-29",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A disavowal that does not verify ends nothing, however it is timed",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "There is no notice period. A disavowal takes effect when signed"
+   }
+  ],
+  "given": "A node bound under two patrons.",
+  "when": "One patron's disavowal arrives with a broken signature, and another arrives naming a pair with no binding between them.",
+  "then": "Neither ends anything. A disavowal takes effect when signed, so one whose signature does not hold is not a late disavowal but not a disavowal; and a pair with no binding has none to end.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "ends-only-the-named"
+   ],
+   [
+    3,
+    "applies-regardless-of-time"
+   ]
+  ]
+ },
+ {
+  "id": "TOP-30",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A disavowal orders nothing another party signed",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "It orders nothing another party signed."
+   }
+  ],
+  "given": "A node bound under two patrons, adopted by the second after the first.",
+  "when": "The first patron disavows it at a timestamp years past anything the second signed.",
+  "then": "The first patron's own binding ends and the second's is untouched. A patron may stamp its own record whenever it likes, which is why §4.3 has no notice period, and the stamp reaches only the slot that patron filled.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "ordered-in-patrons-slot"
+   ]
+  ]
+ },
+ {
+  "id": "TOP-31",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A disavowal's band is readable without a lookup table",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "codes 0-31 are without prejudice,\n32-63 are with prejudice."
+   }
+  ],
+  "given": "A node bound under two patrons.",
+  "when": "One patron disavows it stating a code from the lower band, and in a second world one from the upper.",
+  "then": "The ending the table records says whether the patron made an adverse judgment, from the code's band alone. Nothing weights it: §4.3 says a policy may, and design §16.4 keeps what a node stores and forwards independent of its policy.",
+  "oracle": "behaviour",
+  "interpretation": "The code was carried and round-tripped before this and nothing read the band, so no policy could have acted on one as §4.3 describes.",
+  "holds": [
+   [
+    3,
+    "reason-band-is-structural"
+   ],
+   [
+    3,
+    "reason-is-enumerated"
+   ],
+   [
+    3,
+    "code-space-is-64"
+   ]
+  ]
+ },
+ {
+  "id": "TOP-32",
+  "area": "topology",
+  "gap": "topology",
+  "title": "An unfamiliar disavowal code is banded rather than refused, and none bands as nothing",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "An\nunfamiliar code in 0-63 is retained and evaluated by its band, not rejected"
+   }
+  ],
+  "given": "A node bound under two patrons.",
+  "when": "A disavowal states a code v1 assigns no meaning to, and in a second world one states no code at all.",
+  "then": "The unassigned code is retained and banded rather than refused, because rejecting it would make every future assignment a flag day. A disavowal stating no reason bands as neither: saying nothing is not saying without prejudice.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "reason-band-is-structural"
+   ]
+  ]
+ },
+ {
+  "id": "DEC-31",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "A disavowal's reason is an enumerated code inside a space of sixty-four",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.3",
+    "text": "field 4 is an enumerated code, never free\ntext."
+   }
+  ],
+  "given": "A disavowal body a decoder is asked to check.",
+  "when": "It states each end of the code space, no code at all, a code one past the end, and free-form text where the code belongs.",
+  "then": "Both ends of the space and the absent field are accepted; a code past 63 is refused as out of space; and text where a uint belongs is refused. Free-form text on a permanently published record is a defamation surface with no recourse, which is why the field is an enumeration.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "holds": [
+   [
+    3,
+    "reason-is-enumerated"
+   ],
+   [
+    3,
+    "code-space-is-64"
+   ]
+  ]
  }
 ]

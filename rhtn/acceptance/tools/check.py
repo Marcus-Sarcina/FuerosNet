@@ -27,6 +27,9 @@ for e in entries:
     for f in FIELDS:
         if f not in e:
             flags.append(f"{eid}: missing field {f!r}")
+    for f in e:
+        if f not in FIELDS and f not in OPTIONAL:
+            flags.append(f"{eid}: {f!r} is not a field an entry carries")
     m = ID_RE.match(eid)
     if not m:
         flags.append(f"{eid}: malformed id"); continue
@@ -78,6 +81,34 @@ for e in entries:
         if not str(e.get(f, "")).strip():
             flags.append(f"{eid}: empty {f}")
 
+# **a condition with one polarity is a gap, and the gate says so.**
+# `Robot/transaction-rules.md` reasons about which conditions govern which
+# transaction; an entry carrying `transaction` and `condition` is one of
+# them, and every such condition needs both an entry holding it honoured
+# and one holding it enforced.  A rule nobody can break is a rule nobody
+# has tested.
+POLARITY = {"positive": "+", "must-accept": "+", "liveness": "+", "negative": "-", "robustness": "-"}
+paired = collections.defaultdict(set)
+for e in entries:
+    holds = e.get("holds")
+    if holds is None:
+        continue
+    if not isinstance(holds, list) or not holds:
+        flags.append(f"{e['id']}: `holds` is a non-empty list of [type, condition] pairs"); continue
+    for pair in holds:
+        if not (isinstance(pair, list) and len(pair) == 2 and pair[0] in TRANSACTIONS and isinstance(pair[1], str) and CONDITION_RE.match(pair[1])):
+            flags.append(f"{e['id']}: {pair!r} is not a [type, condition] pair"); continue
+        if e["kind"] == "withdrawn":
+            continue
+        side = POLARITY.get(e["kind"])
+        if side is None:
+            flags.append(f"{e['id']}: kind {e['kind']!r} takes no side, so it cannot hold a condition"); continue
+        paired[(pair[0], pair[1])].add(side)
+for (t, c), sides in sorted(paired.items()):
+    if sides != {"+", "-"}:
+        missing = "negative" if "-" not in sides else "positive"
+        flags.append(f"transaction {t} condition {c!r}: no {missing} entry")
+
 by_gap = collections.Counter(e.get("gap") for e in entries)
 for g in GAPS:
     if by_gap[g] == 0:
@@ -98,6 +129,8 @@ table(by_gap, "per gap")
 table(collections.Counter(str(e.get("milestone")) for e in entries), "per milestone")
 table(collections.Counter(e.get("kind") for e in entries), "per kind")
 print(f"interpretations: {sum(1 for e in entries if e.get('interpretation'))}")
+print(f"paired conditions: {len(paired)} across {len({t for t, _ in paired})} transactions")
+print(f"deferred: {sum(1 for e in entries if e.get('deferred'))}")
 withdrawn = sum(1 for e in entries if e.get("kind") == "withdrawn")
 print(f"withdrawn: {withdrawn}")
 print(f"implemented: {sum(1 for e in entries if e.get('id') in impl)} of {len(entries) - withdrawn}")

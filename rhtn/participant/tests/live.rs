@@ -60,7 +60,7 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
     assert_eq!(set.get("alice").must(&format!("send {} 0 {}", hex(&kh("carol")), hex(body))), ["sent"]);
     let want = format!("payload from={} bytes={}", hex(&kh("alice")), hex(body));
     let mut got = Vec::new();
-    for _ in 0..50 {
+    for _ in 0..300 {
         got = set.get("carol").must("events 200");
         if got.iter().any(|l| l.starts_with("payload ")) {
             break;
@@ -289,6 +289,10 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
     let envelope = line(set.get("alice").must(&format!("adoption-envelope {body} {c}:{sig_c},{a}:{sig_a}")), "envelope ");
     let txid = line(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
 
+    // the polls below are bounded at thirty seconds for the reason the
+    // daemon scenarios' dials are: the gate fences every long job at
+    // `nice -n 19`, and a process spawned from a test inherits it
+    //
     // **it went up because the party that made it offered it, and came
     // back down because the node flooded it.** A client cannot flood; the
     // one node it is attached to can, and `wire-format.md` §10.1.1 already
@@ -296,7 +300,7 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
     // in each direction. Carol learns of its own adoption from the flood,
     // not from having signed it.
     let mut landed = false;
-    for _ in 0..50 {
+    for _ in 0..300 {
         if line(set.get("carol").must(&format!("holds {txid}")), "holds ") == "true" {
             landed = true;
             break;
