@@ -278,6 +278,22 @@ impl LiveNode {
         });
         cfg.on_control = Some(on_control);
 
+        // **a client that attaches is one this node forwards to.**
+        // `wire-format.md` §10.1.1 counts the clients attached to a node
+        // among its adjacencies, and nothing below the transport can see an
+        // attach: a node never told holds an empty set, forwards the flood
+        // to nobody it serves, and stores none of their own transactions
+        // either, since §10.1.1's `h_store` counts them too.
+        let attached = view.clone();
+        cfg.on_attach = Some(Arc::new(move |peer, up| {
+            let mut v = attached.lock().unwrap();
+            if up {
+                v.attached.insert(peer);
+            } else {
+                v.attached.remove(&peer);
+            }
+        }));
+
         // request streams: resolution and currency, answered from the view
         let (v, c, an, s) = (view.clone(), currency.clone(), anchors.clone(), slot.clone());
         let identity = cfg.identity.clone();

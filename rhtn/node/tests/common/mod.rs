@@ -275,3 +275,15 @@ pub fn pack_path(ix: &[u8]) -> Vec<u8> {
 pub fn point(last: u8, port: u16) -> NetworkPoint {
     NetworkPoint::new([127, 0, 0, last], Some(port as u64))
 }
+
+/// Poll `done` until it holds or `ms` elapse.
+pub async fn until(ms: u64, mut done: impl FnMut() -> bool) -> bool {
+    let end = tokio::time::Instant::now() + std::time::Duration::from_millis(ms);
+    while tokio::time::Instant::now() < end {
+        if done() {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    done()
+}

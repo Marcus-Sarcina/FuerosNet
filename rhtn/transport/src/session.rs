@@ -564,6 +564,15 @@ pub type ReplicateHook = Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>;
 /// the session's own (`wire-format.md` §8.0): the peer it came from, the
 /// frame type, and the body bytes.
 pub type ControlHandler = Arc<dyn Fn([u8; 32], u64, Vec<u8>) + Send + Sync>;
+
+/// A session with a client opened (`true`) or ended (`false`).
+///
+/// **A node's adjacency is the sessions it holds by virtue of a topology
+/// relationship** (`wire-format.md` §10.1.1), and the clients attached to
+/// it are one of the four groups that rule names.  Nothing above the
+/// transport can see an attach otherwise, so a node that is not told keeps
+/// an empty set and forwards the flood to nobody it serves.
+pub type AttachHook = Arc<dyn Fn([u8; 32], bool) + Send + Sync>;
 /// Payload delivered on the direct path (design §14.1.1): the
 /// authenticated peer and one message.
 pub type DirectHandler = Arc<dyn Fn([u8; 32], Vec<u8>) + Send + Sync>;
@@ -609,6 +618,9 @@ pub struct NodeConfig {
     pub replicate: Option<ReplicateHook>,
     /// The node's own handling of topology frames on stream 0.  Absent, a
     /// known frame beyond the session's own is logged and dropped.
+    /// Told when a client attaches and when its session ends, so a node
+    /// above can hold the set `wire-format.md` §10.1.1's adjacency names.
+    pub on_attach: Option<AttachHook>,
     pub on_control: Option<ControlHandler>,
     /// Payload arriving on a direct connection from an authenticated peer
     /// that opens no session (design §14.1.1).  Absent, such a connection
@@ -645,6 +657,7 @@ impl NodeConfig {
             serves: Arc::new(|_| true),
             accepts_direct: Arc::new(|_| true),
             replicate: None,
+            on_attach: None,
             on_control: None,
             on_direct: None,
             nat: None,
@@ -915,6 +928,9 @@ impl Node {
             st.reach.insert(claimed, reach.clone());
             st.outbound.insert(claimed, otx);
         }
+        if let Some(f) = &self.cfg.on_attach {
+            f(claimed, true);
+        }
         // drain: each waiting message goes out oldest first and leaves the
         // store only once the peer has taken it, so a session that fails
         // mid-drain leaves the rest where it was (design §14.1.6)
@@ -959,6 +975,9 @@ impl Node {
             st.sessions.remove(&claimed);
             st.reach.remove(&claimed);
             st.outbound.remove(&claimed);
+        }
+        if let Some(f) = &self.cfg.on_attach {
+            f(claimed, false);
         }
         self.log.push(Event::Closed);
         Ok(())

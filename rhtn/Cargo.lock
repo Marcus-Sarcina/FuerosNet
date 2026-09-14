@@ -694,6 +694,7 @@ dependencies = [
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-node",
+ "rhtn-sim",
  "rhtn-transport",
  "tokio",
 ]

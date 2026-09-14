@@ -9,6 +9,7 @@
 //!
 //! [`scenario`] builds several nodes over loopback and scripts them.
 
+pub mod daemons;
 pub mod mesh;
 pub mod nat;
 pub mod path;

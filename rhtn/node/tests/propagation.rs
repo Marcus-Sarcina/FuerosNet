@@ -645,3 +645,58 @@ fn a_relationship_that_ends_takes_the_wake_endpoint_with_it() {
     assert!(s.n.wake.get(&kh("carol")).is_none());
     assert!(s.n.wake.get(&kh("w1")).is_some(), "the other client's endpoint is untouched");
 }
+
+// ------------------------------- who a running node knows is attached to it
+
+// acceptance: PRP-23
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_running_node_learns_who_is_attached_to_it_and_forwards_to_them() {
+    use rhtn_node::resolution::{AnchorTable, Ingestion};
+    use rhtn_node::runtime::LiveNode;
+    use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, NodeConfig, attach};
+    use rhtn_transport::tls::{self, Pins};
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    let pins = Pins::new();
+    for n in ["alice", "bob", "carol", "w1", "witness"] {
+        pins.pin_identity(&id(n).public);
+    }
+    // a node with nothing recorded: no table, no peers, nobody attached,
+    // which is the state a process starts in
+    let mut cfg = NodeConfig::defaults(Arc::new(id("bob")), pins.clone(), 30);
+    cfg.log = Log::recording();
+    let v = view("bob", Table::with_me(kh("bob")), "bob", &[]);
+    let node = LiveNode::start(cfg, v, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    assert!(node.view.lock().unwrap().attached.is_empty(), "nobody is attached before anyone attaches");
+
+    let ccfg = ClientConfig {
+        identity: Arc::new(id("carol")),
+        pins,
+        capabilities: BTreeMap::new(),
+        attestation: None,
+        filter: None,
+        sibling_cache: Arc::new(Mutex::new(Vec::new())),
+        addresses: Arc::new(Mutex::new(Default::default())),
+        tls: Arc::new(Mutex::new(Default::default())),
+        connect_timeout: Duration::from_secs(5),
+        on_reachability: None,
+        log: Log::default(),
+    };
+    let ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let AttachOutcome::Attached(session) = attach(&ccfg, &ep, kh("bob"), node.addr, false).await else { panic!("carol attaches") };
+
+    // **the node was told**, so carol is one of the adjacencies
+    // `wire-format.md` §10.1.1 names
+    let held = until(3000, || node.view.lock().unwrap().attached.contains(&kh("carol"))).await;
+    assert!(held, "a client that attached is recorded as attached");
+    // and is therefore inside the store's reach for its own transactions
+    assert!(node.view.lock().unwrap().in_h_store(&kh("carol")), "an attached client is within the store");
+
+    // when the session ends the node forgets it: adjacency is the sessions
+    // it holds, and it no longer holds this one
+    session.conn.close(0u32.into(), b"done");
+    drop(session);
+    assert!(until(5000, || !node.view.lock().unwrap().attached.contains(&kh("carol"))).await, "and forgotten when the session ends");
+}

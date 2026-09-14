@@ -9449,5 +9449,86 @@
   "then": "The view is discarded and the node rebuilds its own table and its own routing slots. Installing another party's fold would replace this node's slots with theirs, which is a different node's answer to a question only this node can answer.",
   "oracle": "behaviour",
   "interpretation": null
+ },
+ {
+  "id": "PRP-23",
+  "area": "propagation",
+  "gap": "propagation",
+  "title": "A running node learns who is attached to it, and forwards to them",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §10.1.1",
+   "design §14.1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "your serving node, and the clients attached to you"
+   },
+   {
+    "where": "design §14.1.2",
+    "text": "Attachment answers one question: where do my messages queue."
+   }
+  ],
+  "given": "A running node with no topology relationships recorded, and a client that attaches to it.",
+  "when": "A transaction in the node's store reach arrives from a third party, and the client's session later ends.",
+  "then": "The node stores it and forwards it to the attached client, and treats the client's own transactions as within its store. After the session ends it forwards nothing further to that party. A node told nothing about its attaches holds an empty set and serves the flood to none of its clients, whatever its configuration says.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-17",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A transaction crosses two daemon processes and survives a restart",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §4.3",
+   "wire-format.md §10.1.1"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Keep the topology store across a restart — it is your seen-set."
+   },
+   {
+    "where": "wire-format.md §10.1.1",
+    "text": "a node forwards a stored transaction to every adjacent node\nexcept the one it arrived from"
+   }
+  ],
+  "given": "Two daemon processes started from their own configuration files, one naming the other as its patron, with nothing pre-seeded in either.",
+  "when": "A transaction is pushed into the first over a session, and the second is later stopped and started again.",
+  "then": "It reaches the second over the session between the two processes, is in that process's store on disk after it stops, and the restarted process still holds the binding it needs to accept a further transaction. Nothing here reads a view: every claim is made over a session or from what the process wrote.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "DMN-18",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "A daemon answers a resolution from the topology it was pushed",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md \u00a77.7.1",
+   "design \u00a712.6.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md \u00a77.7.1",
+    "text": "The serving node resolves on the client's behalf and returns the\nresult."
+   },
+   {
+    "where": "design \u00a712.6.1",
+    "text": "empty means the addressed party is the node itself, non-empty means the\nlast hop forwards to an attached client"
+   }
+  ],
+  "given": "A daemon process started from its own configuration with nothing pre-seeded, and a client attached to it over a session.",
+  "when": "Two adoptions are pushed into it over a session, and a resolution for the party at the end of the resulting path is then requested on a stream.",
+  "then": "It answers on the stream with the nonce it was asked with, and either serves the request itself with a residual suffix and endpoints or refers onward with a positive advance and endpoints. A subject on a path it holds no record for is a stated failure rather than a hang or a silence.",
+  "oracle": "behaviour",
+  "interpretation": "Which node the answer names is not fixed here. Nothing in a running node marks another node as infrastructure, so the nearest infrastructure ancestor a table can see is the node itself; whether publishing an endpoint record is what marks a publisher infra is unsettled."
  }
 ]
