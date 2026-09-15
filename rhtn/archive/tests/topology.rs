@@ -694,3 +694,65 @@ fn an_unfamiliar_disavowal_code_is_banded_rather_than_refused_and_none_bands_as_
 fn band(t: &Table, node: &[u8; 32], patron: &[u8; 32]) -> Option<bool> {
     t.bindings().iter().find(|b| b.node == *node && b.patron == *patron).and_then(|b| b.end.clone()).expect("an ending").2.with_prejudice()
 }
+
+/// Ten slots, one occupant each (design §3.1).  The fanout bound and the
+/// path's nibble range are the same bound, so the positive case is that a
+/// patron filling all ten is holdable and every one of them is placed
+/// where its own locator says.
+// acceptance: TOP-34
+#[test]
+fn a_patron_fills_ten_slots_and_every_subordinate_keeps_the_one_it_was_given() {
+    let names: Vec<String> = (0..10).map(|i| format!("s{i}")).collect();
+    let mut refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    refs.push("alice");
+    let mut w = World::new(&refs);
+    let mut t = Table::new();
+    for (i, n) in names.iter().enumerate() {
+        let f = w.meet(n, "alice");
+        apply(&mut t, &w, &f);
+        let a = w.adopt_in_slot(n, "alice", f.txid, 1, i as u8);
+        apply(&mut t, &w, &a);
+    }
+    assert_eq!(t.subordinates(&w.kh("alice")).len(), 10, "all ten are held");
+    let mut seen: BTreeSet<u8> = BTreeSet::new();
+    for b in t.bindings().iter().filter(|b| b.patron == w.kh("alice") && b.open()) {
+        let slot = b.slot.expect("a subordinate sits in a slot");
+        assert!(seen.insert(slot), "slot {slot} is claimed twice");
+    }
+    assert_eq!(seen, (0..10).collect::<BTreeSet<u8>>(), "and the ten they claim are 0-9");
+}
+
+/// The negative: a second occupant of a filled slot is refused, and so is
+/// the eleventh subordinate — which cannot name a free slot because there
+/// is no eleventh nibble value.  **The incumbent stays**: nothing here
+/// adjudicates which of two signed adoptions the patron meant.
+// acceptance: TOP-35
+#[test]
+fn a_filled_slot_refuses_a_second_occupant_and_keeps_the_one_it_holds() {
+    let mut w = World::new(&["alice", "carol", "w1", "w2"]);
+    let mut t = Table::new();
+    let f = w.meet("carol", "alice");
+    apply(&mut t, &w, &f);
+    let held = w.adopt_in_slot("carol", "alice", f.txid, 1, 3);
+    apply(&mut t, &w, &held);
+
+    let g = w.meet("w1", "alice");
+    apply(&mut t, &w, &g);
+    let clash = w.adopt_in_slot("w1", "alice", g.txid, 1, 3);
+    let refused = offer(&mut t, &w, &clash).expect_err("slot 3 is taken");
+    assert!(refused.contains("Slot"), "refused for the slot, not something else: {refused}");
+    assert_eq!(t.subordinates(&w.kh("alice")), set(&[w.kh("carol")]), "the incumbent stays and the newcomer is not held");
+
+    // out of range at the encoding, so an eleventh cannot be named at all
+    assert_eq!(Locator { anchor: w.kh("alice"), path: vec![0x1a], nibbles: 2, seqno: Seqno { series: 1, counter: 0 } }.slot(), Some(10),
+        "the accessor reports what the bytes say; DEC-09 is what rejects 10-15");
+
+    // and the departed slot is free again
+    let dep = w.depart("carol", "alice", Seqno { series: 1, counter: 1 });
+    apply(&mut t, &w, &dep);
+    let h = w.meet("w2", "alice");
+    apply(&mut t, &w, &h);
+    let again = w.adopt_in_slot("w2", "alice", h.txid, 1, 3);
+    apply(&mut t, &w, &again);
+    assert_eq!(t.subordinates(&w.kh("alice")), set(&[w.kh("w2")]), "the slot its occupant left takes the next one");
+}

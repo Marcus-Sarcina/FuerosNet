@@ -478,6 +478,16 @@ latency for a stranger's key**, not bandwidth.
   has exactly one patron, and every node has at most **f = 10** subordinates.
   Roots have none, which is an ordinary state rather than an error (§12.7). Directedness and acyclicity are
   enforced within a subtree.
+- **The ten are slots, and a path's last hop names which one.** A subordinate's
+  index under its patron is the final nibble of its path
+  (`wire-format.md` §2.1), so the fanout bound and the index range are one bound
+  stated twice: ten values, ten subordinates, **one occupant each**. A patron
+  issuing an adoption picks an index none of its open subordinates holds.
+  **What enforces that is storage, not scrutiny** (§1.1): a holder keeps a row
+  per patron slot and has nowhere to put a second occupant, so an adoption
+  naming a filled one is refused by the shape of the table rather than by a rule
+  someone has to remember to apply. Slots are counted per subnet, since §3.1.1
+  leaves no cross-subnet fanout accounting to do.
 - **Acyclicity is a property of the patron relation, not of connectivity.** The
   operational graph is a tree *with elaboration around replication, caching and
   failover*, and several of those edges are not parent-child:

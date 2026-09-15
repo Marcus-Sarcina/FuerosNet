@@ -137,6 +137,12 @@ pub struct World {
     pub archives: BTreeMap<Keyhash, Archive>,
     pub store: BTreeMap<Txid, Vec<u8>>,
     pub clock: u64,
+    /// The slot each `(patron, node)` was given, and the next free one per
+    /// patron.  A patron's ten slots hold one occupant each (design §3.1),
+    /// so a harness handing every subordinate slot 0 would be offering the
+    /// table records it cannot store.
+    slots: BTreeMap<(String, String), u8>,
+    next_slot: BTreeMap<String, u8>,
 }
 
 impl Default for World {
@@ -147,7 +153,7 @@ impl Default for World {
 
 impl World {
     pub fn new() -> Self {
-        let mut w = World { archives: BTreeMap::new(), store: BTreeMap::new(), clock: 1_800_000_000 };
+        let mut w = World { archives: BTreeMap::new(), store: BTreeMap::new(), clock: 1_800_000_000, slots: BTreeMap::new(), next_slot: BTreeMap::new() };
         for n in NAMES {
             w.archives.insert(kh(n), Archive::new(kh(n)));
         }
@@ -199,15 +205,31 @@ impl World {
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
 
+    /// The slot `patron` gives `node`, stable across re-adoptions of the
+    /// same pair so a departure and a return land in the same place.
+    fn slot_for(&mut self, node: &str, patron: &str) -> u8 {
+        let key = (patron.to_string(), node.to_string());
+        if let Some(i) = self.slots.get(&key) {
+            return *i;
+        }
+        let next = self.next_slot.entry(patron.to_string()).or_default();
+        let i = *next;
+        assert!(i < 10, "patron {patron} has no free slot: design §3.1 gives ten");
+        *next += 1;
+        self.slots.insert(key, i);
+        i
+    }
+
     /// An adoption of `node` under `patron` on a fresh presence record.
     pub fn adopt(&mut self, node: &str, patron: &str, series: u32) -> (Record, Record) {
         let pop = self.meet(patron, node);
         let t = self.tick();
+        let slot = self.slot_for(node, patron);
         let (bn, bp) = (self.back(node), self.back(patron));
         let a = Adoption {
             node: kh(node),
             patron: kh(patron),
-            locator: Locator { anchor: kh(patron), path: vec![0x10], nibbles: 2, seqno: Seqno { series, counter: 0 } },
+            locator: Locator { anchor: kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),

@@ -69,6 +69,17 @@ impl Locator {
     pub fn root(anchor: Keyhash, seqno: Seqno) -> Self {
         Locator { anchor, path: Vec::new(), nibbles: 0, seqno }
     }
+
+    /// Which of the patron's ten slots this position occupies: the path's
+    /// final nibble (design §3.1, `wire-format.md` §2.1).
+    ///
+    /// **Nothing for the empty path**, which is the self-anchor case — a
+    /// root sits under no patron and so occupies no slot of one.
+    pub fn slot(&self) -> Option<u8> {
+        let i = self.nibbles.checked_sub(1)?;
+        let byte = *self.path.get(usize::try_from(i / 2).ok()?)?;
+        Some(if i.is_multiple_of(2) { byte >> 4 } else { byte & 0x0f })
+    }
     pub fn emit(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 3);
         emit_uint(out, 1);

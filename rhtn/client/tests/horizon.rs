@@ -199,8 +199,8 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
     // two adoptions of w1 that differ only in the slot, so they sort at the
     // same time and neither is the later of the two
     let first = adopt(&mut w, "alice", "bob", vec![0x10], 1);
-    let one = adopt_at(&mut w, "w1", "bob", "bob", vec![0x21], 2, 1);
-    let other = adopt_at(&mut w, "w1", "bob", "bob", vec![0x31], 2, 1);
+    let one = adopt_at(&mut w, "w1", "bob", "bob", vec![0x20], 1, 1);
+    let other = adopt_at(&mut w, "w1", "bob", "bob", vec![0x30], 1, 1);
     assert_ne!(one.txid, other.txid, "different records");
 
     let taken = fed("alice", &[first.clone(), one.clone()]);
@@ -215,7 +215,7 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
     let woke = swapped.wake(Some(&snap), &ids());
     assert!(matches!(woke, Woke::Replayed { .. }), "a fold taken from other records is not reused: {woke:?}");
     // and what it lands on is what the records it holds actually say
-    assert_eq!(swapped.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x31]), "the record held, not the one folded");
+    assert_eq!(swapped.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x30]), "the record held, not the one folded");
 
     // the honest case still folds nothing
     let mut same = fed("alice", &[]);
@@ -223,7 +223,7 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
         assert!(same.restore_record(r.bytes.clone()));
     }
     assert_eq!(same.wake(Some(&snap), &ids()), Woke::Current);
-    assert_eq!(same.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x21]));
+    assert_eq!(same.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x20]));
 }
 
 // acceptance: TOP-26

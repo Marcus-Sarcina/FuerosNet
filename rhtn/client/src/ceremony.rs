@@ -206,16 +206,6 @@ pub struct WitnessRequest {
     pub channels: Vec<ChannelOutcome>,
 }
 
-/// The last nibble of a locator's path: the index its patron put it at.
-fn index_of(loc: &Locator) -> Option<u8> {
-    if loc.nibbles == 0 {
-        return None;
-    }
-    let i = (loc.nibbles - 1) as usize;
-    let byte = *loc.path.get(i / 2)?;
-    Some(if i.is_multiple_of(2) { byte >> 4 } else { byte & 0x0f })
-}
-
 /// What a patron is proposing, beside who and into which subnet.
 ///
 /// Grouped because the four move together: the evidence the binding rests
@@ -811,7 +801,7 @@ impl Client {
             if patron != me || loc.anchor != *anchor || ended.contains(&node) {
                 continue;
             }
-            if let Some(i) = index_of(&loc) {
+            if let Some(i) = loc.slot() {
                 taken.insert(i);
             }
         }

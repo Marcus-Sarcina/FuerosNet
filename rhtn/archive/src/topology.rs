@@ -82,6 +82,10 @@ pub struct Binding {
     pub end: Option<(Txid, u64, End)>,
     /// The subnet the adoption's locator names.
     pub anchor: Option<Keyhash>,
+    /// Which of the patron's ten slots the adoption's locator claims: its
+    /// path's final nibble (design §3.1).  Nothing for a self-anchored
+    /// root, which occupies no patron's slot.
+    pub slot: Option<u8>,
     pub evidence: EvidenceStatus,
 }
 
@@ -109,6 +113,16 @@ pub enum Refusal {
     Evidence(String),
     /// The proposed patron sits in this node's own down-line (design §6.2.5).
     Cycle { below: Keyhash },
+    /// The slot the locator claims is already held by an open subordinate
+    /// of the same patron in the same subnet (design §3.1).
+    ///
+    /// **A bound on this table, not a judgement about the record.** Ten
+    /// slots hold ten subordinates and there is nowhere to put an eleventh
+    /// or a second occupant, so the incumbent stays and the record is not
+    /// stored.  Nothing here adjudicates which of two signed adoptions was
+    /// the patron's real intent — that is the patron's to get right, and
+    /// §1.1 leaves a holder no way to find out.
+    Slot { patron: Keyhash, slot: u8, held: Keyhash },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -472,6 +486,7 @@ impl Table {
                 let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
                 let evidence = Self::evidence_status(rec, ids, &node, &patron, presence, mode)?;
                 let anchor = rec.locator().map(|l| l.anchor);
+                let slot = rec.locator().and_then(|l| l.slot());
                 // an adoption already held is not bound twice; an unevaluated
                 // one whose evidence has since arrived is upgraded
                 if let Some(b) = self.bindings.iter_mut().find(|b| b.adoption == rec.txid) {
@@ -479,6 +494,22 @@ impl Table {
                         b.evidence = EvidenceStatus::Satisfied;
                     }
                     return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
+                }
+                // **Ten slots, one occupant each** (design §3.1): the
+                // patron's fanout and the path's nibble range are the same
+                // bound, so holding this record would mean holding two
+                // subordinates at one index.  A recovery's predecessor does
+                // not count as the occupant — its bindings close below, and
+                // a successor inheriting the slot it vacates is the whole
+                // point of the transaction.
+                if let (Some(slot), Some(anchor)) = (slot, anchor) {
+                    let prior = rec.prior_key();
+                    if let Some(held) = self.bindings.iter().find(|b| {
+                        b.open() && b.patron == patron && b.anchor == Some(anchor)
+                            && b.slot == Some(slot) && b.node != node && Some(b.node) != prior
+                    }) {
+                        return Err(Refusal::Slot { patron, slot, held: held.node });
+                    }
                 }
                 let mut applied = Applied::Adopted;
                 if let Some(prior) = rec.prior_key() {
@@ -495,7 +526,7 @@ impl Table {
                 }
                 self.nodes.insert(node);
                 self.nodes.insert(patron);
-                self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, evidence });
+                self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, slot, evidence });
                 self.settle_pending_reissues();
                 self.settle_pending_departures();
                 self.settle_pending_disavowals();
@@ -911,7 +942,7 @@ impl Table {
         emit_uint(&mut out, 2);
         emit_array_head(&mut out, self.bindings.len());
         for b in &self.bindings {
-            emit_array_head(&mut out, 8);
+            emit_array_head(&mut out, 9);
             emit_bstr(&mut out, &b.node);
             emit_bstr(&mut out, &b.patron);
             emit_uint(&mut out, b.series as u64);
@@ -949,6 +980,13 @@ impl Table {
             match &b.anchor {
                 Some(a) => emit_bstr(&mut out, a),
                 None => emit_bstr(&mut out, &[]),
+            }
+            match &b.slot {
+                Some(i) => {
+                    emit_array_head(&mut out, 1);
+                    emit_uint(&mut out, *i as u64);
+                }
+                None => emit_array_head(&mut out, 0),
             }
             emit_uint(&mut out, matches!(b.evidence, EvidenceStatus::Satisfied) as u64);
         }
@@ -1054,7 +1092,7 @@ impl Table {
         let Item::Array(bindings) = map_get(m, 2)? else { return None };
         for row in bindings {
             let Item::Array(f) = row else { return None };
-            if f.len() != 8 {
+            if f.len() != 9 {
                 return None;
             }
             let end = match &f[5] {
@@ -1075,6 +1113,11 @@ impl Table {
                 _ => return None,
             };
             let anchor = bytes_of(b, &f[6])?;
+            let slot = match &f[7] {
+                Item::Array(v) if v.is_empty() => None,
+                Item::Array(v) if v.len() == 1 => Some(u8::try_from(uint_of(&v[0])?).ok()?),
+                _ => return None,
+            };
             t.bindings.push(Binding {
                 node: kh_of(b, &f[0])?,
                 patron: kh_of(b, &f[1])?,
@@ -1083,7 +1126,8 @@ impl Table {
                 from: uint_of(&f[4])?,
                 end,
                 anchor: (!anchor.is_empty()).then(|| anchor.try_into().ok()).flatten(),
-                evidence: if uint_of(&f[7])? == 1 { EvidenceStatus::Satisfied } else { EvidenceStatus::Unevaluated },
+                slot,
+                evidence: if uint_of(&f[8])? == 1 { EvidenceStatus::Satisfied } else { EvidenceStatus::Unevaluated },
             });
         }
 

@@ -9542,3 +9542,33 @@ by construction, so a ceremony that works with no network needs that crossing.
 relays a payload without reading it satisfies. `light-client-requirements.md`
 §9 and `infra-client-requirements.md` §8.1 carried the same overstatement and
 now carry the rule.
+
+### 2026-09-14 (ten slots, and where two bounds turned out to be one)
+
+**A patron's ten subordinates and the path nibble's ten values are the same
+ten slots, and nothing said so** [author, 2026-09-14]. §3.1 gave the fanout,
+`wire-format.md` §2.1 gave the range, and no passage joined them — so nothing
+required the index a patron issues to be one no subordinate of its already
+holds. Both documents now say it, and §3.1 says what enforces it: **storage,
+not scrutiny.** A holder keeps a row per patron slot, so a record claiming a
+filled one has nowhere to go.
+
+**The enforcement had no holder-side half at all.** The issuing patron's check
+went in on 2026-09-13; a receiver's table carried no slot, refused no eleventh
+subordinate, and would hold ten parties at one address without complaint. A
+binding now carries the slot its locator names and the fold refuses a second
+occupant of one, keeping the incumbent — **nothing there adjudicates** which of
+two signed adoptions the patron meant, which is §15.2's rule for detection
+generally.
+
+**Three test harnesses were putting every subordinate in slot 0**, which is why
+the rule bit as soon as it existed: the archive, node and daemon worlds each
+built one locator shape and reused it. Each now allocates per patron. One
+client fixture had two different parties at one index and read as testing
+something else.
+
+**The hybrid key sizes are stated where the key is defined**, with the standard
+each comes from [author, 2026-09-14]: Ed25519's 32-byte public key from RFC 8032
+§5.1.5 and ML-DSA-65's 1,952 from FIPS 204 Table 2, alongside the signature
+figures §1.3 already carried. They were being cited to §§2.2 and 3.5, which
+stated none of them.

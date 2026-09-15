@@ -235,8 +235,8 @@ logical signer contributes one classical and one post-quantum entry (§3.5).
 that a record one bound permits the other rejects. Deriving it makes that
 structurally impossible rather than something to notice.
 
-**Signature arithmetic, so the figures above are checkable.** Ed25519 is 64 bytes,
-ML-DSA-65 is 3,309. **One logical signer costs 3,373 bytes**, not 6,618 — only one
+**Signature arithmetic, so the figures above are checkable.** Ed25519 is 64 bytes
+(RFC 8032 §5.1.6), ML-DSA-65 is 3,309 (FIPS 204 Table 2). **One logical signer costs 3,373 bytes**, not 6,618 — only one
 of its two entries is post-quantum (§3.5). An adoption's two signers are therefore
 ≈ 6.6 KB, and a ten-signer presence record ≈ 33 KB, both before the body.
 
@@ -308,6 +308,10 @@ path = {
 With f = 10 (design §3.2) each hop index needs values 0–9, so 4 bits suffice. A
 depth-11 path — sufficient for 6×10¹⁰ nodes — occupies 6 bytes.
 
+**The final nibble is the subject's slot under its patron** (design §3.1). Ten
+values, ten subordinates, one occupant each, so the index range and the fanout
+bound are never two bounds to reconcile.
+
 **A path may be empty** [author, 2026-09-01]: zero nibbles, the empty byte
 string, count 0 — `{1: h'', 2: 0}` is its one encoding. It is the
 **self-anchor** case: a root has no ancestor to name, so it names itself, and
@@ -355,7 +359,7 @@ vectors must pick one, and reproducible signing makes a failing vector diagnosab
 rather than merely repeatable.
 
 **Ed25519's parameters come from RFC 9053**: `kty` = OKP (1), `crv` = Ed25519 (6),
-public key in `x` (-2).
+public key in `x` (-2), **32 bytes** (RFC 8032 §5.1.5).
 
 **That only three labels may appear is this profile's rule, not the RFC's.**
 RFC 9053 says which parameters an OKP key requires; COSE keys may also carry common
@@ -374,7 +378,7 @@ not permit inside `KeyMaterial`:
 |---|---|---|
 | 1 | `kty` | **7** (AKP, *Algorithm Key Pair*) |
 | 3 | `alg` | **-49** (ML-DSA-65). REQUIRED for all AKP keys |
-| -1 | `pub` | `bstr`, the raw public key. REQUIRED |
+| -1 | `pub` | `bstr`, the raw public key, **1,952 bytes** at ML-DSA-65 (FIPS 204 Table 2). REQUIRED |
 
 **`priv` (label -2) MUST NOT appear** — that one is RFC 9964's rule for a public
 key. **`kid` and every other optional or common parameter are excluded by this

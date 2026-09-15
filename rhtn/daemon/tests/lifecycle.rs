@@ -192,7 +192,12 @@ async fn the_daemon_refuses_to_start_on_an_identity_it_would_have_to_mint_or_sha
 /// A presence record between two parties and the adoption it supports,
 /// signed as those parties would sign them.  The daemon is the patron, so
 /// it countersigns the adoption and must verify its own signature.
-fn adoption_under(patron: &str, child: &str) -> (Vec<u8>, Vec<u8>) {
+/// An adoption of `child` under `patron` in that patron's slot `slot`.
+///
+/// **The slot is the caller's to keep distinct** (design §3.1): a patron's
+/// ten slots hold one occupant each, so a harness reusing one would be
+/// offering a table a record it cannot store.
+fn adoption_under_slot(patron: &str, child: &str, slot: u8) -> (Vec<u8>, Vec<u8>) {
     use rhtn_archive::record::Record;
     use rhtn_archive::tx::*;
     let (p, c, w) = (test_identity(patron), test_identity(child), test_identity("witness"));
@@ -202,7 +207,7 @@ fn adoption_under(patron: &str, child: &str) -> (Vec<u8>, Vec<u8>) {
     let pop = envelope(TYPE_PRESENCE, &pop, &[&p, &c, &w]);
     let pop_id = Record::parse(&pop).unwrap().txid;
     let (bp, bc) = (vec![pop_id], vec![pop_id]);
-    let path = rhtn_node::resolution::Path::from_indices(&[0]);
+    let path = rhtn_node::resolution::Path::from_indices(&[slot]);
     let a = Adoption {
         node: c.public.keyhash,
         patron: p.public.keyhash,
@@ -231,7 +236,7 @@ async fn a_restart_rebuilds_the_routing_view_and_verifies_this_nodes_own_signatu
     )
     .unwrap();
     let cfg = Config::read(&l.config).unwrap();
-    let (pop, adoption) = adoption_under("bob", "carol");
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
     let slot = {
         let s = Service::start(&cfg, &l.peers).await.expect("starts");
         let mut view = s.node.view.lock().unwrap();
@@ -275,7 +280,7 @@ async fn a_restart_puts_back_this_nodes_own_chain_and_its_current_series() {
     let l = layout("continuity");
     std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
     let cfg = Config::read(&l.config).unwrap();
-    let (pop, adoption) = adoption_under("bob", "carol");
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
     let signed = {
         let s = Service::start(&cfg, &l.peers).await.expect("starts");
         let mut view = s.node.view.lock().unwrap();
@@ -334,7 +339,7 @@ async fn a_wake_folds_in_what_arrived_since_rather_than_replaying_the_store() {
     let l = layout("materialise");
     std::fs::write(&l.peers, ["carol", "w1", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
     let cfg = Config::read(&l.config).unwrap();
-    let (pop, adoption) = adoption_under("bob", "carol");
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
     // one adoption accepted, then written out with the derived view beside
     // the store
     {
@@ -351,7 +356,7 @@ async fn a_wake_folds_in_what_arrived_since_rather_than_replaying_the_store() {
     assert!(snap.high.is_some(), "the watermark names the transaction folded in");
     // a second adoption is added to the store without the derived view
     // being told: it sorts above the watermark, so a wake folds it alone
-    let (pop2, adoption2) = adoption_under("bob", "w1");
+    let (pop2, adoption2) = adoption_under_slot("bob", "w1", 1);
     {
         let s = Service::start(&cfg, &l.peers).await.expect("starts again");
         let mut view = s.node.view.lock().unwrap();
@@ -394,7 +399,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let l = layout("mismatch");
     std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
     let cfg = Config::read(&l.config).unwrap();
-    let (pop, adoption) = adoption_under("bob", "carol");
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
     {
         let s = Service::start(&cfg, &l.peers).await.expect("starts");
         let mut view = s.node.view.lock().unwrap();
@@ -491,7 +496,7 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
     let l = layout("foreign-view");
     std::fs::write(&l.peers, ["carol", "witness"].map(|n| format!("{}\n", hex(&test_identity(n).public.key_material()))).concat()).unwrap();
     let cfg = Config::read(&l.config).unwrap();
-    let (pop, adoption) = adoption_under("bob", "carol");
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
     {
         let s = Service::start(&cfg, &l.peers).await.expect("starts");
         let mut view = s.node.view.lock().unwrap();
