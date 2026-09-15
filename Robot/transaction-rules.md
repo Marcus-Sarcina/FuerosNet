@@ -74,6 +74,7 @@ all six.
 | `forward-if-stored` | Forwarded to every adjacency except the arrival one, if and only if it was stored | store | PRP-01, PRP-23 | PRP-02 |
 | `duplicate-is-not-news` | An object already held is neither stored again nor re-forwarded | store | — | PRP-03 |
 | `originates-from-party` | A client offers its own records to its serving node, which is the only party that can flood them | client, store | PRT-06 | — |
+| `endpoint-line-current` | An equivocating pair retires both contents, an unproved series is not taken, and both facts survive a restore | store, client | TOP-40 | TOP-39 |
 
 **Gaps here.** `cose-profile`, `declared-algorithm`, `body-matches-type`,
 `two-parties-differ` and `nested-structures` have negatives and no
@@ -84,6 +85,17 @@ checks rather than passing for some other reason. `missing-signer-key`,
 refuses to flood what a client had no standing to offer.
 `duplicate-is-not-news` has no positive, which is the same rule read the
 other way: nothing asserts that an object *not* already held is taken.
+
+**`endpoint-line-current` was two implementations of one rule**
+[2026-09-15]. The node applied §10.1.2 in full — exact duplicate, older,
+incomparable, an equal-`seqno` pair retired on both sides, a second series
+held for the chain that proves it. The participant's own copy, written
+later, applied one line of it: *counter at or below the held one is a
+duplicate*. So a client took an equivocating pair and kept whichever
+arrived first, and admitted a series nothing proved. The decision now lives
+in `rhtn-archive` and both holders ask it; each still does its own storing.
+A client's series evidence is its own table, where a node's is a presented
+chain.
 
 ---
 
@@ -326,10 +338,10 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 86 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 87 conditions drawn from the documents,
 and of them:
 
-- 43 hold on both sides
+- 44 hold on both sides
 - 35 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware
