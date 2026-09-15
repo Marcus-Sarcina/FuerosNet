@@ -9725,3 +9725,54 @@ nothing computing its input or reading its output.
   and `evidence()`'s acquaintance edges are empty at a node — the metric
   there runs on adoptions alone. The pull path design §15 describes is the
   work that closes it.
+
+## Author rulings on the reviewer's functional test document (2026-09-14)
+
+The document is `functional_tests.md` in the root, untracked, reviewer-authored
+from the five design documents. Review found it mechanically sound: five
+fingerprints matching, 441 rows across 26 prefixes matching its own totals table,
+297 distinct section citations all resolving, 75 source paths all present, and
+every boundary value checked against its source correct. Six items went to the
+author; his rulings, and what each cost:
+
+1. **Slot uniqueness.** Ruled: a conforming patron performs the check, and other
+   nodes enforce it passively through a strict limitation of their own storage —
+   spell it out only where a section is ambiguous. It was: §3.1 gave f=10,
+   `wire-format.md` §2.1 gave the nibble range, and nothing joined them. Both
+   now do, and `Binding` carries its slot so the fold refuses a second occupant.
+   TOP-34, TOP-35.
+2. **Endpoint records.** Ruled: no rejection. A receiver cannot tell an infra
+   node from a light client that signed one anyway, and the IP-gossip machinery
+   would not normally exist on a light client. **This confirms current
+   behaviour** — `ingest_endpoint` checks the signature and the horizon and
+   nothing else, and TOP-28 already asserts that holding the record is what
+   marks the publisher. A draft test for it was written and deleted as a
+   duplicate rather than kept.
+3. **Contested exit.** Ruled: in-horizon nodes default to the remaining patron's
+   determination; out-of-horizon nodes do not see the disavowal. **Open**: which
+   patron "remaining" names is ambiguous where the departing node has been
+   adopted elsewhere, and it decides whose judgement an observer inherits. Asked
+   rather than guessed.
+4. **Departure.** The author's question — who retains, and what kind of
+   participant — is answered in the report: three kinds hold a `Table`, and
+   "left as a root in the table" was true of the fold and false of the horizon
+   and of the address book. His proposal implemented: an ending re-anchors the
+   departed party on itself and shortens every path beneath it by the prefix
+   that reached it. TOP-36, TOP-37.
+5. **Key sizes.** Ruled: state them in the wire format, keeping the standard
+   each is derived from. Done in §2.2, with §1.3's signature figures given
+   theirs.
+6. **Nonce echo.** Ruled: add tests wherever relevant. The registration reply's
+   echo was already asserted on every registration the tests make. The survey
+   found the real gap elsewhere: `Sweep::take` read entries out of any
+   `CatalogReply` handed to it without checking the nonce, where resolution,
+   currency and the archive walk all check theirs. `Step::WrongNonce` added,
+   following those three. RSC-37.
+
+**The defect class recurred twice more.** `departure_body` has no production
+caller — only tests — so no client can mint a departure, and `Sweep` itself is
+reached from tests alone. Both recorded, neither in scope here.
+
+**Three test harnesses were placing every subordinate at slot 0** and one client
+fixture had two different parties at one index, so the rule bit the moment it
+existed. That is the check working, not the check being wrong.
