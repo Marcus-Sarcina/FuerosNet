@@ -105,32 +105,36 @@ fn swapped_lists_verify_and_do_not_reach_back() {
 
 // acceptance: ARC-04
 #[test]
-fn a_series_opens_at_zero_and_a_departure_advances_it() {
+fn a_series_opens_at_zero_and_a_departure_names_the_one_it_ends() {
     let (mut w, _) = formed();
     let adoption = w.archive("bob").get(&w.head("bob")).unwrap().clone();
-    assert_eq!(adoption.seqno(), Some(Seqno { series: 5, counter: 0 }));
+    assert_eq!(adoption.seqno(), Some(Seqno { series: 5, counter: 0 }), "the adoption establishes the series, opening it at zero");
+
+    // **the series is what selects the binding**, and the counter ranks
+    // nothing here [author, 2026-09-15]: a departure is terminal, not an
+    // update to be ordered against anything
     let dep = w.depart("bob", "alice", Seqno { series: 5, counter: 3 });
-    let s = dep.seqno().unwrap();
-    assert_eq!(s.series, 5);
-    assert!(s.counter > 0);
-    assert_eq!(compare(adoption.seqno().unwrap(), s), Order::Newer);
-    // the same {s, c} again with different contents is not newer
+    assert_eq!(dep.seqno().unwrap().series, 5, "the departure names the series it ends");
+
+    // a second departure naming the same series is a repeat, and what
+    // catches it is its own identity rather than any comparison
     let again = w.loose_departure("bob", "alice", &[dep.txid], Seqno { series: 5, counter: 3 }, w.clock + 1);
-    assert_ne!(again.txid, dep.txid);
-    assert_eq!(compare(s, again.seqno().unwrap()), Order::Same);
+    assert_ne!(again.txid, dep.txid, "two records, so two identities");
+    assert_eq!(again.seqno().unwrap().series, 5);
 }
 
 // acceptance: ARC-05
 #[test]
 fn counter_gaps_and_unknown_series_are_accepted() {
-    let (mut w, _) = formed();
-    let adoption = w.archive("bob").get(&w.head("bob")).unwrap().clone();
-    let held = adoption.seqno().unwrap();
-    let d1 = w.depart("bob", "alice", Seqno { series: 5, counter: 7 });
-    assert_eq!(compare(held, d1.seqno().unwrap()), Order::Newer, "0 to 7 is not an error");
-    let d2 = w.loose_departure("bob", "alice", &[d1.txid], Seqno { series: 77, counter: 5 }, w.clock + 1);
-    assert_eq!(compare(held, d2.seqno().unwrap()), Order::Incomparable, "no prior state in s2 is not a failure, and no rank against s");
-    assert!(Record::parse(&w.store[&d2.txid]).is_ok());
+    // **the comparison itself**, which is what §2.3 states and what
+    // endpoint lines apply (§10.1.2).  Tested on the sequences rather than
+    // on a transaction: nothing ranks a departure, so using one as the
+    // vehicle would teach the wrong thing
+    let held = Seqno { series: 5, counter: 0 };
+    assert_eq!(compare(held, Seqno { series: 5, counter: 7 }), Order::Newer, "0 to 7 is not an error: a verifier may have missed the ones between");
+    assert_eq!(compare(held, Seqno { series: 5, counter: 0 }), Order::Same, "and the same number is not newer");
+    assert_eq!(compare(held, Seqno { series: 77, counter: 5 }), Order::Incomparable, "no prior state in another series is not a failure, and no rank against this one");
+    assert_eq!(compare(Seqno { series: 5, counter: 7 }, held), Order::Older);
 }
 
 // acceptance: ARC-06

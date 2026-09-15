@@ -88,7 +88,7 @@
     "id": "ARC-04",
     "area": "archive",
     "gap": "archive",
-    "title": "Open a relationship's series at counter 0 on adoption and advance it strictly on departure",
+    "title": "Open a relationship's series at counter 0 on adoption",
     "milestone": 3,
     "kind": "positive",
     "spec": [
@@ -103,7 +103,7 @@
       },
       {
         "where": "wire-format.md §4.2",
-        "text": "counter incremented within the current series"
+        "text": "The\n                       ;   SERIES names which binding ends"
       },
       {
         "where": "wire-format.md §2.3",
@@ -112,9 +112,9 @@
     ],
     "given": "Node N adopted under patron P, the adoption's field 3 locator carrying seqno {s, 0}; an observer O holding that adoption and nothing else in series s.",
     "when": "N signs a departure from P and O verifies it.",
-    "then": "The departure's field 3 is {s, c} with the same series s and c strictly greater than 0; O accepts it as newer than the adoption within series s. A second departure from N carrying {s, c} again, with different contents, is not accepted as newer.",
+    "then": "The adoption's field 3 is {s, 0}: the series is established and its counter opens at zero. A departure of that relationship names the same series s, which is what selects the binding it ends; nothing ranks the departure by its counter, and a second departure naming s is caught as a repeat by its txid rather than by any comparison.",
     "oracle": "behaviour",
-    "interpretation": null,
+    "interpretation": "§4.6 has the series established by the adoption and advanced only by a countersigned reissue. The departure-side counter rule this entry once also held was retired on 2026-09-15: the author's ruling is that a signed departure is proof enough, the counter sequences locator updates, and a departure is not one.",
     "holds": [
       [
         1,
@@ -126,7 +126,7 @@
     "id": "ARC-05",
     "area": "archive",
     "gap": "archive",
-    "title": "Accept a departure whose counter skips values in its series, and one in a series with no prior state",
+    "title": "Rank two sequences with a gap, and with no prior state to rank against",
     "milestone": 3,
     "kind": "must-accept",
     "spec": [
@@ -139,11 +139,11 @@
         "text": "not exactly previous+1, since a verifier may legitimately have missed intervening transactions and requiring contiguity would reject valid updates. Absence of prior state is not a failure."
       }
     ],
-    "given": "Observer O holds N's adoption under P at seqno {s, 0} and nothing else in series s, and holds no record at all in series s2.",
-    "when": "O verifies a departure of N from P carrying seqno {s, 7}, and separately a departure carrying seqno {s2, 5}.",
-    "then": "Both are accepted: the gap from 0 to 7 within s is not reported as an error, and the record in s2 is not rejected for O holding no prior state in that series or ranked against the record in s.",
+    "given": "Two {series, counter} pairs an observer might hold for one subject.",
+    "when": "The later one skips counter values within the series, and separately names a series the observer holds nothing in.",
+    "then": "The gap is ranked newer rather than reported as an error, since a verifier may have missed intervening transactions; the pair in the unheld series is incomparable rather than a failure, and is not ranked against the first. This is the comparison itself, which endpoint lines apply (§10.1.2) and which nothing applies to a departure.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Tested on the comparison rather than on a transaction: §2.3's rule says when two sequences may be ranked and what newer means, and the objects that are ranked by it are endpoint records."
   },
   {
     "id": "ARC-06",
@@ -7517,7 +7517,7 @@
     "rule": [
       {
         "where": "wire-format.md §4.2",
-        "text": "counter incremented within the current series"
+        "text": "The\n                       ;   SERIES names which binding ends"
       },
       {
         "where": "wire-format.md §10.1.3",
@@ -8516,7 +8516,7 @@
       },
       {
         "where": "wire-format.md §4.2",
-        "text": "counter incremented within the current series"
+        "text": "The\n                       ;   SERIES names which binding ends"
       }
     ],
     "given": "A node holding adoption A1 of a child, then adoption A2 of the same child in a new relationship series, and then the delayed departure D1 that ends A1, dated before A2.",
@@ -8719,7 +8719,7 @@
       },
       {
         "where": "wire-format.md §4.2",
-        "text": "counter incremented within the current series"
+        "text": "The\n                       ;   SERIES names which binding ends"
       }
     ],
     "given": "A node receiving, in this order, the departure that ends adoption A1 of a child, then adoption A2 of the same child in a new relationship series, and then A1 itself.",
@@ -8908,7 +8908,7 @@
     "rule": [
       {
         "where": "wire-format.md §4.2",
-        "text": "counter incremented within the current series"
+        "text": "The\n                       ;   SERIES names which binding ends"
       },
       {
         "where": "wire-format.md §4.6",

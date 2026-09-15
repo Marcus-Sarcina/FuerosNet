@@ -1173,13 +1173,25 @@ bulk push.
 {
   1: keyhash,          ; departing node
   2: keyhash,          ; patron being left
-  3: seqno,            ; counter incremented within the current series (§2.3)
+  3: seqno,            ; the relationship's {series, counter} (§2.3). The
+                       ;   SERIES names which binding ends; the counter is
+                       ;   the node's own and nothing ranks a departure by it
   4: timestamp,
   5: ? uint            ; reason code — same enumeration as §4.3
 }
 ```
 
 Single signature: the departing node.
+
+**Nothing ranks a departure by its counter** [author, 2026-09-15]. §2.3's
+counter sequences *locator updates*, so a distant holder can tell a later
+address from an earlier one; a departure is not an update to be ordered against
+anything. It is terminal, and **the signature is the whole of what puts it into
+effect**. The two jobs the counter does elsewhere are done here by other fields:
+**the series names which binding ends**, so a departure carrying an old series
+leaves a later re-adoption under the same patron untouched, and a repeat is
+caught as a repeat by its `txid` (§10.1.2). A holder comparing counters would
+be gating the one act design §6.2 says may never be gated.
 
 **Required for a node to become a root.** Without it, a node that adopts
 elsewhere remains in the old subtree's view indefinitely, since adoption says

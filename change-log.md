@@ -9668,3 +9668,21 @@ cleanup reads the outcome.
 Issuance stopped writing the requester/subject log; nothing removed the one
 already on disk, so an upgraded node kept exactly the record
 `infra-client-requirements.md` §6 prohibits, for the life of the directory.
+
+**The departure's counter ranks nothing, and §4.2 no longer says otherwise**
+[author, 2026-09-15]. Field 3's comment read *counter incremented within the
+current series*, which is an obligation nobody had and nobody should: a signed
+departure is proof enough that it takes effect. §2.3's counter sequences
+*locator updates*, so a distant holder can tell a later address from an earlier
+one; a departure is not an update to be ordered against anything. The two jobs
+the counter does elsewhere are already done here by other fields — the series
+names which binding ends, so an old series leaves a later re-adoption untouched,
+and a repeat is caught as a repeat by its `txid`.
+
+**Found by asking which counter it was.** The register said the rule was
+enforced in the table with ARC-04 as its positive; the fold reads the series and
+drops the counter, `Binding` carries no counter to compare against, and ARC-04
+called `compare()` on two sequences its own fixture wrote without handing either
+to a holder. The answer was not to build the check but to retire the condition.
+ARC-05 moved off departures onto the comparison itself, which endpoint lines do
+apply.
