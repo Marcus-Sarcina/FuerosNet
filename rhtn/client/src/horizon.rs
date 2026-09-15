@@ -16,11 +16,11 @@
 
 use crate::{Keyhash, Txid};
 use rhtn_archive::record::Record;
-use rhtn_archive::endpoint::EndpointRecord;
+use rhtn_archive::endpoint::{self, EndpointRecord};
 use rhtn_archive::topology::{End, Evaluation, Snapshot, Table, unfolded};
 use rhtn_archive::tx::Locator;
 use rhtn_crypto::verify::Lookup;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// What a wake did with the snapshot it found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +80,15 @@ pub enum Took {
     /// Not well-formed, not signed by whom it names, or refused by the
     /// table.  Nothing here changed.
     Refused,
+    /// Equal `seqno`, different signed contents (`wire-format.md`
+    /// §10.1.2): the pair is malformed, **neither** is current now, and
+    /// what was held is dropped.  Repaired by re-resolving (§7.7).
+    Conflict,
+    /// A second endpoint line for a subject already placed, in a series
+    /// nothing this client holds proves current.  Not taken; a client
+    /// floods nothing, so §10.1.2 leaves dropping it and letting the
+    /// patron re-propagate a local choice.
+    Unproved,
 }
 
 /// The topology a client holds, and the fold over it.
@@ -120,11 +129,15 @@ pub struct Horizon {
     /// shape with no addresses in it: it can say who its patron's siblings
     /// are and not reach any of them.
     endpoints: BTreeMap<(Keyhash, u32), EndpointRecord>,
+    /// `(subject, series, counter)` retired by an equivocation: neither
+    /// content is current and no later one for that pair is taken
+    /// (`wire-format.md` §10.1.2).
+    conflicts: BTreeSet<(Keyhash, u32, u32)>,
 }
 
 impl Horizon {
     pub fn new(me: Keyhash) -> Horizon {
-        Horizon { me, records: BTreeMap::new(), table: Table::with_me(me), places: BTreeMap::new(), locators: BTreeMap::new(), endpoints: BTreeMap::new() }
+        Horizon { me, records: BTreeMap::new(), table: Table::with_me(me), places: BTreeMap::new(), locators: BTreeMap::new(), endpoints: BTreeMap::new(), conflicts: BTreeSet::new() }
     }
 
     pub fn me(&self) -> Keyhash {
@@ -145,10 +158,30 @@ impl Horizon {
             return Took::Refused;
         }
         let key = (er.node, er.seqno.series);
-        if let Some(held) = self.endpoints.get(&key)
-            && held.seqno.counter >= er.seqno.counter
-        {
-            return Took::Duplicate;
+        // **§10.1.2's rule, the same one a node applies** — decided in
+        // `rhtn-archive` and stored here.  This client's series evidence
+        // is its own table: an open binding's series is the one the
+        // relationship is in, which a reissue moves and an adoption opens.
+        let proved = self.table.bindings().iter().any(|b| b.node == er.node && b.open() && b.series == er.seqno.series);
+        let line = endpoint::decide(
+            self.endpoints.get(&key),
+            &er,
+            self.conflicts.contains(&(er.node, er.seqno.series, er.seqno.counter)),
+            self.endpoints.keys().any(|(n, ser)| *n == er.node && *ser != er.seqno.series),
+            proved,
+        );
+        match line {
+            endpoint::Line::Duplicate => return Took::Duplicate,
+            endpoint::Line::Conflict => {
+                // neither content is current, and the pair is retired: a
+                // holder that kept the earlier one would let arrival order
+                // split the view
+                self.endpoints.remove(&key);
+                self.conflicts.insert((er.node, er.seqno.series, er.seqno.counter));
+                return Took::Conflict;
+            }
+            endpoint::Line::Unproved => return Took::Unproved,
+            endpoint::Line::Current => {}
         }
         // **holding it is what marks the publisher infrastructure**: §7.6
         // has only infra nodes publish, and nothing else distinguishes the
@@ -434,9 +467,16 @@ impl Horizon {
         at.sort();
         let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut out = Vec::new();
-        rhtn_codec::encode::emit_array_head(&mut out, 2);
+        rhtn_codec::encode::emit_array_head(&mut out, 3);
         rhtn_codec::encode::emit_bstr(&mut out, &self.table.materialise());
         rhtn_codec::encode::emit_bstr(&mut out, &encode_places(&self.places, &self.locators));
+        // **the addresses go with the shape** (`light-client-requirements.md`
+        // §4.2): the copy exists to route around a patron that is not
+        // answering, and a restored horizon holding positions and no
+        // endpoints cannot.  Endpoint records are not transactions, so a
+        // replay cannot rebuild them — if they are not written here they
+        // are gone until the patron floods them again.
+        rhtn_codec::encode::emit_bstr(&mut out, &encode_lines(&self.endpoints, &self.conflicts));
         Snapshot { folded, high: at.last().copied(), table: out }
     }
 
@@ -488,9 +528,10 @@ impl Horizon {
     fn take(&mut self, snap: &Snapshot) -> Option<()> {
         let item = rhtn_codec::cbor::parse_all(&snap.table).ok()?;
         let rhtn_codec::cbor::Item::Array(parts) = &item else { return None };
-        let [rhtn_codec::cbor::Item::Bytes(t), rhtn_codec::cbor::Item::Bytes(l)] = parts.as_slice() else { return None };
+        let [rhtn_codec::cbor::Item::Bytes(t), rhtn_codec::cbor::Item::Bytes(l), rhtn_codec::cbor::Item::Bytes(e)] = parts.as_slice() else { return None };
         let mut table = Table::from_materialised(&snap.table[t.clone()])?;
         let (places, locators) = decode_places(&snap.table[l.clone()])?;
+        let (endpoints, conflicts) = decode_lines(&snap.table[e.clone()])?;
         // whose horizon this is, is this client's own answer and never a
         // snapshot's: a copy naming somebody else is one to discard
         if table.me != Some(self.me) {
@@ -500,6 +541,8 @@ impl Horizon {
         self.table = table;
         self.places = places;
         self.locators = locators;
+        self.endpoints = endpoints;
+        self.conflicts = conflicts;
         Some(())
     }
 
@@ -526,6 +569,53 @@ impl Horizon {
 /// party and the anchor as separate fields, because a place is a path
 /// relative to one; keying by both puts two rows where there was one and
 /// leaves what a row says alone.
+/// The endpoint lines and the pairs an equivocation retired, as they go to
+/// local storage (`wire-format.md` §10.1.2).
+///
+/// **The retirements travel with the lines.** A restored client that took
+/// the addresses and forgot which pairs were retired would accept a
+/// conflicting record it had already ruled out.
+fn encode_lines(endpoints: &BTreeMap<(Keyhash, u32), EndpointRecord>, conflicts: &BTreeSet<(Keyhash, u32, u32)>) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 2);
+    emit_array_head(&mut out, endpoints.len());
+    for e in endpoints.values() {
+        emit_bstr(&mut out, &e.bytes);
+    }
+    emit_array_head(&mut out, conflicts.len());
+    for (n, series, counter) in conflicts {
+        emit_array_head(&mut out, 3);
+        emit_bstr(&mut out, n);
+        emit_uint(&mut out, *series as u64);
+        emit_uint(&mut out, *counter as u64);
+    }
+    out
+}
+
+type Lines = (BTreeMap<(Keyhash, u32), EndpointRecord>, BTreeSet<(Keyhash, u32, u32)>);
+
+fn decode_lines(b: &[u8]) -> Option<Lines> {
+    use rhtn_codec::cbor::{Item, parse_all};
+    let item = parse_all(b).ok()?;
+    let Item::Array(parts) = &item else { return None };
+    let [Item::Array(recs), Item::Array(cs)] = parts.as_slice() else { return None };
+    let mut endpoints = BTreeMap::new();
+    for r in recs {
+        let Item::Bytes(range) = r else { return None };
+        let er = EndpointRecord::parse(&b[range.clone()]).ok()?;
+        endpoints.insert((er.node, er.seqno.series), er);
+    }
+    let mut conflicts = BTreeSet::new();
+    for c in cs {
+        let Item::Array(f) = c else { return None };
+        let [Item::Bytes(n), Item::Uint(series), Item::Uint(counter)] = f.as_slice() else { return None };
+        let node: Keyhash = b[n.clone()].try_into().ok()?;
+        conflicts.insert((node, u32::try_from(*series).ok()?, u32::try_from(*counter).ok()?));
+    }
+    Some((endpoints, conflicts))
+}
+
 fn encode_places(places: &BTreeMap<Placement, Place>, locators: &BTreeMap<Placement, Locator>) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();

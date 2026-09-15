@@ -61,3 +61,58 @@ impl EndpointRecord {
     }
 }
 
+
+/// What `wire-format.md` §10.1.2 says about an arriving `EndpointRecord`,
+/// given what the holder already has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Line {
+    /// The current record for that subject and series: store it.
+    Current,
+    /// Already held, superseded by what is held, or in a series that does
+    /// not rank against the held one.  Nothing changes and nothing is
+    /// forwarded.
+    Duplicate,
+    /// Equal `seqno` with different signed contents.  **The pair is
+    /// malformed, not the later arrival**: which arrived first is an
+    /// accident of the path, so the holder retains neither as current and
+    /// repairs by re-resolving (§7.7).
+    Conflict,
+    /// A second line for a subject already holding one, in a series no
+    /// §4.6 chain has proved current.  Neither stored nor forwarded; it
+    /// enters when its prerequisite does.
+    Unproved,
+}
+
+/// §10.1.2's decision, as a function of what the holder holds.
+///
+/// **One rule, two holders.** A node keeps these in its topology store and
+/// a participant keeps them in its own copy of its horizon; the two kept
+/// different amounts of this rule until a review found the client taking
+/// an equivocating pair and an unproved series. Deciding here and storing
+/// separately leaves the storage to each and the rule to neither.
+///
+/// `held` is what the holder has for this subject *and series*;
+/// `holds_another_series` whether it has a line for the subject under any
+/// other; `series_proved` whether it has been shown a chain for this one;
+/// `conflicted` whether this `(subject, series, counter)` was already
+/// retired by an earlier conflict.
+#[must_use]
+pub fn decide(held: Option<&EndpointRecord>, arriving: &EndpointRecord, conflicted: bool, holds_another_series: bool, series_proved: bool) -> Line {
+    if conflicted {
+        // the pair is retired: nothing further is current for it, and
+        // nothing further is forwarded
+        return Line::Duplicate;
+    }
+    match held {
+        Some(h) => match crate::tx::compare(h.seqno, arriving.seqno) {
+            crate::tx::Order::Older | crate::tx::Order::Incomparable => Line::Duplicate,
+            crate::tx::Order::Same if h.bytes == arriving.bytes => Line::Duplicate,
+            crate::tx::Order::Same => Line::Conflict,
+            crate::tx::Order::Newer => Line::Current,
+        },
+        // **a subject's first line is taken as gossip**, there being
+        // nothing to rank it against and nothing a chain could say yet
+        None if holds_another_series && !series_proved => Line::Unproved,
+        None => Line::Current,
+    }
+}
