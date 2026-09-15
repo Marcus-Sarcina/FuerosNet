@@ -27,7 +27,7 @@ both = sum(1 for _, p, n in rows if p == 'held' and n == 'held')
 one = sum(1 for _, p, n in rows if (p == 'held') != (n == 'held') and 'deferred' not in (p, n))
 neither = sum(1 for _, p, n in rows if p == 'none' and n == 'none')
 deferred = sum(1 for _, p, n in rows if 'deferred' in (p, n))
-stated = re.search(r'- (\d+) hold on both sides\n- (\d+) have one polarity only\n- (\d+) have neither\n- (\d+) are deferred', open('../Robot/transaction-rules.md').read())
+stated = re.search(r'- (\d+) hold on both sides\n- (\d+) have one polarity only\n- (\d+) (?:have|has) neither\n- (\d+) are deferred', open('../Robot/transaction-rules.md').read())
 print(f'conditions {len(rows)}: both {both}, one {one}, neither {neither}, deferred {deferred}')
 if stated:
     said = tuple(int(x) for x in stated.groups())

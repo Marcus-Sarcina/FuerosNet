@@ -263,7 +263,13 @@ runs a variant policy; §16.4 keeps what it stores and forwards identical.
 | `asn-does-not-move-standing` | ASN concentration leaves the metric's output unchanged | metric | — | REP-07 |
 | `peering-is-acquaintance` | A peering joins two parties in the acquaintance graph and confers no scope | metric | gap | gap |
 
-**Gaps.** `peering-is-acquaintance` has neither side: nothing asserts that
+**Gaps.** `peering-is-acquaintance` is the last condition held on neither
+side [2026-09-15]; the other four were closed the day this was written, and
+two of them were not test gaps at all — the decoder did not enforce §4.5's
+classical/hybrid split, so a recovery's hybrid verifier signature passed
+inside a presence record and the presence record's classical one passed
+inside a recovery. "The field's type is fixed by where the response sits",
+and now it is. Nothing asserts that
 a stored peering becomes an edge the metric sees, which is the same class
 of oversight as the presence records a node never pulls.
 
@@ -283,11 +289,11 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `participants-differ` | The two participants differ | decoder | gap | DEC-21 |
 | `formation-is-genesis-rooted` | A formation is genesis-rooted and carries no evidence arrays | decoder | TOP-11 | DEC-21 |
 | `normal-record-is-witnessed` | A normal record carries witnesses | decoder | gap | DEC-21 |
-| `witness-nominated-by-a-participant` | `nominated_by` is one of the two participants | decoder | gap | gap |
-| `witness-names-a-body-entry` | A witness's field 1 names an entry of body field 4 | decoder | gap | gap |
-| `signatures-are-classical` | Both signatures in an ordinary record are `COSE_Sign1` and classical only | decoder | gap | gap |
-| `consent-is-classical` | The consent signature is classical everywhere | decoder | gap | gap |
-| `verifier-auth-hybrid-in-recovery` | Verifier authentication is hybrid only inside a `Recovery` block | decoder | REC-03 | gap |
+| `witness-nominated-by-a-participant` | `nominated_by` is one of the two participants | decoder | DEC-34 | DEC-34 |
+| `witness-names-a-body-entry` | A witness's field 1 names an entry of body field 4 | decoder | DEC-34 | DEC-34 |
+| `signatures-are-classical` | Both signatures in an ordinary record are `COSE_Sign1` and classical only | decoder | DEC-33 | DEC-33 |
+| `consent-is-classical` | The consent signature is classical everywhere | decoder | DEC-33 | DEC-33 |
+| `verifier-auth-hybrid-in-recovery` | Verifier authentication is hybrid only inside a `Recovery` block | decoder | REC-03 | DEC-33 |
 | `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | CER-18 | CER-18, CER-35 |
 | `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | CER-35 |
 | `salt-is-sixteen-bytes` | A `Disclosure` whose salt is not exactly sixteen bytes is rejected | decoder | CER-18 | CER-35 |
@@ -354,9 +360,9 @@ entry on both sides of a condition. An entry has one kind and cannot be
 both; the checker found all three. Six transaction types, 87 conditions drawn from the documents,
 and of them:
 
-- 45 hold on both sides
-- 34 have one polarity only
-- 5 have neither
+- 50 hold on both sides
+- 33 have one polarity only
+- 1 has neither
 - 3 are deferred on hardware
 
 **The shape of the gaps is not random.** They cluster where a rule is
