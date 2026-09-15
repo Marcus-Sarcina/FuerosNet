@@ -56,6 +56,8 @@ fn describe(d: &Dispatched) -> String {
         Dispatched::Late(r) => format!("Late({r:?})"),
         Dispatched::Candidates(b) => format!("Candidates({} bytes)", b.len()),
         Dispatched::ResponseCopy(r) => format!("ResponseCopy({r:?})"),
+        Dispatched::Served { records, more } => format!("Served({records}, more {more})"),
+        Dispatched::Fetched(r) => format!("Fetched({r:?})"),
     }
 }
 
@@ -130,6 +132,11 @@ impl Net {
                     self.log.push((name(&from), name(&to), Msg::Payload { to, bytes: bytes.clone() }));
                     let d = self.s.h.client(&to).receive_payload(from, &bytes).expect("decrypts at the recipient");
                     self.delivered.push((from, to, describe(&d)));
+                    // **what arriving caused goes out too**: a client
+                    // answering an archive fetch replies on the same
+                    // channel, and the reply is in its outbox
+                    let back = self.s.h.client(&to).outbox();
+                    self.carry(to, back);
                 }
                 Msg::Relay { to, bytes } => {
                     // my serving node hands it to the recipient's, which queues it
@@ -138,6 +145,10 @@ impl Net {
                     self.nodes.get_mut(dest).unwrap().queues.entry(to).or_default().push_back((from, bytes));
                 }
                 Msg::Transport(_) => {}
+                // a client's own records go up to its serving node, which
+                // is PRT-06's leg and not this harness's: here they are
+                // whatever the ceremony left in the outbox
+                Msg::Record(_) => {}
                 other => panic!("not a payload message: {other:?}"),
             }
         }
@@ -442,4 +453,79 @@ fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
     // spent now: the same bytes a second time find no pair and no session
     // is reopened
     assert!(n.s.client("bob").receive_payload(kh("alice"), &good).is_err(), "the pair is gone once its message authenticated");
+}
+
+/// **The subject holds their archive, so a patron evaluating you fetches
+/// from you** (`light-client-requirements.md` §2) — peer-to-peer payload,
+/// not something an infra node serves on your behalf.  This is the half of
+/// design §15's pull that nobody answered: attestation is fetched on
+/// demand, and nothing could be fetched because no client served.
+// acceptance: ARC-20
+#[test]
+fn a_client_serves_its_own_archive_and_an_evaluator_verifies_the_walk_it_gets() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    for c in ["alice", "bob", "carol"] {
+        n.attach(c);
+    }
+    // alice and bob meet: the record is in both their archives and in
+    // nobody else's, because attestation is never flooded
+    for c in ["alice", "bob", "carol"] {
+        n.sweep(c);
+    }
+    n.s.face_off("alice", "bob");
+    let pop = n.s.h.run(kh("alice"), kh("bob"), vec![kh("w2")], vec![kh("w1")]).expect("a ceremony");
+
+    // carol holds no acquaintance edge for the pair it was not party to
+    let before = n.s.client("carol").evidence();
+    assert!(!before.acquaintances.contains(&participants(kh("alice"), kh("bob")).into()), "not carol's to hold yet");
+
+    // carol asks alice for alice's own archive from that record
+    let msgs = n.s.client("carol").fetch_archive(kh("alice"), Some(pop), 8).expect("asks");
+    n.carry(kh("carol"), msgs);
+
+    let served = n.delivered.iter().filter(|(_, _, d)| d.starts_with("Served")).count();
+    assert_eq!(served, 1, "alice answered from her own archive: {:?}", n.delivered);
+    let fetched = n.delivered.iter().find(|(_, _, d)| d.starts_with("Fetched")).expect("and carol took the reply");
+    assert!(fetched.2.contains("Ok("), "the walk verified: {}", fetched.2);
+
+    // and the record is carol's evidence now, which is what the pull is for
+    let after = n.s.client("carol").evidence();
+    assert!(after.acquaintances.contains(&participants(kh("alice"), kh("bob")).into()), "the acquaintance edge the fetch bought");
+    assert!(after.acquaintances.len() > before.acquaintances.len());
+}
+
+/// The negatives: a fetch nobody asked for is not taken, and a subject
+/// answers for its own archive and nobody else's.
+// acceptance: ARC-21
+#[test]
+fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    for c in ["alice", "bob", "carol"] {
+        n.attach(c);
+    }
+    for c in ["alice", "bob", "carol"] {
+        n.sweep(c);
+    }
+    n.s.face_off("alice", "bob");
+    let pop = n.s.h.run(kh("alice"), kh("bob"), vec![kh("w2")], vec![kh("w1")]).expect("a ceremony");
+
+    // **an attestation delivery carries the nonce the evaluator generated**
+    // (design §15): one that does not is visibly unsolicited
+    let forged = rhtn_archive::chain::ArchiveReply { nonce: [0xcd; 16], records: vec![], more: false, continue_from: None };
+    let msgs = n.s.client("alice").send_payload(kh("carol"), KIND_ARCHIVE_REPLY, &forged.encode()).expect("sent");
+    n.carry(kh("alice"), msgs);
+    let took = n.delivered.iter().find(|(_, _, d)| d.starts_with("Fetched")).expect("carol saw it");
+    assert!(took.2.contains("Err("), "nothing outstanding with this party: {}", took.2);
+
+    // carol asks alice for *bob's* archive: alice answers empty, which
+    // says nothing about bob's archive
+    let msgs = n.s.client("carol").fetch_archive(kh("alice"), Some(pop), 8).expect("asks");
+    n.carry(kh("carol"), msgs);
+    n.delivered.clear();
+    let mut req = rhtn_archive::chain::ArchiveRequest { subject: kh("bob"), head: Some(pop), max_records: 8, stop_before: None, nonce: [3; 16] };
+    req.subject = kh("bob");
+    let msgs = n.s.client("carol").send_payload(kh("alice"), KIND_ARCHIVE_REQUEST, &req.encode()).expect("asks alice about bob");
+    n.carry(kh("carol"), msgs);
+    let served = n.delivered.iter().find(|(_, _, d)| d.starts_with("Served")).expect("alice answered");
+    assert_eq!(served.2, "Served(0, more false)", "a subject it is not gets an empty batch");
 }

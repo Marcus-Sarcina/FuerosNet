@@ -253,8 +253,11 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
         Dispatched::ResponseCopy(Err(why)) => Some(Event::ResponseCopy { from, query: None, refused: Some(why) }),
         Dispatched::Late(Ok(txid)) => Some(Event::Late { from, record: Some(txid.to_vec()), refused: None }),
         Dispatched::Late(Err(why)) => Some(Event::Late { from, record: None, refused: Some(why) }),
-        // handled inside the adaptors and never the shell's
-        Dispatched::Grant(_) | Dispatched::Candidates(_) => None,
+        // handled inside the adaptors and never the shell's; an archive
+        // fetch is the kernel answering and evaluating for itself
+        // (`light-client-requirements.md` §2), and its result reaches the
+        // shell as the standing it changes rather than as an event
+        Dispatched::Grant(_) | Dispatched::Candidates(_) | Dispatched::Served { .. } | Dispatched::Fetched(_) => None,
     }
 }
 

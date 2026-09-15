@@ -9686,3 +9686,33 @@ called `compare()` on two sequences its own fixture wrote without handing either
 to a holder. The answer was not to build the check but to retire the condition.
 ARC-05 moved off departures onto the comparison itself, which endpoint lines do
 apply.
+
+### 2026-09-15 (the half of the pull that nobody answered)
+
+**`light-client-requirements.md` §2 requires a client to serve archive requests
+for its own archive, and no client did.** That is the missing half of design
+§15's pull: attestation is fetched on demand, and nothing could be fetched
+because nobody answered. A node's `Family::ArchiveRequest` served the node's own
+archive, which is correct and also beside the point — every participant's
+archive lives in a client.
+
+**The subject is asked, not its infrastructure.** §2 is explicit that this is
+peer-to-peer payload rather than something an infra node serves on a subject's
+behalf, so it rides the payload channel as two new kinds. `Archive::serve`
+already refuses any subject but its own key, so a fetch naming somebody else
+answers empty — which says nothing about that archive.
+
+**The fetcher verifies the walk**, which §2 also requires and for the reason it
+gives: a holder cannot be trusted to have walked correctly. The first record
+must be the head that was asked for, each record's back-pointers must reach the
+one after it, and every signature is checked before anything is kept.
+
+**The nonce is what makes solicitation visible** (§15). An attestation delivery
+carries the nonce the evaluator generated; one that does not answers no request
+this client made and nothing out of it is taken. That is the checkable half of
+pull-not-push, and it is why §15 states it as a MUST rather than as a wish.
+
+What this buys is the thing that was missing: a party that was not at a ceremony
+can now come to hold its record, so an evaluator's acquaintance edges are
+something it can go and get rather than something it either witnessed or never
+had.

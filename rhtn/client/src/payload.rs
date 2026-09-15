@@ -296,6 +296,14 @@ pub const KIND_CANDIDATES: u64 = 3;
 /// The verifier's copy of its signed response, to the subject over the
 /// association the grant established (`wire-format.md` §5.6).
 pub const KIND_RESPONSE_COPY: u64 = 4;
+/// An `ArchiveRequest` for the recipient's own archive, and its reply
+/// (`wire-format.md` §7.9).
+///
+/// **Payload, not a service** (`light-client-requirements.md` §2): the
+/// subject holds their archive, so a patron evaluating you fetches from
+/// you and no infra node serves it on your behalf.
+pub const KIND_ARCHIVE_REQUEST: u64 = 5;
+pub const KIND_ARCHIVE_REPLY: u64 = 6;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

@@ -287,6 +287,10 @@ pub struct Client {
     /// (design §11.5), not a directory of anything wider.
     pub catalog: crate::catalog::View,
     browsing: Option<(Keyhash, crate::catalog::Sweep)>,
+    /// Archive fetches outstanding, by subject: the nonce sent and the
+    /// head asked for.  One at a time per subject, which is what lets a
+    /// reply be tied to a request (design §15).
+    fetching: BTreeMap<Keyhash, ([u8; 16], Option<Txid>)>,
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -326,6 +330,13 @@ pub enum Dispatched {
     /// A verifier's copy of its response about me: the query it answered,
     /// or why the copy was refused.
     ResponseCopy(Result<[u8; 32], String>),
+    /// An archive fetch this client answered from its own archive: how
+    /// many records went back, and whether more remain.  The reply is in
+    /// the outbox.
+    Served { records: usize, more: bool },
+    /// A reply to a fetch this client made: the records it verified into
+    /// its own store, or why it took none of them.
+    Fetched(Result<usize, String>),
 }
 
 fn hex8(k: &Keyhash) -> String {
@@ -339,7 +350,7 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), catalog: crate::catalog::View::default(), browsing: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), catalog: crate::catalog::View::default(), browsing: None, fetching: BTreeMap::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -1053,6 +1064,82 @@ impl Client {
         Ok((step, out))
     }
 
+    /// Ask `subject` for its own archive from `head`, at most `max`
+    /// records (`wire-format.md` §7.9).
+    ///
+    /// **The subject is asked, not its infrastructure**
+    /// (`light-client-requirements.md` §2): the subject holds their
+    /// archive, so a patron evaluating you fetches from you, and this is
+    /// peer-to-peer payload rather than something a node serves on your
+    /// behalf.  One fetch outstanding per subject; the nonce is what ties
+    /// the answer to it (design §15: an attestation delivery carries the
+    /// nonce the evaluator generated).
+    pub fn fetch_archive(&mut self, subject: Keyhash, head: Option<Txid>, max: u64) -> Result<Vec<Msg>, PayloadError> {
+        let nonce = self.nonce();
+        let req = rhtn_archive::chain::ArchiveRequest { subject, head, max_records: max, stop_before: None, nonce };
+        self.fetching.insert(subject, (nonce, head));
+        self.send_payload(subject, payload::KIND_ARCHIVE_REQUEST, &req.encode())
+    }
+
+    /// Answer a fetch from my own archive, and nobody else's.
+    ///
+    /// **A subject that cannot be asked cannot be evaluated**, which is
+    /// what §2's obligation is for: the reply goes back on the same
+    /// peer-to-peer channel the request came in on.  `Archive::serve`
+    /// refuses any subject but this client's own key, so a request naming
+    /// somebody else answers empty — which says nothing about that
+    /// archive.
+    fn serve_archive(&mut self, from: Keyhash, bytes: &[u8]) -> Dispatched {
+        let Ok(req) = rhtn_archive::chain::ArchiveRequest::decode(bytes) else {
+            return Dispatched::Served { records: 0, more: false };
+        };
+        let reply = self.archive.serve(&req);
+        let (records, more) = (reply.records.len(), reply.more);
+        if let Ok(msgs) = self.send_payload(from, payload::KIND_ARCHIVE_REPLY, &reply.encode()) {
+            self.outbox.extend(msgs);
+        }
+        Dispatched::Served { records, more }
+    }
+
+    /// Take a fetch's reply: the nonce ties it to the request, and the
+    /// chain is verified here rather than trusted.
+    ///
+    /// **A holder cannot be trusted to have walked correctly**
+    /// (`light-client-requirements.md` §2): each record's back-pointers
+    /// must reach the record after it and the first must be the head that
+    /// was asked for.  What verifies is kept — presence records into the
+    /// evidence store, where an adoption naming one can be evaluated
+    /// against it (design §15: attestation is fetched on demand).
+    fn take_archive_reply(&mut self, from: Keyhash, bytes: &[u8]) -> Result<usize, String> {
+        let reply = rhtn_archive::chain::ArchiveReply::decode(bytes)?;
+        let Some((nonce, head)) = self.fetching.get(&from).copied() else {
+            return Err("no fetch outstanding with this party".into());
+        };
+        if reply.nonce != nonce {
+            return Err("reply does not carry the nonce of the fetch".into());
+        }
+        self.fetching.remove(&from);
+        let mut kept = 0;
+        // the head asked for, then the subject's own back-pointers from
+        // each record to the one after it.  A head this client did not name
+        // constrains the first record not at all, which is §7.9's
+        // holder's-newest case
+        let mut expected: Option<Vec<Txid>> = head.map(|h| vec![h]);
+        for raw in &reply.records {
+            let rec = Record::parse(raw).map_err(|e| format!("record does not parse: {e}"))?;
+            if let Some(want) = &expected
+                && !want.contains(&rec.txid)
+            {
+                return Err("the walk does not continue from the record before it".into());
+            }
+            verify::envelope(&self.known, raw).map_err(|e| format!("record does not verify: {e}"))?;
+            expected = rec.back_pointers_of(&from).map(|b| b.to_vec());
+            self.store.records.insert(rec.txid, raw.clone());
+            kept += 1;
+        }
+        Ok(kept)
+    }
+
     /// Routine maintenance: rotate the signed prekey when its interval has
     /// elapsed, and replenish the pool when it has fallen low.
     pub fn maintain(&mut self) -> Vec<Msg> {
@@ -1208,6 +1295,8 @@ impl Client {
             }
             payload::KIND_CANDIDATES => Dispatched::Candidates(inner),
             payload::KIND_RESPONSE_COPY => Dispatched::ResponseCopy(self.take_response_copy(&inner)),
+            payload::KIND_ARCHIVE_REQUEST => self.serve_archive(from, &inner),
+            payload::KIND_ARCHIVE_REPLY => Dispatched::Fetched(self.take_archive_reply(from, &inner)),
             _ => Dispatched::Application(inner),
         })
     }
