@@ -33,6 +33,23 @@ impl NodeView {
         for p in self.peerings() {
             ev.meet(p.a, p.b);
         }
+        // **a patron's determination, taken at face value** (design
+        // §18.5): a relationship ended with prejudice is the patron's
+        // reading of the party it ended, and a member of the
+        // neighbourhood the pair reaches defaults to it rather than
+        // ordering it against a departure it may also hold. Read from the
+        // store for that reason — whichever object reached the fold first
+        // is the one the binding records, and the determination that lost
+        // the race is still one the patron made. §4.3 puts the reason in
+        // field 4; absent, nothing is alleged.
+        for rec in self.store.transactions().filter(|r| r.tx_type == rhtn_archive::tx::TYPE_DISAVOWAL) {
+            if !rec.field_uint(4).is_some_and(rhtn_archive::topology::End::band) {
+                continue;
+            }
+            if let (Some(patron), Some(node)) = (rec.field_hash(1), rec.field_hash(2)) {
+                ev.disavow(patron, node);
+            }
+        }
         ev
     }
 

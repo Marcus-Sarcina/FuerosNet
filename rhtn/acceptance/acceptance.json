@@ -11016,5 +11016,174 @@
     "then": "The sweep reports the wrong nonce and no entry out of that reply reaches the view. The query stays outstanding, and the honest reply under the nonce it sent is taken normally.",
     "oracle": "behaviour",
     "interpretation": "The wire says the reply echoes the query's nonce; that an asker must therefore refuse one that does not is the rule the other three askers (resolution, currency, the archive walk) already apply, asserted here for the catalog sweep."
+  },
+  {
+    "id": "CER-42",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Leave a patron on the departing node's own signature, with nobody to ask",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §4.2",
+      "design §6.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §4.2",
+        "text": "Single signature: the departing node."
+      },
+      {
+        "where": "wire-format.md §4.2",
+        "text": "**A party with authority over another may never gate an action whose sole effect\nis to end that authority relationship**"
+      }
+    ],
+    "given": "A client adopted under two patrons, holding a position in each subnet.",
+    "when": "It leaves one of them.",
+    "then": "A type-2 envelope is minted, signed by the departing node alone, naming that patron and advancing the counter within the series the relationship is in. It goes to the outbox for the serving node to flood; no countersignature is sought and no refusal can arrive. Afterwards the client holds no position in the subnet it left and the other line is untouched. Leaving a patron it has no current relationship with, including one it has already left, is refused.",
+    "oracle": "behaviour",
+    "interpretation": "",
+    "holds": [
+      [
+        2,
+        "one-signature-only",
+        "+"
+      ]
+    ]
+  },
+  {
+    "id": "RSC-38",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Purge a departed party's whole down-line from every resource, granted or not",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §10.2",
+      "design §11.4"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §10.2",
+        "text": "A new member is\nscored against standing predicates and given rows; a departing one has theirs\nremoved."
+      }
+    ],
+    "given": "An owner three generations deep, with a standing grant on one resource and hand-written rows on another that carries none.",
+    "when": "A party between the owner and the deepest generation departs, and the role tables are refreshed.",
+    "then": "The departing party and everything that reached the horizon only through it lose their rows and their sessions, on both resources. Nothing enumerates a subtree: the horizon is a walk over open bindings, so a generation cannot be missed. A party still inside keeps what it had.",
+    "oracle": "behaviour",
+    "interpretation": "§10.2 states the rule for a departing member; that it reaches the member's down-line follows from membership being the owner's horizon, and that it reaches resources with no standing grant is the author's ruling of 2026-09-14 — membership is the outer gate whoever wrote the row."
+  },
+  {
+    "id": "RSC-39",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Browse the serving node's catalog as a sweep, following the continuation",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §6.4",
+      "design §11.5"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §6.4",
+        "text": "echoes the query nonce"
+      }
+    ],
+    "given": "A client attached to a node whose catalog service holds registered entries.",
+    "when": "The client browses, and each reply the node answers with is taken.",
+    "then": "The unfiltered query goes out first, entries are verified under their owners and kept in the portion for the node that served them, and a continuation is asked for once per type until the portion is complete. A client attached to nobody posts nothing. A reply under a nonce no sweep sent is not taken and leaves the query outstanding for the honest one.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
+    "id": "MET-10",
+    "area": "metric",
+    "gap": "metric",
+    "title": "Take a with-prejudice disavowal at face value, whichever object arrived first",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §18.5",
+      "wire-format.md §4.3"
+    ],
+    "rule": [
+      {
+        "where": "design §18.5",
+        "text": "**The patron's determination is what the neighbourhood defaults to**"
+      },
+      {
+        "where": "design §18.5",
+        "text": "it does not try to order them"
+      }
+    ],
+    "given": "A member of a patron's horizon holding both a subordinate's departure and that patron's disavowal of the same party.",
+    "when": "The policy is asked for that party's standing, with the departure having reached the fold first so the binding records it and not the disavowal.",
+    "then": "A banded reason code is read as the patron's determination and the party scores nothing and is admitted to nothing; an unbanded or absent code alleges nothing and changes no score. The answer does not depend on which object arrived first, because the determination is read from the records held rather than from the end the binding recorded. The patron's own standing is untouched.",
+    "oracle": "behaviour",
+    "interpretation": "§18.5 states the default and forbids ordering the pair; that the reference policy therefore scores the party at zero is the reading, and §16.4 leaves a tree free to run a variant that orders them instead.",
+    "holds": [
+      [
+        3,
+        "prejudice-band-read",
+        "+"
+      ],
+      [
+        3,
+        "prejudice-band-read",
+        "-"
+      ]
+    ]
+  },
+  {
+    "id": "DEC-32",
+    "area": "decoder",
+    "gap": "decoder",
+    "title": "Refuse a departure or a disavowal carrying a second signature",
+    "milestone": 1,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §4.2",
+      "wire-format.md §4.3",
+      "wire-format.md §1.3"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §4.2",
+        "text": "the old\npatron does not sign a departure, and a decoder MUST NOT expect a second\nsignature"
+      },
+      {
+        "where": "wire-format.md §4.3",
+        "text": "Single signature."
+      }
+    ],
+    "given": "A well-formed departure body, and a well-formed disavowal body.",
+    "when": "Each is offered in an envelope carrying two logical signers instead of one.",
+    "then": "Both are refused for the entry count, against the ceiling §1.3 derives for a one-signer type; the one-signer form of each is accepted. A departure signed by the patron instead of the departing node is refused too.",
+    "oracle": "fixture",
+    "interpretation": "The rule is stated as what a decoder must not expect; the bound that enforces it is the derived entry ceiling, so the refusal names the count rather than the role.",
+    "holds": [
+      [
+        2,
+        "one-signature-only",
+        "+"
+      ],
+      [
+        2,
+        "one-signature-only",
+        "-"
+      ],
+      [
+        3,
+        "one-signature-only",
+        "+"
+      ],
+      [
+        3,
+        "one-signature-only",
+        "-"
+      ]
+    ]
   }
 ]

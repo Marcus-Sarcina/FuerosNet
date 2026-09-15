@@ -702,3 +702,50 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     assert!(g.row(&R1, &kh("carol")).is_none(), "the departing party's row goes");
     assert_eq!(g.row(&R1, &kh("bob")).map(|r| r.connect), Some(false), "and the one still inside is untouched");
 }
+
+/// A departure takes the departing party's whole down-line out of the
+/// owner's horizon, so the purge reaches every generation of it — and it
+/// reaches rows on resources with no standing grant, which an operator set
+/// by hand and which used to outlive the membership they were written for
+/// [author, 2026-09-14].
+// acceptance: RSC-38
+#[test]
+fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_granted_ones() {
+    let mut w = World::new();
+    // alice over carol, carol over w1, w1 over w2: three generations
+    // below the owner, all inside alice's horizon at h = 2 except w2
+    let (a_c, _) = w.adopt("carol", "alice", 1);
+    let (a_w1, _) = w.adopt("w1", "carol", 2);
+    let (a_b, _) = w.adopt("bob", "alice", 3);
+    let table = table_with(kh("alice"), &w, &[&a_c, &a_w1, &a_b], &["alice", "carol"]);
+
+    let mut g = Gateway::default();
+    g.bind(R1, Binding { owner: kh("alice"), authority: "r1.internal".into(), backend: None, declared_roles: BTreeSet::from(["reader".to_string()]) });
+    g.bind(R2, Binding { owner: kh("alice"), authority: "r2.internal".into(), backend: None, declared_roles: BTreeSet::from(["reader".to_string()]) });
+
+    // R1 carries a standing grant; R2 carries none and is written by hand
+    let row = Row { roles: BTreeSet::from(["reader".to_string()]), connect: true };
+    g.stand(R1, row.clone()).expect("a grant over the owner's horizon");
+    g.refresh(&table);
+    for m in ["carol", "w1", "bob"] {
+        g.set_row(R2, kh(m), row.clone()).expect("the operator's own row");
+        assert!(g.row(&R1, &kh(m)).is_some(), "{m} is granted on R1");
+        assert!(g.row(&R2, &kh(m)).is_some(), "and written on R2");
+    }
+
+    // carol leaves alice.  w1 reached the horizon only through carol, so
+    // it goes with her: nothing here enumerates a subtree
+    let dep = w.depart("carol", "alice", rhtn_archive::tx::Seqno { series: 1, counter: 1 });
+    let after = table_with(kh("alice"), &w, &[&a_c, &a_w1, &a_b, &dep], &["alice", "carol"]);
+    let (granted, dropped) = g.refresh(&after);
+    assert_eq!(granted, 0, "nobody entered");
+    assert!(dropped >= 4, "carol and w1, on both resources: {dropped}");
+
+    for gone in ["carol", "w1"] {
+        assert!(g.row(&R1, &kh(gone)).is_none(), "{gone} is off the granted resource");
+        assert!(g.row(&R2, &kh(gone)).is_none(), "and off the hand-written one");
+        assert!(g.session(&kh(gone), &R1).is_none(), "with no session left open");
+    }
+    assert!(g.row(&R1, &kh("bob")).is_some(), "the party still inside keeps its rows");
+    assert!(g.row(&R2, &kh("bob")).is_some());
+}

@@ -9589,3 +9589,39 @@ ancestor moves afterwards (§12.6.2); those go stale like any other.
 echoes the query's nonce and nothing checked it, where resolution, currency and
 the archive walk all refuse a reply they cannot tie to their request. The sweep
 now does the same, under the name those three already use.
+
+### 2026-09-15 (a departure's fan-out, and three callers that were never written)
+
+**A departure reaches further than the edge it closes** [author, 2026-09-14].
+Every observer holding any part of the departing subtree re-addresses all of it,
+not just the party that left: the re-anchor moves whatever shares the departed
+party's path prefix, so depth is never enumerated and a generation cannot be
+missed. Resource permissions go the same way — an ending drops rows and sessions
+for the departed party **and for everything that reached the owner's horizon only
+through it**, because the horizon is a walk over open bindings. That purge now
+covers every bound resource: a row an operator wrote by hand on a resource with
+no standing grant used to outlive the membership it was written for.
+
+**The contested exit is settled: the patron's determination is the default**
+[author, 2026-09-14]. §18.5 previously had the reference policy weigh the pair as
+evidence about the relationship; it now has a member of the patron's horizon take
+the patron's reading and **not try to order the two objects**. A tree is sovereign
+and owes no due process to non-members; a community wanting a timing rule runs a
+variant, which §16.4 makes indistinguishable on the wire. The reading is taken
+**from the records held rather than from the binding's end** — whichever object
+reached the fold first is the one the binding records, so reading the end would
+make the answer turn on exactly the race nobody is supposed to adjudicate.
+
+**`End::band` is §4.3's banding rule, shared by both readers**, and the band
+finally has consumers: the two trust folds. `with_prejudice` keeps the fold's own
+answer about the end it recorded.
+
+**Three production callers that were never written.** A participant can now leave
+a patron — `departure_body` had only test callers, so no client could mint one.
+A client can now browse its serving node's catalog — `Sweep` was reachable from
+tests alone. And a node with no open binding left self-anchors instead of keeping
+a position in a tree it has left; its position map is rebuilt from open bindings
+rather than accumulated.
+
+**`Gateway::remove_member` is gone.** It purged by member across every resource,
+duplicating what `refresh` now does by horizon, and nothing called it.

@@ -6899,13 +6899,21 @@ several at once, not one per acquisition.
   **zero in exactly this case**, because the subordinate is already leaving and the
   slot refills.
 
-  **What limits it is visibility, not enforcement**, which is §1.1's usual answer. An
-  observer holding both objects holds a departure and a with-prejudice disavowal
-  minutes apart, and **that pair is itself evaluable**: a contested exit reads
-  differently from an ordinary disavowal, and the reference policy weights it as
-  evidence about the relationship rather than about the departing node. Nothing
-  compels any evaluator to read it that way, and the record remains durable
-  regardless.
+  **The patron's determination is what the neighbourhood defaults to** [author,
+  2026-09-14]. An observer holding both objects holds a departure and a
+  with-prejudice disavowal minutes apart, and **it does not try to order them**.
+  A tree is sovereign and owes no due process to non-members: the patron has the
+  authority to end the relationship with prejudice whoever moved first, and the
+  members of its horizon — the only parties the pair reaches — take that reading
+  by default. Asking which came first would have every member adjudicate a
+  question §1.1 gives none of them the standing to settle, on timestamps §2 says
+  are signer-controlled and never checked.
+
+  **A community may decide otherwise, and that is a constitutional choice rather
+  than a protocol one.** A tree wanting a timing rule in its local trust logic
+  may run one: nothing on the wire consumes another party's computation (§16.4),
+  so a variant reading the pair differently stores and forwards exactly what the
+  reference does. The record remains durable regardless.
 
   **The pair's audience is the neighbourhood, and a nonconforming serving patron
   can distort exactly that audience's copy** [author, 2026-09-03]: both objects

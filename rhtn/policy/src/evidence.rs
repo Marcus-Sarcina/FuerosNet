@@ -22,6 +22,18 @@ pub struct Evidence<N: Ord + Clone> {
     /// acquaintance graph, orthogonal to the hierarchy, conferring no scope
     /// (design §6.3, §16.2.1).
     pub acquaintances: BTreeSet<(N, N)>,
+    /// `(patron, node)`: relationships a patron ended **with prejudice**
+    /// (`wire-format.md` §4.3's banded reason codes), as this observer
+    /// holds them.
+    ///
+    /// **The patron's determination is what the neighbourhood defaults
+    /// to** (design §18.5): an observer holding one does not weigh it
+    /// against a departure it may also hold, because ordering the two
+    /// would have it adjudicate a question §1.1 gives it no standing to
+    /// settle, on timestamps §2 says are signer-controlled. A tree wanting
+    /// a timing rule runs a variant policy; nothing on the wire consumes
+    /// either reading (design §16.4).
+    pub disavowed: BTreeSet<(N, N)>,
 }
 
 fn unordered<N: Ord + Clone>(a: N, b: N) -> (N, N) {
@@ -30,7 +42,7 @@ fn unordered<N: Ord + Clone>(a: N, b: N) -> (N, N) {
 
 impl<N: Ord + Clone + Debug> Evidence<N> {
     pub fn new(observer: N) -> Self {
-        Evidence { observer, adoptions: BTreeSet::new(), acquaintances: BTreeSet::new() }
+        Evidence { observer, adoptions: BTreeSet::new(), acquaintances: BTreeSet::new(), disavowed: BTreeSet::new() }
     }
 
     /// An adoption of `node` under `patron` this observer holds.
@@ -41,6 +53,25 @@ impl<N: Ord + Clone + Debug> Evidence<N> {
     /// A presence or peering record joining `a` and `b` this observer holds.
     pub fn meet(&mut self, a: N, b: N) {
         self.acquaintances.insert(unordered(a, b));
+    }
+
+    /// A relationship `patron` ended with prejudice, as this observer
+    /// holds it.  Only the banded codes: an unbanded or unstated reason
+    /// alleges nothing (`wire-format.md` §4.3), and ending a relationship
+    /// is not itself an accusation.
+    pub fn disavow(&mut self, patron: N, node: N) {
+        self.disavowed.insert((patron, node));
+    }
+
+    /// Whether some patron this observer holds has ended a relationship
+    /// with `n` with prejudice.
+    ///
+    /// **Held is the whole of the test.** The pair reaches the ball the
+    /// disavowing patron floods to and no further, so an observer holding
+    /// one is by construction a member of the neighbourhood whose default
+    /// §18.5 is describing.
+    pub fn blacklisted(&self, n: &N) -> bool {
+        self.disavowed.iter().any(|(_, node)| node == n)
     }
 
     /// Scope adjacency from the adoptions held (design §15.1).

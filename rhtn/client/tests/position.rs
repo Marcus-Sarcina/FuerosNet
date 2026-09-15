@@ -155,3 +155,47 @@ fn an_eleventh_subordinate_has_no_slot_to_be_put_in() {
     let e = c.propose_adoption_in(me, kh("c5"), &back("c5"), what()).expect_err("no slot left");
     assert!(format!("{e:?}").contains("ten subordinate slots"), "{e:?}");
 }
+
+/// Exit is a right, not a request (`wire-format.md` §4.2, design §6.2):
+/// one signature, nobody to ask, nothing that can come back refusing.
+// acceptance: CER-42
+#[test]
+fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_after() {
+    use rhtn_archive::record::Record;
+    use rhtn_archive::tx::TYPE_DEPARTURE;
+    use rhtn_client::ceremony::{Abort, Msg};
+
+    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    met(&mut s, "bob", "alice");
+    s.h.run_adoption(kh("bob"), kh("alice"), vec![kh("w1")], vec![kh("w2")], 1).expect("adopted under alice");
+    met(&mut s, "bob", "carol");
+    s.h.run_adoption(kh("bob"), kh("carol"), vec![kh("w1")], vec![kh("w3")], 2).expect("and under carol");
+    let under_alice = s.client("bob").position_in(&kh("alice")).expect("a position in alice's subnet");
+    let _ = s.client("bob").outbox();
+
+    let txid = s.client("bob").depart(kh("alice"), None).expect("nobody to ask");
+
+    // the envelope carries one signature, is the departing node's, and
+    // advances the counter within the series it names
+    let posted = s.client("bob").outbox();
+    let [Msg::Record(bytes)] = posted.as_slice() else { panic!("one record posted, got {posted:?}") };
+    let rec = Record::parse(bytes).expect("parses");
+    assert_eq!(rec.txid, txid);
+    assert_eq!(rec.tx_type, TYPE_DEPARTURE);
+    assert_eq!(rec.field_hash(1), Some(kh("bob")), "the departing node");
+    assert_eq!(rec.field_hash(2), Some(kh("alice")), "the patron being left");
+    let seq = rec.seqno().expect("a sequence");
+    assert_eq!(seq.series, under_alice.seqno.series, "within the current series");
+    assert_eq!(seq.counter, under_alice.seqno.counter + 1, "at the next counter");
+
+    // and bob is no longer at the address it left, while the other line
+    // is untouched: one series per patron relationship
+    assert_eq!(s.client("bob").position_in(&kh("alice")), None, "no position in the subnet it left");
+    assert!(s.client("bob").position_in(&kh("carol")).is_some(), "and carol's is not disturbed");
+    assert_eq!(s.client("bob").anchor(), kh("carol"), "the subnet it acts in is the one it is still in");
+
+    // leaving a patron it has no relationship with is refused, and
+    // leaving the same one twice is the same refusal
+    assert!(matches!(s.client("bob").depart(kh("w3"), None), Err(Abort::NoRelationship(_))), "no relationship to leave");
+    assert!(matches!(s.client("bob").depart(kh("alice"), None), Err(Abort::NoRelationship(_))), "already left");
+}

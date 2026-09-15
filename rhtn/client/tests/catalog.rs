@@ -104,3 +104,69 @@ fn an_unrecognised_declaration_is_surfaced_and_a_known_one_is_not() {
     surface_declaration(&none, &hook);
     assert_eq!(hook.0.borrow().len(), 1);
 }
+
+/// The sweep, driven from the client the way production does it: a browse
+/// posts the query, a reply is taken, and the continuation goes back out
+/// until the node's portion is complete.  Answered by the real
+/// `CatalogService`, so the two halves meet over the bytes rather than
+/// over a fixture.
+// acceptance: RSC-39
+#[test]
+fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
+    use rhtn_client::ceremony::Msg;
+    use rhtn_node::catalog::{CatalogService, ScopeEval};
+
+    /// Every asker is in the horizon, and every scope admits: this test is
+    /// about the sweep, and `node/tests/resources.rs` is about the gates.
+    struct Open;
+    impl ScopeEval for Open {
+        fn in_horizon(&self, _: &rhtn_client::Keyhash) -> bool {
+            true
+        }
+        fn admits(&self, _: &Scope, _: &rhtn_client::Keyhash, _: &rhtn_client::Keyhash) -> bool {
+            true
+        }
+    }
+
+    let mut svc = CatalogService::default();
+    for (i, t) in ["rhtn-forum", "rhtn-wiki"].iter().enumerate() {
+        let e = entry("bob", rhtn_codec::cose::sha256(&(i as u32).to_be_bytes()), t, b"https://x.example/", Some(0));
+        let body = ResourceRegistration { entry: e, scope: None, nonce: [i as u8; 16] }.encode();
+        let reply = svc.register(&ids(), &kh("bob"), &body).expect("answered");
+        assert_eq!(RegistrationReply::decode(&reply).unwrap().code, 0, "recorded");
+    }
+
+    let mut c = fresh("alice");
+    assert!(c.browse().is_empty(), "a client attached to nobody has nobody to ask");
+    c.attach(kh("w1"), &[]);
+
+    let posted = c.browse();
+    let [Msg::CatalogQuery(q)] = posted.as_slice() else { panic!("one query posted: {posted:?}") };
+    let reply = svc.answer(&kh("alice"), q, &Open).expect("the node answers a member");
+    let (step, next) = c.take_catalog_reply(&reply).expect("taken");
+    assert_eq!(step, Step::Done, "both entries fit one page, so there is no continuation");
+    assert!(next.is_empty(), "and nothing more to ask");
+    assert_eq!(c.catalog.entries().len(), 2, "the portion holds what the node served");
+    assert_eq!(c.catalog.entries()[0].0, kh("w1"), "attributed to the node that served it");
+
+    // a reply under a nonce no sweep sent is not taken, and the sweep
+    // stays outstanding for the honest one
+    let mut c2 = fresh("alice");
+    c2.attach(kh("w1"), &[]);
+    let posted = c2.browse();
+    let [Msg::CatalogQuery(q2)] = posted.as_slice() else { panic!("one query") };
+    let forged = CatalogReply { nonce: [0xee; 16], entries: vec![], continuation: None }.encode();
+    let (step, next) = c2.take_catalog_reply(&forged).expect("decodes");
+    assert_eq!(step, Step::WrongNonce, "not this sweep's answer");
+    assert!(next.is_empty());
+    let honest = svc.answer(&kh("alice"), q2, &Open).expect("answered");
+    assert_eq!(c2.take_catalog_reply(&honest).expect("taken").0, Step::Done, "the query it did send is still outstanding");
+    assert_eq!(c2.catalog.entries().len(), 2);
+}
+
+/// A client with nothing configured, for the paths that need one.
+fn fresh(name: &str) -> rhtn_client::ceremony::Client {
+    let clock = std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64));
+    let (device, _) = common::harness::device(vec![], clock, 7, 0);
+    rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
+}

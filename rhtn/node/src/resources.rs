@@ -157,8 +157,24 @@ impl Gateway {
                     granted += 1;
                 }
             }
-            // a party gone from the org: §10.2 has a departing one's rows
-            // removed, and §10.5 has the row change end the session
+        }
+        // **the purge is over every resource, not only the granted ones**
+        // [author, 2026-09-14].  A row an operator set by hand on a
+        // resource with no standing grant outlived the membership it was
+        // written for, so a departed or disavowed party kept a permission
+        // after the tree had let it go.  Membership is the outer gate
+        // (`infra-client-requirements.md` §10.1) and the gate is the same
+        // whoever wrote the row.
+        //
+        // **Recursive by construction.** The horizon is a walk over open
+        // bindings, so a departure takes the departing party's whole
+        // down-line out of it in one step: nothing here enumerates a
+        // subtree, and nothing can miss a generation of one.
+        let bound: Vec<(Keyhash, Keyhash)> = self.bindings.iter().map(|(r, b)| (*r, b.owner)).collect();
+        for (resource, owner) in bound {
+            let members = table.horizon(&owner, 2);
+            // §10.2 has a departing party's rows removed, and §10.5 has
+            // the row change end the session
             let gone: Vec<Keyhash> = self.rows.keys().filter(|(r, m)| *r == resource && !members.contains(m)).map(|(_, m)| *m).collect();
             for m in gone {
                 self.rows.remove(&(resource, m));
@@ -167,12 +183,6 @@ impl Gateway {
             }
         }
         (granted, dropped)
-    }
-
-    /// A member gone from the org: every row and session of theirs goes.
-    pub fn remove_member(&mut self, member: &Keyhash) {
-        self.rows.retain(|(_, m), _| m != member);
-        self.sessions.retain(|(m, _), _| m != member);
     }
 
     /// The hosted session identifier for (member, resource), if one is

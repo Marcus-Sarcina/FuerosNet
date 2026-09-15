@@ -21,7 +21,7 @@ use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
 use rhtn_archive::record::Record;
-use rhtn_archive::tx::{Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_PRESENCE, Witness, adoption_body, envelope_from_entries, recovery_block, recovery_response_with_consent};
+use rhtn_archive::tx::{Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_PRESENCE, Witness, adoption_body, departure_body, envelope, envelope_from_entries, recovery_block, recovery_response_with_consent};
 use rhtn_codec::cose::aad;
 use rhtn_crypto::verify;
 use rhtn_crypto::{Identity, SigningIdentity};
@@ -91,6 +91,12 @@ pub enum Abort {
     Record(String),
     /// The recovering subject holds no prior key to rotate from.
     NoPriorKey,
+    /// This client's archive shows no relationship with that patron, so
+    /// there is nothing for it to leave.
+    NoRelationship(Keyhash),
+    /// The relationship's counter is at its maximum, so a departure
+    /// cannot advance it within this series (`wire-format.md` §2.3).
+    CounterExhausted,
     /// The verifier never met the prior key, or does not recognise the
     /// person; or the subject gathered no recognition.
     NotRecognised,
@@ -144,6 +150,8 @@ pub enum Msg {
     StockOneTime(Vec<Vec<u8>>),
     /// A `PrekeyRequest` or `PrekeyBatchRequest`, to the serving node.
     PrekeyRequest(Vec<u8>),
+    /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
+    CatalogQuery(Vec<u8>),
     /// The reply, from the serving node.
     PrekeyReply(Vec<u8>),
     /// The serving node's word that the pool ran dry.
@@ -270,6 +278,15 @@ pub struct Client {
     /// locator is its patron's path *in that subnet* with a nibble added.
     /// A single position could not say which tree an adoption was into.
     positions: BTreeMap<Keyhash, Locator>,
+    /// The catalog this client has browsed, and the sweep of its serving
+    /// node that produced it (`wire-format.md` §6.4).
+    ///
+    /// **One node at a time**, because that is what a light client can
+    /// ask: it holds one session, and the answer it gets is that node's
+    /// portion — its own entries and those of the clients it serves
+    /// (design §11.5), not a directory of anything wider.
+    pub catalog: crate::catalog::View,
+    browsing: Option<(Keyhash, crate::catalog::Sweep)>,
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -322,7 +339,7 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), catalog: crate::catalog::View::default(), browsing: None, rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -826,6 +843,44 @@ impl Client {
         Ok(t)
     }
 
+    /// Leave `patron` (`wire-format.md` §4.2).
+    ///
+    /// **Nothing to propose and nobody to ask.** §4.2 has the old patron
+    /// not sign, and design §6.2 forbids a party with authority over
+    /// another from gating an action whose sole effect is to end that
+    /// authority — so this mints, signs, appends and posts in one step.
+    /// There is no countersignature to wait for and no refusal that can
+    /// come back; that is what makes exit a right rather than a request.
+    ///
+    /// The sequence is the relationship's current series at the next
+    /// counter, which §4.2 requires and §2.3 scopes to that series alone.
+    /// Afterwards this client holds no position in the subnet it left, and
+    /// the envelope is in the outbox for its serving node to flood.
+    pub fn depart(&mut self, patron: Keyhash, reason: Option<u64>) -> Result<Txid, Abort> {
+        let me = self.keyhash();
+        let rel = crate::rotation::relationships(&self.archive)
+            .into_iter()
+            .find(|r| r.patron == patron)
+            .ok_or(Abort::NoRelationship(patron))?;
+        // **the archive shows every relationship this key ever had**, and
+        // one it has already left is not one it can leave again — a second
+        // departure would advance the counter over a binding that closed.
+        // The position is where that is known: one subnet, one patron, so
+        // the anchor answers it.
+        let held = self.positions.get(&rel.position.anchor).ok_or(Abort::NoRelationship(patron))?;
+        let counter = held.seqno.counter.checked_add(1).ok_or(Abort::CounterExhausted)?;
+        let back = self.archive.next_back_pointers();
+        let body = departure_body(&back, &me, &patron, Seqno { series: rel.series(), counter }, self.now_s(), reason);
+        let env = envelope(TYPE_DEPARTURE, &body, &[&self.id]);
+        let rec = Record::parse(&env).map_err(Abort::Record)?;
+        let t = rec.txid;
+        self.archive.append(rec).map_err(Abort::Record)?;
+        self.store.records.insert(t, env.clone());
+        self.adopt_own_positions();
+        self.outbox.push(Msg::Record(env));
+        Ok(t)
+    }
+
     /// What this client has made and not yet handed up, taken away.
     pub fn outbox(&mut self) -> Vec<Msg> {
         std::mem::take(&mut self.outbox)
@@ -859,21 +914,39 @@ impl Client {
         self.positions.keys().copied().find(|a| *a != self.keyhash()).unwrap_or_else(|| self.keyhash())
     }
 
-    /// Fold this client's own adoptions into where it sits, one per
-    /// subnet.  Derived from the archive rather than kept beside it, so a
-    /// restored archive reaches the same answer; a later adoption in a
-    /// subnet replaces the earlier, which is what a reissue is.
+    /// Fold this client's own adoptions and departures into where it
+    /// sits, one position per subnet.  Derived from the archive rather
+    /// than kept beside it, so a restored archive reaches the same answer;
+    /// a later adoption under one patron replaces the earlier, which is
+    /// what a reissue is.
+    ///
+    /// **Read in order, because both directions occur.** A departure this
+    /// client signed takes the position away — a party that left is not
+    /// still at the address it left — and a re-adoption afterwards puts
+    /// one back. Filtering rather than replaying would make the two
+    /// cancel in whichever order they were written.
     fn adopt_own_positions(&mut self) {
         let me = self.keyhash();
-        let mine: Vec<Locator> = self
-            .archive
-            .records()
-            .filter(|r| r.tx_type == TYPE_ADOPTION && r.field_hash(1) == Some(me))
-            .filter_map(|r| r.locator())
-            .collect();
-        for loc in mine {
-            self.positions.insert(loc.anchor, loc);
+        let mut held: BTreeMap<Keyhash, Locator> = BTreeMap::new();
+        for rec in self.archive.records() {
+            if rec.field_hash(1) != Some(me) {
+                continue;
+            }
+            match rec.tx_type {
+                TYPE_ADOPTION => {
+                    if let (Some(patron), Some(loc)) = (rec.field_hash(2), rec.locator()) {
+                        held.insert(patron, loc);
+                    }
+                }
+                TYPE_DEPARTURE => {
+                    if let Some(patron) = rec.field_hash(2) {
+                        held.remove(&patron);
+                    }
+                }
+                _ => {}
+            }
         }
+        self.positions = held.into_values().map(|l| (l.anchor, l)).collect();
     }
 
     /// The chain proving my series under `patron`, presented when asked
@@ -937,6 +1010,47 @@ impl Client {
             }
             _ => vec![Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))],
         }
+    }
+
+    /// Browse the catalog of the node this client is attached to
+    /// (`wire-format.md` §6.4): the first, unfiltered query of a sweep.
+    ///
+    /// **A sweep, not a request**, because one reply is bounded at 111
+    /// entries and names the type to ask for next. Each reply is taken by
+    /// [`Client::take_catalog_reply`], which posts the continuation until
+    /// the node's portion is complete or the hint repeats.
+    pub fn browse(&mut self) -> Vec<Msg> {
+        let Some(serving) = self.payload.serving else { return Vec::new() };
+        let mut sweep = crate::catalog::Sweep::default();
+        let q = sweep.query(None, self.nonce());
+        self.browsing = Some((serving, sweep));
+        vec![Msg::CatalogQuery(q.encode())]
+    }
+
+    /// Take a `CatalogReply` from the serving node: entries are verified
+    /// under their owners and kept in this client's portion for that node,
+    /// and the continuation is followed once per type.
+    ///
+    /// **A reply this sweep did not ask for is not taken** — §6.4's echoed
+    /// nonce is what ties the two, and an entry out of a reply that cannot
+    /// be attributed is an entry from nowhere.
+    pub fn take_catalog_reply(&mut self, bytes: &[u8]) -> Result<(crate::catalog::Step, Vec<Msg>), String> {
+        let reply = rhtn_archive::catalog::CatalogReply::decode(bytes)?;
+        let Some((node, mut sweep)) = self.browsing.take() else { return Err("no sweep is under way".into()) };
+        let step = sweep.take(&self.known, self.catalog.portion(node), &reply, rhtn_codec::bounds::CATALOG_REPLY_ENTRIES);
+        let out = match &step {
+            crate::catalog::Step::Again(t) => {
+                let q = sweep.query(Some(t.clone()), self.nonce());
+                vec![Msg::CatalogQuery(q.encode())]
+            }
+            _ => Vec::new(),
+        };
+        // a sweep that asked again is still under way; one that is done,
+        // truncated, or answered under a nonce it did not send is not
+        if matches!(step, crate::catalog::Step::Again(_) | crate::catalog::Step::WrongNonce) {
+            self.browsing = Some((node, sweep));
+        }
+        Ok((step, out))
     }
 
     /// Routine maintenance: rotate the signed prekey when its interval has

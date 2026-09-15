@@ -365,3 +365,37 @@ fn a_disavowals_reason_is_an_enumerated_code_inside_a_space_of_sixty_four() {
     prose.splice(r.clone(), [0x64, b'w', b'h', b'y', b'?']);
     assert!(body_err(&prose).contains("code uint"), "a reason that is not a uint");
 }
+
+/// **A departure carries one signature, and a second is refused**
+/// (`wire-format.md` §4.2): the rule is what makes exit a right, so a
+/// decoder that accepted a countersigned one would accept the patron
+/// gating the act that ends its own authority.
+// acceptance: DEC-32
+#[test]
+fn a_departure_countersigned_by_the_patron_is_refused_and_so_is_a_disavowal() {
+    let mut w = World::new(&["alice", "bob"]);
+    let pop = w.meet("alice", "bob");
+    w.adopt("bob", "alice", pop.txid, 1);
+    let (ka, kb) = (w.kh("alice"), w.kh("bob"));
+    let t = w.clock + 1;
+
+    // the honest shape: the departing node alone
+    let dep = departure_body(&w.back("bob"), &kb, &ka, Seqno { series: 1, counter: 1 }, t, None);
+    assert!(parsed(&w, TYPE_DEPARTURE, &dep, &["bob"]).is_ok(), "one signature is the shape");
+
+    // the patron countersigning it: two logical signers is four entries,
+    // over the ceiling §1.3 derives for a one-signer type
+    let both = parsed(&w, TYPE_DEPARTURE, &dep, &["bob", "alice"]).expect_err("two signers on a unilateral type");
+    assert!(both.contains("ceiling"), "refused for the entry count: {both}");
+
+    // and the patron signing it instead of the node, which is the same
+    // count and a different party: the body names who must sign
+    let wrong = parsed(&w, TYPE_DEPARTURE, &dep, &["alice"]).expect_err("the patron is not the departing node");
+    assert!(!wrong.is_empty(), "refused: {wrong}");
+
+    // the other unilateral type holds the same bound the other way round
+    let dis = disavowal_body(&w.back("alice"), &ka, &kb, t, None);
+    assert!(parsed(&w, TYPE_DISAVOWAL, &dis, &["alice"]).is_ok(), "the patron alone");
+    let both = parsed(&w, TYPE_DISAVOWAL, &dis, &["alice", "bob"]).expect_err("two signers on a unilateral type");
+    assert!(both.contains("ceiling"), "refused for the entry count: {both}");
+}

@@ -48,6 +48,17 @@ impl Client {
                 }
             }
         }
+        // **a patron's determination, taken at face value** (design
+        // §18.5): a relationship ended with prejudice is the patron's
+        // reading of the party it ended, and a member of the
+        // neighbourhood the pair reaches defaults to it rather than
+        // ordering it against a departure it may also hold. Read from the
+        // records for that reason — whichever object reached the fold
+        // first is the one the binding records, and the determination
+        // that lost the race is still one the patron made.
+        for (patron, node) in self.horizon.determinations() {
+            ev.disavow(patron, node);
+        }
         ev
     }
 

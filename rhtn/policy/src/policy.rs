@@ -117,9 +117,18 @@ impl<N: Ord + Clone + Debug> Policy<N> for ReferenceMetric {
     fn evaluate(&self, ev: &Evidence<N>, candidates: &[N]) -> Evaluation<N> {
         let alloc = self.admit(ev, candidates, 1);
         let flows: BTreeMap<&N, u64> = alloc.ranked.iter().map(|r| (&r.candidate, r.flow)).collect();
+        // **a patron's determination is what the neighbourhood defaults
+        // to** (design §18.5): a party some patron this observer holds has
+        // disavowed with prejudice scores nothing and is admitted to
+        // nothing, without the observer weighing that against a departure
+        // it may also hold.  This is the reference reading; §16.4 leaves a
+        // tree free to run a variant that orders the pair instead, and
+        // nothing on the wire can tell which is running.
+        let score = |c: &N| if ev.blacklisted(c) { 0.0 } else { flows.get(c).copied().unwrap_or(0) as f64 };
+        let admitted: Vec<N> = alloc.admitted.into_iter().filter(|c| !ev.blacklisted(c)).collect();
         Evaluation {
-            individual: candidates.iter().map(|c| (c.clone(), flows.get(c).copied().unwrap_or(0) as f64)).collect(),
-            admitted: alloc.admitted,
+            individual: candidates.iter().map(|c| (c.clone(), score(c))).collect(),
+            admitted,
             joint: alloc.total as f64,
         }
     }

@@ -394,9 +394,11 @@ fn a_departure_re_anchors_the_departed_party_on_itself_and_shortens_what_sat_ben
     let recs = vec![
         adopt(&mut w, "alice", "bob", vec![0x10], 1),
         adopt(&mut w, "w1", "alice", vec![0x12], 2),
+        adopt(&mut w, "w2", "w1", vec![0x12, 0x30], 3),
     ];
     let mut h = fed("w1", &recs);
     assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x12], 2)), "two hops under bob");
+    assert_eq!(h.place_in(&kh("w2"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x12, 0x30], 3)), "and a generation below that");
     assert!(h.locator_in(&kh("w1"), &kh("bob")).is_some(), "and a propagated locator saying so");
 
     let departure = {
@@ -411,8 +413,13 @@ fn a_departure_re_anchors_the_departed_party_on_itself_and_shortens_what_sat_ben
     assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((Vec::new(), 0)));
     // and w1 is one hop under alice, the prefix that reached alice removed
     assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
-    // nothing is left at the place either of them departed
+    // **every generation, not just the first.** The subtree is moved by
+    // the prefix it shares, so nothing enumerates depth and nothing can
+    // miss a level of it
+    assert_eq!(h.place_in(&kh("w2"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x23], 2)));
+    // nothing is left at the place any of them departed
     assert_eq!(h.place_in(&kh("w1"), &kh("bob")), None, "w1 is not in bob's subnet");
+    assert_eq!(h.place_in(&kh("w2"), &kh("bob")), None, "nor is the generation below it");
     assert_eq!(h.place_in(&kh("alice"), &kh("bob")), None, "nor is alice");
     assert!(h.locator_in(&kh("w1"), &kh("bob")).is_none(), "and no locator claims a subnet it left");
 
@@ -422,6 +429,7 @@ fn a_departure_re_anchors_the_departed_party_on_itself_and_shortens_what_sat_ben
     assert!(matches!(woke, Woke::Replayed { .. }), "{woke:?}");
     assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| p.nibbles), Some(0));
     assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
+    assert_eq!(h.place_in(&kh("w2"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x23], 2)));
 }
 
 /// The negative: a party still holding a patron in that subnet is not a
@@ -451,4 +459,81 @@ fn an_ending_that_leaves_a_patron_standing_moves_no_address() {
     assert!(h.table.subordinates(&kh("carol")).contains(&kh("w1")), "and the other one did not");
     assert_eq!(h.place_in(&kh("w1"), &kh("w1")), None, "w1 is nobody's root while carol holds it");
     assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x22]), "and it is still in bob's subnet");
+}
+
+/// A contested exit: the departure and the with-prejudice disavowal
+/// minutes apart, and the neighbourhood defaults to the patron's reading
+/// (design §18.5) [author, 2026-09-14].  **Not an ordering question** —
+/// asking which came first would have every member adjudicate on
+/// timestamps §2 says are signer-controlled.
+// acceptance: MET-10
+#[test]
+fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_first() {
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
+    // carol leaves bob, and bob disavows carol with prejudice.  Both are
+    // signed, both reach the same ball, and nothing orders them
+    let departure = {
+        let t = w.tick();
+        let bn = w.back("carol");
+        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 1 }, t, None);
+        w.commit(TYPE_DEPARTURE, &body, &["carol"])
+    };
+    let disavowal = |w: &mut World, code: u64| {
+        let t = w.tick();
+        let bp = w.back("bob");
+        let body = rhtn_archive::tx::disavowal_body(&bp, &kh("bob"), &kh("carol"), t, Some(code));
+        w.commit(rhtn_archive::tx::TYPE_DISAVOWAL, &body, &["bob"])
+    };
+
+    // **without prejudice first**: code 1 is inside 0-31, so it alleges
+    // nothing and ending the relationship is not itself an accusation
+    let mut plain = fed("alice", &recs);
+    let d1 = disavowal(&mut w, 1);
+    assert_eq!(plain.ingest(&departure.bytes, &ids()), Took::Applied);
+    assert_eq!(plain.ingest(&d1.bytes, &ids()), Took::Applied);
+    assert!(!client_for("alice", plain).evidence().blacklisted(&kh("carol")), "an unbanded code is not a determination about the party");
+
+    // the same pair, banded: code 33 is with prejudice, and the member
+    // takes the patron's reading without weighing the departure against it
+    let mut w2 = World::new();
+    let recs2 = vec![
+        adopt(&mut w2, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w2, "carol", "bob", vec![0x20], 1),
+    ];
+    let mut banded = fed("alice", &recs2);
+    for r in &recs2 {
+        assert!(banded.holds(&r.txid));
+    }
+    let dep2 = {
+        let t = w2.tick();
+        let bn = w2.back("carol");
+        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 1 }, t, None);
+        w2.commit(TYPE_DEPARTURE, &body, &["carol"])
+    };
+    let d33 = {
+        let t = w2.tick();
+        let bp = w2.back("bob");
+        let body = rhtn_archive::tx::disavowal_body(&bp, &kh("bob"), &kh("carol"), t, Some(33));
+        w2.commit(rhtn_archive::tx::TYPE_DISAVOWAL, &body, &["bob"])
+    };
+    // the departure arrives first here; the order is the point, and it
+    // does not change the answer
+    assert_eq!(banded.ingest(&dep2.bytes, &ids()), Took::Applied);
+    assert_eq!(banded.ingest(&d33.bytes, &ids()), Took::Applied);
+    let c = client_for("alice", banded);
+    assert!(c.evidence().blacklisted(&kh("carol")), "the patron's determination, taken at face value");
+    assert_eq!(c.standing(&kh("carol")), 0.0, "and it scores nothing");
+    assert!(!c.evaluate(&[kh("carol"), kh("bob")]).admitted.contains(&kh("carol")), "nor is it admitted to anything");
+    assert!(c.standing(&kh("bob")) >= 0.0, "the patron is not touched by its own determination");
+}
+
+/// A client wrapped round a horizon, for the trust folds.
+fn client_for(name: &str, h: Horizon) -> rhtn_client::ceremony::Client {
+    let mut c = rhtn_client::ceremony::Client::new(common::id(name), common::ids(), Default::default(), harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 7, 0).0);
+    c.horizon = h;
+    c
 }

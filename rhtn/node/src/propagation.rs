@@ -442,11 +442,23 @@ impl NodeView {
                 Some(loc)
             })
             .collect();
+        // **rebuilt, not accumulated.** An ending closes a binding, and a
+        // map that only ever grew would keep this node introducing itself
+        // at an address in a tree it has left.
+        let rooted = self.position.anchor == me;
+        self.positions = mine.iter().map(|l| (l.anchor, l.clone())).collect();
         for loc in mine {
-            if self.position.anchor == me {
+            if rooted {
                 self.position = loc.clone();
             }
-            self.positions.insert(loc.anchor, loc);
+        }
+        // **with no open binding a node is a root, and says so**
+        // (design §12.1, `wire-format.md` §2.1's self-anchor): the counter
+        // advances because the position changed and a holder's cached copy
+        // of the old one is now stale (§2.3).
+        if self.positions.is_empty() && self.position.anchor != me {
+            let seqno = rhtn_archive::tx::Seqno { series: self.position.seqno.series, counter: self.position.seqno.counter.saturating_add(1) };
+            self.position = Locator::root(me, seqno);
         }
     }
 

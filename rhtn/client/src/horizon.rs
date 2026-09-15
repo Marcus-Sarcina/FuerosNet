@@ -17,7 +17,7 @@
 use crate::{Keyhash, Txid};
 use rhtn_archive::record::Record;
 use rhtn_archive::endpoint::EndpointRecord;
-use rhtn_archive::topology::{Evaluation, Snapshot, Table, unfolded};
+use rhtn_archive::topology::{End, Evaluation, Snapshot, Table, unfolded};
 use rhtn_archive::tx::Locator;
 use rhtn_crypto::verify::Lookup;
 use std::collections::BTreeMap;
@@ -196,6 +196,32 @@ impl Horizon {
 
     pub fn holds(&self, txid: &Txid) -> bool {
         self.records.contains_key(txid)
+    }
+
+    /// `(patron, node)` for every relationship a patron ended **with
+    /// prejudice** in what this client holds (`wire-format.md` §4.3).
+    ///
+    /// **Read from the records, not from the binding's end.** Whichever of
+    /// a departure and a disavowal reached the fold first is the one the
+    /// binding records, and design §18.5 is explicit that a member does
+    /// not order the two — so a determination that lost the race is still
+    /// a determination the patron made and this client holds.
+    pub fn determinations(&self) -> Vec<(Keyhash, Keyhash)> {
+        let mut out = Vec::new();
+        for bytes in self.records.values() {
+            let Ok(rec) = Record::parse(bytes) else { continue };
+            if rec.tx_type != rhtn_archive::tx::TYPE_DISAVOWAL {
+                continue;
+            }
+            // §4.3 puts the reason in field 4; absent, nothing is alleged
+            if !rec.field_uint(4).is_some_and(End::band) {
+                continue;
+            }
+            if let (Some(patron), Some(node)) = (rec.field_hash(1), rec.field_hash(2)) {
+                out.push((patron, node));
+            }
+        }
+        out
     }
 
     pub fn records(&self) -> usize {

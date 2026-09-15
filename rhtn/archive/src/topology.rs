@@ -40,9 +40,21 @@ impl End {
     #[must_use]
     pub fn with_prejudice(&self) -> Option<bool> {
         match self {
-            End::Disavowal(Some(code)) => Some(*code >= 32),
+            End::Disavowal(Some(code)) => Some(End::band(*code)),
             _ => None,
         }
+    }
+
+    /// `wire-format.md` §4.3's band: bit 5 separates 0-31 from 32-63, so a
+    /// code nobody recognises is still readable as an allegation or not.
+    ///
+    /// **One definition, because two readers want it**: the fold, for the
+    /// end it recorded, and a policy reading a disavowal out of the
+    /// records it holds whether or not that disavowal was the object that
+    /// closed the binding (design §18.5).
+    #[must_use]
+    pub fn band(code: u64) -> bool {
+        code >= 32
     }
 }
 
