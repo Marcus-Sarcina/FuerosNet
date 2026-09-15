@@ -10931,5 +10931,90 @@
         "fanout-ten"
       ]
     ]
+  },
+  {
+    "id": "TOP-36",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Re-anchor a departed party on itself and shorten what sat beneath it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §12.1",
+      "light-client-requirements.md §4.2",
+      "wire-format.md §4.2"
+    ],
+    "rule": [
+      {
+        "where": "design §12.1",
+        "text": "a\n  root names itself, with an empty path"
+      },
+      {
+        "where": "light-client-requirements.md §4.2",
+        "text": "**Persist enough to resolve every node in your trust horizon directly**"
+      }
+    ],
+    "given": "A client inside a party's own subtree, holding that party two hops under an anchor and itself one hop below that.",
+    "when": "The party departs its patron, leaving it with none in that subnet.",
+    "then": "The departed party is placed under itself at the empty path, which is what a root is, and everything the client placed beneath it moves to that party's subnet with the prefix that reached it removed. Nothing is left at either place they departed, and no propagated locator still claims the subnet they left. A replay reaches the same map, so the incremental view and the folded one agree.",
+    "oracle": "behaviour",
+    "interpretation": "The design states where a root sits and what the copy is for; that a holder must therefore move the address rather than only close the edge is the author's ruling of 2026-09-14, and the empty path is reached by subtracting the prefix rather than by minting a position.",
+    "holds": [
+      [
+        2,
+        "departed-address-moves"
+      ]
+    ]
+  },
+  {
+    "id": "TOP-37",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Move no address where the ending leaves a patron standing",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "design §12.1",
+      "wire-format.md §4.2"
+    ],
+    "rule": [
+      {
+        "where": "design §12.1",
+        "text": "a\n  root names itself, with an empty path"
+      }
+    ],
+    "given": "A client holding a party bound under two patrons in one subnet, which a disavowal racing a re-adoption can produce.",
+    "when": "A departure ends one of the two bindings.",
+    "then": "Only the named binding ends. The party is not placed under itself, because it is nobody's root while the other patron holds it, and its place in the anchor's subnet is untouched.",
+    "oracle": "behaviour",
+    "interpretation": "The tree admits one patron per subnet, so this state is reachable only through arrival order; the rule tested is that the re-anchor asks whether a patron remains rather than assuming the ending was the last one.",
+    "holds": [
+      [
+        2,
+        "departed-address-moves"
+      ]
+    ]
+  },
+  {
+    "id": "RSC-37",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Take nothing from a catalog reply under a nonce the sweep did not send",
+    "milestone": 5,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §6.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §6.4",
+        "text": "echoes the query nonce"
+      }
+    ],
+    "given": "A client sweep with one query outstanding under a stated nonce.",
+    "when": "A well-formed reply carrying valid entries arrives under a different nonce.",
+    "then": "The sweep reports the wrong nonce and no entry out of that reply reaches the view. The query stays outstanding, and the honest reply under the nonce it sent is taken normally.",
+    "oracle": "behaviour",
+    "interpretation": "The wire says the reply echoes the query's nonce; that an asker must therefore refuse one that does not is the rule the other three askers (resolution, currency, the archive walk) already apply, asserted here for the catalog sweep."
   }
 ]

@@ -9572,3 +9572,20 @@ each comes from [author, 2026-09-14]: Ed25519's 32-byte public key from RFC 8032
 §5.1.5 and ML-DSA-65's 1,952 from FIPS 204 Table 2, alongside the signature
 figures §1.3 already carried. They were being cited to §§2.2 and 3.5, which
 stated none of them.
+
+**A departure moves an address; it does not only close an edge** [author,
+2026-09-14]. Three kinds of participant hold a `Table` — an infra node, a
+client inside its own `Horizon`, and the policy evaluator reading one — and all
+three saw the binding close. None of them held the consequence for *reaching*
+the party: it has left the place its old path named, and every path beneath it
+that ran through the old patron is wrong by one ancestor. An observer that saw
+the ending now re-anchors the departed party on itself, at §12.1's empty path,
+and rewrites what sat beneath it into that party's subnet with the prefix that
+reached it removed. **Only where no patron is left in that subnet** — a party
+one binding still holds is nobody's root. Nothing translates a path when an
+ancestor moves afterwards (§12.6.2); those go stale like any other.
+
+**The catalog sweep read entries out of any reply handed to it.** `CatalogReply`
+echoes the query's nonce and nothing checked it, where resolution, currency and
+the archive walk all refuse a reply they cannot tie to their request. The sweep
+now does the same, under the name those three already use.

@@ -48,9 +48,17 @@ fn register(svc: &mut CatalogService, peer: &str, entry: &[u8], scope: Option<Sc
     r.code
 }
 
+/// **Every reply a request draws echoes the nonce that drew it**
+/// (`wire-format.md` §6.4), which is what lets an asker tell this answer
+/// from another one on the same connection.  Asserted here so every query
+/// in the file checks it, as `register` does for its own reply.
 fn query(svc: &CatalogService, scopes: &TableScopes, asker: &str, filter: Option<&str>) -> Option<CatalogReply> {
     let q = CatalogQuery { service_type: filter.map(|s| s.to_string()), nonce: [9; 16] }.encode();
-    svc.answer(&kh(asker), &q, scopes).map(|b| CatalogReply::decode(&b).unwrap())
+    let reply = svc.answer(&kh(asker), &q, scopes).map(|b| CatalogReply::decode(&b).unwrap());
+    if let Some(r) = &reply {
+        assert_eq!(r.nonce, [9; 16], "the reply echoes the query's nonce");
+    }
+    reply
 }
 
 const R1: [u8; 32] = [0xa1; 32];

@@ -28,6 +28,12 @@ pub struct Portion {
 pub enum Step {
     /// Ask again, filtered to this type.
     Again(String),
+    /// The reply does not echo the nonce of the query outstanding on this
+    /// sweep (`wire-format.md` §6.4), so it is not this query's answer and
+    /// nothing in it is taken.  The same answer `resolution` and `currency`
+    /// give: a reply that cannot be tied to a request is one an asker has
+    /// no way to attribute.
+    WrongNonce,
     /// The node's portion is complete.
     Done,
     /// A full page and a continuation naming a type already asked for:
@@ -40,6 +46,9 @@ pub enum Step {
 #[derive(Debug, Clone, Default)]
 pub struct Sweep {
     asked: BTreeSet<Option<String>>,
+    /// The nonce of the query this sweep is waiting on.  One at a time:
+    /// a sweep asks, takes, and asks again.
+    outstanding: Option<[u8; 16]>,
     pub queries: u32,
 }
 
@@ -48,12 +57,19 @@ impl Sweep {
     pub fn query(&mut self, filter: Option<String>, nonce: [u8; 16]) -> CatalogQuery {
         self.asked.insert(filter.clone());
         self.queries += 1;
+        self.outstanding = Some(nonce);
         CatalogQuery { service_type: filter, nonce }
     }
 
     /// Take a reply into `portion`: entries verified under their owners,
     /// and the continuation followed at most once per type.
     pub fn take<L: Lookup + ?Sized>(&mut self, ids: &L, portion: &mut Portion, reply: &CatalogReply, full_page: usize) -> Step {
+        // checked before anything is read out of it: an entry from an
+        // unattributable reply is an entry from nowhere
+        if self.outstanding.is_some_and(|n| n != reply.nonce) {
+            return Step::WrongNonce;
+        }
+        self.outstanding = None;
         for bytes in &reply.entries {
             if let Ok(e) = CatalogEntry::parse(bytes)
                 && e.verify(ids).is_ok() {

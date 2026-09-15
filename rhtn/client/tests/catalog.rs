@@ -49,6 +49,30 @@ fn a_repeated_continuation_is_truncation_not_another_page() {
     assert_eq!(view.entries().len(), 111 + 3);
 }
 
+/// **A reply that does not echo the query's nonce is not that query's
+/// answer** (`wire-format.md` §6.4), and nothing is read out of it.  The
+/// same rule `resolution` and `currency` already apply to their own
+/// replies; the catalog sweep is where it was missing.
+// acceptance: RSC-37
+#[test]
+fn a_reply_under_a_nonce_the_sweep_did_not_send_is_not_taken() {
+    let node = kh("w3");
+    let mut view = View::default();
+    let mut sweep = Sweep::default();
+    let page: Vec<Vec<u8>> = (0..3u32).map(|i| entry("bob", rhtn_codec::cose::sha256(&i.to_be_bytes()), "rhtn-forum", b"e", None)).collect();
+    let q = sweep.query(None, [4; 16]);
+    assert_eq!(q.nonce, [4; 16]);
+
+    let forged = CatalogReply { nonce: [5; 16], entries: page.clone(), continuation: None };
+    assert_eq!(sweep.take(&ids(), view.portion(node), &forged, 111), Step::WrongNonce, "not this query's answer");
+    assert!(view.portion(node).entries.is_empty(), "and no entry out of it reaches the view");
+
+    // the honest reply to the still-outstanding query is taken
+    let answer = CatalogReply { nonce: [4; 16], entries: page.clone(), continuation: None };
+    assert_eq!(sweep.take(&ids(), view.portion(node), &answer, 111), Step::Done);
+    assert_eq!(view.portion(node).entries.len(), 3);
+}
+
 // acceptance: RSC-24
 #[test]
 fn a_brokered_service_is_routed_to_only_where_it_matches_the_signed_entry() {

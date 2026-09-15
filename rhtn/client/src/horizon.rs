@@ -49,6 +49,27 @@ pub struct Place {
 /// A party, and the subnet a place of theirs is in.
 pub type Placement = (Keyhash, Keyhash);
 
+/// A packed path's nibbles, one per hop (`wire-format.md` §2.1).
+fn nibbles_of(path: &[u8], n: u64) -> Vec<u8> {
+    (0..usize::try_from(n).unwrap_or(usize::MAX))
+        .map_while(|i| path.get(i / 2).map(|b| if i.is_multiple_of(2) { b >> 4 } else { b & 0x0f }))
+        .collect()
+}
+
+/// The packing §2.1 defines: high nibble first, and the unused low nibble
+/// of a final odd byte zero.
+fn pack(nibbles: &[u8]) -> (Vec<u8>, u64) {
+    let mut out = vec![0u8; nibbles.len().div_ceil(2)];
+    for (i, v) in nibbles.iter().enumerate() {
+        if i.is_multiple_of(2) {
+            out[i / 2] |= v << 4;
+        } else {
+            out[i / 2] |= v & 0x0f;
+        }
+    }
+    (out, nibbles.len() as u64)
+}
+
 /// What ingesting a propagated record did here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Took {
@@ -197,8 +218,71 @@ impl Horizon {
             return Took::Refused;
         }
         self.note_locator(&rec);
+        self.note_end(&rec);
         self.records.insert(rec.txid, bytes.to_vec());
         Took::Applied
+    }
+
+    /// A record that ended a binding moves an address, not just an edge.
+    ///
+    /// **The table and the address book answer different questions**
+    /// [author, 2026-09-14].  The fold closes the binding, and that is the
+    /// whole of what the topology says.  What a holder still needs is a way
+    /// to reach the party: it has left the place its old path named, and
+    /// every path under it named through that patron is now wrong by one
+    /// ancestor.  So an observer that saw the ending **re-anchors the
+    /// departed party on itself and rewrites the subtree beneath it**,
+    /// which is what a root is — `Locator::root`'s empty path, arrived at
+    /// by subtraction rather than by minting.
+    ///
+    /// **Only where the party has no patron left in that subnet.** A node
+    /// bound twice in one subnet is not a state the tree admits, but a
+    /// disavowal racing a re-adoption can leave one binding open, and a
+    /// party still placed under a patron is not a root of anything.
+    fn note_end(&mut self, rec: &Record) {
+        let Some((node, anchor)) = self
+            .table
+            .bindings()
+            .iter()
+            .find(|b| matches!(&b.end, Some((t, _, _)) if *t == rec.txid))
+            .and_then(|b| b.anchor.map(|a| (b.node, a)))
+        else {
+            return;
+        };
+        if anchor == node || self.table.bindings().iter().any(|b| b.node == node && b.anchor == Some(anchor) && b.open()) {
+            return;
+        }
+        self.reanchor(node, anchor);
+    }
+
+    /// Move `node` and everything placed beneath it out of `anchor`'s
+    /// subnet and under `node` itself, each path shortened by the prefix
+    /// that reached `node`.
+    fn reanchor(&mut self, node: Keyhash, anchor: Keyhash) {
+        let Some(base) = self.places.get(&(node, anchor)).map(|p| nibbles_of(&p.path, p.nibbles)) else { return };
+        // **an empty prefix is every path in the subnet**, and a party at
+        // the empty path under an anchor that is not itself is malformed
+        // (`wire-format.md` §2.1's self-anchor is the only empty one).
+        // Moving the whole subnet on one is not a repair.
+        if base.is_empty() {
+            return;
+        }
+        let moved: Vec<(Keyhash, Vec<u8>)> = self
+            .places
+            .iter()
+            .filter(|((_, a), _)| *a == anchor)
+            .filter_map(|((x, _), p)| nibbles_of(&p.path, p.nibbles).strip_prefix(&base[..]).map(|rest| (*x, rest.to_vec())))
+            .collect();
+        for (x, rest) in moved {
+            self.places.remove(&(x, anchor));
+            // **the propagated locator goes with it**: it named a position
+            // in a subnet this party has left, and nobody has propagated a
+            // replacement.  A place with no locator is the ordinary state
+            // of a party known only by where it sits.
+            self.locators.remove(&(x, anchor));
+            let (path, nibbles) = pack(&rest);
+            self.places.insert((x, node), Place { anchor: node, path, nibbles });
+        }
     }
 
     /// An adoption names where its subject sits, and that is the whole of
@@ -207,6 +291,16 @@ impl Horizon {
     /// the propagated version the system of record here.
     fn note_locator(&mut self, rec: &Record) {
         let (Some(node), Some(loc)) = (rec.field_hash(1), rec.locator()) else { return };
+        // **a party placed under someone is not its own anchor.** An
+        // ending may have re-anchored it on itself ([`Horizon::reanchor`]);
+        // an adoption propagated afterwards says that is over, and leaving
+        // the self-anchor would have this client holding a party as a root
+        // and as a subordinate at once.  What was placed *beneath* it stays
+        // where it was put: nothing translates a path when an ancestor
+        // moves (design §12.6.2), and those go stale as any other does.
+        if node != loc.anchor {
+            self.places.remove(&(node, node));
+        }
         self.places.insert((node, loc.anchor), Place { anchor: loc.anchor, path: loc.path.clone(), nibbles: loc.nibbles });
         // the anchor a path is relative to sits at the empty path under
         // itself: a fact the record states rather than one derived from it
@@ -218,11 +312,12 @@ impl Horizon {
     ///
     /// **Bounded by the horizon on the way out**
     /// (`light-client-requirements.md` §4.2), not by remembering to prune.
-    /// A place is recorded from a record and nothing in the fold removes it
-    /// when a later record ends the relationship, so a party that has left
-    /// is still in the map until [`Horizon::prune`] drops it — and a replay
-    /// puts it back.  Reading through the current bound makes the replayed
-    /// view and the incremental one agree by construction.
+    /// An ending moves a place rather than deleting one ([`Horizon::note_end`]),
+    /// so a party that left one subnet is still in the map — under itself —
+    /// until [`Horizon::prune`] drops what the horizon no longer covers, and
+    /// a replay reaches the same map by the same route.  Reading through the
+    /// current bound makes the replayed view and the incremental one agree by
+    /// construction.
     /// Every subnet this client can place `node` in, ordered by anchor.
     ///
     /// **Plural because a party may be in more than one**, and a caller
@@ -341,6 +436,7 @@ impl Horizon {
                         && self.table.apply_with(&rec, ids, &self.records, None, Evaluation::Deferred).is_ok()
                     {
                         self.note_locator(&rec);
+                        self.note_end(&rec);
                     }
                 }
                 if later.is_empty() { Woke::Current } else { Woke::Extended { folded: later.len() } }
@@ -354,6 +450,7 @@ impl Horizon {
                         && self.table.apply_with(&rec, ids, &self.records, None, Evaluation::Deferred).is_ok()
                     {
                         self.note_locator(&rec);
+                        self.note_end(&rec);
                     }
                 }
                 Woke::Replayed { replayed: all.len() }

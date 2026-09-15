@@ -154,6 +154,7 @@ evidence which *is* good is counted. `second-binding-stands` and
 | `order-independent` | The binding a departure names ends whichever of the two arrives first | table | TOP-18 | PRP-22 |
 | `reissue-advances-relationship` | A departure in the proven current series ends the relationship a reissue moved | table | TOP-20 | REC-09 |
 | `move-inside-horizon` | A move within the replication horizon is accepted without archive presentation | table | REP-04 | gap |
+| `departed-address-moves` | An observer that saw the ending re-anchors the departed party on itself and shortens every path beneath it | client | TOP-36 | TOP-37 |
 
 **Gaps.** Three conditions have no negative. `one-signature-only` is the
 sharpest: nothing asserts that a departure carrying a second signature is
@@ -170,6 +171,22 @@ sibling adopted afterwards can reach it there. §4.2 states that
 consequence the other way round — without a departure a node that adopts
 elsewhere *remains in the old subtree's view indefinitely* — and TOP-33
 asserts it.
+
+**And a third thing the two were hiding: the address book** [author,
+2026-09-14]. The author's question was *who* retains, and of what kind. A
+`Table` is held by an infra node, by a participant client inside its
+`Horizon`, and read by the policy evaluator; all three see the binding
+close, and that is the whole of what the topology says. What none of them
+had was the consequence for *reaching* the party: it has left the place its
+old path named, and every path beneath it that ran through the old patron
+is now wrong by one ancestor. **Routing is an address-book question, not a
+topology one**, and the ruling is that an observer which saw the ending
+re-anchors the departed party on itself — `Locator::root`'s empty path,
+reached by subtracting the prefix rather than by minting a position — and
+rewrites what sat beneath it into that party's own subnet. Only where no
+patron is left in that subnet: a party one binding still holds is nobody's
+root. Nothing translates a path when an ancestor moves afterwards (design
+§12.6.2); those go stale like any other.
 
 ---
 
@@ -291,10 +308,10 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 82 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 83 conditions drawn from the documents,
 and of them:
 
-- 38 hold on both sides
+- 39 hold on both sides
 - 36 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware

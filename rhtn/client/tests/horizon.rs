@@ -380,3 +380,75 @@ fn a_client_weighs_trust_distance_from_its_own_copy_and_asks_nobody() {
     assert!(ev.horizon().contains(&kh("w2")), "and the metric's own walk reaches the nephew");
     assert!(c.standing(&kh("carol")).is_finite(), "and a score comes out of it rather than a question");
 }
+
+/// A departure moves an address; it does not only close an edge.
+///
+/// The observer is inside the departing party's own subtree, which is the
+/// case where the answer matters: its patron has left the tree they were
+/// both in, so every path it holds that runs through the old anchor is now
+/// wrong by one ancestor.
+// acceptance: TOP-36
+#[test]
+fn a_departure_re_anchors_the_departed_party_on_itself_and_shortens_what_sat_beneath_it() {
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "w1", "alice", vec![0x12], 2),
+    ];
+    let mut h = fed("w1", &recs);
+    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x12], 2)), "two hops under bob");
+    assert!(h.locator_in(&kh("w1"), &kh("bob")).is_some(), "and a propagated locator saying so");
+
+    let departure = {
+        let t = w.tick();
+        let bn = w.back("alice");
+        let body = departure_body(&bn, &kh("alice"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        w.commit(TYPE_DEPARTURE, &body, &["alice"])
+    };
+    assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
+
+    // alice is her own anchor at the empty path, which is what a root is
+    assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((Vec::new(), 0)));
+    // and w1 is one hop under alice, the prefix that reached alice removed
+    assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
+    // nothing is left at the place either of them departed
+    assert_eq!(h.place_in(&kh("w1"), &kh("bob")), None, "w1 is not in bob's subnet");
+    assert_eq!(h.place_in(&kh("alice"), &kh("bob")), None, "nor is alice");
+    assert!(h.locator_in(&kh("w1"), &kh("bob")).is_none(), "and no locator claims a subnet it left");
+
+    // a replay reaches the same map: the fold and the incremental view
+    // agree by construction, endings included
+    let woke = h.wake(None, &ids());
+    assert!(matches!(woke, Woke::Replayed { .. }), "{woke:?}");
+    assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| p.nibbles), Some(0));
+    assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
+}
+
+/// The negative: a party still holding a patron in that subnet is not a
+/// root of anything, and nothing moves.
+// acceptance: TOP-37
+#[test]
+fn an_ending_that_leaves_a_patron_standing_moves_no_address() {
+    let mut w = World::new();
+    // w1 is bound under both alice and carol in bob's subnet.  Not a state
+    // the tree admits, but a disavowal racing a re-adoption produces it,
+    // and the address book must not call w1 a root while one binding stands
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt_at(&mut w, "w1", "alice", "bob", vec![0x12], 2, 1),
+        adopt_at(&mut w, "w1", "carol", "bob", vec![0x22], 2, 2),
+    ];
+    let mut h = fed("w1", &recs);
+    let departure = {
+        let t = w.tick();
+        let bn = w.back("w1");
+        let body = departure_body(&bn, &kh("w1"), &kh("alice"), Seqno { series: 1, counter: 0 }, t, None);
+        w.commit(TYPE_DEPARTURE, &body, &["w1"])
+    };
+    assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
+    assert!(!h.table.subordinates(&kh("alice")).contains(&kh("w1")), "the named binding ended");
+    assert!(h.table.subordinates(&kh("carol")).contains(&kh("w1")), "and the other one did not");
+    assert_eq!(h.place_in(&kh("w1"), &kh("w1")), None, "w1 is nobody's root while carol holds it");
+    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x22]), "and it is still in bob's subnet");
+}
