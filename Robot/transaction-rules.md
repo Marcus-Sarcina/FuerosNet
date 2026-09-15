@@ -261,17 +261,23 @@ runs a variant policy; §16.4 keeps what it stores and forwards identical.
 | `both-parties-exposed` | Both peers' addresses and ASNs are readable from the stored record | store | REP-06 | gap |
 | `asn-is-self-asserted` | A self-asserted ASN is accepted and never validated against its address | store | REP-05 | gap |
 | `asn-does-not-move-standing` | ASN concentration leaves the metric's output unchanged | metric | — | REP-07 |
-| `peering-is-acquaintance` | A peering joins two parties in the acquaintance graph and confers no scope | metric | gap | gap |
+| `peering-is-acquaintance` | A peering joins two parties in the acquaintance graph and confers no scope | metric | MET-11 | MET-11 |
 
-**Gaps.** `peering-is-acquaintance` is the last condition held on neither
-side [2026-09-15]; the other four were closed the day this was written, and
-two of them were not test gaps at all — the decoder did not enforce §4.5's
-classical/hybrid split, so a recovery's hybrid verifier signature passed
-inside a presence record and the presence record's classical one passed
-inside a recovery. "The field's type is fixed by where the response sits",
-and now it is. Nothing asserts that
-a stored peering becomes an edge the metric sees, which is the same class
-of oversight as the presence records a node never pulls.
+**No condition in this survey is held on neither side any more**
+[2026-09-15]. The five that were went together, and two of them were not
+test gaps at all: the decoder did not enforce §4.5's classical/hybrid
+split, so a recovery's hybrid verifier signature passed inside a presence
+record and the presence record's classical one passed inside a recovery,
+with every signature verifying either way. "The field's type is fixed by
+where the response sits", and now it is.
+
+`peering-is-acquaintance` was the last, and it was the same class of
+oversight as the presence records a node never pulled: a stored peering had
+to become an edge the metric sees, and nothing asserted that it did. Both
+are closed. **What remains is the 33 conditions held on one side only**,
+and the dangerous direction there is the eighteen with no positive —
+nothing asserts that a well-formed object passes the check rather than
+passing for some other reason.
 
 ---
 
@@ -360,9 +366,9 @@ entry on both sides of a condition. An entry has one kind and cannot be
 both; the checker found all three. Six transaction types, 87 conditions drawn from the documents,
 and of them:
 
-- 50 hold on both sides
+- 51 hold on both sides
 - 33 have one polarity only
-- 1 has neither
+- 0 have neither
 - 3 are deferred on hardware
 
 **The shape of the gaps is not random.** They cluster where a rule is
