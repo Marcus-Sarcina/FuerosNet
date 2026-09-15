@@ -181,3 +181,80 @@ fn rewrite_header_field(blob: &[u8], index: usize, value: u64) -> Vec<u8> {
     }
     out
 }
+
+/// **Import is where the leak occurs** (design §13.7.1): age-based
+/// flushing acts on live data, and a restored backup reintroduces files
+/// that aged while offline.  So the scan runs on the way in, and it covers
+/// device migration and manual copies as well as restore.
+// acceptance: ARC-26
+#[test]
+fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
+    let mut w = World::new();
+    let (before, txid) = contents(&mut w);
+    let finalized = before.store.seeds[&txid].finalized_at;
+    let two_years = 2 * 365 * 86_400;
+
+    // inside the window, everything lands
+    let mut fresh = before.clone();
+    assert_eq!(fresh.scan(finalized + 60, two_years), backup::Discarded::default(), "nothing is past anything yet");
+    assert_eq!(fresh, before);
+
+    // a day past it, the likeness goes and the history stays
+    let mut aged = before.clone();
+    let out = aged.scan(finalized + two_years + 86_400, two_years);
+    assert_eq!(out, backup::Discarded { captures: 1, seeds: 1 }, "the capture and the seed");
+    assert!(aged.store.sealed.is_empty(), "no likeness past the window it was committed under");
+    assert!(aged.store.seeds.is_empty(), "nor the seed that would release one");
+
+    // **history is not likeness and is not touched** — §13.7.1's concern
+    // is photographs outliving the commitment made about them, and L §2
+    // separately forbids deleting presence records with a chain prune
+    assert_eq!(aged.store.records, before.store.records, "the records stay");
+    assert_eq!(aged.store.disclosures, before.store.disclosures, "and what they committed to");
+    assert_eq!(aged.records, before.records, "and the archive");
+    assert_eq!(aged.seeds, before.seeds, "and the identity, which is not a retention question");
+}
+
+/// The scan runs through the client, on its own clock and its own window,
+/// and says what it threw away rather than swallowing it.
+// acceptance: ARC-27
+#[test]
+fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
+    let mut w = World::new();
+    let (before, txid) = contents(&mut w);
+    let finalized = before.store.seeds[&txid].finalized_at;
+    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+
+    // a client whose clock is inside the window imports the lot
+    let mut c = fresh("alice", (finalized + 60) * 1000);
+    let (kept, dropped) = c.import(&blob, b"a passphrase").expect("imports");
+    assert_eq!(dropped, backup::Discarded::default());
+    assert_eq!(kept.store.sealed.len(), 1);
+
+    // one whose clock is past it gets the history and not the likeness,
+    // and is told so
+    c = fresh("alice", (finalized + 2 * 365 * 86_400 + 1) * 1000);
+    let (kept, dropped) = c.import(&blob, b"a passphrase").expect("imports");
+    assert_eq!(dropped, backup::Discarded { captures: 1, seeds: 1 }, "reported, not swallowed");
+    assert!(kept.store.sealed.is_empty());
+    assert_eq!(kept.store.records, before.store.records);
+
+    // and a backup that does not open discards nothing, because nothing
+    // was opened
+    assert!(c.import(&blob, b"the wrong one").is_err());
+
+    // the round trip through the client's own export
+    let mut source = fresh("alice", (finalized + 60) * 1000);
+    source.store = before.store.clone();
+    let own = source.export(before.seeds, cheap(), b"another passphrase").expect("exports");
+    let (back, _) = source.import(&own, b"another passphrase").expect("imports");
+    assert_eq!(back.store, before.store, "what this client wrote, this client reads");
+    assert_eq!(back.seeds, before.seeds);
+}
+
+/// A client at a stated instant, for the scan's clock.
+fn fresh(name: &str, at_ms: u64) -> rhtn_client::ceremony::Client {
+    let clock = std::rc::Rc::new(std::cell::Cell::new(at_ms));
+    let (device, _) = common::harness::device(vec![], clock, 7, 0);
+    rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
+}

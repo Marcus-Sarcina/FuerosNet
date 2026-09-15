@@ -5,6 +5,7 @@
 //! carried by no wire object (§8.1.2's rule), so here they are values; an
 //! in-process [`Harness`] moves them and records every path they take.
 
+use crate::backup;
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
 use crate::horizon::Horizon;
 use crate::keys::{capture_key, pre_commitment};
@@ -880,6 +881,37 @@ impl Client {
         c.store = ClientStore::load(dir)?;
         c.adopt_own_positions();
         Ok(c)
+    }
+
+    /// Everything a device loss would take away, enveloped under a key
+    /// derived from `secret` (design §13.7.1).
+    ///
+    /// **The identity goes in.** The store writes no key; a backup is
+    /// where the archive and the key are deliberately together, which is
+    /// the aggregation §13.7.1 names and exactly why the blob is
+    /// encrypted. Seeds absent where this client cannot supply them.
+    pub fn export(&self, seeds: Option<[[u8; 32]; 2]>, cost: backup::Cost, secret: &[u8]) -> Result<Vec<u8>, backup::Failure> {
+        let contents = backup::Contents {
+            seeds,
+            records: self.archive.records().map(|r| r.bytes.clone()).collect(),
+            store: self.store.clone(),
+        };
+        backup::export(&contents, &backup::Wrap::passphrase(cost), secret)
+    }
+
+    /// Open a backup and **scan it before any of it lands**
+    /// (design §13.7.1: import is where over-retention leaks). What the
+    /// scan discarded is returned beside the contents rather than
+    /// swallowed: a person restoring is entitled to know their backup held
+    /// material their own commitment had run out on.
+    ///
+    /// **Nothing is merged here.** This opens and scans; what a client
+    /// does with contents that would replace an intact identity is its
+    /// own decision and not this function's to make quietly.
+    pub fn import(&self, blob: &[u8], secret: &[u8]) -> Result<(backup::Contents, backup::Discarded), backup::Failure> {
+        let mut contents = backup::import(blob, secret)?;
+        let discarded = contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
+        Ok((contents, discarded))
     }
 
     /// Leave `patron` (`wire-format.md` §4.2).

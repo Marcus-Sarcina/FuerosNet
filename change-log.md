@@ -9790,3 +9790,24 @@ recommendation, 64 MiB over three passes — recorded as chosen, not derived.
 **Dependency:** `argon2` 0.6, MIT OR Apache-2.0, pulling `blake2`,
 `password-hash` and `phc`, all MIT OR Apache-2.0. A sweep of the whole tree finds
 every one of its 230 external packages under a permissive licence.
+
+**Scan-on-import, which is the only deletion the design asks for.** §13.7.1:
+*"Age-based flushing acts on live data, but a restored backup reintroduces files
+that aged while offline — import is exactly where the leak occurs."* So the scan
+runs on the way in and covers device migration and manual copies as well as
+restore, and a client applies it with its own clock and its own window.
+
+**A capture expires on its subject's declared window, not its holder's.** §7.5.1
+makes the window a default the subject enforces, and the record carries each
+participant's own declaration; a holder applying its own to somebody else's
+likeness would substitute its policy for theirs.
+
+**History is not likeness.** Records, disclosure sets, the archive and the
+identity survive a scan. §13.7.1's concern is photographs outliving the
+commitment made about them, and `light-client-requirements.md` §2 separately
+forbids deleting presence records with a chain prune — two rules about the same
+objects, and conflating them would discard the evidence a later adoption and a
+later recovery both rest on.
+
+**What was discarded is returned, not swallowed**: a person restoring is
+entitled to know their backup held material their own commitment had run out on.

@@ -11681,5 +11681,56 @@
     "then": "Each cost opens, because the cost travels in the header and a reader uses what the writer used rather than what it would have chosen. An unimplemented wrap method and a later format version are each named rather than guessed at.",
     "oracle": "behaviour",
     "interpretation": "§13.7.1 has passphrase in v1, hardware token later and split shares later still, none of which changes the format; the cost is an operator's number like every other §21.1 leaves unset."
+  },
+  {
+    "id": "ARC-26",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Discard what is past its window on import, and keep the history",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §13.7.1",
+      "design §7.5.1",
+      "light-client-requirements.md §2"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "**The fix is scan-on-import, not cron-style aging.**"
+      },
+      {
+        "where": "light-client-requirements.md §2",
+        "text": "**Scan any imported backup for expired retention** and delete what is past its\n  window."
+      }
+    ],
+    "given": "A backup holding a sealed capture, the seed that would release it, the record it belongs to and that record's disclosure set.",
+    "when": "It is scanned inside the window, and again a day past it.",
+    "then": "Inside, nothing is discarded. Past, the capture and the seed go and the count of each is returned. The records, the disclosure sets, the archive and the identity are untouched: history is not likeness, and deleting a presence record with a retention scan would discard the evidence a later adoption and a later recovery both rest on.",
+    "oracle": "behaviour",
+    "interpretation": "A capture expires on its subject's declared window, since §7.5.1 makes the window a default the subject enforces and the record carries each participant's own declaration; a holder applying its own to somebody else's likeness would substitute its policy for theirs."
+  },
+  {
+    "id": "ARC-27",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Scan on the importing client's own clock and window, and say what was dropped",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §13.7.1",
+      "light-client-requirements.md §2"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "**The fix is scan-on-import, not cron-style aging.**"
+      }
+    ],
+    "given": "A backup and two clients whose clocks fall inside and past the window.",
+    "when": "Each imports it, and one imports it under the wrong secret.",
+    "then": "The one inside takes everything; the one past takes the history without the likeness and is told how much was dropped rather than having it swallowed. A backup that does not open discards nothing, because nothing was opened. A client's own export reads back through its own import.",
+    "oracle": "behaviour",
+    "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on."
   }
 ]

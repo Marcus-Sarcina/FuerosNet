@@ -305,3 +305,80 @@ fn uint(it: &Item) -> Option<u64> {
         _ => None,
     }
 }
+
+/// What a scan threw away.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Discarded {
+    pub captures: usize,
+    pub seeds: usize,
+}
+
+impl Contents {
+    /// Discard what is past its retention window, before any of it lands.
+    ///
+    /// **Import is where the leak occurs** (design §13.7.1): age-based
+    /// flushing acts on live data, and a restored backup reintroduces
+    /// files that aged while offline. So this is the deletion the design
+    /// asks for, and the only one — §7.5.2 makes a holder's copies
+    /// inaccessible once the subject stops releasing, *without anyone
+    /// deleting anything*, and §7.5.1 puts the live enforcement at the
+    /// subject's refusal rather than at a sweep.
+    ///
+    /// **Covering device migration and manual copies as well as restore**,
+    /// which is why it takes bulk data rather than living inside `import`
+    /// alone.
+    ///
+    /// **A capture expires on its subject's declared window, not its
+    /// holder's.** §7.5.1 has the window a default the *subject* enforces,
+    /// and the record carries each participant's declaration; a holder
+    /// applying its own to somebody else's likeness would be substituting
+    /// its policy for theirs. A seed expires on this client's own, which
+    /// is the same window `SubjectState::grant_for` declines past.
+    ///
+    /// **History is not likeness and is not touched.** Records,
+    /// disclosure sets and late responses stay: §13.7.1's concern is
+    /// photographs outliving the commitment made about them, and
+    /// `light-client-requirements.md` §2 separately forbids deleting
+    /// presence records with a chain prune. Two rules about the same
+    /// objects, and conflating them would discard the evidence a later
+    /// adoption and a later recovery both rest on.
+    pub fn scan(&mut self, now: u64, own_window_s: u64) -> Discarded {
+        let mut out = Discarded::default();
+        let stale: Vec<crate::Txid> = self
+            .store
+            .sealed
+            .iter()
+            .filter(|(txid, c)| subject_window(&self.store, txid, &c.subject).is_some_and(|(at, w)| now.saturating_sub(at) >= w))
+            .map(|(t, _)| *t)
+            .collect();
+        for t in stale {
+            self.store.sealed.remove(&t);
+            out.captures += 1;
+        }
+        let spent: Vec<crate::Txid> = self.store.seeds.iter().filter(|(_, s)| now.saturating_sub(s.finalized_at) >= own_window_s).map(|(t, _)| *t).collect();
+        for t in spent {
+            self.store.seeds.remove(&t);
+            out.seeds += 1;
+        }
+        out
+    }
+}
+
+/// When a capture's subject said their window runs from, and how long it
+/// is: the record's finalization and the subject's own retention slot.
+///
+/// Nothing where this client holds neither the record nor the disclosure
+/// set — an unreadable commitment is not a licence to discard, and it is
+/// not a licence to keep either; it is simply not a judgement this scan
+/// can make.
+fn subject_window(store: &ClientStore, txid: &crate::Txid, subject: &crate::Keyhash) -> Option<(u64, u64)> {
+    let set = store.disclosures.get(txid)?;
+    let rec = rhtn_archive::record::Record::parse(store.records.get(txid)?).ok()?;
+    let parts = rec.participants();
+    let slot = if parts.first() == Some(subject) { 3 } else { 5 };
+    let years = match parse_all(&set[slot].value).ok()? {
+        Item::Uint(n) => n,
+        _ => return None,
+    };
+    Some((rec.field_uint(2)?, years.saturating_mul(365 * 86_400)))
+}
