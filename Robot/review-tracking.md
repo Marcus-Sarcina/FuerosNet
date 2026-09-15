@@ -9821,3 +9821,50 @@ stopping the write (OPS-016).
 **Not fixed, and not in scope here**: `counter-advances-strictly` on type 2
 still has no negative — nothing refuses a departure whose counter does not
 advance. Recorded in the matrix.
+
+## The non-blocked backlog (2026-09-15)
+
+Closed today, in the order they were listed:
+
+**The presence pull path** turned out to be misdiagnosed on my part. I had it as
+"nothing pulls"; it is "nobody answered". design §15 makes attestation pull and
+names the evaluator as the party that fetches; `light-client-requirements.md` §2
+names the subject as the party that serves — *the subject holds their archive,
+so a patron evaluating you fetches from you* — and no client served. The node's
+handler answered for the node's own archive, which is right and beside the
+point, since every participant's archive lives in a client. Built as two payload
+kinds, with the walk verified at the fetcher and the nonce tying a reply to its
+request. ARC-20, ARC-21. **`keep_presence` still has no production caller**: a
+node comes to hold a presence record by fetching one as an evaluator, and
+nothing yet drives a node to evaluate.
+
+**The five conditions held on neither side** are closed, and two of them were
+not test gaps. The decoder did not enforce §4.5's classical/hybrid split, so a
+recovery's hybrid verifier signature passed inside a presence record and the
+presence record's classical one passed inside a recovery — with every signature
+verifying either way, which is why nothing else could have caught it. DEC-33,
+DEC-34, MET-11. **`functional_tests.md` had required this** at SIG-009 and
+SIG-010: the specification was right and the implementation was not, for the
+third time this week.
+
+**§10.1.3's periodic replay** is running, with the interval read from the
+daemon's configuration — it is an operator's number and no document states one,
+so the default is a default. DMN-22.
+
+**`Table::is_root`, `Table::is_node` and `NodeView::is_root` are not the defect
+class I filed them under.** They are queries tests use to interrogate state, and
+the rule one of their comments named — rootward forwarding stopping at a root —
+is applied by `send_memo` finding no patron. The comment implied otherwise and
+now does not. Nothing deleted, and the earlier note overstated it.
+
+**Still open, and none of it blocked:**
+- Resource predicates stop at named rows and standing horizon membership. The
+  structural/rank/quantile/tenure/date evaluator and scheduled recomputation are
+  unbuilt, and O-009's absolute-rank displacement is an open decision inside that
+  work.
+- Participant durable storage: in-memory archive and capture sealing only, no
+  export/import, no Argon2id-wrapped backup. The daemon persists; the client does
+  not.
+- 33 conditions held on one side. The eighteen with no positive are the
+  dangerous direction: nothing asserts that a well-formed object passes the
+  check rather than passing for some other reason.
