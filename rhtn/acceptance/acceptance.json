@@ -11523,5 +11523,40 @@
         "-"
       ]
     ]
+  },
+  {
+    "id": "MET-11",
+    "area": "metric",
+    "gap": "metric",
+    "title": "Take a peering as an acquaintance edge that confers no scope",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §16.2.1",
+      "design §6.3"
+    ],
+    "rule": [
+      {
+        "where": "design §16.2.1",
+        "text": "**Proof-of-presence and peering edges — an acquaintance graph orthogonal\n  to that hierarchy.** Neither confers subnet scope or resource access"
+      }
+    ],
+    "given": "A node's evidence before a peering between two parties it can place has arrived.",
+    "when": "The peering is stored and the evidence is folded again.",
+    "then": "The pair is joined in the acquaintance graph and in neither direction of the adoption graph. The scope walk puts neither party in the other's, while an adoption in the same evidence does. Nothing about a peering says one party holds authority over the other, which is why peering can create the cycles the authority relation forbids.",
+    "oracle": "behaviour",
+    "interpretation": "",
+    "holds": [
+      [
+        4,
+        "peering-is-acquaintance",
+        "+"
+      ],
+      [
+        4,
+        "peering-is-acquaintance",
+        "-"
+      ]
+    ]
   }
 ]
