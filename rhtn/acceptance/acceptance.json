@@ -11558,5 +11558,28 @@
         "-"
       ]
     ]
+  },
+  {
+    "id": "DMN-22",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Take the reconciliation interval from the operator, with a default and a bound",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §10.1.3",
+      "design §21.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §10.1.3",
+        "text": "**Second repair path: periodic reconciliation.**"
+      }
+    ],
+    "given": "A daemon configuration document.",
+    "when": "It states no interval, states one inside the bound, states zero, and states one outside the bound.",
+    "then": "Absent, a default applies; a stated interval inside the bound is taken; zero turns the replay off rather than being refused; one outside the bound is refused with the range named and the line it was written on. A string where a count belongs is refused as a type error.",
+    "oracle": "behaviour",
+    "interpretation": "§10.1.3 asks for the periodic replay and states no interval, because what it costs and what it is worth are facts about one deployment; the default is a default and not a rule any document states."
   }
 ]

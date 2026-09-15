@@ -224,6 +224,15 @@ impl Service {
         let anchors = AnchorTable::new(0, cfg.ingestion);
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
 
+        // **§10.1.3's second repair path**, started here because its
+        // interval is the operator's number.  A new adjacency is the
+        // first repair path and the node does that itself; this is the
+        // one for a frame missed while the session was already up.
+        // Zero is an operator saying its links do not lose frames.
+        if cfg.reconcile_secs > 0 {
+            rhtn_node::runtime::reconcile_every(node.view.clone(), node.adjacency.clone(), Duration::from_secs(cfg.reconcile_secs));
+        }
+
         // upstream, where the configuration names one: a root attaches to
         // nobody (design §14.1.2)
         let upstream = match &cfg.upstream {

@@ -9730,3 +9730,16 @@ classical everywhere and was equally unchecked.
 **Found by writing the tests for the conditions nothing exercised.** Four of the
 five were closed together; two of them turned out to be code gaps rather than
 test gaps. `peering-is-acquaintance` is the last one left.
+
+**§10.1.3's second repair path is running.** A new adjacency was the first and
+the node already did that; the periodic replay to siblings and the patron was
+not there, on the ground that its interval is an operator's number no document
+states. It still is — so the daemon reads it from its configuration, defaults to
+fifteen minutes absent one, and takes zero as an operator saying its links do not
+lose frames. The replay itself is what §10.1.3 says it is: the same frames, with
+the far end's duplicate suppression making the repeat cheap.
+
+**`NodeView::is_root`'s comment claimed a rule it does not apply.** Rootward
+forwarding does stop at a root, and what stops it is `send_memo` finding no
+patron to send to. The comment now says which is which, at both ends: a reader
+who took it the other way would add the check that is already there.

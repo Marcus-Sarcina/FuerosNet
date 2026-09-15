@@ -112,3 +112,21 @@ fn an_upstream_names_a_keyhash_and_the_addresses_it_is_reached_at() {
     assert!(bad(&format!("node = \"{k}\"\naddresses = []\n")).what.contains("names no address"));
     assert!(bad(&format!("node = \"{k}\"\n")).what.contains("addresses"), "and the field it wanted is named");
 }
+
+/// **The interval is the operator's** (`wire-format.md` §10.1.3 asks for
+/// the periodic replay and states no interval): absent, a default; zero is
+/// an operator saying its links do not lose frames.
+// acceptance: DMN-22
+#[test]
+fn the_reconciliation_interval_defaults_and_bounds_and_can_be_turned_off() {
+    let every = |v: &str| Config::parse(&with("heartbeat = 30", &format!("heartbeat = 30\nreconcile = {v}"))).map(|c| c.reconcile_secs);
+    assert_eq!(Config::parse(&with("heartbeat = 30", "heartbeat = 30")).unwrap().reconcile_secs, 900, "a default, not a rule any document states");
+    assert_eq!(every("60").unwrap(), 60);
+    assert_eq!(every("86400").unwrap(), 86_400);
+    assert_eq!(every("0").unwrap(), 0, "zero turns the replay off rather than being refused");
+    let over = every("86401").unwrap_err();
+    assert!(over.what.contains("0 to 86400"), "{over}");
+    assert!(over.line > 0, "and it knows where it was written: {over}");
+    let word = every("\"often\"").unwrap_err();
+    assert!(word.what.contains("invalid type"), "a string is not a count: {word}");
+}

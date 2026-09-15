@@ -171,8 +171,13 @@ impl NodeView {
         out
     }
 
-    /// A root has no patron, and rootward forwarding stops there
-    /// (`wire-format.md` §10.2).
+    /// Whether this node has no patron in the subnet it acts in.
+    ///
+    /// **A question, not the rule.** Rootward forwarding does stop at a
+    /// root (`wire-format.md` §10.2), and what stops it is
+    /// [`NodeView::send_memo`] finding no patron to send to — not a caller
+    /// consulting this first. Reading the comment the other way would have
+    /// somebody add the check that is already there.
     pub fn is_root(&self) -> bool {
         self.patron().is_none()
     }

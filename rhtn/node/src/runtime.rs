@@ -291,9 +291,10 @@ impl LiveNode {
         // moment two stores have never been compared: without this the
         // party that attaches sees nothing this node already holds, and an
         // endpoint record made before the session existed reaches nobody.
-        // The section also asks for a *periodic* replay with siblings and
-        // the patron, which is not here: its interval is an operator's
-        // number and no document states one.
+        // The section's *second* repair path, the periodic replay with
+        // siblings and the patron, is [`reconcile_every`]: the daemon
+        // starts it, because the interval is an operator's number and no
+        // document states one.
         let attached = view.clone();
         let reconcile = adjacency.clone();
         cfg.on_attach = Some(Arc::new(move |peer, up| {
@@ -750,6 +751,47 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
         }
     }
     (r, last)
+}
+
+/// Replay this node's store to its siblings and its patron every
+/// `interval` (`wire-format.md` §10.1.3's second repair path).
+///
+/// **A replay of the same frames, not a mechanism of its own.** §10.1.3 is
+/// explicit that there is no repair protocol to specify beyond what
+/// propagation already defines, so this sends what [`NodeView::replay_to`]
+/// sends on a new adjacency — the duplicate suppression at the far end is
+/// what makes repeating it cheap, and what a peer already holds it
+/// neither stores again nor forwards (§10.1.2).
+///
+/// **Siblings and the patron, and nobody else.** Those are the parties
+/// §10.1.3 names: a node that missed something it ought to hold is missing
+/// it from the ball it shares with them. Sessions it does not hold are
+/// skipped rather than dialled — a replay is repair, not a reason to open
+/// a connection.
+///
+/// **The interval is the operator's** (design §21.1's posture for every
+/// such number), which is why this is started by the daemon from its
+/// configuration rather than fixed here.
+pub fn reconcile_every(view: Arc<Mutex<NodeView>>, adjacency: impl Adjacency + Clone + Send + 'static, interval: std::time::Duration) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(interval).await;
+            let targets: Vec<Keyhash> = {
+                let v = view.lock().unwrap();
+                let me = v.me();
+                let mut t: Vec<Keyhash> = v.table.siblings(&me).into_iter().collect();
+                t.extend(v.patron());
+                t
+            };
+            for peer in targets {
+                if !adjacency.has_session(&peer) {
+                    continue;
+                }
+                let v = view.lock().unwrap();
+                v.replay_to(&adjacency, &peer);
+            }
+        }
+    })
 }
 
 /// Drain the frames a client session delivers into a light client's own

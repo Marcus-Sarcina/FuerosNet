@@ -568,6 +568,10 @@ impl NodeView {
     /// node on the patron chain (`wire-format.md` §10.2).  `None` means this
     /// node is the root of that subnet, or has nowhere to send.
     pub fn send_memo(&self, adj: &dyn Adjacency, memo: &Memo) -> Option<Keyhash> {
+        // **this is where rootward forwarding stops** (`wire-format.md`
+        // §10.2): a root has no patron in the subnet, so there is nobody
+        // to send to and nothing to decide.  No separate root check, and
+        // none to keep in step with this one.
         let patron = self.patron_in(&memo.position.anchor)?;
         let to = if adj.has_session(&patron) { patron } else { self.serving_node? };
         adj.send(&to, FRAME_TOPOLOGY_MEMO, &memo.encode());

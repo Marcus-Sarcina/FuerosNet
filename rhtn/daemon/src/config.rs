@@ -60,6 +60,15 @@ pub struct Config {
     /// The heartbeat interval this node advertises, in seconds
     /// (`wire-format.md` §8.2 fixes the range at 1 to 3600).
     pub heartbeat_secs: u64,
+    /// Seconds between periodic replays to siblings and the patron
+    /// (`wire-format.md` §10.1.3's second repair path).
+    ///
+    /// **The operator's number, like the heartbeat's.** §10.1.3 asks for
+    /// the replay and states no interval, because what it costs and what
+    /// it is worth are facts about one deployment. Absent, the default
+    /// below; zero turns it off, which is an operator saying its links do
+    /// not lose frames.
+    pub reconcile_secs: u64,
     /// How this node takes anchor entries it did not verify itself
     /// (`infra-client-requirements.md` §4.1).
     pub ingestion: Ingestion,
@@ -149,6 +158,7 @@ struct File {
     topology: PathBuf,
     archive: PathBuf,
     heartbeat: Spanned<u64>,
+    reconcile: Option<Spanned<u64>>,
     ingestion: Spanned<String>,
     allowance: Spanned<Allowance>,
     #[serde(rename = "queue-cap")]
@@ -201,6 +211,16 @@ impl Config {
             return Err(at(line_at(text, &f.heartbeat), "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)"));
         }
 
+        // 15 minutes absent a setting: often enough that a missed frame
+        // is repaired within an operator's attention span, rare enough
+        // that the replay is not the link's main traffic.  Nothing in the
+        // documents states it; it is a default, not a rule.
+        let reconcile_secs = match &f.reconcile {
+            None => 900,
+            Some(r) if (0..=86_400).contains(r.get_ref()) => *r.get_ref(),
+            Some(r) => return Err(at(line_at(text, r), "`reconcile` is 0 to 86400 seconds, 0 to turn the replay off (`wire-format.md` §10.1.3)")),
+        };
+
         let ingestion = match f.ingestion.get_ref().as_str() {
             "verified-on-acceptance" => Ingestion::VerifiedOnAcceptance,
             "unverified-gossip" => Ingestion::UnverifiedGossip,
@@ -246,6 +266,7 @@ impl Config {
             queue: f.queue,
             queue_cap: f.queue_cap,
             heartbeat_secs,
+            reconcile_secs,
             ingestion,
             request_allowance,
             prekeys: f.prekeys,
