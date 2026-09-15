@@ -9743,3 +9743,28 @@ the far end's duplicate suppression making the repeat cheap.
 forwarding does stop at a root, and what stops it is `send_memo` finding no
 patron to send to. The comment now says which is which, at both ends: a reader
 who took it the other way would add the check that is already there.
+
+### 2026-09-15 (a participant's state on disk, and the phase that was the wrong fix)
+
+**The retention sweep I had scoped should not be built, and the design says so
+twice.** §7.5.2: *"If A never releases the key again… B's copies are permanently
+inaccessible **without anyone deleting anything**."* §13.7.1: *"Age-based
+flushing acts on live data, but a restored backup reintroduces files that aged
+while offline — **import is exactly where the leak occurs**."* The window is
+already enforced where §7.5.1 puts it, at the subject: `grant_for` filters seeds
+to those inside it, and a subject past the window releases nothing. The only
+deletion the documents ask for is scan-on-import, which belongs to the import
+path. CAP-007's live half was already built and already tested.
+
+**A participant's store now persists.** Six maps, three lifetimes: records,
+sealed captures and seeds are written once because the archive is append-only;
+late responses, unattached arrivals and disclosure sets are rewritten because
+they grow against a record. A seed is the only secret of the six — §7.5.2 makes
+it what releases a capture key — so its file is 0600 like the identity's, and
+ciphertext this client cannot open is not given the same care it would not
+benefit from.
+
+**The identity is not written by the store**, and the positions are not read from
+it: where a client sits is a fold over its own archive, so a restored archive
+reaches the same answer and a stored position could disagree with the records
+that produced it.

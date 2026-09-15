@@ -11581,5 +11581,33 @@
     "then": "Absent, a default applies; a stated interval inside the bound is taken; zero turns the replay off rather than being refused; one outside the bound is refused with the range named and the line it was written on. A string where a count belongs is refused as a type error.",
     "oracle": "behaviour",
     "interpretation": "§10.1.3 asks for the periodic replay and states no interval, because what it costs and what it is worth are facts about one deployment; the default is a default and not a rule any document states."
+  },
+  {
+    "id": "ARC-22",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Save a participant's archive and the store beside it, and come back the same participant",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §13.7.1",
+      "design §7.5.2",
+      "light-client-requirements.md §2"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "The local store is **not dynamic.** The transaction archive (§16.7) and photo\nrecords (§7.2) are append-only"
+      },
+      {
+        "where": "design §7.5.2",
+        "text": "**The subject holds the key to their own likeness on someone else's device.**"
+      }
+    ],
+    "given": "A client holding a presence record, its disclosure set, its own seed for that ceremony, a sealed capture of a counterparty, a late response and an arrival it could not attach.",
+    "when": "The store is written to a directory and read back, and written a second time over the same directory.",
+    "then": "Every map comes back as it went: records byte for byte, seeds, ciphertext, late responses, unattached arrivals, and disclosure salts and values with the labels taken from their fixed order. The seed's file is not world-readable and the ciphertext's need not be. A second save over the same directory rewrites nothing that was written once.",
+    "oracle": "behaviour",
+    "interpretation": "The seed is the only secret of the six, because §7.5.2 makes it what releases a capture key; sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data."
   }
 ]

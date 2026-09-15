@@ -854,6 +854,34 @@ impl Client {
         Ok(t)
     }
 
+    /// Write this client's own state where it can be read back: its
+    /// archive, and the store beside it.
+    ///
+    /// **The identity is not written here.** It is minted by `rhtn keys`
+    /// and read at start; a client that wrote its own signing key each
+    /// time it saved would put the key wherever the store went, which is
+    /// the aggregation design §13.7.1 spends its length avoiding.
+    pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
+        self.archive.save(dir)?;
+        self.store.save(dir)
+    }
+
+    /// Start from what is at `dir` under the identity given, or from
+    /// nothing where there is nothing there.
+    ///
+    /// **The positions are re-derived, never loaded.** Where this client
+    /// sits is a fold over its own archive ([`Client::adopt_own_positions`]),
+    /// so a restored archive reaches the same answer and a stored position
+    /// could disagree with the records that produced it.
+    pub fn at(dir: &std::path::Path, id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> std::io::Result<Client> {
+        let kh = id.public.keyhash;
+        let mut c = Client::new(id, known, cfg, device);
+        c.archive = Archive::load(dir, kh)?;
+        c.store = ClientStore::load(dir)?;
+        c.adopt_own_positions();
+        Ok(c)
+    }
+
     /// Leave `patron` (`wire-format.md` §4.2).
     ///
     /// **Nothing to propose and nobody to ask.** §4.2 has the old patron

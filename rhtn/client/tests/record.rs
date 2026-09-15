@@ -515,3 +515,56 @@ fn classical_signed_recovery_response(verifier: &rhtn_crypto::SigningIdentity, s
     out.extend_from_slice(&payload[key10_at..]);
     out
 }
+
+/// A client stops between interactions and resumes as the same
+/// participant (`infra-client-requirements.md` §4.3's posture, applied at
+/// the participant): the archive and the store beside it come back, and
+/// where this client sits is re-derived from the records rather than
+/// loaded from a copy that could disagree with them.
+// acceptance: ARC-22
+#[test]
+fn a_client_saves_its_archive_and_its_store_and_comes_back_the_same_participant() {
+    use rhtn_client::store::{Capture, Frame, SealParams, seal};
+    let dir = std::env::temp_dir().join(format!("rhtn-client-store-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let mut w = world();
+    let set = full_set();
+    let rec = signed_record(&mut w, &set, vec![]);
+
+    let mut before = ClientStore::default();
+    before.records.insert(rec.txid, rec.bytes.clone());
+    before.disclosures.insert(rec.txid, set.clone());
+    before.seeds.insert(rec.txid, OwnSeed { seed: [9; 32], counterparty: kh("bob"), ceremony_id: [4; 32], finalized_at: 1_800_000_600 });
+    let capture = Capture { template: vec![3; 32], frames: vec![Frame { at_ms: 7, bytes: b"a frame".to_vec() }], modality: 0, template_version: 1 };
+    before.sealed.insert(rec.txid, seal(&SealParams::default(), &[1; 32], kh("bob"), kh("alice"), [4; 32], &capture));
+    before.late.insert(rec.txid, vec![b"a late response".to_vec()]);
+    before.unattached_late.insert(rec.txid, vec![kh("w1")]);
+
+    before.save(&dir).expect("writes");
+    let after = ClientStore::load(&dir).expect("reads");
+
+    assert_eq!(after.records, before.records, "the records come back byte for byte");
+    assert_eq!(after.seeds, before.seeds, "and the seeds, which are what release a capture key");
+    assert_eq!(after.sealed, before.sealed, "and the ciphertext this client cannot open");
+    assert_eq!(after.late, before.late);
+    assert_eq!(after.unattached_late, before.unattached_late);
+    assert_eq!(after.disclosures, before.disclosures, "salts and values, with the labels taken from their fixed order");
+
+    // **a seed is the only secret here** (design §7.5.2), and its file says so
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let name: String = rec.txid.iter().map(|b| format!("{b:02x}")).collect();
+        let mode = std::fs::metadata(dir.join("seeds").join(&name)).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "the seed is not world-readable");
+        let sealed_mode = std::fs::metadata(dir.join("sealed").join(&name)).unwrap().permissions().mode() & 0o777;
+        assert_ne!(sealed_mode, 0o600, "ciphertext this client cannot open needs no such care");
+    }
+
+    // a second save over the same directory is uneventful, and what was
+    // written once is not rewritten
+    before.save(&dir).expect("writes again");
+    assert_eq!(ClientStore::load(&dir).expect("reads").records, before.records);
+    let _ = std::fs::remove_dir_all(&dir);
+}

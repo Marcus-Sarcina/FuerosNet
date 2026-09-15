@@ -222,3 +222,265 @@ impl ClientStore {
         self.disclosures.remove(txid);
     }
 }
+
+// ---------------------------------------------------------------- on disk
+
+/// Where a client's own state goes, and how it comes back.
+///
+/// **Three shapes, because the five maps have three lifetimes.** Records,
+/// sealed captures and seeds are written once and never rewritten — the
+/// archive is append-only (design §13.7.1) and so is everything keyed
+/// beside it. Late responses, the arrivals that could not be attached and
+/// the disclosure sets accumulate against a record, so their file is
+/// rewritten when it grows.
+///
+/// **A seed is the only secret here** (design §7.5.2: the subject holds
+/// the key to their own likeness on someone else's device), so its file is
+/// written 0600 like the identity's. Sealed captures are ciphertext this
+/// client cannot open and records are public by construction.
+///
+/// **Nothing ages out on load.** design §13.7.1 is explicit that
+/// age-based flushing of live data is the wrong fix and **import** is
+/// where over-retention leaks, so deletion belongs to the import path and
+/// not here. The retention window itself is enforced where §7.5.1 puts it:
+/// a subject past it declines to release a capture key, and the holder's
+/// ciphertext becomes unopenable without anyone deleting anything.
+impl ClientStore {
+    pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
+        write_once(&dir.join("records"), self.records.iter().map(|(t, b)| (*t, b.clone())), false)?;
+        write_once(&dir.join("sealed"), self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))), false)?;
+        write_once(&dir.join("seeds"), self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))), true)?;
+        rewrite(&dir.join("late"), self.late.iter().map(|(t, v)| (*t, encode_blobs(v))))?;
+        rewrite(&dir.join("unattached"), self.unattached_late.iter().map(|(t, v)| (*t, encode_keys(v))))?;
+        rewrite(&dir.join("disclosures"), self.disclosures.iter().map(|(t, d)| (*t, encode_disclosures(d))))?;
+        Ok(())
+    }
+
+    /// Read a store back.  **What no longer parses is skipped rather than
+    /// failing the load**, the same posture the node's store takes: a
+    /// client that cannot start because one file went bad has lost more
+    /// than the file.
+    pub fn load(dir: &std::path::Path) -> std::io::Result<ClientStore> {
+        let mut st = ClientStore::default();
+        for (t, b) in read_dir_of(&dir.join("records"))? {
+            st.records.insert(t, b);
+        }
+        for (t, b) in read_dir_of(&dir.join("sealed"))? {
+            if let Some(c) = decode_sealed(&b) {
+                st.sealed.insert(t, c);
+            }
+        }
+        for (t, b) in read_dir_of(&dir.join("seeds"))? {
+            if let Some(s) = decode_seed(&b) {
+                st.seeds.insert(t, s);
+            }
+        }
+        for (t, b) in read_dir_of(&dir.join("late"))? {
+            if let Some(v) = decode_blobs(&b) {
+                st.late.insert(t, v);
+            }
+        }
+        for (t, b) in read_dir_of(&dir.join("unattached"))? {
+            if let Some(v) = decode_keys(&b) {
+                st.unattached_late.insert(t, v);
+            }
+        }
+        for (t, b) in read_dir_of(&dir.join("disclosures"))? {
+            if let Some(d) = decode_disclosures(&b) {
+                st.disclosures.insert(t, d);
+            }
+        }
+        Ok(st)
+    }
+}
+
+fn hex_of(t: &Txid) -> String {
+    t.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn unhex(s: &str) -> Option<Txid> {
+    if s.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Written once and left alone: a file already there is the same bytes.
+fn write_once(root: &std::path::Path, items: impl Iterator<Item = (Txid, Vec<u8>)>, private: bool) -> std::io::Result<()> {
+    std::fs::create_dir_all(root)?;
+    for (t, bytes) in items {
+        let p = root.join(hex_of(&t));
+        if p.exists() {
+            continue;
+        }
+        std::fs::write(&p, &bytes)?;
+        if private {
+            restrict(&p)?;
+        }
+    }
+    Ok(())
+}
+
+/// Rewritten each time, because what it holds grows against its record.
+fn rewrite(root: &std::path::Path, items: impl Iterator<Item = (Txid, Vec<u8>)>) -> std::io::Result<()> {
+    std::fs::create_dir_all(root)?;
+    for (t, bytes) in items {
+        std::fs::write(root.join(hex_of(&t)), &bytes)?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn restrict(p: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn restrict(_: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+fn read_dir_of(root: &std::path::Path) -> std::io::Result<Vec<(Txid, Vec<u8>)>> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(root) else { return Ok(out) };
+    for e in rd.flatten() {
+        if let Some(t) = unhex(&e.file_name().to_string_lossy()) {
+            out.push((t, std::fs::read(e.path())?));
+        }
+    }
+    Ok(out)
+}
+
+// The six encodings.  Deterministic CBOR, as everything written here is:
+// a store that round-trips differently from how it was written is one
+// whose files cannot be compared.
+
+fn encode_sealed(c: &SealedCapture) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 7);
+    emit_bstr(&mut out, &c.subject);
+    emit_bstr(&mut out, &c.holder);
+    emit_bstr(&mut out, &c.ceremony_id);
+    emit_uint(&mut out, c.modality);
+    emit_uint(&mut out, c.template_version);
+    emit_bstr(&mut out, &c.nonce);
+    emit_bstr(&mut out, &c.ciphertext);
+    out
+}
+
+fn decode_sealed(b: &[u8]) -> Option<SealedCapture> {
+    let a = array_of(b, 7)?;
+    Some(SealedCapture {
+        subject: kh_at(b, &a[0])?,
+        holder: kh_at(b, &a[1])?,
+        ceremony_id: kh_at(b, &a[2])?,
+        modality: uint_at(&a[3])?,
+        template_version: uint_at(&a[4])?,
+        nonce: bytes_at(b, &a[5])?.try_into().ok()?,
+        ciphertext: bytes_at(b, &a[6])?,
+    })
+}
+
+fn encode_seed(s: &OwnSeed) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 4);
+    emit_bstr(&mut out, &s.seed);
+    emit_bstr(&mut out, &s.counterparty);
+    emit_bstr(&mut out, &s.ceremony_id);
+    emit_uint(&mut out, s.finalized_at);
+    out
+}
+
+fn decode_seed(b: &[u8]) -> Option<OwnSeed> {
+    let a = array_of(b, 4)?;
+    Some(OwnSeed { seed: kh_at(b, &a[0])?, counterparty: kh_at(b, &a[1])?, ceremony_id: kh_at(b, &a[2])?, finalized_at: uint_at(&a[3])? })
+}
+
+fn encode_blobs(v: &[Vec<u8>]) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, v.len());
+    for b in v {
+        emit_bstr(&mut out, b);
+    }
+    out
+}
+
+fn decode_blobs(b: &[u8]) -> Option<Vec<Vec<u8>>> {
+    let item = rhtn_codec::cbor::parse_all(b).ok()?;
+    let rhtn_codec::cbor::Item::Array(a) = &item else { return None };
+    a.iter().map(|x| bytes_at(b, x)).collect()
+}
+
+fn encode_keys(v: &[Keyhash]) -> Vec<u8> {
+    encode_blobs(&v.iter().map(|k| k.to_vec()).collect::<Vec<_>>())
+}
+
+fn decode_keys(b: &[u8]) -> Option<Vec<Keyhash>> {
+    decode_blobs(b)?.into_iter().map(|v| v.try_into().ok()).collect()
+}
+
+fn encode_disclosures(d: &DisclosureSet) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 7);
+    for one in d {
+        emit_array_head(&mut out, 2);
+        emit_bstr(&mut out, &one.salt);
+        emit_bstr(&mut out, &one.value);
+    }
+    out
+}
+
+/// **The labels are not written.** A disclosure set is the seven labels in
+/// their fixed order (`wire-format.md` §4.5.1), so storing them would be
+/// storing the same seven strings against every record — and a file whose
+/// labels disagreed with the order would be a set this client cannot use
+/// anyway.
+fn decode_disclosures(b: &[u8]) -> Option<DisclosureSet> {
+    let a = array_of(b, 7)?;
+    let mut out: Vec<crate::record::Disclosure> = Vec::with_capacity(7);
+    for (i, item) in a.iter().enumerate() {
+        let rhtn_codec::cbor::Item::Array(f) = item else { return None };
+        if f.len() != 2 {
+            return None;
+        }
+        out.push(crate::record::Disclosure {
+            label: crate::record::LABELS[i],
+            salt: bytes_at(b, &f[0])?.try_into().ok()?,
+            value: bytes_at(b, &f[1])?,
+        });
+    }
+    out.try_into().ok()
+}
+
+fn array_of(b: &[u8], n: usize) -> Option<Vec<rhtn_codec::cbor::Item>> {
+    let item = rhtn_codec::cbor::parse_all(b).ok()?;
+    let rhtn_codec::cbor::Item::Array(a) = &item else { return None };
+    (a.len() == n).then(|| a.clone())
+}
+
+fn bytes_at(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<Vec<u8>> {
+    match it {
+        rhtn_codec::cbor::Item::Bytes(r) => Some(b[r.clone()].to_vec()),
+        _ => None,
+    }
+}
+
+fn kh_at(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<[u8; 32]> {
+    bytes_at(b, it)?.try_into().ok()
+}
+
+fn uint_at(it: &rhtn_codec::cbor::Item) -> Option<u64> {
+    match it {
+        rhtn_codec::cbor::Item::Uint(n) => Some(*n),
+        _ => None,
+    }
+}
