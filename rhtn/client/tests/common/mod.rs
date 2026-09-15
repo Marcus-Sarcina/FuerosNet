@@ -85,6 +85,15 @@ impl World {
         rec
     }
 
+    /// Signed and returned without being parsed, for the tests whose
+    /// subject is what a decoder refuses.  Nothing is appended: a record
+    /// that does not parse has no place in anybody's archive.
+    pub fn loose(&self, tx_type: u64, body: &[u8], signers: &[&str]) -> Vec<u8> {
+        let sids: Vec<SigningIdentity> = signers.iter().map(|s| id(s)).collect();
+        let refs: Vec<&SigningIdentity> = sids.iter().collect();
+        envelope(tx_type, body, &refs)
+    }
+
     /// A formation between two fresh keys, finalizing at `finalized`.
     pub fn formation_at(&mut self, a: &str, b: &str, started: u64, finalized: u64) -> Record {
         let (ba, bb) = (self.back(a), self.back(b));

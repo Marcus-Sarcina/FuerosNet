@@ -1081,6 +1081,44 @@ fn check_transfer(b: &[u8], m: &[(Item, Item)], tm: &[(Item, Item)]) -> Result<(
 
 /// The consistency rules of a `Recovery` block (§4.1), each checkable
 /// from the adoption alone: the prior key differs from the new one; every
+/// Whether a signature object is a `COSE_Sign1` — one signature, and in
+/// this profile therefore classical — rather than a `COSE_Sign` carrying
+/// an entries array.
+///
+/// **Both are four-element arrays and the fourth element tells them
+/// apart**: a `bstr` is the one signature of a `Sign1`, an array is a
+/// `Sign`'s entries.
+fn is_sign1(it: Option<&Item>) -> bool {
+    matches!(it, Some(Item::Array(a)) if a.len() == 4 && matches!(a[3], Item::Bytes(_)))
+}
+
+/// Whether it is a hybrid `COSE_Sign`: an entries array, two of them, one
+/// classical and one post-quantum (§3.5).
+fn is_hybrid_sign(it: Option<&Item>) -> bool {
+    matches!(it, Some(Item::Array(a)) if a.len() == 4 && matches!(&a[3], Item::Array(e) if e.len() == 2))
+}
+
+/// §4.5's rule for one verifier response, which depends on where the
+/// response sits.
+///
+/// **The consent signature is classical everywhere**, recovery included:
+/// the subject countersigns a query id, and that reliance expires with the
+/// query. **Verifier authentication is the one exception** — a `COSE_Sign1`
+/// in a presence record, a hybrid `COSE_Sign` inside a `Recovery`, because
+/// a recovery induces a permanent identity change and that signature's
+/// reliance never expires. "The field's type is fixed by where the
+/// response sits."
+fn check_response_signatures(x: &[(Item, Item)], in_recovery: bool) -> Result<(), Error> {
+    if !is_sign1(map_get(x, 7)) {
+        return Err(Error("a response's consent signature is not a classical COSE_Sign1"));
+    }
+    match in_recovery {
+        false if !is_sign1(map_get(x, 9)) => Err(Error("a response's verifier signature is not a COSE_Sign1 in a presence record")),
+        true if !is_hybrid_sign(map_get(x, 9)) => Err(Error("a response's verifier signature is not a hybrid COSE_Sign inside a recovery")),
+        _ => Ok(()),
+    }
+}
+
 /// response names the new key as its subject and the prior key in field 8;
 /// no verifier is its own subject; responses sort by verifier with no
 /// repeat; each claims the met basis; and at least one is a match.
@@ -1118,6 +1156,7 @@ fn check_recovery(b: &[u8], m: &[(Item, Item)], rm: &[(Item, Item)]) -> Result<(
         if map_get(x, 10).and_then(as_uint) != Some(0) {
             return Err(Error("a recovery response's selection basis is not met"));
         }
+        check_response_signatures(x, true)?;
         if map_get(x, 4).and_then(as_uint) == Some(0) {
             matched = true;
         }
@@ -1239,6 +1278,7 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
             if prev.is_some_and(|p| (verifier, subject) <= p) {
                 return Err(Error("responses unsorted, or one verifier twice for one subject"));
             }
+            check_response_signatures(x, false)?;
             prev = Some((verifier, subject));
         }
     }

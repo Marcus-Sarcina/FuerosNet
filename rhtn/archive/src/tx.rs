@@ -282,6 +282,45 @@ pub fn recovery_response_with_consent(verifier: &SigningIdentity, subject: &Keyh
     out
 }
 
+/// A verifier's response as a **presence record** carries it
+/// (`wire-format.md` §4.5): field 9 is a classical `COSE_Sign1`, and there
+/// is no field 8, because a prior key is the recovery form's.
+///
+/// **The field's type is fixed by where the response sits.** Hybridising
+/// every embedded signature would cost ≈ 211 KB against ≈ 4 KB; these are
+/// evidence inside a hybrid-signed body, so substituting one breaks the
+/// envelope signature and their authenticity is protected transitively.
+pub fn verifier_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32]) -> Vec<u8> {
+    let consent = subject.sign1_ed_unnamed(aad::CONSENT, qid);
+    let mut payload = Vec::new();
+    emit_map_head(&mut payload, 7);
+    emit_uint(&mut payload, 1);
+    emit_bstr(&mut payload, &verifier.public.keyhash);
+    emit_uint(&mut payload, 2);
+    emit_bstr(&mut payload, &subject.public.keyhash);
+    emit_uint(&mut payload, 3);
+    emit_bstr(&mut payload, qid);
+    emit_uint(&mut payload, 4);
+    emit_uint(&mut payload, 0);
+    emit_uint(&mut payload, 5);
+    emit_uint(&mut payload, 1);
+    emit_uint(&mut payload, 7);
+    payload.extend_from_slice(&consent);
+    emit_uint(&mut payload, 10);
+    emit_uint(&mut payload, 0);
+    let sig9 = verifier.sign1_ed_unnamed(aad::VERIFIER, &payload);
+    let r10 = rhtn_codec::cbor::value_slice(&payload, 10).unwrap();
+    let key10_at = r10.start - 1;
+    let (_, _, adv) = rhtn_codec::cbor::Parser { b: &payload }.head(0).unwrap();
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 8);
+    out.extend_from_slice(&payload[adv..key10_at]);
+    emit_uint(&mut out, 9);
+    out.extend_from_slice(&sig9);
+    out.extend_from_slice(&payload[key10_at..]);
+    out
+}
+
 /// A `Recovery` block (`wire-format.md` §4.1): the prior key, the verifier
 /// responses sorted by verifier keyhash, and the old key's successor
 /// statement over `[prior, new, patron]`.

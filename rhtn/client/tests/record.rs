@@ -378,3 +378,140 @@ fn a_sealed_capture_is_held_under_the_platforms_key_storage() {
     // the platform's unlock cannot.
     unimplemented!("a platform key store");
 }
+
+/// §4.5's classical/hybrid split, and the two witness rules beside it.
+///
+/// **The field's type is fixed by where the response sits**: a verifier's
+/// signature is a classical `COSE_Sign1` in a presence record and a hybrid
+/// `COSE_Sign` inside a `Recovery`, because a recovery induces a permanent
+/// identity change and that signature's reliance never expires. The
+/// subject's consent is classical everywhere.
+// acceptance: DEC-33
+#[test]
+fn a_presence_record_takes_classical_response_signatures_and_a_recovery_takes_hybrid() {
+    use rhtn_archive::tx;
+    let mut w = world();
+    let set = full_set();
+    let qid = rhtn_codec::cose::sha256(b"a query");
+
+    // the control: a response whose verifier signature is a classical
+    // COSE_Sign1, which is what a presence record carries
+    let classical = tx::verifier_response(&id("w3"), &id("alice"), &qid);
+    let rec = signed_record(&mut w, &set, vec![classical.clone()]);
+    assert!(Record::parse(&rec.bytes).is_ok(), "a classical response is the presence shape");
+
+    // the same response with a recovery's hybrid verifier signature: every
+    // signature still verifies, and the record is refused for the shape
+    let hybrid = tx::recovery_response(&id("w3"), &id("alice"), &qid, &kh("carol"));
+    let t = w.tick();
+    let back = vec![w.back("alice"), w.back("bob"), w.back("w1"), w.back("w2")];
+    let p = Proposal {
+        started_at: t,
+        finalized_at: t + 600,
+        participants: [kh("alice"), kh("bob")],
+        witnesses: vec![Witness { keyhash: kh("w1"), nominated_by: kh("alice"), flags: 7 }, Witness { keyhash: kh("w2"), nominated_by: kh("bob"), flags: 7 }],
+        responses: vec![hybrid],
+        root: disclosure_root(&set),
+    };
+    let e = Record::parse(&w.loose(TYPE_PRESENCE, &p.body(&back), &["alice", "bob", "w1", "w2"])).expect_err("a hybrid verifier signature does not belong here");
+    assert!(e.contains("COSE_Sign1 in a presence record"), "refused for the signature's shape: {e}");
+
+    // and the other way round: a recovery response complete in every other
+    // respect — field 8 naming the prior key, the met basis — whose
+    // verifier signature is the presence record's classical one
+    let under_signed = classical_signed_recovery_response(&id("w3"), &id("alice"), &qid, &kh("carol"));
+    let block = tx::recovery_block(&id("carol"), &kh("alice"), &kh("bob"), vec![under_signed]);
+    let a = tx::Adoption {
+        node: kh("alice"),
+        patron: kh("bob"),
+        locator: tx::Locator::root(kh("bob"), tx::Seqno { series: 3, counter: 0 }),
+        timestamp: w.tick(),
+        key_material: None,
+        evidence: tx::Evidence::Recovery(block),
+        presented_head: None,
+        back: [&[rhtn_archive::genesis(&kh("alice"))], &[rhtn_archive::genesis(&kh("bob"))]],
+    };
+    let env = tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &tx::adoption_body(&a), &[&id("alice"), &id("bob")]);
+    let e = Record::parse(&env).expect_err("a classical verifier signature does not survive a recovery");
+    assert!(e.contains("hybrid COSE_Sign inside a recovery"), "refused for the signature's shape: {e}");
+}
+
+/// The witness rules a record's own signer set rests on (§3.2, §3.5).
+// acceptance: DEC-34
+#[test]
+fn a_witnesss_nominator_is_a_participant_and_the_signers_are_the_body_s_witnesses() {
+    let mut w = world();
+    let set = full_set();
+    let t = w.tick();
+    let back = vec![w.back("alice"), w.back("bob"), w.back("w1"), w.back("w2")];
+
+    // the control: each witness nominated by one of the two participants,
+    // and the envelope signed by the participants then the witnesses in
+    // field 4's order
+    let ok = Proposal {
+        started_at: t,
+        finalized_at: t + 600,
+        participants: [kh("alice"), kh("bob")],
+        witnesses: vec![Witness { keyhash: kh("w1"), nominated_by: kh("alice"), flags: 7 }, Witness { keyhash: kh("w2"), nominated_by: kh("bob"), flags: 7 }],
+        responses: vec![],
+        root: disclosure_root(&set),
+    };
+    assert!(Record::parse(&w.commit(TYPE_PRESENCE, &ok.body(&back), &["alice", "bob", "w1", "w2"]).bytes).is_ok());
+
+    // **a nominator who is not a participant**: the claim the field makes
+    // is cross-nomination by the witness's counterparty, and a third party
+    // nominating cannot be that
+    let stranger = Proposal {
+        witnesses: vec![Witness { keyhash: kh("w1"), nominated_by: kh("carol"), flags: 7 }, Witness { keyhash: kh("w2"), nominated_by: kh("bob"), flags: 7 }],
+        ..ok.clone()
+    };
+    let e = Record::parse(&w.loose(TYPE_PRESENCE, &stranger.body(&back), &["alice", "bob", "w1", "w2"])).expect_err("carol is not a participant");
+    assert!(e.contains("nominator is not a participant"), "{e}");
+
+    // **the signers are the body's witnesses, in field 4's order** (§3.5):
+    // a signer who is not one of them is not a signer this record has a
+    // role for
+    let e = Record::parse(&w.loose(TYPE_PRESENCE, &ok.body(&back), &["alice", "bob", "w1", "carol"])).expect_err("carol witnesses nothing here");
+    assert!(!e.is_empty(), "refused: {e}");
+}
+
+/// A recovery response whose field 9 is the presence record's classical
+/// `COSE_Sign1` rather than the hybrid `COSE_Sign` a `Recovery` takes.
+///
+/// Built here rather than in `rhtn-archive`: nothing should be able to
+/// make one of these by accident, and a production builder for a shape the
+/// wire refuses is a shape somebody will reach for.
+fn classical_signed_recovery_response(verifier: &rhtn_crypto::SigningIdentity, subject: &rhtn_crypto::SigningIdentity, qid: &[u8; 32], prior: &rhtn_client::Keyhash) -> Vec<u8> {
+    use rhtn_codec::cose::aad;
+    use rhtn_codec::encode::*;
+    let consent = subject.sign1_ed_unnamed(aad::CONSENT, qid);
+    let mut payload = Vec::new();
+    emit_map_head(&mut payload, 8);
+    emit_uint(&mut payload, 1);
+    emit_bstr(&mut payload, &verifier.public.keyhash);
+    emit_uint(&mut payload, 2);
+    emit_bstr(&mut payload, &subject.public.keyhash);
+    emit_uint(&mut payload, 3);
+    emit_bstr(&mut payload, qid);
+    emit_uint(&mut payload, 4);
+    emit_uint(&mut payload, 0);
+    emit_uint(&mut payload, 5);
+    emit_uint(&mut payload, 1);
+    emit_uint(&mut payload, 7);
+    payload.extend_from_slice(&consent);
+    emit_uint(&mut payload, 8);
+    emit_bstr(&mut payload, prior);
+    emit_uint(&mut payload, 10);
+    emit_uint(&mut payload, 0);
+    let sig9 = verifier.sign1_ed_unnamed(aad::VERIFIER, &payload);
+    let r10 = rhtn_codec::cbor::value_slice(&payload, 10).unwrap();
+    let key10_at = r10.start - 1;
+    let (_, _, adv) = rhtn_codec::cbor::Parser { b: &payload }.head(0).unwrap();
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 9);
+    out.extend_from_slice(&payload[adv..key10_at]);
+    emit_uint(&mut out, 9);
+    out.extend_from_slice(&sig9);
+    out.extend_from_slice(&payload[key10_at..]);
+    out
+}

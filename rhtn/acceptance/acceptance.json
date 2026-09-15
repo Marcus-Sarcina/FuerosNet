@@ -4149,6 +4149,11 @@
       [
         1,
         "recovery-response-shape"
+      ],
+      [
+        1,
+        "verifier-auth-hybrid-in-recovery",
+        "+"
       ]
     ]
   },
@@ -11412,6 +11417,110 @@
       [
         5,
         "attestation-is-pulled"
+      ]
+    ]
+  },
+  {
+    "id": "DEC-33",
+    "area": "decoder",
+    "gap": "decoder",
+    "title": "Fix a response signature's type by where the response sits",
+    "milestone": 1,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §4.5",
+      "wire-format.md §4.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §4.5",
+        "text": "**The consent signature\n(field 7) is classical everywhere. Verifier authentication (field 9) is the one\nexception: inside a `Recovery` it is a hybrid `COSE_Sign`**"
+      },
+      {
+        "where": "wire-format.md §4.5",
+        "text": "**COSE_Sign1, classical, in a presence record.**"
+      }
+    ],
+    "given": "A well-formed presence record carrying one verifier response, and a well-formed recovery block carrying one.",
+    "when": "Each is offered with the other's verifier-signature shape: a hybrid COSE_Sign in the presence record, and a classical COSE_Sign1 inside the recovery, both complete in every other respect.",
+    "then": "Both are refused, and refused for the signature's shape rather than for some other field. The classical form is accepted in the presence record. Every signature in each still verifies, which is the point: nothing but the shape rule catches these.",
+    "oracle": "fixture",
+    "interpretation": "A recovery induces a permanent identity change, so that one signature's reliance never expires and it is the exception that must be hybrid; the rest are evidence inside a hybrid-signed body whose authenticity is protected transitively.",
+    "holds": [
+      [
+        5,
+        "signatures-are-classical",
+        "+"
+      ],
+      [
+        5,
+        "signatures-are-classical",
+        "-"
+      ],
+      [
+        5,
+        "consent-is-classical",
+        "+"
+      ],
+      [
+        5,
+        "consent-is-classical",
+        "-"
+      ],
+      [
+        1,
+        "verifier-auth-hybrid-in-recovery",
+        "-"
+      ]
+    ]
+  },
+  {
+    "id": "DEC-34",
+    "area": "decoder",
+    "gap": "decoder",
+    "title": "Refuse a witness nominated by a non-participant, and a signer the body does not name",
+    "milestone": 1,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §4.5",
+      "wire-format.md §3.1",
+      "wire-format.md §3.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §4.5",
+        "text": "nominated_by — MUST be one of the two participants"
+      },
+      {
+        "where": "wire-format.md §3.1",
+        "text": "the two participants in field 3's order, then witnesses in field 4's order"
+      }
+    ],
+    "given": "A presence record whose witnesses are each nominated by one of its two participants and whose signers are the participants then those witnesses.",
+    "when": "A witness names a third party as its nominator, and separately the envelope is signed by a party the body names as no witness.",
+    "then": "Both are refused. The control, with every nominator a participant and the signer set taken from the body, is accepted.",
+    "oracle": "fixture",
+    "interpretation": "That the nominator is the witness's counterparty is the ceremony's cross-nomination claim and is not checkable from the record; that it is one of the two participants is, and is what the decoder holds.",
+    "holds": [
+      [
+        5,
+        "witness-nominated-by-a-participant",
+        "+"
+      ],
+      [
+        5,
+        "witness-nominated-by-a-participant",
+        "-"
+      ],
+      [
+        5,
+        "witness-names-a-body-entry",
+        "+"
+      ],
+      [
+        5,
+        "witness-names-a-body-entry",
+        "-"
       ]
     ]
   }

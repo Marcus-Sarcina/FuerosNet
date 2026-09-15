@@ -9716,3 +9716,17 @@ What this buys is the thing that was missing: a party that was not at a ceremony
 can now come to hold its record, so an evaluator's acquaintance edges are
 something it can go and get rather than something it either witnessed or never
 had.
+
+**§4.5's classical/hybrid split was stated and not enforced.** "The field's type
+is fixed by where the response sits": a verifier's signature is a classical
+`COSE_Sign1` in a presence record and a hybrid `COSE_Sign` inside a `Recovery`,
+because a recovery induces a permanent identity change and that one signature's
+reliance never expires. The decoder checked neither, so a recovery's hybrid
+signature passed inside a presence record and the presence record's classical
+one passed inside a recovery — with every signature still verifying, which is
+why nothing else would have caught it. The consent signature (field 7) is
+classical everywhere and was equally unchecked.
+
+**Found by writing the tests for the conditions nothing exercised.** Four of the
+five were closed together; two of them turned out to be code gaps rather than
+test gaps. `peering-is-acquaintance` is the last one left.
