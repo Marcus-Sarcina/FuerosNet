@@ -99,6 +99,8 @@ because its evidence field is where three different histories arrive.
 | `self-anchor-suffices` | A party with no ancestor names itself, so a newly minted root can adopt | client | CER-33, PRT-05 | gap |
 | `locator-index-is-free` | The index a patron issues is one no subordinate of its already holds, in that subnet | client | CER-40 | CER-41 |
 | `fanout-cap` | A patron has at most ten subordinates, which is the ten values a nibble carries | client | CER-41 | CER-41 |
+| `slot-unique` | A patron's ten slots hold one open subordinate each; a record claiming a filled one is not stored | table | TOP-34 | TOP-35 |
+| `fanout-ten` | The eleventh subordinate has no slot to name, because the nibble carries ten values | table | TOP-34 | TOP-35 |
 | `series-opens-at-zero` | A relationship's series opens at counter 0 | table | ARC-04 | DEC-22 |
 | `presence-is-between-these-two` | An adoption's named presence record must be between the two parties named | table | gap | TOP-12 |
 | `evidence-verified-before-counted` | Dereferenced evidence counts only once its own signatures verify | table | gap | TOP-19 |
@@ -119,6 +121,16 @@ occupant. A patron now issues the lowest index it has not already used in
 that subnet, read from its own archive, and refuses an eleventh. It is
 enforced at the issuer because that is the party that can: a holder
 elsewhere may not have the other ten, which is design §1.1's test.
+
+**And passively at every holder** [author, 2026-09-14]: the ruling was that
+a duplicate index is caught by a strict limitation of the holder's own
+storage rather than by anyone policing the patron. A binding now carries
+the slot its locator names, and a table with an open occupant in that slot
+has nowhere to put a second — so `slot-unique` and `fanout-ten` are one
+bound counted from the other end, and they do not depend on the holder
+having seen the other nine. Nothing there adjudicates which of two signed
+adoptions the patron meant; the incumbent stays because it arrived, not
+because it won.
 
 **Gaps.** `self-anchor-suffices` and `locator-under-patron` have no
 negative: nothing asserts that a patron with no position *in the subnet it
@@ -279,10 +291,10 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 80 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 82 conditions drawn from the documents,
 and of them:
 
-- 36 hold on both sides
+- 38 hold on both sides
 - 36 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware
