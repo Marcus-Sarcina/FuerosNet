@@ -2,6 +2,8 @@
 name = "rhtn-codec"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN wire format: deterministic CBOR, primitives, envelopes, frames and messages, validated on the received bytes"
 
 [dependencies]

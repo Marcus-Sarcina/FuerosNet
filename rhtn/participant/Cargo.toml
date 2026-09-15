@@ -2,6 +2,8 @@
 name = "rhtn-participant"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "rhtnp: a participant driven from a terminal, so the chain from a ceremony to a payload can be run against real processes rather than asserted in one"
 
 [[bin]]

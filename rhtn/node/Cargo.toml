@@ -2,6 +2,8 @@
 name = "rhtn-node"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN node behaviour above the session: topology propagation and the rootward memo, resolution and the anchor table, currency issuance and its escalation ladder, sibling replication and peering"
 
 [dependencies]

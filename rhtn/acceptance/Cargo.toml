@@ -2,6 +2,8 @@
 name = "rhtn-acceptance"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "The RHTN acceptance-test catalogue and its generated stubs"
 
 [dependencies]

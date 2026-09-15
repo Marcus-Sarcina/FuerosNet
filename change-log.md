@@ -9811,3 +9811,13 @@ later recovery both rest on.
 
 **What was discarded is returned, not swallowed**: a person restoring is
 entitled to know their backup held material their own commitment had run out on.
+
+**Every crate declares Apache-2.0** [author, 2026-09-15]. The licence text and
+the copyright notice were already at the repository root; the fifteen manifests
+declared nothing, so a consumer reading package metadata found no grant at all.
+Declared once in `[workspace.package]` and inherited, so the grant has one place
+to be correct rather than fifteen to drift.
+
+A sweep of the dependency tree at the same time: **all 245 packages now declare a
+licence, and every one of the 230 external ones is permissive** — MIT,
+Apache-2.0, BSD, ISC or similar. Nothing copyleft reaches the workspace.

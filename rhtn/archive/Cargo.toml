@@ -2,6 +2,8 @@
 name = "rhtn-archive"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN archive chain and local topology: transaction construction, the per-key Merkle DAG, archive fetch, backward verification, and the table a node keeps of the bindings it has verified"
 
 [dependencies]

@@ -2,6 +2,8 @@
 name = "rhtn-resources"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "The component-model sandbox a hosted package runs in: what the host hands it, what it may reach, and what it costs before it is stopped"
 
 [dependencies]

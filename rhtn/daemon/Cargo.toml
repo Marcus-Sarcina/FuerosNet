@@ -2,6 +2,8 @@
 name = "rhtn-daemon"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "rhtnd: a node run from an operator's configuration, and the operator's view of what that configuration exposes"
 
 [[bin]]

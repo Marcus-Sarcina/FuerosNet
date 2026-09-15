@@ -2,6 +2,8 @@
 name = "rhtn-policy"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN trust policy: the reference flow metric over the graph an evaluator builds, the policy interface a node consults, and the conformance test that reports what a substitute policy gives up"
 
 [dependencies]

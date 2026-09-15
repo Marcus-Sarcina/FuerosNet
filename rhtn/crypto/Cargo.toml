@@ -2,6 +2,8 @@
 name = "rhtn-crypto"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN identities and signatures: hybrid Ed25519 + ML-DSA-65 over the structures rhtn-codec parses"
 
 [dependencies]

@@ -2,6 +2,8 @@
 name = "rhtn-sim"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "In-process multi-node harness: a datagram-level path that can drop, delay, blackhole and replay, and the scripted scenarios the TLA+ models are restated over"
 
 [dependencies]

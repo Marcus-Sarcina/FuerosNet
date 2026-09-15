@@ -2,6 +2,8 @@
 name = "rhtn-transport"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "RHTN transport binding: QUIC with TLS 1.3, X25519MLKEM768 only, raw public keys both ways, ALPN rhtn/1, and the stream-0 session"
 
 [dependencies]

@@ -4,6 +4,13 @@ resolver = "3"
 # Xcode and are not Cargo members.
 members = ["acceptance", "adaptors", "archive", "cli", "client", "codec", "crypto", "daemon", "ffi", "node", "participant", "policy", "resources", "sim", "transport"]
 
+# Apache-2.0 on every crate, inherited rather than repeated fifteen times,
+# so the grant has one place to be correct.  The full text and the copyright
+# notice are in `LICENSE` at the repository root.
+[workspace.package]
+license = "Apache-2.0"
+authors = ["Albin Marcus Zuech"]
+
 [workspace.dependencies]
 sha2 = "0.11.0"
 hex = "0.4.3"

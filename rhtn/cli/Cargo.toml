@@ -2,6 +2,8 @@
 name = "rhtn-cli"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+authors.workspace = true
 description = "rhtn: the developer command line — decode what the wire carries, mint and inspect identities, and probe a running node"
 
 [dev-dependencies]
