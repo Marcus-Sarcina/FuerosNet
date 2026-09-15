@@ -278,6 +278,21 @@ impl PrekeyService {
     pub fn load(dir: &std::path::Path, cfg: PrekeyConfig) -> std::io::Result<PrekeyService> {
         let mut s = PrekeyService::new(cfg);
         let root = dir.join("prekeys");
+        // **the rate-limit window is never written down**
+        // (`infra-client-requirements.md` §6): who asked for whose bundle
+        // is exactly the record the section forbids keeping, and an
+        // earlier version of this service wrote one.  Issuance stopped
+        // writing it; **nothing removed what was already there**, so an
+        // upgraded node kept a durable requester/subject log for the life
+        // of the directory.
+        //
+        // One named file, removed once, with the failure visible: an
+        // operator's own files under this root are not this function's to
+        // delete on suspicion.
+        let legacy = root.join("issued");
+        if legacy.is_file() {
+            std::fs::remove_file(&legacy)?;
+        }
         let Ok(rd) = std::fs::read_dir(&root) else { return Ok(s) };
         for e in rd.flatten() {
             let Ok(bundle) = std::fs::read(e.path().join("bundle")) else { continue };

@@ -61,6 +61,16 @@ pub struct Gateway {
     /// Grants standing over the owner's horizon, by resource.
     standing: BTreeMap<Keyhash, Row>,
     rows: BTreeMap<(Keyhash, Keyhash), Row>,
+    /// Rows this gateway wrote by expanding a standing grant, as against
+    /// ones the operator set for a named member.
+    ///
+    /// **A standing grant is a floor under the table, not an overwrite**,
+    /// so the two must be told apart: a change to the grant rewrites what
+    /// the grant produced and leaves the operator's own entries where they
+    /// are.  Without the distinction a grant narrowed to nothing left
+    /// every row it had written standing as if each were an individual
+    /// decision (`infra-client-requirements.md` §10.2).
+    derived: BTreeSet<(Keyhash, Keyhash)>,
     /// Hosted sessions: the identifier under which a resource sees a
     /// principal, minted per (member, resource).
     sessions: BTreeMap<(Keyhash, Keyhash), [u8; 16]>,
@@ -93,12 +103,20 @@ impl Gateway {
         if let Some(r) = row.roles.iter().find(|r| !b.declared_roles.contains(*r)) {
             return Err(RowError::Undeclared(r.clone()));
         }
+        self.derived.remove(&(resource, member));
+        self.write_row(resource, member, row);
+        Ok(())
+    }
+
+    /// The same write, without the checks the operator's path runs and
+    /// marked as the grant's: §10.5 has a changed row end the member's
+    /// hosted session either way.
+    fn write_row(&mut self, resource: Keyhash, member: Keyhash, row: Row) {
         let changed = self.rows.get(&(resource, member)) != Some(&row);
         self.rows.insert((resource, member), row);
         if changed {
             self.sessions.remove(&(member, resource));
         }
-        Ok(())
     }
 
     /// A predicate expanded into rows (design §11.4): `members` is what
@@ -130,6 +148,21 @@ impl Gateway {
         if row.roles.len() > MAX_ROLES {
             return Err(RowError::TooWide(row.roles.len()));
         }
+        // **changing the policy changes the rows it wrote**
+        // (`infra-client-requirements.md` §10.2: re-evaluate when an
+        // operator is configuring roles).  The rows this grant produced
+        // are dropped so the next expansion writes the new grant into
+        // them; ending their sessions is §10.5's, and it happens because
+        // the row changes rather than in spite of it.  An operator's own
+        // row is not the grant's to rewrite.
+        if self.standing.get(&resource) != Some(&row) {
+            let stale: Vec<Keyhash> = self.derived.iter().filter(|(r, _)| *r == resource).map(|(_, m)| *m).collect();
+            for m in stale {
+                self.derived.remove(&(resource, m));
+                self.rows.remove(&(resource, m));
+                self.sessions.remove(&(m, resource));
+            }
+        }
         self.standing.insert(resource, row);
         Ok(())
     }
@@ -149,11 +182,17 @@ impl Gateway {
         for (resource, row) in standing {
             let Some(owner) = self.bindings.get(&resource).map(|b| b.owner) else { continue };
             let members = table.horizon(&owner, 2);
+            let admissible = self.admissible(&resource, &row);
             for m in &members {
-                if self.rows.contains_key(&(resource, *m)) {
+                // an operator's own row is the floor's exception and is
+                // left alone; a row this grant wrote is the grant's to
+                // rewrite, and one already correct costs nothing
+                if self.rows.contains_key(&(resource, *m)) && !self.derived.contains(&(resource, *m)) {
                     continue;
                 }
-                if self.set_row(resource, *m, row.clone()).is_ok() {
+                if admissible && self.rows.get(&(resource, *m)) != Some(&row) {
+                    self.write_row(resource, *m, row.clone());
+                    self.derived.insert((resource, *m));
                     granted += 1;
                 }
             }
@@ -178,11 +217,22 @@ impl Gateway {
             let gone: Vec<Keyhash> = self.rows.keys().filter(|(r, m)| *r == resource && !members.contains(m)).map(|(_, m)| *m).collect();
             for m in gone {
                 self.rows.remove(&(resource, m));
+                self.derived.remove(&(resource, m));
                 self.sessions.remove(&(m, resource));
                 dropped += 1;
             }
         }
         (granted, dropped)
+    }
+
+    /// Whether a standing grant's row is one this resource can carry: the
+    /// same three checks `set_row` runs, asked once for the grant instead
+    /// of once per member, since the answer cannot differ between them.
+    fn admissible(&self, resource: &Keyhash, row: &Row) -> bool {
+        let Some(b) = self.bindings.get(resource) else { return false };
+        row.roles.len() <= MAX_ROLES
+            && !row.roles.iter().any(|r| RESERVED_ROLES.contains(&r.as_str()))
+            && row.roles.iter().all(|r| b.declared_roles.contains(r))
     }
 
     /// The hosted session identifier for (member, resource), if one is

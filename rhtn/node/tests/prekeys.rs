@@ -390,3 +390,35 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
     assert_eq!(names.len(), held, "no half-written key outlived the refusal");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **The rate-limit window is never written down**
+/// (`infra-client-requirements.md` §6): who asked for whose bundle is the
+/// record the section forbids keeping, and an earlier version of this
+/// service wrote one.  Issuance stopped; an upgrade must also remove what
+/// is already there.
+// acceptance: SUB-11
+#[test]
+fn an_upgrade_removes_the_requester_subject_log_an_earlier_version_left_behind() {
+    let dir = std::env::temp_dir().join(format!("rhtn-prekey-legacy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let root = dir.join("prekeys");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("issued"), "requester subject window count\nalice bob 1800000000 3\n").unwrap();
+    // an operator's own file under the same root is not this function's
+    // to delete on suspicion
+    std::fs::write(root.join("operator-notes"), "keep me").unwrap();
+
+    let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).expect("loads");
+    assert!(!root.join("issued").exists(), "the prohibited log is gone");
+    assert!(root.join("operator-notes").exists(), "and nothing else is");
+
+    // and nothing writes it back: the window lives in memory and expires
+    s.expire(1_900_000_000);
+    s.save(&dir).expect("saves");
+    assert!(!root.join("issued").exists(), "still gone after a save");
+
+    // a second load over a directory without it is uneventful
+    PrekeyService::at(&dir, PrekeyConfig::default()).expect("loads again");
+    assert!(!root.join("issued").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

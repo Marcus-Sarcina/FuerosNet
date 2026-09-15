@@ -749,3 +749,50 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
     assert!(g.row(&R1, &kh("bob")).is_some(), "the party still inside keeps its rows");
     assert!(g.row(&R2, &kh("bob")).is_some());
 }
+
+/// **Changing the policy changes the rows it wrote**
+/// (`infra-client-requirements.md` §10.2's first moment: an operator
+/// configuring roles).  A grant is a floor under the table, so the rows it
+/// produced are its to rewrite and the operator's own are not.
+// acceptance: RSC-40
+#[test]
+fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_own_rows() {
+    let sc = scene();
+    let mut g = Gateway::default();
+    g.bind(R1, Binding { owner: kh("alice"), authority: "r1.internal".into(), backend: None, declared_roles: BTreeSet::from(["reader".to_string()]) });
+    g.bind(R2, Binding { owner: kh("alice"), authority: "r2.internal".into(), backend: None, declared_roles: BTreeSet::from(["reader".to_string()]) });
+
+    let open = Row { roles: BTreeSet::from(["reader".to_string()]), connect: true };
+    g.stand(R1, open.clone()).expect("a grant over the owner's horizon");
+    g.stand(R2, open.clone()).expect("and one on the other resource");
+    let (granted, _) = g.refresh(&sc.table);
+    assert!(granted >= 6, "both horizons expanded: {granted}");
+    assert_eq!(g.row(&R1, &kh("carol")).map(|r| r.connect), Some(true));
+
+    // one member is the operator's own decision, not the grant's
+    let pinned = Row { roles: BTreeSet::new(), connect: false };
+    g.set_row(R1, kh("bob"), pinned.clone()).expect("the operator's own row");
+    // and one member opens a session, so the retirement is observable
+    assert!(g.session(&kh("carol"), &R1).is_none());
+
+    // the grant is narrowed to nothing
+    let shut = Row { roles: BTreeSet::new(), connect: false };
+    g.stand(R1, shut.clone()).expect("the policy is replaced");
+    g.refresh(&sc.table);
+
+    assert_eq!(g.row(&R1, &kh("carol")), Some(&shut), "the row the old grant wrote now carries the new one");
+    assert_eq!(g.row(&R1, &kh("w1")), Some(&shut), "every row it wrote, not just one");
+    assert_eq!(g.row(&R1, &kh("bob")), Some(&pinned), "and the operator's own row is untouched");
+    assert_eq!(g.row(&R2, &kh("carol")).map(|r| r.connect), Some(true), "the other resource's grant is not disturbed");
+
+    // widening it again writes the members back
+    g.stand(R1, open.clone()).expect("the policy is replaced again");
+    g.refresh(&sc.table);
+    assert_eq!(g.row(&R1, &kh("carol")), Some(&open), "the grant's rows follow it back out");
+    assert_eq!(g.row(&R1, &kh("bob")), Some(&pinned), "the operator's still does not");
+
+    // re-standing the same policy is not a change and rewrites nothing
+    let before = g.row(&R1, &kh("carol")).cloned();
+    g.stand(R1, open).expect("the same policy");
+    assert_eq!(g.row(&R1, &kh("carol")), before.as_ref(), "an unchanged grant disturbs no row");
+}
