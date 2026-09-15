@@ -301,6 +301,7 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `guided-capture-on-a-camera` | Three to five images over ten to fifteen seconds under prompts that vary, from a real camera | client, platform | **deferred** CER-38 | **deferred** CER-38 |
 | `capture-sealed-under-subjects-key` | The capture is sealed under the key the subject supplied and the key discarded | client | CER-04 | gap |
 | `sealed-store-on-platform-keys` | The sealed store is held under the platform's key storage | client, platform | **deferred** CER-39 | **deferred** CER-39 |
+| `attestation-is-pulled` | A presence record reaches a party that was not there by being fetched from a participant, under that evaluator's own nonce | client | ARC-20 | ARC-21 |
 
 **Deferred, and what each waits for.** The three marked `deferred` need a
 device: a proximity radio for UWB and NFC, a camera pointed at a person for
@@ -350,10 +351,10 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 86 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 87 conditions drawn from the documents,
 and of them:
 
-- 44 hold on both sides
+- 45 hold on both sides
 - 34 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware
