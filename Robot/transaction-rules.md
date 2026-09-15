@@ -161,7 +161,6 @@ evidence which *is* good is counted. `second-binding-stands` and
 |---|---|---|---|---|
 | `one-signature-only` | The old patron does not sign a departure, and a decoder must not expect a second signature | decoder | DEC-32, CER-42 | DEC-32 |
 | `ends-only-the-named` | A departure ends the relationship its series names and nothing else | table | TOP-03, TOP-18 | PRP-21, PRP-22 |
-| `counter-advances-strictly` | The relationship's counter advances strictly on departure | nowhere | — | — |
 | `departed-becomes-root` | A node with no other binding reads as a root in the holder's own table, and is out of the horizon where it was | table | TOP-04 | TOP-33 |
 | `order-independent` | The binding a departure names ends whichever of the two arrives first | table | TOP-18 | PRP-22 |
 | `reissue-advances-relationship` | A departure in the proven current series ends the relationship a reissue moved | table | TOP-20 | REC-09 |
@@ -174,19 +173,21 @@ evidence which *is* good is counted. `second-binding-stands` and
 sharpest of the three and is closed: DEC-32 offers a departure and a disavowal
 countersigned, and the derived entry ceiling refuses both.
 
-**`counter-advances-strictly` is held on neither side** [2026-09-15], which
-is a correction: it was recorded as enforced in the table with ARC-04 as its
-positive, and it is enforced nowhere. §2.3's verification rule — comparable
-only within one series, and then **strictly greater than the last counter the
-verifier holds**, not previous+1, with absence of prior state not a failure —
-is applied to endpoint records and to nothing else. The fold reads
-`rec.seqno()?.series` for a departure and drops the counter; the reissue
-branch does the same with the series it leaves; `Binding` carries the series
-and no counter, so the table has nothing to compare against even if it asked.
-ARC-04 and ARC-05 call `compare()` on two seqnos the fixture itself wrote and
-never hand the records to a holder, so what they establish is that `compare`
-works. **The relationship sequence — what §2.3 is mostly about — is carried,
-encoded, decoded, and compared by nobody.**
+**`counter-advances-strictly` is retired, not a gap** [author,
+2026-09-15]. It was recorded as enforced in the table with ARC-04 as its
+positive; it was enforced nowhere, and the ruling on finding that out is that
+it should not be. **A signed departure is proof enough that the departure takes
+effect.** §2.3's counter sequences *locator updates* so a distant holder can
+tell a later address from an earlier one, and a departure is not an update to
+be ordered against anything — it is terminal. The two jobs a counter does
+elsewhere are done here by other fields: the **series** names which binding
+ends, so an old series leaves a later re-adoption untouched, and a repeat is
+caught as a repeat by its `txid`. Both were already true in the fold, which is
+why nothing had ever missed the check.
+
+`wire-format.md` §4.2 no longer states the obligation; ARC-04 keeps the
+series-opens-at-zero half, and ARC-05 moved off departures onto the comparison
+itself, since testing it on a departure taught that departures are ranked.
 
 **On `departed-becomes-root`, and which table** [author, 2026-09-14]. Two
 facts, and the first was being stated in a way that invited the second to
@@ -349,12 +350,12 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 87 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 86 conditions drawn from the documents,
 and of them:
 
 - 44 hold on both sides
 - 34 have one polarity only
-- 6 have neither
+- 5 have neither
 - 3 are deferred on hardware
 
 **The shape of the gaps is not random.** They cluster where a rule is
