@@ -37,6 +37,7 @@
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
 
+pub mod backup;
 pub mod catalog;
 pub mod ceremony;
 pub mod device;

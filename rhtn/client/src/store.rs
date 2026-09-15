@@ -178,7 +178,7 @@ pub struct OwnSeed {
 /// sets of its own records, which are ordinary record state
 /// (`wire-format.md` §4.5.1.2).  No plaintext likeness and no released key
 /// is ever written here.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ClientStore {
     pub sealed: BTreeMap<Txid, SealedCapture>,
     pub seeds: BTreeMap<Txid, OwnSeed>,
@@ -254,6 +254,54 @@ impl ClientStore {
         rewrite(&dir.join("unattached"), self.unattached_late.iter().map(|(t, v)| (*t, encode_keys(v))))?;
         rewrite(&dir.join("disclosures"), self.disclosures.iter().map(|(t, d)| (*t, encode_disclosures(d))))?;
         Ok(())
+    }
+
+    /// The whole store as one document, for a backup to carry
+    /// (`backup`): the same six encodings the directory holds, in one
+    /// place, since a blob has no directory to spread them over.
+    pub fn encode(&self) -> Vec<u8> {
+        use rhtn_codec::encode::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 6);
+        keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
+        keyed(&mut out, self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))));
+        keyed(&mut out, self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))));
+        keyed(&mut out, self.late.iter().map(|(t, v)| (*t, encode_blobs(v))));
+        keyed(&mut out, self.unattached_late.iter().map(|(t, v)| (*t, encode_keys(v))));
+        keyed(&mut out, self.disclosures.iter().map(|(t, d)| (*t, encode_disclosures(d))));
+        out
+    }
+
+    /// One back.  **Nothing partial**: a store that decoded five of six
+    /// maps is not a store, and returning one would be the half-import a
+    /// restore must not perform.
+    pub fn decode(b: &[u8]) -> Option<ClientStore> {
+        let item = rhtn_codec::cbor::parse_all(b).ok()?;
+        let rhtn_codec::cbor::Item::Array(f) = &item else { return None };
+        if f.len() != 6 {
+            return None;
+        }
+        let m = |i: usize| unkeyed(b, &f[i]);
+        let mut st = ClientStore::default();
+        for (t, v) in m(0)? {
+            st.records.insert(t, v);
+        }
+        for (t, v) in m(1)? {
+            st.sealed.insert(t, decode_sealed(&v)?);
+        }
+        for (t, v) in m(2)? {
+            st.seeds.insert(t, decode_seed(&v)?);
+        }
+        for (t, v) in m(3)? {
+            st.late.insert(t, decode_blobs(&v)?);
+        }
+        for (t, v) in m(4)? {
+            st.unattached_late.insert(t, decode_keys(&v)?);
+        }
+        for (t, v) in m(5)? {
+            st.disclosures.insert(t, decode_disclosures(&v)?);
+        }
+        Some(st)
     }
 
     /// Read a store back.  **What no longer parses is skipped rather than
@@ -483,4 +531,29 @@ fn uint_at(it: &rhtn_codec::cbor::Item) -> Option<u64> {
         rhtn_codec::cbor::Item::Uint(n) => Some(*n),
         _ => None,
     }
+}
+
+/// One map as `[[txid, bytes], ...]`, in the key order a `BTreeMap` gives:
+/// two stores holding the same thing encode the same bytes.
+fn keyed(out: &mut Vec<u8>, items: impl ExactSizeIterator<Item = (Txid, Vec<u8>)>) {
+    use rhtn_codec::encode::*;
+    emit_array_head(out, items.len());
+    for (t, v) in items {
+        emit_array_head(out, 2);
+        emit_bstr(out, &t);
+        emit_bstr(out, &v);
+    }
+}
+
+fn unkeyed(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<Vec<(Txid, Vec<u8>)>> {
+    let rhtn_codec::cbor::Item::Array(a) = it else { return None };
+    a.iter()
+        .map(|x| {
+            let rhtn_codec::cbor::Item::Array(p) = x else { return None };
+            match p.as_slice() {
+                [t, v] => Some((kh_at(b, t)?, bytes_at(b, v)?)),
+                _ => None,
+            }
+        })
+        .collect()
 }

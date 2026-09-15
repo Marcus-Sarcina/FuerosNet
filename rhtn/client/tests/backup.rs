@@ -1,0 +1,183 @@
+//! Backup: envelope encryption over what a device loss takes away
+//! (design §13.7.1), and what a restore refuses.
+
+mod common;
+
+use common::*;
+use rhtn_client::backup::{self, Contents, Cost, Failure, Wrap};
+use rhtn_client::record::*;
+use rhtn_client::store::{Capture, ClientStore, Frame, OwnSeed, SealParams, seal};
+use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
+
+/// Cheap enough to run in a test and still Argon2id: the cost is the
+/// operator's number, and a test asserting a shape has no business
+/// spending 64 MiB on it.
+fn cheap() -> Cost {
+    Cost { m_kib: 64, passes: 1, lanes: 1 }
+}
+
+fn full_set() -> DisclosureSet {
+    let values = [
+        capture_value(0, 4, 0, 2),
+        empty_location_value(),
+        integrity_value(false, 0),
+        retention_value(2),
+        integrity_value(false, 0),
+        retention_value(2),
+        proximity_value(&[(1, 0, Some(4))], 1),
+    ];
+    disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]))
+}
+
+/// Everything a device loss takes away: the identity, the archive, and the
+/// store beside it.
+fn contents(w: &mut World) -> (Contents, [u8; 32]) {
+    let set = full_set();
+    let t = w.tick();
+    let p = Proposal {
+        started_at: t,
+        finalized_at: t + 600,
+        participants: [kh("alice"), kh("bob")],
+        witnesses: vec![Witness { keyhash: kh("w1"), nominated_by: kh("alice"), flags: 7 }],
+        responses: vec![],
+        root: disclosure_root(&set),
+    };
+    let back = vec![w.back("alice"), w.back("bob"), w.back("w1")];
+    let rec = w.commit(TYPE_PRESENCE, &p.body(&back), &["alice", "bob", "w1"]);
+
+    let mut store = ClientStore::default();
+    store.records.insert(rec.txid, rec.bytes.clone());
+    store.disclosures.insert(rec.txid, set);
+    store.seeds.insert(rec.txid, OwnSeed { seed: [9; 32], counterparty: kh("bob"), ceremony_id: [4; 32], finalized_at: t + 600 });
+    let capture = Capture { template: vec![3; 32], frames: vec![Frame { at_ms: 7, bytes: b"a frame".to_vec() }], modality: 0, template_version: 1 };
+    store.sealed.insert(rec.txid, seal(&SealParams::default(), &[1; 32], kh("bob"), kh("alice"), [4; 32], &capture));
+    (Contents { seeds: Some([[1; 32], [2; 32]]), records: vec![rec.bytes.clone()], store }, rec.txid)
+}
+
+// acceptance: ARC-23
+#[test]
+fn a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole() {
+    let mut w = World::new();
+    let (before, _) = contents(&mut w);
+    let wrap = Wrap::passphrase(cheap());
+    let blob = backup::export(&before, &wrap, b"a passphrase").expect("exports");
+
+    // **the KEK is never stored with the ciphertext** (design §13.7.1):
+    // neither the passphrase nor anything derived from it is in the blob,
+    // and neither is the plaintext it protects
+    assert!(!find(&blob, b"a passphrase"), "the passphrase is not in the backup");
+    let kek_probe = before.seeds.unwrap()[0];
+    assert!(!find(&blob, &kek_probe), "nor is the identity seed in the clear");
+    assert!(!find(&blob, b"a frame"), "nor a captured frame");
+
+    let after = backup::import(&blob, b"a passphrase").expect("imports");
+    assert_eq!(after, before, "everything a device loss takes away comes back");
+
+    // the salt is fresh per backup, so two exports of the same contents
+    // under the same passphrase are different bytes
+    let again = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    assert_ne!(again, blob, "a fresh salt and fresh nonces each time");
+    assert_eq!(backup::import(&again, b"a passphrase").expect("imports"), before);
+}
+
+// acceptance: ARC-24
+#[test]
+fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name() {
+    let mut w = World::new();
+    let (before, _) = contents(&mut w);
+    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+
+    // **the secret is wrong, which is a different thing to tell a person
+    // than a tampered payload**, and both are authentication failures
+    assert_eq!(backup::import(&blob, b"the wrong one"), Err(Failure::Secret));
+    assert_eq!(backup::import(&blob, b""), Err(Failure::Secret));
+
+    // altering the header makes the data key refuse to unwrap: the header
+    // is the wrap's aad, so a changed cost or salt is not a different
+    // derivation but a failure
+    let mut headered = blob.clone();
+    let at = headered.iter().position(|b| *b == 64).expect("the memory cost is in there");
+    headered[at] = 65;
+    assert!(matches!(backup::import(&headered, b"a passphrase"), Err(Failure::Secret) | Err(Failure::Malformed(_))), "an altered header does not open");
+
+    // altering the payload authenticates the key and fails the body: the
+    // two steps are distinguishable, which is what lets a person be told
+    // which one went wrong
+    let mut tampered = blob.clone();
+    let n = tampered.len();
+    tampered[n - 20] ^= 1;
+    assert_eq!(backup::import(&tampered, b"a passphrase"), Err(Failure::Payload));
+
+    // **nothing is returned from a backup that did not authenticate
+    // whole**: a truncated blob is refused rather than half-imported
+    for cut in [blob.len() - 1, blob.len() / 2, 8, 0] {
+        let short = &blob[..cut];
+        assert!(backup::import(short, b"a passphrase").is_err(), "a backup cut at {cut} opens nothing");
+    }
+}
+
+// acceptance: ARC-25
+#[test]
+fn the_wrapping_is_replaceable_without_touching_what_it_wraps() {
+    let mut w = World::new();
+    let (before, _) = contents(&mut w);
+
+    // **the cost is the operator's and travels in the header**, so a
+    // reader uses what the writer used rather than what it would have
+    // chosen: two backups at different costs both open
+    for cost in [cheap(), Cost { m_kib: 128, passes: 2, lanes: 1 }] {
+        let blob = backup::export(&before, &Wrap::passphrase(cost), b"a passphrase").expect("exports");
+        assert_eq!(backup::import(&blob, b"a passphrase").expect("imports"), before, "at {cost:?}");
+    }
+
+    // **a wrap method this reader does not implement is named, not
+    // guessed** (design §13.7.1: passphrase in v1, hardware token later,
+    // split shares later still — none of which changes the format)
+    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let future = with_wrap_method(&blob, 7);
+    assert_eq!(backup::import(&future, b"a passphrase"), Err(Failure::UnsupportedWrap(7)));
+
+    // and a later format version likewise
+    let later = with_version(&blob, 2);
+    assert_eq!(backup::import(&later, b"a passphrase"), Err(Failure::Version(2)));
+}
+
+fn find(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// Rewrite the header's wrap method, leaving everything else alone.
+fn with_wrap_method(blob: &[u8], method: u64) -> Vec<u8> {
+    rewrite_header_field(blob, 1, method)
+}
+
+fn with_version(blob: &[u8], version: u64) -> Vec<u8> {
+    rewrite_header_field(blob, 0, version)
+}
+
+/// The header is `[version, method, salt, m, t, p, nonces]`; both fields
+/// this rewrites are small uints, so the length does not move.
+fn rewrite_header_field(blob: &[u8], index: usize, value: u64) -> Vec<u8> {
+    use rhtn_codec::cbor::{Item, parse_all};
+    let item = parse_all(blob).expect("a backup");
+    let Item::Array(parts) = &item else { panic!("three fields") };
+    let Item::Bytes(hr) = &parts[0] else { panic!("a header") };
+    let header = &blob[hr.clone()];
+    let hitem = parse_all(header).expect("a header");
+    let Item::Array(f) = &hitem else { panic!("an array") };
+    let Item::Uint(_) = &f[index] else { panic!("a uint") };
+    let mut fresh = header.to_vec();
+    // a uint under 24 is one byte at a known offset: the array head, then
+    // one byte per preceding small uint
+    let at = 1 + index;
+    assert!(value < 24 && fresh[at] < 24, "only small values move no bytes");
+    fresh[at] = value as u8;
+    let mut out = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut out, 3);
+    rhtn_codec::encode::emit_bstr(&mut out, &fresh);
+    for p in &parts[1..] {
+        let Item::Bytes(r) = p else { panic!("bytes") };
+        rhtn_codec::encode::emit_bstr(&mut out, &blob[r.clone()]);
+    }
+    out
+}

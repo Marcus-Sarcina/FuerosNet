@@ -11609,5 +11609,77 @@
     "then": "Every map comes back as it went: records byte for byte, seeds, ciphertext, late responses, unattached arrivals, and disclosure salts and values with the labels taken from their fixed order. The seed's file is not world-readable and the ciphertext's need not be. A second save over the same directory rewrites nothing that was written once.",
     "oracle": "behaviour",
     "interpretation": "The seed is the only secret of the six, because §7.5.2 makes it what releases a capture key; sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data."
+  },
+  {
+    "id": "ARC-23",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Envelope a backup under a key kept apart, and open it whole",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §13.7.1"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "**Encrypt under a key not stored alongside it.**"
+      },
+      {
+        "where": "design §13.7.1",
+        "text": "A random data key encrypts the blob, and a key-encryption key (KEK) derived from\n  a passphrase encrypts the data key."
+      }
+    ],
+    "given": "A participant's identity seeds, archive records and store.",
+    "when": "They are exported under a passphrase and imported back.",
+    "then": "Neither the passphrase, nor an identity seed, nor a captured frame appears in the blob. Everything a device loss takes away comes back identical. A second export of the same contents under the same passphrase is different bytes, because the salt and the nonces are fresh each time.",
+    "oracle": "behaviour",
+    "interpretation": "The KEK is derived and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names."
+  },
+  {
+    "id": "ARC-24",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Refuse a wrong secret, a tampered blob and a truncated one, each by name",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "design §13.7.1",
+      "design §10.2"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "**Encrypt under a key not stored alongside it.**"
+      }
+    ],
+    "given": "A well-formed backup.",
+    "when": "It is opened with the wrong secret, with an empty secret, with an altered header, with an altered payload, and truncated at four lengths.",
+    "then": "A wrong secret and an altered header fail at the unwrap; an altered payload authenticates the key and fails the body, so the two steps are distinguishable and a person can be told which went wrong. Every truncation opens nothing. Nothing is returned from a backup that did not authenticate whole.",
+    "oracle": "behaviour",
+    "interpretation": "The header is the wrap's external_aad, so altering a cost or a salt is an authentication failure rather than a different derivation; a partial import is how a restore replaces an intact identity with half of an old one."
+  },
+  {
+    "id": "ARC-25",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Keep the wrapping replaceable without touching what it wraps",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §13.7.1",
+      "design §21.1"
+    ],
+    "rule": [
+      {
+        "where": "design §13.7.1",
+        "text": "**The format leaves a seam.** How the KEK is protected is a pluggable layer\n  above the backup format"
+      }
+    ],
+    "given": "A participant's contents and more than one cost setting.",
+    "when": "Backups are written at each cost, and readers meet a wrap method and a format version they do not implement.",
+    "then": "Each cost opens, because the cost travels in the header and a reader uses what the writer used rather than what it would have chosen. An unimplemented wrap method and a later format version are each named rather than guessed at.",
+    "oracle": "behaviour",
+    "interpretation": "§13.7.1 has passphrase in v1, hardware token later and split shares later still, none of which changes the format; the cost is an operator's number like every other §21.1 leaves unset."
   }
 ]

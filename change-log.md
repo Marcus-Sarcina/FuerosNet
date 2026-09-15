@@ -9768,3 +9768,25 @@ benefit from.
 it: where a client sits is a fold over its own archive, so a restored archive
 reaches the same answer and a stored position could disagree with the records
 that produced it.
+
+**The backup format is §13.7.1's envelope, with the seam it asks for.** A random
+data key over the payload, a key-encryption key from a passphrase through
+Argon2id, the KEK written nowhere. The header carries what a reader needs to
+derive the KEK again and nothing that derives it, and the header is the wrap's
+`external_aad` — so altering a cost or a salt is an authentication failure rather
+than a quietly different derivation.
+
+**How the KEK is protected is a named method, not an assumption.** §13.7.1 has
+*"passphrase in v1, hardware token later, split shares later still — none of
+which changes the format"*, so the method travels in the header and a reader that
+meets one it does not implement says which rather than guessing. Nothing here
+splits a KEK among counterparties: §13.7.1 costs that honestly and leaves it, and
+a `Wrap` variant is where it would go.
+
+**Argon2id's cost is the operator's number**, carried in the header because a
+reader must use what the writer used. The default is RFC 9106's second
+recommendation, 64 MiB over three passes — recorded as chosen, not derived.
+
+**Dependency:** `argon2` 0.6, MIT OR Apache-2.0, pulling `blake2`,
+`password-hash` and `phc`, all MIT OR Apache-2.0. A sweep of the whole tree finds
+every one of its 230 external packages under a permissive licence.
