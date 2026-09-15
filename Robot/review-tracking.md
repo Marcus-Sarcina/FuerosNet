@@ -9776,3 +9776,48 @@ reached from tests alone. Both recorded, neither in scope here.
 **Three test harnesses were placing every subordinate at slot 0** and one client
 fixture had two different parties at one index, so the rule bit the moment it
 existed. That is the check working, not the check being wrong.
+
+## Conformance review of 2026-09-15 at `4edfe52` — all eight closed
+
+Eight findings, all verified against the code and the cited text before any
+change, all reproduced by the reviewer's own `tests/september15.rs`, all now
+passing. The review suite finishes 67 passed, 0 failed, where it finished 59/8.
+**No finding was wrong and none needed an author decision**: each cites a
+passage that says plainly what should happen.
+
+| ID | What it was | Disposition |
+|---|---|---|
+| P01 | The reference metric filtered denied candidates out of the scores and the admitted set but returned the allocation's unfiltered total as `joint`; the allocation had already given the denied party capacity | Denial moved ahead of §16.4's three passes. MET-10 extended |
+| T01 | The slot bound lived in the fold, which runs after the store accepts and the adjacencies are written; the node flooded what it then refused | `Table::admits_slot`, asked by the storage decision and the fold. PRP-25 |
+| E01 | The client kept the first arrival of an equivocating pair | §10.1.2's decision shared. TOP-39 |
+| E02 | The client admitted an unproved second series | The same, with the client's table as its series evidence. TOP-39 |
+| E03 | A restored horizon held positions and no addresses | The snapshot carries the lines and the retirements. TOP-40 |
+| G01 | A gateway could not tell a derived row from an operator's, so narrowing a grant preserved its permissions | Rows carry provenance. RSC-40 |
+| S02 | A recognised recovery left the superseded key's wake endpoint | The cleanup reads the fold's outcome. SUB-10 |
+| S04 | The legacy requester/subject log survived an upgrade | Removed by name on load. SUB-11 |
+
+**Two were the previous day's work**, and both landed in the wrong layer: P01
+filtered after the allocation instead of before it, and T01 put a storage rule
+in the fold. Neither is a rule that was wrong; both are a rule applied where it
+could not bind.
+
+**E01, E02 and E03 were one defect.** §10.1.2 was implemented in full at the
+node and in one line at the participant — a rule written twice, which is the
+shape everything else this week has had. The remediation shares the decision
+rather than fixing three symptoms, which is the only version of this fix that
+stops the fourth divergence.
+
+**Every finding was already required by `functional_tests.md`.** TOP-016 had the
+equivocation rule, TOP-013 the forwarding rule, MAIL-019 the wake cleanup,
+MAIL-006 the prohibition on a request history, GAT-006/009 the recomputation.
+The document was right and the implementation was not, which is what a test
+specification is for. Four rows were added for what the *remediation* exposed
+and nothing required: that a storage decision admit only what the holder's own
+state can hold (TOP-033), that a rule kept by two holders be exercised at both
+(TOP-034), that grant provenance be distinguishable (GAT-037), and that an
+upgrade remove durable state the current rules forbid rather than merely
+stopping the write (OPS-016).
+
+**Not fixed, and not in scope here**: `counter-advances-strictly` on type 2
+still has no negative — nothing refuses a departure whose counter does not
+advance. Recorded in the matrix.
