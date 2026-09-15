@@ -11185,5 +11185,171 @@
         "-"
       ]
     ]
+  },
+  {
+    "id": "PRP-25",
+    "area": "propagation",
+    "gap": "propagation",
+    "title": "Neither store nor forward a record this node's own table will not hold",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §10.1.2",
+      "wire-format.md §10.1.1",
+      "design §3.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §10.1.2",
+        "text": "a forwarding node vouches with its storage decision"
+      }
+    ],
+    "given": "A node holding an open subordinate in one of its own patron slots, with adjacencies to store and forward on.",
+    "when": "A validly signed adoption arrives naming that filled slot in the same subnet.",
+    "then": "The node refuses it: the record is not retained, nothing is pushed to any adjacency, and the incumbent and its slot row are unchanged. A record already held replays as a duplicate rather than refusing itself, and an adoption naming a free slot under the same patron is stored and forwarded as usual.",
+    "oracle": "behaviour",
+    "interpretation": "§10.1.2 states the vouching relation between storing and forwarding; that the slot bound must therefore be part of the storage decision rather than applied by the fold afterwards is that relation asserted. `Table::admits_slot` is the one predicate both ask.",
+    "holds": [
+      [
+        1,
+        "slot-unique",
+        "-"
+      ],
+      [
+        1,
+        "fanout-ten",
+        "-"
+      ]
+    ]
+  },
+  {
+    "id": "TOP-39",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Retire an equivocating endpoint pair and withhold an unproved series, at the participant",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §10.1.2",
+      "wire-format.md §2.3"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §10.1.2",
+        "text": "a holder retains **neither** as current and forwards nothing further for that\n`(subject, seqno)`"
+      },
+      {
+        "where": "wire-format.md §10.1.2",
+        "text": "**A record in a series the receiver cannot prove current is\nneither stored nor forwarded**"
+      }
+    ],
+    "given": "A client holding one signed endpoint line for a party in its horizon, in the series that party's open binding names.",
+    "when": "A second record arrives at the same sequence with different signed contents, and separately one arrives in a series nothing the client holds proves current.",
+    "then": "The pair is retired: neither content is current, the party is not reachable on either, and nothing further for that pair is taken. A greater counter in the same line repairs it. The unproved series is not taken and its address is not mixed into the party's. An exact duplicate stays inert throughout.",
+    "oracle": "behaviour",
+    "interpretation": "The client's series evidence is its own table, an open binding naming the series the relationship is in; a node's is a presented §4.6 chain. The decision itself is one function both holders call.",
+    "holds": [
+      [
+        0,
+        "endpoint-line-current"
+      ]
+    ]
+  },
+  {
+    "id": "TOP-40",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Keep the addresses across a restore, retirements included",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §4.2",
+      "wire-format.md §10.1.2"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §4.2",
+        "text": "**Persist enough to resolve every node in your trust horizon directly**"
+      }
+    ],
+    "given": "A client holding an endpoint line for its patron and a retired pair for a sibling, which materialises a snapshot.",
+    "when": "A fresh horizon for the same party restores the records and wakes on that snapshot.",
+    "then": "The snapshot accounts for what is held, the patron is still reachable at the address it published, and the retired pair is still retired — a conflicting record already ruled out is not admitted by the restored copy. Endpoint records are not transactions, so a replay cannot rebuild either fact.",
+    "oracle": "behaviour",
+    "interpretation": "§4.2 states what the copy is for and that it must survive a wake; that the addresses and the retirements are both part of it follows from the copy being useless for routing without the first and unsound without the second.",
+    "holds": [
+      [
+        0,
+        "endpoint-line-current"
+      ]
+    ]
+  },
+  {
+    "id": "RSC-40",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Rewrite the rows a standing grant wrote when the grant is replaced",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §10.2",
+      "infra-client-requirements.md §10.5"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §10.2",
+        "text": "**Re-evaluate predicates at four moments, none of them a request**: when an\noperator is configuring roles"
+      }
+    ],
+    "given": "Two resources of one owner, each carrying a standing grant expanded over the horizon, with one member's row set individually by the operator.",
+    "when": "One resource's grant is replaced by a narrower one, then by the original again.",
+    "then": "Every row that grant wrote carries the new grant and its sessions are retired; the operator's own row is untouched; the other resource is not disturbed. Widening it again writes the members back and still leaves the operator's row alone. Re-standing an unchanged grant disturbs no row.",
+    "oracle": "behaviour",
+    "interpretation": "§10.2 names the configuration change as a moment to re-evaluate; that a grant can only rewrite what it wrote — not what an operator set — is the floor-under-the-table reading the same section gives for a departing member's rows."
+  },
+  {
+    "id": "SUB-10",
+    "area": "submission",
+    "gap": "submission",
+    "title": "Forget what the superseded key registered to be woken at",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §6.1",
+      "design §9.0.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §6.1",
+        "text": "**Forget an endpoint when the relationship ends**"
+      }
+    ],
+    "given": "A node serving a subordinate that has registered an external wake endpoint, and an unrelated party that has registered one too.",
+    "when": "A recognised recovery supersedes that subordinate's key under the same patron.",
+    "then": "The superseded key's registration is forgotten and its slot row no longer names it. The unrelated party's registration stands. The successor's own registration is its own to make and is not created by the supersession.",
+    "oracle": "behaviour",
+    "interpretation": "The fold is what knows a supersession happened, since the adoption names only the new key; the cleanup therefore reads the outcome rather than the record."
+  },
+  {
+    "id": "SUB-11",
+    "area": "submission",
+    "gap": "submission",
+    "title": "Remove the requester/subject log an earlier version left behind",
+    "milestone": 5,
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §6"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §6",
+        "text": "serve the request,\nkeep no record of who asked for whose bundle."
+      }
+    ],
+    "given": "A prekey directory carrying the old requester/subject/window/count file an earlier version wrote, and an operator's own unrelated file beside it.",
+    "when": "The service is loaded, its counters expired, and its state saved.",
+    "then": "The prohibited file is removed and stays removed across a save and a second load; the operator's own file is untouched. Nothing writes the log back, because the window lives in memory.",
+    "oracle": "behaviour",
+    "interpretation": "The section forbids the record; issuance stopped writing it, and an upgrade that left the old one in place kept exactly what it forbids. One named file, removed once, with the failure visible."
   }
 ]

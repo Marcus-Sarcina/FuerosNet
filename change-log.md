@@ -9625,3 +9625,46 @@ rather than accumulated.
 
 **`Gateway::remove_member` is gone.** It purged by member across every resource,
 duplicating what `refresh` now does by horizon, and nothing called it.
+
+### 2026-09-15 (eight review findings, and the two that were yesterday's)
+
+**A denied candidate is out of the allocation, not filtered after it.** The
+reference metric zeroed a disavowed party's score and dropped it from the
+admitted set, then reported the unfiltered total as the set's joint standing —
+three answers about one set that disagreed. Worse, the three passes had already
+divided the cut among candidates including the denied one, so it starved the
+eligible. §18.5's denial now happens before §16.4's allocation.
+
+**A forwarding node vouches with its storage decision** (`wire-format.md`
+§10.1.2), and this one did not. The slot bound lived in the fold, which runs
+*after* the store has accepted and the adjacencies have been written to, so a
+node retained and flooded an adoption its own table then refused. The predicate
+is `Table::admits_slot` now, asked by the storage decision and by the fold, and
+it admits a record already held so §10.1.3's replay still converges.
+
+**§10.1.2's endpoint rule was implemented twice and agreed once.** A node
+applied all of it; the participant's copy, written later, applied *counter at or
+below the held one is a duplicate* — so a client took an equivocating pair and
+kept whichever arrived first, and admitted a series nothing proved. The decision
+is one function in `rhtn-archive` that both holders call; each still does its own
+storing, and a client's series evidence is its own table where a node's is a
+presented chain. **The addresses now survive a restore**, retirements included:
+endpoint records are not transactions, so a replay cannot rebuild them and a
+restored horizon held the shape with no way to reach anything in it.
+
+**A standing grant could not tell its own rows from an operator's.** Narrowing a
+grant left every row it had written standing, as if each were an individual
+decision. Rows carry provenance; replacing a grant rewrites what the grant wrote,
+retires those sessions, and leaves the operator's own entries as the floor's
+exception.
+
+**A recognised recovery now ends the superseded key's relationship.** The
+cleanup's own comment said recovery reached it through the adoption branch; the
+branch only handled the adoption's own binding, so the old key's wake endpoint
+survived its identity. The fold is what knows a supersession happened, so the
+cleanup reads the outcome.
+
+**And an upgrade removes what an earlier version wrote that the rules forbid.**
+Issuance stopped writing the requester/subject log; nothing removed the one
+already on disk, so an upgraded node kept exactly the record
+`infra-client-requirements.md` §6 prohibits, for the life of the directory.
