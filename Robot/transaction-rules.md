@@ -147,7 +147,7 @@ evidence which *is* good is counted. `second-binding-stands` and
 
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
-| `one-signature-only` | The old patron does not sign a departure, and a decoder must not expect a second signature | decoder | TOP-03 | gap |
+| `one-signature-only` | The old patron does not sign a departure, and a decoder must not expect a second signature | decoder | DEC-32, CER-42 | DEC-32 |
 | `ends-only-the-named` | A departure ends the relationship its series names and nothing else | table | TOP-03, TOP-18 | PRP-21, PRP-22 |
 | `counter-advances-strictly` | The relationship's counter advances strictly on departure | table | ARC-04 | gap |
 | `departed-becomes-root` | A node with no other binding reads as a root in the holder's own table, and is out of the horizon where it was | table | TOP-04 | TOP-33 |
@@ -156,9 +156,14 @@ evidence which *is* good is counted. `second-binding-stands` and
 | `move-inside-horizon` | A move within the replication horizon is accepted without archive presentation | table | REP-04 | gap |
 | `departed-address-moves` | An observer that saw the ending re-anchors the departed party on itself and shortens every path beneath it | client | TOP-36 | TOP-37 |
 
-**Gaps.** Three conditions have no negative. `one-signature-only` is the
-sharpest: nothing asserts that a departure carrying a second signature is
-refused, which is exactly the shape §4.2 calls out.
+| `minted-unilaterally` | A client leaves on its own signature, with no countersignature to seek and no refusal that can arrive | client | CER-42 | CER-42 |
+
+**Gaps.** `counter-advances-strictly` and `move-inside-horizon` have no
+negative. The first is the one to watch: ARC-04 holds that a departure
+advancing the counter is taken, and **nothing refuses one that does not** —
+the fold reads the series and never compares the counter. `one-signature-only`
+was the sharpest of the three and is closed: DEC-32 offers a departure and a
+disavowal countersigned, and the derived entry ceiling refuses both.
 
 **On `departed-becomes-root`, and which table** [author, 2026-09-14]. Two
 facts, and the first was being stated in a way that invited the second to
@@ -192,7 +197,8 @@ root. Nothing translates a path when an ancestor moves afterwards (design
 
 ## Type 3 — disavowal (`wire-format.md` §4.3)
 
-The least covered of the six: three entries, none of them negative.
+Once the least covered of the six; eight conditions now, all on both
+sides.
 
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
@@ -202,12 +208,24 @@ The least covered of the six: three entries, none of them negative.
 | `reason-is-enumerated` | Field 4 is an enumerated code and never free text | decoder | TOP-31 | DEC-31 |
 | `reason-band-is-structural` | Codes 0–31 are without prejudice, 32–63 with; the band is retained and evaluated | table | TOP-31 | TOP-32 |
 | `code-space-is-64` | The code space is 64 values, and a code outside it is malformed | decoder | TOP-31 | DEC-31 |
+| `one-signature-only` | The patron signs a disavowal and nobody else does | decoder | DEC-32 | DEC-32 |
+| `prejudice-band-read` | A banded code is the patron's determination and a member of its horizon defaults to it; an unbanded one alleges nothing | policy | MET-10 | MET-10 |
 
-**Closed** (2026-09-14). All six hold on both sides. Writing them found one
-real gap: the reason code was carried and round-tripped and **nothing read
-the band**, so no policy could act on an unfamiliar code the way §4.3
-describes — which is the whole reason the space is banded. `End` answers
-`with_prejudice` now.
+**Closed** (2026-09-14). All eight hold on both sides. Writing the first six
+found one real gap: the reason code was carried and round-tripped and
+**nothing read the band**, so no policy could act on an unfamiliar code the
+way §4.3 describes — which is the whole reason the space is banded. `End`
+answers `with_prejudice`, and `End::band` is the rule both readers share.
+
+**And the band had no consumer until the contested exit was ruled on**
+[author, 2026-09-14]. A member of the patron's horizon takes the patron's
+determination at face value and does not try to order it against a
+departure of the same party it may also hold: a tree is sovereign and owes
+no due process to non-members. **Read from the records, not from the
+binding's end** — whichever object reached the fold first is the one the
+binding records, so reading the end would make the answer depend on the
+race the ruling says nobody should adjudicate. A tree wanting a timing rule
+runs a variant policy; §16.4 keeps what it stores and forwards identical.
 
 ---
 
@@ -308,11 +326,11 @@ ceremony.
 paragraph said sixty-two conditions and twenty on both sides, and the
 second said twenty-one after three rows had been written with the same
 entry on both sides of a condition. An entry has one kind and cannot be
-both; the checker found all three. Six transaction types, 83 conditions drawn from the documents,
+both; the checker found all three. Six transaction types, 86 conditions drawn from the documents,
 and of them:
 
-- 39 hold on both sides
-- 36 have one polarity only
+- 43 hold on both sides
+- 35 have one polarity only
 - 5 have neither
 - 3 are deferred on hardware
 
