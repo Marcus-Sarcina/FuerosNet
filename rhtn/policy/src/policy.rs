@@ -115,20 +115,26 @@ impl<N: Ord + Clone + Debug> Policy<N> for ReferenceMetric {
     }
 
     fn evaluate(&self, ev: &Evidence<N>, candidates: &[N]) -> Evaluation<N> {
-        let alloc = self.admit(ev, candidates, 1);
-        let flows: BTreeMap<&N, u64> = alloc.ranked.iter().map(|r| (&r.candidate, r.flow)).collect();
         // **a patron's determination is what the neighbourhood defaults
         // to** (design §18.5): a party some patron this observer holds has
-        // disavowed with prejudice scores nothing and is admitted to
-        // nothing, without the observer weighing that against a departure
-        // it may also hold.  This is the reference reading; §16.4 leaves a
-        // tree free to run a variant that orders the pair instead, and
-        // nothing on the wire can tell which is running.
-        let score = |c: &N| if ev.blacklisted(c) { 0.0 } else { flows.get(c).copied().unwrap_or(0) as f64 };
-        let admitted: Vec<N> = alloc.admitted.into_iter().filter(|c| !ev.blacklisted(c)).collect();
+        // disavowed with prejudice is denied, without the observer
+        // weighing that against a departure it may also hold.  This is the
+        // reference reading; §16.4 leaves a tree free to run a variant
+        // that orders the pair instead, and nothing on the wire can tell
+        // which is running.
+        //
+        // **Denied before the allocation, not after it.** The three passes
+        // (design §16.4) divide a cut among the candidates they are given,
+        // so a denied party left in would take capacity an eligible one
+        // could have used and `joint` would report a set that includes it
+        // — an allocation, an admission and a usable total disagreeing
+        // about the same set.
+        let eligible: Vec<N> = candidates.iter().filter(|c| !ev.blacklisted(c)).cloned().collect();
+        let alloc = self.admit(ev, &eligible, 1);
+        let flows: BTreeMap<&N, u64> = alloc.ranked.iter().map(|r| (&r.candidate, r.flow)).collect();
         Evaluation {
-            individual: candidates.iter().map(|c| (c.clone(), score(c))).collect(),
-            admitted,
+            individual: candidates.iter().map(|c| (c.clone(), flows.get(c).copied().unwrap_or(0) as f64)).collect(),
+            admitted: alloc.admitted,
             joint: alloc.total as f64,
         }
     }

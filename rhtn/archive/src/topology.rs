@@ -447,6 +447,40 @@ impl Table {
     /// Verify a transaction and apply it.  `presence` serves presence records
     /// an adoption's field 8 may name; `issuer` is this node's standing
     /// acknowledgement policy, if it is a grandpatron.
+    /// Whether this table can hold what `rec` claims of a patron's slot
+    /// (design §3.1), deciding nothing else and changing nothing.
+    ///
+    /// **Ten slots, one occupant each**: the patron's fanout and the
+    /// path's nibble range are the same bound, so holding a second
+    /// occupant would mean holding two subordinates at one index. A
+    /// recovery's predecessor does not count as the occupant — its
+    /// bindings close when the recovery applies, and a successor
+    /// inheriting the slot it vacates is the whole point of that
+    /// transaction. A record this table already holds is admitted whatever
+    /// it claims: §10.1.3's reconciliation is a replay of the same frames,
+    /// and a replay that refused itself would not converge.
+    ///
+    /// **Public because the storage decision asks it too.**
+    /// `wire-format.md` §10.1.2 has a forwarding node vouch with its
+    /// storage decision, so a node that stored and flooded a record its
+    /// own fold then refused would be vouching for what it rejects. One
+    /// predicate, asked twice, rather than two that can drift.
+    pub fn admits_slot(&self, rec: &Record) -> Result<(), Refusal> {
+        if rec.tx_type != TYPE_ADOPTION || self.bindings.iter().any(|b| b.adoption == rec.txid) {
+            return Ok(());
+        }
+        let (Some(node), Some(patron)) = (rec.field_hash(1), rec.field_hash(2)) else { return Ok(()) };
+        let Some(loc) = rec.locator() else { return Ok(()) };
+        let Some(slot) = loc.slot() else { return Ok(()) };
+        let prior = rec.prior_key();
+        match self.bindings.iter().find(|b| {
+            b.open() && b.patron == patron && b.anchor == Some(loc.anchor) && b.slot == Some(slot) && b.node != node && Some(b.node) != prior
+        }) {
+            Some(held) => Err(Refusal::Slot { patron, slot, held: held.node }),
+            None => Ok(()),
+        }
+    }
+
     pub fn apply<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L, presence: &dyn Fetch, issuer: Option<&AckIssuer>) -> Result<Outcome, Refusal> {
         self.apply_with(rec, ids, presence, issuer, Evaluation::Required)
     }
@@ -507,22 +541,7 @@ impl Table {
                     }
                     return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
                 }
-                // **Ten slots, one occupant each** (design §3.1): the
-                // patron's fanout and the path's nibble range are the same
-                // bound, so holding this record would mean holding two
-                // subordinates at one index.  A recovery's predecessor does
-                // not count as the occupant — its bindings close below, and
-                // a successor inheriting the slot it vacates is the whole
-                // point of the transaction.
-                if let (Some(slot), Some(anchor)) = (slot, anchor) {
-                    let prior = rec.prior_key();
-                    if let Some(held) = self.bindings.iter().find(|b| {
-                        b.open() && b.patron == patron && b.anchor == Some(anchor)
-                            && b.slot == Some(slot) && b.node != node && Some(b.node) != prior
-                    }) {
-                        return Err(Refusal::Slot { patron, slot, held: held.node });
-                    }
-                }
+                self.admits_slot(rec)?;
                 let mut applied = Applied::Adopted;
                 if let Some(prior) = rec.prior_key() {
                     self.lineage.entry(prior).or_default().push((node, patron));

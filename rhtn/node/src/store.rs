@@ -4,7 +4,7 @@
 //! The store is the seen-set.  There is no suppression cache beside it, and
 //! §10.1.2 says there should not be.
 
-pub use rhtn_archive::endpoint::EndpointRecord;
+pub use rhtn_archive::endpoint::{EndpointRecord, Line};
 use rhtn_archive::record::{Record, SigStatus};
 use rhtn_archive::tx::*;
 use rhtn_archive::{Keyhash, Txid};
@@ -92,6 +92,14 @@ pub enum Decision {
     /// Equal `seqno`, different signed contents: the pair is malformed,
     /// neither is current, and the holder re-resolves (§10.1.2).
     Conflict { subject: Keyhash, seqno: Seqno },
+    /// Well formed, correctly signed, and this node's own table will not
+    /// hold it: neither stored nor forwarded.
+    ///
+    /// **Distinct from `Malformed`**, which says the bytes are wrong.
+    /// Nothing is wrong with these bytes; another holder may take them
+    /// and be right to. What this says is that *this* node cannot vouch
+    /// for the record by storing it (§10.1.2), and so does not pass it on.
+    Refused(String),
     /// The bytes do not parse, or the signatures fail.
     Malformed(String),
 }
@@ -273,37 +281,32 @@ impl TopologyStore {
         if er.signature_checks(ids) == Some(false) {
             return Decision::Malformed("endpoint record signature fails".into());
         }
-        if self.conflicted(&er.node, er.seqno) {
-            return Decision::Duplicate;
-        }
+        // §10.1.2's rule lives in `rhtn-archive` and this store does the
+        // storing: the participant's own copy asks the same question.
         let key = (er.node, er.seqno.series);
-        if let Some(held) = self.endpoints.get(&key) {
-            match compare(held.record.seqno, er.seqno) {
-                Order::Older | Order::Incomparable => return Decision::Duplicate,
-                Order::Same => {
-                    if held.record.bytes == er.bytes {
-                        return Decision::Duplicate;
-                    }
-                    // two signed contents at one number: the pair is
-                    // malformed and neither is current (§10.1.2)
-                    self.endpoints.remove(&key);
-                    self.conflicts.insert((er.node, er.seqno.series, er.seqno.counter));
-                    return Decision::Conflict { subject: er.node, seqno: er.seqno };
+        let line = rhtn_archive::endpoint::decide(
+            self.endpoints.get(&key).map(|h| &h.record),
+            &er,
+            self.conflicted(&er.node, er.seqno),
+            self.endpoints.keys().any(|(s, ser)| *s == er.node && *ser != er.seqno.series),
+            self.series_proved(&er.node, er.seqno.series),
+        );
+        match line {
+            Line::Duplicate => return Decision::Duplicate,
+            Line::Conflict => {
+                self.endpoints.remove(&key);
+                self.conflicts.insert((er.node, er.seqno.series, er.seqno.counter));
+                return Decision::Conflict { subject: er.node, seqno: er.seqno };
+            }
+            Line::Unproved => {
+                // held, and it enters when a §4.6 chain proves the series
+                let p = Pending { kind: KIND_ENDPOINT_RECORD, bytes: bytes.to_vec(), from: *from, missing_key: None, unproved_series: Some((er.node, er.seqno.series)) };
+                if !self.pending.contains(&p) {
+                    self.pending.push(p.clone());
                 }
-                Order::Newer => {}
+                return Decision::Held(p);
             }
-        } else if self.endpoints.keys().any(|(s, _)| *s == er.node) && !self.series_proved(&er.node, er.seqno.series) {
-            // a second line for a subject this node already holds a line
-            // for: a record in a series the receiver cannot prove current
-            // is neither stored nor forwarded (§10.1.2).  It is held, and
-            // enters when a §4.6 chain proves the series.  A subject's
-            // first line is taken as gossip, there being nothing to rank it
-            // against and nothing a chain could say yet.
-            let p = Pending { kind: KIND_ENDPOINT_RECORD, bytes: bytes.to_vec(), from: *from, missing_key: None, unproved_series: Some((er.node, er.seqno.series)) };
-            if !self.pending.contains(&p) {
-                self.pending.push(p.clone());
-            }
-            return Decision::Held(p);
+            Line::Current => {}
         }
         self.endpoints.insert(key, HeldEndpoint { record: er });
         Decision::Stored

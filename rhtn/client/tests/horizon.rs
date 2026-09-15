@@ -529,6 +529,22 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     assert_eq!(c.standing(&kh("carol")), 0.0, "and it scores nothing");
     assert!(!c.evaluate(&[kh("carol"), kh("bob")]).admitted.contains(&kh("carol")), "nor is it admitted to anything");
     assert!(c.standing(&kh("bob")) >= 0.0, "the patron is not touched by its own determination");
+
+    // **the allocation, the admission and the usable total agree.** A
+    // denied party left in the allocation would take capacity an eligible
+    // one could have used, and the set would report standing it cannot
+    // spend (design §16.2's joint bound).
+    let only_denied = c.evaluate(&[kh("carol")]);
+    assert_eq!(only_denied.individual, vec![(kh("carol"), 0.0)]);
+    assert!(only_denied.admitted.is_empty());
+    assert_eq!(only_denied.joint, 0.0, "a set of one denied candidate can use nothing at once");
+
+    // and a mixed set gives the eligible party what it would have had
+    // alone: the denied one consumes none of the cut
+    let mixed = c.evaluate(&[kh("carol"), kh("bob")]);
+    let alone = c.evaluate(&[kh("bob")]);
+    assert_eq!(mixed.joint, alone.joint, "the denied candidate starves nobody");
+    assert_eq!(mixed.individual.iter().find(|(k, _)| *k == kh("bob")).map(|(_, s)| *s), alone.individual.first().map(|(_, s)| *s));
 }
 
 /// A client wrapped round a horizon, for the trust folds.
@@ -536,4 +552,77 @@ fn client_for(name: &str, h: Horizon) -> rhtn_client::ceremony::Client {
     let mut c = rhtn_client::ceremony::Client::new(common::id(name), common::ids(), Default::default(), harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 7, 0).0);
     c.horizon = h;
     c
+}
+
+/// §10.1.2's endpoint rule, at the participant.  The node applied it in
+/// full and the client applied one line of it; the rule now lives in
+/// `rhtn-archive` and both ask it.
+// acceptance: TOP-39
+#[test]
+fn an_equivocating_pair_leaves_neither_endpoint_current_and_an_unproved_series_is_not_taken() {
+    let mut w = World::new();
+    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let mut h = fed("alice", &recs);
+
+    // one signed line, taken; its exact duplicate is inert
+    let (first, point) = endpoints("bob", 7001, 1, 1);
+    assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Applied);
+    assert_eq!(h.endpoints_of(&kh("bob")), vec![point.encode_bytes()]);
+    assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Duplicate, "the same bytes at the same number");
+
+    // **equal seqno, different signed contents**: the pair is malformed
+    // and neither is current.  Which arrived first is an accident of the
+    // path, so keeping the earlier one would let arrival order split the
+    // view
+    let (other, _) = endpoints("bob", 7002, 1, 1);
+    assert_eq!(h.ingest_endpoint(&other, &ids()), Took::Conflict);
+    assert!(h.endpoints_of(&kh("bob")).is_empty(), "neither content is current");
+    assert!(h.reachable_infra().iter().all(|(n, _)| *n != kh("bob")), "and bob is not reachable on either");
+    assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Duplicate, "the retired pair takes nothing further");
+
+    // a greater counter in the same line repairs it: the line is the
+    // subject's to repair
+    let (repaired, where_now) = endpoints("bob", 7003, 1, 2);
+    assert_eq!(h.ingest_endpoint(&repaired, &ids()), Took::Applied);
+    assert_eq!(h.endpoints_of(&kh("bob")), vec![where_now.encode_bytes()]);
+
+    // **a second series nothing proves current is not taken.** carol is
+    // adopted in series 1, so that series is proved by the binding; 99 is
+    // proved by nothing this client holds
+    let (proved, carol_at) = endpoints("carol", 7010, 1, 1);
+    assert_eq!(h.ingest_endpoint(&proved, &ids()), Took::Applied, "the series the relationship is in");
+    let (unproved, _) = endpoints("carol", 7011, 99, 1);
+    assert_eq!(h.ingest_endpoint(&unproved, &ids()), Took::Unproved);
+    assert_eq!(h.endpoints_of(&kh("carol")), vec![carol_at.encode_bytes()], "and its address is not mixed in");
+}
+
+/// A restored horizon keeps what it needs to route (`light-client-requirements.md`
+/// §4.2).  Endpoint records are not transactions, so a replay cannot
+/// rebuild them: they go into the snapshot or they are gone.
+// acceptance: TOP-40
+#[test]
+fn a_restored_horizon_still_holds_the_addresses_it_was_keeping_to_route_around_a_dark_patron() {
+    let mut w = World::new();
+    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let mut h = fed("alice", &recs);
+    let (rec, point) = endpoints("bob", 7001, 1, 1);
+    assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Applied);
+    // a retirement, so the restore is shown to carry that too
+    let (a, _) = endpoints("carol", 7020, 1, 1);
+    let (b, _) = endpoints("carol", 7021, 1, 1);
+    assert_eq!(h.ingest_endpoint(&a, &ids()), Took::Applied);
+    assert_eq!(h.ingest_endpoint(&b, &ids()), Took::Conflict);
+    let snap = h.materialise();
+
+    let mut fresh = fed("alice", &[]);
+    for r in &recs {
+        assert!(fresh.restore_record(r.bytes.clone()));
+    }
+    assert_eq!(fresh.wake(Some(&snap), &ids()), Woke::Current, "the snapshot accounts for what is held");
+    assert_eq!(fresh.endpoints_of(&kh("bob")), vec![point.encode_bytes()], "and the patron is still reachable");
+    assert_eq!(fresh.reachable_infra().len(), 1);
+    // the retirement came with them: a conflicting record already ruled
+    // out is not admitted by a restored copy
+    assert_eq!(fresh.ingest_endpoint(&a, &ids()), Took::Duplicate, "the retired pair stays retired");
+    assert!(fresh.endpoints_of(&kh("carol")).is_empty());
 }

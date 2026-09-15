@@ -131,3 +131,40 @@ fn the_chain_is_presented_when_asked_and_never_propagated() {
     // no chain under a patron S was never adopted by
     assert!(s.present_chain(&kh("carol")).is_empty());
 }
+
+/// **A recognised recovery ends the superseded key's relationship**
+/// (`infra-client-requirements.md` §6.1; design §9.0.2): the old key is
+/// not a party this node serves any more, so what it registered to be
+/// woken at is not this node's to keep.
+// acceptance: SUB-10
+#[test]
+fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
+    let (_w, mut p, fab) = patron();
+    // bob, alice's subordinate, is served here and has somewhere to be
+    // woken; so has an unrelated party, which this must not touch
+    p.wake.register(kh("bob"), Some("https://push.example/bob".into()), Some(vec![7; 32]), None);
+    p.wake.register(kh("w1"), Some("https://push.example/w1".into()), Some(vec![9; 32]), None);
+    assert!(p.wake.get(&kh("bob")).is_some());
+    let slot = p.slot_of(&kh("bob"));
+
+    // carol recovers bob's identity under the same patron
+    let good = recovery_block_for("bob", "carol", "alice", "w2");
+    let back = [rhtn_archive::genesis(&kh("carol"))];
+    let body = p.propose_adoption(&kh("carol"), Evidence::Recovery(good), 3, &back).expect("proposed");
+    let rec = p.countersign_adoption(&body, &id("carol"), &ids()).expect("countersigned");
+    p.store.keep_presence(rec.txid, rec.bytes.clone());
+    assert_eq!(p.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()), rhtn_node::store::Decision::Stored);
+
+    // controls: the supersession happened and the successor is bound
+    assert_eq!(p.table.current_key(&kh("bob")), kh("carol"), "the old key is superseded");
+    assert!(p.table.subordinates(&kh("alice")).contains(&kh("carol")), "and the successor is a subordinate");
+
+    assert!(p.wake.get(&kh("bob")).is_none(), "the superseded key's registration is forgotten");
+    assert!(p.wake.get(&kh("w1")).is_some(), "and an unrelated party's is not");
+    if let Some(s) = slot {
+        assert_ne!(p.slots.get(&s).and_then(|r| r.occupant), Some(kh("bob")), "nor does the old key still hold its row");
+    }
+    // the successor's own registration is its own to make and is not
+    // pre-empted by the old key's going
+    assert!(p.wake.get(&kh("carol")).is_none());
+}

@@ -748,3 +748,35 @@ fn an_endpoint_record_is_what_says_its_publisher_is_infrastructure() {
     assert!(fresh.table.is_infra(&kh("carol")), "the store it replays carries the record that makes one");
     assert!(fresh.table.is_infra(&kh("bob")), "and a rebuild does not lose the node's own mark");
 }
+
+/// **A forwarding node vouches with its storage decision**
+/// (`wire-format.md` §10.1.2), so a record its own table will not hold is
+/// neither retained nor passed on.  The fold refused a second occupant of
+/// a filled slot; storage and propagation agreed with it only afterwards,
+/// which meant the node flooded what it then rejected.
+// acceptance: PRP-25
+#[test]
+fn a_second_occupant_of_a_filled_slot_is_neither_stored_nor_forwarded() {
+    let mut s = scene();
+    let held = s.n.slot_of(&kh("carol")).expect("carol sits in one of bob's slots");
+    s.fab.frames();
+
+    // w4 adopted under bob into the slot carol holds: validly signed, and
+    // this node cannot hold it
+    let clash = s.w.adopt_in_slot("w4", "bob", 1, held as u8);
+    s.n.store.keep_presence(clash.1.txid, s.w.bytes(&clash.1.txid));
+    let decision = s.n.take_object(&*s.fab, &kh("carol"), KIND_TRANSACTION, &clash.0.bytes, &ids());
+    assert!(matches!(decision, Decision::Refused(_)), "refused rather than stored: {decision:?}");
+    assert!(!s.n.store.holds_txid(&clash.0.txid), "and not retained");
+    assert!(s.fab.frames().is_empty(), "nor pushed to anybody");
+    assert_eq!(s.n.table.subordinates(&kh("bob")), [kh("carol"), kh("w1")].into_iter().collect::<BTreeSet<_>>(), "the incumbent stays");
+    assert_eq!(s.n.slots.get(&held).and_then(|r| r.occupant), Some(kh("carol")), "and the row is unchanged");
+
+    // a free slot under the same patron is taken and forwarded as usual:
+    // the refusal is about the occupancy, not about the patron
+    let free = (0..10u64).find(|i| !s.n.slots.contains_key(i)).expect("bob has a free slot");
+    let ok = s.w.adopt_in_slot("w4", "bob", 1, free as u8);
+    s.n.store.keep_presence(ok.1.txid, s.w.bytes(&ok.1.txid));
+    assert_eq!(s.n.take_object(&*s.fab, &kh("carol"), KIND_TRANSACTION, &ok.0.bytes, &ids()), Decision::Stored);
+    assert!(!s.fab.frames().is_empty(), "and it is forwarded");
+}

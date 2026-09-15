@@ -241,6 +241,26 @@ impl World {
         (rec, pop)
     }
 
+    /// An adoption placing `node` in a slot of the caller's choosing, for
+    /// the tests that need a patron to get it wrong.
+    pub fn adopt_in_slot(&mut self, node: &str, patron: &str, series: u32, slot: u8) -> (Record, Record) {
+        let pop = self.meet(patron, node);
+        let t = self.tick();
+        let (bn, bp) = (self.back(node), self.back(patron));
+        let a = Adoption {
+            node: kh(node),
+            patron: kh(patron),
+            locator: Locator { anchor: kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } },
+            timestamp: t,
+            key_material: None,
+            evidence: Evidence::Presence(pop.txid),
+            presented_head: None,
+            back: [&bn, &bp],
+        };
+        let rec = self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron]);
+        (rec, pop)
+    }
+
     pub fn depart(&mut self, node: &str, patron: &str, seqno: Seqno) -> Record {
         let t = self.tick();
         let b = self.back(node);

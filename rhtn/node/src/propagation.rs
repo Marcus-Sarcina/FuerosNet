@@ -221,6 +221,22 @@ impl NodeView {
             balls: (0..=2).map(|h| self.table.horizon(&me, h)).collect(),
             attached: self.attached.clone(),
         };
+        // **a forwarding node vouches with its storage decision**
+        // (`wire-format.md` §10.1.2), so what this node's own table will
+        // not hold is not stored and not forwarded either.  Asked before
+        // the store sees it: retaining the bytes and flooding them, then
+        // discovering the fold refuses them, is the node disagreeing with
+        // itself in front of its neighbours.
+        //
+        // The same predicate the fold applies (`Table::admits_slot`), so
+        // the two cannot drift, and it admits a record already held —
+        // §10.1.3's reconciliation replays the same frames.
+        if kind == KIND_TRANSACTION
+            && let Ok(rec) = Record::parse(object)
+            && let Err(e) = self.table.admits_slot(&rec)
+        {
+            return Decision::Refused(format!("{e:?}"));
+        }
         let decision = self.store.accept(kind, object, from, ids, &hz);
         match &decision {
             Decision::Stored => {
@@ -275,9 +291,19 @@ impl NodeView {
     fn apply_stored<L: Lookup + ?Sized>(&mut self, object: &[u8], ids: &L) -> Option<u64> {
         let rec = Record::parse(object).ok()?;
         let me = self.me();
-        let applied = self.table.apply_with(&rec, ids, &self.store, None, Evaluation::Deferred).is_ok();
-        if !applied {
+        let Ok(outcome) = self.table.apply_with(&rec, ids, &self.store, None, Evaluation::Deferred) else {
             return None;
+        };
+        // **a recognised recovery ends the superseded key's relationship**
+        // (design §9.0.2; `infra-client-requirements.md` §6.1): the old key
+        // is not a party this node serves any more, so what it registered
+        // to be woken at is not this node's to keep.  The fold is what
+        // knows a supersession happened — the adoption names the new key,
+        // and only the table can say whose bindings it closed.
+        if let rhtn_archive::topology::Applied::Replaced { prior, .. } = outcome.applied
+            && !self.still_bound(&prior)
+        {
+            self.ended(&prior, rec.time);
         }
         match rec.tx_type {
             TYPE_ADOPTION if rec.field_hash(2) == Some(me) => {
@@ -358,6 +384,17 @@ impl NodeView {
     fn relationship_ended(&mut self, slot: u64, node: &Keyhash, at: u64) {
         self.set_slot(slot, None, at);
         self.wake.forget(node);
+    }
+
+    /// The same, for a party whose slot this node may not hold: a client
+    /// it served without being its patron has no row here, and a
+    /// superseded key's row is found by looking rather than by being
+    /// named in the record.
+    fn ended(&mut self, node: &Keyhash, at: u64) {
+        match self.slot_of(node) {
+            Some(slot) => self.relationship_ended(slot, node, at),
+            None => self.wake.forget(node),
+        }
     }
 
     /// Whether this node holds an open binding to `node`.
