@@ -495,11 +495,11 @@ and never leaves its own, so each is wrapped once inside that thread.
 queries and grants, witness asks, the proposal, review and signature, and
 finalisation, each as values in the shape `Intent` already had.
 
-**The exit criterion's other half waits on section 7.** No binding is
-generated, because no generator is adopted: `uniffi` is the candidate and
-the choice is the author's. Until it is made the facade is plain Rust with
-no borrow and no generic across the boundary, which is what a generator
-reads whichever one is chosen.
+**The generator is `uniffi`** [author, 2026-09-16], which settles half of
+what the exit criterion still owed. The facade is plain Rust with no borrow
+and no generic across the boundary, which is what a generator reads, so
+nothing in it has to change to be read. What remains is to generate a
+binding for one platform and compile the facade against it.
 
 **Milestone 14, the shells** (`mobile/android`, `mobile/ios`). Exit: PRD-01
 to PRD-05 and PRD-07 to PRD-09 are marked, which first needs
@@ -654,13 +654,20 @@ for.
   the thing a supply chain will sign. The argument parser for `rhtn` is
   still open. Each fixes a dependency, and neither is forced by any
   document.
-- Whether the operator's view (PRD-06) is a terminal on the host or a page
-  served to the operator alone. If it grows a frontend it leaves
-  `rhtn-daemon`, so its dependencies stay out of the library's lockfile.
+- ~~Whether the operator's view (PRD-06) is a terminal on the host or a page
+  served to the operator alone~~ — **a terminal, and a page in the light
+  client** [author, 2026-09-16]. A terminal on the host is expected, but
+  most administration is a page in the light client backed by an SSH
+  session to the node. The frontend is the client's rather than the
+  daemon's, so `rhtn-daemon` grows no frontend dependencies at all.
 - The payload library and its licence (section 3).
 - The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
   trait.
-- The mobile framework for the ceremony track.
+- ~~The binding generator for the mobile shells~~ — **uniffi** [author,
+  2026-09-16]. MPL-2.0, whose copyleft reaches modifications to uniffi's
+  own files and not what links them; the client carries libsignal's AGPL
+  regardless.
+- The shell framework for the ceremony track.
 - Every item in design §22.2, each as it is reached: parameters, the payload
   integration decisions, the biometric profile, capture-key re-derivation, audit
   calibration, replication distance, the divergence notice, archive recovery, the
