@@ -22,6 +22,23 @@ and are cited from there; this file keeps the working state.
 | Desktop graphical light client | **no** | A second device for an identity established elsewhere. CER-39 already says a desktop instrument keeps its seal in memory |
 | CLI light client | no | Largely banked in `rhtn` and `rhtnp`. Claims no product entries — a command read from standard input is not a person |
 
+**The light client has two modes**, before an infra node is attached and after,
+and the difference is real software state rather than presentation: the
+operator's frame appears (`infra-client-requirements.md` §8.3), the client begins
+issuing delegations (§2.1), and its envelope gains a provider credential
+(`light-client-requirements.md` §2). Whatever encourages a user toward the
+infrastructure tier is therefore a rendering of which mode they are in, and is
+**idempotent on that state** — it stops when an instance exists because the
+condition stops, returns if the instance goes away, and needs no memory of having
+prompted [author, 2026-09-16]. The backup prompt has the same shape by
+construction, which is why §5 could close it as "until one exists" rather than as
+a campaign.
+
+*Two classes of notice, and an implementation should know which it is building.*
+State-keyed notices need no storage: the condition is the whole of the logic.
+PRD-08's is the other kind — "shown once, before traffic is routed" is a
+persisted flag, and a client that renders it from state would show it forever.
+
 Owed at the catalogue: **PAY-13** (payload library, awaiting a licence decision)
 and **PRD-01 … PRD-09**, all milestone `manual`. Eight of the nine are
 light-client product behaviour; **PRD-06** is the operator's. CER-37/38/39 are
