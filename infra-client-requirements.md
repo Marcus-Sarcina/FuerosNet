@@ -308,22 +308,26 @@ it is bound by the same line.
 
 ### 8.2 How an operator reaches their own instance
 
-design §23.3 makes an operator's instance one of their own devices, holding
-the same key as the rest, rather than a server they hold an account on.
+**An operator administering their node is not one network role addressing
+another.** A participant's client and an infra node are distinct roles and the
+protocol governs what passes between them; a person configuring the machine
+they own sits beside that rather than inside it. No request type carries a
+command (`wire-format.md` §9.2), and none is owed one.
 
-- **An operator reaches their instance over the session their own key already
-  authenticates.** Not a second account, not a second credential, and not a
-  system the operator has to think of as separate: Dana administers the node
-  she runs from the same client she uses to answer a ceremony, under the key
-  that made her its operator. §8.1's line still holds — the interface asks and
-  the node acts.
-- **The host's operating system and the provider's control plane are not
-  reachable that way, and stay out of band.** An operator's software should
-  ask of them only what they alone can do: the instance's lifecycle, and
-  recovering a host that has stopped answering. Neither is specified by this
-  document set, a credential for either can destroy the instance and bill its
-  owner, and an operator who is never told the difference cannot judge what
-  they are handing over.
+- **Administration is out of band, with everything else about the host.** The
+  node's own configuration, the host's operating system, and the provider's
+  control plane are reached the way any other server is reached, and this
+  document set does not specify the channel. A credential for the last two can
+  destroy the instance and bill its owner, and an operator who is never told
+  the difference between the three cannot judge what they are handing over.
+- **One package, not two systems.** design §23.3 makes an operator's instance
+  one of their own devices, so Dana should not have to think of the node she
+  runs as somewhere she logs in: her client carries the operator's interface
+  beside everything else it carries. But that interface is an extension of
+  *this* document's software rather than a participant's client acting as one.
+  What she is spared is juggling sessions and devices, not the distinction
+  itself — §8.1's line holds whatever the channel, and an interface handed
+  frames is still a second parser.
 
 ---
 

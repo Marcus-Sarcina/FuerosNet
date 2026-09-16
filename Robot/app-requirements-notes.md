@@ -148,6 +148,7 @@ argument nothing — tickets stay long for all but the tail of each window.
 | design §14.1.1, §14.1.3 | A node presents an ephemeral key with a delegation rather than its identity key; the resumption-ticket clamp |
 | design §12.6.5 | Already carries the playbook this inherits; check whether it needs to name the delegation as a thing supersession answers |
 | `infra-client-requirements.md` §7 | What an operator's node holds, presents and rotates |
+| `infra-client-requirements.md` §8.2 | Cites design §23.3's same-key sentence, which §2.1 changes |
 | `infra-client-requirements.md` §4.3, §4.4 | Endpoint and anchor records signed by the operator's client rather than by the node |
 | `light-client-requirements.md` §4.1 | What a client verifies on attach, and that it caches a checked delegation |
 | §2.2 below | P33's answer follows from this one |
@@ -213,19 +214,23 @@ existing text do not obviously agree.
   asking the kernel to act composes no frame, and nothing in §8.1 forbids the
   product.
 
-- **But an operator's command has to cross the wire, and no stream class carries
-  one.** `wire-format.md` §9.2 binds stream 0 to session control and topology
-  propagation, and every bidirectional stream opens with a request-type tag
-  covering resolution, archive fetch, prekey fetch, resource requests, catalog
-  queries and verifier queries. None of those is an operator command. Two ways
-  out, and the choice belongs in the surgery:
-  - **A new request type.** Honest, and a `wire-format.md` change.
-  - **Ride resource requests.** The operator's administration surface is a
-    resource their own node hosts: request type 6 exists, carries an HTTP
-    message, and already has an owner and a role model. Likely needs a host
-    binding the sandbox does not currently grant rather than any new wire type,
-    which makes it the smaller change — and it is the same mechanism the
-    network already offers everyone else.
+- **Administration does not go on the wire at all** [author, 2026-09-16], which
+  is the answer to where an operator's command rides and removes the item from
+  the surgery entirely. The reasoning: a participant's client and an infra node
+  are distinct *network roles*, and the protocol governs what passes between
+  them. An operator configuring the machine they own is not that. The infra tab
+  in a client package is logically an extension of the infra client — the same
+  software this document specifies — bundled into one product because a person
+  should not juggle two, not because it is a participant's client doing
+  participant things.
+
+  So: no new request type, no `wire-format.md` change, no host binding, and no
+  sandboxed component administering its own sandbox. The cost is a channel the
+  product must carry and the document set does not specify. **`infra-client-
+  requirements.md` §8.2 was written the other way and has been corrected**; the
+  earlier text argued from authentication — the node can verify the operator's
+  key, so why a second credential — which was answering the wrong question.
+  Layering, not authentication, is what decides this.
 
 ---
 
