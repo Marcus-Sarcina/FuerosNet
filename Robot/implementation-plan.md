@@ -657,9 +657,15 @@ for.
 - ~~Whether the operator's view (PRD-06) is a terminal on the host or a page
   served to the operator alone~~ — **a terminal, and a page in the light
   client** [author, 2026-09-16]. A terminal on the host is expected, but
-  most administration is a page in the light client backed by an SSH
-  session to the node. The frontend is the client's rather than the
-  daemon's, so `rhtn-daemon` grows no frontend dependencies at all.
+  most administration is a page in the light client, and the operator is a
+  premium tab rather than a second system to log into. Everyday
+  administration rides the authenticated session the operator's own key
+  already gives them, since their instance is one of their devices (design
+  §23.3); SSH and the provider's control-plane credential are for what that
+  session cannot reach — root on the host and actions on the hypervisor —
+  and are to be avoided where they can be. The frontend is the client's
+  rather than the daemon's, so `rhtn-daemon` grows no frontend dependencies
+  at all.
 - The payload library and its licence (section 3).
 - The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
   trait.
