@@ -306,6 +306,25 @@ it is bound by the same line.
   design §14.1.0's allowance for a payload that must cross does not arise
   here.
 
+### 8.2 How an operator reaches their own instance
+
+design §23.3 makes an operator's instance one of their own devices, holding
+the same key as the rest, rather than a server they hold an account on.
+
+- **An operator reaches their instance over the session their own key already
+  authenticates.** Not a second account, not a second credential, and not a
+  system the operator has to think of as separate: Dana administers the node
+  she runs from the same client she uses to answer a ceremony, under the key
+  that made her its operator. §8.1's line still holds — the interface asks and
+  the node acts.
+- **The host's operating system and the provider's control plane are not
+  reachable that way, and stay out of band.** An operator's software should
+  ask of them only what they alone can do: the instance's lifecycle, and
+  recovering a host that has stopped answering. Neither is specified by this
+  document set, a credential for either can destroy the instance and bill its
+  owner, and an operator who is never told the difference cannot judge what
+  they are handing over.
+
 ---
 
 ## 9. Package hosting

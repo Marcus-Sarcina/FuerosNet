@@ -447,6 +447,23 @@ session secrecy. The client implements them; it does not reinvent them.
   unlinkability clear.** The two are one choice seen from opposite sides (design
   §13.7).
 
+- **Before an operator commits an instance to a provider and zone, order the
+  choices by how concentrated they already are inside that operator's own
+  horizon, least concentrated first, and mark the crowded ones rather than
+  hiding them.** The peering record carries each endpoint's ASN (design §3.4),
+  and what an observer may use is its horizon plus the far endpoints of the
+  peering records it can see (design §16.2.1) — 221 nodes at f = 10 (design
+  §15.1). Design §3.4 already asks the reference client to prefer peers
+  differing in ASN and region and to surface it when they do not; this is that
+  preference one screen earlier, while the choice is still free, and design
+  §18.1 is what turns on it. Dana's patron and four of her nine siblings
+  already run inside one provider's ASN: that provider sorts last and is
+  marked, and Dana may still choose it.
+- **Say what that ordering does not cover.** It speaks to one operator's own
+  redundancy and not to the network's, because visibility does not compose: a
+  provider uncrowded inside a horizon may be crowded one edge out, and design
+  §16.3.1's bound is why an observer may not go looking.
+
 ---
 
 ## 7. Cycle handling
