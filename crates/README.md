@@ -1,4 +1,4 @@
-# `rhtn/` — the RHTN implementation workspace
+# `crates/` — the RHTN implementation workspace
 
 A Cargo workspace beside the specification, laid out by
 `Robot/implementation-plan.md`.  The root documents are authoritative on every

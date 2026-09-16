@@ -1,4 +1,4 @@
-//! Acceptance entries for the decoder (`rhtn/acceptance/acceptance.json`,
+//! Acceptance entries for the decoder (`crates/acceptance/acceptance.json`,
 //! area `decoder`), over the corpus fixtures.  Each test names its entry.
 //!
 //! Budgets: the entries parameterise a per-input time budget T and a memory

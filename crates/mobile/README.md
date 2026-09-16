@@ -7,7 +7,7 @@ exists in a Rust process, so the participant-facing application is Kotlin
 on Android and Swift on iOS over `rhtn-ffi`.
 
 **These are not Cargo workspace members and cannot be.** They build with
-Gradle and Xcode, and `rhtn/check.sh` does not run them. Their tests run in
+Gradle and Xcode, and `crates/check.sh` does not run them. Their tests run in
 their own toolchains, on their own runners.
 
 **They live here anyway, in the same tree as the library.** Eight of the
