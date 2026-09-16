@@ -329,6 +329,27 @@ command (`wire-format.md` §9.2), and none is owed one.
   itself — §8.1's line holds whatever the channel, and an interface handed
   frames is still a second parser.
 
+### 8.3 The administration surface ships with the node
+
+**A node develops and serves its own administration pages; a client provides the
+frame they are presented in.** Third-party implementations of both roles are
+expected, and an administration surface agreed between them would have to be
+defined universally — constraining what either may build, and fixing behaviour
+that has no reason to be common to begin with. Serving its own, each
+implementation administers itself with a surface that matches its software and
+stays in step with it as that software changes.
+
+- **A client ships the provisioning pages and no others.** Those have to work
+  before any node exists, which is the reason they cannot come from one. Once
+  Dana's instance is running, what she administers it with arrives from the
+  instance.
+- **The frame is a sandbox, isolated from the presenting client's keys, archive
+  and sealed captures.** What it draws arrives from a node, and a seized node is
+  a case this design plans for (design §18.1): a frame with reach into the device
+  presenting it would hand a seized instance a path to the device that still
+  holds the seed, which is exactly what design §23.3's arrangement is there to
+  prevent.
+
 ---
 
 ## 9. Package hosting

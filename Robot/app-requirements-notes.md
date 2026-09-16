@@ -233,19 +233,11 @@ existing text do not obviously agree.
   Layering, not authentication, is what decides this. The premise is gone as well
   as the argument: under §2.1 the instance no longer holds that key at all.
 
-- **The node serves its own administration pages; the client only ships
-  provisioning** [author, 2026-09-16, stated as a probably]. Third-party
-  implementations of both roles are anticipated, and putting administration on
-  the wire would constrain their design and force a great deal of behaviour to
-  be agreed universally. So a client ships the **provisioning** pages — which
-  must work before any node exists — and an existing node **serves its own
-  administration pages**, which the client presents in a browser-like sandbox.
-  Each implementation's admin surface then matches the software it administers
-  and stays in sync with it, with nothing agreed between them beyond the frame.
-
-  *What it asks of a client.* A sandboxed renderer isolated from the client's
-  keys, archive and captures: what it draws arrives from a node, and the node is
-  the thing whose seizure this design already plans for.
+- ~~**The node serves its own administration pages.**~~ **Closed** [author,
+  2026-09-16] and landed at `infra-client-requirements.md` §8.3. Both halves went
+  there rather than splitting across documents, because the operator's tab is
+  infra-client software wearing a client's chrome, which is the ruling that
+  produced it.
 
 ---
 
@@ -257,6 +249,12 @@ existing text do not obviously agree.
 - **`infra-client-requirements.md` §8.2** — an operator reaches their instance
   over the session their own key already authenticates; the host's operating
   system and the provider's control plane stay out of band.
+- **`infra-client-requirements.md` §8.3** — a node develops and serves its own
+  administration pages, a client ships only provisioning, and the frame is a
+  sandbox isolated from the presenting client's keys, archive and captures.
+- **`network-design.md` §23.3, §18.1** — an instance carries a delegated
+  credential rather than its operator's seed, and §18.1's residual narrows with
+  it from impersonating the operator to continuing as the node.
 - **`implementation-plan.md` section 7** — PRD-06 is a terminal *and* a page in
   the light client; the binding generator is `uniffi`.
 
