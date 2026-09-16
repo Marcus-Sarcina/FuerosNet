@@ -321,12 +321,23 @@ gets an answer.
   store has no holder and is outside both. Recorded because the nearest mistake
   is over-applying PRD-09 until its warning means nothing, and because a reviewer
   may otherwise read the gap as missing rather than scoped.
-- **The desktop variant.** Settled in §2.2, and the custody ruling above makes
-  its cold store a complete restore source rather than a partial one. What
-  remains is product: what it shows about its own limits, and whether a user
-  without a desktop is told what they are not getting — design §23.3 says they
-  are not stranded, envelope encryption being what lets a password manager or
-  consumer cloud sync carry the same blob.
-- **Multi-device in the ordinary case.** Phone, node and possibly desktop under
-  one key. Forking and merge are specified (design §10.3); what the user is told
-  about it is not.
+- ~~**The desktop variant.**~~ **Closed** [author, 2026-09-16]. It owes no
+  messaging about setting up a mobile client, because **the order is fixed by the
+  mechanism**: a desktop cannot be initialised until a mobile client exists to
+  create the identity and issue it a credential. Nothing needs saying about a
+  sequence that cannot be performed out of order. What replaces it is a
+  mobile-side obligation — prompt for a backup until one exists, with a desktop
+  among the destinations offered — landed at `light-client-requirements.md` §2.
+- ~~**Multi-device in the ordinary case.**~~ **Closed** [author, 2026-09-16]:
+  **noted in the design, kept out of the UX.** Design §23.3's residual now records
+  that the reference client holds the device count down rather than warning about
+  it — prompting for a backup until one exists, offering the infrastructure tier
+  until an instance does — so the ordinary shape is a device and a store, with an
+  instance beside them for anyone in §3.3's tier. Past three is the unusual case
+  by construction, and that is the whole of the shaping needed. Merge is automatic
+  and presents no decision, so there was never a screen owed.
+
+---
+
+**§5 is closed.** Nothing left in it touches the wire: the surgery's scope is
+§2.1 and §2.2 alone.

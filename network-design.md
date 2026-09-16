@@ -7880,8 +7880,13 @@ seeing one branch sees a valid truncation — permitted and self-defeating (§10
 no rule is needed; the reference client merges automatically on noticing
 divergence, since the user has no reason to want otherwise. Replication weakens the
 second factor arithmetically, and merging does not change that: **a user who syncs
-their archive to three devices has three places to lose it from** (§10.2). What
-remains open is which devices hold seeds, sealed captures and deletion state (P33),
+their archive to three devices has three places to lose it from** (§10.2). **The
+reference client holds that count down rather than warning about it** — it prompts
+for a backup until one exists and offers the infrastructure tier until an instance
+does, so the ordinary shape is a device and a store, with an instance beside them
+for anyone in §3.3's tier. Past three is the unusual case by construction, which
+is the whole of the shaping needed: a warning about replication a user has not
+performed would be noise. What remains open is which devices hold seeds, sealed captures and deletion state (P33),
 tracked at §22.2.
 
 ### 23.4 Test vectors, and what a test suite would add

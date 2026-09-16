@@ -248,6 +248,11 @@ job.
   a client backs up; what a user *can* check is whether they were told what losing
   the device costs. On a host with evictable storage, saying so is the substance of
   the obligation.
+- **Prompt for a backup until one exists.** The bullet above makes the
+  consequence visible; this is for the user who has read it and still has no
+  backup, which is the case it was written for. A desktop client is one
+  destination and a password manager or consumer cloud sync another — design
+  §13.7.1's envelope is what makes any of them safe to use.
 - **Scan any imported backup for expired retention** and delete what is past its
   window. Import is exactly where an over-retention leak occurs (design §13.7.1).
 - **An operator's backup carries their provider credential too.** It belongs in
