@@ -7746,10 +7746,6 @@ order and refusal behaviour, with the role row consulted as a lookup.
   rather than assumed behaviour.
 - **Archive recovery after device loss** (§22.3), a gap in user experience rather than in
   the protocol.
-- ~~**Multi-device beyond archive merge**~~ — **settled at §23.3** [author,
-  2026-09-16]. Seeds sit on the ceremony device and nowhere else, deletion state
-  follows the seed, and archives, captures and caches go where the storage is.
-  Retention and deletion commitments can be assessed with it (P33).
 - **Queue cap value** (§14.1.6), freely tunable per node.
 
 ---

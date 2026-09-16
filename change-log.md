@@ -9821,3 +9821,113 @@ to be correct rather than fifteen to drift.
 A sweep of the dependency tree at the same time: **all 245 packages now declare a
 licence, and every one of the 230 external ones is permissive** — MIT,
 Apache-2.0, BSD, ISC or similar. Nothing copyleft reaches the workspace.
+
+### 2026-09-16 (the key that left the server, and the administration that left the wire)
+
+**An operator's instance no longer holds their seed.** §23.3 said it held *"the
+same key as their phone — the relationship is a seed shared across wallets, not a
+client and a server"*, which was true and is no longer the design: an instance
+mostly runs on hardware its operator cannot stand over, so it carries a credential
+their client delegates to it for a window and the key that signs as them stays on
+the device that performs ceremonies. The instance is still one of their devices;
+what it holds changed, not what it is.
+
+**The transport was the only thing keeping the seed there.** A node signs two
+objects, the endpoint record and the anchor entry, and both are cached and
+re-signed only when an address set or a subtree size changes — rare enough to sign
+on the operator's own device. What could not move was the handshake: peer
+authentication is by raw public key, so the identity key was the TLS private key
+and had to be live for every inbound connection from a subtree of up to 110.
+
+**The credential is modelled on OpenSSH certificates** — a key signs a public key
+and a validity window, no revocation infrastructure, short lifetimes in its place,
+and an "authority" that is just a key. It rides as a `COSE_Sign1` record in the
+attach under a fourteenth domain-separation tag, so TLS keeps raw public keys and
+the binding sits one layer above them. Considered and set aside: Signal's sender
+certificate, which would have served; SPIFFE, which drags X.509 in for no other
+benefit; macaroons and Biscuit, whose caveat languages are more than this needs.
+
+**A receiver checks that the delegation names the key the handshake presented.**
+That single check is what makes a public credential non-transferable: an actor
+replaying one it captured cannot complete a handshake under the key it names.
+Because the thing is hybrid at 3,373 bytes and arrives on every handshake of a
+months-long window, a verified delegation is cached against that key.
+
+**Hybrid, not classical.** The keyhash is over both components and the rest of the
+identity is hybrid, so a 64-byte Ed25519 delegation would have been the one
+forgeable link in the chain. The caching is what makes the size affordable, which
+makes it part of the decision rather than an optimisation to defer.
+
+**The run is 45 credentials of 48 hours, and the two figures answer different
+questions.** The run is what lets an instance serve while the device that signs
+for it is asleep, so it is held forward-dated and in advance — which makes 90 days
+the horizon an actor holding the store inherits, whatever the windows are cut to.
+The 48 hours is what one separated credential costs. The figures sit with the
+mechanism rather than in §21.1, which is for unset parameters and says itself that
+a settled bound lives with the thing it bounds.
+
+**Revocation is §12.6.5's playbook, already adopted.** An operator who
+re-provisions reissues the endpoint record and every party holding that binding
+stops reaching the old instance; beyond the horizon, nothing stronger than expiry.
+Pushing the new binding to everything it knows belongs in an instance's
+initiation, which leaves the 90 days covering stale contacts and operators who
+never re-provision. **A resumption ticket is clamped to the delegation's remaining
+validity**, a resumed session re-presenting nothing being the one path by which a
+lapsed credential goes on working.
+
+**§18.1's residual narrowed, in the design's favour.** It read that an actor
+holding a seized instance could present as that operator in new exchanges. What
+such an actor now holds is a delegated credential, so it can go on being the node
+— serving that subtree, seeing what a serving node sees — until the credential
+lapses or its operator supersedes it. It cannot sign as them.
+
+**P33 is answered, and it was three decisions rather than five.** Seeds sit on the
+ceremony device alone. Deletion state needs no separate allocation, because
+§7.5.2 makes a capture decryptable only when its subject releases a key derived
+from a seed only they hold — so the device holding the seed is the device holding
+deletion state, and a deletion on one device saying nothing about another was a
+consequence of scattering seeds rather than a property of replication. Archives,
+sealed captures and caches go where the storage is, which is a personal computer:
+a phone is lost, broken and stolen, and neither the record nor the captures should
+go with it. That device holds ciphertext under a passphrase rather than a seal
+under a platform's key storage — a cold store rather than a live client, which is
+why it needs no enclave and why CER-39's problem does not arise there.
+
+**An operator's backup carries their provider credential too**, in §13.7.1's
+envelope and not in the archive, which siblings replicate. It makes a restore a
+whole one: a replacement device recovers the ability to administer, not only to
+participate. It is also the only credential here whose loss has a remedy outside
+this network.
+
+**Administration is not a network-role interaction, so it is not on the wire.** A
+participant's client and an infra node are distinct roles and the protocol governs
+what passes between them; a person configuring the machine they own is beside
+that. No request type carries a command and none is owed one. Third-party
+implementations of both roles are expected, and a surface agreed between them
+would have to be defined universally, constraining what either may build. So a
+node develops and serves its own administration pages, a client ships only the
+provisioning ones — which must work before any node exists, and so cannot come
+from one — and the frame is a sandbox isolated from the presenting client's keys,
+archive and captures, a seized node being a case §18.1 plans for.
+
+**A provisioning choice is ordered by what the operator's own horizon already
+holds.** The peering record carries each endpoint's ASN and an observer may use
+its horizon plus the far endpoints of the peering records it can see, so
+concentration is measurable where it matters: §3.4 asks the same preference of
+peer selection, and this is that preference one screen earlier, while the choice
+is still free. §18.1 ranks provider concentration highest of the systemic risks
+and makes the ranking conditional on diversity, so the screen where a provider is
+chosen is where that condition is decided. What it cannot speak to is the
+network's concentration rather than the operator's: visibility does not compose.
+
+**The device count is shaped rather than warned about.** §23.3's residual — three
+devices being three places to lose it from — is answered by the reference client
+prompting for a backup until one exists and offering the infrastructure tier until
+an instance does. Past three is then unusual by construction, and a warning about
+replication a user has not performed would be noise.
+
+**Counts checked, and one had drifted.** The domain-separation table gained a row
+and the sentence above it still said thirteen roles carry a tag; it says fourteen.
+§21.1's eleven unset parameters are unchanged, the delegation's figures having gone
+to the mechanism. 2,176 references across the five documents and 1,190 citations
+across `models/` and the workspace resolve, with no flag in either.
