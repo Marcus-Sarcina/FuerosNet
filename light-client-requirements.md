@@ -250,6 +250,15 @@ job.
   the obligation.
 - **Scan any imported backup for expired retention** and delete what is past its
   window. Import is exactly where an over-retention leak occurs (design §13.7.1).
+- **An operator's backup carries their provider credential too.** It belongs in
+  design §13.7.1's envelope with everything else and **not in the archive**,
+  which siblings replicate (design §3.4) and which is the wrong place for
+  something nobody else has any business holding. Encrypted under a passphrase
+  the user holds, on a device they control, it is as protected as the subnet keys
+  beside it — and it makes a restore a whole one: a replacement device recovers
+  the ability to administer, not only to participate. It is also the piece whose
+  loss is recoverable outside this network, a provider having its own account
+  recovery and its own facility to withdraw and reissue.
 - **Restoring your own archive from a holder is an act of trust, and the
   interface must say so.** A client that lost its archive does not know its own
   head, so it fetches from the newest record the holder claims

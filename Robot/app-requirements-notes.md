@@ -265,10 +265,14 @@ existing text do not obviously agree.
 To work through. Each gets checked for whether it touches the protocol before it
 gets an answer.
 
-- **Provisioning.** Provider and zone selection, routing to the provider's
-  payment gateway, recurring-payment authorisation. Design §16 already
-  anticipates an agent that encapsulates exactly this; what does the client owe
-  beyond §4's ordering rule?
+- ~~**Provisioning.**~~ **Closed as a UX note, not a requirement** [author,
+  2026-09-16]. What an operator is taking on — the recurring commitment being
+  with the provider rather than the network, the capacity design §3.3's two-level
+  bound buys, and the exposure the configuration creates — belongs in a
+  selectable explainer about what infra operation means. Not warnings and
+  click-throughs crowding the screen. Nothing lands in the requirements: LCR §6's
+  ordering rule is the whole of what is owed there, and payment never touches the
+  network.
 - ~~**Re-provisioning after loss.**~~ **Decided** [author, 2026-09-16]: with the
   seed off the box, re-provisioning is routine housekeeping. Launch a new
   instance through the same sign-up screen, initialise it with the operator's
@@ -281,18 +285,48 @@ gets an answer.
   for §2.1.
 - **The administration page.** What state does it read, at what rate, and over
   which stream? §8.1 bounds it to what to draw — a count, a keyhash, a time.
-- **Custody on the phone.** The operator's client ends up holding the RHTN
-  identity, the provider's control-plane token, and possibly the node's
-  delegation key. That concentration wants a deliberate decision.
-- **Wake endpoints and push.** Registered per client; what a mobile shell owes
-  around backgrounding and suspension.
-- **Backup and restore** (PRD-07, design §13.7.1). Scan-on-import is specified;
-  the product surface is not.
-- **The desktop variant.** Settled in §2.2: no seed, a delegation for transport,
-  and the household's cold store for the archive and the sealed captures. What
-  remains is product — the restore path to a replacement phone, what it shows
-  about its own limits, and whether a user without a desktop is told what they
-  are not getting.
+- ~~**Custody on the phone.**~~ **Decided** [author, 2026-09-16]: **the
+  control-plane credential is persisted inside design §13.7.1's backup
+  envelope.** Encrypted under a passphrase and held on a controlled device it is
+  as secure as it needs to be, and it makes the desktop cold store a fully potent
+  restore source — a user who remembers their passphrase recovers the ability to
+  administer, not only to participate. A lost or compromised store is the one
+  failure recoverable outside this network, since providers carry their own
+  account recovery and can withdraw and reissue. Landed at
+  `light-client-requirements.md` §2.
+
+  *The precision that matters:* the envelope, not the archive. Siblings replicate
+  the chain (design §3.4), and a provider credential is nobody else's.
+- ~~**Wake endpoints and push.**~~ **Closed** — settled already and further than
+  it looked. Design §14.1.4 decides the connection model (store-and-forward
+  default, push opt-in, the dependency the client's and not the network's) and
+  `light-client-requirements.md` §4.1 carries six obligations covering the
+  mechanics. What remains is shell behaviour under iOS suspension and Android
+  Doze, which §14.1.4 already scopes.
+
+  *A disclosure requirement was proposed and declined* [author, 2026-09-16].
+  The proposal was that LCR §5 should make a client state what opting into a
+  doorbell reveals, on the pattern of its direct-versus-relayed bullet. Declined:
+  push is an OS feature behind an OS opt-in, and a phone comes active on the
+  network for every app at the same times, so a doorbell discloses nothing a
+  user's other notifications do not. **This is not a darknet protocol and does
+  not owe users pro-active remediation of leaks through other products.**
+  Recorded so it is not raised again.
+- ~~**Backup and restore**~~ **Closed** [author, 2026-09-16]. PRD-07 carries the
+  mechanics and needs no change. The distinction worth holding is that **a
+  self-restore is not a recovery from a holder** — and both places that govern it
+  already say so: PRD-09 fires only when a reviewer "restores from a holder", and
+  `light-client-requirements.md` §2 opens its bullet with restoring *from a
+  holder* being an act of trust. Restoring your own envelope from your own cold
+  store has no holder and is outside both. Recorded because the nearest mistake
+  is over-applying PRD-09 until its warning means nothing, and because a reviewer
+  may otherwise read the gap as missing rather than scoped.
+- **The desktop variant.** Settled in §2.2, and the custody ruling above makes
+  its cold store a complete restore source rather than a partial one. What
+  remains is product: what it shows about its own limits, and whether a user
+  without a desktop is told what they are not getting — design §23.3 says they
+  are not stranded, envelope encryption being what lets a password manager or
+  consumer cloud sync carry the same blob.
 - **Multi-device in the ordinary case.** Phone, node and possibly desktop under
   one key. Forking and merge are specified (design §10.3); what the user is told
   about it is not.
