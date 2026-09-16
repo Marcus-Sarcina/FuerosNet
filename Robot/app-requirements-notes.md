@@ -87,14 +87,56 @@ is the ceiling for parties **outside** the operator's horizon, where the new
 binding never arrives — and for them a stale credential attests nothing anyway.
 Inside the horizon it ends as fast as the endpoint record propagates.
 
+*And the initiation cycle should push it* [author, 2026-09-16]. Because topology
+is recoverable, **propagating the new binding to every node it knows belongs in
+an instance's initiation**, not left to ordinary drift. "Every node it knows" is
+the horizon and the far endpoints of visible peering records — there is no wider
+list to push to — which is precisely the set §12.6.5 hands supersession. What
+the ninety days then covers is the residue: stale contacts, long-idle operators,
+and operators who never re-provision after a seizure.
+
 *Residual exposure to state in the surgery.* For that window a seized node is
 still the serving node for its subtree: it sees what a serving node sees and
 holds what a serving node queues. That is a metadata and availability exposure,
 not a trust one — it cannot sign an adoption, a disavowal or a recovery — but it
 should be written down rather than left implied.
 
-*Still open.* Whether every peer must see the delegation or only a serving
-node's direct counterparties, and how it interacts with 0-RTT deferral.
+*Propagation — decided* [author, 2026-09-16]: **there is none, because the
+delegation is a handshake artefact rather than a record.** The question of who
+must see it dissolves: the delegation is *how* a party authenticates the node on
+a connection, so exactly the parties on its connections verify it and nobody
+else ever needs it. It is not stored, not forwarded, not replicated, and adds
+nothing to the topology. The node's endpoint records and anchor entries are
+still signed by the identity key and verify as they always did; the ephemeral
+key signs nothing any third party reads.
+
+The consequence to accept is that it rides **every** handshake. A verifier
+should cache a delegation it has checked, keyed by the ephemeral public key, so
+the cost is once per credential per peer rather than once per connection.
+
+*Open — the delegation's signature class.* Classical Ed25519 is 64 bytes; a
+hybrid logical signer is ~3,373 B (`wire-format.md` §4.1). Forging a delegation
+means impersonating a node at the transport layer for the credential's window.
+The keyhash is over both components and the rest of the identity is hybrid, so
+signing this one classically-only would make it the weak link — but it is a
+transport artefact, not a trust-bearing one, and the cost lands on every peer.
+**Author's call.** With verifier-side caching the hybrid cost is amortised, which
+is the reason to prefer it.
+
+*0-RTT — no new exposure, one rule needed.* The replay worry was misdirected:
+early data travels client to node, and what rides it is the client's `Attach`,
+which is already deferred and never processed before the handshake completes
+(design §8.2, §9.2). A delegation travels the other way, in the node's handshake
+flight, and is never in replayable early data.
+
+The real interaction is **resumption outliving the delegation**. A resumed 0-RTT
+connection authenticates by pre-shared key and re-presents nothing, so a ticket
+issued under a live delegation still works after that delegation expires — or
+after the node is seized. This is §12.6.5's stale-credential failure wearing a
+different hat. **Rule: never issue a resumption ticket whose lifetime exceeds
+the delegation's remaining validity.** Standard practice, one clamp, no new
+machinery, and it costs design §14.1.3's battery argument nothing — tickets stay
+long for all but the tail of each window.
 
 ### 2.2 P33 — which devices hold seeds, sealed captures and deletion state
 
