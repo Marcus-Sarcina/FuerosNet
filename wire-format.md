@@ -3460,7 +3460,8 @@ Delegation = {
                        ;   this connection, and the keyhash the receiver already
                        ;   holds a pin for
   3: timestamp,        ; not_before
-  4: timestamp,        ; not_after. The window is the whole of this credential's
+  4: timestamp,        ; not_after. 48 HOURS after field 3 [author, 2026-09-16].
+                       ;   The window is the whole of this credential's
                        ;   revocation story — no list to consult, no responder to
                        ;   ask, which is deliberate (design §12.6.5)
   5: COSE_Sign        ; HYBRID, over fields 1 to 4, external_aad

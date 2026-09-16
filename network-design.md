@@ -62,7 +62,7 @@ operations. Encoding for all of it is in
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
 the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
-decisions open. Multi-device beyond archive merge (§23.3). **Eleven parameters
+decisions open. **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **Canonical test vectors are
 deferred by decision** until the encoding stops moving.
@@ -4478,6 +4478,15 @@ nothing stronger than the delegation's own expiry. The credential is deliberatel
 built to that shape — a window and no responder — because a revocation check that
 fails open is decorative, and the playbook above is already the design's.
 
+**The run is 45 credentials of 48 hours, 90 days end to end** [author,
+2026-09-16], and the two figures answer different questions. The run is what lets
+an instance keep serving while the device that signs for it is asleep, unreachable
+or abroad, so it must be held forward-dated and in advance — which makes **90 days
+the horizon an actor holding the store inherits**, whatever the individual windows
+are cut to. The 48 hours is what a single credential costs when one is separated
+from the rest, and it is what obliges an instance to roll over often enough that
+stopping is visible.
+
 **Adopt stapling.** Rather than the recipient querying, the introducing node
 **staples a recent patron-signed currency attestation to its introduction**:
 
@@ -6803,8 +6812,10 @@ several at once, not one per acquisition.
   make, and the asymmetry inside the window is worth stating: thief-issued
   currency dies with the staple lifetime (§12.6.5, hours), while a thief-signed
   disavowal is durable evidence (§6.2.2). Dividing the key's roles would divide
-  the two thefts; the multi-device model (§23.3, Appendix B.1) currently makes
-  them one, and this entry prices that.
+  the two thefts; both sit on the one key the ceremony device holds (§23.3,
+  Appendix B.1), which makes them one, and this entry prices that. §23.3 does
+  divide one role off — an instance authenticates its transport under a delegated
+  key rather than this one — and that is not a division these two thefts feel.
 - **A stolen device becomes a biometric collector when a counterparty next meets
   someone.** Its sealed captures of past counterparties stay ciphertext, and §7.5.2's
   seed release is per query and direct to each selected verifier — there is no standing
@@ -7735,8 +7746,10 @@ order and refusal behaviour, with the role row consulted as a lookup.
   rather than assumed behaviour.
 - **Archive recovery after device loss** (§22.3), a gap in user experience rather than in
   the protocol.
-- **Multi-device beyond archive merge** (§23.3), which also blocks assessing retention
-  and deletion commitments at all (P33).
+- ~~**Multi-device beyond archive merge**~~ — **settled at §23.3** [author,
+  2026-09-16]. Seeds sit on the ceremony device and nowhere else, deletion state
+  follows the seed, and archives, captures and caches go where the storage is.
+  Retention and deletion commitments can be assessed with it (P33).
 - **Queue cap value** (§14.1.6), freely tunable per node.
 
 ---

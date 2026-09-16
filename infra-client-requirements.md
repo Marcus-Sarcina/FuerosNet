@@ -303,9 +303,10 @@ serving node.
   name the key the handshake presented.** A delegation is public and travels on
   every handshake; that one check is the whole of what stops a captured one being
   replayed onto another connection.
-- **Hold the run you were given, and say so while it is still long.** The party
-  that signs your next credential is a device with a battery and an owner who
-  sleeps, so an instance that waited for expiry to ask would go dark for reasons
+- **Hold the run you were given, and say so while it is still long.** A run is
+  **45 credentials of 48 hours each** [author, 2026-09-16], 90 days end to end.
+  The party that signs your next credential is a device with a battery and an
+  owner who sleeps, so an instance that waited for expiry to ask would go dark for reasons
   none of its subordinates can see. Holding forward-dated credentials is the
   point of them; telling your operator before the last one is the obligation.
 - **Never issue a resumption ticket that outlives your delegation** (design
