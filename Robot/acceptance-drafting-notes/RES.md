@@ -2,7 +2,7 @@
 
 Draft written 2026-09-09 against the working tree at cb48989 (plus uncommitted
 changes outside these documents). Entries: 16 RES, 15 REP; 11 carry an
-interpretation. Checked with a replica of `rhtn/acceptance/tools/check.py` (same
+interpretation. Checked with a replica of `crates/acceptance/tools/check.py` (same
 `catalogue.py` helpers, whole-catalogue gap and marker checks skipped): 0 flags.
 
 ## 1. Assigned functions with no specification basis found

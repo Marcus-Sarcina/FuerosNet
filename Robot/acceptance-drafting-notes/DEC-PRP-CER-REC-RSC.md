@@ -2,7 +2,7 @@
 
 DEC (16 entries, drafted before the interruption, no notes file survived), then
 PRP/CUR/MET (36), CER (29), REC/PAY (29) and RSC/PRD (33), drafted directly.
-Every quote verified verbatim by `rhtn/acceptance/tools/check.py`; 0 flags.
+Every quote verified verbatim by `crates/acceptance/tools/check.py`; 0 flags.
 The interpretations recorded in the entries are the questions for the author;
 the items below are what the drafting noticed beside them.
 

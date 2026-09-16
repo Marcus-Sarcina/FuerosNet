@@ -1,7 +1,7 @@
 """Check `transaction-rules.md`: every id it cites is a catalogue entry,
 and the counts it states are the counts its own tables carry.
 
-Run from `rhtn/`.  A number in prose is a claim; this is what makes it one
+Run from `crates/`.  A number in prose is a claim; this is what makes it one
 somebody can check rather than one somebody remembered."""
 import json, re, sys
 d = {e['id']: e for e in json.load(open('acceptance/acceptance.json'))}

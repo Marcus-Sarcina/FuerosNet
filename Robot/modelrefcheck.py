@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Section citations in models/ and rhtn/ against actual headings in the
+"""Section citations in models/ and crates/ against actual headings in the
 specification.
 
 refcheck.py covers the root documents and Robot/ citations; nothing covered
@@ -10,7 +10,7 @@ exist, carried in two comment blocks and repeated in models/README.md.
 The code cites the specification the same way and far more often, and the
 implementation plan's section 2.2 requires the same check over it, so a
 renumbered section fails here rather than leaving a stale citation in a doc
-comment.  The first run over rhtn/ found 637 citations and no flag.
+comment.  The first run over crates/ found 637 citations and no flag.
 
 No exemptions, by the same rule refcheck.py follows.
 """
@@ -54,8 +54,8 @@ for d, _, fs in os.walk(os.path.join(ROOT, "models")):
 # The workspace: source and the catalogue's tooling, never build output, and
 # never the generated stubs, whose citations are the catalogue's own and are
 # checked verbatim by acceptance/tools/check.py.
-STUBS = os.path.join(ROOT, "rhtn", "acceptance", "tests")
-for d, dirs, fs in os.walk(os.path.join(ROOT, "rhtn")):
+STUBS = os.path.join(ROOT, "crates", "acceptance", "tests")
+for d, dirs, fs in os.walk(os.path.join(ROOT, "crates")):
     dirs[:] = [x for x in dirs if x != "target"]
     if os.path.abspath(d).startswith(os.path.abspath(STUBS)):
         continue
@@ -73,7 +73,7 @@ for path in sorted(files):
         if sec not in H[tgt]:
             flags.append((os.path.relpath(path, ROOT), qual, sec, TARGETS[tgt]))
 
-print(f"{total} citations checked across {len(files)} files in models/ and rhtn/; {len(flags)} flags")
+print(f"{total} citations checked across {len(files)} files in models/ and crates/; {len(flags)} flags")
 for path, qual, sec, doc in flags:
     print(f"  FLAG {path}: '{qual} §{sec}' has no such heading in {doc}")
 raise SystemExit(1 if flags else 0)

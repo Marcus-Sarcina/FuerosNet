@@ -3,7 +3,7 @@
 32 entries in `ARC.json`: 16 archive, 16 topology, all milestone 3. Kinds: 20
 positive, 5 negative, 7 must-accept. 6 entries carry an interpretation (ARC-03,
 ARC-13, ARC-15, TOP-10, TOP-12, TOP-16). Validated with the repository checker's
-own helpers (`rhtn/acceptance/tools/catalogue.py`, imported read-only): 0 flags,
+own helpers (`crates/acceptance/tools/catalogue.py`, imported read-only): 0 flags,
 every citation names a heading, every quote found verbatim after normalisation,
 every quote at most 40 words, ids consecutive per prefix.
 

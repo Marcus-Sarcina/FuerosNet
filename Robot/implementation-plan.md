@@ -48,19 +48,19 @@ works by hashing the specification files; the code's conformance is pinned the s
 way, and a specification change and the code change it forces land in one commit.
 Reviewers copy the working tree, so the tree stays coherent at every commit.
 
-**One new top-level directory, `rhtn/`, a Cargo workspace.** The root keeps its
-shape: the six documents, `CLAUDE.md`, `test-vectors/`, `models/`, `rhtn/`. No root
-document cites `rhtn/`; the code cites the documents.
+**One new top-level directory, `crates/`, a Cargo workspace.** The root keeps its
+shape: the six documents, `CLAUDE.md`, `test-vectors/`, `models/`, `crates/`. No root
+document cites `crates/`; the code cites the documents.
 
 **The applications live in the workspace, and the shells beside it.**
-`rhtn/daemon`, `rhtn/cli` and `rhtn/ffi` are Cargo members; `rhtn/mobile/android`
-and `rhtn/mobile/ios` are Kotlin and Swift and cannot be. Keeping them here is not
+`crates/daemon`, `crates/cli` and `crates/ffi` are Cargo members; `crates/mobile/android`
+and `crates/mobile/ios` are Kotlin and Swift and cannot be. Keeping them here is not
 a preference. The acceptance catalogue is the only mechanism binding this code to
 the specification, and it binds by a filesystem walk: an entry counts as
 implemented when a marker appears in a file `acceptance/tools/catalogue.py` finds
 under the workspace. Eight of the nine manual product entries are the light client
 application's and one is the operator's, so applications elsewhere could never
-close one. Two further things break at a repository boundary: `rhtn/check.sh` is
+close one. Two further things break at a repository boundary: `crates/check.sh` is
 one verdict over one workspace, and a change crossing the boundary could not be
 green in a single run; and the conformance review copies the working tree at a
 commit, so two trees would have to be paired by hand.
@@ -103,7 +103,7 @@ Python generator and harness stay as the other side of the differential pair.
 ### 2.2 Citation discipline in code
 
 Doc comments cite the specification the way the models do: `design §12.6.5`,
-`wire-format.md §4.1 field 8`. `Robot/modelrefcheck.py` scans `rhtn/` as well as
+`wire-format.md §4.1 field 8`. `Robot/modelrefcheck.py` scans `crates/` as well as
 `models/`, with no exemptions, so a renumbered section fails the check rather than
 leaving a stale citation in a comment. It reads `.rs`, `.py`, `.md` and `.toml`,
 and the shells' `.kt` and `.swift`; it skips build output and the generated stubs,
@@ -138,7 +138,7 @@ Kept to what earns its place:
 - **`uniffi`** to expose `rhtn-client` to Kotlin and Swift when the mobile track
   starts. The ceremony's channels (`light-client-requirements.md` §1.3) need camera,
   NFC and UWB, which exist only there.
-- **One gate, `rhtn/check.sh`**, in the shape of `models/run-all.sh`: format, lint,
+- **One gate, `crates/check.sh`**, in the shape of `models/run-all.sh`: format, lint,
   tests, corpus, a bounded fuzz run, deny. Separate from the model gate, which runs
   on a different cadence.
 - **A spec pin for the code**, in the shape of the test-vector pin: the gate records
@@ -645,7 +645,7 @@ for.
 
 ## 7. Decisions that are the author's
 
-- Whether `rhtn/` lives in this repository (section 2) or in its own, and
+- Whether `crates/` lives in this repository (section 2) or in its own, and
   whether the trigger section 2 proposes for moving the applications out is
   the right one.
 - ~~The configuration file's format for `rhtnd`~~ — **TOML** [author,
@@ -670,8 +670,8 @@ for.
 
 ## 8. Coverage: what is established, and what acceptance tests still owe
 
-**The catalogue is `rhtn/acceptance/acceptance.json`**, one entry per acceptance
-test, each quoting the sentence that justifies its expectation; `rhtn/check.sh`
+**The catalogue is `crates/acceptance/acceptance.json`**, one entry per acceptance
+test, each quoting the sentence that justifies its expectation; `crates/check.sh`
 verifies every citation and quote against the specification and reports coverage of
 the rows below.
 
