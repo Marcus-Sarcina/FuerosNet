@@ -6662,10 +6662,12 @@ several at once, not one per acquisition.
   carries ciphertext (§14.2). **The actor's reach is prospective rather than
   retrospective**, which is the part *"bulk access"* overstates.
 
-  **The residual there is impersonation, not interception.** An instance holds the
-  same key as its operator's other devices (§23.3), so an actor with it can present as
-  that operator in **new** exchanges and become the endpoint legitimately. What it
-  cannot do is reach a session it was never on the path for.
+  **The residual there is narrower than impersonation of the operator.** An instance
+  holds a delegated credential rather than its operator's seed (§23.3), so an actor
+  with it can go on being *the node* — serving that subtree, seeing what a serving
+  node sees — until the credential lapses or its operator supersedes it (§12.6.5).
+  It cannot sign as that operator, and it cannot reach a session it was never on the
+  path for.
 
   **And impersonation is a different class of operation from collection**, so
   the position is not that this adversary is stopped; it is that **what the
@@ -7863,9 +7865,12 @@ record itself. Devices may share a key or hold their own; the choice is ordinary
 key management, not an archive constraint.
 
 **An infra operator is a multi-device user by construction**, and their instance is
-one of the devices. It holds the same key as their phone — the relationship is a
-seed shared across wallets, not a client and a server — and runs different software
-in a different network role. **So this section is not an edge case for people who
+one of the devices — a device of theirs rather than a server they hold an account
+on, running different software in a different network role. **It does not hold
+their seed.** An instance mostly runs on infrastructure its operator does not
+physically control, so it carries a credential its operator's client delegates to
+it for a window, and the key that signs as them stays on the device that performs
+ceremonies. **So this section is not an edge case for people who
 own two phones**: it is the ordinary condition of everyone in §3.3's tier. *(Three prevention shapes — a single
 primary device, a head-check before signing, published per-device key bindings —
 are superseded; Appendix B.1.)*

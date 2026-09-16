@@ -230,7 +230,22 @@ existing text do not obviously agree.
   requirements.md` §8.2 was written the other way and has been corrected**; the
   earlier text argued from authentication — the node can verify the operator's
   key, so why a second credential — which was answering the wrong question.
-  Layering, not authentication, is what decides this.
+  Layering, not authentication, is what decides this. The premise is gone as well
+  as the argument: under §2.1 the instance no longer holds that key at all.
+
+- **The node serves its own administration pages; the client only ships
+  provisioning** [author, 2026-09-16, stated as a probably]. Third-party
+  implementations of both roles are anticipated, and putting administration on
+  the wire would constrain their design and force a great deal of behaviour to
+  be agreed universally. So a client ships the **provisioning** pages — which
+  must work before any node exists — and an existing node **serves its own
+  administration pages**, which the client presents in a browser-like sandbox.
+  Each implementation's admin surface then matches the software it administers
+  and stays in sync with it, with nothing agreed between them beyond the frame.
+
+  *What it asks of a client.* A sandboxed renderer isolated from the client's
+  keys, archive and captures: what it draws arrives from a node, and the node is
+  the thing whose seizure this design already plans for.
 
 ---
 
