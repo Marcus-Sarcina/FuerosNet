@@ -114,14 +114,14 @@ The consequence to accept is that it rides **every** handshake. A verifier
 should cache a delegation it has checked, keyed by the ephemeral public key, so
 the cost is once per credential per peer rather than once per connection.
 
-*Open — the delegation's signature class.* Classical Ed25519 is 64 bytes; a
-hybrid logical signer is ~3,373 B (`wire-format.md` §4.1). Forging a delegation
-means impersonating a node at the transport layer for the credential's window.
-The keyhash is over both components and the rest of the identity is hybrid, so
-signing this one classically-only would make it the weak link — but it is a
-transport artefact, not a trust-bearing one, and the cost lands on every peer.
-**Author's call.** With verifier-side caching the hybrid cost is amortised, which
-is the reason to prefer it.
+*Signature class — decided* [author, 2026-09-16]: **hybrid**, a logical signer
+at ~3,373 B (`wire-format.md` §4.1) rather than classical Ed25519's 64. Forging
+a delegation means impersonating a node at the transport layer for the
+credential's window, and since the keyhash is over both components and the rest
+of the identity is hybrid, a classical-only delegation would have been the one
+non-hybrid link in the chain. Verifier-side caching is what makes the size
+affordable, so the caching is not an optimisation to defer — it is what the
+choice assumes.
 
 *0-RTT — no new exposure, one rule needed.* The replay worry was misdirected:
 early data travels client to node, and what rides it is the client's `Attach`,
@@ -133,10 +133,24 @@ The real interaction is **resumption outliving the delegation**. A resumed 0-RTT
 connection authenticates by pre-shared key and re-presents nothing, so a ticket
 issued under a live delegation still works after that delegation expires — or
 after the node is seized. This is §12.6.5's stale-credential failure wearing a
-different hat. **Rule: never issue a resumption ticket whose lifetime exceeds
-the delegation's remaining validity.** Standard practice, one clamp, no new
-machinery, and it costs design §14.1.3's battery argument nothing — tickets stay
-long for all but the tail of each window.
+different hat. **Decided** [author, 2026-09-16]: **never issue a resumption
+ticket whose lifetime exceeds the delegation's remaining validity.** Standard
+practice, one clamp, no new machinery, and it costs design §14.1.3's battery
+argument nothing — tickets stay long for all but the tail of each window.
+
+---
+
+**§2.1 is fully specified.** What the surgery moves, for scoping the review:
+
+| Where | What |
+|---|---|
+| `wire-format.md` | The delegation's encoding, and a fourteenth domain-separation tag beside the thirteen the codec carries |
+| design §14.1.1, §14.1.3 | A node presents an ephemeral key with a delegation rather than its identity key; the resumption-ticket clamp |
+| design §12.6.5 | Already carries the playbook this inherits; check whether it needs to name the delegation as a thing supersession answers |
+| `infra-client-requirements.md` §7 | What an operator's node holds, presents and rotates |
+| `infra-client-requirements.md` §4.3, §4.4 | Endpoint and anchor records signed by the operator's client rather than by the node |
+| `light-client-requirements.md` §4.1 | What a client verifies on attach, and that it caches a checked delegation |
+| §2.2 below | P33's answer follows from this one |
 
 ### 2.2 P33 — which devices hold seeds, sealed captures and deletion state
 
