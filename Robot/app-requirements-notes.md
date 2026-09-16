@@ -50,41 +50,51 @@ client. **The transport is the sole reason the seed must be on the box.**
 delegation binding that key to the operator's keyhash for a window. Peers verify
 the delegation against a keyhash they already hold.
 
-*Cheapest form.* Keep raw public key at TLS and let the presented key be the
-node's ephemeral one; carry the delegation as a `COSE_Sign1` record in the attach
-handshake, under a new domain-separation tag beside the thirteen already in the
-codec. No ASN.1, no new signature algorithm, no certificate authority, no
-revocation list.
+*Form — decided* [author, 2026-09-16]. **Model it on OpenSSH certificates**: a
+key signs a credential carrying a public key and a validity window, with no
+revocation infrastructure and short lifetimes in its place. The "authority" is
+just a key, which is what an operator's client is. **Keep raw public key at TLS
+and let the presented key be the node's ephemeral one**; carry the delegation as
+a `COSE_Sign1` record in the attach handshake, under a fourteenth
+domain-separation tag beside the thirteen already in the codec. No ASN.1, no new
+signature algorithm, no certificate authority, no revocation list.
 
-*Prior art to evaluate.* The constraint is simple and bulletproof, no new design
-burden:
+Design §12.6.5 already adopts the PKI revocation playbook and has done the
+analysis this inherits — including why online revocation checking that fails
+open is decorative.
 
-- **OpenSSH certificates.** Closest conceptual fit. A key signs a certificate
-  carrying a public key, a validity window and principals. No revocation
-  infrastructure — short lifetimes instead. Deployed at scale for two decades.
-  The "authority" is just a key, which is exactly what an operator's phone is.
-- **Signal's sender certificate.** A short-lived signed assertion in a system
-  with no authority. Minimal structure, close to what a `COSE_Sign1` record
-  would carry anyway.
-- **SPIFFE / SPIRE SVIDs.** Purpose-built for workload identity with short-lived
-  credentials, but X.509 and ASN.1 bring surface the design has no other use for.
-- **Macaroons, Biscuit.** Bearer semantics and a caveat language. More than is
-  needed here.
+*Prior art considered and set aside.* **Signal's sender certificate** is the
+same idea with an even smaller structure and would serve; **SPIFFE/SPIRE SVIDs**
+are purpose-built but drag X.509 and ASN.1 in for no other benefit here;
+**macaroons and Biscuit** bring bearer semantics and a caveat language that is
+more than this needs.
 
-*The hard open question: what happens when the operator's phone is offline.* A
-credential measured in hours means a node goes dark when its operator's battery
-does. Candidate answers, none chosen:
+*Lifetime — decided* [author, 2026-09-16]. **A longer window combined with a
+forward-dated batch, reaching a total of about three months.** The author's
+reasoning: the high-impact actions stay gated by the light client and the true
+key, so the delegation only permits routine connections. The split between
+window length and batch depth is still to set, but note that it buys nothing
+against seizure — a node holds its whole batch in advance, or it cannot survive
+its operator being offline, so **the exposure horizon is the batch total
+regardless of how the individual windows are cut.**
 
-- A longer window, trading exposure for availability directly.
-- The client pre-signs a forward-dated batch at provisioning time. Good
-  availability; a seizure then yields the whole batch, so the exposure window is
-  the batch horizon rather than the credential lifetime.
-- A degraded mode where an expired credential still serves some traffic. Needs a
-  rule for which, and that rule is a protocol fact.
+*What three months measures.* Not "a seized node keeps its powers for a
+quarter". Design §12.6.5 settles this: supersession inside the horizon, expiry
+only beyond it. An operator who re-provisions and reissues the endpoint record
+supersedes the seized node for every party that holds the new binding, and a
+party holding that knowledge serves nothing under the old one. The three months
+is the ceiling for parties **outside** the operator's horizon, where the new
+binding never arrives — and for them a stale credential attests nothing anyway.
+Inside the horizon it ends as fast as the endpoint record propagates.
 
-*Also open.* Whether recovery (design §9) revokes a live delegation or waits it
-out; whether every peer must see the delegation or only a serving node's direct
-counterparties; and how the delegation interacts with 0-RTT deferral.
+*Residual exposure to state in the surgery.* For that window a seized node is
+still the serving node for its subtree: it sees what a serving node sees and
+holds what a serving node queues. That is a metadata and availability exposure,
+not a trust one — it cannot sign an adoption, a disavowal or a recovery — but it
+should be written down rather than left implied.
+
+*Still open.* Whether every peer must see the delegation or only a serving
+node's direct counterparties, and how it interacts with 0-RTT deferral.
 
 ### 2.2 P33 — which devices hold seeds, sealed captures and deletion state
 
@@ -135,11 +145,16 @@ gets an answer.
   payment gateway, recurring-payment authorisation. Design §16 already
   anticipates an agent that encapsulates exactly this; what does the client owe
   beyond §4's ordering rule?
-- **Re-provisioning after loss.** Launch a new instance, initialise it with the
-  operator's key, recover topology from siblings and peers. Sibling replication
-  (design §3.4) is what makes this work. Does it need anything the protocol does
-  not already have, and is it one flow or two depending on whether the seed was
-  exposed?
+- ~~**Re-provisioning after loss.**~~ **Decided** [author, 2026-09-16]: with the
+  seed off the box, re-provisioning is routine housekeeping. Launch a new
+  instance through the same sign-up screen, initialise it with the operator's
+  key, and recover topology from siblings and peers — which is what sibling
+  replication (design §3.4) exists for. A seizure costs the user data held on
+  that instance and the services it hosted locally; everything else is a
+  re-launch. **Only if the seed was on the box does the same event also require
+  a key succession** (design §9), which is the heavier path and the one a
+  non-technical operator is least able to drive. That asymmetry is the argument
+  for §2.1.
 - **The administration page.** What state does it read, at what rate, and over
   which stream? §8.1 bounds it to what to draw — a count, a keyhash, a time.
 - **Custody on the phone.** The operator's client ends up holding the RHTN
