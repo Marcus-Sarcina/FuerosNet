@@ -27,10 +27,10 @@ is explicitly not canonical** — Google's own documentation says so, citing
 unspecified field ordering and unknown-field handling, so the same logical
 message can serialize differently and signatures fail to verify. CBOR's deterministic profile fixes
 map key ordering, integer encoding, and float representation; the residual
-float semantics RFC 8949 leaves to protocols are moot here — no schema in this
+float semantics RFC 8949 leaves to protocols are moot here: no schema in this
 document admits a float.
 
-**Signatures use real COSE (RFC 9052).** — *not* a custom map that merely
+**Signatures use real COSE (RFC 9052).**, *not* a custom map that merely
 resembles it.
 
 **A custom map that resembles COSE is not COSE**, and the divergence is invisible
@@ -58,7 +58,7 @@ Three things this buys beyond interoperability:
 
 **Nested COSE objects are UNTAGGED.** RFC 9052 permits either, and libraries
 expose both serialisations, so a profile that does not choose gets two byte
-encodings for one object — which breaks canonicality before it breaks
+encodings for one object, which breaks canonicality before it breaks
 interoperability.
 
 **All signatures in this profile are DETACHED.** The COSE payload slot is
@@ -77,11 +77,11 @@ silently dropped, and reading "signs fields 1–2" as exhaustive would defeat it
 
 **Wherever a signature is described as covering "fields X–Y", the signed payload
 is the deterministic CBOR of the *map* containing exactly those fields under
-their original keys — plus any unknown extension keys the object carries — and
+their original keys — plus any unknown extension keys the object carries, and
 never the signature field itself.** Stated once because the phrase names eight
 objects, and it admits an array and a concatenation reading that produce
 different bytes and interoperate with nothing. The map keeps each field under
-its own key, which also makes a failing signature diagnosable — a concatenation
+its own key, which also makes a failing signature diagnosable: a concatenation
 offers a debugger nothing to label.
 
 ### 1.1 Domain separation — REQUIRED PROFILE RULE
@@ -89,7 +89,7 @@ offers a debugger nothing to label.
 COSE does not separate application roles (above), so this profile does.
 
 **Every distinct signing context MUST carry its own separation tag, and a verifier
-MUST reconstruct that tag from the context in which it is checking — never from the
+MUST reconstruct that tag from the context in which it is checking: never from the
 message.** A context is distinct whenever the same key could be asked to sign in
 more than one role; adding a role therefore means adding a tag, and the table below
 is the current enumeration rather than a closed set.
@@ -150,7 +150,7 @@ context rather than content also makes the check free.
   verification, and MUST NOT be silently dropped. **Their values are opaque
   encoded slices, preserved and never interpreted** [author, 2026-09-01]:
   uninterpretable state kept for a reader that may understand it later. Any
-  deterministically encoded CBOR item is admissible — the profile's encoding
+  deterministically encoded CBOR item is admissible: the profile's encoding
   rules govern the slice's framing, and its meaning is nobody else's to
   evaluate, which is why preservation works by slice and never by
   reconstruction through a typed model.
@@ -165,7 +165,7 @@ context rather than content also makes the check free.
   signature's coverage, in every family.** The preserve-unknown-keys rule below
   exists so an extension survives re-serialisation for signature verification;
   an unsigned message is never re-serialised for one, so there is nothing for
-  preservation to protect — and accepting unknown keys on an unsigned message is
+  preservation to protect, and accepting unknown keys on an unsigned message is
   accepting unbounded input from an unauthenticated peer.
 - **An OPTIONAL field whose value equals its stated default MUST be omitted,
   never written out** [author, 2026-09-01] — the scalar analogue of the rule
@@ -237,7 +237,7 @@ that a record one bound permits the other rejects. Deriving it makes that
 structurally impossible rather than something to notice.
 
 **Signature arithmetic, so the figures above are checkable.** Ed25519 is 64 bytes
-(RFC 8032 §5.1.6), ML-DSA-65 is 3,309 (FIPS 204 Table 2). **One logical signer costs 3,373 bytes**, not 6,618 — only one
+(RFC 8032 §5.1.6), ML-DSA-65 is 3,309 (FIPS 204 Table 2). **One logical signer costs 3,373 bytes**, not 6,618: only one
 of its two entries is post-quantum (§3.5). An adoption's two signers are therefore
 ≈ 6.6 KB, and a ten-signer presence record ≈ 33 KB, both before the body.
 
@@ -307,7 +307,7 @@ path = {
 ```
 
 With f = 10 (design §3.2) each hop index needs values 0–9, so 4 bits suffice. A
-depth-11 path — sufficient for 6×10¹⁰ nodes — occupies 6 bytes.
+depth-11 path (sufficient for 6×10¹⁰ nodes) occupies 6 bytes.
 
 **The final nibble is the subject's slot under its patron** (design §3.1). Ten
 values, ten subordinates, one occupant each, so the index range and the fanout
@@ -331,8 +331,8 @@ node receives only the prefix needed to route to the right region, and truncatio
 must be expressible at nibble granularity rather than byte granularity.
 
 **A signed locator always carries the subject's complete path.**
-The signature covers the path — standalone via `SignedLocator`, in a transaction via
-the envelope — so no intermediary can truncate one without breaking it. Truncated
+The signature covers the path: standalone via `SignedLocator`, in a transaction via
+the envelope, so no intermediary can truncate one without breaking it. Truncated
 prefixes exist only in **unsigned aggregate routing state** held by distant nodes,
 and are never what a resolution starts from: §7.7's *full, unmodified path* is
 guaranteed by the input being signed, not by a completeness marker.
@@ -355,7 +355,7 @@ keypair.
 **Profile: the post-quantum component is ML-DSA-65** (`alg = -49`).
 
 **Signing is deterministic** (the ML-DSA variant without added randomness).
-Both variants verify identically, so this affects nothing on the wire — but test
+Both variants verify identically, so this affects nothing on the wire, but test
 vectors must pick one, and reproducible signing makes a failing vector diagnosable
 rather than merely repeatable.
 
@@ -366,7 +366,7 @@ public key in `x` (-2), **32 bytes** (RFC 8032 §5.1.5).
 RFC 9053 says which parameters an OKP key requires; COSE keys may also carry common
 parameters such as `kid`, `alg` and `key_ops`, and the standard does not forbid
 them. **`KeyMaterial` forbids them** — no `kid`, no `key_ops`, nothing beyond the
-three above — because the keyhash is taken over the encoding, so **any additional
+three above, because the keyhash is taken over the encoding, so **any additional
 parameter yields a different identity for the same key.**
 
 **The ML-DSA component uses RFC 9964's AKP key type.** The RFC supplies the
@@ -420,7 +420,7 @@ endpoint change** (§7.6), serving both as freshness test and stale-cache detect
 is advanced only by §4.6's patron-countersigned reissue; **a new adoption
 establishes its relationship's series**, countersigned by the same party a
 reissue would need. Whether to adopt an established key that presents no
-history — a fresh series on a visibly non-fresh key — is the patron's
+history (a fresh series on a visibly non-fresh key) is the patron's
 discretion, like every adoption (design §16.7). A root's own line has neither
 counterparty nor gate: a root changes series by continuing its chain under a new
 designator — the uncountersigned rollup §4.6 closes with. **One series per patron relationship** is the expected
@@ -428,7 +428,7 @@ shape — a node bound under two patrons keeps two, which is what stops its coun
 subnet disclosing its activity in another (design §19.4, P36).
 
 **Endpoints advance it because the malformed-on-equal rule requires them to.** §7.7.3 treats equal `seqno` with different contents as malformed rather
-than a tie to break, on the ground that a subject advances its own counter — so **a
+than a tie to break, on the ground that a subject advances its own counter, so **a
 subject that cannot advance has no way to publish a change at all.** An infra node
 that changes address without changing position would otherwise be stuck advertising
 a dead one until it happened to move, which is precisely the node §7.6 exists for.
@@ -437,7 +437,7 @@ changed, which is all the counter ever said.
 
 **Verification rule**: two `seqno`s are comparable **only when their `series` are
 equal.** Within one series a new `counter` must be **strictly greater** than the last
-one the verifier holds — **not** exactly previous+1, since a verifier may
+one the verifier holds, **not** exactly previous+1, since a verifier may
 legitimately have missed intervening transactions and requiring contiguity would
 reject valid updates. Absence of prior state is not a failure.
 
@@ -449,7 +449,7 @@ not inferred** — by the chain of §4.6, presented on request.
 
 **The arbitrariness is the defence, and ordering would remove it.** A counter can be
 exhausted: one record at the top of the range leaves no successor, and §7.7.3 makes an
-equal `seqno` carrying different contents malformed rather than a tie — so a party
+equal `seqno` carrying different contents malformed rather than a tie, so a party
 holding the node's key could otherwise pin it permanently, and §2.3's own reasoning
 says why that is fatal (*"a subject that cannot advance has no way to publish a change
 at all"*). Were `series` ordered, the same record could simply name the top series and
@@ -552,7 +552,7 @@ independent archive. An adoption advances both the node's archive and the patron
 — typically from concurrent use of two devices — reunites it by supplying **both**
 branch heads in the next ordinary transaction. **No merge transaction type
 exists**; a merge is an ordinary transaction with a longer back-pointer list.
-**A list of length greater than one is sorted ascending bytewise** — one logical
+**A list of length greater than one is sorted ascending bytewise**: one logical
 merge, one encoding, one txid. Deterministic CBOR orders map keys and not array
 elements, so without this rule the same merge would have as many valid txids as
 its heads have permutations.
@@ -573,14 +573,14 @@ Rules a validator checks from the record alone. All were previously unstated.
 - **The two participant identities MUST differ.**
 - **`finalized_at` MUST be ≥ `started_at`, and MUST NOT exceed it by more than 24
   hours.** The lower bound alone lets a body name any future instant, and every
-  envelope signer's next record must clear it (§3.3's monotonicity) — so one
+  envelope signer's next record must clear it (§3.3's monotonicity), so one
   disposable identity could freeze the chains of a victim and its whole witness set
   until a date it chose. **This is checkable with no clock**: both values are in the
   record, and the rule constrains their difference rather than either one against the
   reader's time, which is why it can be structural where §3.3's timestamp rules
   cannot. 24 hours is far beyond any honest finalization — an unanswered slot is simply
   absent from the record (§5.5), so a ceremony never waits on an absent
-  verifier — and 24 hours is a figure the design already carries rather than a new
+  verifier, and 24 hours is a figure the design already carries rather than a new
   one (design §21).
 
   **This bounds the gap, not `started_at` itself**, and the two need different
@@ -593,7 +593,7 @@ Rules a validator checks from the record alone. All were previously unstated.
   record already carries, and the other needs a clock the reader does not have.
 - **A presence record on the wire is always final.** A ceremony the participants
   abandon is local state and is not published; `finalized_at` records when
-  assembly closed, and **the verifier sample does not gate it** — an unanswered
+  assembly closed, and **the verifier sample does not gate it**: an unanswered
   query simply yields no response (§5.5). Late responses arrive as
   `LateResponse` objects (§7.4) and never alter the original record's validity.
 - **`strongest` MUST appear among the channels with `result = pass`, and no
@@ -610,8 +610,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   **Two distinct claims, easy to conflate.** *Structurally*: a validator checks the
   subtype, the absent evidence arrays, and the genesis back-pointers — all local to
   the record. *Honestly*: a conforming established key cannot produce one, since its
-  true chain has a predecessor. **A cheating established key can** — it simply omits
-  its history and signs — and a validator holding no history cannot tell. The design
+  true chain has a predecessor. **A cheating established key can**: it simply omits
+  its history and signs, and a validator holding no history cannot tell. The design
   accepts that: the forgery's weakness is evidentiary (design §13.2), a formation
   record attests nothing anyway, and detection arrives with anyone who holds the
   key's real chain, against which the fork is visible.
@@ -631,12 +631,12 @@ Rules a validator checks from the record alone. All were previously unstated.
   Zero witnesses is the
   formation case and nothing else, a normal record with none is malformed rather
   than merely weak, since the subtype is what separates an uncorroborated bootstrap
-  from an uncorroborated ordinary meeting (design §13.2) — **and a witness
+  from an uncorroborated ordinary meeting (design §13.2), **and a witness
   attesting nothing is not corroboration**: an entry with neither bit set is
   representable as partial or negative evidence, but it does not satisfy this
   floor, or the count rule would let a formally normal record carry no
   affirmative witness statement at all. `latency_bound` remains genuinely
-  optional. The uncorroborated meeting stays expressible — as a formation
+  optional. The uncorroborated meeting stays expressible: as a formation
   record, where it is visible as exactly what it is.
 - **One identity is one logical signer regardless of how many roles it holds.** A
   party that is both a witness and a verifier signs once **in each capacity it
@@ -681,23 +681,23 @@ records alone would let a non-presence transaction bridge backward through the
 chain and break both.
 
 **Without that bound, backdating collapses verification.** `started_at` determines
-the 730-day window, so *n* — and therefore the selection threshold — is computed
+the 730-day window, so *n*, and therefore the selection threshold — is computed
 relative to a value the proposer chooses. **Claiming a `started_at` earlier than
-one's own history yields n = 0 and a required verifier count of zero** — and
+one's own history yields n = 0 and a required verifier count of zero**, and
 shifts the qualification window itself (§5.3), so the claimed day decides which
 records may be counted at all.
 
 **The back-pointer is what makes this checkable.** It is inside the signature and
 names a record with its own `finalized_at`, so a subject cannot claim a ceremony
 earlier than their own last one. **The bound is against the signer's own history,
-not against anyone's clock** — which is the only monotonicity available in a system
+not against anyone's clock**, which is the only monotonicity available in a system
 with no global time.
 
 **It is a floor, and not a rate limit.** Everything at or after the predecessor's
 effective time is admissible, including days in the future, so the bound closes
 backdating without licensing the claimed day: what limits an implausible
 `started_at` is a witness declining to attest a ceremony dated far from its own
-clock (`light-client-requirements.md` §1.2) — not anything checkable here. *(With deterministic
+clock (`light-client-requirements.md` §1.2), not anything checkable here. *(With deterministic
 selection retired, there is no sample to reroll; the claimed day now decides only
 the qualification window, §5.3.)*
 
@@ -746,7 +746,7 @@ implemented**, and offering one hides the key-management requirement rather than
 removing it.
 
 **The two signatures need not be produced together.** The body is fixed before
-either party signs — `txid` covers it — so signatures may be collected in any order,
+either party signs — `txid` covers it, so signatures may be collected in any order,
 over any channel, with any delay. **Nothing in the envelope records how they were
 gathered**, and a verifier cannot tell a co-present exchange from one assembled over
 days. Only the finished envelope is specified.
@@ -783,7 +783,7 @@ logical signer contributes **two entries**.
   Additional headers are rejected rather than ignored: the protected header is
   covered by the signature, so tolerating unknown entries there would let two
   implementations disagree about what was signed. **A nonempty unprotected header
-  is malformed**, per the rule above — not ignored.
+  is malformed**, per the rule above, not ignored.
 - **Both envelope entries carry the same `kid`, in the PROTECTED header: the
   32-byte identity keyhash.** RFC 9052 offers protected and unprotected buckets and a
   verifier that accepts only one placement rejects otherwise valid signatures;
@@ -799,8 +799,8 @@ logical signer contributes **two entries**.
   before post-quantum.** Deterministic CBOR fixes map ordering but says nothing
   about array element order, and the signature covers the body rather than the
   array, so without this rule two conforming encoders of the same transaction
-  produce different **envelope bytes**. The `txid` is unaffected — it hashes the body
-  map, which excludes the signature array (§1) — but envelope byte-identity matters
+  produce different **envelope bytes**. The `txid` is unaffected: it hashes the body
+  map, which excludes the signature array (§1), but envelope byte-identity matters
   wherever an envelope is compared, cached or deduplicated.
 - Signer role is inferred by comparing each `kid` to the body's fields. There is
   deliberately no role field: redundant where inference works, forgeable where it
@@ -840,14 +840,14 @@ accepting an unverified object.
 | 7 | Series reissue | node + patron | Topology |
 
 **A decoder MUST reject a retired or unassigned type value.** Retirement removes
-the schema — there is nothing a type-6 envelope could be validated *as* — and an
+the schema; there is nothing a type-6 envelope could be validated *as*, and an
 unassigned value is §1's unknown-enum case. The tombstone reserves the number; it
 does not readmit the bytes.
 
 **There is no registration transaction.** A resource registration is **not
 shared network state**: it is a signed `CatalogEntry` handed to one hosting node and
 answered from that node's current table (§6.5, design §11.5). It advances no archive
-(design §10), reaches nobody else, and has nothing to chain to — so an envelope
+(design §10), reaches nobody else, and has nothing to chain to, so an envelope
 around it would carry a back-pointer nothing walks, a `txid` nothing references, and
 a post-quantum signature justified only by an archive it never enters.
 
@@ -929,16 +929,16 @@ Recovery = {
 ```
 
 **The node and the patron MUST differ — a node cannot hold authority over
-itself — and the rule holds for every two-party type** [author, 2026-09-01]:
+itself, and the rule holds for every two-party type** [author, 2026-09-01]:
 departure, disavowal, peering and series reissue reject the degenerate pair
-identically, as presence records already reject equal participants (§3.2). For adoption it is also the degenerate cycle — the proposed
-patron *is* the node — and the one cycle a validator can see from the record
+identically, as presence records already reject equal participants (§3.2). For adoption it is also the degenerate cycle: the proposed
+patron *is* the node, and the one cycle a validator can see from the record
 alone, where design §6.2.5's rule otherwise needs topology state. For the
 two-signer types the envelope layer agrees independently: a required signer set
 collapsing to one identity collides with §3.5's no-duplicate-signers rule.
 
 `Recovery` is present iff the adoption claims a predecessor's history — the
-recovery adoption of design §9 — and absent otherwise. A **plain rotation
+recovery adoption of design §9, and absent otherwise. A **plain rotation
 carries nothing** (design §9): on the wire it is an ordinary adoption,
 indistinguishable from a fresh one, and no `Recovery` appears. **There are no
 variants of the block itself**: every claim of predecessor history carries both
@@ -958,7 +958,7 @@ signature verifies and the assembly still means something other than it claims:
 
 - **A verifier's authentication inside a `Recovery` block is HYBRID**, not
 classical — **field 9 only.** Every other embedded signature is classical because
-its relevance expires; **a recovery's does not** — it induces a permanent identity
+its relevance expires; **a recovery's does not**: it induces a permanent identity
 change that a later evaluator cannot revisit, so a forged classical `match` would sit
 inside an authentic post-quantum record indefinitely (design §5.1). Field 9 becomes an
 untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.5).
@@ -976,7 +976,7 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   (§7.9), or adopt afresh on a new series and merge the old branch back when its
   head resurfaces (§3.1, design §10.3). A same-key `Recovery` would be vacuous
   evidence — the old key's signature and the continuity attestation each prove a
-  key the subject already holds — and vacuous evidence in a permanent identity
+  key the subject already holds, and vacuous evidence in a permanent identity
   object is surface with no use.
 
 **Every response's field 8 MUST equal `prior_key`** — otherwise evidence about
@@ -1008,7 +1008,7 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   subject (design §9.1). Values 1 and 2 are malformed inside a `Recovery`
   block.
 - **An old-key proof and verifier responses both appear, always.** They are
-  independent evidence of the same continuity — one cryptographic, one human — and
+  independent evidence of the same continuity — one cryptographic, one human, and
   **neither substitutes for the other**, which is why both are required rather than
   weighed against a threshold.
 
@@ -1031,7 +1031,7 @@ face matches some subject, without ever signing which old identity that continue
 
 **Structural rule**: both fields are **required**, and field 2 carries **at
 least one** response. `[+ …]` is the grammar, so an absent field 2 and a
-present-but-empty array are both malformed — the second by §1's rule that empty
+present-but-empty array are both malformed: the second by §1's rule that empty
 arrays are never encoded. **Neither half is optional**: there is one procedure, and it needs both.
 
 **Field 3 is a `COSE_Sign`**, not a `COSE_Sign1` — the old identity is hybrid, so it
@@ -1095,22 +1095,22 @@ one reason a node with a usable former patron may prefer it.
 
 **`former_patron_key` MUST differ from adoption field 2** — identical keys
 represent no transfer, the same rule and the same reason as `prior_key` MUST
-differ from field 1 in a `Recovery` — **and MUST differ from field 1**, since a
+differ from field 1 in a `Recovery`, **and MUST differ from field 1**, since a
 node does not vouch for its own move.
 
 **A verifier MUST check all three against the enclosing adoption** — `node_key`
 against field 1, `former_patron_key` against the `Transfer` map's own field 1,
-`new_patron_key` against field 2 — **and reject on mismatch.** The same
+`new_patron_key` against field 2, **and reject on mismatch.** The same
 sentence as above, and for the same reason: an unchecked binding is the same as
 no binding.
 
-**The evidence fields — 6, 8 and 9 — and exactly one is present.** design
+**The evidence fields — 6, 8 and 9, and exactly one is present.** design
 §6.1.1: an adoption rests on a proof of presence between the two parties
 (field 8, that record's `txid`), on the former patron's countersignature
 (field 9, a `Transfer` block), or on a recovery's own evidence (field 6, a
 `Recovery` block, whose responses are the presence half). **An adoption
 carrying none of the three is malformed**, and one carrying more than one is
-malformed too — they are alternatives, and an object offering two answers to
+malformed too; they are alternatives, and an object offering two answers to
 the same question invites a validator to pick.
 
 **A recovery takes no separate reference and MUST NOT carry one.** Its
@@ -1148,7 +1148,7 @@ two back-pointers means both branches are reachable and both get walked.
 
 **Truncation needs no grammar.** A subject presenting less history presents an
 *earlier* head, and this field expresses that and nothing else. The chain's other
-edit — dropping what is early — is carried by the checkpoint that licenses it
+edit (dropping what is early) is carried by the checkpoint that licenses it
 (§4.6, design §10.2) rather than by anything here, so the field still cannot express
 what the archive model does not already allow.
 
@@ -1300,8 +1300,8 @@ subordinate, who may have joined it entirely reasonably.
 
 **The banding makes severity legible without making particulars so.** A code
 says which band a patron placed an ending in and nothing about the reasoning
-behind it. design §19.8 tested the composition that would undo that — a code
-read beside a known resource and a revocation date — and withdrew it: the only
+behind it. design §19.8 tested the composition that would undo that: a code
+read beside a known resource and a revocation date, and withdrew it: the only
 party holding both halves is the disavowing patron, who already knows them.
 
 ### 4.4 Peering (type 4)
@@ -1631,7 +1631,7 @@ is looking at without a table. **Exactly seven, in ascending byte order**:
 | `pN.integrity` | `{ 1: bool, 2: uint, 3: ? bstr }` — attested, scheme, evidence (design §7.8) |
 
 **Why not a Merkle tree.** design §19.3 proposed one, following SD-JWT loosely. At
-the leaf count here — seven — a tree buys nothing: inclusion
+the leaf count here (seven), a tree buys nothing: inclusion
 proofs would cost three hashes each where sending every digest costs seven, and a tree
 adds real hazards a flat list does not have, **odd-node handling and the
 duplicated-node second-preimage class**. SD-JWT's own construction is a digest array
@@ -1665,13 +1665,13 @@ DisclosureSlot = Disclosure / bstr .size 32   ; revealed, or the withheld digest
 ```
 
 **Position supplies the label.** Slot *i* belongs to label *i* of §4.5.1's sorted
-set, so a withheld digest needs no label of its own — a revealed `Disclosure` whose
+set, so a withheld digest needs no label of its own: a revealed `Disclosure` whose
 embedded label differs from its slot's is malformed. Exactly seven slots always: a
 shorter or longer array is malformed, and a fully-withheld presentation is seven
 digests.
 
 **A recipient verifies by recomputing `root`** from what it holds — revealed
-disclosures hashed, withheld digests taken as given — and checking it equals body
+disclosures hashed, withheld digests taken as given, and checking it equals body
 field 8, which the envelope signature covers. A mismatch means the presentation is
 malformed, not that a field is missing.
 
@@ -1697,12 +1697,12 @@ record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 - **Reject a revealed value that does not match its label's schema** (the table
   above) — a disclosure is not an extension point.
 - **The `strongest`-channel rule (§3.2) is checked when `proximity` is revealed**,
-  and reported as unverifiable — not valid, not malformed — when it is withheld.
+  and reported as unverifiable, not valid, not malformed — when it is withheld.
   It is the one structural rule living in a disclosable field.
 - **Accept any subset of disclosures, including none.** A minimised record is
   well-formed; only a root mismatch is malformed.
 - **Never treat a withheld field as a default value.** Withheld is not zero, not
-  absent, and not `unavailable` — it is unknown, and §4.5.2 says which recipients may
+  absent, and not `unavailable`; it is unknown, and §4.5.2 says which recipients may
   require it.
 - **There is no aggregate verdict.** *Malformed* is terminal;
   everything else — missing keys, unavailable history, a withheld field, each
@@ -1729,7 +1729,7 @@ separately here.
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier selection (§5) | **None.** Selection is the selector's judgment over the handed bundle; nothing in the record replays it |
 | Response accounting (§5.5) | **None.** Counts and reads field 5 |
-| Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else — signatures, back-pointers, timestamps, subtype rules, participant distinctness — reads the body |
+| Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else (signatures, back-pointers, timestamps, subtype rules, participant distinctness) reads the body |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
 | Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
@@ -1769,7 +1769,7 @@ node and its patron.
 
 **The patron's countersignature is the whole of the security property.** A `series`
 cannot be advanced by the node's key alone, so a party holding a stolen key can
-exhaust the current counter and cannot escape into a fresh series — while the
+exhaust the current counter and cannot escape into a fresh series, while the
 legitimate holder can, because their patron will sign for them and not for a thief.
 This is the same social check adoption and recovery already rest on, applied to the
 one operation that repairs an exhausted or poisoned counter.
@@ -1802,19 +1802,19 @@ than stolen — nobody else holds the key, so the unsealed lines are dead space.
 Where it is stolen, the thief holds the key and could out-sign a seal anyway;
 the remedy is rotation (§4.1, design §18.3), not sealing.
 
-**A root cannot produce a reissue, and does not need the transaction — for a
+**A root cannot produce a reissue, and does not need the transaction: for a
 root its content is empty.** Type 7 requires a patron distinct from the node
 (§4.1), and a root has none; an exception could not be checked, since nothing in
 a record shows its signer is a root. What a root may still want is the **rollup
 point** — a Tx0 on a new series, electable as a checkpoint for retention and
-look-back exactly as a countersigned reissue is (design §10.0) — and that is an
+look-back exactly as a countersigned reissue is (design §10.0), and that is an
 **internal operation**: the root simply continues its hashchain under a new
 series designator. The chain back-pointer is the real predecessor, not the
 genesis value, so to an observer holding the chain it is an ordinary
 continuation, distinguishable from a genesis event; **presented as a history
 root, it is logically equivalent to one**, which is what a rollup point is. What
-the internal transition lacks is what the countersignature supplied — a gate
-against a thief — and for a root that gate never existed: owner and thief are
+the internal transition lacks is what the countersignature supplied: a gate
+against a thief, and for a root that gate never existed: owner and thief are
 indistinguishable at the series layer, and root compromise is answered at the
 subnet level (design §12.7, §13). §2.3's currency rule is unchanged: a series
 claim is proved by showing the chain into it, and a series nobody can link stays
@@ -1822,13 +1822,13 @@ unprovable.
 
 **A chain-holder does not need the seal.** Anyone holding §4.6.1's chain knows which
 series was abandoned and **MUST reject records in it** whatever their counter. The
-seal protects the parties who hold no chain — a cached locator and nothing else — and
+seal protects the parties who hold no chain — a cached locator and nothing else, and
 against them it is a race the thief can win by reaching a reader first. That is the
 argument for acting on suspicion rather than on confirmation.
 
 **What a recipient ends up holding is an address that can never be updated.** The
 seal occupies the top of the `(node, series)` sequence — the slot any future locator
-for that pair would have to take — so the entry in that party's address book is final.
+for that pair would have to take, so the entry in that party's address book is final.
 Not deleted: they still hold an address, and it still resolves if the position behind
 it still answers. What is gone is anyone's ability to *move* it, the node's own
 ability included.
@@ -1841,7 +1841,7 @@ confers no continuing ability; it removes the series from use by everyone.
 **So a thief who seals first burns a line rather than capturing one.** The parties it
 reached first hold a frozen entry pointing where that record pointed, and the thief
 cannot develop it: no further transaction in that series will be recognised by anyone
-holding the seal. **The `keyhash` is untouched** — the legitimate holder reissues into
+holding the seal. **The `keyhash` is untouched**: the legitimate holder reissues into
 a fresh series with the patron's countersignature, which the thief cannot obtain
 (§4.6), and continues. What the thief destroyed is one line the holder was leaving
 anyway. The cost is re-contact for the parties that took the thief's seal: a chain
@@ -1857,7 +1857,7 @@ contact, which design §12.3 Case 0 makes an out-of-band act.
 
 **The new series MUST NOT be one the node has previously occupied.** Reusing one
 brings its abandoned high-counter records back into comparison against the new line.
-The node knows its own history, so this is local bookkeeping — and it is **checkable
+The node knows its own history, so this is local bookkeeping, and it is **checkable
 by anyone holding the chain**, who MUST reject a reissue naming a series already in it.
 
 #### 4.6.1 Proving which series is current
@@ -1865,7 +1865,7 @@ by anyone holding the chain**, who MUST reject a reissue naming a series already
 **Presentation, not propagation, and not a history scan.** A node proves its current
 series by presenting:
 
-- its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno` — and so the
+- its **adoption** (§4.1), whose `Locator` in field 3 carries the `seqno`, and so the
   series — that the patron countersigned at that moment; and
 - **each series reissue since**, each naming the series left and the series entered.
 
@@ -1899,8 +1899,8 @@ not auditing how they were chosen.**
 
 ### 5.1 Who selects, and how
 
-**Each participant selects the other's verifiers** — the party who performs a
-selection is never the party it is about — from the counterparty's handed
+**Each participant selects the other's verifiers**: the party who performs a
+selection is never the party it is about: from the counterparty's handed
 bundle (§5.4), by the selector's own knowledge, in descending order of
 trustworthiness:
 
@@ -1908,7 +1908,7 @@ trustworthiness:
 2. **users in any of the selector's trust horizons** — the two-edge walk of
    any subnet the selector belongs to (design §2);
 3. **users someone in any of the selector's trust horizons has met**;
-4. **users in the trust horizons of users the selector has met** — to the
+4. **users in the trust horizons of users the selector has met**: to the
    extent foreign topology is visible at all, which it usually is not.
 
 Tiers 3 and 4 are one further edge over the graph of meetings and
@@ -1919,7 +1919,7 @@ own knowledge** — computed locally, provable to nobody, owed to nobody
 
 **Where the initial bundles surface no common acquaintance, the parties go
 fishing**: either may propose further candidates from their own history so the
-other can test them against tiers 1–4 — an exchange over the ceremony's direct
+other can test them against tiers 1–4: an exchange over the ceremony's direct
 channel, carried by no wire object and recorded nowhere. **A fishing proposal
 is a bundle augmentation** [author, 2026-09-03]: proposing a candidate from
 your own history is the same disclosure decision the bundle was, made
@@ -1943,8 +1943,8 @@ required(subject) = min( floor(n / 2), 10, |candidates| )
 `|candidates|` term is necessary: without it a subject with twenty meetings
 against one counterparty needs ten verifiers from a pool of one.
 
-***n* is entirely the subject's claim** — it counts a bundle the subject
-curates — so the formula is a **reasonableness criterion, not a security
+***n* is entirely the subject's claim**; it counts a bundle the subject
+curates, so the formula is a **reasonableness criterion, not a security
 check**: it sizes how many verifiers the selector should seek, and an evaluator
 comparing a record's response count against it learns whether the ceremony was
 diligent, never whether the subject's history is complete. Understating is
@@ -1977,7 +1977,7 @@ the window. Precisely:
   They are the party being established; asking them is not evidence.
 - **Duplicates count once, by `txid`; candidates are distinct prior
   counterparties, deduplicated by keyhash.** The count counts transactions,
-  the pool counts **identities**, and the two must not be conflated — and
+  the pool counts **identities**, and the two must not be conflated, and
   identities are the most the protocol can count [author, 2026-09-03]: one
   person may hold several (design §13.7), so slot uniqueness is keyhash
   uniqueness, and the record claims no human independence the protocol
@@ -1995,7 +1995,7 @@ no completeness to protect, it is simply not in the pool.
 
 **The bundle has no protocol ceiling** [2026-09-02]. It rides the ceremony
 channel and is retained nowhere, so what a client will hold is local resource
-policy — and truncation is a local act with a visible price, since it changes
+policy, and truncation is a local act with a visible price, since it changes
 *n* and the candidate pool.
 
 **Understatement is free, and self-defeating rather than dangerous.** A subject
@@ -2003,14 +2003,14 @@ who hands fewer records gets a smaller *n*, a smaller sample, and a record that
 advertises thinner corroboration. Overstatement is impossible, since every
 record must verify. What protects the selector is **recognition, not
 completeness** (design §8.1.2): a pool holding nobody they know is worth what
-unrecognised history is worth — and a curated pool of strangers announces
+unrecognised history is worth, and a curated pool of strangers announces
 itself to the one party it is aimed at.
 
 ### 5.5 What the record carries
 
 **The record carries the responses gathered, and nothing defines which slots
 "should" exist.** An evaluator weighs the response count against §5.2's
-criterion — knowing *n* is the subject's claim — and weighs each responder by
+criterion — knowing *n* is the subject's claim, and weighs each responder by
 their own recognition of them, which is the same act design §16.1 asks of every
 evaluator everywhere.
 
@@ -2024,7 +2024,7 @@ queries**:
 - **Duplicate responses from one verifier for one subject are malformed**, so a
   single verifier cannot occupy multiple slots. One identity answering once
   for each participant is two slots and valid.
-- **Each response carries the selector's claim of its basis** — field 10,
+- **Each response carries the selector's claim of its basis**: field 10,
   tier-aligned [author, 2026-09-03]: `0 met` (tier 1), `1 in-horizon`
   (tier 2), `2 reachable` (tier 3 or 4), `3 discretionary fill`. Met and
   merely-in-horizon are separately encoded because they are different
@@ -2035,7 +2035,7 @@ queries**:
   the record cannot reconstruct the selector's acquaintance graph; like
   `nominated_by`, the schema records the claim and evaluation is the
   reader's.
-- **Responses that are present count content-blind** — match, no-match,
+- **Responses that are present count content-blind**: match, no-match,
   inconclusive, unavailable each fill a slot; content is evidence weighed by
   policy (design §16.1), never an input to structural validity.
 
@@ -2068,7 +2068,7 @@ the hash is unconstructible.
 2026-09-03]: field 7 names the one verifier this query may reach, the consent
 signs the id that names it, and a receiving verifier rejects a query not
 addressed to it before any processing. One consent per verifier follows —
-`query_id` differs per addressee — which is what makes the consent an
+`query_id` differs per addressee, which is what makes the consent an
 authorization instead of bearer paper. Witnesses must observe all
 participants; verifiers are drawn from a wider pool and need not, which is
 why the confinement sits here and not on the witness path.
@@ -2121,21 +2121,21 @@ input that is not evidence.
 2026-09-03]: the verifier sends a copy of its signed `VerifierResponse` to the
 subject over the association the capture-key grant already establishes
 (§7.3, design §7.5.2). The subject consented to the query, so the copy
-disclosed nothing new — and it is what makes the finalization veto real: a
+disclosed nothing new, and it is what makes the finalization veto real: a
 subject holding a response withholds its envelope signature from a proposed
 body that omits it (design §7.4.2). Suppression then requires both
 participants, and buys a visibly thin record (§5.2).
 
 **A claimed `met` the verifier's own records refute is answered `unavailable`**
 [author, 2026-09-03]: `met` names the selector's relationship to this
-verifier, which the verifier can check locally — a false claim voids the
+verifier, which the verifier can check locally: a false claim voids the
 selection premise, and a false `met` is the same as not available. No other
 basis value is verifier-checkable, and none is endorsed by answering: see
 field 10's carriage rule below.
 
 **Field 10 in the signed payload is carriage, not endorsement** [author,
 2026-09-03]: the verifier's signature binds the selector's claim against later
-alteration — the `nominated_by` pattern — and policy MUST NOT weight the claim
+alteration — the `nominated_by` pattern, and policy MUST NOT weight the claim
 more heavily for sitting inside a verifier signature. Evaluation of the claim
 is the reader's, by their own recognition of the selector.
 
@@ -2148,7 +2148,7 @@ and nothing about B, and reports the two separately rather than collapsing
 them (§4.1's valid-versus-unverifiable discipline).
 
 **A stranger holding only the record can verify signatures, structure, consent
-and the bindings of §5.5 — and can weigh nothing**, because weight comes from
+and the bindings of §5.5, and can weigh nothing**, because weight comes from
 recognising responders (design §16.1), which no distant audience can do. That
 is not a shortfall; it is the design's statement of who presence evidence is
 *for*: the people connected enough to recognise the people in it.
@@ -2160,7 +2160,7 @@ is not a shortfall; it is the design's statement of who presence evidence is
 **A registration is the entry itself, signed.** There is no envelope and no
 transaction around it: field 8's signature covers fields 1–7 and 9, and those are
 the same bytes a query reply returns. **One object, one signature, wherever it
-appears** — which is what lets a host store what it was handed and serve it
+appears**, which is what lets a host store what it was handed and serve it
 unchanged.
 
 ```
@@ -2214,12 +2214,12 @@ publisher can make specific enough to be checked socially, and no finer.
 **Unknown values are retained and surfaced, not rejected**, on §4.3's reasoning:
 rejecting an unfamiliar declaration would make every future value a flag day, and a
 client that cannot interpret one should show the user that a declaration exists and is
-unrecognised — which is more informative than absence.
+unrecognised, which is more informative than absence.
 
 **Four values, deliberately coarse.** A resource may be
 anything from a shared drive to a social network to a persistent agent, so its security
 posture is particular to it in a way no enumeration can track. **A granular or
-exhaustive taxonomy would be counterproductive** — it would multiply values nobody
+exhaustive taxonomy would be counterproductive**; it would multiply values nobody
 maps consistently and give a reader false confidence that the categories mean the same
 thing across two resources. Four coarse bands a publisher can be held to socially are
 worth more than twenty nobody applies the same way.
@@ -2271,7 +2271,7 @@ refuses valid brokered registrations.
 
 **The authenticated peer MUST be the owner named in the entry.** An entry is
 owner-signed and so may be relayed by anyone, which means a host accepting one from
-any peer would also accept a **replayed earlier envelope** — and since the node keeps
+any peer would also accept a **replayed earlier envelope**, and since the node keeps
 whichever it applied last, a stale registration would silently supersede the current
 one. Binding submission to the owner's own session is the check that costs nothing:
 the owner is attached already and the host has its identity from the handshake.
@@ -2367,7 +2367,7 @@ filtered on that type and received a full page will receive the same page again.
 **That is the signal: a full page plus a continuation naming a type already
 exhausted means the node holds more than the bound**, and the asker's view of that
 node is truncated. Treating it as truncated is right; following the hint again is a
-loop. Nothing on the wire reports the condition, and nothing needs to — the asker
+loop. Nothing on the wire reports the condition, and nothing needs to: the asker
 holds both facts already.
 
 **Carried on a bidirectional stream** (§9.2) tagged request type 5, a query per
@@ -2375,7 +2375,7 @@ stream, with the reply closing it.
 
 **Inclusion in a truncated set is not a ranking.** The order below is by resource
 keyhash — arbitrary, chosen because it is stable rather than because it is
-meaningful — so an asker must not read the first 111 as the most relevant 111.
+meaningful, so an asker must not read the first 111 as the most relevant 111.
 
 **Preserved unknown keys are bounded like anything else.** §1 requires unknown
 map keys to survive re-serialisation, which makes them attacker-supplied storage on
@@ -2390,14 +2390,14 @@ not name: resolution, prekey and archive requests, grants and wrappers.
 
 **An asker outside the answering node's horizon is refused before the application
 reply.** Close the stream; do not return an empty `CatalogReply`. **An empty
-reply is a true statement — nothing is visible to you — and it is the wrong one**,
+reply is a true statement; nothing is visible to you, and it is the wrong one**,
 because it is indistinguishable from a node that hosts nothing, and it invites an
 asker to conclude the catalog was answered.
 
 ### 6.5 An entry's lifecycle
 
 **An entry is signed once, at registration, and that signature is reused for every
-answer.** No field varies per query, so re-signing buys nothing — and a
+answer.** No field varies per query, so re-signing buys nothing, and a
 per-answer signature would make an entry's bytes differ between askers, which
 defeats the attributability that signing is for.
 
@@ -2462,11 +2462,11 @@ decided by the owner at request time (§11).
 needs to. An entry is a claim by its owner, verifiable as theirs; a reader
 holding two such claims holds two claims, and **the resource keyhash is not a
 namespace anyone allocates.** Which one a reader acts on follows from whose catalog
-answered — and each answer came from a node the reader chose to ask.
+answered, and each answer came from a node the reader chose to ask.
 
 **One host may not serve two, and that is where the rule bites.** A
 `ResourceRequest` names the resource and nothing else (§11), so a node holding two
-claims for one keyhash has nothing to choose between them with — and choosing wrongly
+claims for one keyhash has nothing to choose between them with, and choosing wrongly
 applies one owner's membership and roles to the other owner's backend. **A host
 refuses a registration for a keyhash it already serves under a different owner**,
 which is a check it can make and the requester cannot. Two claims may still exist on
@@ -2482,7 +2482,7 @@ resource's identity, which is the only assertion a catalog carries.
 **A scope the evaluator cannot compute is structurally valid and ineffective.** A decoder MUST NOT reject it.
 
 **Rejection is wrong because validity is not local.** The same entry is valid for a
-node that can compute the position and not for one that cannot — so rejection would
+node that can compute the position and not for one that cannot, so rejection would
 make structural validity depend on the reader's topology, and a node would reject an
 object its neighbour accepts. **Store it, forward it if the forwarding rule says to,
 and grant nothing from it.**
@@ -2563,7 +2563,7 @@ visible-but-unresolved, and that is the point (design §9.0.2).
 
 **Nothing is retained on either side.** The request is liveness class (design
 §15): answer it and discard it. **It is not archived** — design §10's archive is
-topology and presence — and a responder that logged these would hold a record of who
+topology and presence, and a responder that logged these would hold a record of who
 was being introduced to whom, which is the exposure stapling exists to prevent.
 Rate-limit per requester as with any other query.
 
@@ -2576,7 +2576,7 @@ this protocol — its holder must present one naming a reachable ancestor instea
 
 **An unpinned anchor is never authenticated, and this is not trust-on-first-use.**
 The requester has a keyhash from the table and no key material —
-`AnchorEntry` carries neither — and **a keyhash cannot be checked against what the
+`AnchorEntry` carries neither, and **a keyhash cannot be checked against what the
 handshake presents.** An identity is SHA-256 of the *pair* (§1), while RFC 7250
 carries one SubjectPublicKeyInfo, so the classical component alone cannot reconstruct
 the hash. This is the same impossibility §8.2 states for a sibling arriving without
@@ -2599,7 +2599,7 @@ authenticate.
 > someone else. Do not "fix" the anchor case to match the sibling one.
 
 **Anchor entries are self-signed, and the signature is verifiable only by a party
-that already holds the anchor's key** — from having attached to it, or from a
+that already holds the anchor's key**: from having attached to it, or from a
 transaction naming it. An entry carries the *keyhash*, not the key, so **nothing in
 the entry lets a recipient check the signature on receipt, and resolution never
 supplies what would.**
@@ -2613,7 +2613,7 @@ identifiable. Where it cannot, a forged entry costs one failed dial.
 treats "present in the table" as "verified" while its ingestion path does not
 enforce that has a partition vulnerability with no visible symptom. State which it
 is: either entries are verified on acceptance — possible only where the key is
-already pinned — or the table holds unverified gossip and verification happens on
+already pinned, or the table holds unverified gossip and verification happens on
 contact.
 
 Freshness is by `seqno`, strictly greater `counter` to replace **within a series**; entries in different series do not rank (§2.3).
@@ -2663,7 +2663,7 @@ never propagates**: a grant is a momentary release, and an object that persisted
 would defeat the retention property the whole scheme exists for.
 
 **Field 1 disambiguates which capture.** A verifier who has met the subject several
-times holds several sealed captures; **the grant names the one to open** — ordinarily the latest finalized eligible
+times holds several sealed captures; **the grant names the one to open**: ordinarily the latest finalized eligible
 meeting in the committed history (§4.5), though which eligible capture to grant
 against is the subject's choice (design §7.5.2). Without field 1 the holder
 would guess.
@@ -2672,15 +2672,15 @@ would guess.
 subject countersigned is an unsolicited key release, and a holder should treat it as
 malformed rather than as an invitation to open its store. **Arrival order is not
 guaranteed**: the grant and the query travel different paths, so a
-holder may buffer an unopened grant briefly awaiting its query — bounded and brief,
+holder may buffer an unopened grant briefly awaiting its query: bounded and brief,
 since an indefinite buffer defeats the momentary-release property. The bound is
 local policy. **The authenticated sender MUST be the subject** [2026-09-02]:
 the seed never leaves the subject, so a grant arriving from anyone else is
 replay or fabrication, and the holder rejects it. **Duplicates are ignored, and
-so is a differing second grant for a query already satisfied** — the first
+so is a differing second grant for a query already satisfied**: the first
 authenticated grant stands: one release, one answer. **A grant naming a record
 the holder does not hold yields `unavailable`** [2026-09-02]: there is nothing
-to compare, and nothing about the subject is thereby evidenced — the same
+to compare, and nothing about the subject is thereby evidenced: the same
 posture as every other absence.
 
 ### 7.4 Late verifier response
@@ -2701,7 +2701,7 @@ LateResponse = {
 `txid` fixes its content; this object sits beside it. **The record is unaffected**
 — it finalised with the responses that had arrived, its unanswered slots absent
 and visible (§5.5, §3.2). A late response is additional evidence an evaluator may
-weigh, never a change to what was decided — and never retro-inserted.
+weigh, never a change to what was decided, and never retro-inserted.
 
 **The response must carry a `query_id` the subject countersigned for that
 ceremony** — consent is the gate, there being no selected set to test against
@@ -2753,7 +2753,7 @@ network position — **positional grants only**, never roles bound to named
 individuals (design §11.2.1).
 
 **Discard it when it lapses**, rather than holding a record of a relationship that
-has ended. The condition is visible in topology, so a holder can tell — and a
+has ended. The condition is visible in topology, so a holder can tell, and a
 retained lapsed acknowledgement is a durable statement that two parties were once
 connected, which is exactly what departure is supposed to end.
 
@@ -2780,7 +2780,7 @@ EndpointRecord = {
 
 **Published by infra nodes only.** A light client's endpoints arrive when it attaches
 (design §14.1.2) and it holds no static address; an infra node serves itself and
-never attaches, so nothing otherwise carries its address to its patron — and without
+never attaches, so nothing otherwise carries its address to its patron, and without
 it **the patron cannot refer** (design §12.6.1).
 
 **Carried in the topology class**, by §10.1's forwarding rule, so it reaches the
@@ -2799,7 +2799,7 @@ flooded object passes through parties the recipient did not choose, where a
 This is why §7.7.3's replies are unsigned and this record is not.
 
 **Freshness by `seqno`, strictly greater `counter` to replace within a series**, under §2.3's rule; across series they do not rank.
-**Publishing a changed endpoint list advances the counter** — and the list is
+**Publishing a changed endpoint list advances the counter**, and the list is
 ordered, so reordering alone is a change [2026-09-02]: field 2 carries
 preference, and any field-2 difference at an equal `seqno` would be exactly the
 equal-`seqno` disagreement the advance exists to prevent. That is what makes the
@@ -2813,7 +2813,7 @@ relationship line's (§2.3: one series per patron relationship, two patrons two
 series — design §19.4, P36), so a node bound under two patrons publishes one
 record per line, each carrying that line's own current `seqno`. A single
 record could not serve: its series is unprovable in the other relationship's
-subnet, so it would never enter storage there — and a shared counter across
+subnet, so it would never enter storage there, and a shared counter across
 subnets would disclose exactly the cross-subnet activity P36 exists to
 conceal. The lists may agree; nothing requires it, and each record is that
 line's own address claim — **partitioning records and locators between
@@ -2825,7 +2825,7 @@ conflict.
 **The list is in the publisher's preference order, and its entries are distinct.**
 A repeated `NetworkPoint` is malformed. The record is signed, so a decoder
 accepting a repetition another rejects splits the network on bytes rather than on
-meaning — and a repetition expresses nothing the order does not already say.
+meaning, and a repetition expresses nothing the order does not already say.
 
 **A peering record already carries this for peered nodes** (§4.4, `NetworkPoint` for
 both endpoints). The gap this record closes is the infra node that **neither peers
@@ -2958,7 +2958,7 @@ its own subtree.
 
 **Nothing polices referral content, because impersonation is self-detecting.** The requester
 authenticates each endpoint against the keyhash it expects (§9.1), so a wrong
-address produces a handshake failure rather than a silent misdirection — and an
+address produces a handshake failure rather than a silent misdirection, and an
 intermediary misreporting progress buys only the same failed dial. What a false
 answer retains is denial (design §12.6.1, design §18.4).
 
@@ -2987,7 +2987,7 @@ from some other source — an introduction, a cached entry, a peer's referral.
 resolution against a position the subject has left returns failure code 0 or 1, and
 the requester re-resolves from a higher anchor (design §12.3) or re-establishes
 socially (design §12.4). **No party redirects a resolution to a different position on
-the subject's behalf** — that is the redirection mechanism this rule existed to
+the subject's behalf**; that is the redirection mechanism this rule existed to
 prevent, and removing forwarding removed the thing that needed the guard.
 
 **`seqno` comparison still governs locator freshness** wherever two locators for one
@@ -3009,7 +3009,7 @@ PQXDH, whose bundle contents are specified by that protocol. This section carrie
 them.
 
 **The bundle is opaque to this protocol**. A node that serves
-prekeys cannot validate their contents and does not need to — only the endpoints
+prekeys cannot validate their contents and does not need to: only the endpoints
 share the state required to interpret them. Carrying the bundle as a blob also
 means a PQXDH revision does not force a wire change here.
 
@@ -3117,7 +3117,7 @@ truncation.
 must match the record that follows it in the batch, and the first must match the
 requested head. **Where field 2 was absent, there is no requested head to match**:
 the chain still verifies internally, but its *newestness* is the holder's claim
-and nothing the requester holds can check it — a requester restoring its own
+and nothing the requester holds can check it: a requester restoring its own
 archive is trusting the holder not to serve a truncated history
 (`light-client-requirements.md` §2 states the interface obligation this creates). **A holder cannot be trusted to have walked correctly**, and the
 verification is one hash comparison per record, over records the requester is
@@ -3245,7 +3245,7 @@ frame = u32-be length || deterministic CBOR of [ uint frame_type, body ]
 decimal implementer and the boundary frames would divide the two.
 
 **A declared length above the bound is a protocol error, and it ends the
-session** [2026-09-02] — this sits *below* the malformed-frame rule, not under
+session** [2026-09-02]; this sits *below* the malformed-frame rule, not under
 it. A malformed body inside a bounded frame is cheap to discard and the
 session survives; a length out of contract is a violation of the framing layer
 itself, and skipping it would mean streaming an attacker-declared volume
@@ -3280,7 +3280,7 @@ corrupted frame is indistinguishable from loss, and closing an authenticated
 session over what loss would have cost nothing is a self-inflicted outage.
 §8.2 states the two instances this generalises — a malformed heartbeat counts
 as absence, a malformed `SiblingUpdate` is ignored whole with the previous
-list standing — and the rule holds for every control frame, `TopologyPush`
+list standing, and the rule holds for every control frame, `TopologyPush`
 included: discard, hold what you held, let reconciliation or the next frame
 repair it.
 
@@ -3324,7 +3324,7 @@ its capability names.
 sends its own in `AttachAck`. Neither is a request for the other's permission.
 
 **Unknown parameters MUST be ignored, never rejected.** This is the same treatment
-§1 gives unknown *map keys* — preserved and passed over, and deliberately
+§1 gives unknown *map keys*: preserved and passed over, and deliberately
 different from unknown *enum values*, which are rejected. A capability is an
 extension point; an enumerated field is a closed vocabulary.
 
@@ -3344,8 +3344,8 @@ node except its serving node's siblings.
 #### 8.1.1 Greasing — required, not decorative
 
 *A greased id is drawn avoiding ids the sender knows; collision with an id known
-only to the peer is accepted at its probability — k/2^64 per draw against a peer
-holding k unpublished capabilities, negligible at any real k — and the peer
+only to the peer is accepted at its probability: k/2^64 per draw against a peer
+holding k unpublished capabilities, negligible at any real k, and the peer
 treats the value as an ordinary unknown parameter.*
 
 **Every implementation MUST tolerate receiving parameters whose ids it does not
@@ -3580,14 +3580,14 @@ send the next failover to peers of a node the client is not talking to.
 client cannot discover failover targets after its serving node is already dark.
 
 **Field 2 is optional because it must be.** §1 forbids encoding an empty
-array, and an infra node with a single child — a perfectly legal topology — has no
+array, and an infra node with a single child (a perfectly legal topology) has no
 siblings to list. Absence means no siblings.
 
 **The serving node determines the mode; the client is told.** A client
 attaching to a sibling sits two hops away in topology the sibling holds within
 its horizon, so *"is this client in my subtree?"* answers the question without
 anything on the wire. `AttachAck` field 1 exists because **the client may not
-know**: one whose serving node changed — its patron grew into infra, say — can
+know**: one whose serving node changed (its patron grew into infra, say) can
 believe it is reaching its primary when it is not. The determination belongs with
 the node that has authority over its own subtree.
 
@@ -3636,7 +3636,7 @@ be discovered once the node is dark — would be unusable in the case it exists 
 **There is no `AttachNack`, and refusal is carried as a QUIC close code.** A node refusing an attach by policy closes the connection with
 **application close code 1 (`refused`)** in CONNECTION_CLOSE. A client seeing it
 MUST treat the refusal as **that node's answer, not that endpoint's** — its other
-addresses will say the same — which gives `light-client-requirements.md`'s existing
+addresses will say the same, which gives `light-client-requirements.md`'s existing
 retry floor the carrier it lacked. Every other outcome — any other close code,
 reset, timeout, no valid `AttachAck` — is an **endpoint** failure: the client tries
 the remaining candidates in the order received, and when all fail it is disconnected
@@ -3660,7 +3660,7 @@ replayable, and a replayed `Attach` re-binds session state; 0-RTT resumption sti
 serves reattachment latency because everything after the handshake keeps its
 benefit. The rule sits on the server because that is where it is checkable. **It is
 one instance of §9.2's general rule** — anything replayable that changes state waits
-for the handshake — and `Attach` is named here because this is where it arrives.
+for the handshake, and `Attach` is named here because this is where it arrives.
 
 **The cached sibling list should survive restart.** It is replaced by any
 `AttachAck` or `SiblingUpdate` and otherwise persists; an in-memory-only client
@@ -3671,7 +3671,7 @@ ends; the next fresh attach tries its actual serving node first. Probing the
 primary from a degraded session adds traffic for a state the client will leave
 anyway at the next natural reattachment.
 
-Queuing is continuous — there is no "begin queuing" signal, and
+Queuing is continuous; there is no "begin queuing" signal, and
 reachability is only a hint about when to attempt delivery.
 
 ---
@@ -3734,7 +3734,7 @@ frame = u32-be length || deterministic CBOR of [ uint request_type, body ]
 ```
 
 Same framing as stream 0 (§8.0), same rule — **unknown request types are rejected
-on a bidirectional stream**, unlike unknown control frames which are skipped — but
+on a bidirectional stream**, unlike unknown control frames which are skipped, but
 **a larger bound: 256 KB — exactly 262,144 bytes.** Stream 0's 64 KB cannot carry what
 bidirectional streams exist to fetch: a maximum-signer presence record is ~65 KB
 before its presentation slots, and a recovery adoption ~42 KB. Control frames stay at
@@ -3757,7 +3757,7 @@ no continuation to preserve.
 | 11 | `RelaySubmission` (§7.10) |
 | 12 | `WakeRegistration` (§7.10) |
 
-**The reply carries no type tag and is framed identically otherwise** — the same
+**The reply carries no type tag and is framed identically otherwise**: the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
 chose, on a stream it opened, so a tag would restate what the requester already
 knows.
@@ -3821,12 +3821,12 @@ protocol.**
 **Frame:** `TopologyPush`, control frame type 5 on stream 0 (§8.0), carrying the
 object byte-for-byte with a **body-kind tag and nothing else.** The class is not
 uniform — most topology objects are signed transactions with an envelope, and an
-`EndpointRecord` (§7.6) is a standalone signed map with neither — so a receiver needs
+`EndpointRecord` (§7.6) is a standalone signed map with neither, so a receiver needs
 one discriminator to know which parser to use. **That is the only wrapper field
 permitted.** Anything further would be sender-supplied state every receiver must
 trust, which §7.7.3 rejected for resolution and rejects here for the same reason.
 
-**Who may push.** A node pushes topology it is a party to — its own adoptions and
+**Who may push.** A node pushes topology it is a party to: its own adoptions and
 departures, disavowals of its own subordinates, its own peerings, its own endpoint
 record. **Within the horizon this is a trusted push**, in the narrow sense that the
 pusher is the party whose position the object describes and the object is signed by
@@ -3849,7 +3849,7 @@ field.
 **Adjacent means the authenticated sessions you already hold by virtue of a topology
 relationship**: your patron and your subordinates where sessions with them exist,
 your peers (design §6.3), **your serving node, and the clients attached to you**
-(design §14.1.2). It is not a set to maintain — it is the
+(design §14.1.2). It is not a set to maintain; it is the
 sessions the node has anyway, which is the same move the duplicate rule makes with
 the store. **The serving relationship is what carries control past light-client
 patrons**, who hold no sessions and relay nothing (design §12.6.3): a client's
@@ -3857,7 +3857,7 @@ floods enter and leave the network through the node that serves it, which is how
 node two levels below its infra ancestor keeps its own horizon view and publishes
 its own departure. **Node type does not
 enter it**, and must not: type is not a function of position — a node becomes infra
-by launching and signing an infra instance, without moving (design §12.6.1) — so a
+by launching and signing an infra instance, without moving (design §12.6.1), so a
 rule phrased on type would go stale on an act that changed no topology at all. It is
 the same reason a locator does not encode type. Leaving adjacency unstated would let two conforming nodes store the same
 objects and deliver them to different neighbourhoods, which shows up as a permanent
@@ -3918,7 +3918,7 @@ endpoints and extensions alike, since §2.3's rationale is that a subject
 advances its own counter for *any* new signed content [2026-09-02].
 **Malformed names the pair, not the later arrival** [2026-09-02]: two signed
 contents at one number can only mean equivocation or a key in two hands, and
-which arrived first is an accident of the path — a holder that kept the
+which arrived first is an accident of the path: a holder that kept the
 earlier one would let arrival order split the network's view, the thing this
 section's own repetition rule refuses on bytes. On discovering the conflict
 a holder retains **neither** as current and forwards nothing further for that
@@ -3948,7 +3948,7 @@ than an omission.
 **Loss is detected at the receiver, which is the party that can act.** §3.1 puts a
 back-pointer in every signed body, so a transaction whose predecessor the receiver
 does not hold announces the gap, names exactly what is missing, and §7.9 fetches it.
-That is stronger than acknowledgement, which detects loss at the sender — who can
+That is stronger than acknowledgement, which detects loss at the sender, who can
 only resend into the same hole.
 
 **Second repair path: periodic reconciliation.** A node that missed something it
@@ -3968,7 +3968,7 @@ root.** `TopologyMemo`, control frame type 6 on stream 0 (§8.0).
 This is what design §15's *ancestors* reach means: **full transactions flood within
 the horizon; only memos travel further up.**
 
-**Restricted to membership operations — adoption, departure and disavowal — and the
+**Restricted to membership operations — adoption, departure and disavowal, and the
 restriction is load-bearing.** Peering is topology class and is **excluded from
 rootward travel**: a peering record carries `NetworkPoint` for both endpoints plus
 ASN (§4.4), and design §19.8 C8 maps that composition to a
@@ -3985,7 +3985,7 @@ infrastructure node on the patron chain instead** (design §14.1.2). A light-cli
 through one are collapsed through the infrastructure that serves it; a skipped
 patron's optional table simply has gaps, which *no tier is load-bearing* already
 prices. **A serving node runs the cycle check for its attached clients as well as
-for itself** — it holds its whole light-client subtree (design §12.6.1), so it
+for itself**; it holds its whole light-client subtree (design §12.6.1), so it
 checks field 1 against itself and every attached client, and a hit for an attached
 client is handed to that client at contact: the records that confirm it and the
 disavowal that answers it are that client's (design §6.2.2), not the serving
@@ -3995,7 +3995,7 @@ node's.
 It has already passed on what the memo says, or something later, so
 no upstream table can need it. This costs a little latency on a genuinely late
 out-of-order memo — repaired by the next one or by reconciliation, the failure this
-section already accepts — and it stops a **replayed** memo at the first table-holding
+section already accepts, and it stops a **replayed** memo at the first table-holding
 hop above wherever it was injected, rather than letting it travel to the party it
 names. **A memo never leaves its subnet**,
 because its anchor names the subnet and rootward travel terminates at that subnet's
@@ -4021,7 +4021,7 @@ passed.
 
 **The cycle check is an identity comparison.** A memo travels up
 patron edges and field 1 names the patron it speaks for. **If field 1 is you, a memo
-you originated has come back to you from below** — you are your own ancestor, and
+you originated has come back to you from below**; you are your own ancestor, and
 that is a cycle. It fires at any depth, on the memo alone, and terminates the memo
 there.
 
@@ -4040,7 +4040,7 @@ moved for an endpoint change (§2.3).
 **A node MAY maintain a table of `(patron, slot) → occupant` built from the memos
 that pass through it.** Every memo from below traverses it, so the table's
 coverage is that node's **whole subtree** rather than its horizon. Read the other
-way — by occupant — it answers the re-parenting question: a node appearing in two
+way (by occupant), it answers the re-parenting question: a node appearing in two
 slots is held in two places.
 
 **It is a RIB.** design §15's liveness class already sets the retention rule: *keep
@@ -4058,7 +4058,7 @@ slot.** Later timestamp replaces; equal timestamps break by arrival
 order. **No clock is compared across nodes**: two memos about one slot were written
 by the same patron from the same clock, which is the one case where a timestamp
 orders reliably. This is why the field is the underlying transaction's own timestamp
-(§4.1, §4.2, §4.3) rather than a reading taken when the memo is composed — it is
+(§4.1, §4.2, §4.3) rather than a reading taken when the memo is composed; it is
 copied from a signed record and a detector that fetches that record can check it.
 
 **Every field is a statement the patron has authority to make.** It names
@@ -4101,7 +4101,7 @@ slot is still the one the memo asserts. **A fabricated memo fails both**, at no
 traffic cost. This is what lets the memo stay small and unsigned.
 
 **Not a fetch.** A `§7.9` archive request needs a head, and a head reaches you only
-by having adopted the subject (§4.1 field 7) — so a rule requiring a fetch would be
+by having adopted the subject (§4.1 field 7), so a rule requiring a fetch would be
 unperformable for exactly the distant cycles the memo exists to catch. It is also
 unnecessary: the detector is never a stranger to the transaction.
 
@@ -4123,7 +4123,7 @@ a structural accident, and design §6.2.5 already calls the bootstrap case "a li
 accident rather than an attack."
 
 **Where both parties are present, the prompt is better and comes first.** design
-§6.2.5's disambiguation — *one of you must be the patron* — resolves the bootstrap
+§6.2.5's disambiguation (*one of you must be the patron*) resolves the bootstrap
 case socially. Automatic disavowal is the fallback for cycles formed at a distance,
 which is the case the memo exists for.
 
@@ -4204,7 +4204,7 @@ requester is told.
 1. **Resource exists on this node** → **code 1** if it does not. An unknown resource
    keyhash has **no owner**, and membership is owner-relative (design §11.2), so
    there is no membership question to ask first. **Existing means the node holds a
-   binding from that keyhash to an owner and a backend** — not that the package is
+   binding from that keyhash to an owner and a backend**, not that the package is
    running, which is step 6, and not that a `CatalogEntry` was ever published, which
    is optional (design §11.5). Collapsing a stopped package into absence would answer
    code 1 where another host answers code 2 for the same deployment.
@@ -4231,7 +4231,7 @@ non-role-holder never does.** Putting availability before the role check would t
 anyone in the horizon when a resource is offline, which is operational information
 about the owner. And running availability first would answer *unavailable* to
 someone who has no role,
-which is true and useless — they would retry forever against a resource they could
+which is true and useless; they would retry forever against a resource they could
 never reach.
 
 **Each code answers exactly one question**, so a member is never left choosing
@@ -4250,20 +4250,20 @@ so the node already knows which it is talking to.
 **Inside the horizon, withholding the reason helps nobody.** A member who lacks a
 `SubtreeAck` (code 4) or holds no role row granting `connect` (code 5) can act on
 that — ask
-the grandpatron to acknowledge them, ask the owner for a role — and a bare refusal
+the grandpatron to acknowledge them, ask the owner for a role, and a bare refusal
 leaves the resource undiagnosable to precisely the people entitled to use it. They
 already hold the topology those answers describe.
 
 **Outside it, `refused` (code 1) covers everything**: not a member, membership
 lapsed, resource does not exist for you. A stranger learns nothing about the owner's
-membership or policy, which is the case the opacity was for — and **a keyhash naming
+membership or policy, which is the case the opacity was for, and **a keyhash naming
 nothing returns the same code**, otherwise a stranger enumerates the host's resources
 by watching which lookups differ.
 
 **The codes are equal; the timing is not specified.** A host that looks up a resource
 it has and one it does not may take measurably different time, and nothing here sets
 an envelope for that. **The opacity is in what the node says, not in how long it
-takes to say it** — an implementation that cares should equalise the two paths, and
+takes to say it**: an implementation that cares should equalise the two paths, and
 one that does not has a narrower property than this section describes.
 
 ### 11.1 Reaching a node you are not attached to
@@ -4319,7 +4319,7 @@ other as a fresh request — with the node's authenticated headers attached to i
   is how a proxy is turned into someone else's client.
 - **Insert your headers after stripping, into the re-serialised message.**
 
-**"Canonically" means *from your parse, deterministically* — not identically to
+**"Canonically" means *from your parse, deterministically*, not identically to
 another node.** Nothing signs these bytes and no second implementation compares
 them, so there is no interoperable serialisation to agree on. The property that
 matters is that what you emit is what you parsed, entirely, and that the same input

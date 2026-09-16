@@ -48,14 +48,14 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   nominees are absent or outnumbered.** The witness set is only representative to
   the extent you nominated half of it; where the counterparty nominated all of it,
   the attestation rests entirely on their nominees (design §7.1.1). This
-  is not a validity condition — such a record is well-formed — which is why the
+  is not a validity condition — such a record is well-formed, which is why the
   client has to surface it.
 - **Refuse to sign a record attributing to you a witness you did not nominate**
   [author, 2026-09-03]. Your client knows exactly which witnesses it nominated;
   an entry claiming `nominated_by = you` outside that set is the counterparty
   dressing its own curation in your name, and it defeats the split check above
   from inside an apparently balanced record. The wire cannot check this
-  (`nominated_by` is a recorded claim) — you can, and you are the only party
+  (`nominated_by` is a recorded claim); you can, and you are the only party
   who can.
 
 ### 1.2 Acting as a witness
@@ -63,7 +63,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 - **Decline to witness a ceremony whose claimed `started_at` is far from the
   time you observe.** Your clock is the only independent one at the ceremony,
   and the chronology bound (`wire-format.md` §3.3) is worth nothing unless
-  witnesses apply it. No later validator can check that you did — set the
+  witnesses apply it. No later validator can check that you did: set the
   tolerance you can defend and refuse outside it.
 
 ### 1.3 Capture
@@ -147,7 +147,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   §7.3).
 - **Select your counterparty's verifiers by your own recognition, and say which
   was which** (design §8.1.2): people you have met, people in any of your trust
-  horizons, then one further edge — and go fishing for common acquaintances
+  horizons, then one further edge, and go fishing for common acquaintances
   before filling the remainder at your discretion, marking each response's
   basis honestly (`wire-format.md` §5.5). **Review who was selected for you
   before signing**: the record will carry those responders forever, and you
@@ -170,7 +170,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   case and signs normally.
 - **Compute *n* over the bundle handed to you, and treat it as your
   counterparty's claim** (`wire-format.md` §5.2 and `wire-format.md` §5.4). The bundle is theirs to
-  curate — records from any of their series, no chaining, no completeness — so
+  curate — records from any of their series, no chaining, no completeness, so
   verify each record alone, count qualifying ones once by txid, and read the
   result as sizing your diligence, never as a fact about their history.
 - **Report a record as unverifiable, not invalid, when you lack a participant's
@@ -207,8 +207,8 @@ job.
   high-counter records would come back into comparison against the new one
   (`wire-format.md` §4.6). You hold your own chain, so this is yours to check, and a
   counterparty holding that chain will reject a reissue that repeats a series in it.
-- **Keep the chain that proves your current series** — your adoption and every reissue
-  since — and present it when a counterparty needs to rank two of your records
+- **Keep the chain that proves your current series**: your adoption and every reissue
+  since, and present it when a counterparty needs to rank two of your records
   (`wire-format.md` §4.6.1). It is presented, never propagated, and it discloses the age
   of your patron relationship and how many reissues you have taken.
 - **On suspected key compromise, seal before you take a series reissue.** Set the counter of the
@@ -230,10 +230,10 @@ job.
 - **Keep retention and disclosure as separate controls.** Choosing how far back to
   *disclose* must never delete anything: disclosure is reversible and can be widened
   later, up to what is retained. Deleting is the one-way door, and it caps every
-  future disclosure — so it belongs behind its own deliberate control, never as a
+  future disclosure, so it belongs behind its own deliberate control, never as a
   side effect of choosing what to show today.
 - **Treat a series reissue as deliberate, not routine.** It costs nothing in routing, since
-  the path is unchanged, but it is the boundary beyond which you may prune — and
+  the path is unchanged, but it is the boundary beyond which you may prune, and
   pruning is irreversible. **Never prune inside the 730-day window**: those records are
   what verifier selection counts, and discarding them lowers your own verification
   threshold, which is a thing an evaluator can see you did (design §10.1).
@@ -243,7 +243,7 @@ job.
   outstanding branches, and an unmerged fork means their history is incomplete
   wherever they present it (design §10.3).
 - **Maintain backups, and make the consequence visible to the user.** Archive loss
-  is loss of portable history, since the archive is a second factor — key without
+  is loss of portable history, since the archive is a second factor: key without
   archive yields no transferable standing (design §10.2). Nobody can check that
   a client backs up; what a user *can* check is whether they were told what losing
   the device costs. On a host with evictable storage, saying so is the substance of
@@ -260,7 +260,7 @@ job.
   which siblings replicate (design §3.4) and which is the wrong place for
   something nobody else has any business holding. Encrypted under a passphrase
   the user holds, on a device they control, it is as protected as the subnet keys
-  beside it — and it makes a restore a whole one: a replacement device recovers
+  beside it, and it makes a restore a whole one: a replacement device recovers
   the ability to administer, not only to participate. It is also the piece whose
   loss is recoverable outside this network, a provider having its own account
   recovery and its own facility to withdraw and reissue.
@@ -270,8 +270,8 @@ job.
   (`wire-format.md` §7.9) — the chain verifies internally, its completeness does
   not, and the same reduced footing extends through the whole lost-archive path:
   re-adoption on a fresh series presents no history and rests on the patron's
-  personal judgment. Surface both as what they are — recovery on trust rather
-  than on verification — and never present a restored archive as
+  personal judgment. Surface both as what they are: recovery on trust rather
+  than on verification, and never present a restored archive as
   verified-complete.
 
 **Presenting and serving history:**
@@ -313,7 +313,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Prefetch reusable prekey material for the whole trust horizon as a batch request**
   (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
-  someone rotated — rather than intent to message. Fetching on demand instead
+  someone rotated, rather than intent to message. Fetching on demand instead
   announces each intended conversation to whoever serves the bundle (design
   §19.8, C11).
 - **Never prefetch one-time keys.** Serving one consumes it, so blanket prefetch
@@ -364,7 +364,7 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Check each referral, not an arrival total.** A referral's `advances` must be at
   least 1 and must not advance past the path's end; arrival is announced by the
   `ServingInfra` reply itself, and no arrival-consistency equation is checked
-  (`wire-format.md` §7.7) — it would reject the direct-serving answer a
+  (`wire-format.md` §7.7); it would reject the direct-serving answer a
   deeper-cached node is permitted to give.
 - **Retry and endpoint-selection policy is yours**, with two floors: treat a node's
   endpoint list as alternatives rather than stopping at the first failure, and treat
@@ -493,7 +493,7 @@ session secrecy. The client implements them; it does not reinvent them.
 ## 7. Cycle handling
 
 - **When two participants simultaneously propose authority relationships in
-  opposite directions — each becoming the other's superior — ask them to choose one
+  opposite directions (each becoming the other's superior), ask them to choose one
   direction rather than reporting a protocol failure.** Two people setting up
   together will each reasonably try to adopt the other (design §6.2.5).
 
@@ -530,7 +530,7 @@ session secrecy. The client implements them; it does not reinvent them.
   (design §11.4); what the operator is deciding is who gets in, and a list of people
   they recognise is the form in which a wrong answer is obvious. Show the count
   beside it, never instead of it.
-- **For a relative rank predicate — a percentile, a median, any quantile — show the
+- **For a relative rank predicate (a percentile, a median, any quantile), show the
   population it is a fraction of, and say that the line moves when the org does.**
   These are the only predicates whose result depends on somebody other than the
   member being granted (`resource-requirements.md` §7.2.1), and an operator reading

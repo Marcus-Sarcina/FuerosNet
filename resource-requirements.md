@@ -73,7 +73,7 @@ negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 
 | Leg | Transport | Framing |
 |---|---|---|
-| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §11) — not a stream-0 control frame. No HTTP transport — the application request rides inside the frame as a serialized HTTP/1.1 message (`wire-format.md` §11) |
+| **Client → node** | The existing `rhtn/1` QUIC session | A `ResourceRequest` on a **new bidirectional stream**, request type 6 (`wire-format.md` §11), not a stream-0 control frame. No HTTP transport — the application request rides inside the frame as a serialized HTTP/1.1 message (`wire-format.md` §11) |
 | **Node → resource**, *where the node carries the traffic* | A local socket for a package hosted on the node; **HTTPS, required**, where it crosses a network | **Ordinary HTTP**, carrying the headers below |
 
 **The second leg often does not exist at all.** design §11.7's
@@ -114,7 +114,7 @@ missing grant.**
 **So `rhtn-roles` may be empty, and that is not an error.** `connect` is the
 gate and it is spent getting the request to you; the application roles are what you
 were given on top of it. **An empty list means a caller the node admitted and to whom
-the operator has granted nothing further** — decide for yourself what that principal
+the operator has granted nothing further**: decide for yourself what that principal
 may do, exactly as you would for any role set you do not recognise. It does not mean
 the node failed to populate the header.
 
@@ -122,7 +122,7 @@ the node failed to populate the header.
 `rhtn-principal` and `rhtn-audience` are base64url keyhashes, `rhtn-session` is
 a base64url opaque identifier, and `rhtn-roles` is RFC 9110 list syntax — a
 comma-separated list of role names, each an HTTP `token`, the comma being the
-list delimiter rather than part of any name. **base64url here is RFC 4648 §5 without padding** — no trailing
+list delimiter rather than part of any name. **base64url here is RFC 4648 §5 without padding**: no trailing
 `=`, since a strict parser given the other spelling rejects bytes that decode
 identically, and one of the two had to be named. **Role names are `[a-z0-9_-]`, 1–32 bytes, matched
 byte-for-byte** — no case folding, no escaping, and no comma admitted. **They
@@ -232,7 +232,7 @@ architecture. It is the same shape as
 deployment and expect the network to express its access control; it never sees a
 wide-scale audience. Design for one instance, and let the application federate.
 
-**design §11.0.1 carries the argument** — the three properties that follow from
+**design §11.0.1 carries the argument**: the three properties that follow from
 this, and the cost, which is that every patron running an instance becomes an
 operator.
 
@@ -498,7 +498,7 @@ review them, but this is ordinary permission hygiene rather than a structural ho
 stay optional since some named grants are permanent by intent.
 
 **External consumers are a different direction and unaffected.** A SaaS vendor
-accepting a credential (§4, §13) is not *accessing a resource* — it is consuming an
+accepting a credential (§4, §13) is not *accessing a resource*; it is consuming an
 assertion made about an org member by that member's own infra node. The vendor
 need not be in the org, or in the network at all.
 
@@ -545,7 +545,7 @@ is the whole of their security difference.
 **Why relative rank is different.** The cutoff is a fraction of a count, so anyone
 who can enlarge the population *below* the line raises everyone above it. An org of
 100 with the line at the top 20 admits its 25th member once 25 further members exist
-beneath them, and the trust metric is not wrong at any point — it rates the added
+beneath them, and the trust metric is not wrong at any point: it rates the added
 members as worthless, which is exactly why they land at the bottom and lengthen the
 queue. **The predicate never asked how trusted anyone was; it asked where they stood
 in a line.** So a relative predicate's soundness rests on the acknowledgement policy
@@ -556,12 +556,12 @@ and those two settings are one decision rather than two.
 design §11.4 re-evaluates when a node enters or leaves the horizon; for the classes
 above that means scoring the entrant and dropping the leaver's rows, but a quantile
 moves for *everyone* when the count changes. An implementation that scores only the
-changed member leaves rows that no longer follow the predicate — stale in both
+changed member leaves rows that no longer follow the predicate: stale in both
 directions, granting where the line has risen and withholding where it has fallen.
 
 **What contains this is the size and character of the org, not a rule.** The table
 is bounded and small (§3's vocabulary), and its members are people the operator has
-at least passing acquaintance with — that is what the horizon is sized for. Moving a
+at least passing acquaintance with; that is what the horizon is sized for. Moving a
 quantile enough to matter means unfamiliar names appearing in a list the operator
 reads while binding the role. **Statistical manoeuvring is a weak attack against a
 population you recognise individually**, which is the reason the predicate language
@@ -628,7 +628,7 @@ metric.
 
 **Declare what you need in the manifest.** Storage, compute, hardware capabilities, a
 persistent address, anything a requesting client must supply. **A node that cannot meet
-those requirements cannot host you, and remains conforming** — so does a user device
+those requirements cannot host you, and remains conforming**, so does a user device
 that cannot use you. That is ordinary capacity rather than a defect on either side.
 Declaring it here makes the mismatch visible before installation instead of at first
 request, which is packaging hygiene rather than something the protocol enforces. The
@@ -711,7 +711,7 @@ consumer's root-of-trust decision (*which resource keys do I accept?*) stays whe
 it belongs.
 
 **Out of scope for the network.** An external consumer is not in the graph and
-cannot compute a flow metric, so it needs its own root-of-trust decision — which
+cannot compute a flow metric, so it needs its own root-of-trust decision, which
 issuers do I recognise? That sits **between the patron and the resource**, and is
 the responsibility of whoever writes the IdP plugin (§5), not of this protocol.
 Consistent with per-observer trust rather than a violation of it.
