@@ -161,8 +161,41 @@ one-click provisioning places a seed on hardware the operator does not control.
 §2.1 is the mitigation if it lands; if it does not, the answer to P33 has to
 account for a compelled provider (design §18.1).
 
-The desktop variant needs the same answer from the other end — CER-39 already
-says a desktop instrument keeps its seal in memory.
+**P33's shape** [author, 2026-09-16]. The register entry allocates five things;
+they are three decisions, not one.
+
+- **Seeds — the PoP-capable device alone.** Everything else holds a delegation:
+  the rented instance, the desktop, the CLI. What a light client signs with its
+  identity key is three contexts (`ENVELOPE`, `CONSENT`, `VERIFIER`), every call
+  site of them in the ceremony or the verifier-selection query, so a client that
+  cannot originate a relationship has almost no occasion to use the key. The
+  residue is departure and disavowal, which bounce to the PoP device — where
+  they belong anyway, being what a shared desktop should least be able to do.
+- **Deletion state follows the seed allocation and needs no separate answer.**
+  Design §7.5.2 makes a capture decryptable only when the subject releases a key
+  derived from a seed only they hold, so "which device holds deletion state" is
+  "which device holds the per-ceremony seed". The register's worst line — that a
+  deletion on one device says nothing about the others — dissolves once seeds
+  sit in one place.
+- **Archives, sealed captures and caches go where the storage is, and that is
+  the desktop.** A phone is lost, stolen and broken; the full transaction record
+  and the biometric captures should not go with it, and they are too voluminous
+  to push to every patron, sibling and peer even encrypted — design §23.3
+  already calls photo stores reaching hundreds of MB awkward for attachment
+  quotas. A personal computer is not storage-constrained.
+
+**The cold store resolves CER-39 rather than inheriting it.** That entry defers
+because a desktop has no platform key storage to hold a live seal under. A
+§13.7.1 envelope needs none: a random data key encrypts the blob, an Argon2id
+KEK derived from a passphrase encrypts the data key, and the KEK is never
+stored. A desktop holding that envelope holds ciphertext, and what protects it
+is a passphrase rather than an enclave. **Cold store, not live client** is the
+distinction to keep.
+
+*The trade to state plainly in the surgery.* Design §23.3: a user who syncs
+their archive to three devices has three places to lose it from. This buys
+durability and recovery-to-a-new-phone at the cost of the archive's strength as
+a second factor, and the design says so already.
 
 ---
 
@@ -171,11 +204,28 @@ says a desktop instrument keeps its seal in memory.
 Not protocol changes, but places where the application decisions and the
 existing text do not obviously agree.
 
-- **`infra-client-requirements.md` §8.1 says an operator's interface "reads and
-  never speaks for the node"** and does not compose, sign or send anything on the
-  wire. Push-button administration is compatible only if the button is a request
-  the kernel acts on rather than an interface composing a frame. The text should
-  say which, because the natural reading of "never speaks" forbids the product.
+- ~~**`infra-client-requirements.md` §8.1 says an operator's interface "reads and
+  never speaks for the node".**~~ **Withdrawn — a misreading** [author,
+  2026-09-16]. §8.1 draws design §14.1.0's kernel line: the operator's view is
+  not a second protocol implementation, which is why what crosses to it is what
+  to draw and why an interface handed frames would be a second parser. It says
+  nothing about the operator's authority to command their own node. A button
+  asking the kernel to act composes no frame, and nothing in §8.1 forbids the
+  product.
+
+- **But an operator's command has to cross the wire, and no stream class carries
+  one.** `wire-format.md` §9.2 binds stream 0 to session control and topology
+  propagation, and every bidirectional stream opens with a request-type tag
+  covering resolution, archive fetch, prekey fetch, resource requests, catalog
+  queries and verifier queries. None of those is an operator command. Two ways
+  out, and the choice belongs in the surgery:
+  - **A new request type.** Honest, and a `wire-format.md` change.
+  - **Ride resource requests.** The operator's administration surface is a
+    resource their own node hosts: request type 6 exists, carries an HTTP
+    message, and already has an owner and a role model. Likely needs a host
+    binding the sandbox does not currently grant rather than any new wire type,
+    which makes it the smaller change — and it is the same mechanism the
+    network already offers everyone else.
 
 ---
 
@@ -220,8 +270,11 @@ gets an answer.
   around backgrounding and suspension.
 - **Backup and restore** (PRD-07, design §13.7.1). Scan-on-import is specified;
   the product surface is not.
-- **The desktop variant.** A second device that cannot originate a relationship.
-  What it holds, what it may sign, and what it shows about its own limits.
+- **The desktop variant.** Settled in §2.2: no seed, a delegation for transport,
+  and the household's cold store for the archive and the sealed captures. What
+  remains is product — the restore path to a replacement phone, what it shows
+  about its own limits, and whether a user without a desktop is told what they
+  are not getting.
 - **Multi-device in the ordinary case.** Phone, node and possibly desktop under
   one key. Forking and merge are specified (design §10.3); what the user is told
   about it is not.
