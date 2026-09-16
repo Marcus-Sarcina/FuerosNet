@@ -392,6 +392,16 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Hand payload to your node rather than waiting for the recipient.** The
   answer says your node took it, not that it arrived; a recipient may be away
   for days, and that is what the mailbox is for (design §14.1.6).
+- **Verify the delegation your node presents, and check that it names the key the
+  handshake gave you** (`wire-format.md` §8.2). An instance carries a delegated
+  credential rather than its operator's seed (design §23.3), so the key it
+  presents is not the keyhash you pinned and the delegation is what joins the
+  two. One that names a different key is a replay, and a session built on it is a
+  session with whoever replayed it.
+- **Cache a delegation you have verified, against the key it names.** It is
+  hybrid, it arrives on every handshake, and its window runs to months, so
+  checking it per connection pays that cost repeatedly for an answer that cannot
+  have changed in between.
 - **A wake endpoint is the user's choice and nobody else's** (design §14.1.5).
   Obtain it from a service they picked, hand it to your node with the key its
   body is encrypted to, and refresh it: an endpoint is stable while valid, not

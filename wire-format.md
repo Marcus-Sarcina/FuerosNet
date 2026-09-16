@@ -125,6 +125,7 @@ either be structurally disjoint from every language above, or carry its own
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
 | Former-patron transfer statement (§4.1) | `rhtn/1:transfer` |
+| Transport delegation (§8.2) | `rhtn/1:delegation` |
 
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
 byte string valid in two roles, which the differing CBOR structures argue against without ruling out
@@ -3405,7 +3406,12 @@ Attach = {
                        ; connectivity; the transport authenticated the client
                        ; already, and refusing the session would strand a
                        ; client whose patron is the party that can refresh it
-  3: Capabilities      ; §8.1
+  3: Capabilities,     ; §8.1
+  4: ? Delegation      ; PRESENT iff the handshake presented a delegated
+                       ;   transport key rather than this identity's own key.
+                       ;   ABSENT means field 1's keyhash is over the key the
+                       ;   handshake presented, which the receiver checks
+                       ;   directly
 }
 
 AttachAck = {
@@ -3437,9 +3443,47 @@ AttachAck = {
                        ;   state (design §14.1.6) — so a failover value is
                        ;   normally 0 and a client MUST NOT present it as a
                        ;   global count
-  5: Capabilities      ; §8.1, the serving node's own
+  5: Capabilities,     ; §8.1, the serving node's own
+  6: ? Delegation      ; the serving node's own, on `Attach` field 4's rule.
+                       ;   Normally PRESENT: an instance carries a delegated
+                       ;   credential rather than its operator's seed (design
+                       ;   §23.3), so the key it presents is not the one a
+                       ;   client pinned, and this is what binds the two
 }
 
+Delegation = {
+  1: bstr,             ; the transport key this delegation names: the 32-byte
+                       ;   raw public key the handshake presented (§9.2). Not an
+                       ;   identity — it has no keyhash and signs nothing beyond
+                       ;   the handshake it appears in
+  2: keyhash,          ; the delegating identity. Who the holder speaks as on
+                       ;   this connection, and the keyhash the receiver already
+                       ;   holds a pin for
+  3: timestamp,        ; not_before
+  4: timestamp,        ; not_after. The window is the whole of this credential's
+                       ;   revocation story — no list to consult, no responder to
+                       ;   ask, which is deliberate (design §12.6.5)
+  5: COSE_Sign        ; HYBRID, over fields 1 to 4, external_aad
+                       ;   `rhtn/1:delegation`. Hybrid because the delegating
+                       ;   identity is (§1.3), and a classical-only delegation
+                       ;   would be the one forgeable link in an otherwise
+                       ;   hybrid chain
+}
+```
+
+**A receiver checks field 1 against the key the handshake actually presented and
+refuses the session if they differ.** That check is the whole of what makes a
+delegation non-transferable: it is public, it travels on every handshake, and an
+actor replaying a captured one cannot complete a handshake under the key it
+names. A receiver also checks the window against its own clock and checks that
+field 2 is the keyhash it meant to reach.
+
+**A verified delegation is cached against its transport key.** It is hybrid and
+so costs about 3.4 KB (§4.1), and it arrives on every handshake of a window that
+is measured in months, so a receiver that re-verifies per connection pays that
+repeatedly for an answer that cannot have changed.
+
+```
 SiblingRef = {
   1: keyhash,
   2: [ 1*8 NetworkPoint ],

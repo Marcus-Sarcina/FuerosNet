@@ -171,6 +171,14 @@ A light client's endpoints arrive when it attaches (§1); an infra child does no
 attach to you — it serves itself — so without this record nothing delivered its
 address, and **without that you cannot refer**.
 
+**An instance cannot mint its own.** The signature on an endpoint record is its
+operator's, not its delegation's (`wire-format.md` §7.6), and the anchor entry is
+the same (`wire-format.md` §7.2) — so a change of address is something an
+operator's client signs. Both are rare by construction, an endpoint record being re-signed
+when the address set changes and an anchor entry when the subtree size does. The
+consequence to plan for is that an instance whose address moves while its
+operator is unreachable publishes nothing until they are.
+
 **You accept it on the same terms as an anchor entry.** The signature is verifiable
 only once you hold the node's key material, so it gives attribution after contact
 rather than authentication before it. Treat the record as unverified gossip until you
@@ -285,6 +293,24 @@ serving node.
   the relayed path as a first-class route rather than a fallback afterthought — a
   substantial minority of connections will never get a direct path (design
   §14.1.1).
+- **Present a delegated transport key rather than your operator's identity key.**
+  An instance mostly runs where its operator cannot stand over it (design §23.3),
+  so what you hold is a credential their client signed for a window
+  (`wire-format.md` §8.2) and what you present in a handshake is the key that
+  credential names. The key that signs as your operator stays on the device that
+  performs ceremonies.
+- **Send it in every `AttachAck`, and refuse a session whose delegation does not
+  name the key the handshake presented.** A delegation is public and travels on
+  every handshake; that one check is the whole of what stops a captured one being
+  replayed onto another connection.
+- **Hold the run you were given, and say so while it is still long.** The party
+  that signs your next credential is a device with a battery and an owner who
+  sleeps, so an instance that waited for expiry to ask would go dark for reasons
+  none of its subordinates can see. Holding forward-dated credentials is the
+  point of them; telling your operator before the last one is the obligation.
+- **Never issue a resumption ticket that outlives your delegation** (design
+  §14.1.3). A resumed session re-presents nothing, so a ticket is the one way a
+  lapsed credential goes on working.
 
 ## 8. Operator disclosure
 

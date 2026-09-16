@@ -753,7 +753,7 @@ Post-quantum from the start, tiered by how long authenticity must hold.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Transport (hop) | **QUIC + TLS 1.3, group `X25519MLKEM768`.** Peer authentication by raw public key (RFC 7250) | "Harvest now, decrypt later" is a real threat to confidentiality. The hybrid group survives either primitive failing. Identities here are keyhashes and there is no CA, so X.509 has nothing to validate against |
+| Transport (hop) | **QUIC + TLS 1.3, group `X25519MLKEM768`.** Peer authentication by raw public key (RFC 7250); where the presenting device holds no seed, that key is a delegated one bound to its identity by the attach (§23.3, `wire-format.md` §8.2) | "Harvest now, decrypt later" is a real threat to confidentiality. The hybrid group survives either primitive failing. Identities here are keyhashes and there is no CA, so X.509 has nothing to validate against — which is also why a delegation is carried in the attach rather than in the handshake, raw public keys having nowhere to put one |
 | Payload (end-to-end) | **PQXDH + Triple Ratchet** (§14.2.4) | Adopted rather than designed here. Both have published specifications and formal verification |
 | Identity keys | Hybrid classical + PQ (§5.1) | Long validity window justifies the cost |
 | **Every transaction retained in the archive** | Post-quantum | §5.1 |
@@ -4470,6 +4470,14 @@ and a stale staple attests nothing. The distinguishability §9.0.2 requires is
 about what a caller concludes — silence is not attestation — not about what it
 may do.
 
+**A transport delegation is answered the same way, which is why it needs no
+revocation of its own.** An operator who re-provisions reissues the endpoint
+record, and a party holding that binding stops reaching the instance the old
+credential authorises; beyond the horizon, where the reissue never arrives,
+nothing stronger than the delegation's own expiry. The credential is deliberately
+built to that shape — a window and no responder — because a revocation check that
+fails open is decorative, and the playbook above is already the design's.
+
 **Adopt stapling.** Rather than the recipient querying, the introducing node
 **staples a recent patron-signed currency attestation to its introduction**:
 
@@ -5194,6 +5202,14 @@ that natively where ordinary single-path TCP does not, a TCP connection is bound
 to its endpoint addresses and ports. Multipath TCP is a different matter and is not
 what clients run. 0-RTT resumption makes frequent reattachment
 cheap, which permits a lazy heartbeat and saves battery.
+
+**A resumption ticket never outlives the delegation that authorised it.** A
+resumed connection authenticates by pre-shared key and re-presents nothing, so a
+ticket issued while a delegation was live would go on working after it lapsed —
+§12.6.5's stale credential arriving by the resumption path rather than the
+credential path. Clamping a ticket's lifetime to the delegation's remaining
+validity costs the paragraph above nothing: tickets stay long for all but the
+tail of each window.
 
 #### 14.1.4 Mobile OS policy is the binding constraint
 iOS suspends apps shortly after backgrounding and Android Doze suspends ordinary
@@ -7204,7 +7220,7 @@ and a citation to a missing number resolves there.
 | P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §9.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
-| P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | Which devices hold archives, seeds, sealed captures, caches and deletion state is open, so **retention and deletion commitments cannot be assessed at all** — a deletion on one device says nothing about the others. A specification dependency rather than evidence of a leak |
+| P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit on the ceremony device alone and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to — and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §5.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive — but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — at any point: a fishing proposal is a bundle augmentation under the same curation (§8.1.2) [2026-09-03] — and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
@@ -7886,8 +7902,23 @@ for a backup until one exists and offers the infrastructure tier until an instan
 does, so the ordinary shape is a device and a store, with an instance beside them
 for anyone in §3.3's tier. Past three is the unusual case by construction, which
 is the whole of the shaping needed: a warning about replication a user has not
-performed would be noise. What remains open is which devices hold seeds, sealed captures and deletion state (P33),
-tracked at §22.2.
+performed would be noise.
+
+**Which device holds what is settled** [author, 2026-09-16]. **Seeds sit on the
+device that performs ceremonies and nowhere else**: an instance, a desktop and a
+terminal instrument each carry a delegated transport credential instead, so the
+only device holding the key that signs is the one its owner keeps on them.
+**Deletion state needs no separate allocation**, because §7.5.2 makes a capture
+decryptable only when its subject releases a key derived from a seed only they
+hold — so the device holding the seed is the device holding deletion state, and a
+deletion on one device saying nothing about another was a consequence of
+scattering seeds rather than a property of replication. **Archives, sealed
+captures and caches go where the storage is**, §13.7.1's envelope being what makes
+anywhere safe to put them, and a personal computer is the obvious place: a phone
+is lost, broken and stolen, and neither the transaction record nor the captures
+should go with it. Such a device holds ciphertext under a passphrase rather than a
+seal under a platform's key storage — **a cold store rather than a live client**,
+which is why it needs no enclave to be safe (P33).
 
 ### 23.4 Test vectors, and what a test suite would add
 
