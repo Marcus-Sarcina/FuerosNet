@@ -45,7 +45,7 @@ Three things this buys beyond interoperability:
   itself**, which this profile must supply. RFC 9052's `Sig_structure` context
   string is `"Signature"` or `"Signature1"`, distinguishing *COSE structure types*,
   not application roles. **COSE does not give role
-  separation for free**, and this protocol has **thirteen** signing roles, and will acquire more. See
+  separation for free**, and this protocol has **fourteen** signing roles, and will acquire more. See
   §1.1-§1.4 for the required profile rules.
 - **A place to put the algorithm identifier.** RFC 9052 requires `alg` to be
   authenticated but permits it either in the protected header **or as externally

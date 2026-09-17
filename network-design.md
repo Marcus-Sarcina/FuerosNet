@@ -2708,8 +2708,8 @@ fresh locator to anyone holding a stale one — §12.3 Case 2 guarantees those h
 have no other source of truth, since nothing redirects on the subject's behalf.
 **Setting the retired series to its maximum counter forecloses that**
 (`wire-format.md` §4.6), at the cost of one self-signed locator, unilateral and
-needing no patron. The old key is in hand at rotation — it signs the `Recovery`, so
-this is the moment to spend it.
+needing no patron. The old key is in hand wherever the rotation carries its
+inheritance, since it signs the `Recovery`, so that is the moment to spend it.
 
 **It does not burn the key globally, and cannot.** A seal reaches exactly as far as
 the locator carrying it, so parties you never contact and subnets you never enter
@@ -3795,11 +3795,15 @@ nodes at f = 10 (§15.1); one row each, per resource.
 stands, which makes authorisation deterministic, fast, and inspectable — an
 operator can read who has what, rather than deriving it.
 
-**A table update is enforced at issuance and reconnection, never against a
-connection already open** — it neither upgrades nor closes one mid-session. Where
-the node itself holds the session: a hosted package, or its own leg of a proxied
-path — dropping the affected sessions on an authorisation change is mandatory
-(`infra-client-requirements.md` §10.5). A non-intermediated connection, brokered
+**A table update is enforced at issuance and reconnection, and never against a
+request already running** — it neither upgrades nor interrupts one mid-flight.
+What it ends is the **resource-facing hosted session**: where the node itself
+holds that session — a hosted package, or its own leg of a proxied path —
+dropping it on an authorisation change is mandatory
+(`infra-client-requirements.md` §10.5), so the caller's next request is evaluated
+afresh under a new identifier. The underlying `rhtn/1` transport connection is
+untouched, an authorisation change at one resource not being a connectivity
+event. Three things, and only the middle one is dropped. A non-intermediated connection, brokered
 past the node, cannot be relied on to drop: enforcement there is at
 establishment, and an existing session continues on the service's terms (§11.2).
 
@@ -7641,8 +7645,8 @@ not derived.
 | f | Max subordinates per node | 10 | Span of control ~8 + headroom; Dunbar scale at a two-edge walk (§3.3) |
 | L | Non-infra subordinate levels beneath an infra node | 2 | 110 users before infrastructure is required |
 | S | Anchor **guideline** (subtree size) | ~500,000 | Not a status boundary, any ancestor may serve as anchor; caching is per-node policy (§12.2, §12.7.3). Yields ~120k widely-cached anchors at the 60B stress scale |
-| h_store | Topology storage horizon | 2 | ~110 nodes |
-| h_process | Process-and-discard horizon | 3 | ~1,110 nodes |
+| h_store | Topology storage horizon | 2 | the 221-node horizon at f = 10, of which 110 are the node's own downline (§15.1) |
+| h_process | Process-and-discard horizon | 3 | ~1,110 nodes of downline (§15.1) |
 | — | Cross-tree peers per infra node | ≥2 **recommended** | For fault independence — hierarchical replication has cut 1. **Not required**: peering is voluntary and zero peers is a supported, degraded state (§6.3, §12.7.5) |
 | λ | Trust decay per hop (if decay metric used) | < 1/f | Convergence requirement (§16.2) — **necessary, not sufficient**: f bounds subordinates, not §16.2.1's acquaintance degree |
 | — | Verifiers sought per subject | min(floor(n/2), 10, \|candidates\|) | A reasonableness criterion — n is the subject's own claim (§8.1.2); candidates = distinct prior counterparties (§8.1) |
