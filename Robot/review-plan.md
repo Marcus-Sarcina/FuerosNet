@@ -1015,7 +1015,7 @@ Stated plainly so it is not over-trusted:
 | 2 | **0.6** | Purge | Implementation gaps. Start with *encode, sign and verify an adoption transaction* — build-order step 2, and it exercises deterministic CBOR, COSE multi-signature, key material vs key hash, the locator, the PoP reference and archive-subset references. Expect the most edits from this pass |
 | 3 | **0.5.2** | Purge | Unenforceable mandates. Deliberately separated from 0.5.1 — near-neighbour frames contaminate. Likely cheap now that design §1.1 states the principle |
 | 4 | **0.7** | Purge | LINDDUN privacy |
-| 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis |
+| 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis. **Cycle 3 reverses this against 0.6; see below** |
 | 6 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
 | 7 | **migration** | — | **DONE 2026-09-01**, in four stages. Not a review. Spec below, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §3 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
 | 8 | **0.9-after** | Purge | **DONE 2026-09-01.** Organisation again, on the migrated structure. **Confirmed nothing was orphaned or double-numbered in the move** — the pass's whole purpose, and the result was negative. What it found was local: three heading-level defects, three misfiled blocks, four chapters needing subsections, one real duplication and one that was not, and the change log's own heading collisions. Applied in four passes; dispositions in `review-tracking.md` |
@@ -1042,6 +1042,34 @@ misorganised, and material the migration displaced.
 correct); and the open question of where Vocabulary sits in the new order, which
 reads naturally before Topology since a reader meets *patron*, *subordinate* and
 *Dunbar Org* there before the structure that uses them.
+
+## Third cycle (2026-09-16 →)
+
+**The programme restarts from 0.1 again** [author, 2026-09-16]: the changes since
+cycle 2 reach the protocol rather than its wording. An operator's instance carries
+a credential its operator's client delegates for a window instead of the
+operator's seed, so a handshake now proves something different and proves it one
+layer higher; §23.3 settles which device holds seeds, sealed captures and storage,
+which answers P33; and administration left the wire entirely, a node serving its
+own pages rather than any request type carrying a command. The five client
+variants also have obligations neither earlier cycle saw. A consistency pass and a
+de-lint ran 2026-09-16 against the result to produce the baseline; `change-log.md`
+records the numbers.
+
+**0.8 runs before 0.6 this cycle** [author, 2026-09-16]. Both passes are
+expensive, and **0.8 is the likelier to surface a gap needing a protocol
+adjustment — which would invalidate whatever 0.6 had already verified against the
+older text.** Ordering them this way spends the cheaper-to-repeat effort second.
+
+**This reverses the first cycle's reason for putting 0.8 last**, recorded in the
+order table above: an adversarial reviewer distracted by inconsistencies produces
+worse attack analysis. That reason is weaker against this baseline than it was
+against the first, because the consistency-and-coherence pass and the de-lint have
+already run — so the inconsistencies 0.6 would otherwise have cleared out of the
+adversary's way are largely not there to distract one. **The trade is deliberate,
+and the residual risk is that 0.8 meets a specification gap 0.6 would have found
+first**; a 0.8 finding that turns out to be a gap rather than an attack belongs to
+0.6 and should be filed there.
 
 ## De-linting: the released document is a design, not a record of drafting it
 
