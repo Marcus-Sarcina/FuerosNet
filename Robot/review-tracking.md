@@ -9971,3 +9971,43 @@ mechanism where a person is present and acting.
 **The privacy fact stays even though the obligation goes**: a witness and a
 verifier do become durable nodes in another person's evidence graph, and §19.6
 still says so. Recording the exposure is not the same as owing a warning for it.
+
+## Cycle 3, pass 0.2 second run — internal coherence (2026-09-17)
+
+**Four live contradictions, eight stale cross-references, and the split is the
+result.** The design set itself now yields four; the other eight were
+`functional_tests.md` §9 describing contradictions the first run closed.
+
+**Four applied.** Wire format said *thirteen* signing roles in §1 and *fourteen*
+in §1.1 — the consistency pass corrected the sentence above the table and left the
+one above that, which is fixing the instance rather than the claim. §9.0 had the
+old key signing a `Recovery` at every rotation while defining a plain rotation as
+carrying nothing; scoped to the linked case. §11.4 said a table update never
+closes a session and then made dropping one mandatory in the same paragraph; it
+now separates the three things the infra document already separated — a running
+request completes, the resource-facing session is dropped, the transport is
+untouched. And the parameter table gave `h_store` = 2 as ~110 nodes where §15.1
+gives that horizon as 221; not a wrong number but an unlabelled measure, since
+§15.1 calls `h_process`'s 1,110 *"of downline"* and the table dropped the
+qualifier from both cells.
+
+**Ten O-items closed, not the eight flagged.** The reviewer did not count O-003
+or O-007, but both describe contradictions the first run closed: the rotation
+wording, and §12.2's key acquisition against wire §7.2. O-007 keeps a genuine gap
+— the authentication profile for an unpinned intermediate or anchor — which is not
+a contradiction and stays open. Six remain open (O-011 to O-016), all gaps rather
+than disagreements, as the reviewer said.
+
+**Seven dependent rows moved with them**, which the reviewer did not enumerate and
+which would have been the expensive half to miss: UX-002 tested the *withdrawn*
+witness-and-verifier disclosure and now tests the capture-time participant one
+plus the absence of any per-query notice; GAT-014 was marked open pending O-001
+and is now a three-part assertion; ARC-010 and SCH-018 described linear pagination
+and a single head; and TOP-026, REC-009 and GAT-009 each carried a trailing
+"tracked in O-00N" clause pointing at a closed item.
+
+**This is the second run's real yield.** Eight of its twelve findings exist
+because closing the first run's twelve left a test document describing the
+documents as they were. A pass that reviews a set including its own test
+specification will produce that every cycle unless the specification is updated in
+the same commit as the sections it cites.
