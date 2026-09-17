@@ -529,12 +529,16 @@ a scheduled whole-table pass, not a continuous recomputation. A new member is
 scored against standing predicates and given rows; a departing one has theirs
 removed.
 
-**Scoring the changed member alone is correct for every predicate class but one.**
-A *relative* rank predicate (a percentile, a median, any quantile) has a cutoff
-that is a fraction of the population, so a membership change moves it for **every**
-row rather than for the entrant
-(`resource-requirements.md` §7.2.1). Re-score the whole table for those predicates
-and the changed member only for the rest. An implementation that treats them alike
+**Scoring the changed member alone is correct for every predicate class but two,
+and both are rank predicates.** A *relative* rank predicate (a percentile, a
+median, any quantile) has a cutoff that is a fraction of the population, so a
+membership change moves it for **every** row rather than for the entrant. An
+*absolute* rank predicate — *my ten most trusted* — has a fixed cutoff and a
+contested last place, so an entrant scoring above the line **displaces whoever
+held it**, and that member's row changes without that member changing
+(`resource-requirements.md` §7.2.1). Re-score the whole table for a relative rank
+and at least the displaced row for an absolute one; the changed member alone is
+enough for the rest. An implementation that treats them alike
 leaves rows stale in both directions: granting where the line has since risen, and
 withholding where it has fallen.
 
@@ -605,13 +609,15 @@ resource-facing one** [2026-09-02]. A hosted session is the node-held identifier
 under which the resource sees a principal's requests
 (`resource-requirements.md` §2), not the caller's rhtn/1 transport session,
 which may be carrying sessions to other resources and control traffic besides.
-Ending it means retiring the identifier and resetting any of that pair's
-requests still in flight; the caller's next request to that resource is
-evaluated afresh and, where it still passes, arrives under a new identifier —
+Ending it means retiring the identifier, so the caller's next request to that
+resource is evaluated afresh and, where it still passes, arrives under a new
+identifier —
 which is how the resource observes the change, since there is no teardown
 message on the hosting path. The transport session is untouched: an
 authorisation change at one resource is not a connectivity event. If the roles
-are gone, so is the access.
+are gone, so is the access. **A request already in flight is not reached into**
+(§10.1): the identifier is retired for what comes next rather than withdrawn from
+underneath work the resource may already have committed.
 
 **This is local behaviour, not a network promise.** No protocol rule compels it and
 none could: the network cannot reach into an operator's node. **For sessions this

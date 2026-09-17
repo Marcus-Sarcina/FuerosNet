@@ -1215,8 +1215,9 @@ therefore has no continuity check**, and rests on liveness and proximity alone �
 which establish that *someone* is present, not that they are who the existing
 identity represents. Accepted: the case requires an attacker holding both the key and
 the archive, and buying one clean false-continuity edge before the identity has a
-history is worth less than the ceremony costs. From *n* = 2 the threshold is non-zero,
-verifier responses are required, and reaching those verifiers may run through the very
+history is worth less than the ceremony costs. From *n* = 2 the sample is non-empty, so
+verifier responses are sought and their absence is something an evaluator weighs
+(§8.1.2), and reaching those verifiers may run through the very
 patron doing the eclipsing. An
 established user who becomes eclipsed has a harder escape, though they also have
 existing standing and relationships that a new joiner does not, which is why
@@ -2786,10 +2787,12 @@ attacker": recover elsewhere and accept the transplant.
 
 #### 9.0.1 One procedure: key and presence together
 
-**A rotation carries both the old key's signature and a prior counterparty's
-in-person recognition.** Neither alone is enough, and there is **no lost-key
-variant**. **The recognition requires a meeting, and requires it every time**
-[author, 2026-09-05] — for rotation and recovery alike, which are one
+**A rotation that carries its inheritance carries both the old key's signature
+and a prior counterparty's in-person recognition.** Neither alone is enough, and
+there is **no lost-key variant**. A plain rotation carries neither and claims
+nothing, which is §9.0's other case and the subject's to choose. **The
+recognition requires a meeting, and requires it every time** [author,
+2026-09-05] — for a linked rotation and a recovery alike, which are one
 procedure (§9.0). `wire-format.md` §4.1's `Recovery` block puts it in the
 field's own definition: the presence half is *"a prior counterparty who **met
 the subject again** and recognised them."* Past acquaintance is what makes
@@ -3711,9 +3714,10 @@ eligibility is then computable locally from topology the evaluator already holds
 
 **The horizon bounds the vocabulary, and does so naturally.** A node can only
 compute its position relative to an owner within its horizon (§15.1). Beyond that,
-relative position is unknown, so **scope-based permission does not extend past the
-horizon** and distant access requires an explicit grant. This is a consequence of
-the architecture rather than a rule added to it.
+relative position is unknown, so **permission does not extend past the horizon at
+all, scope or grant alike**: §11.2's gate sits behind both, and a party outside
+the region the owner's policy can evaluate holds no access whatever named it.
+This is a consequence of the architecture rather than a rule added to it.
 
 ```
 Scope =
@@ -4027,8 +4031,10 @@ nothing into the trust graph (§11.0.3) and reaches the network only through the
 gateway.
 
 **Which makes a report closer to a log entry than to a message**, and that is the
-right way to read it. It is defined as a transaction because it is signed, portable
-and durable, not because it traverses the network in the ordinary case.
+right way to read it. It is signed, portable and durable, which is what the word
+*transaction* is doing here; it is **not** one of `wire-format.md` §4's typed
+envelopes, carries no type number, and has no carriage at all
+(`wire-format.md` §6.3).
 
 ```
 AbuseReport = {
@@ -4186,8 +4192,10 @@ your subtree.
   v1 (`wire-format.md` §4.4) — + 4B subtree size + 8B sequence ≈ 50 bytes for the
   index fields, **plus the anchor's own signature** (`wire-format.md` §7.2), which
   the sizing below omits. 120,000 × 50B ≈ **6 MB** of index, well inside the
-  25 MB budget with room for signatures. **Full keys are
-  fetched at contact time** — the table is an *index*, not a credential store, which
+  25 MB budget with room for signatures. **Full keys arrive at contact**, from
+  attaching or from a transaction naming the node, and are never fetched during
+  resolution (`wire-format.md` §7.2) — the table is an *index*, not a credential
+  store, which
   is also why an entry's signature cannot be checked on receipt
   (`wire-format.md` §7.2).
 - Nodes replicate anchor entries **according to local caching policy** (§12.7.3),
@@ -5864,8 +5872,11 @@ no node adjudicates between them.
 
 **What it buys.** Cycle prevention for the partial-information case (§6.2.5), and
 detection of a node held at two positions within one subnet. Both are *detection*;
-neither adjudicates. A node that detects a conflict fetches the underlying signed
-transaction before acting, and what it then does is bounded by what it has authority
+neither adjudicates. A node that detects a conflict confirms it against its own
+records before acting — never by fetching, which `wire-format.md` §10.2.3 shows
+would be unperformable for exactly the distant cycles the memo exists to catch,
+and unnecessary because the detector is never a stranger to the transaction. What
+it then does is bounded by what it has authority
 over — a patron may disavow its own subordinate and nothing more (§1.1, §6.2.2).
 
 #### 15.2.1 The memo table, and what an ancestor comes to hold
@@ -6299,8 +6310,8 @@ both counts one. **What a peering record adds to such an observer's graph is
 nothing**; what it adds to an observer who can see the peering record and not the
 presence record is one edge, and that difference is per-observer like everything
 else here. Peering is
-an owner-signed record returned on request within horizon (§11.5), so it is visible
-inside the two peers' horizons and **nowhere else**. An observer outside them
+a transaction both peers sign (§6.3), carried in the topology class, so it is
+visible inside the two peers' horizons and **nowhere else**. An observer outside them
 never learns the edge exists, and it conveys nothing to them.
 
 **The concern is therefore local and targeted, and narrower than it first
