@@ -68,7 +68,8 @@ does.
 
 **There are two legs, and only the second speaks HTTP on the wire**, and conflating them produces a
 claim that cannot hold: HTTP/3 is selected by ALPN token `h3`
-at QUIC connection establishment (RFC 9114), while the client's session already
+at QUIC connection establishment absent some other selection mechanism
+(RFC 9114), while the client's session already
 negotiated `rhtn/1`. You cannot layer standard HTTP/3 onto that connection.
 
 | Leg | Transport | Framing |
@@ -155,7 +156,7 @@ hosting path; you observe it as requests ceasing to arrive under that identifier
 
 ### 3.1 The header-spoofing hazard
 
-This pattern is most commonly misimplemented in exactly one way, so both halves are
+This pattern has one characteristic failure, so both halves are
 stated as requirements:
 
 - **The node parses the HTTP message and re-serialises it; it does not forward your
@@ -269,8 +270,9 @@ design rests on.
 
 **The SaaS case is much cheaper per vendor than a bespoke integration, and this
 matters for adoption.**
-The shape is identical to enterprise single sign-on: an identity provider asserts a
-user with roles or groups, and the service consumes that assertion. **The vendor
+The shape is identical to enterprise single sign-on: an identity provider asserts
+a user with attributes the service reads as roles or groups, there being no claim
+vocabulary every service shares. **The vendor
 needs only the standard protocols it already supports.** The infra node is simply
 an unusual IdP, and role assignment (§7) maps onto group claims the vendor already
 understands.

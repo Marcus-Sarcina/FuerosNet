@@ -3804,7 +3804,7 @@ infra nodes dial each other directly.
 **Payload attempts a direct path inside the horizon**, which does require
 traversal. Infra nodes act as **STUN and TURN**, and ICE falls back to relaying
 through the serving node when hole punching fails. Address- and port-dependent
-mapping defeats it, and carrier-grade NAT and mobile networks raise the odds of
+mapping can defeat it, and carrier-grade NAT and mobile networks raise the odds of
 meeting that, but **neither guarantees failure** (RFC 8445).
 
 ---

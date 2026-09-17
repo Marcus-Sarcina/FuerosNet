@@ -511,11 +511,11 @@ choices** (network partitionability, permissionless infrastructure and free
 exit) rather than an intended feature, and the protocol does not model it.
 
 > **Vignette V7 — A power, not a right.**
-> Juries can refuse to convict against the evidence. Almost nowhere does a
-> statute grant this or a judge instruct a jury about it; it exists because juries are supreme on the
-> facts and cannot be punished for their verdict. Lawyers therefore call
-> nullification a *power* of jurors rather than a *right*, a consequence of two
-> other rules, never a feature anyone wrote.
+> Juries can refuse to convict against the evidence. Statutes do not generally
+> grant this and judges do not instruct juries about it; it exists because juries
+> are supreme on the facts and cannot be punished for their verdict. Lawyers
+> therefore call nullification a *power* of jurors rather than a *right*, a
+> consequence of other rules rather than a feature anyone wrote.
 >
 > Belonging to several subnets at once has the same shape. Nothing here grants it,
 > nothing models it, and legislating it away would mean discarding the
@@ -852,8 +852,9 @@ rather than closing it [2026-09-02].
 **The browser gap is the transport, not the primitives.** Native Rust
 plausibly covers the full profile: rustls/quinn expose `X25519MLKEM768`, RFC 7250
 raw public keys and 0-RTT, but browser `wasm32-unknown-unknown` today has no
-production path for that stack: no UDP sockets for QUIC, no ML-KEM-capable pure-wasm
-TLS provider, and entropy only via explicit `getrandom` `wasm_js` wiring. Native and
+production path for that stack: no UDP sockets for QUIC outside Chrome's
+Isolated Web Apps, no ML-KEM-capable pure-wasm TLS provider this survey found,
+and entropy through `getrandom`'s documented `wasm_js` wiring. Native and
 browser conformance are **separate implementation targets** until that closes;
 compiling the arithmetic to wasm is not the constraint.
 
@@ -1450,7 +1451,9 @@ protects the signer against their counterparty, not against an outsider.
 ### 7.2 Local face storage, no biometrics in network state
 
 **Biometric templates never enter network state.** Reasons, ascending: they are
-irrevocable (keys rotate, faces do not); fuzzing does not survive combination
+rooted in something that cannot be reissued (keys rotate, faces do not), so a
+template scheme built for revocation still leaves the face it derives from
+unchanged; fuzzing does not survive combination
 with timestamp, location and graph position in the same record; and a global
 replicated log of who physically met whom with biometrics attached inverts the
 network's own metadata-resistance property.
@@ -1476,7 +1479,8 @@ be opened without that person handing it over again in a later ceremony.
 **Ciphertext a holder cannot open is a different thing from a stored likeness**,
 and the difference is likely to matter wherever the obligation attaches to holding
 material in usable form. **Whether it matters in any particular jurisdiction is not
-this document's judgement to make**, and the position is not settled anywhere.
+this document's judgement to make**, and no jurisdiction surveyed here has
+settled it.
 
 **Two things it does not do.** A non-compliant client retains plaintext and its
 operator is exactly where they were. And the relief, whatever it amounts to, does
@@ -2166,7 +2170,8 @@ Comparing local radio environments (Wi-Fi BSSIDs, BLE beacons) via private set
 intersection is a natural-looking proximity check and **does not work here**, for
 three compounding reasons:
 
-1. **No timing binding, therefore forwardable.** A Wi-Fi scan takes seconds, so
+1. **No timing binding, therefore forwardable.** A Wi-Fi scan is not
+   instantaneous, so
    no challenge window tighter than a network round trip is achievable. A
    confederate standing in front of the honest party scans the room, ships the
    result to the remote key holder, and the remote party signs it. Overlap
@@ -4460,7 +4465,8 @@ This is **not** a session-key problem. It is the certificate revocation
 problem, and the web PKI's failures there are directly transferable.
 
 **The cautionary tale: OCSP soft-fail.** Where online revocation checking
-soft-fails, the conventional OCSP behaviour, an unreachable responder
+soft-fails, the conventional client behaviour rather than anything OCSP
+requires, an unreachable responder
 means the client proceeds anyway, so an attacker who can block the check has
 defeated revocation entirely. (Not all browsers: Chrome largely abandoned online
 revocation checking in favour of CRLSets, which **reinforces** the lesson rather
@@ -5015,8 +5021,9 @@ sufficient in mechanism, and no continuous sync is required.
   a passphrase encrypts the data key. Argon2id for the KDF (memory-hard; **raises the cost
   of** GPU and specialised-hardware attack rather than preventing it, and only in
   proportion to the memory and time parameters chosen), XChaCha20-Poly1305 or AES-256-GCM for the payload, KEK never
-  stored with the ciphertext. Broadly what 1Password, Bitwarden, KeePass and
-  Signal backups do.
+  stored with the ciphertext. Broadly the shape password managers and encrypted
+  backups use, though 1Password, Bitwarden, KeePass and Signal each derive their
+  keys differently.
 
   **The format leaves a seam.** How the KEK is protected is a pluggable layer
   above the backup format: passphrase in v1, hardware token later, split shares
@@ -5143,8 +5150,9 @@ infrastructure, which §12.6.3 declines for both cost and privacy reasons.
 
 **Infra nodes act as STUN and TURN.** This adds no capability they did not already
 have — relaying payload *is* what a TURN server does. What changes is that the
-relay becomes the **fallback**: ICE attempts the direct path first and falls back
-to the serving node when it fails.
+relay becomes the **fallback**: ICE checks candidate pairs in priority order,
+preferring a direct path where one works and using the serving node where none
+does.
 
 **Feature capabilities are separate from the handshake and deliberately
 non-fatal** (`wire-format.md` §8.1): parameters set limits rather than gating a
@@ -5241,7 +5249,8 @@ normally backgrounded app. Both platforms offer constrained alternatives —
 background `URLSession` transfers, approved background modes, Doze maintenance
 windows, foreground services, WorkManager, so background networking is
 **constrained rather than categorically impossible**, and **APNs and FCM are the
-common and most dependable wake mechanisms rather than the only ones**. Relying on
+common ones and the ones with the most platform support rather than the only
+ones**. Relying on
 them introduces **Apple and Google as central parties** into a design that refuses
 central parties everywhere else.
 
@@ -7523,6 +7532,9 @@ mistaken for established results.
 | 1.3 | "Any SaaS supporting enterprise SSO is most of the way to being usable here"; federation "turns an integration project into a configuration task" | The SSO-adaptor adoption path. No representative integration has been exercised |
 | 7.1.1 | "A large fraction of the nodes a party would like to nominate are inactive" at ceremony time | Probe-after-selection rather than advertise-and-select. An availability claim with no measurement |
 | 11 | "A compromised resource leaks its own data, not the owner's archive" (also `resource-requirements.md` §1) | The credential gateway instead of a scoped archive-read API. A confinement conclusion stated, not demonstrated across interfaces and side channels |
+| 3.2 | Span of control is "often quoted near 7±2" for interdependent work, with suitable spans running 2–3 to 20+ | One input to f = 10 (§3.2). Management guidance supports wide variation by managerial role and task; the specific figures are not established as a general empirical result |
+| 7.5 | Capture failures within one session are "strongly correlated" | Feeds the multi-frame argument (§7.5). Dependence between similar frames is plausible and independence cannot be assumed, but the strength is unmeasured for this capture process |
+| 13.7.1 | Social recovery "has a poor practical record", the usual failure being holders unreachable when needed | Argues against adopting it (§13.7.1). Studies examine trustee availability and recovery usability; none establishes this as the predominant failure mode |
 | `resource-requirements.md` §4.1 | "A resource application can be any scale" via per-patron federation | Neighbourhood-scoped resources instead of wider protocol scope. No federated instance has been built |
 
 The 2-year retention parameter (§7.5.1) partly rests on the ageing assumption
@@ -7884,7 +7896,8 @@ line here says *this is not being built yet*.
 encryption makes the archive safe in untrusted storage, so password managers and
 consumer cloud sync carry it as an opaque blob — building private replication would
 add new attack surface to duplicate a solved problem. Durability varies by host:
-native storage persists until deleted; a WASM runtime persists only as the host
+native storage persists until deleted, excepting cache locations the platform
+may reclaim; a WASM runtime persists only as the host
 configured it, since WASI confers no ambient filesystem access; browser storage
 (OPFS, IndexedDB) is evictable under pressure unless persistence is granted.
 Because the archive is a second factor (§10.2), a client that can be silently

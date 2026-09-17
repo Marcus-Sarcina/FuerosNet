@@ -9899,3 +9899,40 @@ closing that would mean a clause in §1, which has not been written.
 hill-climbing query counts, §7.4.4's cross-device false-reject rate, and §1's
 benchmark. The register is doing its job, and a 0.1 reviewer re-deriving what the
 document already admits is a pass working correctly rather than a defect.
+
+**The unverifiable set was mostly already registered.** Of the eighteen claims
+pass 0.1 could not verify, **thirteen already had a §20.1 row**: the 20–80 ms
+radio latency, the 30–80 KB face crop, regional-gateway aggregation, the UWB
+channel ranking, the $20/month infra figure, "capture margin in most cases",
+0-RTT's battery saving, the substantial-minority relay rate, face entropy against
+fuzzy commitments, ageing degradation, randomised motion prompts as the liveness
+check, hill-climbing query counts, and account age being cheap to manufacture. A
+0.1 reviewer re-deriving those is the register working, not a defect. **Three
+were genuinely unregistered** and now have rows: §3.2's 7±2 span of control,
+which is an input to f = 10; §7.5's claim that capture failures within one session
+are strongly correlated, which feeds the multi-frame argument; and §13.7.1's
+"poor practical record" for social recovery, which argues against adopting it.
+§20.1 stands at 31 rows.
+
+**Registered rather than removed** [author, 2026-09-17]. The figures are
+load-bearing for sizing and security arguments, so striking them would cost the
+arguments; the register exists to hold a number that is relied on and not
+established.
+
+**Sixteen hedges applied**, each a universal the source did not carry: UDP
+sockets outside Chrome's Isolated Web Apps, `getrandom`'s documented route rather
+than its only one, templates rooted in something unreissuable rather than
+themselves irrevocable, OCSP soft-fail as client convention rather than protocol
+requirement, four password products that do not share one key derivation, native
+storage excepting reclaimable caches, ICE checking candidate pairs in priority
+order rather than strictly direct-then-relay, NAT mapping timers as minimums,
+push vendors as best-supported rather than most dependable, jurisdictions
+surveyed rather than anywhere, a Wi-Fi scan as not instantaneous, HTTP/3's ALPN
+selection absent another mechanism, one characteristic failure rather than the
+most common one, federation attributes with no shared vocabulary, hole punching
+that can be defeated rather than is, and V7's two legal absolutes.
+
+**Nothing in the confirmed set needed action**: eighty-odd claims verified as
+written, including every figure in the post-quantum size tables, the COSE and
+CDDL encoding facts, the UWB attack results, and the platform background-execution
+constraints.
