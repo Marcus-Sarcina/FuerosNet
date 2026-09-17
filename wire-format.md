@@ -242,7 +242,7 @@ structurally impossible rather than something to notice.
 of its two entries is post-quantum (§3.5). An adoption's two signers are therefore
 ≈ 6.6 KB, and a ten-signer presence record ≈ 33 KB, both before the body.
 
-**Typical is far below maximum.** A presence record is expected to carry ~10
+**The expected case is about half the maximum.** A presence record is expected to carry ~10
 logical signers — two participants and ~8 witnesses, at 10 × (64 + 3,309) ≈ **33
 KB**, or ~35 KB with the body. The bound accommodates 18 envelope signers plus 32
 embedded verifier responses, ≈ **65 KB**. Bounds exist to
@@ -580,7 +580,8 @@ Rules a validator checks from the record alone. All were previously unstated.
   until a date it chose. **This is checkable with no clock**: both values are in the
   record, and the rule constrains their difference rather than either one against the
   reader's time, which is why it can be structural where §3.3's timestamp rules
-  cannot. 24 hours is far beyond any honest finalization — an unanswered slot is simply
+  cannot. 24 hours is assumed to exceed any honest finalization, unmeasured but
+  argued: an unanswered slot is simply
   absent from the record (§5.5), so a ceremony never waits on an absent
   verifier, and 24 hours is a figure the design already carries rather than a new
   one (design §21).
@@ -3268,8 +3269,8 @@ decimal implementer and the boundary frames would divide the two.
 
 **A declared length above the bound is a protocol error, and it ends the
 session** [2026-09-02]; this sits *below* the malformed-frame rule, not under
-it. A malformed body inside a bounded frame is cheap to discard and the
-session survives; a length out of contract is a violation of the framing layer
+it. A malformed body inside a bounded frame costs at most that frame to discard
+and the session survives; a length out of contract is a violation of the framing layer
 itself, and skipping it would mean streaming an attacker-declared volume
 through the very ceiling that exists to bound the receiver's buffer.
 
@@ -3367,7 +3368,8 @@ node except its serving node's siblings.
 
 *A greased id is drawn avoiding ids the sender knows; collision with an id known
 only to the peer is accepted at its probability: k/2^64 per draw against a peer
-holding k unpublished capabilities, negligible at any real k, and the peer
+holding k unpublished capabilities — at most 64/2^64 ≈ 3.5 × 10⁻¹⁸, since §1.3
+caps a peer's map at 64 entries — and the peer
 treats the value as an ordinary unknown parameter.*
 
 **Every implementation MUST tolerate receiving parameters whose ids it does not

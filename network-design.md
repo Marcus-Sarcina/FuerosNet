@@ -6002,8 +6002,8 @@ an intended locus of adaptation and evolutionary pressure.
 
 ### 16.2 The reference metric must be flow-based
 
-**Finding:** distance-decay metrics are exploitable and the naive tuning fails
-catastrophically.
+**Finding:** distance-decay metrics are exploitable, and at a plausible-looking
+tuning an attacker's fake subtree outweighs an honest node ~19,500 to one.
 
 For weight = λ^distance, the total weight of an attacker's fake subtree is
 λ^D · Σ(fλ)^k, which **diverges unless fλ < 1**. At a plausible-sounding
@@ -6442,9 +6442,8 @@ the measurement itself:**
 - **Consideration order breaks true ties only** — candidates equal on both
   flow and path length. It is the residual rule, not the governing one.
 
-**The first pass is easy to miss from the chokepoint case alone**, where
-every candidate behind one saturated cut necessarily carries the same flow
-and it therefore decides nothing, but this section is about pluggable
+**The first pass decides nothing in the chokepoint case**, where
+every candidate behind one saturated cut necessarily carries the same flow, but this section is about pluggable
 policy in general, not only about candidates sharing a bottleneck.
 
 **No pass is promoted to a protocol rule**, because none needs to
