@@ -1363,14 +1363,14 @@ would not, since an attacker holds many identities.
 > considerably.*
 
 > **Vignette V5 — A new ritual.**
-> In the late 2010s people all over the world started doing something they had
+> By the late 2010s people all over the world were doing something they had
 > never done before. Partway through talking to a customer service rep or filling
 > in a form, they would be told to open their phone, check for a code, and read it
 > back. Almost nobody outside the industry knew or cared why every institution
 > adopted this at roughly the same moment. But the ritual arrived alongside the
 > automation of things that used to involve a person, and alongside working from
-> home, which had been rare. A few years later "Sign in with Google" joined the
-> repertoire.
+> home, which had been rare. "Sign in with Google", which had been available
+> for years by then, settled into the same repertoire.
 >
 > If this protocol is broadly adopted, most users will never know most of what is
 > in this document. What they will know is another new ritual: meeting someone
@@ -1486,9 +1486,10 @@ Instead:
   that counterparty supplied** (§7.5.2), a full photo record of the counterparty. The
   holder cannot open it unaided.
 - Retaining the *photo* rather than only a derived template is deliberate: face
-  recognition models improve, and templates are only comparable within a
-  version. Holding the source image allows re-derivation under future template
-  versions.
+  recognition models improve, and a template is not comparable across versions
+  unless the newer model was trained for backward compatibility — which exists
+  in the literature and which no record can assume of its successor. Holding the
+  source image allows re-derivation under future template versions.
 - The published record carries only a signed assertion of the form *"I observed
   a live human face; it matched / did not match / no prior record for this
   identity."*
@@ -1811,7 +1812,9 @@ is under 100 MB. Capture *time* is the binding cost, not disk.
 **Modality versioning.** Retaining source photographs rather than templates
 means any future still-image algorithm can be applied to old records. A break
 occurs only at a generational change in capture modality — stereoscopic, depth,
-LiDAR, which cannot be compared against a still. Policy for that turnover:
+LiDAR, which the still-image algorithms in use cannot match against a still.
+Purpose-built cross-modal matchers exist in the research literature; a legacy
+record cannot assume one. Policy for that turnover:
 continue using still-image algorithms for verification against legacy records
 while storing the new modality going forward. The
 record therefore carries a **capture-modality field** now, so a future client knows
@@ -1926,8 +1929,12 @@ rest**, which is a materially different position from holding a stored likeness,
 though what follows from it depends on a jurisdiction this document does not
 attempt to assess (§7.2).
 
-Data in memory during a ceremony authorised to display
-it is not storage, and retention provisions do not reach it.
+Data held in memory only for the ceremony that displayed it is not a stored
+likeness either. **But no regime surveyed here exempts transient memory as
+such** — the GDPR's definition of processing reaches collection, consultation
+and use rather than storage alone — so whether retention provisions reach it is
+the same jurisdictional question §7.2.1 declines to answer, and is declined here
+on the same ground.
 
 ##### 7.5.2.3 Retention becomes enforceable by the subject
 
@@ -2218,7 +2225,8 @@ Strongest first:
    demonstrated practical over-the-air **distance-reduction attacks against
    802.15.4z HRP UWB**, including Apple U1, NXP and Qorvo parts — 12 m spoofed as
    0 m **without knowledge of the ranging key**, because the attack targets the
-   physical-layer preamble rather than the cryptography above it. Resistance
+   receiver's processing of the physical layer's scrambled timestamp sequence
+   rather than the cryptography that generates it. Resistance
    depends on ranging mode, receiver design, and implementation, not on the
    standard alone. Not universally available either.
 2. **NFC tap.** A few cm, widely deployed on modern handsets though not a
@@ -4218,7 +4226,9 @@ thereafter.
 
 ### 12.4 There is no cold lookup — deliberately
 
-A global key→locator index is a DHT, which is rejected (Appendix B.1). Nor can it be
+A global key→locator index comes in two shapes and this design takes neither:
+distributed, which is the DHT Appendix B.1 rejects, or centrally held, which is
+the global operator §1 refuses. Nor can it be
 replicated: Bloom summaries of anchor subtrees run ~625 KB per anchor, or ~12.5
 GB globally at target scale, three orders of magnitude over budget.
 
@@ -7481,7 +7491,7 @@ mistaken for established results.
 |---|---|---|
 | 7.4.1 | Hill-climbing against binary-output matchers needs "thousands to tens of thousands" of queries | Query counts depend on modality, matcher, and information exposed. **Needs a specific cited attack** if used as a security-cost input |
 | 7.4.4 | Cross-device face matching gives "a few percent" false-reject rate | NIST evaluations show error rates vary strongly with algorithm, image quality, pose and threshold. **No externally valid figure exists** until matcher, dataset, threshold and capture conditions are specified |
-| 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it |
+| 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it, and **the universal form is contradicted**: commercial location-data brokerage identifies visits to religious, political and medical places in bulk, which is neither manual nor per-target, and FTC enforcement against Gravy Analytics and Venntel documents the practice. What survives is the part that rests on having been somewhere rather than on purchasable movement data. **Restating the benchmark is an open decision** |
 | 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
 | 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
 | 1.2.4 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |

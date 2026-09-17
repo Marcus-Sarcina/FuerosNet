@@ -286,10 +286,11 @@ seqno     = [series, counter]      ; §2.3. NOT a single integer, and NOT
 series    = uint                   ; U32 RANGE. ARBITRARY, never ordered
 counter   = uint                   ; U32 RANGE. Monotone WITHIN one series
 
-; NOTE: no `.size 8` here. It would read as a fixed eight-byte
-; serialisation, which contradicts the shortest-form requirement in §1, a 2026
-; timestamp encodes in five bytes, not nine. These are range constraints only;
-; encoding is always shortest-form deterministic CBOR.
+; NOTE: the ranges above are prose, not CDDL `.size`. `.size` on a uint
+; bounds the VALUE and not the encoded length (RFC 8610 §3.8.1), so `.size 8`
+; would say 0..2^64-1 and say nothing about bytes on the wire. Encoding is
+; always shortest-form deterministic CBOR: a 2026 timestamp is five bytes,
+; not nine.
 ```
 
 **Identities are referenced by hash, never by key** (design §5.1). An **ML-DSA-44**
