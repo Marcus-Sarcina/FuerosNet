@@ -10049,3 +10049,50 @@ disputed after O-001 had been marked resolved in the same document.
 settle"* before *"multi-device"* and my pattern expected the reverse. Grepping for
 a claim is only as good as the phrasings guessed for it, which is an argument for
 grepping the subject rather than the assertion.
+
+## Cycle 3, pass 0.3 — unjustified claims, two audits (2026-09-17)
+
+**Two independent audits, 123 and 138 claims, and both reproduce §20.** The
+first decomposes to 79 load-bearing exactly as §20's preamble predicts — §20.2's
+32, §21's operating points, wire §1.3's tabled bounds, §20.1's load-bearing rows.
+The second reaches 103 by counting every byte-string length, frame size and
+threshold the wire format states inline. Neither found a load-bearing claim the
+register did not already hold or a section did not already declare chosen. That is
+the register being read back accurately, twice.
+
+**The second audit's sharpest point was about the register itself.** §20 stated
+*"79 load-bearing and 123 in total"* without showing the enumeration, and the two
+reviewers' 79 and 103 show the figure is rubric-dependent. It also drifted the
+moment I added three rows to §21. The preamble now states the load-bearing set as
+**a sum over four enumerated sets rather than an asserted figure**, says it moves
+when a row is added, and says a stricter rubric reaches higher. No fixed number.
+
+**Three operating points were missing from §21's table**, and one was mine:
+the delegated credential's run of 45 × 48 h, which I had placed with its
+mechanism under §21.1's local-policy rule when it is a protocol constant like the
+currency attestation lifetime beside it; anchor hysteresis at S and S/2; and the
+25 MB anchor index budget. All three now have rows with the basis stated as chosen.
+
+**Wire §1.3's declaration now covers every bound, not only its tabled arrays.**
+The second audit counted twenty-one inline byte-string and frame bounds beyond the
+table, and the sentence that declares bounds as chosen ceilings only reached the
+table. It now reaches all of them.
+
+**Nine intensifiers taken under the standing rule** across the two audits — six
+from the first, three from the second — each given its number where one existed
+("catastrophically" had ~19,500:1 in the next paragraph; "negligible at any real
+k" is 64/2⁶⁴) or restated as assumed where none does.
+
+**Declined, with reasons.** The second audit's #3 (QUIC migration versus TCP) and
+#4 (an always-on socket is unreliable when backgrounded) were both **confirmed by
+pass 0.1** against RFC 9000 §9, RFC 9293 and the Apple and Android background
+execution documentation; they are sourced, not unsupported. Its S3, "nine of the
+eleven exchanges", is derived from wire §4.5.2's table, which enumerates eleven
+exchanges of which nine read no disclosable field — checked by counting the rows.
+S1, that the workspace has fifteen crates, is a fact about the workspace and not a
+claim the design makes.
+
+**Open for the author, carried from the first audit.** Whether §20.2 gains an
+*evidence needed* column — the first audit supplies one per assumption, and it is
+what the register's stated purpose most wants. And where the threshold for
+registering supporting claims sits, the register being curated by design.

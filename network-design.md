@@ -354,8 +354,8 @@ This is not built for crime or insurgency, so the threat model of an anonymity
 network does not apply. Someone committing crimes on this network would not be
 doing it at the layer this document specifies; it would be inside a resource,
 which can implement whatever additional obfuscation its authors choose. **The
-network layer's job is identity and trust, cheaply enough that resources can build
-strong security on top of it.**
+network layer's job is identity and trust, at a cost the design aims to keep low
+enough that resources can build strong security on top of it.**
 
 #### 1.2.4 Four honest limits on that target
 
@@ -392,7 +392,8 @@ deniability. Non-repudiation is accepted as a cost separately (§19.7), and
 profiling is expensive both in bulk and per target. This design is expensive in
 bulk and comparatively cheap per target once an observer is inside the relevant
 horizon, which is what C4 and C7 in §19.8 describe. The per-target cost is real;
-the per-record processing cost is near zero. An adversary who solves acquisition
+the per-record processing cost — a parse and a signature check — is assumed small
+beside it. An adversary who solves acquisition
 solves everything downstream, but the compromise extends only to the compromised
 user's activity within the subnets the adversary can see into.
 
@@ -7490,11 +7491,16 @@ does all three at once.
 
 **This register is curated, not exhaustive, and the difference should be stated.**
 A strict reading, one that counts every claim lacking a derivation, mechanism or
-source — finds **79 load-bearing unsupported claims** across the document set and 123
-in total, against the 32 listed in §20.2. The gap is not concealment: most of it
-is §21's parameters and `wire-format.md` §1's array bounds, which both documents
-declare as chosen operating points and conservative ceilings rather than derived
-values.
+source — finds many more load-bearing unsupported claims than the 32 listed in
+§20.2. **The load-bearing set is a sum over four enumerated sets, not an
+asserted figure**: §20.2's rows, §21's operating points, `wire-format.md` §1.3's
+tabled bounds, and whichever of §20.1's rows a reader judges load-bearing. Count
+them and the total moves when a row is added, which is the point of stating it
+this way. **It is also rubric-dependent**: a reading that additionally counts
+every byte-string length, frame size and threshold the wire format states inline
+rather than in §1.3's table reaches higher still. The gap between any such
+figure and §20.2's 32 is not concealment: it is bounds both documents declare as
+chosen operating points and conservative ceilings rather than derived values.
 
 **But "chosen" is a disclosure, not a justification.** Labelling a value chosen
 says only that nobody claims it was derived. Every parameter in §21 is therefore
@@ -7657,6 +7663,9 @@ not derived.
 | — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2) |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
+| — | Delegated transport credential | 48 h each, a run of 45 | 90 days end to end. The run is what lets an instance serve while its operator's device is asleep, and is the horizon a seized store inherits (§12.6.5). Chosen, not derived |
+| — | Anchor hysteresis | promote at S, demote at S/2 | So a boundary node does not flap (§12.2). The ratio is chosen |
+| — | Anchor index budget | 25 MB | Sizes the keyhash-only index at ~6 MB for 120,000 anchors and rules out full keys at ~18× (§12.2). Chosen |
 | — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 
 ### 21.1 Unset parameters, the implementation checklist

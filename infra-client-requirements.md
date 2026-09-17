@@ -514,7 +514,7 @@ everything, uniformly.
 
 **Materialise role assignments per resource, one row per member of the trust horizon**
 (design §11.4). **Authorisation at request time is a lookup**, never a predicate
-evaluation; that makes it deterministic, cheap, and readable by the operator who
+evaluation; that makes it deterministic, a single table read, and readable by the operator who
 configured it. **A row carries at most 64 roles**
 (`resource-requirements.md` §3); refuse to materialise one wider [2026-09-02] —
 the operator hears about it at configuration time, never a requester at request

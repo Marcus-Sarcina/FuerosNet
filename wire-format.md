@@ -246,7 +246,10 @@ of its two entries is post-quantum (§3.5). An adoption's two signers are theref
 logical signers — two participants and ~8 witnesses, at 10 × (64 + 3,309) ≈ **33
 KB**, or ~35 KB with the body. The bound accommodates 18 envelope signers plus 32
 embedded verifier responses, ≈ **65 KB**. Bounds exist to
-stop a stranger exhausting memory, not to describe normal operation.
+stop a stranger exhausting memory, not to describe normal operation — and that
+holds for every byte-string length, frame size and threshold stated inline
+elsewhere in this document as much as for the arrays tabled here. Each is a
+chosen ceiling; none is derived.
 
 ### 1.4 Content addressing
 
