@@ -1728,7 +1728,7 @@
       },
       {
         "where": "wire-format.md §1.3",
-        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation"
       }
     ],
     "given": "The accept set: every corpus.json entry of class `bytes` whose expect.outcome is `accept` (162 byte-class entries in the current corpus, the accept subset among them). For each entry, every proper prefix of its bytes, lengths 0 to n−1, and memory budget M and per-input time budget T, which no document sets (design §21.1 places buffer bounds with the component and lists none).",
@@ -1752,7 +1752,7 @@
     "rule": [
       {
         "where": "wire-format.md §1.3",
-        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation"
       },
       {
         "where": "wire-format.md §1.3",
@@ -1784,7 +1784,7 @@
     "rule": [
       {
         "where": "wire-format.md §1.3",
-        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation."
+        "text": "Bounds exist to stop a stranger exhausting memory, not to describe normal operation"
       },
       {
         "where": "wire-format.md §1.3",
