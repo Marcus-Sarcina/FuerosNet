@@ -3137,7 +3137,7 @@ Every returned record must be named either by the requested frontier or by a
 back-pointer of another record in the batch, and every back-pointer naming
 nothing in the batch must appear in field 4. The check is reachability, which is
 what §3.1 says the structure proves; a batch that crosses a merge has no sequence
-to check and needs none. **Where field 2 was absent, there is no requested head to match**:
+to check and needs none. **Where field 2 was absent, there is no requested frontier to match**:
 the chain still verifies internally, but its *newestness* is the holder's claim
 and nothing the requester holds can check it: a requester restoring its own
 archive is trusting the holder not to serve a truncated history

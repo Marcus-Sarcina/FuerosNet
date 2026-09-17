@@ -223,7 +223,7 @@
       },
       {
         "where": "wire-format.md §7.9",
-        "text": "records in reverse chain order, head first"
+        "text": "every record returned before any record it points back"
       }
     ],
     "given": "Subject S holding an unbroken chain of R records rooted at genesis and serving its own archive; the requester asks for max_records m, 1 to 256, with R greater than m so that more than one batch is needed.",
@@ -246,7 +246,7 @@
     "rule": [
       {
         "where": "wire-format.md §7.9",
-        "text": "The requester verifies the chain itself. Each returned record's back-pointers must match the record that follows it in the batch, and the first must match the requested head."
+        "text": "The requester verifies the structure itself, and order is no part of it. Every returned record must be named either by the requested frontier or by a back-pointer of another record in the batch"
       }
     ],
     "given": "A holder answering for subject S, and a requester asking with field 2 set to S's head.",
@@ -292,7 +292,7 @@
     "rule": [
       {
         "where": "wire-format.md §7.9",
-        "text": "Where field 2 was absent, there is no requested head to match: the chain still verifies internally, but its newestness is the holder's claim and nothing the requester holds can check it"
+        "text": "Where field 2 was absent, there is no requested frontier to match: the chain still verifies internally, but its newestness is the holder's claim and nothing the requester holds can check it"
       },
       {
         "where": "light-client-requirements.md §2",
@@ -1214,7 +1214,7 @@
       },
       {
         "where": "design §19.6",
-        "text": "The reference client must disclose to a verifier or witness, at the moment they are asked, that their identity and relationship will be permanently recorded in a third party's evidence and readable by future evaluators."
+        "text": "The reference client must disclose at capture time what the record will contain and who will be able to read it."
       }
     ],
     "given": "A ceremony on the harness with a notification hook on the participants', witnesses' and verifiers' clients.",
@@ -2039,7 +2039,7 @@
     "rule": [
       {
         "where": "wire-format.md §1.2",
-        "text": "Any deterministically encoded CBOR item is admissible — the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
+        "text": "Any deterministically encoded CBOR item is admissible: the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
       },
       {
         "where": "wire-format.md §1.2",
@@ -2070,7 +2070,7 @@
     "rule": [
       {
         "where": "wire-format.md §1.2",
-        "text": "Any deterministically encoded CBOR item is admissible — the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
+        "text": "Any deterministically encoded CBOR item is admissible: the profile's encoding rules govern the slice's framing, and its meaning is nobody else's to evaluate"
       },
       {
         "where": "wire-format.md §1.3",
@@ -2847,7 +2847,7 @@
       },
       {
         "where": "design §14.1.1",
-        "text": "falls back to the serving node when it fails"
+        "text": "using the serving node where none does"
       }
     ],
     "given": "Two leaves whose NATs, emulated by the harness, defeat hole punching.",
@@ -4986,7 +4986,7 @@
     "rule": [
       {
         "where": "wire-format.md §2.3",
-        "text": "Within one series a new counter must be strictly greater than the last one the verifier holds — not exactly previous+1, since a verifier may legitimately have missed intervening transactions"
+        "text": "Within one series a new counter must be strictly greater than the last one the verifier holds, not exactly previous+1, since a verifier may legitimately have missed intervening transactions"
       }
     ],
     "given": "The holder has installed the primitives.md SignedLocator for alice with seqno [5, 42] as her current locator.",
@@ -5275,7 +5275,7 @@
     "rule": [
       {
         "where": "wire-format.md §7.6",
-        "text": "Publishing a changed endpoint list advances the counter — and the list is ordered, so reordering alone is a change"
+        "text": "Publishing a changed endpoint list advances the counter, and the list is ordered, so reordering alone is a change"
       },
       {
         "where": "wire-format.md §7.6",
@@ -6738,7 +6738,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §4.1",
-        "text": "Every light client beneath you attaches to you — not only your direct subordinates, since design §14.1.2 has a client walk up past light-client patrons to the nearest infrastructure."
+        "text": "Every light client beneath you attaches to you, not only your direct subordinates, since design §14.1.2 has a client walk up past light-client patrons to the nearest infrastructure."
       },
       {
         "where": "infra-client-requirements.md §1",
@@ -8106,7 +8106,7 @@
     "rule": [
       {
         "where": "design §14.1.1",
-        "text": "ICE attempts the direct path first and falls back to the serving node when it fails."
+        "text": "ICE checks candidate pairs in priority order, preferring a direct path where one works and using the serving node where none does."
       },
       {
         "where": "wire-format.md §9.2",
@@ -8278,7 +8278,7 @@
       },
       {
         "where": "design §14.1.1",
-        "text": "ICE attempts the direct path first and falls back to the serving node when it fails."
+        "text": "ICE checks candidate pairs in priority order, preferring a direct path where one works and using the serving node where none does."
       },
       {
         "where": "wire-format.md §9.2",
@@ -8549,7 +8549,7 @@
     "rule": [
       {
         "where": "wire-format.md §4.1",
-        "text": "`former_patron_key` MUST differ from adoption field 2 — identical keys represent no transfer, the same rule and the same reason as `prior_key` MUST differ from field 1 in a `Recovery` — and MUST differ from field 1"
+        "text": "`former_patron_key` MUST differ from adoption field 2 — identical keys represent no transfer, the same rule and the same reason as `prior_key` MUST differ from field 1 in a `Recovery`, and MUST differ from field 1"
       },
       {
         "where": "wire-format.md §4.1",
@@ -8697,7 +8697,7 @@
       },
       {
         "where": "infra-client-requirements.md §4.3",
-        "text": "**Keep the topology store across a restart — it is your seen-set.**"
+        "text": "**Keep the topology store across a restart; it is your seen-set.**"
       }
     ],
     "given": "A daemon stopped with a signal, with material accepted for a client waiting in its queue.",
@@ -8784,7 +8784,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §4.3",
-        "text": "**Keep the topology store across a restart — it is your seen-set.**"
+        "text": "**Keep the topology store across a restart; it is your seen-set.**"
       },
       {
         "where": "infra-client-requirements.md §4.3",
@@ -8947,7 +8947,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §4.3",
-        "text": "**Keep the topology store across a restart — it is your seen-set.**"
+        "text": "**Keep the topology store across a restart; it is your seen-set.**"
       },
       {
         "where": "wire-format.md §3.1",
@@ -8973,7 +8973,7 @@
     "rule": [
       {
         "where": "wire-format.md §7.9",
-        "text": "**The requester verifies the chain itself.** Each returned record's back-pointers must match the record that follows it in the batch"
+        "text": "**The requester verifies the structure itself, and order is no part of it.** Every returned record must be named either by the requested frontier or by a back-pointer of another record in the batch"
       },
       {
         "where": "wire-format.md §7.9",
@@ -9584,7 +9584,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §4.3",
-        "text": "Keep the topology store across a restart — it is your seen-set."
+        "text": "Keep the topology store across a restart; it is your seen-set."
       },
       {
         "where": "infra-client-requirements.md §6",
@@ -9779,7 +9779,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §4.3",
-        "text": "Keep the topology store across a restart — it is your seen-set."
+        "text": "Keep the topology store across a restart; it is your seen-set."
       },
       {
         "where": "wire-format.md §10.1.1",
