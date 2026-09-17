@@ -51,7 +51,7 @@ Aug. 2026
 
 ---
 
-**Status:** Design. No implementation yet.
+**Status:** Design, with a reference implementation under way.
 
 **Specified.** Topology and transactions; the archive, its genesis rule and its
 merge semantics; proof of presence, including selection by recognition; addressing, resolution and routing; session establishment, failover and the

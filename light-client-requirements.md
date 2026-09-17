@@ -600,5 +600,7 @@ on the wire.
 
 - Whether recovery should restore archive history, and how, without handing an
   attacker the same path (design §22).
-- Multi-device behaviour beyond merge: which device holds what, and how a user
-  understands their archive spanning several (design §23.3).
+- How a user understands an archive spanning several devices. **Which device
+  holds what is settled** (design §23.3): seeds sit on the ceremony device, and
+  archives, sealed captures and caches go where the storage is. How that is
+  presented to the person is not.

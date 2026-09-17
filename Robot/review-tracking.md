@@ -10011,3 +10011,41 @@ because closing the first run's twelve left a test document describing the
 documents as they were. A pass that reviews a set including its own test
 specification will produce that every cycle unless the specification is updated in
 the same commit as the sections it cites.
+
+## Cycle 3, pass 0.2 third run — internal coherence (2026-09-17)
+
+**Five findings, all real, and the echo is receding**: three in the root documents
+against two in the test specification, where the second run ran eight to four the
+other way.
+
+**Two were mine.** Wire §1.1's domain table pointed the catalog entry and the
+abuse report at §4, which is *Transaction types* and which itself says an abuse
+report is not one — the schemas are at §6.1 and §6.3. I added the delegation row
+to that table and did not audit the rows beside it. `refcheck` passed both,
+because **§4 exists**: the checker validates that a reference resolves, never that
+it resolves to the right place. That is the second time this cycle a resolving
+citation has been wrong — the other was §4.1 cited for a signature size that lives
+at §1.3. Audited the whole table this time; the remaining twelve point where the
+object is defined.
+
+**The design's status line said "No implementation yet."** Fifteen crates, a green
+gate and 403 of 413 acceptance entries say otherwise. Now: *Design, with a
+reference implementation under way.* No path is named, the root citing nothing
+under `Robot/` or the workspace.
+
+**Multi-device was settled in one document and open in two.** §23.3 answered P33
+on 2026-09-16 and the register marked it answered; `light-client-requirements.md`
+§10 and O-015 still listed device allocation as open. Both now say which half is
+closed — which device holds what — and which is not: restoration, deletion
+propagation across devices, and how a person is shown an archive spanning several.
+That is the reviewer's own reading and it is right: answering P33 did not answer
+restoration.
+
+**The two test rows were ordinary staleness**: SIG-005 enumerated thirteen signing
+domains against the wire's fourteen, and INT-019 flagged the in-flight outcome as
+disputed after O-001 had been marked resolved in the same document.
+
+**Sweep note.** O-015 survived my first sweep because its wording puts *"do not
+settle"* before *"multi-device"* and my pattern expected the reverse. Grepping for
+a claim is only as good as the phrasings guessed for it, which is an argument for
+grepping the subject rather than the assertion.

@@ -116,8 +116,8 @@ either be structurally disjoint from every language above, or carry its own
 | Verifier response (§4.5) | `rhtn/1:verifier` |
 | Subject consent to a query (§4.5) | `rhtn/1:consent` |
 | Currency attestation (§7.1) | `rhtn/1:currency` |
-| Catalog entry (§4) | `rhtn/1:catalog` |
-| Abuse report (§4) | `rhtn/1:abuse` |
+| Catalog entry (§6.1) | `rhtn/1:catalog` |
+| Abuse report (§6.3) | `rhtn/1:abuse` |
 | Standalone locator (§2.3) | `rhtn/1:locator` |
 | Anchor entry (§7.2) | `rhtn/1:anchor` |
 | Node endpoint record (§7.6) | `rhtn/1:endpoints` |
