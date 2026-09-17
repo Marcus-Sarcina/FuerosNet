@@ -6542,7 +6542,7 @@ is visible either way. Everything else disclosable — retention, client integri
 capture parameters, proximity — has no consumer here.
 
 **Presentation is a single head txid** (`wire-format.md` §4.1 field 7), from which
-the patron walks the chain backward and fetches what it wants
+the patron walks backward from it and fetches what it wants
 (`wire-format.md` §7.9, archive fetch). **The patron chooses its own depth.** The presenter picks the head and
 cannot control how far back the recipient looks, so the party extending credit
 decides how much evidence it wants. On joining a new tree, the node presents a

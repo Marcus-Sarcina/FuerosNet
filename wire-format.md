@@ -3088,15 +3088,18 @@ disclosable fields may be revealed or withheld, withholding is visible in the di
 list, and the record verifies either way. **This is the only fetch path with a use for
 location**, so it is the only one where the choice carries information (§4.5.2).
 
-**A patron given an archive head (§4.1 field 7) walks the chain backward.** Doing
+**A patron given an archive head (§4.1 field 7) walks backward from it.** Doing
 that one record per round trip would be prohibitive, so fetching is batched.
 
 ```
 ArchiveRequest = {
   1: keyhash,          ; subject whose archive is wanted
-  2: ? txid,           ; head to walk back from. ABSENT: the holder's newest
-                       ;   record for this subject — the recovery case, where
-                       ;   the requester lost the one thing this field asks for
+  2: ? [ + txid ],     ; the frontier to walk back from: one txid for an
+                       ;   unmerged chain, several where a merge left more than
+                       ;   one branch unreturned (§3.1). ABSENT: the holder's
+                       ;   newest record for this subject — the recovery case,
+                       ;   where the requester lost the one thing this field
+                       ;   asks for
   3: uint,             ; max_records, 1..256
   4: ? timestamp,      ; stop at records older than this
   5: bstr .size 16     ; nonce
@@ -3104,10 +3107,24 @@ ArchiveRequest = {
 
 ArchiveReply = {
   1: bstr .size 16,    ; echoes the request nonce
-  2: [ * Envelope ],   ; records in reverse chain order, head first
+  2: [ * ArchiveEntry ],
+                       ; every record returned before any record it points back
+                       ;   to. NOT a sequence: the archive is a DAG (§3.1) and
+                       ;   cross-branch order is deliberately not recovered, so
+                       ;   a batch spanning a merge has no single order to assert
   3: bool,             ; true if more remain beyond this batch
-  4: ? txid            ; continue from here, the oldest record returned
+  4: ? [ + txid ]      ; the frontier: every back-pointer this batch named and
+                       ;   did not return. PRESENT iff field 3 is true, and one
+                       ;   txid is the ordinary case — more only past a merge
 }
+
+ArchiveEntry = PresentedRecord / Envelope
+                       ; a presence record (§4.5) arrives in the presented form,
+                       ;   §4.5.1.3's envelope plus seven disclosure slots,
+                       ;   because the holder's disclosure choice is what this
+                       ;   path is for. Every other type arrives as a bare
+                       ;   envelope. A map is an envelope and an array is a
+                       ;   presentation, so the two need no discriminator
 ```
 
 **Paginate by re-requesting with field 2 set to the previous reply's field 4.**
@@ -3115,9 +3132,12 @@ A holder may refuse a request or return fewer records than asked for; **a short
 reply is not evidence of a short archive**, and a patron must not treat it as
 truncation.
 
-**The requester verifies the chain itself.** Each returned record's back-pointers
-must match the record that follows it in the batch, and the first must match the
-requested head. **Where field 2 was absent, there is no requested head to match**:
+**The requester verifies the structure itself, and order is no part of it.**
+Every returned record must be named either by the requested frontier or by a
+back-pointer of another record in the batch, and every back-pointer naming
+nothing in the batch must appear in field 4. The check is reachability, which is
+what §3.1 says the structure proves; a batch that crosses a merge has no sequence
+to check and needs none. **Where field 2 was absent, there is no requested head to match**:
 the chain still verifies internally, but its *newestness* is the holder's claim
 and nothing the requester holds can check it: a requester restoring its own
 archive is trusting the holder not to serve a truncated history
