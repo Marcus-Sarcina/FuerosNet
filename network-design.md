@@ -307,7 +307,8 @@ cannot tell fabricated activity from real.
 
 **Indiscriminate but targeted.** Intelligence services, secret police, immigration
 officers, employment screeners. This class wants information about a **specific
-subject** and is **accountable to no fixed evidentiary standard**. An officer will
+subject**, and whatever standard it answers to is **not one the subject can
+invoke at the moment of decision**. An officer will
 refuse you entry because your device holds photographs of you somewhere
 compromising, and will refuse you exactly as readily whether or not those
 photographs are signed and witnessed. **To this class, cryptographic attestation
@@ -699,7 +700,8 @@ distinct from §22's open questions about mechanisms that *are* specified.
   **The package to adopt when revisiting**: the reputation unit is the /64 — the
   smallest end-site assignment RFC 6177 contemplates (it declines to fix a formal
   size and expects most sites to receive more), and standing anti-abuse practice (Spamhaus lists IPv6 at /64; M3AAWG recommends
-  it as the rate-limiting unit), with larger delegations a per-observer policy
+  rate-limiting a range rather than an address, naming /64 as the typical
+  smallest allocation), with larger delegations a per-observer policy
   choice (§16.1); the encoding is BGP NLRI form (RFC 4271, section 4.3) — `[length_bits,
   truncated address bytes]` — with trailing bits zero as this document's
   canonical-form rule (RFC 4271 leaves trailing-bit values irrelevant), one
@@ -754,7 +756,7 @@ Post-quantum from the start, tiered by how long authenticity must hold.
 | Layer | Choice | Why |
 |---|---|---|
 | Transport (hop) | **QUIC + TLS 1.3, group `X25519MLKEM768`.** Peer authentication by raw public key (RFC 7250); where the presenting device holds no seed, that key is a delegated one bound to its identity by the attach (§23.3, `wire-format.md` §8.2) | "Harvest now, decrypt later" is a real threat to confidentiality. The hybrid group survives either primitive failing. Identities here are keyhashes and there is no CA, so X.509 has nothing to validate against, which is also why a delegation is carried in the attach rather than in the handshake, raw public keys having nowhere to put one |
-| Payload (end-to-end) | **PQXDH + Triple Ratchet** (§14.2.4) | Adopted rather than designed here. Both have published specifications and formal verification |
+| Payload (end-to-end) | **PQXDH + Triple Ratchet** (§14.2.4) | Adopted rather than designed here. Both have published specifications; PQXDH carries machine-checked ProVerif and CryptoVerif analysis, the Triple Ratchet a published security proof |
 | Identity keys | Hybrid classical + PQ (§5.1) | Long validity window justifies the cost |
 | **Every transaction retained in the archive** | Post-quantum | §5.1 |
 | Evidence embedded inside a signed body | Classical | §5.1 |
@@ -840,8 +842,9 @@ presence records, key rotations, identity changes, or any archived transaction.
 
 RustCrypto provides `ml-dsa` (FIPS 204) and `ml-kem` (FIPS 203), both pure-Rust
 and `no_std`, so a wasm32 target is viable **for the primitives**. **Both carry
-explicit notices that they have not been independently audited**, and alternatives
-(`fips203`/`fips204`) carry the same caveat. `aws-lc-rs` now exposes both
+explicit notices that they have not been independently audited**, and the
+alternatives (`fips203`/`fips204`) describe themselves as experimental and
+use-at-own-risk rather than making the same statement about audit. `aws-lc-rs` now exposes both
 ML-KEM and ML-DSA on AWS-LC's FIPS lineage — a production-oriented native
 route, but offers no browser-wasm target, which sharpens the split below
 rather than closing it [2026-09-02].
@@ -2147,9 +2150,9 @@ label-stack information on others. Treat per-hop data as diagnostic,
 not as added precision.
 
 **Traceroute cannot reach the cell tower.** Mobile architecture does not expose
-the radio access network to IP routing: the path terminates at the carrier's
-packet gateway (PGW/UPF), and tower, backhaul and scheduling are all invisible
-below it. Carriers aggregate to a small number of regional gateways, so egress
+the radio access network to IP routing: the path a traceroute can see stops at
+the carrier's packet gateway (PGW/UPF), tunnelling hiding tower, backhaul and
+scheduling below it. Carriers aggregate to a small number of regional gateways, so egress
 may be hundreds of km from the subscriber, and CGNAT often means the device IP
 is not globally routable. The last visible hop yields carrier and coarse region
 — not a tower. RAN latency also cannot be subtracted, because the
@@ -2201,7 +2204,7 @@ location evidence a record needs is the evaluator's policy.
 | Channel | Type | Resolution | Notes |
 |---|---|---|---|
 | GNSS | self-reported | metres | Forgeable; weight by client attestation (§7.8) |
-| Serving cell ID | self-reported | ~1 km urban | Forgeable; **Android only among documented public APIs.** IOS CoreTelephony exposes carrier data, not a serving-cell identifier |
+| Serving cell ID | self-reported | ~1 km urban, deployment-dependent | Forgeable; **Android only among documented public APIs.** iOS CoreTelephony publishes no serving-cell identifier |
 | Witness latency bounds | independent | continental | Upper-bound disks, §7.6 |
 | Egress gateway IP geo | independent | carrier region | Coarse; CGNAT-affected |
 
@@ -2230,7 +2233,8 @@ Strongest first:
    depends on ranging mode, receiver design, and implementation, not on the
    standard alone. Not universally available either.
 2. **NFC tap.** A few cm, widely deployed on modern handsets though not a
-   guaranteed platform capability, requires deliberate contact.
+   guaranteed platform capability, and close enough that the gesture is
+   deliberate even where contact is not required.
    **NOT anti-relay.** Relay attacks against NFC are a well-documented class;
    short physical range does not prevent a relay pair with a fast link. NFC
    supplies *physical-range friction*, not a distance-bounding guarantee.
@@ -2267,8 +2271,8 @@ of scope by §7.
 
 **Self-reported serving cell ID** is available on Android through
 `TelephonyManager` under location permission, and **is not available on iOS** —
-CoreTelephony publishes carrier and subscriber information but no serving-cell
-identifier. It is forgeable by construction. It belongs in the same category as client integrity (§7.8) —
+CoreTelephony has never published a serving-cell identifier, and its carrier
+properties are deprecated and return static values on current releases. It is forgeable by construction. It belongs in the same category as client integrity (§7.8) —
 a trust-raising attribute weighted by attestation, never treated as a fact.
 
 **Witnesses notarise; they do not verify proximity.** Under the corrected
@@ -5282,9 +5286,10 @@ an accepted cost (§19.7).
 
 #### 14.1.5 Push is a doorbell, not a mailbox
 The patron posts a **content-free** body to the wake endpoint a client gave it,
-which only prompts the user to open the app and re-establish a session; all
-payload moves over the network's own channel and notification text is rendered
-locally. Signal uses this pattern.
+which prompts the client to reconnect — the process itself where the platform
+allows a background wake, the person where it does not; all payload moves over
+the network's own channel and notification text is rendered locally. Signal's
+content-free pushes are the same pattern.
 
 **The endpoint is what the patron holds, and it is all the patron needs.** A
 URL to post to and the key the body is encrypted to, so the service carrying it
@@ -5292,7 +5297,8 @@ cannot read even the nothing that is in it. The patron authenticates itself to
 that service with a key pair of its own rather than a credential a platform
 issued, which is what keeps a serving node able to ring the doorbell of a
 client it has never shared a vendor with. **This is the shape RFC 8030 fixed**
-for the same problem, and adopting its shape rather than a vendor's is what
+for the same problem, with RFC 8291 for the body's encryption and RFC 8292 for
+the sender's own key pair, and adopting its shape rather than a vendor's is what
 makes one obligation cover every platform.
 
 **What the push service still learns:** that a body went to this endpoint at
@@ -7080,12 +7086,13 @@ data they find is sparse.
 **Transmission to aggregators is never a default behaviour.** No component pushes
 anywhere central. That is a structural property, not a policy promise.
 
-**The comparison classes usually reached for are the opposite of this.** Ring's
-police-partnership programme and Flock's business model are *designed* aggregation
-and push to law-enforcement; the fragmentation is at the camera and the
-aggregation is the product. Real-name platforms are built for maximum PII
-collection and distribution and are near-mandatory for ordinary life in wealthy
-countries. **Neither is an example of high-friction fragmented data**, and citing
+**The comparison classes usually reached for are the opposite of this.** Flock's
+business model is *designed* aggregation and push to law enforcement, connected
+sharing and automatic alerts being the product; Ring solicits footage through
+requests its users may decline, which is a weaker form of the same direction. In
+both the fragmentation is at the camera and the aggregation is what is sold.
+Real-name platforms collect and distribute personal data extensively, and
+declining them carries a cost most people will not pay. **Neither is an example of high-friction fragmented data**, and citing
 them as one inverts the comparison this design should be measured against.
 
 **What remains true:** some nodes and subnets will be bad actors, and a
@@ -7491,7 +7498,7 @@ mistaken for established results.
 |---|---|---|
 | 7.4.1 | Hill-climbing against binary-output matchers needs "thousands to tens of thousands" of queries | Query counts depend on modality, matcher, and information exposed. **Needs a specific cited attack** if used as a security-cost input |
 | 7.4.4 | Cross-device face matching gives "a few percent" false-reject rate | NIST evaluations show error rates vary strongly with algorithm, image quality, pose and threshold. **No externally valid figure exists** until matcher, dataset, threshold and capture conditions are specified |
-| 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it, and **the universal form is contradicted**: commercial location-data brokerage identifies visits to religious, political and medical places in bulk, which is neither manual nor per-target, and FTC enforcement against Gravy Analytics and Venntel documents the practice. What survives is the part that rests on having been somewhere rather than on purchasable movement data. **Restating the benchmark is an open decision** |
+| 1 | Physical-world affiliation profiling is "expensive, manual, per-target work that no single breach short-circuits" | The benchmark the whole privacy target is set against (§1). No comparative investigation-cost study supports it |
 | 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
 | 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
 | 1.2.4 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |

@@ -139,9 +139,10 @@ context rather than content also makes the check free.
 
 **Deterministic rules, normative:**
 - Map keys in **protocol-defined** maps are unsigned integers, sorted ascending.
-  **Standardised structures are exempt**: a `COSE_Key` carries negative labels by
-  definition (§2.2) and its encoding is fixed by its own RFC. Integer keys keep
-  records
+  **Standardised structures are exempt from the key-space rule**: a `COSE_Key`
+  carries negative labels by definition (§2.2). The exemption reaches the labels
+  and not determinism — RFC 9052 fixes no single serialisation, so the rules
+  below decide the rest. Integer keys keep records
   small and avoid string-ordering ambiguity.
 - Definite-length encoding only. No indefinite-length arrays, maps or strings.
 - Shortest-form integers.

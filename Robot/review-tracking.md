@@ -9868,3 +9868,34 @@ now does not. Nothing deleted, and the earlier note overstated it.
 - 33 conditions held on one side. The eighteen with no positive are the
   dangerous direction: nothing asserts that a well-formed object passes the
   check rather than passing for some other reason.
+
+---
+
+## Cycle 3, pass 0.1 — factual verification of external claims (2026-09-16)
+
+**Eight contradicted, seven applied.** Corrections are in `ea0533c`. The wire
+format's note on CDDL `.size` was wrong about the language: `.size` bounds a
+uint's value, not its encoded length (RFC 8610 §3.8.1). Three biometric claims
+were categorical where the literature is not — templates across versions, depth
+capture against a still, and Ghost Peak, which attacks the receiver's handling of
+the scrambled timestamp sequence rather than the preamble. §12.4 equated a global
+key→locator index with a DHT when it has two shapes and the design refuses each
+for a different reason. V5's chronology ran backwards. And §7.5.2.2's flat "data
+in memory is not storage" had a second problem the reviewer did not raise: it
+contradicted §7.2.1 two subsections away, which declines to judge any
+jurisdiction.
+
+**§1's privacy benchmark: declined** [author, 2026-09-16]. The reviewer offered
+FTC enforcement against location-data brokers as contradicting *"expensive,
+manual, per-target work"*. The ruling: the benchmark names **the commonly
+understood and accepted level of exposure**, not a claim about what surveillance
+can currently do. Speculative or newly emerging programmes that make the world
+outside the network less private do not change the privacy the network affords.
+§20.1's row stands as filed. **Expect this finding again** — the text does not say
+what the benchmark is for, so each cycle's 0.1 can be expected to re-derive it;
+closing that would mean a clause in §1, which has not been written.
+
+**Three findings were already registered** at §20.1 before the pass ran: §7.4.1's
+hill-climbing query counts, §7.4.4's cross-device false-reject rate, and §1's
+benchmark. The register is doing its job, and a 0.1 reviewer re-deriving what the
+document already admits is a pass working correctly rather than a defect.
