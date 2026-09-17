@@ -193,10 +193,6 @@ job.
 
 - **Tell participants what the record will contain and who will be able to read
   it**, at the moment of capture, not in a policy document.
-- **Tell witnesses and verifiers the same.** A verifier who answers permanently
-  proves they previously met the subject; a witness proves neighbourhood
-  involvement. Both become durable nodes in someone else's evidence graph, and the
-  protocol's consent machinery does not cover them (design §19.6).
 
 
 ---

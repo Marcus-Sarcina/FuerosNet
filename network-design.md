@@ -7258,7 +7258,7 @@ and a citation to a missing number resolves there.
 | **P19** | **Archive presentation hands a new patron an intelligible history of prior relationships** (§16.7) | High | The prefix is chosen by the user, but the chain forbids arbitrary omission, so the choice is coarse. Selective disclosure within records (§19.3) is now specified, and does not help here: what a prospective patron reads is counterparty identity, which no field-level measure withholds (§8.1.1). See also C4 in §19.8, which is worse |
 | **P20** | **Resource access logs, where an implementation creates them, bind network identity to application actions** (§11.7) | High for sensitive resources | Flagged as unfinished but never analysed. A resource already authenticates by network identity and topological scope, so a log connects *who* to *what they did, when, and under which organisational relationship* |
 | **P21** | **Coarse location becomes behavioural location under temporal correlation** (§7.7) | **Medium, mitigated**; High for at-risk users | A single precision-3 geohash is ~156 km. A *time series* of them plus counterparties reveals commuting, travel, conference attendance, employment and residence, and coarsening reduces precision rather than longitudinal inference. **Location is now withholdable** (§8.1.1) and ten of eleven exchanges never receive it. **The residual is structural**: §7.7's impossible-travel check and this leak are the same computation over the same series, so the one recipient with a legitimate use (a prospective patron) is also the dangerous holder. Graph position no longer compounds it (§8.1) |
-| **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§19.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. Corrected as a reference-client obligation, not yet a demonstrated one |
+| **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§19.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. **Accepted** [author, 2026-09-17]: neither role is a user action, consent to perform protocol actions is given by choosing to use the network, and a per-query notice would tell an operator only who is meeting whom (§7.3). The disclosure §19.6 does require reaches the participant at capture, not these roles |
 | **P24** | **A gateway operator sees their subnet's external traffic** (§11.7) | **Medium, reduced** | Socially trusted is not accountable, and the design ensures no patron sees payload content (§14.2) while a gateway hands a subnet member exactly that one layer up. **The user can now evaluate before routing**: the signed `CatalogEntry` binds the service to what the owner published and carries a declared `data_practice`, and it reaches them at catalog lookup, which precedes any connection (§11.5). **The residual is that a declaration is a claim, not a guarantee** (§1.1), and the operator sees the traffic whatever they declared. Beyond that the remedy is not to use the resource |
 | **P25** | **A hosted operator can invert a pairwise principal identifier** (§11.0.2) | Low | They know the resource identity and their own org's keyhashes, so one hash per member recovers the mapping. Deliberate, the scheme withholds network identity from parties who do not already know you, not from the operator you chose |
 | **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §7.7) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
@@ -7294,33 +7294,34 @@ alone would have read as complete.
 
 ### 19.6 Unawareness is a product obligation, not a schema one
 
-**The obligation extends to witnesses and verifiers, not only participants.**
+**A witness's and a verifier's participation is durably recorded.** A verifier
+whose client answers a query permanently proves they previously met the subject;
+the response is signed and lives in someone else's record for decades (§8.1). A
+witness whose client attests permanently proves neighbourhood involvement. Both
+become durable nodes in another person's evidence graph, disclosed to audiences
+they never chose, and the subject's countersignature on the query (§7.4.2)
+protects the *subject* rather than them.
 
-A **verifier** who answers a query permanently proves they previously met the
-subject; the response is signed and lives in someone else's record for decades
-(§8.1). A **witness** who attests permanently proves neighbourhood involvement.
-Both become durable nodes in another person's evidence graph, disclosed to
-audiences they never chose, and **the design's consent machinery does not address
-them**: the subject countersigns the query (§7.4.2), which protects the *subject*,
-while the verifier (whose own relationship is what gets exposed) is asked
-nothing.
+**Neither is owed a warning** [author, 2026-09-17]. Neither role is a user
+action: witnessing is a client watching a ceremony's message flow for conformance
+and timing it against its own clock before signing, and answering as a verifier is
+a client comparing a presented profile against what it already holds (Appendix
+A.3). Consent to perform protocol actions is given by choosing to use the network,
+and §7.3 records what a per-query notice would actually convey — who is meeting
+whom.
 
-Agreeing to answer one question is not informed consent to years of graph
-disclosure. **The reference client must disclose to a verifier or witness, at the
-moment they are asked, that their identity and relationship will be permanently
-recorded in a third party's evidence and readable by future evaluators.**
-
-**No party can verify this happened.** A client that skips it produces records
-indistinguishable from one that does not, and the people harmed are those who were
-never told. It is a commitment by the implementer and the only lever available.
-
-Several units score badly on LINDDUN's Unawareness/Unintervenability axis for the
+**The obligation that does exist runs to the participant, at capture.** Several
+units score badly on LINDDUN's Unawareness/Unintervenability axis for the
 same reason: a participant understands "prove we met" without appreciating that
 the record durably names witnesses and verifiers and will be fetched by evaluators for
 years. The schema cannot fix this. **The
 reference client must disclose at capture time what the record will contain and
 who will be able to read it.** Not in a policy document, at the moment of the
-ceremony.
+ceremony — which is the one point in this where a person is present and acting.
+
+**No party can verify this happened.** A client that skips it produces records
+indistinguishable from one that does not, and the people harmed are those who were
+never told. It is a commitment by the implementer and the only lever available.
 
 ### 19.7 Accepted costs
 
@@ -8076,8 +8077,7 @@ adoptions, acknowledging subtree membership (§11.2.1), replication and issuing
 resource credentials all proceed without user intervention. **Witnessing and
 answering a verifier query are automatic too, despite resembling human acts**: the
 witness's client observes a ceremony, tests the evidence and signs without pausing
-for its operator's approval — §19.6's disclosure still reaches the operator, as
-notice rather than a question, and a verifier's client compares a profile
+for its operator's approval, and a verifier's client compares a profile
 against what it already holds without asking anyone's permission (§7.1, §7.3,
 §19.6). **A user
 wanting less sets policy in advance rather than being interrupted** — the switch is

@@ -9936,3 +9936,38 @@ that can be defeated rather than is, and V7's two legal absolutes.
 written, including every figure in the post-quantum size tables, the COSE and
 CDDL encoding facts, the UWB attack results, and the platform background-execution
 constraints.
+
+## Cycle 3, pass 0.2 — internal coherence (2026-09-16 to 09-17)
+
+**Twelve contradictions, all real, both sides verified before any change.** Nine
+closed in `e5c966e`, the archive pair in `7e625d2`, and the twelfth by deletion.
+Two were sharper than filed: §10.1 does not merely disagree with §10.5, it *cites*
+§10.5 as what stops the next request while §10.5 reset the current one; and the
+rotation pair is settled by the schema rather than the prose, `Recovery` being
+field 6 and present iff this is a recovery adoption. One was narrower: §12.2 and
+wire §7.2 agree on substance and collided on the verb "fetched".
+
+**The archive pair carried a third defect the reviewer did not raise.** §7.9's
+verification rule required each record's back-pointers to match *"the record that
+follows it in the batch"* — a sequence check over a structure §3.1 says has no
+sequence. Repaired with the frontier: reachability, not order.
+
+**Finding 11 was withdrawn entirely, not relocated** [author, 2026-09-17]. The
+reviewer read §7.3 against §19.6/A.3 and proposed §19.6 was intended. Two author
+corrections changed the answer. First: **a witness is not present and is not asked
+anything** — witnessing and verification are both client background tasks, the
+witness watching message flow for conformance and timing the ceremony against its
+own clock, none of it a user action. That made §19.6's *"at the moment they are
+asked"* wrong for both roles rather than one, and made §19.6 self-contradictory,
+since it says the verifier "is asked nothing" two lines above. Second, and
+decisive: **the paragraph is a drafter gloss, not a requirement.** Consent to
+perform protocol actions is given by choosing to use the network; there is no
+per-request warning. The obligation is deleted from §19.6, the matching bullet
+from `light-client-requirements.md` §1.5, and the clause from Appendix A.3. P23
+moves from *corrected* to *accepted*, with the reason. What survives in §19.6 is
+the capture-time disclosure to the **participant**, which is the one point in the
+mechanism where a person is present and acting.
+
+**The privacy fact stays even though the obligation goes**: a witness and a
+verifier do become durable nodes in another person's evidence graph, and §19.6
+still says so. Recording the exposure is not the same as owing a warning for it.
