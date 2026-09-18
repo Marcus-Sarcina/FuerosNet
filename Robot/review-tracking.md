@@ -10092,7 +10092,91 @@ exchanges of which nine read no disclosable field — checked by counting the ro
 S1, that the workspace has fifteen crates, is a fact about the workspace and not a
 claim the design makes.
 
-**Open for the author, carried from the first audit.** Whether §20.2 gains an
-*evidence needed* column — the first audit supplies one per assumption, and it is
-what the register's stated purpose most wants. And where the threshold for
-registering supporting claims sits, the register being curated by design.
+**Both items carried from the first audit are closed** [author, 2026-09-17].
+§20.2 gained its fifth column, *evidence that would settle it*, on all 32 rows,
+the reviewer's per-assumption text mapped by A-number; and §20.1's threshold
+stands, the register being curated by design and the author reading the current
+cut as matching his judgment. Neither is to be reopened by a later 0.3.
+
+## Cycle 3, pass 0.5 — fragile rules (2026-09-17)
+
+15 rules flagged as identifier-bound, the reviewer having already excluded
+encodings whose role statement immediately precedes them. Verified each against
+the "Where invariants live" test: does a role-form statement exist anywhere in
+the set?
+
+**Thirteen needed no change — the invariant is already stated in role terms**,
+and the wire format is where identifiers live:
+- Four repeat cycle-2 dispositions on the same text: decryption failure (#1, cycle
+  2's #6 anchor at design §7.5.2: *a verifier reports an identity judgment only
+  where it ran the comparison that supports one*), KeyGrant binding (#2, cycle 2's
+  #14: *a query the subject countersigned* is role language, and the bullet names
+  what the release must name rather than any field), pruning (#3, cycle 2's #8:
+  design §10.1 *what is released is the chain, not the evidence*), late response
+  (#13, cycle 2's #15: *consent is the gate*).
+- Two quote an encoding whose role statement is the sentence before it, which the
+  reviewer's own criterion excludes: failover key material (#4, infra §1 opens
+  *a client must be able to authenticate every failover peer before it needs one*,
+  cycle 2's #9 anchor) and referral progress (#14, wire §7.7 leads with
+  *strictly forward along the path and never past its end*, cycle 2's #16 anchor).
+- Three have the design's explicit invariant-then-encoding idiom: the witness
+  floor (#6, design §13.2 *the record's subtype field is the present encoding of
+  that invariant, not the invariant itself*, and design §7.1 states the floor in
+  words), recovery's selection basis (#8, design §9.1 *a recovery verifier is by
+  definition a prior counterparty recognising the subject; the encoding fixes
+  it*), adoption evidence (#11, design §6.1.1 *exactly one of three forms*, then
+  the three fields).
+- Four carry the property in the design and in the wire's own rationale: recovery
+  binding (#7, design §9.4's italic invariant, cycle 2's #13), the successor
+  statement (#9, design §9.4 *without letting a thief perform the same
+  connection*; wire §4.1 *one observed proof would authorise an unlimited number
+  of competing successors*), the transfer statement (#10, design §6.1.1 *vouches
+  again, to a named successor*, §6.2 *to that patron*; wire §4.1 *naming all three
+  parties is what makes the vouching specific to this move*), archive closure
+  (#15, wire §7.9 *the requester verifies the structure itself... the check is
+  reachability... a holder cannot be trusted to have walked correctly*; design
+  §10.1 verification walks backward through commitments).
+
+**Two reordered so the role statement leads**, the cycle-2 shape:
+- #5: infra §7's delegation bullet opened *send it in every AttachAck*; it now
+  opens *send the delegation with every attach you acknowledge, and refuse a
+  session whose delegation does not name the key the handshake presented*, with
+  `AttachAck` field 6 as the present encoding. This bullet was new this cycle and
+  had never been through a 0.5.
+- #12: wire §5.6's querier rule opened *field 2 MUST name the authenticated
+  requester*; it now opens *the querier a verifier limits and attributes is the
+  party the transport authenticated, never one the request names*, then the
+  field-2 encoding. "Type-4 stream" became *the stream carrying the query*.
+
+**Verifying #5 found wire §9.1 stale against the delegation surgery.** The
+surgery's table (`app-requirements-notes.md` §2.1) listed design §14.1, §12.6.5,
+§23.3, infra §7 and lc §4.1, and not the wire's authentication step. §9.1 still
+said the dialling party checks the presented key *is the classical member of the
+KeyMaterial it has pinned* and that *Attach field 1 must equal the
+connection-authenticated identity*, both false for a delegated key, which is the
+normal case for every instance. Now: a peer presents one raw key, its own
+classical component or a delegated one; either check binds it, the pinned member
+or the attach carrying that keyhash's delegation naming it; a session on which
+neither holds is refused. The mutual-authentication invariant binds the claimed
+identity *to the identity the transport-authenticated key speaks as*, and its
+present encoding names both forms of `Attach`.
+- Consequence swept: *a wrong address produces a handshake failure* was stated
+  four times (design §12.6.1, wire §7.6, §7.7, §9.1) and is now *a refused
+  session*, at the handshake or at the attach that cannot bind the key. The
+  property the four sites exist for, self-detection at contact, is unchanged.
+- Design §12.6.1 cited §14.1.3 (QUIC) for endpoint authentication, a citation that
+  resolved to the wrong section since the baseline (§11.1.3 then, also QUIC); now
+  §5 and `wire-format.md` §9.1. Delegation field 1 cited §9.2 for the handshake;
+  now §9.1.
+
+**One garble repaired.** Design §8.2's immutability bullet read *Present encoding:
+`LateResponse`, signed by signed reference to `txid`* since the baseline; now *a
+separately signed response naming the record's `txid`*.
+
+**Catalogue.** Five entries requoted (RES-12, TRN-03, TRN-04, TRN-17, CER-31).
+Three scenarios adjusted rather than only requoted, because the text they
+asserted is now forbidden: RES-12 and TRN-03 refuse the session at the attach
+instead of aborting the handshake on a non-pinned key, and TRN-04's Attach carries
+no field 4. Their tests in `crates/transport` and `crates/node` still exercise
+the pre-delegation model, which is the recorded documents-ahead-of-code gap; the
+catalogue holds no delegation entries yet. check.py 0 flags, 403 of 413.

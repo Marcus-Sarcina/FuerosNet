@@ -168,6 +168,7 @@ argument nothing — tickets stay long for all but the tail of each window.
 | `infra-client-requirements.md` §8.2 | Cites design §23.3's same-key sentence, which §2.1 changes |
 | `infra-client-requirements.md` §4.3, §4.4 | Endpoint and anchor records signed by the operator's client rather than by the node |
 | `light-client-requirements.md` §4.1 | What a client verifies on attach, and that it caches a checked delegation |
+| `wire-format.md` §9.1 | The authentication step itself: which key a peer presents and what binds it to the keyhash sought. Not in this table when the surgery ran; caught by cycle 3's 0.5 |
 | §2.2 below | P33's answer follows from this one |
 
 ### 2.2 P33 — which devices hold seeds, sealed captures and deletion state

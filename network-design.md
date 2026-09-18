@@ -2680,8 +2680,8 @@ distant audience could have checked one.
 - **Immutable once finalized.** *Once every party required to authenticate a
   piece of historical evidence has finalized it, nobody may alter that evidence
   in place; later assertions must be separately signed and must cryptographically
-  refer back to the evidence they supplement.* Present encoding: `LateResponse` (`wire-format.md` §7.4), signed by
-  signed reference to `txid`.
+  refer back to the evidence they supplement.* Present encoding: `LateResponse`
+  (`wire-format.md` §7.4), a separately signed response naming the record's `txid`.
 - **Rate**: far below the 1-per-100s threshold in §1. Ceremony duration is
   deliberately minutes (§7.1), which caps throughput at the human.
 
@@ -4309,9 +4309,11 @@ minimum a node must be able to operate on, not a ceiling on what it may keep.
 **A referral cannot be falsified for impersonation, which is why no machinery
 polices its content.**
 The requester knows the keyhash it intends to reach and authenticates the endpoint
-against it (§14.1.3). A node that returns a wrong address produces a handshake
-failure, not a silent misdirection — **the lie is self-detecting at contact**, and
-the protocol needs no traversal state to prevent it. **What lying retains is
+against it (§5, `wire-format.md` §9.1). A node that returns a wrong address
+produces a refused session, not a silent misdirection: the handshake fails, or
+the attach that follows cannot bind the key presented to the identity sought.
+**The lie is self-detecting at contact**, and the protocol needs no traversal
+state to prevent it. **What lying retains is
 denial** [2026-09-03]: a serving node that answers chosen resolutions falsely
 makes chosen targets unreachable while everything else stays healthy — a
 censorship primitive, not an impersonation one, and the quiet selective form of

@@ -2112,9 +2112,10 @@ is the selector making the claim; the verifier echoes it into field 10 and
 signs the echo. The recovery form is untouched: there the verifier is its own
 querier (§4.1) and no type-4 request travels.
 
-**Field 2 MUST name the authenticated requester** [2026-09-02]: on a type-4
-stream the querier is the transport-authenticated peer, and a mismatch is
-rejected — otherwise field 2 chooses its own rate-limit bucket.
+**The querier a verifier limits and attributes is the party the transport
+authenticated, never one the request names** [2026-09-02]: field 2 MUST equal
+the transport-authenticated peer on the stream carrying the query, and a
+mismatch is rejected. Otherwise a request chooses its own rate-limit bucket.
 
 **The successful reply body is a single `VerifierResponse`** [2026-09-02],
 framed as every reply is (§9.2). A malformed query — consent absent or
@@ -2593,7 +2594,7 @@ itself, so an anchor that refers you onward is never pinned at all.
 **It does not need to be, because a referrer's identity is not what protects you.**
 design §12.6.1: a referral cannot be falsified for impersonation, since the requester
 authenticates the *subject* it intended to reach and a wrong address produces a
-handshake failure rather than a silent misdirection. A hostile chain costs a failed
+refused session rather than a silent misdirection (§9.1). A hostile chain costs a failed
 dial — denial, not misdirection, and design §18.4 prices the selective form. **Disclose nothing beyond the query itself** to a party you cannot
 authenticate.
 
@@ -2964,7 +2965,7 @@ its own subtree.
 
 **Nothing polices referral content, because impersonation is self-detecting.** The requester
 authenticates each endpoint against the keyhash it expects (§9.1), so a wrong
-address produces a handshake failure rather than a silent misdirection, and an
+address produces a refused session rather than a silent misdirection, and an
 intermediary misreporting progress buys only the same failed dial. What a false
 answer retains is denial (design §12.6.1, design §18.4).
 
@@ -3480,7 +3481,7 @@ AttachAck = {
 
 Delegation = {
   1: bstr,             ; the transport key this delegation names: the 32-byte
-                       ;   raw public key the handshake presented (§9.2). Not an
+                       ;   raw public key the handshake presented (§9.1). Not an
                        ;   identity — it has no keyhash and signs nothing beyond
                        ;   the handshake it appears in
   2: keyhash,          ; the delegating identity. Who the holder speaks as on
@@ -3717,25 +3718,32 @@ naming the family without choosing a set is not implementable.
 are keyhashes, not certificate subjects, and there is no certificate authority to
 issue or validate chains.
 
-**A peer presents its classical component**, since RFC 7250 carries one
-SubjectPublicKeyInfo and an identity here is a *pair* (§2.2). The dialling party
-checks that key is the classical member of the `KeyMaterial` it has pinned for the
-keyhash it intended to reach. **The post-quantum component authenticates nothing at
-the transport layer, and does not need to.** design §5.1's rule is that an object
-may use the classical component alone where its relevance expires before the
-post-quantum horizon, and a session's authenticity expires with the session.
-Confidentiality is separately post-quantum via the key exchange group.
+**A peer presents one raw key**, since RFC 7250 carries one SubjectPublicKeyInfo
+and an identity here is a *pair* (§2.2): the classical component of its own
+identity, or a delegated transport key that identity signed for a window (§8.2).
+The dialling party checks that key against the keyhash it intended to reach, and
+either check binds it: the key is the classical member of the `KeyMaterial`
+pinned for that keyhash, or the attach that follows carries that keyhash's
+delegation naming it. A session on which neither holds is refused. **The
+post-quantum component authenticates nothing at the transport layer, and does
+not need to.** design §5.1's rule is that an object may use the classical
+component alone where its relevance expires before the post-quantum horizon, and
+a session's authenticity expires with the session. Confidentiality is separately
+post-quantum via the key exchange group.
 
 **Authentication is mutual.** The serving node authenticates the client the
 same way, and **MUST bind the identity for which session state and queued data are
-requested to the identity the transport authenticated, rejecting any mismatch.**
-Present encoding: `Attach` field 1 must equal the connection-authenticated
-identity. `Attach` is unsigned, so without that check any party
-could claim any keyhash and receive another node's queued messages.
+requested to the identity the transport-authenticated key speaks as, rejecting
+any mismatch.** Present encoding: `Attach` field 1 names an identity whose
+classical member is the connection-authenticated key, or `Attach` field 4
+carries that identity's delegation naming it (§8.2). `Attach` is unsigned, so
+without that check any party could claim any keyhash and receive another node's
+queued messages.
 
-That is the whole authentication step, and it is exactly what §7.7's unsigned resolution
-replies rely on, a wrong address produces a failed handshake rather than a false
-identity.
+That is the whole authentication step, and it is exactly what §7.7's unsigned
+resolution replies rely on: a wrong address produces a refused session rather
+than a false identity, at the handshake or at the attach that cannot bind the
+key presented.
 
 **Downgrade protection** is TLS 1.3's own. **That nothing can be negotiated below
 the named group is this profile's doing, not TLS's** — TLS 1.3 negotiates among

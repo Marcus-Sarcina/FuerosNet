@@ -5182,7 +5182,7 @@
     "id": "RES-12",
     "area": "resolution",
     "gap": "resolution",
-    "title": "Fail the handshake, not the identity, when an unsigned reply gives a wrong address",
+    "title": "Refuse the session, not the identity, when an unsigned reply gives a wrong address",
     "milestone": 4,
     "kind": "negative",
     "spec": [
@@ -5197,7 +5197,7 @@
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "The dialling party checks that key is the classical member of the KeyMaterial it has pinned for the keyhash it intended to reach."
+        "text": "either check binds it: the key is the classical member of the KeyMaterial pinned for that keyhash, or the attach that follows carries that keyhash's delegation naming it. A session on which neither holds is refused."
       },
       {
         "where": "wire-format.md §7.7.3",
@@ -5206,7 +5206,7 @@
     ],
     "given": "The requester intends to reach subject X, whose serving node is S, and holds S's KeyMaterial pinned. A ResolveReply names S's keyhash in ServingInfra but lists the endpoint of a different node Y, which presents Y's own key.",
     "when": "The requester dials the listed endpoint.",
-    "then": "The handshake fails because the presented key is not the classical member of S's pinned KeyMaterial; no session, Attach or payload follows, and the result is reported as a failed contact with S, never as having reached S.",
+    "then": "The session is refused: the presented key is not the classical member of S's pinned KeyMaterial and nothing at the attach binds it to S, so no payload follows, and the result is reported as a failed contact with S, never as having reached S.",
     "oracle": "behaviour",
     "interpretation": null
   },
@@ -6908,7 +6908,7 @@
     "id": "TRN-03",
     "area": "transport",
     "gap": "transport",
-    "title": "Abort the dial when the presented raw public key is not the pinned classical member.",
+    "title": "Refuse the session when the presented raw public key is neither the pinned classical member nor bound to it at the attach.",
     "milestone": 2,
     "kind": "negative",
     "spec": [
@@ -6918,20 +6918,20 @@
     "rule": [
       {
         "where": "wire-format.md §9.1",
-        "text": "The dialling party checks that key is the classical member of the KeyMaterial it has pinned for the keyhash it intended to reach."
+        "text": "either check binds it: the key is the classical member of the KeyMaterial pinned for that keyhash, or the attach that follows carries that keyhash's delegation naming it. A session on which neither holds is refused."
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "a wrong address produces a failed handshake rather than a false identity."
+        "text": "a wrong address produces a refused session rather than a false identity"
       },
       {
         "where": "wire-format.md §2.2",
         "text": "KeyMaterial = [ COSE_Key, COSE_Key ]   ; [classical, post-quantum]"
       }
     ],
-    "given": "The implementation, as dialling party, holds a validated pin for keyhash K: a KeyMaterial that hashes to K. A test endpoint advertised for K completes the TLS handshake with an RFC 7250 raw public key whose SubjectPublicKeyInfo is a valid Ed25519 key that is not the first entry of that KeyMaterial.",
+    "given": "The implementation, as dialling party, holds a validated pin for keyhash K: a KeyMaterial that hashes to K. A test endpoint advertised for K completes the TLS handshake with an RFC 7250 raw public key whose SubjectPublicKeyInfo is a valid Ed25519 key that is not the first entry of that KeyMaterial. The AttachAck that follows carries no delegation by K naming that key.",
     "when": "The implementation dials the endpoint intending to reach K.",
-    "then": "The handshake does not complete from the implementation's side: the connection is abandoned before any control frame is sent, no Attach frame appears on stream 0, and the dial is reported as a failed handshake rather than as a session with K.",
+    "then": "The connection never becomes a session with K: the implementation sends nothing beyond its Attach, accepts no session state or payload on it, abandons it once the AttachAck binds nothing, and reports the dial as a refused session rather than as a session with K.",
     "oracle": "model",
     "interpretation": null
   },
@@ -6949,11 +6949,11 @@
     "rule": [
       {
         "where": "wire-format.md §9.1",
-        "text": "Authentication is mutual. The serving node authenticates the client the same way, and MUST bind the identity for which session state and queued data are requested to the identity the transport authenticated, rejecting any mismatch."
+        "text": "Authentication is mutual. The serving node authenticates the client the same way, and MUST bind the identity for which session state and queued data are requested to the identity the transport-authenticated key speaks as, rejecting any mismatch."
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "Present encoding: Attach field 1 must equal the connection-authenticated identity."
+        "text": "Present encoding: Attach field 1 names an identity whose classical member is the connection-authenticated key, or Attach field 4 carries that identity's delegation naming it (§8.2)."
       },
       {
         "where": "wire-format.md §8.2",
@@ -6961,7 +6961,7 @@
       }
     ],
     "given": "The implementation acts as serving node S and holds queued items for keyhash B, inspectable by the test. A test client holding keypair A completes a mutual raw-public-key handshake presenting A's classical component, so the connection-authenticated identity is A.",
-    "when": "The test client sends a well-formed Attach whose field 1 is B, with a Capabilities map in field 3.",
+    "when": "The test client sends a well-formed Attach whose field 1 is B, with a Capabilities map in field 3 and no field 4.",
     "then": "No AttachAck is issued on the connection, nothing queued for B is delivered on it, and S's queue for B is unchanged. No AttachNack or other refusal frame appears on stream 0.",
     "oracle": "model",
     "interpretation": null
@@ -8056,7 +8056,7 @@
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "the classical member of the KeyMaterial it has pinned"
+        "text": "the classical member of the KeyMaterial pinned for that keyhash"
       }
     ],
     "given": "An identity's own key material; the classical key alone; the two keys in the other order; three keys; and a classical key carrying a kid label. Each variant offered with its own hash.",
@@ -8438,11 +8438,11 @@
     "rule": [
       {
         "where": "wire-format.md §5.6",
-        "text": "Field 2 MUST name the authenticated requester"
+        "text": "The querier a verifier limits and attributes is the party the transport authenticated, never one the request names"
       },
       {
         "where": "wire-format.md §5.6",
-        "text": "on a type-4 stream the querier is the transport-authenticated peer, and a mismatch is rejected"
+        "text": "field 2 MUST equal the transport-authenticated peer on the stream carrying the query, and a mismatch is rejected"
       }
     ],
     "given": "A verifier hosted in a node's process with a query pending its grant, and a second peer presenting the same signed query body under its own authenticated identity.",

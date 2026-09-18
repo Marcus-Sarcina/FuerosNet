@@ -299,10 +299,11 @@ serving node.
   (`wire-format.md` §8.2) and what you present in a handshake is the key that
   credential names. The key that signs as your operator stays on the device that
   performs ceremonies.
-- **Send it in every `AttachAck`, and refuse a session whose delegation does not
-  name the key the handshake presented.** A delegation is public and travels on
-  every handshake; that one check is the whole of what stops a captured one being
-  replayed onto another connection.
+- **Send the delegation with every attach you acknowledge, and refuse a session
+  whose delegation does not name the key the handshake presented.** A delegation
+  is public and travels on every handshake; that one check is the whole of what
+  stops a captured one being replayed onto another connection. Present encoding:
+  `AttachAck` field 6 (`wire-format.md` §8.2).
 - **Hold the run you were given, and say so while it is still long.** A run is
   **45 credentials of 48 hours each** [author, 2026-09-16], 90 days end to end.
   The party that signs your next credential is a device with a battery and an
