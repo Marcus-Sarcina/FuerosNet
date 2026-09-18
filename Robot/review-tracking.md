@@ -10180,3 +10180,88 @@ instead of aborting the handshake on a non-pinned key, and TRN-04's Attach carri
 no field 4. Their tests in `crates/transport` and `crates/node` still exercise
 the pre-delegation model, which is the recorded documents-ahead-of-code gap; the
 catalogue holds no delegation entries yet. check.py 0 flags, 403 of 413.
+
+## Cycle 3, pass 0.7 — LINDDUN privacy threat analysis (2026-09-18)
+
+31 data flows and 30 stored artifacts through seven categories, ~370 ledger
+rows. **The ledger reproduces §19**: every row's acknowledgement column cites a
+P or C entry, an accepted cost, or a section, and the reviewer's table of
+thirteen deliberately accepted costs matches §19.7 item for item, including item
+7's tombstone. The correlation table restates C1–C22 with severities that agree.
+That is the register read back accurately, as both 0.3 audits did for §20.
+
+**Five additional findings, verified:**
+- **N1, archive-request interest leakage — does not hold.** The finding assumes
+  a third-party holder who learns a requester is investigating a subject. lc §2:
+  *the subject holds their archive, so a patron evaluating you fetches from you;
+  this is peer-to-peer payload, not something an infra node serves on your
+  behalf.* The request reaches the party presenting the history, for an adoption
+  they are party to; what a relaying node sees is a session, the chokepoint
+  §19.7 item 8 accepts.
+- **N2, prekey publication and deposit cadence — folded into N4.** The serving
+  node serves the one-time fetches itself (C11), so depletion is something it
+  already sees rather than infers; what the finding rightly notices is that the
+  no-record obligation named fetches and doorbells and not publications and
+  deposits. The cross-class rule below covers them.
+- **N3, role-table history — applied.** Infra §10.2 described the table as
+  current state (a departing member's rows removed) without saying no history of
+  rows is kept, and the house pattern says so everywhere else (memo table, C19;
+  registrations, §6.5; caches, P32). One sentence added: a row replaced is gone,
+  and what a member's roles used to be is the time axis C22's matrix would
+  otherwise gain. **Derived from the pattern; author sign-off.**
+- **N4, interest telemetry as one class — applied, as a consolidation.** Infra §1
+  stated process-and-discard for liveness; §2, §4.5, §6 and §6.1 each said their
+  class "falls under §1's obligation"; catalog queries (P38) and currency
+  fallbacks (§19.7 item 12's *nothing is retained*) had no infra statement at
+  all. §19.1 says the composition is what matters, and one node answers every
+  class. Infra §1 now states the rule once, for every request class including
+  one the document does not name, and the per-class statements stand as its
+  instances. Design §19.8 gains **C23**, the composition itself: histories of
+  resolution, one-time key, catalog, currency and publication requests at one
+  node join into an interest graph no single class yields; High for a node
+  keeping histories, and the obligation is what keeps it low. **Derived from
+  §19.1 and the existing per-class rules; author sign-off.**
+- **N5, role names at the resource endpoint — already carried.** rr §7.4: *role
+  names are visible strings and they leak... a reason for operators to choose
+  names knowing they are public to those who can see the resource.* The resource
+  receives names its own manifest declared (rr §7), which is no disclosure to it.
+
+**Rows marked new or implicit elsewhere in the ledger, declined:**
+- Backup blob size and update timing at a storage provider (DF27/SA27): §23.3's
+  answer to P33 puts the cold store on a personal computer and §13.7.1 rejects
+  consumer cloud defaults; a user who chooses a cloud location chooses that
+  observer. Below the register's threshold, which the author has said is
+  calibrated.
+- Group-fanout residual not disclosed to users (DF26): C20 registers it; the
+  standing ruling is no per-event warnings, consent being given by using the
+  network.
+- A person described in an abuse report's `detail` gets no notice (SA26): P27
+  bounds and localises the report; the person is the application's data subject,
+  outside the protocol's boundary (rr §1).
+- Resource-side session retention after a session ends (SA23): P20 and P24 price
+  resource logging as outside enforcement, and a per-resource session id retained
+  links nothing across resources.
+- discover_scope reveals the intended audience to the host (DF20): the host
+  filters at answer time (infra §11), so it must know; it is the owner's own
+  chosen host.
+- Peering visibility broader than the two parties, wanting UI disclosure (DF29):
+  §19.7 item 6 accepts visible placement; infra §8's disclosure obligation is
+  general.
+- Anchor-table history (SA13): the table is an index replaced by counter; infra
+  §1's rule now says tables, not histories, for every class.
+- Per-introduction and per-resolution consent moments (DF01, DF07): the same
+  standing ruling as DF26.
+- The 48 h × 45 run "reviewed against the threat model" (SA02): §12.6.5 gives the
+  90-day horizon as the chosen consequence [author, 2026-09-16].
+
+**P12 was stale, found while verifying the reviewer's item 3.** The register said
+*specified but not yet implemented*, *Critical until built*, and §19.1.2 said *no
+implementation yet*; the status line was corrected on 09-17 and these two
+instances were not, the same claim in three places. The root documents do not
+track implementation state, so both now say what is true regardless of it: an
+implementation shipping hop encryption alone leaks payload to both serving
+nodes, Critical for any implementation without it, five integration decisions
+remaining (§22.1).
+
+**Test spec** (untracked): two retention-checklist rows extended, prekeys to
+publication and deposit history, role rows to no row history.

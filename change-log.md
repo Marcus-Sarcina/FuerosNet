@@ -10031,3 +10031,29 @@ sentence before them.
 citations across `models/` and the workspace resolve with no flag; the staleness
 sweep reports its baseline of fourteen; the acceptance catalogue quotes verbatim
 at 0 flags, 403 of 413 implemented.
+
+### 2026-09-18 (one rule for every request class, and a register entry that tracked the wrong thing)
+
+**A serving node keeps the state serving needs and no history of the requests
+that produced it, whatever the class.** The obligation was stated for liveness
+and extended by name to queue events, resolution, one-time key requests and
+doorbells, while catalog queries and currency fallbacks had no statement in the
+operator document at all. Each class is priced alone in §19, one node answers
+every one of them, and §19.1 says the composition is what to assess: histories
+of whom a client resolves, whose one-time key it asks for, what service kind it
+seeks and whom it evaluates join into an interest graph no single class yields.
+The infra document states the rule once, for a class it does not name as much as
+for those it does, and §19.8 registers the composition as C23. The role table
+gains the same shape: current rows only, no history of what a member's roles
+used to be, which is the time axis C22's matrix would otherwise acquire.
+
+**P12 recorded implementation state, and was stale.** It said end-to-end payload
+encryption was specified but not yet implemented, Critical until built, and
+§19.1.2 said no implementation yet; the status line was corrected two days ago
+and these were not. The root documents do not track what has been built, so both
+now say what is true regardless: an implementation shipping hop encryption alone
+leaks payload to both serving nodes, and that is Critical for any implementation
+without it.
+
+**Counts checked.** 2,220 references across the five documents resolve with no
+flag; the staleness sweep reports its baseline; check.py 0 flags.

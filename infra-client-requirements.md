@@ -43,6 +43,16 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   the keyhash commits to the pair.
 - **Push the sibling list at attach.** A client cannot discover failover targets
   after its serving node is already dark (design §14.1.2).
+- **Keep the state that serving needs and no history of the requests that
+  produced it, whatever the request class.** A resolution says whom a client
+  wants to reach, a one-time key request that a session is opening, a filtered
+  catalog query what kind of service it seeks, a currency fallback whom it is
+  evaluating, a publication or deposit that it is making itself reachable. Each
+  is priced alone in design §19, and one node answers all of them, so histories
+  of them would join into an interest graph no single class yields (design
+  §19.8, C23). §2, §4.5, §6 and §6.1 say what this means for the queue,
+  resolution, prekeys and doorbells; the rule is the same for a class this
+  document does not name.
 - **Process liveness updates and discard them.** Store the resulting reachability
   state, not the update history (design §15). **The protocol cannot prevent an
   operator logging what it says to discard; not doing so is the requirement.**
@@ -528,7 +538,10 @@ narrow enough that re-scoring on events is affordable (design §11.4); and
 periodically for time-dependent predicates, whose values move with time alone —
 a scheduled whole-table pass, not a continuous recomputation. A new member is
 scored against standing predicates and given rows; a departing one has theirs
-removed.
+removed. **The table is current state, and no history of its rows is kept**: a
+row replaced is gone, and what a member's roles used to be is a classification
+history no lookup needs, the time axis C22's matrix would otherwise gain
+(design §19.8).
 
 **Scoring the changed member alone is correct for every predicate class but two,
 and both are rank predicates.** A *relative* rank predicate (a percentile, a
