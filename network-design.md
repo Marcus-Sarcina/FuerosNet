@@ -3253,6 +3253,19 @@ supplies that root, asserting that history existed across the boundary without c
 what it contained, so **the chain before it need not be retained or presented** — the
 blocks and the dates survive and the details go.
 
+**That the checkpoint is patron-countersigned, and so refusable, is deliberate**
+[author, 2026-09-18]. A pruned but continuous history has dropped the hashchain that
+would otherwise prove it whole, so what vouches for it across the gap is the social
+anchor the reissue carries: a patron, queryable out of band, asserting the history
+existed. An owner-only rollup that let a subject checkpoint without that
+countersignature would let one keep several self-anchored *sets of books*, branching
+and pruning at no social cost, which is exactly the friction the archive exists to
+impose. Parallel histories are permitted, but each must anchor to real relationships;
+a subject whose patron will not reissue prunes by presenting into a new context with
+no history at all (§13.7), never by minting its own rollback point. The cost of a
+refusing patron here is one instance of the general §18.5 cost, and is accepted on
+the same terms.
+
 **What is released is the chain, not the evidence.** Presence records are a separate
 kind of history (§10.0): a PoP is a transaction and sits in the archive, but its use —
 identifying validators for a later ceremony, and standing as evidence that two people
@@ -6996,11 +7009,23 @@ several at once, not one per acquisition.
   network builds no cross-tree reputation, and the one cross-tree evaluation
   that exists — the adoption history scan (§16.7) — reads the subject's own
   archive, which carries the departure and never the patron's disavowal, a
-  single-signer transaction on the patron's chain. Any evaluator who matters
-  to the departed node's future sees the exculpating half; a neighbourhood
-  evaluator holding the adverse half meets the departure the moment they
-  evaluate the subject at all. The pair assembles wherever something is
-  decided, and fails to assemble only where nothing is.
+  single-signer transaction on the patron's chain.
+
+  **The adverse default is friction inside the neighbourhood, not a verdict that
+  travels** [author, 2026-09-18]. The two audiences are not the same. An evaluator
+  in a *different* social context reads the subject's own archive, which carries
+  the departure and never the patron's disavowal, and so sees the exculpating half;
+  the disavowal never reaches it. Inside the neighbourhood the node is leaving, and
+  only there, the pair assembles and the default runs to the patron's account. That
+  the cheapest re-homing (§6.2.3, a grandpatron or a patron-sibling already holding
+  the history by replication) sits in exactly that neighbourhood is not a defeat of
+  the escape hatch but the shape of it: a with-prejudice exit is *meant* to make the
+  low-friction local move carry the former patron's account, while a clean slate
+  stays available by presenting into a context that holds none of it. Relationships
+  here are weighty and a little painful to exit by design; what the escape hatch
+  guarantees is that exit and a fresh start remain possible, not that a contested
+  departure costs the neighbourhood's memory nothing. The pair assembles wherever
+  something local is decided, and fails to assemble only where nothing is.
 
 ---
 

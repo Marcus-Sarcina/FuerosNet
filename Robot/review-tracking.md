@@ -10267,3 +10267,100 @@ remaining (§22.1).
 
 **Test spec** (untracked): two retention-checklist rows extended, prekeys to
 publication and deposit history, role rows to no row history.
+
+## Cycle 3, pass 0.8.1 — adversarial: the patron (2026-09-18)
+
+Six findings, 14 self-discarded restatements. Verified each against the text and,
+for the currency and memo findings, against `crates/`. One finding is blocked on
+an author reconciliation (F1); the rest are ruled.
+
+**F1 — currency attestation as a second, patron-only key selector (REASONING vs
+§12.1). VERIFIED; BLOCKED pending author input.** The premise holds. §12.1's
+participant-authentication invariant governs the locator; `CurrencyAttestation`
+field 2 (`current_key`) is a second selector of the addressed key, issuer-signed,
+and the beyond-horizon path treats it as authoritative
+(`crates/archive/src/currency.rs::assess` → `Attested(a)` → address `a.current`).
+When field 2 ≠ field 1 the object asserts a rotation on the patron's signature
+alone; the participant authorization a real rotation carries (recovery adoption's
+successor statement + verifier responses, wire §4.1) does not travel with it, and
+nothing requires field 2 to be backed by one. The fork machinery (§9.0.2, ARC-15)
+catches this only when a *competing* attestation exists; a lone compelled-patron
+attestation naming `K_attacker` produces no fork. Author ruled **constrain field 2
+== field 1** with the caveat "check whether any flow needs field 2 ≠ field 1."
+**It does**: the fork/divergence notification (§9.0.2, ARC-15) is built on field 2
+carrying a successor that differs from the queried key; a literal field2==field1
+removes fork-detection from the currency path. Held for a follow-up ruling on the
+narrower invariant (field 2 is never an authoritative redirect; a key *change* is
+learned only from a recovery adoption or a signed locator; divergent field-2 claims
+remain a fork signal). No edit yet; this touches wire §7.1, §9.0.2, the crate, and
+ARC-15.
+
+**F2 — a positional predicate delegates ACL membership to the topology authority
+(NOVEL). NOT A FINDING [author, 2026-09-18].** Accurate framing but already the
+design: a resource owner marks per role whether it is topology-granted, and may
+grant sensitive roles manually to named individuals within the horizon disregarding
+topology (rr §7, "assignable to named individual nodes"). The auto-grant ceiling
+the reviewer asks for is the owner's existing per-role choice. No change.
+
+**F3 — retaliatory disavowal prejudices the cheap re-homing path (REASONING).
+VERIFIED; ruling kept, justification repaired [author, 2026-09-18].** Both premises
+hold: §18.5 says the neighbourhood defaults to the patron's determination [author,
+2026-09-14], and §6.2.3's cheap re-homing (grandpatron/patron-sibling) sits in
+exactly the neighbourhood the disavowal floods. §18.5's own two claims were in
+tension — "bounded to spite / any evaluator who matters sees the exculpating half"
+did not neutralise the adverse default for that local audience. Author keeps the
+adverse default (tree sovereignty; relationships are meant to be weighty and a
+little painful to exit, not tyrannical). §18.5 rewritten to remove the tension: the
+adverse default is friction *inside the neighbourhood being left* and does not
+travel; an evaluator in a different context reads the subject's own archive (the
+departure, never the disavowal); the cheap local move carrying the former patron's
+account is the shape of a with-prejudice exit, and a clean slate stays available by
+presenting into a context holding no history. MET-10's quoted sentence preserved
+verbatim.
+
+**F4 — memo ordering's "one patron clock" premise is imprecise for departures
+(REASONING). VERIFIED; precision fix applied [author, 2026-09-18].** wire §10.2.2
+said competing memos for one slot share one patron's clock, while the same
+paragraph sources field 4 from the underlying signed transaction — and a departure
+(§4.2) is participant-signed, so its vacancy memo carries the participant's clock.
+Impact is nil: the only cross-clock pair pits an emptying against a fill, and a skew
+can only leave a slot stale-empty (the emptied-timestamp rule already blocks
+resurrection), which is the safe direction. §10.2.2 now says so. The suppression
+half (patron omits a vacancy memo) reduces to a stale entry in the ancestor's
+private RIB, bounded by "hint, never evidence" and by stale routes failing and
+re-resolving — no change.
+
+**F5 — a dishonest "custody accepted" prolongs censorship past exit (EXTENDS).
+COVERED, no change [author, 2026-09-18].** Relay "accepted" is explicitly custody,
+not delivery (lc §2), so a correspondent never had delivery confirmation; reaching
+a lying old node requires it to also answer resolution falsely, which is the §18.4
+censorship-by-serving-node primitive already priced, and infra §6.1 makes a node
+with no record refuse (a visible failure). The serving-lease mechanism is declined
+(a new temporary keyset, unnecessary); §23.3's delegation window already bounds an
+instance's serving authority.
+
+**F6 — patron countersignature on series reissue gates the participant's pruning
+(EXTENDS). VERIFIED; rejected as intended, registered [author, 2026-09-18].**
+Confirmed: pruning-with-continuity needs a reissue checkpoint (§10.1) and a reissue
+is patron-countersigned (§6.2.1, wire §4.6). The reviewer's "design says the
+coupling is elective" is not in the text; §10.1 frames it as load-bearing. Author
+rejects the owner-only checkpoint: a pruned continuous history has dropped the
+hashchain that proves it whole, so it must anchor to a social context (the
+patron's countersignature, queryable out of band); an owner-only rollup would
+allow costless multiple sets of books, which is the friction the archive exists to
+impose. Parallel histories are fine but each must be socially anchored; the
+clean-slate alternative (present with no history) remains. §10.1 now states this;
+the refusing-patron cost is one instance of the §18.5 cost.
+
+**Standing note from the author [2026-09-18].** The drafter and reviewer, trained
+on trustless and centrally governed systems, recurrently misperceive the authority
+expected of patrons and other user classes. These relationships are meant to be
+weighty and a little painful to exit, but not tyrannical: exit and parallel
+membership remain possible. A user should care about the patron's opinion and a
+patron about the sub's satisfaction. Findings framed as "a patron has power X over
+its sub" are to be weighed against this, not automatically against a least-authority
+default.
+
+**Confirmed defenses** (reviewer's, agreed): unilateral exit (§6.2.1), locator
+authentication in isolation, the memo hint-rule (wire §10.2.3), the horizon outer
+gate.

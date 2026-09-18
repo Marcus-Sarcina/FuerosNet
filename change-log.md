@@ -10057,3 +10057,47 @@ without it.
 
 **Counts checked.** 2,220 references across the five documents resolve with no
 flag; the staleness sweep reports its baseline; check.py 0 flags.
+
+### 2026-09-18 (an adversarial pass on the patron: two justifications repaired, two mechanisms declined)
+
+The patron-adversary review returned six findings. Five are ruled here; one, on
+currency attestation and key selection, is held for a further decision and not yet
+applied.
+
+**A with-prejudice disavowal's local prejudice is intended, and §18.5 said so
+inconsistently.** The section held both that the neighbourhood defaults to the
+patron's determination and that the harm is bounded because any evaluator who
+matters sees the departure too, which does not hold for the one audience §6.2.3
+steers a departing node toward: the grandpatron and patron-siblings who offer the
+cheap re-homing sit inside the neighbourhood the disavowal floods and are told to
+default to the patron's account. The ruling stands, and the reason is rewritten to
+match it: the adverse default is friction inside the neighbourhood being left and
+does not travel; an evaluator in another context reads the subject's own archive,
+which carries the departure and never the disavowal. A with-prejudice exit is meant
+to make the low-friction local move carry the former patron's account, while a
+clean slate stays available by presenting into a context that holds no history.
+Relationships here are weighty and a little painful to exit by design.
+
+**The rootward memo's ordering premise is imprecise for a departure, and harmless.**
+wire §10.2.2 said competing memos for one slot share one patron's clock, while
+sourcing the memo timestamp from the underlying signed transaction — and a departure
+is participant-signed, so its vacancy memo carries the participant's clock. The only
+cross-clock pair pits an emptying against a fill, where a skew can leave a slot
+stale-empty but never stale-occupied, the safe direction; the section now says so.
+
+**Pruning stays anchored to the patron, deliberately.** A series reissue is the
+checkpoint that makes pruning possible, and it is patron-countersigned. A pruned
+but continuous history has dropped the hashchain that would prove it whole, so what
+vouches for it across the gap is the social anchor the reissue carries. An
+owner-only checkpoint would let a subject keep several self-anchored sets of books
+at no social cost, which is the friction the archive exists to impose; §10.1 now
+states this, and the refusing-patron cost is registered as one instance of §18.5.
+
+Two proposed mechanisms are declined: an auto-grant ceiling for topology-driven
+resource roles (already the owner's per-role choice, with manual grants to named
+individuals available), and a short-lived serving lease (a new keyset, and §23.3's
+delegation window already bounds an instance's serving authority; a serving node
+that fakes custody is the §18.4 censor, already priced).
+
+**Counts checked.** 2,224 references across the five documents resolve with no flag;
+the staleness sweep reports its baseline; check.py 0 flags.

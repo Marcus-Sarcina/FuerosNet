@@ -4090,11 +4090,20 @@ patron has already removed.
 
 **Ordering is by field 4, and the comparison is always within one patron and one
 slot.** Later timestamp replaces; equal timestamps break by arrival
-order. **No clock is compared across nodes**: two memos about one slot were written
-by the same patron from the same clock, which is the one case where a timestamp
-orders reliably. This is why the field is the underlying transaction's own timestamp
-(§4.1, §4.2, §4.3) rather than a reading taken when the memo is composed; it is
-copied from a signed record and a detector that fetches that record can check it.
+order. **No clock is compared across nodes**: the memos about one slot are the
+patron's own account of that slot, and where two carry the same signer's clock a
+timestamp orders them reliably. This is why the field is the underlying
+transaction's own timestamp (§4.1, §4.2, §4.3) rather than a reading taken when the
+memo is composed; it is copied from a signed record and a detector that fetches that
+record can check it. **The one cross-clock pair is harmless.** A departure (§4.2) is
+participant-signed, so a vacancy memo for it carries the participant's clock rather
+than the patron's, and can order against a patron-clocked memo for the same slot
+skewed. But a departure empties the slot, so against another emptying (a disavowal)
+the occupant is the same either way, and against a later fill a skew can only leave
+the slot **stale-empty**, never stale-occupied: the emptied-timestamp rule above
+already stops an earlier memo from reinstating a departed occupant, so the only
+direction a bad order can move the table is toward under-claiming occupancy, which
+is the safe one.
 
 **Every field is a statement the patron has authority to make.** It names
 itself, its own position, its own slot, and who is in it. **Nothing in the object
