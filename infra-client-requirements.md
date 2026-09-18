@@ -44,7 +44,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 - **Push the sibling list at attach.** A client cannot discover failover targets
   after its serving node is already dark (design §14.1.2).
 - **Keep the state that serving needs and no history of the requests that
-  produced it, whatever the request class.** A resolution says whom a client
+  produced it, whatever the request class** [author, 2026-09-18]. A resolution says whom a client
   wants to reach, a one-time key request that a session is opening, a filtered
   catalog query what kind of service it seeks, a currency fallback whom it is
   evaluating, a publication or deposit that it is making itself reachable. Each
@@ -538,8 +538,8 @@ narrow enough that re-scoring on events is affordable (design §11.4); and
 periodically for time-dependent predicates, whose values move with time alone —
 a scheduled whole-table pass, not a continuous recomputation. A new member is
 scored against standing predicates and given rows; a departing one has theirs
-removed. **The table is current state, and no history of its rows is kept**: a
-row replaced is gone, and what a member's roles used to be is a classification
+removed. **The table is current state, and no history of its rows is kept**
+[author, 2026-09-18]: a row replaced is gone, and what a member's roles used to be is a classification
 history no lookup needs, the time axis C22's matrix would otherwise gain
 (design §19.8).
 

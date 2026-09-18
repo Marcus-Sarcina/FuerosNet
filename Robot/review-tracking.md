@@ -10208,7 +10208,8 @@ That is the register read back accurately, as both 0.3 audits did for §20.
   rows is kept, and the house pattern says so everywhere else (memo table, C19;
   registrations, §6.5; caches, P32). One sentence added: a row replaced is gone,
   and what a member's roles used to be is the time axis C22's matrix would
-  otherwise gain. **Derived from the pattern; author sign-off.**
+  otherwise gain. **Derived from the pattern; signed off as derived [author,
+  2026-09-18].**
 - **N4, interest telemetry as one class — applied, as a consolidation.** Infra §1
   stated process-and-discard for liveness; §2, §4.5, §6 and §6.1 each said their
   class "falls under §1's obligation"; catalog queries (P38) and currency
@@ -10220,7 +10221,8 @@ That is the register read back accurately, as both 0.3 audits did for §20.
   resolution, one-time key, catalog, currency and publication requests at one
   node join into an interest graph no single class yields; High for a node
   keeping histories, and the obligation is what keeps it low. **Derived from
-  §19.1 and the existing per-class rules; author sign-off.**
+  §19.1 and the existing per-class rules; signed off as derived [author,
+  2026-09-18].**
 - **N5, role names at the resource endpoint — already carried.** rr §7.4: *role
   names are visible strings and they leak... a reason for operators to choose
   names knowing they are public to those who can see the resource.* The resource
