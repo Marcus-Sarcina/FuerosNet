@@ -9931,3 +9931,103 @@ and the sentence above it still said thirteen roles carry a tag; it says fourtee
 §21.1's eleven unset parameters are unchanged, the delegation's figures having gone
 to the mechanism. 2,176 references across the five documents and 1,190 citations
 across `models/` and the workspace resolve, with no flag in either.
+
+### 2026-09-17 (the third cycle's first four passes, and the authentication step the surgery missed)
+
+**The review cycle restarted after the delegation and administration changes,
+with the adversarial pass moved ahead of the implementation pass.** The first
+four passes closed on this day: factual verification, three runs of internal
+coherence, two audits of unsupported claims, and rule fragility. What changed
+the design is here.
+
+**A witness is not present and is not asked anything.** §19.6 required that
+witnesses and verifiers be told, at the moment they are asked, that answering
+makes them durable nodes in someone else's evidence graph. Both roles are client
+background tasks: a witness watches a ceremony's message flow and times it against
+its own clock before signing, and a verifier answers a query its client received.
+Neither is a person acting, so there is no moment of asking to warn at. The
+paragraph was a drafter gloss rather than a requirement [author, 2026-09-17]:
+consent to perform protocol actions is given by choosing to use the network, and
+there is no per-request warning. Removed from §19.6, from the light client's
+matching bullet and from A.3; P23 moves to accepted. The capture-time disclosure to
+a participant survives, being the one point where a person is present and acting,
+and so does the privacy fact itself. Recording an exposure is not owing a warning
+for it.
+
+**An archive reply carries presentations and a frontier.** §7.9 promised a presence
+record in whatever form its holder chose while its reply field accepted only a bare
+envelope, with nowhere to put the disclosure slots, on the one fetch path where
+disclosure choice is for. Field 2 now carries a presentation for a presence record
+and an envelope for everything else, a map and an array needing no discriminator.
+And since §3.1 makes the archive a DAG whose cross-branch order is deliberately not
+recovered, a single continuation txid could not name an unreturned branch past a
+merge: the request walks back from a frontier and the reply returns the frontier it
+named and did not return, one txid remaining the ordinary case. The verification
+rule became reachability rather than a sequence check over a structure that has no
+sequence.
+
+**Twelve contradictions, and which side was right.** Resetting an in-flight
+request at a table change (§10.5) against never reaching into one (§10.1): the
+identifier is retired for what comes next and committed work is left alone, and
+there are three things of which only the middle one ends (§11.4). Every rotation
+carrying both continuity factors (§9.0.1) against a plain rotation carrying
+nothing (§9.0): scoped to the rotation that carries its inheritance, which is what
+the wire encodes. Fetching the transaction behind a memo conflict (§15.2): the
+fetch is unperformable and unnecessary, and the detector confirms against its own
+records. Distant parties admitted by explicit grant (§11.4) against membership as
+the outer gate (§11.2): nothing reaches outside it, scope or grant alike. Verifier
+responses required (§6.4) against a reasonableness criterion (§8.1.2): sought, and
+their absence weighed. Full keys fetched at contact (§12.2) against never fetched
+(wire §7.2): they arrive at contact, from attaching or from a transaction. A
+peering is bilateral (§16.3); an abuse report is not a §4 envelope (§11.6). The
+wire said thirteen signing roles above the table that lists fourteen, the earlier
+count having fixed the instance and not the claim. `h_store = 2` was given as ~110
+nodes where §15.1 gives 221 of which 110 are downline; both cells now say which
+they count.
+
+**§20 no longer asserts a number for its own size.** It said "79 load-bearing and
+123 in total" without showing the enumeration; two independent audits with two
+rubrics reached 79 and 103, and the figure moved again the moment rows were added.
+The load-bearing set is now a sum over four enumerated sets, said to move when a
+row is added and to rise under a stricter rubric. §20.2 gains a fifth column,
+*evidence that would settle it*, on all thirty-two rows [author, 2026-09-17]: the
+register's stated purpose is deciding what to test first, and the columns it had
+said why each assumption matters without saying what would settle it. §20.1 gains
+three rows (the 7±2 span of control behind f = 10, strongly correlated session
+failures behind the multi-frame argument, social recovery's poor practical record)
+and sixteen universals lost the absolutes their sources did not carry; its
+threshold stands, the register being curated by design. §21 gains three operating
+points whose basis is chosen: the delegated credential's run of 45 × 48 h, anchor
+hysteresis at S and S/2, and the 25 MB index budget. Wire §1.3's declaration that
+bounds are chosen ceilings now reaches every bound in the document, not only the
+tabled arrays. Nine intensifiers were given their number or restated as assumed:
+"fails catastrophically" had ~19,500 to one in the next paragraph, and "negligible
+at any real k" is 64 over 2⁶⁴.
+
+**The wire's authentication step had not been told about delegation.** The
+surgery of 2026-09-16 moved the identity key off the instance and listed the sites
+it touched; wire §9.1 was not among them, and it still said the dialling party
+checks that the presented key is the classical member of the pinned key material,
+and that an attach must name the connection-authenticated identity, both false for
+a delegated key, which is every instance's normal case. Now a peer presents one raw
+key, its own classical component or a delegated one, and either check binds it:
+the pinned member, or the attach that follows carrying that keyhash's delegation
+naming it; a session on which neither holds is refused. *A wrong address produces
+a handshake failure* was stated four times and is now a refused session, at the
+handshake or at the attach that cannot bind the key; the property those sites exist
+for, self-detection at contact, is unchanged. §12.6.1 had cited the QUIC section
+for endpoint authentication since the baseline; it cites §5 and the wire's
+handshake section.
+
+**Two rules reordered so the property leads and the encoding follows.** An
+instance's obligation to send its delegation opened with the frame it travels in;
+it opens with the obligation and names the frame as the present encoding. The
+querier a verifier limits and attributes is the party the transport authenticated,
+never one the request names; the field-2 rule follows. Thirteen other rules the
+fragility pass flagged already had their role statement in the design or in the
+sentence before them.
+
+**Counts checked.** 2,209 references across the five documents and 1,190
+citations across `models/` and the workspace resolve with no flag; the staleness
+sweep reports its baseline of fourteen; the acceptance catalogue quotes verbatim
+at 0 flags, 403 of 413 implemented.
