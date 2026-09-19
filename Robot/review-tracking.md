@@ -10306,6 +10306,25 @@ across issuers, which the invariant keeps as a signal. No code or acceptance cha
 needed; the literal field2==field1 first proposed was set aside because it would
 have removed fork detection from the currency path.
 
+**Backed by executable tests [author, 2026-09-18].** The author asked that the
+clarification be demanded by a test a redirecting client would fail, not left as
+prose. Two catalogue entries, both implemented as live tests in
+`crates/node/tests/currency.rs`:
+- **CUR-20** (must-accept): a valid attestation whose current key differs from its
+  subject is accepted, not rejected -- the honest rotation-report/fork-signal form;
+  a client requiring field2==field1 fails it.
+- **CUR-19** (negative): a lone current attestation naming a differing successor
+  does not move the addressed key; the relying party proceeds on the queried key;
+  a redirect-on-field-2 client fails it.
+check.py 405/415 implemented, 0 flags; gate green. `functional_tests.md` gains
+CUR-011/CUR-012 (untracked). A canonical wire vector (`P-currency-successor`,
+field 2 differing from field 1, accept) was prepared in
+`test-vectors/tools/generate.py` but **not landed**: the vector corpus is gated
+behind `spec-pins.json`, which this cycle's spec edits have left stale, so
+regenerating asserts a re-audit of the hand-authored fixtures across the whole
+spec delta -- a separate pass, not part of this finding. The executable
+acceptance tests are the binding demand.
+
 **F2 — a positional predicate delegates ACL membership to the topology authority
 (NOVEL). NOT A FINDING [author, 2026-09-18].** Accurate framing but already the
 design: a resource owner marks per role whether it is topology-granted, and may

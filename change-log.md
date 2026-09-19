@@ -10102,7 +10102,12 @@ the queried key and reads the field only to detect a fork, never as a destinatio
 The gap was that the wire prose did not say so; §7.1, §12.1 and the §12.6.5 staple
 table now state that field 2 is the issuer's account of what is live, not an
 authority to select a key, and that a differing field 2 is a rotation-or-fork signal
-resolved by participant-authored evidence or re-introduction. No mechanism changed.
+resolved by participant-authored evidence or re-introduction. No mechanism changed. Two
+acceptance entries make the rule executable rather than only stated: CUR-20, that a
+valid attestation whose current key differs from its subject is accepted; and
+CUR-19, that such an attestation does not move the addressed key. Both are live
+tests in `crates/node/tests/currency.rs`, so a client that rejected the message or
+followed the redirect would fail the gate.
 
 Two proposed mechanisms are declined: an auto-grant ceiling for topology-driven
 resource roles (already the owner's per-role choice, with manual grants to named
