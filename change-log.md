@@ -10093,6 +10093,17 @@ owner-only checkpoint would let a subject keep several self-anchored sets of boo
 at no social cost, which is the friction the archive exists to impose; §10.1 now
 states this, and the refusing-patron cost is registered as one instance of §18.5.
 
+**A currency attestation vouches that a key is live; it does not select one.** The
+finding was that its `current_key` field, issuer-signed, could read as a second path
+to the addressed key in tension with §12.1's rule that routing is participant-
+authenticated. The binding is in fact the participant's, authored by a signed
+locator or a recovery adoption, and the reference implementation already addresses
+the queried key and reads the field only to detect a fork, never as a destination.
+The gap was that the wire prose did not say so; §7.1, §12.1 and the §12.6.5 staple
+table now state that field 2 is the issuer's account of what is live, not an
+authority to select a key, and that a differing field 2 is a rotation-or-fork signal
+resolved by participant-authored evidence or re-introduction. No mechanism changed.
+
 Two proposed mechanisms are declined: an auto-grant ceiling for topology-driven
 resource roles (already the owner's per-role choice, with manual grants to named
 individuals available), and a short-lived serving lease (a new keyset, and §23.3's

@@ -10289,11 +10289,22 @@ attestation naming `K_attacker` produces no fork. Author ruled **constrain field
 == field 1** with the caveat "check whether any flow needs field 2 ≠ field 1."
 **It does**: the fork/divergence notification (§9.0.2, ARC-15) is built on field 2
 carrying a successor that differs from the queried key; a literal field2==field1
-removes fork-detection from the currency path. Held for a follow-up ruling on the
-narrower invariant (field 2 is never an authoritative redirect; a key *change* is
-learned only from a recovery adoption or a signed locator; divergent field-2 claims
-remain a fork signal). No edit yet; this touches wire §7.1, §9.0.2, the crate, and
-ARC-15.
+removes fork-detection from the currency path. **Resolved [author, 2026-09-18].** The author's ruling: the key binding is the
+user's (authored by the recovery adoption's successor statement and the signed
+locator); the patron-signed staple only vouches currency and cannot select a key.
+Verifying against `crates/` showed the implementation **already conforms**:
+`require_currency` addresses the queried subject and uses the staple only to
+confirm that key current; `assess` reads field 2 solely to count divergent claims
+for fork detection, and no consumer addresses `Attested(a).current`. So the gap was
+prose, not mechanism: wire §7.1, the §12.6.5 staple table, and §12.1 could be read
+as licensing a redirect to field 2. Fixed by stating the invariant in all three:
+field 2 is the issuer's account of what is live, not an authority to select a key;
+a relying party addresses a key authored by the participant (SignedLocator §2.3 or
+recovery adoption §4.1), and a differing field 2 is a rotation-or-fork signal, never
+a redirect. Fork detection (ARC-15) is unaffected: it turns on divergent field 2s
+across issuers, which the invariant keeps as a signal. No code or acceptance change
+needed; the literal field2==field1 first proposed was set aside because it would
+have removed fork detection from the currency path.
 
 **F2 — a positional predicate delegates ACL membership to the topology authority
 (NOVEL). NOT A FINDING [author, 2026-09-18].** Accurate framing but already the

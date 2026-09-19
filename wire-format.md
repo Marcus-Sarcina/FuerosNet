@@ -2524,6 +2524,20 @@ CurrencyAttestation = {
 
 Signed by the issuer.
 
+**Field 2 is what the issuer vouches is live, not an authority to select a key**
+[author, 2026-09-18]. The attestation confirms currency; it is not the
+participant-authenticated routing information design §12.1 confines to the
+participant, and it never binds an identity to a key on the issuer's signature
+alone. A relying party addresses a key it holds by participant-authored evidence:
+a `SignedLocator` (§2.3) or a recovery adoption (§4.1), whose successor statement
+and verifier responses are what author a key change (design §9.0.2). A field 2 that
+differs from such a key is a rotation-or-fork *signal*, resolved by that evidence
+or by re-introduction, never a redirect: an inquirer holding one issuer's differing
+field 2 learns only that the key it named is not confirmed current, and one holding
+divergent field 2s from different issuers has a fork (design §9.0.2), reported and
+neither chosen. This is why a conforming implementation addresses the queried key
+and reads field 2 only for that signal, never as a destination.
+
 **Field 5 exists because issuance escalates** during patron outage, and a
 consumer must be able to weight a secondhand attestation lower. Note the rule it
 encodes: attestations are **issued fresh, never extended stale.** There is no

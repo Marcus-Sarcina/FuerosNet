@@ -4164,7 +4164,12 @@ intermediary cannot substitute itself as the destination; without that, any
 relay can silently become that node's mailbox. Inside a transaction the
 envelope supplies it and the locator is carried bare; handed over alone at
 introduction it carries its own signature, which is what `SignedLocator` is
-(`wire-format.md` §2.3).
+(`wire-format.md` §2.3). **A currency attestation is not this routing
+information and does not stand in for it** [author, 2026-09-18]: it is
+issuer-signed and vouches only that a key is live, never binding an identity to a
+key on the issuer's authority. Which key a relying party addresses is authored by
+the participant, through a `SignedLocator` or a recovery adoption (§9.0.2); the
+staple confirms currency of that key and no more (§12.6.5, `wire-format.md` §7.1).
 
 Identity (public key) is permanent; locator is mutable. Standard
 identity/locator split (see LISP and HIP for well-mapped potholes).
@@ -4620,7 +4625,7 @@ likes.
 
 | What a relying party holds | What it does |
 |---|---|
-| A current staple | Addresses the key it names |
+| A current staple | Addresses the key it named as subject, whose currency the staple confirms: field 2 is the issuer's account of what is live, not an authority to select a key (`wire-format.md` §7.1) |
 | A staple absent or expired | Falls back to the query (§9.0.2, `wire-format.md` §7.1) and addresses the key it holds meanwhile, knowing it unattested |
 | Neither an attestation nor a code-1 answer | Concludes nothing: silence is not attestation (§9.0.2) |
 | Authenticated supersession evidence | Serves nothing under the superseded key — the rule below |
