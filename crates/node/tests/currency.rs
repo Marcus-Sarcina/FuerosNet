@@ -421,3 +421,40 @@ fn a_currency_ask_goes_on_a_request_stream_and_its_reply_settles_it() {
     assert_eq!(below.request_count(REQUEST_CURRENCY), 0);
     assert!(below.frames().is_empty());
 }
+
+// acceptance: CUR-20
+#[test]
+fn a_valid_attestation_whose_current_key_differs_from_its_subject_is_accepted() {
+    let (_w, n, _cur) = patron_and_subordinate();
+    let t = n.now();
+    // alice, bob's patron, vouches bob current but names a different key in
+    // field 2: the honest rotation-report and fork-signal form.  It verifies,
+    // is current, and is issued on the patron rung, so it is accepted.
+    let staple = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("w9"), t, t + 36_000, ROLE_PATRON);
+    let (parsed, state) = n.read_staple(&ids(), &staple, &kh("bob"), &[]);
+    assert_eq!(state, Staple::Current, "field 2 differing from field 1 is not a ground for rejection");
+    assert_eq!(parsed.unwrap().current, kh("w9"), "field 2 really does name a different key");
+    // an implementation requiring field 2 == field 1, or rejecting the message,
+    // would break on this valid staple.
+}
+
+// acceptance: CUR-19
+#[test]
+fn a_currency_attestation_does_not_redirect_the_addressed_key() {
+    let (_w, mut n, _cur) = patron_and_subordinate();
+    let fab = Fabric::with(&[]);
+    let t = n.now();
+    // K is bob, the participant-authored key the party already addresses; the
+    // patron's staple is current but names K' = w9 (attacker-chosen) in field 2.
+    let staple = tx::currency_attestation(&id("alice"), &kh("bob"), &kh("w9"), t, t + 36_000, ROLE_PATRON);
+    assert_eq!(n.take_staple(&ids(), &kh("bob"), &staple, &[]), Staple::Current, "the staple is accepted");
+    // Settling which key to address for bob proceeds on bob, the key it holds;
+    // nothing re-points addressing to w9.  A redirect-on-field-2 implementation
+    // would instead act on w9.
+    assert_eq!(
+        n.require_currency(&*fab, &ids(), &kh("bob"), None, None),
+        Requirement::Settled(Gate::Proceed),
+        "addresses the queried key, not field 2's K'"
+    );
+    assert_eq!(att(&staple).current, kh("w9"), "the staple did name a different key");
+}

@@ -7748,6 +7748,59 @@
     "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11]."
   },
   {
+    "id": "CUR-19",
+    "area": "currency",
+    "gap": "currency",
+    "title": "Do not redirect the addressed key on a currency attestation; address the queried key",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.1",
+      "design §12.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.1",
+        "text": "Field 2 is what the issuer vouches is live, not an authority to select a key"
+      },
+      {
+        "where": "wire-format.md §7.1",
+        "text": "a conforming implementation addresses the queried key\nand reads field 2 only for that signal, never as a destination"
+      }
+    ],
+    "given": "A relying party addressing identity X at a participant-authored key K, holding no recovery adoption for X, receives one currency attestation for X from X's patron: valid, unexpired against the party's clock, issued on the patron rung, with field 1 (subject) equal to K and field 2 (current key) equal to K', where K' differs from K and is attacker-chosen.",
+    "when": "The party settles which key to address for X.",
+    "then": "It addresses K, the key it holds by participant-authored evidence; the requirement resolves to proceed on K, and nothing in the decision re-points addressing to K'. An implementation that treats field 2 as the destination, addressing K', fails.",
+    "oracle": "model",
+    "interpretation": null
+  },
+  {
+    "id": "CUR-20",
+    "area": "currency",
+    "gap": "currency",
+    "title": "Accept a valid attestation whose current key differs from its subject",
+    "milestone": 4,
+    "kind": "must-accept",
+    "spec": [
+      "wire-format.md §7.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.1",
+        "text": "A field 2 that\ndiffers from such a key is a rotation-or-fork"
+      },
+      {
+        "where": "wire-format.md §7.1",
+        "text": "reads field 2 only for that signal"
+      }
+    ],
+    "given": "A currency attestation that verifies under its issuer, is unexpired against the relying party's clock, and is issued on a rung the relying party can place for the subject, whose field 2 (current key) differs from field 1 (subject).",
+    "when": "The relying party reads it as a staple for the subject in field 1.",
+    "then": "It is accepted as a current staple, not rejected for the differing field 2: the object is the honest rotation-report and fork-signal form, so an implementation that requires field 2 to equal field 1, or that rejects the message, fails.",
+    "oracle": "behaviour",
+    "interpretation": "The staple confirms currency of the queried key; the differing field 2 is a signal (CUR-19 fixes that it is not a redirect), never a ground for rejection."
+  },
+  {
     "id": "DEC-24",
     "area": "decoder",
     "gap": "decoder",
