@@ -3603,7 +3603,9 @@ refuses the session if they differ.** That check is the whole of what makes a
 delegation non-transferable: it is public, it travels on every handshake, and an
 actor replaying a captured one cannot complete a handshake under the key it
 names. A receiver also checks the window against its own clock and checks that
-field 2 is the keyhash it meant to reach.
+field 2 is the keyhash it meant to reach. **The signature is hybrid because the
+delegating identity is, and a classical-only delegation is malformed**: it would
+be the one forgeable link in an otherwise hybrid chain.
 
 **The clock check carries a leeway, and the leeway is the receiver's**
 [author, 2026-09-21]. A receiver accepts a delegation whose window contains its

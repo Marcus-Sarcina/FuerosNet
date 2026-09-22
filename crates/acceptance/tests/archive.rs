@@ -57,3 +57,20 @@ fn arc_09_reject_an_archive_batch_that_is_not_reachable_fr() {
 fn arc_11_mark_an_archive_restored_without_a_requested_hea() {
     todo!("ARC-11: Mark an archive restored without a requested head as internally verified but not verified-complete")
 }
+
+/// Carry the operator's provider credential in the backup envelope and never in the archive
+///
+/// Spec: light-client-requirements.md §2
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §2): "An operator's backup carries their provider credential too."
+/// Rule (light-client-requirements.md §2): "not in the archive"
+///
+/// Given: An operator's client holding a provider credential.
+/// When: It exports a backup and a sibling replicates its archive.
+/// Then: The envelope's contents carry the credential and open only under the passphrase; the archive the sibling holds contains no byte of it.
+#[test]
+#[ignore = "acceptance ARC-28: owed at milestone after-5"]
+fn arc_28_carry_the_operator_s_provider_credential_in_the() {
+    todo!("ARC-28: Carry the operator's provider credential in the backup envelope and never in the archive")
+}

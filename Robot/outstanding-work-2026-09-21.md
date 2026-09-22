@@ -759,7 +759,17 @@ land on their own.
    rerun. A gap found here goes back to step 0.
 2. **Catalogue** (sections 2.1, 2.3, 2.4, 2.5, and one entry per driver in
    section 6). Stubs regenerated, `check.py` at 0 flags; the implemented count
-   falls, which is the owed work counted.
+   falls, which is the owed work counted. **Done 2026-09-22**: 395 of 455.
+   Beyond the entries the rulings wrote as they landed, twenty-two more: the
+   delegation's remaining mechanics (TRN-23 to TRN-27, SES-27, DMN-24 to
+   DMN-26, DEC-35, PRP-28), the no-history pairs for the newly named classes
+   and the role table (RSC-41, RSC-42, SUB-13), one entry per caller-less
+   driver in section 6 (TOP-44 acknowledgements, MET-12 evaluation, SUB-14
+   wake delivery), the provider credential in the envelope (ARC-28), and the
+   four product obligations of 09-16 as manual entries (PRD-10 to PRD-13).
+   Not entered: the verifier's leg to a client behind its serving node, which
+   the documents leave unwritten and so gives nothing to quote; it stays in
+   section 6 as owed to the documents first.
 3. **Vectors, once, landed with the codec** (section 3): the audit of the
    hand-authored fixtures across the whole delta; the generator extended for
    both mechanisms; `--accept-spec-change`; `verify.py` green; then

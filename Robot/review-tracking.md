@@ -10574,3 +10574,26 @@ count. The currency premise had been restated the day before.
 README: the window and the receiver's leeway; the distinction between an
 attach and a request-only contact; the flood as such; one key per run and the
 run.
+
+## The catalogue after the rulings (2026-09-22)
+
+Milestone A step 2. Twenty-two entries added beyond those the rulings wrote:
+TRN-23 (a delegation naming another key than the one presented), TRN-24 (the
+wrong delegating keyhash), TRN-25 (classical-only, malformed), TRN-26 (the
+cache), TRN-27 (the resumption ticket clamped and a lapsed one refused),
+SES-27 (`AttachAck` field 6 on every acknowledgement), DMN-24 (the notice before
+the run's last credential), DMN-25 and DMN-26 (no minting on the instance; the
+operator-signed records served from configuration), DEC-35 (no envelope
+signature under a delegated key), PRP-28 (the instance pushes each credential),
+RSC-41, SUB-13 and RSC-42 (no history for catalog queries, publications and
+deposits, and the role table's rows), TOP-44 (acknowledgements issued and taken
+by a running node under standing policy, nothing injected), MET-12 (evaluation
+from records fetched from the candidate's own client), SUB-14 (the doorbell
+posted, content-free, unlogged), ARC-28 (the provider credential in the
+envelope and never the archive), and PRD-10 to PRD-13 (the backup prompt,
+provider ordering, the frame's isolation, the provisioning pages). One sentence
+lifted from `wire-format.md` §8.2's schema comment into its prose so the hybrid
+requirement can be quoted, the comment's own words. `check.py` 395 of 455, 0
+flags, stubs in sync; the stub crate builds and lints. Not entered: the
+verifier's leg from a serving node to a client attached over the wire, which no
+document states and so nothing can quote.

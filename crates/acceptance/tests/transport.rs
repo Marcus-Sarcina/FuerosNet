@@ -87,3 +87,84 @@ fn trn_21_refuse_a_delegation_whose_window_is_not_exactly() {
 fn trn_22_accept_a_delegation_whose_window_contains_the_re() {
     todo!("TRN-22: Accept a delegation whose window contains the receiver's clock within its leeway, and refuse one beyond it")
 }
+
+/// Refuse a session whose delegation names a key other than the one the handshake presented
+///
+/// Spec: wire-format.md §8.2
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §8.2): "A receiver checks field 1 against the key the handshake actually presented and refuses the session if they differ."
+///
+/// Given: A valid delegation by S naming transport key k1, captured by an adversary; a handshake in which the adversary presents its own key k2 and then sends that delegation in AttachAck field 6.
+/// When: The client evaluates the attach.
+/// Then: The session is refused: no session state, no queued data and no request is bound to S, and the delegation, though it verifies under S's material, binds nothing because field 1 is not k2.
+#[test]
+#[ignore = "acceptance TRN-23: owed at milestone after-5"]
+fn trn_23_refuse_a_session_whose_delegation_names_a_key_ot() {
+    todo!("TRN-23: Refuse a session whose delegation names a key other than the one the handshake presented")
+}
+
+/// Refuse a delegation whose delegating keyhash is not the one sought
+///
+/// Spec: wire-format.md §8.2
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §8.2): "checks that field 2 is the keyhash it meant to reach"
+///
+/// Given: Client C dialling S; the peer presents an unpinned key k and a valid delegation naming k whose field 2 is T, not S.
+/// When: C evaluates it.
+/// Then: The connection is refused; nothing is bound to S or to T.
+#[test]
+#[ignore = "acceptance TRN-24: owed at milestone after-5"]
+fn trn_24_refuse_a_delegation_whose_delegating_keyhash_is() {
+    todo!("TRN-24: Refuse a delegation whose delegating keyhash is not the one sought")
+}
+
+/// Reject a classical-only delegation as malformed
+///
+/// Spec: wire-format.md §8.2
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §8.2): "a classical-only delegation is malformed"
+///
+/// Given: A delegation by S naming the presented key, within its window, whose field 5 carries an Ed25519 signature alone and no ML-DSA-65 signature.
+/// When: A receiver decodes it.
+/// Then: It is malformed: not verified, not cached, and the session or connection it arrived on is refused as one on which nothing binds the presented key.
+#[test]
+#[ignore = "acceptance TRN-25: owed at milestone after-5"]
+fn trn_25_reject_a_classical_only_delegation_as_malformed() {
+    todo!("TRN-25: Reject a classical-only delegation as malformed")
+}
+
+/// Cache a verified delegation against its transport key, and verify it once per credential rather than once per connection
+///
+/// Spec: wire-format.md §8.2
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §8.2): "A verified delegation is cached against its transport key."
+///
+/// Given: Client C with a delegation-verification hook counting verifications; S presents key k under delegation D on two consecutive connections.
+/// When: C attaches twice.
+/// Then: The hybrid signature over D is verified once; the second connection binds k to S from the cache with no verification; a later connection under a different key k' verifies again.
+#[test]
+#[ignore = "acceptance TRN-26: owed at milestone after-5"]
+fn trn_26_cache_a_verified_delegation_against_its_transpor() {
+    todo!("TRN-26: Cache a verified delegation against its transport key, and verify it once per credential rather than once per connection")
+}
+
+/// Never issue a resumption ticket that outlives the delegation, and refuse a resumption after it lapses
+///
+/// Spec: design §14.1.3; infra-client-requirements.md §7
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (design §14.1.3): "A resumption ticket never outlives the delegation that authorised it."
+/// Rule (infra-client-requirements.md §7): "Never issue a resumption ticket that outlives your delegation"
+///
+/// Given: An instance whose current delegation has one hour of validity left issues a resumption ticket to an attached client; the clock then passes not_after plus the leeway.
+/// When: The client attempts a 0-RTT resumption on the ticket.
+/// Then: The ticket's lifetime at issue was at most the delegation's remaining validity, and the resumption after not_after is refused; a fresh handshake under the next credential succeeds.
+#[test]
+#[ignore = "acceptance TRN-27: owed at milestone after-5"]
+fn trn_27_never_issue_a_resumption_ticket_that_outlives_th() {
+    todo!("TRN-27: Never issue a resumption ticket that outlives the delegation, and refuse a resumption after it lapses")
+}

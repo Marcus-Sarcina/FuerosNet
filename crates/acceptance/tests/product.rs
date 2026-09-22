@@ -150,3 +150,67 @@ fn prd_08_tell_the_user_on_first_brokered_use_that_ending() {
 fn prd_09_present_a_restored_archive_as_recovered_on_trust() {
     todo!("PRD-09: Present a restored archive as recovered on trust, never as verified-complete")
 }
+
+/// Prompt for a backup until one exists, and stop when it does
+///
+/// Spec: light-client-requirements.md §2
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §2): "Prompt for a backup until one exists."
+///
+/// Given: A light client on a device with no backup made.
+/// When: A person uses the client across several sessions, then makes a backup, then deletes it.
+/// Then: The prompt appears until the backup exists, is absent while it exists, and returns after deletion, with no count or memory of having prompted.
+#[test]
+#[ignore = "acceptance PRD-10: owed at milestone manual"]
+fn prd_10_prompt_for_a_backup_until_one_exists_and_stop_wh() {
+    todo!("PRD-10: Prompt for a backup until one exists, and stop when it does")
+}
+
+/// Order provider and zone choices by concentration inside the operator's own horizon
+///
+/// Spec: light-client-requirements.md §6
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §6): "order the choices by how concentrated they already are inside that operator's own horizon, least concentrated first"
+///
+/// Given: An operator provisioning an instance whose horizon already holds instances at two providers.
+/// When: The provisioning screen lists providers and zones.
+/// Then: The least concentrated come first, the crowded ones are marked rather than hidden, and the screen says the ordering speaks to this operator's horizon and not the network's.
+#[test]
+#[ignore = "acceptance PRD-11: owed at milestone manual"]
+fn prd_11_order_provider_and_zone_choices_by_concentration() {
+    todo!("PRD-11: Order provider and zone choices by concentration inside the operator's own horizon")
+}
+
+/// Present a node's administration pages in a frame isolated from the client's keys, archive and sealed captures
+///
+/// Spec: infra-client-requirements.md §8.3
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §8.3): "The frame is a sandbox, isolated from the presenting client's keys, archive and sealed captures."
+///
+/// Given: A light client presenting the administration pages of the operator's instance.
+/// When: A page served by the instance attempts to reach the client's keys, archive or captures.
+/// Then: It cannot: the frame exposes none of them, and a seized instance serving a hostile page reaches nothing on the device.
+#[test]
+#[ignore = "acceptance PRD-12: owed at milestone manual"]
+fn prd_12_present_a_node_s_administration_pages_in_a_frame() {
+    todo!("PRD-12: Present a node's administration pages in a frame isolated from the client's keys, archive and sealed captures")
+}
+
+/// Ship the provisioning pages and no other administration pages
+///
+/// Spec: infra-client-requirements.md §8.3
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §8.3): "A client ships the provisioning pages and no others."
+///
+/// Given: A light client with no instance provisioned, then one provisioned.
+/// When: The operator's tab is opened in each state.
+/// Then: Before provisioning the tab carries the provisioning pages only, working with no node present; after, what administers the instance arrives from the instance and nothing administrative is the client's own.
+#[test]
+#[ignore = "acceptance PRD-13: owed at milestone manual"]
+fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
+    todo!("PRD-13: Ship the provisioning pages and no other administration pages")
+}

@@ -37,3 +37,51 @@ fn dmn_09_verify_an_archive_batch_s_own_links_before_repor() {
 fn dmn_23_mint_the_transport_keypair_on_the_instance_and_s() {
     todo!("DMN-23: Mint the transport keypair on the instance, and serve a whole run of contiguous credentials over its one public key")
 }
+
+/// Tell the operator before the last credential of the run
+///
+/// Spec: infra-client-requirements.md §7
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §7): "telling your operator before the last one is the obligation"
+///
+/// Given: An rhtnd holding a run of 45 credentials and an operator-notice hook; the clock advances credential by credential.
+/// When: The run reaches its tail.
+/// Then: The operator's notice is raised while more than one credential remains, names how many do, and is raised before the daemon would otherwise go dark.
+#[test]
+#[ignore = "acceptance DMN-24: owed at milestone after-5"]
+fn dmn_24_tell_the_operator_before_the_last_credential_of() {
+    todo!("DMN-24: Tell the operator before the last credential of the run")
+}
+
+/// Mint no endpoint record or anchor entry on the instance
+///
+/// Spec: infra-client-requirements.md §4.4
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §4.4): "An instance cannot mint its own."
+///
+/// Given: An rhtnd started with a delegation and no seed, whose listen address is then changed in its configuration.
+/// When: The daemon restarts and serves.
+/// Then: No endpoint record and no anchor entry signed by the daemon appears in what it pushes or serves; it serves the operator-signed records it was given and reports that its address has moved and a new record is owed.
+#[test]
+#[ignore = "acceptance DMN-25: owed at milestone after-5"]
+fn dmn_25_mint_no_endpoint_record_or_anchor_entry_on_the_i() {
+    todo!("DMN-25: Mint no endpoint record or anchor entry on the instance")
+}
+
+/// Serve the operator-signed endpoint record and anchor entry given as configuration
+///
+/// Spec: infra-client-requirements.md §4.4
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §4.4): "a change of address is something an operator's client signs"
+///
+/// Given: An endpoint record and an anchor entry signed by the operator's identity on the operator's client, given to the daemon as configuration.
+/// When: The daemon starts.
+/// Then: It pushes that endpoint record in the topology class and answers resolutions with that anchor entry, each verifying under the operator's identity and neither under the delegated key.
+#[test]
+#[ignore = "acceptance DMN-26: owed at milestone after-5"]
+fn dmn_26_serve_the_operator_signed_endpoint_record_and_an() {
+    todo!("DMN-26: Serve the operator-signed endpoint record and anchor entry given as configuration")
+}

@@ -36,3 +36,37 @@ fn sub_02_a_publication_and_a_deposit_from_an_attached_cli() {
 fn sub_12_refuse_a_publication_whose_device_is_not_the_key() {
     todo!("SUB-12: Refuse a publication whose device is not the key the session presented")
 }
+
+/// Keep no history of publications and deposits beyond the bundle and the pool they produced
+///
+/// Spec: infra-client-requirements.md §1
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §1): "a publication or deposit that it is making itself reachable"
+///
+/// Given: Node N; client S publishes a bundle, deposits keys, publishes again with a new bundle and deposits again.
+/// When: N's state is inspected after each, and after a save and restart.
+/// Then: N holds S's current bundle and its current pool and nothing else: no prior bundle, no count of publications, no times of deposit.
+#[test]
+#[ignore = "acceptance SUB-13: owed at milestone after-5"]
+fn sub_13_keep_no_history_of_publications_and_deposits_bey() {
+    todo!("SUB-13: Keep no history of publications and deposits beyond the bundle and the pool they produced")
+}
+
+/// Post a content-free doorbell to the registered endpoint when a message arrives for an offline client, and log nothing
+///
+/// Spec: infra-client-requirements.md §6.1
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §6.1): "post nothing but a doorbell to it"
+/// Rule (infra-client-requirements.md §6.1): "The body carries no payload, no sender and no count"
+/// Rule (infra-client-requirements.md §6.1): "Do not log doorbells."
+///
+/// Given: Node N with a test wake endpoint registered by offline client C under key k; a second submission for C arrives later; then C withdraws the endpoint and a third arrives.
+/// When: Each submission is accepted.
+/// Then: The endpoint receives one post per arrival while registered, each body encrypted to k and carrying no payload, no sender and no count; nothing is posted after withdrawal; N's state and logs hold no record of any post.
+#[test]
+#[ignore = "acceptance SUB-14: owed at milestone after-5"]
+fn sub_14_post_a_content_free_doorbell_to_the_registered_e() {
+    todo!("SUB-14: Post a content-free doorbell to the registered endpoint when a message arrives for an offline client, and log nothing")
+}

@@ -56,3 +56,19 @@ fn prp_26_store_a_pushed_delegation_that_verifies_under_it() {
 fn prp_27_mint_no_transaction_on_a_confirmed_cycle() {
     todo!("PRP-27: Mint no transaction on a confirmed cycle")
 }
+
+/// Push your own delegation as each credential comes into force
+///
+/// Spec: wire-format.md §8.2
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §8.2): "An instance pushes each credential as it comes into force, under §10.1's forwarding rule"
+///
+/// Given: An instance with a run of credentials and a neighbour N inside its horizon; the clock crosses a credential boundary.
+/// When: The next credential comes into force.
+/// Then: The instance sends a TopologyPush carrying that credential to every adjacent node; N stores it, drops the previous one for that keyhash, and forwards it onward.
+#[test]
+#[ignore = "acceptance PRP-28: owed at milestone after-5"]
+fn prp_28_push_your_own_delegation_as_each_credential_come() {
+    todo!("PRP-28: Push your own delegation as each credential comes into force")
+}

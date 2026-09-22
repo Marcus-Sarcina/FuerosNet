@@ -10273,7 +10273,14 @@ model gate runs three mutations of it that must falsify: the comparison on eithe
 side, and a held delegation taken unverified. `models/run-all.sh` passes: 38
 wire-only lemmas, 29 compliant, ten mutations falsified.
 
+**The catalogue counts what the rulings owe.** Twenty-two entries added for the
+delegation's mechanics, the no-history rule's newly named classes, the drivers a
+running node does not yet call, the provider credential in the envelope, and the
+product obligations of 09-16; `wire-format.md` §8.2 states in prose what its
+schema comment said, that a classical-only delegation is malformed, so the rule
+can be quoted.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,233 citations across `models/` and the
-workspace resolve; check.py 395 of 433 implemented, 0 flags, stubs in sync; the
+workspace resolve; check.py 395 of 455 implemented, 0 flags, stubs in sync; the
 workspace lints clean and the crates whose tests were unmarked pass.

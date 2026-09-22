@@ -17,3 +17,20 @@
 fn ses_26_attach_a_subject_s_several_devices_as_several_se() {
     todo!("SES-26: Attach a subject's several devices as several sessions, each named by the key it presented")
 }
+
+/// Carry the delegation in every AttachAck an instance sends
+///
+/// Spec: infra-client-requirements.md §7; wire-format.md §8.2
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §7): "Present your delegation before anything else on every connection you accept"
+/// Rule (wire-format.md §8.2): "Present encoding: on a session, `Attach` field 4 and `AttachAck` field 6"
+///
+/// Given: An instance running under delegation D; a client attaches.
+/// When: The instance acknowledges.
+/// Then: AttachAck field 6 is present and equals D on this and every later attach it acknowledges; a node holding its own identity key sends field 6 absent.
+#[test]
+#[ignore = "acceptance SES-27: owed at milestone after-5"]
+fn ses_27_carry_the_delegation_in_every_attachack_an_insta() {
+    todo!("SES-27: Carry the delegation in every AttachAck an instance sends")
+}

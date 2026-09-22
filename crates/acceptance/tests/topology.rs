@@ -52,3 +52,20 @@ fn top_42_defer_an_acknowledgement_whose_grandpatron_s_del() {
 fn top_43_hold_the_delegations_of_the_parties_in_a_light_c() {
     todo!("TOP-43: Hold the delegations of the parties in a light client's horizon, and bind a direct-path peer by one")
 }
+
+/// Issue and take subtree acknowledgements in a running node under its standing policy, and admit the grandchild
+///
+/// Spec: infra-client-requirements.md §10.1; wire-format.md §7.5
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §10.1): "Issue it automatically, under a policy the operator set beforehand."
+/// Rule (wire-format.md §7.5): "Acceptance by other nodes is policy, not obligation."
+///
+/// Given: Daemons G, P and S, S a sibling of G that accepts G's acknowledgements by policy; G configured with a standing acknowledgement policy and hosting a resource; nothing injected by the test.
+/// When: An adoption of N under P is pushed to G.
+/// Then: G's runtime issues the acknowledgement and pushes it; G's gateway admits N's resource request (no code 4); S holds the acknowledgement and admits N by its policy; the acknowledgement lapses at all three when P departs.
+#[test]
+#[ignore = "acceptance TOP-44: owed at milestone after-5"]
+fn top_44_issue_and_take_subtree_acknowledgements_in_a_run() {
+    todo!("TOP-44: Issue and take subtree acknowledgements in a running node under its standing policy, and admit the grandchild")
+}
