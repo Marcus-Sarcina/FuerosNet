@@ -639,3 +639,115 @@ async fn a_pinned_peer_is_served_requests_with_no_session_and_no_frame() {
     assert_eq!(count(&node.log, |e| matches!(e, Event::RequestOnly)), 1);
     assert!(!node.has_session(&kh("alice")));
 }
+
+/// Alice's desktop: a transport key under alice's own delegation, opening
+/// at `t`.
+fn desktop(seed: u8, t: u64) -> Arc<Credential> {
+    let alice = test_identity("alice");
+    let c = Credential::from_seed(&[seed; 32], kh("alice"));
+    c.add(
+        std::slice::from_ref(&alice.public),
+        &issue(&alice, &c.public(), t),
+    )
+    .unwrap();
+    Arc::new(c)
+}
+
+// acceptance: SES-26
+#[tokio::test]
+async fn ses_26_a_subjects_devices_are_several_sessions_each_named_by_its_key() {
+    let t = now();
+    type Seen = Arc<Mutex<Vec<([u8; 32], [u8; 32])>>>;
+    let seen: Seen = Arc::default();
+    let mut cfg = node_cfg("bob", 5);
+    let sink = seen.clone();
+    cfg.on_request = Some(Arc::new(move |peer, device, _family, _body| {
+        sink.lock().unwrap().push((peer, device));
+        Box::pin(async { None })
+    }));
+    let (node, addr) = spawn_node(cfg);
+    let ep = client_ep();
+    // the phone presents alice's classical component
+    let phone = client_cfg("alice");
+    let AttachOutcome::Attached(s1) = attach(&phone, &ep, kh("bob"), addr, false).await else {
+        panic!("the phone attaches")
+    };
+    // the desktop presents a delegated key under alice's delegation, field 1 = alice
+    let d = desktop(31, t);
+    let laptop = client_cfg("alice").with_credential(d.clone());
+    let AttachOutcome::Attached(s2) = attach(&laptop, &ep, kh("bob"), addr, false).await else {
+        panic!("the desktop attaches")
+    };
+    let phone_key = test_identity("alice").public.ed.to_bytes();
+    let mut devices = node.devices_of(&kh("alice"));
+    devices.sort();
+    let mut expected = vec![phone_key, d.public()];
+    expected.sort();
+    assert_eq!(
+        devices, expected,
+        "two sessions for alice, one per presented key"
+    );
+    assert!(node.has_session_for(&kh("alice"), &phone_key));
+    assert!(node.has_session_for(&kh("alice"), &d.public()));
+    // a request from each session is attributed to the device it arrived on
+    let _ = request_on(
+        &s1.conn,
+        REQUEST_CURRENCY,
+        &currency_request(&kh("alice"), [1; 16]),
+    )
+    .await;
+    let _ = request_on(
+        &s2.conn,
+        REQUEST_CURRENCY,
+        &currency_request(&kh("alice"), [2; 16]),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let seen = seen.lock().unwrap().clone();
+    assert!(seen.contains(&(kh("alice"), phone_key)), "{seen:?}");
+    assert!(seen.contains(&(kh("alice"), d.public())), "{seen:?}");
+    // neither session ended the other
+    assert!(!s1.conn.close_reason().is_some());
+    assert!(!s2.conn.close_reason().is_some());
+}
+
+// acceptance: QUE-21
+#[tokio::test]
+async fn que_21_a_ciphertext_waits_for_the_device_it_names_and_reaches_that_session_alone() {
+    let t = now();
+    let (node, addr) = spawn_node(node_cfg("bob", 5));
+    let phone_key = test_identity("alice").public.ed.to_bytes();
+    let d2 = desktop(32, t);
+    // both devices offline: a submission for alice naming the phone (d1)
+    node.enqueue_for(kh("alice"), phone_key, b"for the phone".to_vec())
+        .unwrap();
+    assert_eq!(node.queued(&kh("alice")), 1);
+    // d2 attaches, drains and detaches: told nothing waits, given nothing
+    let ep = client_ep();
+    let laptop = client_cfg("alice").with_credential(d2.clone());
+    let AttachOutcome::Attached(mut s2) = attach(&laptop, &ep, kh("bob"), addr, false).await else {
+        panic!("the desktop attaches")
+    };
+    assert_eq!(s2.ack.queued, 0, "field 4 is 0 for d2");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), s2.deliveries.recv())
+            .await
+            .is_err(),
+        "d2 receives nothing"
+    );
+    s2.conn.close(0u32.into(), b"");
+    assert_eq!(node.queued(&kh("alice")), 1, "still waiting for d1");
+    // then d1 attaches
+    let phone = client_cfg("alice");
+    let AttachOutcome::Attached(mut s1) = attach(&phone, &ep, kh("bob"), addr, false).await else {
+        panic!("the phone attaches")
+    };
+    assert_eq!(s1.ack.queued, 1, "field 4 is 1 for d1");
+    let got = tokio::time::timeout(Duration::from_secs(3), s1.deliveries.recv())
+        .await
+        .expect("delivered")
+        .expect("open");
+    assert_eq!(got, b"for the phone");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(node.queued(&kh("alice")), 0);
+}

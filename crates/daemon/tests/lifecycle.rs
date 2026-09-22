@@ -179,6 +179,7 @@ async fn the_daemon_serves_from_a_configuration_and_redelivers_across_a_restart_
     // something is accepted for alice while the daemon is down: the queue's
     // directory store is what a restart finds
     DirStore::new(&l.queue).push(Queued {
+        device: rhtn_transport::queue::ANY_DEVICE,
         ciphertext: b"kept across the restart".to_vec(),
         recipient: kh("alice"),
         arrival: 1,

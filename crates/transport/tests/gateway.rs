@@ -48,7 +48,7 @@ async fn a_resource_request_is_never_processed_from_early_data_and_a_stream_carr
     );
     cfg.log = Log::recording();
     let h = handled.clone();
-    cfg.on_request = Some(Arc::new(move |_peer, family, _body| {
+    cfg.on_request = Some(Arc::new(move |_peer, _device, family, _body| {
         let h = h.clone();
         Box::pin(async move {
             if family == Family::ResourceRequest {
@@ -157,7 +157,7 @@ async fn a_malformed_resource_body_is_answered_status_three_and_a_malformed_fram
     cfg.log = Log::recording();
     let reached: Arc<Mutex<Vec<Family>>> = Arc::default();
     let r = reached.clone();
-    cfg.on_request = Some(Arc::new(move |_peer, family, body| {
+    cfg.on_request = Some(Arc::new(move |_peer, _device, family, body| {
         let r = r.clone();
         Box::pin(async move {
             r.lock().unwrap().push(family);

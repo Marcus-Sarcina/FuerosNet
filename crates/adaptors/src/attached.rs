@@ -74,6 +74,14 @@ impl Serving for AttachedNode {
         self.node
     }
 
+    /// The key the serving node presented on the current session; all
+    /// zero where no session is up, which no device matches.
+    fn node_device(&self) -> [u8; 32] {
+        (self.session)()
+            .and_then(|s| rhtn_transport::tls::peer_key(&s.conn))
+            .unwrap_or([0; 32])
+    }
+
     /// A node across a session tells nobody what it holds; a client finds
     /// out by fetching (`wire-format.md` §7.8).
     fn holds(&self, _subject: &Keyhash) -> bool {
@@ -202,6 +210,12 @@ pub fn follow(
                         rhtn_node::store::KIND_TRANSACTION => c.horizon.ingest(&object, &known),
                         rhtn_node::store::KIND_ENDPOINT_RECORD => {
                             c.horizon.ingest_endpoint(&object, &known)
+                        }
+                        // and the delegations of the parties in it, which
+                        // bind a delegated peer on a direct path with no
+                        // frame (`light-client-requirements.md` §4.2)
+                        rhtn_node::store::KIND_DELEGATION => {
+                            c.horizon.ingest_delegation(&object, &known)
                         }
                         _ => rhtn_client::horizon::Took::Refused,
                     };

@@ -84,13 +84,17 @@ async fn attach_light(name: &str, node: &Arc<LiveNode>) -> Light {
     }
 }
 
+/// A bundle by `name` for its seed-holding device: the classical member,
+/// which is the key its session presents (`wire-format.md` §7.8).
 fn bundle(name: &str) -> Vec<u8> {
+    let me = id(name);
+    let device = *me.public.ed.as_bytes();
     PrekeyBundle::build(
-        &id(name),
+        &me,
         CONSTRUCTION_PQXDH,
         b"reusable material",
         1_800_000_000,
-        &[0u8; 32],
+        &device,
     )
 }
 
@@ -197,7 +201,7 @@ async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
         subject: carol.me,
         one_time: true,
         nonce: [1; 16],
-        device: Some([0u8; 32]),
+        device: Some(*id("carol").public.ed.as_bytes()),
     }
     .encode();
     let reply = PrekeyReply::decode(

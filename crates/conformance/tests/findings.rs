@@ -111,10 +111,10 @@ fn f09_queue_restart_in_same_second_must_not_overwrite() {
     use rhtn_node::queue::{DirStore, QueueStore, Queued};
     let dir = std::env::temp_dir().join(format!("rhtn-review-queue-{}", std::process::id()));
     let first = DirStore::new(&dir);
-    first.push(Queued { recipient: [7;32], arrival: 100, ciphertext: vec![1] });
+    first.push(Queued { recipient: [7;32], device: [0;32], arrival: 100, ciphertext: vec![1] });
     drop(first);
     let second = DirStore::new(&dir);
-    second.push(Queued { recipient: [7;32], arrival: 100, ciphertext: vec![2] });
+    second.push(Queued { recipient: [7;32], device: [0;32], arrival: 100, ciphertext: vec![2] });
     let got = second.list(&[7;32]);
     std::fs::remove_dir_all(dir).unwrap();
     assert_eq!(got.len(), 2, "accepted queued messages survive a restart in their arrival second");
@@ -189,7 +189,7 @@ async fn f11_live_node_must_use_a_running_clock() {
     let live = LiveNode::start(cfg, view, ids.clone(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
     clock.store(101, std::sync::atomic::Ordering::SeqCst);
     let req = CurrencyRequest { subject: n.public.keyhash, nonce: [7;16] };
-    let bytes = live.node.cfg.on_request.as_ref().unwrap()(n.public.keyhash, rhtn_codec::schema::Family::CurrencyRequest, req.encode()).await.unwrap();
+    let bytes = live.node.cfg.on_request.as_ref().unwrap()(n.public.keyhash, [0;32], rhtn_codec::schema::Family::CurrencyRequest, req.encode()).await.unwrap();
     let CurrencyReply::Attestation { bytes, .. } = CurrencyReply::decode(&bytes).unwrap() else { panic!("patron must issue") };
     let att = rhtn_archive::currency::parse_attestation(&ids, &bytes).unwrap();
     assert_eq!(att.issued_at, 101, "currency issuance must read current clock rather than the view's setup timestamp");

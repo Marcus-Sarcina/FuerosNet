@@ -152,7 +152,10 @@ Kept to what earns its place:
   documents, tools and outputs read and compared, never rewritten. The format
   step landed the same day as step 3a, rustfmt at its default width [author,
   2026-09-22], the reviewer harness and the generated stubs outside its reach;
-  the gate's list is complete.
+  the gate's list is complete. A sixth step followed on 2026-09-22 [author]:
+  `cargo-sweep`, stamped before the pins and run after the fuzz smoke, so a
+  pass leaves one copy of every artifact; `target/` had reached 58 GB, 38 GB
+  of it superseded test binaries at about 330 MB each.
 - **Every long job is fenced** as the prover now is: a core cap and a heap ceiling
   under `nice`. A fuzzer or a full build on 32 cores reproduces the 2026-09-08
   lock-up otherwise.

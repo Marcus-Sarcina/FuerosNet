@@ -673,14 +673,18 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
         "a writable pool takes a deposit"
     );
 
-    // the subject's directory stops accepting new files, which is the
-    // deterministic form of a node that cannot store what it was handed
-    let subject = dir.join("prekeys").join(
-        kh("alice")
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>(),
-    );
+    // the pool's directory stops accepting new files, which is the
+    // deterministic form of a node that cannot store what it was handed;
+    // a pool stocked for any device sits under `any`
+    let subject = dir
+        .join("prekeys")
+        .join(
+            kh("alice")
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+        )
+        .join("any");
     std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o500)).unwrap();
     let held = svc.pool_size(&kh("alice"));
 

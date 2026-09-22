@@ -25,7 +25,7 @@ async fn s03_ffi_send_must_report_a_refused_relay_submission() {
  let ids=vec![a.public.clone(),b.public.clone(),c.public.clone()];let pins=Pins::new();for id in &ids {pins.pin_identity(id);}
  let mut view=NodeView::new(b.clone(),Locator::root(b.public.keyhash,Seqno {series:1,counter:0}));
  let mut ck=rhtn_client::payload::PayloadKeys::generate(&mut |b|b.fill(31),1_800_000_000);
- view.prekeys.publish(&ids,&ck.bundle(&c,1_800_000_000)).unwrap();
+ view.prekeys.publish(&ids,&ck.bundle(&c,c.public.ed.as_bytes(),1_800_000_000)).unwrap();
  let mut cfg=NodeConfig::defaults(b.clone(),pins,30);cfg.queue_cap=Some(0);
  let node=LiveNode::start(cfg,view,ids.clone(),AnchorTable::new(0,Ingestion::UnverifiedGossip));
  assert!(node.node.serves(&c.public.keyhash),"control: Carol is known through her held bundle");

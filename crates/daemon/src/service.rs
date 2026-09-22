@@ -350,6 +350,12 @@ impl Service {
             (None, None) => unreachable!("settled above"),
         };
         view.store = store;
+        // the standing acknowledgement policy: every adoption under one of
+        // this node's subordinates, or none (`infra-client-requirements.md`
+        // §10.1)
+        if cfg.acknowledge {
+            view.ack_policy = Some(Arc::new(|_, _| true));
+        }
         view.prekeys = prekeys;
         // this key's own signed history, kept apart from the seen-set: the
         // horizon bounds one and nothing bounds the other [author,

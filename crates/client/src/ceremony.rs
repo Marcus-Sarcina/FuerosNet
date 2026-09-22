@@ -389,7 +389,10 @@ impl Client {
         let now = device.clock.now_ms() / 1000;
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
+        let mut payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
+        // this device holds the seed, so it is named by the identity's
+        // classical member (`wire-format.md` §7.8) until told otherwise
+        payload.device = *id.public.ed.as_bytes();
         Client {
             id: Box::new(id),
             known,
@@ -1418,7 +1421,10 @@ impl Client {
         let now = self.now_s();
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let bundle = self.payload.keys.bundle(&self.id, now);
+        let bundle = self
+            .payload
+            .keys
+            .bundle(&self.id, &self.payload.device, now);
         let n = self.payload.cfg.pool_target;
         let keys = self.payload.keys.one_time_keys(n, &mut fresh);
         self.payload.pool_reported = n;
@@ -1618,7 +1624,11 @@ impl Client {
             let random = self.device.random.clone();
             let mut fresh = |out: &mut [u8]| random.fill(out);
             self.payload.keys.rotate_signed_prekey(now, &mut fresh);
-            out.push(Msg::PublishBundle(self.payload.keys.bundle(&self.id, now)));
+            out.push(Msg::PublishBundle(self.payload.keys.bundle(
+                &self.id,
+                &self.payload.device,
+                now,
+            )));
         }
         if self.payload.pool_reported < self.payload.cfg.replenish_below {
             out.extend(self.restock());
@@ -1681,44 +1691,63 @@ impl Client {
             return Ok(vec![Msg::Transport(bytes.to_vec())]);
         }
         let plaintext = payload::wrap(kind, bytes);
+        // a session is with a device (design §14.2.4): every device of the
+        // recipient with a session open gets its own ciphertext, and every
+        // device without one gets a session opened, on a one-time key
+        // asked for that device (`wire-format.md` §7.8 field 4)
+        let me = self.payload.device;
+        let mut out = Vec::new();
         if self.payload.sessions.has_session(&to) {
-            let m = self.payload.sessions.send(&to, &plaintext)?;
-            return Ok(vec![self.route(to, m)]);
+            for (device, m) in self.payload.sessions.send(&me, &to, &plaintext)? {
+                out.push(self.route(to, m, device));
+            }
         }
-        self.payload.pending.entry(to).or_default().push(plaintext);
-        if self.payload.outstanding.values().any(|t| *t == to) {
-            return Ok(Vec::new());
+        let devices = self.devices_of(&to);
+        if devices.is_empty() {
+            return Err(PayloadError::NoBundle);
         }
-        let nonce = self.nonce();
-        self.payload.outstanding.insert(nonce, to);
-        // a one-time key is one device's: the device whose reusable material
-        // this client holds, or the recipient's seed-holding device where
-        // none was swept (`wire-format.md` §7.8 field 4)
-        let device = self.device_of(&to).ok_or(PayloadError::NoBundle)?;
-        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(
-            to, device, nonce,
-        ))])
+        for device in devices {
+            if self.payload.sessions.has_session_with(&to, &device) {
+                continue;
+            }
+            self.payload
+                .pending
+                .entry((to, device))
+                .or_default()
+                .push(plaintext.clone());
+            if self
+                .payload
+                .outstanding
+                .values()
+                .any(|t| *t == (to, device))
+            {
+                continue;
+            }
+            let nonce = self.nonce();
+            self.payload.outstanding.insert(nonce, (to, device));
+            out.push(Msg::PrekeyRequest(payload::one_time_request(
+                to, device, nonce,
+            )));
+        }
+        Ok(out)
     }
 
-    /// The recipient's device a session with `to` is with: the device its
-    /// prefetched bundle names, else the classical key of the identity
+    /// The recipient's devices a session with `to` is with: the devices
+    /// its prefetched bundles name, else the classical key of the identity
     /// held for it, which names the seed-holding device.
-    fn device_of(&self, to: &Keyhash) -> Option<[u8; 32]> {
-        self.payload
-            .sessions
-            .prefetched
-            .get(to)
-            .map(|p| p.device)
-            .or_else(|| {
-                self.known
-                    .iter()
-                    .find(|i| i.keyhash == *to)
-                    .map(|i| *i.ed.as_bytes())
-            })
+    fn devices_of(&self, to: &Keyhash) -> Vec<[u8; 32]> {
+        let known = self.payload.sessions.devices_of(to);
+        if !known.is_empty() {
+            return known;
+        }
+        self.known
+            .iter()
+            .find(|i| i.keyhash == *to)
+            .map(|i| vec![*i.ed.as_bytes()])
+            .unwrap_or_default()
     }
 
-    fn route(&self, to: Keyhash, bytes: Vec<u8>) -> Msg {
-        let device = self.device_of(&to).unwrap_or([0; 32]);
+    fn route(&self, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Msg {
         if self.device.direct.reachable(&to) {
             Msg::Payload { to, bytes, device }
         } else {
@@ -1733,22 +1762,22 @@ impl Client {
     pub fn take_prekey_reply(&mut self, bytes: &[u8]) -> Result<Vec<Msg>, String> {
         if let Ok(replies) = decode_batch_reply(bytes) {
             for r in replies {
-                // one bundle per device (`wire-format.md` §7.8); one device
-                // per subject is kept here until sessions are per device
+                // one bundle per device (`wire-format.md` §7.8), each kept
+                // under the device it names
                 for b in &r.bundles {
                     if let Ok(p) = payload::read_bundle(&self.known, b) {
-                        self.payload.sessions.prefetched.insert(p.subject, p);
+                        self.payload.sessions.prefetch(p);
                     }
                 }
             }
             return Ok(Vec::new());
         }
         let r = PrekeyReply::decode(bytes)?;
-        let Some(to) = self.payload.outstanding.remove(&r.nonce) else {
+        let Some((to, device)) = self.payload.outstanding.remove(&r.nonce) else {
             // a reusable-only reply: the bundles are kept, and nothing opens
             for b in &r.bundles {
                 if let Ok(p) = payload::read_bundle(&self.known, b) {
-                    self.payload.sessions.prefetched.insert(p.subject, p);
+                    self.payload.sessions.prefetch(p);
                 }
             }
             return Ok(Vec::new());
@@ -1759,14 +1788,17 @@ impl Client {
                 if p.subject != to {
                     return Err("bundle for another subject".into());
                 }
-                self.payload.sessions.prefetched.insert(to, p.clone());
+                if p.device != device {
+                    return Err("bundle for another device".into());
+                }
+                self.payload.sessions.prefetch(p.clone());
                 p
             }
             None => self
                 .payload
                 .sessions
                 .prefetched
-                .get(&to)
+                .get(&(to, device))
                 .cloned()
                 .ok_or("no bundle for the peer")?,
         };
@@ -1774,17 +1806,23 @@ impl Client {
             Some(k) => Some(payload::OneTimeKey::decode(&k)?),
             None => None,
         };
-        let mut waiting = self.payload.pending.remove(&to).unwrap_or_default();
+        let mut waiting = self
+            .payload
+            .pending
+            .remove(&(to, device))
+            .unwrap_or_default();
         if waiting.is_empty() {
             waiting.push(payload::wrap(payload::KIND_APPLICATION, b""));
         }
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
+        let me = self.payload.device;
         let first = self
             .payload
             .sessions
             .open(
                 &self.payload.keys,
+                &me,
                 to,
                 &their,
                 one_time.as_ref(),
@@ -1792,16 +1830,25 @@ impl Client {
                 &waiting[0],
             )
             .map_err(|e| e.to_string())?;
-        let mut out = vec![self.route(to, first)];
+        let mut out = vec![self.route(to, first, device)];
         for p in &waiting[1..] {
-            let m = self
+            let r = self
                 .payload
                 .sessions
-                .send(&to, p)
-                .map_err(|e| e.to_string())?;
-            out.push(self.route(to, m));
+                .ratchets
+                .get_mut(&(to, device))
+                .ok_or("no session")?;
+            let m = r.encrypt(p)?;
+            out.push(self.route(to, payload::channel_message(&me, &m), device));
         }
         Ok(out)
+    }
+
+    /// Run as another of this identity's devices: what a desktop holding a
+    /// delegation is (design §14.2.4).  Its bundle names `key`, the
+    /// transport key it presents, and its messages say they are from it.
+    pub fn as_device(&mut self, key: [u8; 32]) {
+        self.payload.device = key;
     }
 
     /// What arrived on the end-to-end channel from `from`: decrypted on the

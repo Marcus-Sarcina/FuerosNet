@@ -258,11 +258,11 @@ impl Courier {
                         }
                     }
                     Msg::Transport(b) => {
+                        // material for the serving node itself is addressed
+                        // to the device it presented (`wire-format.md` §7.10)
                         let node = me.serving.me();
-                        // the serving node's own device is the transport key it
-                        // presented, which the courier does not yet hold: an
-                        // all-zero device until the queue is per device (QUE-21)
-                        if !me.serving.relay(me.me(), node, b.clone(), [0; 32]).await {
+                        let device = me.serving.node_device();
+                        if !me.serving.relay(me.me(), node, b.clone(), device).await {
                             out.refused.push(Msg::Transport(b));
                         }
                     }

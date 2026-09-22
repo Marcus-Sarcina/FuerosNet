@@ -2807,6 +2807,11 @@ the patron, or the patron departs, the acknowledgement describes a subtree the n
 is no longer in and confers nothing. **No revocation object is needed**: the
 condition it depends on is already visible in topology.
 
+**It travels in the topology class**, as `TopologyPush` body kind 3 (§10.1), pushed
+by the grandpatron's node as it issues it and forwarded under §10.1.1's rule, which
+carries it as far as the acknowledged node's own adoption travels [author,
+2026-09-22].
+
 ### 7.6 Node endpoint record
 
 **How an infra node's address reaches the parties that must refer to it.** Modelled on `AnchorEntry` (§7.2), which is the anchor-table
@@ -3716,7 +3721,8 @@ SiblingUpdate = {
 TopologyPush = {
   1: uint,             ; body kind: 0 = signed transaction envelope,
                        ;            1 = EndpointRecord (§7.6),
-                       ;            2 = Delegation (§8.2)
+                       ;            2 = Delegation (§8.2),
+                       ;            3 = SubtreeAck (§7.5)
   2: bstr              ; the object, byte-for-byte as received. NOT re-encoded:
                        ;   it is already canonical (§1) and re-serialising risks
                        ;   changing bytes a signature covers
@@ -4068,7 +4074,12 @@ and accepted as gossip precisely so that reaching the address is what confirms i
 (§7.6). **A `Delegation` is stored when its hybrid signature verifies under the
 delegating keyhash's material and replaces any earlier one held for that keyhash**
 [author, 2026-09-21]: it is state, not a transaction, advances no archive, and a
-holder keeps the newest by `not_before` alone.
+holder keeps the newest by `not_before` alone. **A `SubtreeAck` is stored when its
+signature verifies under the key its grandpatron's held delegation names (§7.5)
+and the adoption it acknowledges is held**, deferred where the delegation is not
+yet held, as any signer whose key the holder lacks; it is state too, and it is
+dropped when the acknowledged relationship ends (§7.5) rather than kept as a
+record of it [author, 2026-09-22].
 
 **Reach is a consequence of storage policy, not a separate mechanism.** A hop
 counter would encode the *sender's* horizon and impose it on every receiver, and
@@ -4094,13 +4105,14 @@ hold it.
 it.** The store the node keeps anyway is the seen-set. A horizon contains cycles
 once peering exists (design §6.3); the second arrival is a duplicate and dies there.
 
-**Identity differs by body kind, and all three are already defined:**
+**Identity differs by body kind, and all four are already defined:**
 
 | Kind | Identity | Duplicate when |
 |---|---|---|
 | Signed transaction | `txid` (§1) | the `txid` is already held |
 | `EndpointRecord` | `(subject keyhash, seqno)` | the held `seqno` is greater than or equal (§2.3) |
 | `Delegation` | the delegating keyhash (§8.2, field 2) | the held `not_before` is greater than or equal (§8.2) |
+| `SubtreeAck` | `(adoption txid, grandpatron keyhash)` (§7.5, fields 1 and 2) | the pair is already held |
 
 **An `EndpointRecord` therefore supersedes rather than accumulating**, which is what a
 current-address record should do, and §2.3's strictly-greater rule already governs it.

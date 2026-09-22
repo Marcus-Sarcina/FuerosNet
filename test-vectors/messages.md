@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `db149452cf531e4b…`, `network-design.md` `e3822764defcc4dc…` and `light-client-requirements.md` `4ab4927a4ff0f0cf…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `5fb34586d8b9d970…`, `network-design.md` `e3822764defcc4dc…` and `light-client-requirements.md` `4ab4927a4ff0f0cf…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -1164,6 +1164,17 @@ f8196daabb21145f697536f16c393ed26d696e5799ba17546f2d428abc03649b
 752b5ce1f9370cc345539ad0db01479cc7d3dce126274e598da1cbd0e50d196e
 71a9b0ce2533bec37a82add2f500000000000000000000000000000000000005
 0c151c2025
+```
+**TopologyPush — kind 3, carrying the subtree acknowledgement byte-for-byte: the grandpatron's node pushes it as it issues it (§10.1, §7.5)** (198 bytes, length prefix included):
+
+```
+000000c28205a201030258baa5015820252e1f58e8c0d3f9002fad507fe04dcc
+772859f8183743106e2426062c840e3e02582071591ef14497c49bd95fc61e24
+3ccc9e2d041f54d210e89ad6654f61554a2cf20358208410def778a5de3a2599
+1aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a041a69d99f68058443a1
+0127a0f658408fac292d08a649c335e8aaff268f842bfb34ca8c8574b0db1321
+6918c25207ad999056f8643d2ae0ec338301592a5bb8bc388cc7e7ceff1a6723
+3d3c9b53c607
 ```
 
 ## Requests (bidirectional streams)

@@ -231,12 +231,14 @@ fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
     // woken; so has an unrelated party, which this must not touch
     p.wake.register(
         kh("bob"),
+        [0u8; 32],
         Some("https://push.example/bob".into()),
         Some(vec![7; 32]),
         None,
     );
     p.wake.register(
         kh("w1"),
+        [0u8; 32],
         Some("https://push.example/w1".into()),
         Some(vec![9; 32]),
         None,

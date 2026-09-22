@@ -19,7 +19,7 @@ fn layout(tag: &str) -> Layout {
     let peers=dir.join("peers");
     let text=["alice","bob","carol"].iter().map(|n|test_identity(n).public.key_material().iter().map(|b|format!("{b:02x}")).collect::<String>()).collect::<Vec<_>>().join("\n");
     std::fs::write(&peers,text).unwrap();
-    let cfg=Config { resources:None, resource_limits:Default::default(), identity:Some(identity), operator:None, transport_key:None, delegations:None, endpoint_record:None, anchor_entry:None, listen:"127.0.0.1:0".parse().unwrap(), upstream:None, queue:dir.join("queue"), archive:dir.join("archive"), queue_cap:None, heartbeat_secs:30, reconcile_secs:900, ingestion:Ingestion::UnverifiedGossip, request_allowance:(120,60), prekeys:dir.join("prekeys"), topology:dir.join("topology") };
+    let cfg=Config { resources:None, resource_limits:Default::default(), identity:Some(identity), operator:None, transport_key:None, delegations:None, endpoint_record:None, anchor_entry:None, acknowledge:false, listen:"127.0.0.1:0".parse().unwrap(), upstream:None, queue:dir.join("queue"), archive:dir.join("archive"), queue_cap:None, heartbeat_secs:30, reconcile_secs:900, ingestion:Ingestion::UnverifiedGossip, request_allowance:(120,60), prekeys:dir.join("prekeys"), topology:dir.join("topology") };
     Layout { dir,cfg,peers }
 }
 

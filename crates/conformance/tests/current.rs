@@ -26,15 +26,15 @@ fn r02_initial_payload_must_match_the_named_senders_bound_identity() {
     let mut victim_keys=PayloadKeys::generate(&mut |b|b.fill(12),100);
     let mut recipient_keys=PayloadKeys::generate(&mut |b|b.fill(13),100);
     let ids=vec![sender.public.clone(),victim.public.clone(),recipient.public.clone()];
-    let recipient_bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,100)).unwrap();
-    let victim_bundle=read_bundle(&ids,&victim_keys.bundle(&victim,100)).unwrap();
+    let recipient_bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,recipient.public.ed.as_bytes(),100)).unwrap();
+    let victim_bundle=read_bundle(&ids,&victim_keys.bundle(&victim,victim.public.ed.as_bytes(),100)).unwrap();
     let mut sender_sessions=Sessions::default();
-    let initial=sender_sessions.open(&sender_keys,recipient.public.keyhash,&recipient_bundle,None,&mut fresh,b"message from Carol").unwrap();
+    let initial=sender_sessions.open(&sender_keys,sender.public.ed.as_bytes(),recipient.public.keyhash,&recipient_bundle,None,&mut fresh,b"message from Carol").unwrap();
     let mut control=Sessions::default();
-    control.prefetched.insert(sender.public.keyhash,read_bundle(&ids,&sender_keys.bundle(&sender,100)).unwrap());
+    control.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
     assert_eq!(control.receive(&mut recipient_keys.clone(),sender.public.keyhash,&initial,&mut fresh).unwrap(),b"message from Carol");
     let mut receiver=Sessions::default();
-    receiver.prefetched.insert(victim.public.keyhash,victim_bundle);
+    receiver.prefetch(victim_bundle);
     assert!(receiver.receive(&mut recipient_keys,victim.public.keyhash,&initial,&mut fresh).is_err(),"design §14.2: a relay must not turn Carol's initial message into an authenticated session with Alice");
 }
 
@@ -44,11 +44,11 @@ fn r03_failed_initial_message_must_not_consume_the_private_one_time_key() {
     let mut sender_keys=PayloadKeys::generate(&mut |b|b.fill(11),100);
     let mut recipient_keys=PayloadKeys::generate(&mut |b|b.fill(13),100);
     let ids=vec![sender.public.clone(),recipient.public.clone()];
-    let bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,100)).unwrap();
+    let bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,recipient.public.ed.as_bytes(),100)).unwrap();
     let otk=OneTimeKey::decode(&recipient_keys.one_time_keys(1,&mut fresh)[0]).unwrap();
-    let mut tx=Sessions::default();let initial=tx.open(&sender_keys,recipient.public.keyhash,&bundle,Some(&otk),&mut fresh,b"valid message").unwrap();
+    let mut tx=Sessions::default();let initial=tx.open(&sender_keys,sender.public.ed.as_bytes(),recipient.public.keyhash,&bundle,Some(&otk),&mut fresh,b"valid message").unwrap();
     let mut receiver=Sessions::default();
-    receiver.prefetched.insert(sender.public.keyhash,read_bundle(&ids,&sender_keys.bundle(&sender,100)).unwrap());
+    receiver.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
     let mut control=Sessions::default();
     control.prefetched=receiver.prefetched.clone();
     assert_eq!(control.receive(&mut recipient_keys.clone(),sender.public.keyhash,&initial,&mut fresh).unwrap(),b"valid message");

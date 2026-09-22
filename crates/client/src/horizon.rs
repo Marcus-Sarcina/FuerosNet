@@ -20,6 +20,7 @@ use rhtn_archive::record::Record;
 use rhtn_archive::topology::{End, Evaluation, Snapshot, Table, unfolded};
 use rhtn_archive::tx::Locator;
 use rhtn_crypto::verify::Lookup;
+use rhtn_crypto::verify::{self, Delegation};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What a wake did with the snapshot it found.
@@ -141,6 +142,12 @@ pub struct Horizon {
     /// shape with no addresses in it: it can say who its patron's siblings
     /// are and not reach any of them.
     endpoints: BTreeMap<(Keyhash, u32), EndpointRecord>,
+    /// The delegations of the parties in the horizon, one per delegating
+    /// keyhash, the newest by `not_before` (`light-client-requirements.md`
+    /// §4.2) [author, 2026-09-21]: what binds a delegated peer on a direct
+    /// path without waiting for its frame.  Current state, never a history
+    /// of keys.
+    delegations: BTreeMap<Keyhash, Delegation>,
     /// `(subject, series, counter)` retired by an equivocation: neither
     /// content is current and no later one for that pair is taken
     /// (`wire-format.md` §10.1.2).
@@ -156,12 +163,51 @@ impl Horizon {
             places: BTreeMap::new(),
             locators: BTreeMap::new(),
             endpoints: BTreeMap::new(),
+            delegations: BTreeMap::new(),
             conflicts: BTreeSet::new(),
         }
     }
 
     pub fn me(&self) -> Keyhash {
         self.me
+    }
+
+    /// Take a delegation the serving node propagated (`wire-format.md`
+    /// §10.1): stored when it verifies under the delegating keyhash's
+    /// material and that keyhash is a party this client can place, the
+    /// newest per keyhash kept and the rest dropped.
+    pub fn ingest_delegation<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
+        let Ok(d) = verify::delegation(ids, bytes) else {
+            return Took::Refused;
+        };
+        // bounded by the horizon, as the records are: a delegation of a
+        // party this client cannot place is not one it will dial
+        if d.keyhash != self.me && self.distance(&d.keyhash).is_none() {
+            return Took::Refused;
+        }
+        if self
+            .delegations
+            .get(&d.keyhash)
+            .is_some_and(|held| held.not_before >= d.not_before)
+        {
+            return Took::Duplicate;
+        }
+        self.delegations.insert(d.keyhash, d);
+        Took::Applied
+    }
+
+    /// The delegation held for a party in the horizon.
+    pub fn delegation(&self, keyhash: &Keyhash) -> Option<&Delegation> {
+        self.delegations.get(keyhash)
+    }
+
+    /// The held delegation naming transport key `key`.
+    pub fn delegation_by_key(&self, key: &[u8; 32]) -> Option<&Delegation> {
+        self.delegations.values().find(|d| d.key == *key)
+    }
+
+    pub fn delegations(&self) -> usize {
+        self.delegations.len()
     }
 
     /// Take an endpoint record the serving node propagated.
@@ -557,6 +603,8 @@ impl Horizon {
         self.places.retain(|(n, _), _| inside.contains(n));
         self.locators.retain(|(n, _), _| inside.contains(n));
         self.endpoints.retain(|(n, _), _| inside.contains(n));
+        self.delegations
+            .retain(|n, _| inside.contains(n) || *n == self.me);
         self.records.retain(|_, b| {
             Record::parse(b).is_ok_and(|r| {
                 r.participants().iter().any(|p| inside.contains(p))

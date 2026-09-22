@@ -606,7 +606,7 @@ e2e = section_blocks('End-to-end payloads')
 check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
       'messages: every fixture block belongs to a named section')
 
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 5, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -663,6 +663,10 @@ push_deleg = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 5][1]][1
 deleg_frame_body = frame_objs[EXPECT_FRAMES.index(7)][1]
 check(push_deleg[1] == 2 and push_deleg[2] == enc(deleg_frame_body).hex(),
       'TopologyPush kind 2 carries the delegation byte-for-byte, as frame 7 carries it')
+push_ack = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 5][2]][1]
+ack_obj = canonical(bytes.fromhex(push_ack[2]))
+check(push_ack[1] == 3 and isinstance(ack_obj, dict) and set(ack_obj) == {1, 2, 3, 4, 5},
+      'TopologyPush kind 3 carries a subtree acknowledgement, fields 1 to 5, byte-for-byte')
 srv = canonical(bytes.fromhex(replies[0].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],

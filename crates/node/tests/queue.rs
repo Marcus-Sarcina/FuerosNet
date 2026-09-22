@@ -153,11 +153,13 @@ fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
     let _ = std::fs::remove_dir_all(&dir);
     let first = DirStore::new(&dir);
     first.push(Queued {
+        device: rhtn_transport::queue::ANY_DEVICE,
         recipient: kh("carol"),
         arrival: 100,
         ciphertext: b"one".to_vec(),
     });
     first.push(Queued {
+        device: rhtn_transport::queue::ANY_DEVICE,
         recipient: kh("carol"),
         arrival: 100,
         ciphertext: b"two".to_vec(),
@@ -166,6 +168,7 @@ fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
     // the node restarts within the same second and accepts a third
     let second = DirStore::new(&dir);
     second.push(Queued {
+        device: rhtn_transport::queue::ANY_DEVICE,
         recipient: kh("carol"),
         arrival: 100,
         ciphertext: b"three".to_vec(),

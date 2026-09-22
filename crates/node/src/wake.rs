@@ -41,11 +41,12 @@ pub enum Registered {
     Refused,
 }
 
-/// The endpoints, by client.  A relationship holds one; registering
-/// again replaces it, which is how a client refreshes.
+/// The endpoints, by client and device (`wire-format.md` §8.2: a
+/// registration is the session's device's).  A device holds one;
+/// registering again replaces it, which is how a client refreshes.
 #[derive(Debug, Default)]
 pub struct WakeRegister {
-    endpoints: BTreeMap<Keyhash, Endpoint>,
+    endpoints: BTreeMap<(Keyhash, [u8; 32]), Endpoint>,
     /// Where they are kept, once an owner has said.  Absent, they live in
     /// memory alone.
     dir: Option<PathBuf>,
@@ -70,26 +71,48 @@ impl WakeRegister {
         let d = dir.join("wake");
         if let Ok(rd) = std::fs::read_dir(&d) {
             for e in rd.flatten() {
-                let Some(who) = unhex(&e.file_name().to_string_lossy()) else {
+                let name = e.file_name().to_string_lossy().to_string();
+                let Some((who, dev)) = name.split_once('-') else {
+                    continue;
+                };
+                let (Some(who), Some(dev)) = (unhex(who), unhex(dev)) else {
                     continue;
                 };
                 let Ok(text) = std::fs::read_to_string(e.path()) else {
                     continue;
                 };
                 if let Some(ep) = parse(&text) {
-                    self.endpoints.insert(who, ep);
+                    self.endpoints.insert((who, dev), ep);
                 }
             }
         }
         self.dir = Some(dir);
     }
 
+    /// One of the client's endpoints, whichever device.
     pub fn get(&self, client: &Keyhash) -> Option<&Endpoint> {
-        self.endpoints.get(client)
+        self.of_client(client).next().map(|(_, e)| e)
     }
 
+    pub fn get_for(&self, client: &Keyhash, device: &[u8; 32]) -> Option<&Endpoint> {
+        self.endpoints.get(&(*client, *device))
+    }
+
+    fn of_client<'a>(
+        &'a self,
+        client: &Keyhash,
+    ) -> impl Iterator<Item = ([u8; 32], &'a Endpoint)> + 'a {
+        let client = *client;
+        self.endpoints
+            .range((client, [0; 32])..=(client, [0xff; 32]))
+            .map(|((_, d), e)| (*d, e))
+    }
+
+    /// Every client with an endpoint, once each.
     pub fn holders(&self) -> Vec<Keyhash> {
-        self.endpoints.keys().copied().collect()
+        let mut out: Vec<Keyhash> = self.endpoints.keys().map(|(c, _)| *c).collect();
+        out.dedup();
+        out
     }
 
     /// Take what `client` registered.  No URL withdraws: opting out is as
@@ -97,12 +120,13 @@ impl WakeRegister {
     pub fn register(
         &mut self,
         client: Keyhash,
+        device: [u8; 32],
         url: Option<String>,
         key: Option<Vec<u8>>,
         lapses_at: Option<u64>,
     ) -> Registered {
         let Some(url) = url else {
-            self.forget(&client);
+            self.forget_device(&client, &device);
             return Registered::Withdrawn;
         };
         let key = key.unwrap_or_default();
@@ -118,22 +142,30 @@ impl WakeRegister {
         if let Some(dir) = &self.dir {
             let d = dir.join("wake");
             if std::fs::create_dir_all(&d)
-                .and_then(|_| std::fs::write(d.join(hex(&client)), render(&ep)))
+                .and_then(|_| std::fs::write(d.join(file_name(&client, &device)), render(&ep)))
                 .is_err()
             {
                 return Registered::Refused;
             }
         }
-        self.endpoints.insert(client, ep);
+        self.endpoints.insert((client, device), ep);
         Registered::Held
+    }
+
+    /// Forget one device's endpoint.
+    pub fn forget_device(&mut self, client: &Keyhash, device: &[u8; 32]) {
+        self.endpoints.remove(&(*client, *device));
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_file(dir.join("wake").join(file_name(client, device)));
+        }
     }
 
     /// Forget one endpoint: on withdrawal, and when the relationship that
     /// justified holding it ends (`infra-client-requirements.md` §6.1).
     pub fn forget(&mut self, client: &Keyhash) {
-        self.endpoints.remove(client);
-        if let Some(dir) = &self.dir {
-            let _ = std::fs::remove_file(dir.join("wake").join(hex(client)));
+        let devices: Vec<[u8; 32]> = self.of_client(client).map(|(d, _)| d).collect();
+        for d in devices {
+            self.forget_device(client, &d);
         }
     }
 
@@ -141,7 +173,16 @@ impl WakeRegister {
     /// registered none and nothing for an endpoint the client said would
     /// have lapsed by `now`.
     pub fn doorbell(&self, client: &Keyhash, now: u64) -> Option<&Endpoint> {
-        self.endpoints.get(client).filter(|e| !e.lapsed(now))
+        self.of_client(client)
+            .map(|(_, e)| e)
+            .find(|e| !e.lapsed(now))
+    }
+
+    /// Where to ring one of the client's devices.
+    pub fn doorbell_for(&self, client: &Keyhash, device: &[u8; 32], now: u64) -> Option<&Endpoint> {
+        self.endpoints
+            .get(&(*client, *device))
+            .filter(|e| !e.lapsed(now))
     }
 }
 
@@ -177,6 +218,10 @@ fn parse(text: &str) -> Option<Endpoint> {
 
 fn hex(k: &Keyhash) -> String {
     hex_bytes(k)
+}
+
+fn file_name(client: &Keyhash, device: &[u8; 32]) -> String {
+    format!("{}-{}", hex(client), hex(device))
 }
 
 fn hex_bytes(b: &[u8]) -> String {

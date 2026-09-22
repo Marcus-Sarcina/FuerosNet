@@ -23,6 +23,9 @@ impl Random for DeviceStub { fn fill(&self,b:&mut[u8]) { b.fill(17); } }
 impl Operator for DeviceStub { fn ask(&self,_:&str)->bool { true } }
 struct ServingStub;
 impl Serving for ServingStub {
+    fn node_device(&self) -> [u8; 32] {
+        [0; 32]
+    }
     fn propagate<'a>(&'a self,_:Vec<u8>)->Answer<'a,bool> { Box::pin(async {false}) }
     fn me(&self)->Keyhash { [1;32] }
     fn holds(&self,_:&Keyhash)->bool { false }

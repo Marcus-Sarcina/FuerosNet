@@ -181,7 +181,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 
 | ID | Kind | Requirement and functional test oracle | Authority |
 |---|---|---|---|
-| TOP-011 | S | Dispatch TopologyPush kind 0 as a signed transaction, kind 1 as an EndpointRecord and kind 2 as a Delegation, preserving the enclosed bytes; store a Delegation when it verifies under its delegating keyhash and keep the newest per keyhash. Reject malformed known push bodies and unsupported kind values with the specified frame-level behavior. | W §§8.2, 10.1 |
+| TOP-011 | S | Dispatch TopologyPush kind 0 as a signed transaction, kind 1 as an EndpointRecord, kind 2 as a Delegation and kind 3 as a SubtreeAck, preserving the enclosed bytes; store a Delegation when it verifies under its delegating keyhash and keep the newest per keyhash. Reject malformed known push bodies and unsupported kind values with the specified frame-level behavior. | W §§8.2, 10.1 |
 | TOP-012 | C | Store a pushed topology-class transaction only when valid and its type-defined subject is in the receiver's h_store; exercise adoption, departure, disavowal and reissue subjects plus either peering endpoint. Do not use all signers as interchangeable propagation subjects. | W §10.1.1 |
 | TOP-013 | C | Forward if and only if the item was newly stored, to authenticated adjacent patron/children/peers/serving node/attached clients except the sender. No hop count or TTL is added, and a rejected or out-of-horizon item is not forwarded. | W §10.1.1 |
 | TOP-014 | C | Missing transaction signer keys leave a pending unverifiable object that is not flooded as verified. Distinguish the explicitly allowed unverified endpoint routing hint from a verified topology transaction. | W §§3.4, 7.6, 10.1 |

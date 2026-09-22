@@ -65,6 +65,11 @@ pub struct Config {
     pub endpoint_record: Option<PathBuf>,
     /// This node's anchor entry, likewise operator-signed.
     pub anchor_entry: Option<PathBuf>,
+    /// The standing acknowledgement policy (design §11.2.1,
+    /// `infra-client-requirements.md` §10.1): true acknowledges every
+    /// adoption under one of this node's subordinates as it is stored;
+    /// absent or false issues none.  A default of none, not a rule.
+    pub acknowledge: bool,
     /// The address the node serves QUIC on and answers STUN Binding
     /// requests at (`infra-client-requirements.md` §7, design §14.1.1).
     pub listen: SocketAddr,
@@ -188,6 +193,7 @@ struct File {
     endpoint_record: Option<PathBuf>,
     #[serde(rename = "anchor-entry")]
     anchor_entry: Option<PathBuf>,
+    acknowledge: Option<bool>,
     listen: Spanned<String>,
     queue: PathBuf,
     prekeys: PathBuf,
@@ -353,6 +359,7 @@ impl Config {
             delegations: f.delegations,
             endpoint_record: f.endpoint_record,
             anchor_entry: f.anchor_entry,
+            acknowledge: f.acknowledge.unwrap_or(false),
             listen,
             upstream,
             queue: f.queue,

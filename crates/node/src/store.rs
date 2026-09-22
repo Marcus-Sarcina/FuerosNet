@@ -18,6 +18,10 @@ pub const KIND_ENDPOINT_RECORD: u64 = 1;
 /// A `Delegation` (`wire-format.md` §8.2): current state, one per
 /// delegating keyhash, the newest by `not_before` [author, 2026-09-21].
 pub const KIND_DELEGATION: u64 = 2;
+/// A `SubtreeAck` (`wire-format.md` §7.5): state that lapses with the
+/// relationship it acknowledges, one per (adoption, grandpatron)
+/// [author, 2026-09-22].
+pub const KIND_SUBTREE_ACK: u64 = 3;
 
 /// The identities a holder pins, and the delegations its store keeps: the
 /// lookup a record signed under a delegated key is verified against
@@ -162,6 +166,9 @@ pub struct TopologyStore {
     /// One delegation per delegating keyhash, the newest by `not_before`
     /// (`wire-format.md` §10.1.1): current state, never a history of keys.
     delegations: BTreeMap<Keyhash, HeldDelegation>,
+    /// The acknowledgements held, by (adoption, grandpatron): what is
+    /// forwarded and replayed, kept while the table holds them.
+    acks: BTreeMap<(Txid, Keyhash), Vec<u8>>,
 }
 
 impl TopologyStore {
@@ -287,7 +294,28 @@ impl TopologyStore {
                 .values()
                 .map(|h| (KIND_DELEGATION, h.bytes.clone())),
         );
+        out.extend(self.acks.values().map(|b| (KIND_SUBTREE_ACK, b.clone())));
         out
+    }
+
+    /// Whether an acknowledgement for this pair is held.
+    pub fn holds_ack(&self, adoption: &Txid, grandpatron: &Keyhash) -> bool {
+        self.acks.contains_key(&(*adoption, *grandpatron))
+    }
+
+    /// Keep an acknowledgement the table took; whether it was new here.
+    pub fn keep_ack(&mut self, adoption: Txid, grandpatron: Keyhash, bytes: Vec<u8>) -> bool {
+        self.acks.insert((adoption, grandpatron), bytes).is_none()
+    }
+
+    /// Drop the acknowledgements the table no longer holds
+    /// (`wire-format.md` §7.5: discarded when they lapse).
+    pub fn retain_acks(&mut self, keep: impl Fn(&Txid, &Keyhash) -> bool) {
+        self.acks.retain(|(a, g), _| keep(a, g));
+    }
+
+    pub fn acks_held(&self) -> usize {
+        self.acks.len()
     }
 
     /// The delegation held for a keyhash: what its acknowledgements and
@@ -522,7 +550,7 @@ impl TopologyStore {
     /// replays a forwarding wave into every cycle in the horizon
     /// (`infra-client-requirements.md` §4.3).
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
-        for sub in ["tx", "ep", "presence", "deleg"] {
+        for sub in ["tx", "ep", "presence", "deleg", "ack"] {
             std::fs::create_dir_all(dir.join(sub))?;
         }
         for (t, r) in &self.transactions {
@@ -554,6 +582,16 @@ impl TopologyStore {
         }
         for (kh, h) in &self.delegations {
             std::fs::write(dir.join("deleg").join(hex(kh)), &h.bytes)?;
+        }
+        // rewritten whole: a lapsed acknowledgement must not outlive the
+        // relationship on disk
+        if let Ok(rd) = std::fs::read_dir(dir.join("ack")) {
+            for e in rd.flatten() {
+                std::fs::remove_file(e.path())?;
+            }
+        }
+        for ((a, g), b) in &self.acks {
+            std::fs::write(dir.join("ack").join(format!("{}-{}", hex(a), hex(g))), b)?;
         }
         let proved: Vec<String> = self
             .proved_series
@@ -611,6 +649,21 @@ impl TopologyStore {
                         },
                     );
                 }
+            }
+        }
+        if let Ok(rd) = std::fs::read_dir(dir.join("ack")) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                let Some((a, g)) = name.split_once('-') else {
+                    continue;
+                };
+                let (Some(a), Some(g)) = (
+                    unhex(a).and_then(|v| <[u8; 32]>::try_from(v).ok()),
+                    unhex(g).and_then(|v| <[u8; 32]>::try_from(v).ok()),
+                ) else {
+                    continue;
+                };
+                st.acks.insert((a, g), std::fs::read(e.path())?);
             }
         }
         if let Ok(text) = std::fs::read_to_string(dir.join("proved")) {

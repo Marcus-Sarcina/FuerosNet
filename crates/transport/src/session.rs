@@ -710,7 +710,7 @@ pub type ControlHandler = Arc<dyn Fn([u8; 32], u64, Vec<u8>) + Send + Sync>;
 /// it are one of the four groups that rule names.  Nothing above the
 /// transport can see an attach otherwise, so a node that is not told keeps
 /// an empty set and forwards the flood to nobody it serves.
-pub type AttachHook = Arc<dyn Fn([u8; 32], bool) + Send + Sync>;
+pub type AttachHook = Arc<dyn Fn([u8; 32], [u8; 32], bool) + Send + Sync>;
 
 /// What a node says its siblings are, asked at each attach.
 pub type SiblingList = Arc<dyn Fn() -> Vec<SiblingRef> + Send + Sync>;
@@ -719,10 +719,12 @@ pub type SiblingList = Arc<dyn Fn() -> Vec<SiblingRef> + Send + Sync>;
 pub type DirectHandler = Arc<dyn Fn([u8; 32], Vec<u8>) + Send + Sync>;
 
 /// What a node answers on a request stream (`wire-format.md` §9.2): the
-/// authenticated peer, the family, and the body bytes, to a reply body or
-/// `None` to fail the stream.
+/// authenticated peer, the device it spoke from (the key the handshake
+/// presented, `wire-format.md` §8.2), the family, and the body bytes, to a
+/// reply body or `None` to fail the stream.
 pub type RequestHandler = Arc<
     dyn Fn(
+            [u8; 32],
             [u8; 32],
             Family,
             Vec<u8>,
@@ -730,6 +732,12 @@ pub type RequestHandler = Arc<
         + Send
         + Sync,
 >;
+
+/// A session's name: the identity it speaks for and the device it speaks
+/// from, the key the handshake presented (`wire-format.md` §8.2: an attach
+/// speaks for a device, and a subject's several devices are several
+/// sessions).
+pub type Peer = ([u8; 32], [u8; 32]);
 
 pub struct NodeConfig {
     /// Who this node speaks as and what it presents: its identity's
@@ -862,10 +870,11 @@ impl NodeConfig {
 
 #[derive(Default)]
 struct NodeState {
-    /// One drain at a time per recipient.
-    drains: HashMap<[u8; 32], Arc<tokio::sync::Mutex<()>>>,
-    reach: HashMap<[u8; 32], Arc<Mutex<Reachability>>>,
-    sessions: HashMap<[u8; 32], Connection>,
+    /// One drain at a time per recipient's device.
+    drains: HashMap<Peer, Arc<tokio::sync::Mutex<()>>>,
+    reach: HashMap<Peer, Arc<Mutex<Reachability>>>,
+    /// One session per device (`wire-format.md` §8.2).
+    sessions: HashMap<Peer, Connection>,
     /// Credentials this node holds supersession evidence for, and their
     /// successors (a reissue names the same key).
     superseded: HashMap<[u8; 32], [u8; 32]>,
@@ -874,7 +883,7 @@ struct NodeState {
     marked: HashMap<[u8; 32], Reachability>,
     /// A handle into each live session's control stream, for frames this
     /// node originates or forwards.
-    outbound: HashMap<[u8; 32], mpsc::UnboundedSender<(u64, Vec<u8>)>>,
+    outbound: HashMap<Peer, mpsc::UnboundedSender<(u64, Vec<u8>)>>,
 }
 
 pub struct Node {
@@ -907,6 +916,19 @@ impl Node {
         keyhash: [u8; 32],
         bytes: Vec<u8>,
     ) -> Result<(), queue::Refusal> {
+        self.enqueue_for(keyhash, queue::ANY_DEVICE, bytes)
+    }
+
+    /// `enqueue` for the recipient's `device` (`wire-format.md` §7.10): the
+    /// ciphertext is readable by one device, and that device's session is
+    /// the one it is delivered on (design §14.1.6).  `ANY_DEVICE` is
+    /// delivered on whichever of the recipient's sessions drains first.
+    pub fn enqueue_for(
+        self: &Arc<Self>,
+        keyhash: [u8; 32],
+        device: [u8; 32],
+        bytes: Vec<u8>,
+    ) -> Result<(), queue::Refusal> {
         if !(self.cfg.serves)(&keyhash) {
             return Err(queue::Refusal::NoRecord);
         }
@@ -919,15 +941,25 @@ impl Node {
             // delivered to: the material waits for its return (design
             // §14.1.2).  A session object outlives the reachability the
             // detector settled on, and the detector is what decides.
-            let live = st
-                .reach
-                .get(&keyhash)
-                .map(|r| *r.lock().unwrap())
-                .or_else(|| st.marked.get(&keyhash).copied());
-            if live == Some(Reachability::Unreachable) {
-                None
-            } else {
-                st.sessions.get(&keyhash).cloned()
+            let live_session = st
+                .sessions
+                .iter()
+                .find(|((kh, d), _)| *kh == keyhash && queue::for_device_key(&device, d))
+                .map(|(peer, c)| (*peer, c.clone()));
+            match live_session {
+                Some((peer, c)) => {
+                    let live = st
+                        .reach
+                        .get(&peer)
+                        .map(|r| *r.lock().unwrap())
+                        .or_else(|| st.marked.get(&keyhash).copied());
+                    if live == Some(Reachability::Unreachable) {
+                        None
+                    } else {
+                        Some((peer, c))
+                    }
+                }
+                None => None,
             }
         };
         // the cap is read and the message stored under one gate: capacity is
@@ -945,26 +977,33 @@ impl Node {
         self.cfg.queue.push(Queued {
             ciphertext: bytes,
             recipient: keyhash,
+            device,
             arrival: (self.cfg.clock)(),
         });
-        if let Some(conn) = conn {
-            tokio::spawn(drain(self.clone(), keyhash, conn));
+        if let Some(((_, d), conn)) = conn {
+            tokio::spawn(drain(self.clone(), keyhash, d, conn));
         }
         Ok(())
     }
 
-    fn drain_lock(&self, recipient: &[u8; 32]) -> Arc<tokio::sync::Mutex<()>> {
+    fn drain_lock(&self, peer: &Peer) -> Arc<tokio::sync::Mutex<()>> {
         self.state
             .lock()
             .unwrap()
             .drains
-            .entry(*recipient)
+            .entry(*peer)
             .or_default()
             .clone()
     }
 
+    /// What waits for `keyhash`, every device counted.
     pub fn queued(&self, keyhash: &[u8; 32]) -> usize {
         self.cfg.queue.count(keyhash)
+    }
+
+    /// What waits for one of `keyhash`'s devices: what its AttachAck says.
+    pub fn queued_for(&self, keyhash: &[u8; 32], device: &[u8; 32]) -> usize {
+        self.cfg.queue.count_for(keyhash, device)
     }
 
     /// The node's record of what waits for `keyhash`, as it holds it.
@@ -977,15 +1016,21 @@ impl Node {
     /// under it gets no AttachAck, and nothing queued for it is delivered
     /// to it or handed to its successor.
     pub fn supersede(&self, s: Supersession) {
-        let conn = {
+        let conns: Vec<Connection> = {
             let mut st = self.state.lock().unwrap();
             st.superseded.insert(s.superseded, s.successor);
-            st.sessions.remove(&s.superseded)
+            let gone: Vec<Peer> = st
+                .sessions
+                .keys()
+                .filter(|(kh, _)| *kh == s.superseded)
+                .copied()
+                .collect();
+            gone.iter().filter_map(|p| st.sessions.remove(p)).collect()
         };
         if s.successor != s.superseded {
             self.cfg.queue.drop_all(&s.superseded);
         }
-        if let Some(c) = conn {
+        for c in conns {
             c.close(VarInt::from_u32(CLOSE_REFUSED), b"superseded");
         }
     }
@@ -999,11 +1044,21 @@ impl Node {
             .is_some_and(|s| s != keyhash)
     }
 
+    /// The reachability of `keyhash`: reachable if any of its sessions is,
+    /// else what the detector last settled on.
     pub fn reachability(&self, keyhash: &[u8; 32]) -> Option<Reachability> {
         let st = self.state.lock().unwrap();
-        st.reach
-            .get(keyhash)
-            .map(|r| *r.lock().unwrap())
+        let live: Vec<Reachability> = st
+            .reach
+            .iter()
+            .filter(|((kh, _), _)| kh == keyhash)
+            .map(|(_, r)| *r.lock().unwrap())
+            .collect();
+        if live.contains(&Reachability::Reachable) {
+            return Some(Reachability::Reachable);
+        }
+        live.first()
+            .copied()
             .or_else(|| st.marked.get(keyhash).copied())
     }
 
@@ -1019,37 +1074,68 @@ impl Node {
         (self.cfg.serves)(keyhash)
     }
 
+    /// Whether any of `keyhash`'s devices holds a session.
     pub fn has_session(&self, keyhash: &[u8; 32]) -> bool {
-        self.state.lock().unwrap().sessions.contains_key(keyhash)
-    }
-
-    /// Every peer with a live session on this node.
-    pub fn sessions(&self) -> Vec<[u8; 32]> {
         self.state
             .lock()
             .unwrap()
             .sessions
             .keys()
-            .copied()
+            .any(|(kh, _)| kh == keyhash)
+    }
+
+    /// Whether `keyhash`'s `device` holds a session.
+    pub fn has_session_for(&self, keyhash: &[u8; 32], device: &[u8; 32]) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .sessions
+            .contains_key(&(*keyhash, *device))
+    }
+
+    /// Every identity with a live session on this node, once each.
+    pub fn sessions(&self) -> Vec<[u8; 32]> {
+        let st = self.state.lock().unwrap();
+        let mut out: Vec<[u8; 32]> = st.sessions.keys().map(|(kh, _)| *kh).collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// The devices `keyhash` holds sessions from.
+    pub fn devices_of(&self, keyhash: &[u8; 32]) -> Vec<[u8; 32]> {
+        self.state
+            .lock()
+            .unwrap()
+            .sessions
+            .keys()
+            .filter(|(kh, _)| kh == keyhash)
+            .map(|(_, d)| *d)
             .collect()
     }
 
-    /// Send a control frame on the session with `peer`, where one exists.
+    /// Send a control frame on every session with `peer`: a topology
+    /// object goes to each device, since each holds its own view.
     pub fn send_control(&self, peer: &[u8; 32], frame_type: u64, body: &[u8]) -> bool {
-        match self.state.lock().unwrap().outbound.get(peer) {
-            Some(tx) => tx.send((frame_type, body.to_vec())).is_ok(),
-            None => false,
+        let st = self.state.lock().unwrap();
+        let mut any = false;
+        for ((kh, _), tx) in st.outbound.iter() {
+            if kh == peer {
+                any |= tx.send((frame_type, body.to_vec())).is_ok();
+            }
         }
+        any
     }
 
-    /// The address the client's session currently comes from.
+    /// The address one of the client's sessions currently comes from.
     pub fn remote_address(&self, keyhash: &[u8; 32]) -> Option<std::net::SocketAddr> {
         self.state
             .lock()
             .unwrap()
             .sessions
-            .get(keyhash)
-            .map(|c| c.remote_address())
+            .iter()
+            .find(|((kh, _), _)| kh == keyhash)
+            .map(|(_, c)| c.remote_address())
     }
 
     /// Accept connections forever.
@@ -1163,7 +1249,9 @@ impl Node {
                                 Err(why) => return self.refuse_unbound(&conn, why),
                             };
                         self.log.push(Event::Bound { how });
-                        return self.serve_requests(conn, peer, sender, recv, None).await;
+                        return self
+                            .serve_requests(conn, peer, presented, sender, recv, None)
+                            .await;
                     }
                     Control::Known(..) => {
                         conn.close(
@@ -1185,7 +1273,14 @@ impl Node {
                             });
                             let Sender { send, .. } = sender;
                             return self
-                                .serve_requests(conn, peer, Sender::detached(send), recv, Some(p))
+                                .serve_requests(
+                                    conn,
+                                    peer,
+                                    presented,
+                                    Sender::detached(send),
+                                    recv,
+                                    Some(p),
+                                )
                                 .await;
                         }
                         match other {
@@ -1237,7 +1332,7 @@ impl Node {
         } else {
             1
         };
-        let queued = self.queued(&claimed) as u64;
+        let queued = self.queued_for(&claimed, &presented) as u64;
         let mut caps = self.cfg.capabilities.clone();
         let known: Vec<u64> = caps.keys().copied().collect();
         let (gid, gval) = grease(&known);
@@ -1257,25 +1352,36 @@ impl Node {
         self.log.push(Event::Attached { mode });
         let reach = Arc::new(Mutex::new(Reachability::Reachable));
         let (otx, orx) = mpsc::unbounded_channel();
+        // the session is the device's: one per key presented (§8.2), so a
+        // subject's phone and desktop are two sessions and neither
+        // displaces the other
+        let session_key: Peer = (claimed, presented);
         {
             let mut st = self.state.lock().unwrap();
-            st.sessions.insert(claimed, conn.clone());
-            st.reach.insert(claimed, reach.clone());
-            st.outbound.insert(claimed, otx);
+            st.sessions.insert(session_key, conn.clone());
+            st.reach.insert(session_key, reach.clone());
+            st.outbound.insert(session_key, otx);
         }
         if let Some(f) = &self.cfg.on_attach {
-            f(claimed, true);
+            f(claimed, presented, true);
         }
-        // drain: each waiting message goes out oldest first and leaves the
-        // store only once the peer has taken it, so a session that fails
-        // mid-drain leaves the rest where it was (design §14.1.6)
-        tokio::spawn(drain(self.clone(), claimed, conn.clone()));
+        // drain: each waiting message for this device goes out oldest
+        // first and leaves the store only once the peer has taken it, so a
+        // session that fails mid-drain leaves the rest where it was
+        // (design §14.1.6)
+        tokio::spawn(drain(self.clone(), claimed, presented, conn.clone()));
         // requests on bidirectional streams, answered for as long as the session lives
         let req_conn = conn.clone();
         let handler = self.cfg.on_request.clone();
         let requests = tokio::spawn(async move {
             while let Ok((send, recv)) = req_conn.accept_bi().await {
-                tokio::spawn(answer_request(send, recv, claimed, handler.clone()));
+                tokio::spawn(answer_request(
+                    send,
+                    recv,
+                    claimed,
+                    presented,
+                    handler.clone(),
+                ));
             }
         });
         let interval = Duration::from_secs(self.cfg.interval_secs);
@@ -1317,12 +1423,20 @@ impl Node {
         requests.abort();
         {
             let mut st = self.state.lock().unwrap();
-            st.sessions.remove(&claimed);
-            st.reach.remove(&claimed);
-            st.outbound.remove(&claimed);
+            // a newer session from the same device replaces this one in
+            // the table; only this one's own entry is removed
+            if st
+                .sessions
+                .get(&session_key)
+                .is_some_and(|c| c.stable_id() == conn.stable_id())
+            {
+                st.sessions.remove(&session_key);
+                st.reach.remove(&session_key);
+                st.outbound.remove(&session_key);
+            }
         }
         if let Some(f) = &self.cfg.on_attach {
-            f(claimed, false);
+            f(claimed, presented, false);
         }
         self.log.push(Event::Closed);
         Ok(())
@@ -1367,6 +1481,7 @@ impl Node {
         self: Arc<Self>,
         conn: Connection,
         peer: [u8; 32],
+        device: [u8; 32],
         control: Sender,
         control_recv: RecvStream,
         first: Option<Vec<u8>>,
@@ -1377,7 +1492,7 @@ impl Node {
         if let Some(p) = first {
             let Sender { send, .. } = control;
             let _ = control_recv.take();
-            tokio::spawn(answer_payload(send, p, peer, handler.clone()));
+            tokio::spawn(answer_payload(send, p, peer, device, handler.clone()));
         } else {
             // held open until the connection ends: closing it would tell
             // the peer to stop sending on a stream the wire leaves to it
@@ -1389,7 +1504,7 @@ impl Node {
             });
         }
         while let Ok((send, recv)) = conn.accept_bi().await {
-            tokio::spawn(answer_request(send, recv, peer, handler.clone()));
+            tokio::spawn(answer_request(send, recv, peer, device, handler.clone()));
         }
         self.log.push(Event::Closed);
         Ok(())
@@ -1416,10 +1531,10 @@ pub async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
 /// `infra-client-requirements.md` §2: delete on delivery).  One drain runs
 /// per recipient at a time; a failed delivery ends the drain, and the rest
 /// waits for the next session.
-async fn drain(node: Arc<Node>, recipient: [u8; 32], conn: Connection) {
-    let lock = node.drain_lock(&recipient);
+async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Connection) {
+    let lock = node.drain_lock(&(recipient, device));
     let _running = lock.lock().await;
-    while let Some(item) = node.cfg.queue.peek_oldest(&recipient) {
+    while let Some(item) = node.cfg.queue.peek_oldest_for(&recipient, &device) {
         if !deliver(&conn, item.ciphertext.clone()).await {
             return;
         }
@@ -1434,12 +1549,13 @@ async fn answer_request(
     send: SendStream,
     mut recv: RecvStream,
     peer: [u8; 32],
+    device: [u8; 32],
     handler: Option<RequestHandler>,
 ) {
     let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else {
         return;
     };
-    answer_payload(send, p, peer, handler).await
+    answer_payload(send, p, peer, device, handler).await
 }
 
 /// Answer one request whose payload is already read, on `send`.
@@ -1447,6 +1563,7 @@ async fn answer_payload(
     mut send: SendStream,
     p: Vec<u8>,
     peer: [u8; 32],
+    device: [u8; 32],
     handler: Option<RequestHandler>,
 ) {
     let f = match frame::parse_payload(Stream::Request, &p) {
@@ -1467,7 +1584,7 @@ async fn answer_payload(
     };
     if let (Some(h), Some(fam)) = (handler, f.family) {
         let body = p[f.body.clone()].to_vec();
-        match h(peer, fam, body).await {
+        match h(peer, device, fam, body).await {
             Some(reply) => {
                 let mut out = (reply.len() as u32).to_be_bytes().to_vec();
                 out.extend_from_slice(&reply);

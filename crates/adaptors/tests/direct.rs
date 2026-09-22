@@ -47,6 +47,9 @@ impl Counting {
 }
 
 impl Serving for Counting {
+    fn node_device(&self) -> [u8; 32] {
+        [0; 32]
+    }
     fn me(&self) -> Keyhash {
         self.inner.me()
     }
@@ -385,4 +388,169 @@ async fn an_infrastructure_node_opens_no_direct_path_it_would_not_have_gathered_
         "no offer for a peer it may not reach"
     );
     assert!(!p1.reachable.holds(&kh("w2")));
+}
+
+/// A light client whose direct path binds by what its own horizon view
+/// holds (`light-client-requirements.md` §4.2), presenting `credential`
+/// where it is a delegated desktop.
+fn light_holding(
+    name: &'static str,
+    node: &Arc<LiveNode>,
+    serving: &Arc<dyn Serving>,
+    inboxes: &Inboxes,
+    credential: Option<Arc<rhtn_transport::tls::Credential>>,
+) -> Party {
+    let inlet = Inlet::default();
+    let gate: Gate = {
+        let node = node.clone();
+        let me = kh(name);
+        Arc::new(move |peer| {
+            node.view
+                .lock()
+                .unwrap()
+                .table
+                .horizon(&me, 2)
+                .contains(peer)
+        })
+    };
+    let reachable_cell: Arc<std::sync::Mutex<Option<Reachable>>> = Arc::default();
+    // the client first, so its view is what the socket binds by
+    let handle = {
+        let cell = reachable_cell.clone();
+        let placeholder = Reachable::default();
+        *cell.lock().unwrap() = Some(placeholder.clone());
+        spawn_client(name, Config::default(), placeholder)
+    };
+    let mut binding = rhtn_transport::bind::Binding::default().with_held(Arc::new(handle.clone()));
+    if let Some(c) = &credential {
+        binding = binding.with_credential(c.clone());
+    }
+    let direct = LightDirect::bind(
+        Arc::new(id(name)),
+        pins(),
+        binding,
+        loopback(),
+        None,
+        None,
+        gate,
+        inlet.inbound(),
+    )
+    .expect("bound");
+    let reachable = direct.reachable();
+    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
+    inlet.bind(courier.inbound());
+    inboxes.host(kh(name), courier.inbound());
+    Party {
+        handle,
+        courier,
+        app,
+        reachable,
+    }
+}
+
+// acceptance: TOP-43
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one() {
+    use rhtn_crypto::delegation::issue;
+    use rhtn_transport::tls::Credential;
+    // carol and w1 adopted under bob: inside each other's horizon; w1 runs
+    // a delegated desktop under key k
+    let mut scene = Scene::new();
+    scene.adopt("carol", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
+    // the earlier credential's window closed a minute ago; the later one,
+    // opening then, is the one in force by the wall clock the bind reads
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let t = now - 172_800 - 60;
+    let w1 = id("w1");
+    let desktop_key = Arc::new(Credential::from_seed(&[41; 32], kh("w1")));
+    let d1 = issue(&w1, &desktop_key.public(), t);
+    let d2 = issue(&w1, &desktop_key.public(), t + 172_800);
+    desktop_key
+        .add(std::slice::from_ref(&w1.public), &d2)
+        .unwrap();
+    let carol = light_holding("carol", &node, &serving, &inboxes, None);
+    let mut desktop = light_holding("w1", &node, &serving, &inboxes, Some(desktop_key.clone()));
+    carol.courier.attach(vec![kh("w1")]).await;
+    desktop.courier.attach(vec![kh("carol")]).await;
+    carol.courier.sweep(vec![kh("w1")]).await;
+    // A's view holds the neighbourhood the node pushed: the adoptions that
+    // place w1 inside it
+    let records: Vec<Vec<u8>> = scene.records.iter().map(|r| r.bytes.clone()).collect();
+    carol
+        .handle
+        .with(move |c| {
+            let known = c.known.clone();
+            for r in &records {
+                c.horizon.ingest(r, &known);
+            }
+            assert!(c.horizon.distance(&kh("w1")).is_some(), "w1 is placed");
+        })
+        .await;
+    // N pushes D's delegation, then a later one over the same key: A's
+    // horizon view holds one, the later
+    let (a, b) = (d1.clone(), d2.clone());
+    let (first, second, held, newest) = carol
+        .handle
+        .with(move |c| {
+            let known = c.known.clone();
+            let first = c.horizon.ingest_delegation(&a, &known);
+            let second = c.horizon.ingest_delegation(&b, &known);
+            (
+                first,
+                second,
+                c.horizon.delegations(),
+                c.horizon.delegation(&kh("w1")).map(|d| d.not_before),
+            )
+        })
+        .await;
+    assert_eq!(
+        (first, second),
+        (
+            rhtn_client::horizon::Took::Applied,
+            rhtn_client::horizon::Took::Applied
+        )
+    );
+    assert_eq!(held, 1, "one delegation for D");
+    assert_eq!(newest, Some(t + 172_800), "the later one");
+    // and the earlier one arriving again is nothing new
+    let a = d1.clone();
+    assert_eq!(
+        carol
+            .handle
+            .with(move |c| {
+                let known = c.known.clone();
+                c.horizon.ingest_delegation(&a, &known)
+            })
+            .await,
+        rhtn_client::horizon::Took::Duplicate
+    );
+    // A dials D's desktop on the direct path: the key it presents, k, is
+    // bound to D from the held delegation before any frame arrives, and
+    // the desktop's own socket binds A by her pinned member
+    assert!(carol.courier.offer(kh("w1")).await);
+    assert!(
+        until(4000, || carol.reachable.holds(&kh("w1"))
+            && desktop.reachable.holds(&kh("carol")))
+        .await,
+        "both hold the path"
+    );
+    carol
+        .courier
+        .send(
+            kh("w1"),
+            KIND_APPLICATION,
+            b"to the desktop, directly".to_vec(),
+        )
+        .await
+        .expect("sent");
+    let (from, d) = next(&mut desktop.app, 3000).await.expect("delivered");
+    assert_eq!(from, kh("carol"));
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"to the desktop, directly"));
 }

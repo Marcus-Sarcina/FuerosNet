@@ -22,20 +22,3 @@
 fn pay_13_instantiate_pqxdh_with_x25519_and_ml_kem_768_and() {
     todo!("PAY-13: Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications")
 }
-
-/// Fetch a bundle per device, open a session with each, and send to each
-///
-/// Spec: wire-format.md §7.8; light-client-requirements.md §4.1; design §14.2.4
-/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.8): "A reply therefore carries every device's bundle, an initiator opens one session against each and sends to each"
-/// Rule (light-client-requirements.md §4.1): "Open a session with each of a recipient's devices, and send to each."
-///
-/// Given: Subject T has two devices, d1 and d2, each with its own bundle at N; client S holds T's KeyMaterial.
-/// When: S fetches T's material with field 4 absent and sends T one message.
-/// Then: The reply's field 2 carries two bundles, one naming d1 and one d2, each verifying under T; S opens two sessions and submits two ciphertexts, one naming d1 and one d2; each device decrypts the one addressed to it and cannot decrypt the other.
-#[test]
-#[ignore = "acceptance PAY-20: owed at milestone after-5"]
-fn pay_20_fetch_a_bundle_per_device_open_a_session_with_ea() {
-    todo!("PAY-20: Fetch a bundle per device, open a session with each, and send to each")
-}

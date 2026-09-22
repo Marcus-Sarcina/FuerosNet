@@ -11,12 +11,30 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-/// One waiting message: the whole of what the node holds about it.
+/// One waiting message: the whole of what the node holds about it
+/// (design §14.1.6): ciphertext, recipient keyhash and device, arrival time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Queued {
     pub ciphertext: Vec<u8>,
     pub recipient: [u8; 32],
+    /// The recipient's device the ciphertext is readable by, named by the
+    /// key it presents (`wire-format.md` §7.10); [`ANY_DEVICE`] where the
+    /// submission named none, which any of the recipient's sessions drains.
+    pub device: [u8; 32],
     pub arrival: u64,
+}
+
+/// The device a message for any of the recipient's devices names.
+pub const ANY_DEVICE: [u8; 32] = [0; 32];
+
+/// Whether a queued item is for the session of `device`.
+pub fn for_device(item: &Queued, device: &[u8; 32]) -> bool {
+    for_device_key(&item.device, device)
+}
+
+/// Whether a message named for `named` is for the session of `device`.
+pub fn for_device_key(named: &[u8; 32], device: &[u8; 32]) -> bool {
+    *named == ANY_DEVICE || *named == *device
 }
 
 /// Why a submission was not accepted; the sender is told.
@@ -44,6 +62,19 @@ pub trait QueueStore: Send + Sync {
     fn drop_all(&self, recipient: &[u8; 32]);
     fn count(&self, recipient: &[u8; 32]) -> usize {
         self.list(recipient).len()
+    }
+    /// The oldest message waiting for `recipient`'s `device`: what that
+    /// device's session drains (design §14.1.6).
+    fn peek_oldest_for(&self, recipient: &[u8; 32], device: &[u8; 32]) -> Option<Queued> {
+        self.list(recipient)
+            .into_iter()
+            .find(|q| for_device(q, device))
+    }
+    fn count_for(&self, recipient: &[u8; 32], device: &[u8; 32]) -> usize {
+        self.list(recipient)
+            .iter()
+            .filter(|q| for_device(q, device))
+            .count()
     }
     fn bytes(&self, recipient: &[u8; 32]) -> usize {
         self.list(recipient)

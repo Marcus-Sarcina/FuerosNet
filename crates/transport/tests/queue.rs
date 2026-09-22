@@ -145,30 +145,34 @@ async fn delete_on_delivery_leaves_nothing_for_a_second_attach() {
     assert!(drain(&mut s2).await.is_empty());
 }
 
-// owed: QUE-05 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: QUE-05
 #[tokio::test]
 async fn a_waiting_message_carries_the_minimum() {
     let mut cfg = node_cfg("alice");
     cfg.clock = Arc::new(|| 1_900_000_000);
     let (node, _addr, _ep) = spawn_node(cfg);
     let m = b"one message from X".to_vec();
-    node.enqueue(kh("carol"), m.clone()).unwrap();
+    let device = [7u8; 32];
+    node.enqueue_for(kh("carol"), device, m.clone()).unwrap();
     let recs = node.queue_records(&kh("carol"));
     assert_eq!(recs.len(), 1);
-    // the record is exactly these three fields, and nothing names or locates X
+    // the record is exactly these four fields, and nothing names or locates X
     let Queued {
         ciphertext,
         recipient,
+        device: named,
         arrival,
     } = recs[0].clone();
     assert_eq!(ciphertext, m);
     assert_eq!(recipient, kh("carol"));
+    assert_eq!(named, device, "the device the submission named");
     assert_eq!(arrival, 1_900_000_000);
     assert_eq!(
         recs[0],
         Queued {
             ciphertext: m,
             recipient: kh("carol"),
+            device,
             arrival: 1_900_000_000
         }
     );

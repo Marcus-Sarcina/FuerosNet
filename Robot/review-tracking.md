@@ -10828,8 +10828,95 @@ entry offered to the anchor table, a mismatch with `listen` reported as an
 address that has moved. DMN-23 to DMN-26 are process tests of the binary.
 427 of 455 implemented, 0 flags.
 
-**Still to come in step 5.** SES-26 and the queue per device (QUE-05,
-QUE-21, PAY-20, SUB-12), TOP-43 in the light client's horizon view, TOP-44's
-runtime acknowledgement, TRV-11, the no-history audit (RSC-41, RSC-42,
+**The device, everywhere it was plumbed and not done.** The queue record
+carries the device the submission named (`Queued::device`, `ANY_DEVICE` for
+one that named none, which any of the recipient's sessions drains; the
+directory store names it in the file name); the transport's session table
+is keyed by identity and presented key (`session::Peer`), so a subject's
+phone and desktop are two sessions, each drained for its own device, the
+AttachAck's field 4 counted per device, a control frame sent to every
+device's session, the request handler and the attach hook told the device;
+the node's bundles, pools and wake endpoints are per device (`prekeys::Slot`,
+`ANY_DEVICE` pools drawn from for any device; the reply carries every
+device's bundle up to the wire's ceiling, or the one named), a publication
+naming a device other than the session's is refused, a deposit fills the
+session device's pool, a relay is queued for the device the submission
+names, the courier addresses material for the serving node to the key it
+presented; the client's sessions and prefetched bundles are per peer
+device, a message goes to every device with a session and a one-time key is
+asked for every device without one, and the channel names the sending
+device so the recipient opens the right session. QUE-05 marked, QUE-21,
+SES-26, SUB-12 and PAY-20 added; PAY-20's second device is a client run as
+another device of the same identity (`Client::as_device`), the seedless
+desktop being the light-client item still owed. 432 of 455 implemented, 0
+flags.
+
+**The light client holds delegations (TOP-43).** `Horizon::ingest_delegation`
+keeps one per delegating keyhash, the newest by `not_before`, for a party
+the view can place (or the client itself), and `prune` drops them with the
+party; the attached adaptor takes a kind-2 push into it; the client's
+`Handle` implements the transport's `Held`, read on the client's own
+thread, so a `LightDirect` bound with that holder binds a delegated desktop
+by the held delegation before any frame. The test drives the intake
+directly, the in-process serving node of that harness pushing nothing over
+a session; the one line from a session's push to the intake is the
+attached adaptor's. 433 of 455.
+
+**The acknowledgement travels as body kind 3** [author, 2026-09-22]. Asked
+how a `SubtreeAck` reaches a sibling, since §7.5 defined the record and said
+it is carried separately from the adoption while §10.1's wrapper had no
+kind for it, the author took the fourth kind: the wire's CDDL, its identity
+table (`(adoption txid, grandpatron)`, a duplicate when the pair is held),
+§10.1.1's storage rule (verified under the grandpatron's held delegation,
+against an adoption held, deferred where the delegation is not, dropped
+when the relationship ends) and §7.5's carriage paragraph say so;
+`functional_tests.md` TOP-011 lists it; the vectors carry a kind-3 push of
+the worked acknowledgement (240 entries) and the enumeration negative moved
+to 4; the codec admits 3. In the node: `KIND_SUBTREE_ACK`, taken by the
+table (`take_ack`, which now holds one per pair), kept in the store for
+forwarding and replay and persisted under `ack/`, forwarded on every
+adjacency but the arrival one, held aside when the signer's delegation is
+not yet held and released, stored and forwarded when it arrives; issued
+under the view's standing `ack_policy` as an adoption under one of the
+node's subordinates is folded, signed by the delegated key where the node
+is an instance, pushed to every adjacency; lapsed with the table
+(`Table::lapse_acks`, public) and dropped from the store. `rhtnd` takes
+`acknowledge = true` (absent is none: a default, not a rule). TOP-44
+marked: 434 of 455.
+
+**A reach the entry assumes and the rule does not give.** TOP-44 has the
+accepting sibling S as a sibling of the grandpatron G, and design §11.2.1
+names the grandpatron's siblings and the great-grandpatron as the parties
+who may accept an acknowledgement. Under §10.1.1 the acknowledgement travels
+as far as the acknowledged node's adoption does, two edges from that node,
+and a sibling of G stands three from it, as does the great-grandpatron:
+neither stores the adoption, so neither holds the acknowledgement, and the
+gateway's own horizon check (`resources.rs`) would refuse the node before
+any acknowledgement was consulted. The test places S as a sibling of the
+patron P, two edges from the node, where the rule reaches; §7.5's new
+sentence states the reach as §10.1.1 gives it and claims no more. **Whether
+§11.2.1's list is to be read within `h_store`, or the acknowledgement is to
+travel further than the adoption, is the author's** and is entered in the
+note.
+
+**Still to come in step 5.** TRV-11, the no-history audit (RSC-41, RSC-42,
 SUB-13), section 2.6's confirmations, the light client and FFI holding a
 delegation and no seed, and the DMN-17 flake.
+
+## The build cache (2026-09-22)
+
+`crates/target` stood at 58 GB: 43 GB under `debug/deps`, of which 38 GB was
+416 test executables at about 330 MB each (every one a statically linked
+program with full debug information), several versions of each since cargo
+names artifacts by a hash of their inputs and deletes nothing; 15 GB of
+incremental state. Nothing reads it and nothing depends on it beyond rebuild
+time. **`cargo-sweep` 0.8.0 installed** [author, 2026-09-22]: the gate stamps
+the cache before step 0 and sweeps after the fuzz smoke, so what a full pass
+did not build is what goes, and absence of the tool fails the gate as
+cargo-deny's does. Its first pass: 59,213 MB to 24,552 MB, 416 test
+executables to 99, one of each. The two further levers, `debug =
+"line-tables-only"` in the dev and test profiles and a size cap, are the
+author's and untaken. That pass failed DMN-17's daemon scenario a third
+time, *carol attaches: dial timed out* at 125.88 s under the full run's
+load: three of the twelve full gate runs of the 22nd, always that scenario,
+always the dial between two daemon processes, never alone.

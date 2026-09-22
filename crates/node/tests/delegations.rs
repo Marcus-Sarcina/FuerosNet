@@ -17,7 +17,9 @@ use rhtn_crypto::verify::{self, Failure};
 use rhtn_node::Keyhash;
 use rhtn_node::currency::{CurrencyState, ROLE_PATRON};
 use rhtn_node::propagation::*;
-use rhtn_node::store::{Decision, Horizon, KIND_DELEGATION, Known, TopologyStore};
+use rhtn_node::store::{
+    Decision, Horizon, KIND_DELEGATION, KIND_TRANSACTION, Known, TopologyStore,
+};
 use rhtn_node::view::NodeView;
 use rhtn_transport::tls::{Clock, Credential};
 use std::collections::BTreeSet;
@@ -315,7 +317,13 @@ fn top_42_an_acknowledgement_waits_for_the_delegation_it_was_signed_under() {
         ids: &ids(),
         store: &store,
     };
-    assert_eq!(s.release_deferred_acks(&known), vec![AckTaken::Taken]);
+    assert_eq!(
+        s.release_deferred_acks(&known)
+            .into_iter()
+            .map(|(t, _)| t)
+            .collect::<Vec<_>>(),
+        vec![AckTaken::Taken]
+    );
     assert_eq!(s.acks().len(), 1);
     assert_eq!(s.deferred_acks(), 0);
 }
@@ -479,4 +487,189 @@ fn dec_35_an_envelope_signed_under_a_delegated_key_fails_verification() {
         Decision::Malformed(_) | Decision::OutOfStore | Decision::Refused(_)
     ));
     assert_eq!(fab.count(FRAME_TOPOLOGY_PUSH), 0);
+}
+
+// acceptance: SUB-12
+#[test]
+fn sub_12_a_publication_naming_another_device_than_the_sessions_is_refused() {
+    use rhtn_archive::prekey::{CONSTRUCTION_PQXDH, PrekeyBundle};
+    use rhtn_archive::submission::{
+        PrekeyPublication, SUBMISSION_ACCEPTED, SUBMISSION_REFUSED, SubmissionReply,
+    };
+    let w = World::new();
+    let mut n = view("bob", Table::with_me(kh("bob")), "alice", &[]);
+    n.set_now(w.clock);
+    let s = id("carol");
+    let (d1, d2) = ([1u8; 32], [2u8; 32]);
+    // a valid bundle by S naming device d2, published on d1's session
+    let bundle = PrekeyBundle::build(&s, CONSTRUCTION_PQXDH, b"material", w.clock, &d2);
+    let body = PrekeyPublication {
+        bundle: bundle.clone(),
+        nonce: [5; 16],
+    }
+    .encode();
+    let reply =
+        rhtn_node::submissions::publication(&mut n, &ids(), &kh("carol"), &d1, &body).unwrap();
+    let r = SubmissionReply::decode(&reply).unwrap();
+    assert_eq!((r.nonce, r.code), ([5; 16], SUBMISSION_REFUSED));
+    assert!(
+        n.prekeys.bundle_for(&kh("carol"), &d2).is_none(),
+        "no bundle for (S, d2) from it"
+    );
+    assert!(n.prekeys.bundle(&kh("carol")).is_none());
+    // the same bundle on a session d2 presented is taken
+    let reply =
+        rhtn_node::submissions::publication(&mut n, &ids(), &kh("carol"), &d2, &body).unwrap();
+    let r = SubmissionReply::decode(&reply).unwrap();
+    assert_eq!(r.code, SUBMISSION_ACCEPTED);
+    assert_eq!(n.prekeys.bundle_for(&kh("carol"), &d2), Some(&bundle));
+}
+
+// acceptance: TOP-44
+#[test]
+fn top_44_a_running_node_issues_and_takes_acknowledgements_under_its_standing_policy() {
+    use rhtn_node::store::KIND_SUBTREE_ACK;
+    // G (alice) over P (bob) under a root (w3); S (w1) a sibling of P under
+    // G, within two edges of the node acknowledged, which is as far as the
+    // storage rule carries the acknowledgement (`wire-format.md` §10.1.1);
+    // G runs as an instance and acknowledges everything under its
+    // subordinates; S accepts G's acknowledgements by holding G's delegation
+    let mut w = World::new();
+    let (a_g, _) = w.adopt("alice", "w3", 1);
+    let (a_p, _) = w.adopt("bob", "alice", 3);
+    let (a_s, _) = w.adopt("w1", "alice", 2);
+    let base = [&a_g, &a_p, &a_s];
+    let infra = ["w3", "alice", "w1", "bob"];
+    let t = w.clock;
+    let (clock, _) = movable(t);
+    let cred = instance("alice", 51, t - 60, clock);
+    let mut g = view(
+        "alice",
+        table_with(kh("alice"), &w, &base, &infra),
+        "w3",
+        &[0],
+    );
+    g.set_now(t + 1);
+    g.set_slot(0, Some(kh("bob")), t);
+    g.credential = Some(cred.clone());
+    g.ack_policy = Some(Arc::new(|_patron, _node| true));
+    g.set_slot(1, Some(kh("w1")), t);
+    let mut s = view("w1", table_with(kh("w1"), &w, &base, &infra), "w3", &[0, 1]);
+    s.set_now(t + 1);
+    s.peers.insert(kh("w2"));
+    let fab_g = Fabric::with(&[kh("w3"), kh("bob"), kh("w1")]);
+    let fab_s = Fabric::with(&[kh("alice"), kh("w2")]);
+    // S holds G's delegation from the topology class
+    assert_eq!(
+        s.receive_push(
+            &*fab_s,
+            &kh("alice"),
+            &encode_push(KIND_DELEGATION, &cred.current().unwrap().raw),
+            &ids()
+        ),
+        Decision::Stored
+    );
+    // an adoption of N (carol) under P is pushed to G: G's runtime stores
+    // it, issues the acknowledgement under its delegated key, and pushes it
+    let (a_n, _) = w.adopt("carol", "bob", 4);
+    fab_g.clear();
+    assert_eq!(
+        g.receive_push(
+            &*fab_g,
+            &kh("bob"),
+            &encode_push(KIND_TRANSACTION, &a_n.bytes),
+            &ids()
+        ),
+        Decision::Stored
+    );
+    assert_eq!(
+        g.table.acks().len(),
+        1,
+        "G's table holds its acknowledgement"
+    );
+    assert_eq!(g.table.acks()[0].node, kh("carol"));
+    assert_eq!(g.store.acks_held(), 1);
+    // pushed to every adjacency, S among them
+    let pushes: Vec<(u64, Vec<u8>)> = fab_g
+        .to(&kh("w1"), FRAME_TOPOLOGY_PUSH)
+        .iter()
+        .map(|b| decode_push(b).unwrap())
+        .collect();
+    let ack = pushes
+        .iter()
+        .find(|(k, _)| *k == KIND_SUBTREE_ACK)
+        .map(|(_, o)| o.clone())
+        .expect("the acknowledgement is pushed to S");
+    assert_eq!(
+        verify::record(
+            &Known {
+                ids: &ids(),
+                store: &s.store
+            },
+            "SubtreeAck",
+            &ack
+        ),
+        Ok(()),
+        "signed under the delegated key"
+    );
+    // S takes the adoption, then the acknowledgement, and admits N by policy
+    assert_eq!(
+        s.receive_push(
+            &*fab_s,
+            &kh("alice"),
+            &encode_push(KIND_TRANSACTION, &a_n.bytes),
+            &ids()
+        ),
+        Decision::Stored
+    );
+    fab_s.clear();
+    assert_eq!(
+        s.receive_push(
+            &*fab_s,
+            &kh("alice"),
+            &encode_push(KIND_SUBTREE_ACK, &ack),
+            &ids()
+        ),
+        Decision::Stored
+    );
+    assert_eq!(s.table.acks().len(), 1);
+    assert_eq!(s.table.acks()[0].grandpatron, kh("alice"));
+    assert_eq!(
+        fab_s.recipients(FRAME_TOPOLOGY_PUSH),
+        [kh("w2")].into_iter().collect::<BTreeSet<_>>(),
+        "forwarded on to its peer, not back to where it came from"
+    );
+    // G's gateway admits N above the patron level: the acknowledgement it
+    // consults is its own
+    assert!(
+        g.table
+            .acks()
+            .iter()
+            .any(|a| a.node == kh("carol") && a.grandpatron == kh("alice"))
+    );
+    // a second arrival is a duplicate at S
+    assert_eq!(
+        s.receive_push(
+            &*fab_s,
+            &kh("w2"),
+            &encode_push(KIND_SUBTREE_ACK, &ack),
+            &ids()
+        ),
+        Decision::Duplicate
+    );
+    // the acknowledgement lapses at both when P departs
+    let dep = w.depart("bob", "alice", a_p.locator().unwrap().seqno);
+    for (v, fab, from) in [(&mut g, &fab_g, "bob"), (&mut s, &fab_s, "alice")] {
+        assert_eq!(
+            v.receive_push(
+                &**fab,
+                &kh(from),
+                &encode_push(KIND_TRANSACTION, &dep.bytes),
+                &ids()
+            ),
+            Decision::Stored
+        );
+        assert_eq!(v.table.acks().len(), 0, "lapsed in the table");
+        assert_eq!(v.store.acks_held(), 0, "and gone from the store");
+    }
 }

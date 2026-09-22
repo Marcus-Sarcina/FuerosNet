@@ -112,18 +112,15 @@ impl PayloadKeys {
         }
     }
 
-    /// The signed bundle to publish (`wire-format.md` §7.8).
-    pub fn bundle(&mut self, id: &SigningIdentity, now: u64) -> Vec<u8> {
+    /// The signed bundle to publish (`wire-format.md` §7.8), naming
+    /// `device`: the key this device presents in a handshake, the
+    /// identity's classical member on the seed-holding device and the
+    /// delegated key on any other.  The identity signs it either way: a
+    /// desktop's public halves are signed on the ceremony device (design
+    /// §14.2.4).
+    pub fn bundle(&mut self, id: &SigningIdentity, device: &[u8; 32], now: u64) -> Vec<u8> {
         self.published_at = Some(now);
-        // this client holds the seed, so its device is named by the
-        // identity's classical key (`wire-format.md` §7.8)
-        PrekeyBundle::build(
-            id,
-            CONSTRUCTION_PQXDH,
-            &self.blob().encode(),
-            now,
-            id.public.ed.as_bytes(),
-        )
+        PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now, device)
     }
 
     /// Mint `n` one-time pairs and return their public halves, as uploaded.
@@ -409,16 +406,41 @@ pub fn unwrap(plaintext: &[u8]) -> Result<(u64, Vec<u8>), String> {
     }
 }
 
-fn channel(tag: u64, bytes: &[u8]) -> Vec<u8> {
+/// The channel's framing, this construction's own: the tag, the sending
+/// device (the key it presents, `wire-format.md` §7.8), and the bytes.  A
+/// session is with a device (design §14.2.4), so what arrives says which
+/// of the sender's devices it is from.
+fn channel(tag: u64, device: &[u8; 32], bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 2);
+    emit_array_head(&mut out, 3);
     emit_uint(&mut out, tag);
+    emit_bstr(&mut out, device);
     emit_bstr(&mut out, bytes);
     out
 }
 
-fn unchannel(b: &[u8]) -> Result<(u64, Vec<u8>), String> {
-    unwrap(b)
+/// A ratchet message on the channel from `me`.
+pub fn channel_message(me: &[u8; 32], m: &[u8]) -> Vec<u8> {
+    channel(CHANNEL_MESSAGE, me, m)
+}
+
+fn unchannel(b: &[u8]) -> Result<(u64, [u8; 32], Vec<u8>), String> {
+    let parts = array_item_ranges(b, 0).ok_or("channel not an array")?;
+    if parts.len() != 3 {
+        return Err("channel is tag, device and bytes".into());
+    }
+    let p = Parser { b };
+    let (tg, _) = p.item(parts[0].start).map_err(|e| e.0)?;
+    let (d, _) = p.item(parts[1].start).map_err(|e| e.0)?;
+    let (v, _) = p.item(parts[2].start).map_err(|e| e.0)?;
+    match (as_uint(&tg), &d, &v) {
+        (Some(tag), Item::Bytes(dr), Item::Bytes(r)) if dr.len() == 32 => Ok((
+            tag,
+            b[dr.clone()].try_into().unwrap(),
+            b[r.clone()].to_vec(),
+        )),
+        _ => Err("channel shape".into()),
+    }
 }
 
 impl InitialMessage {
@@ -502,20 +524,52 @@ impl std::fmt::Display for PayloadError {
     }
 }
 
-/// The sessions a client holds, one per peer, and the bundles it
-/// prefetched.
+/// A peer's device: the key it presents (`wire-format.md` §7.8).
+pub type PeerDevice = (Keyhash, [u8; 32]);
+
+/// One ciphertext per device it is for.
+pub type PerDevice = Vec<([u8; 32], Vec<u8>)>;
+
+/// The sessions a client holds, one per peer device, and the bundles it
+/// prefetched, one per peer device (design §14.2.4: a session is with a
+/// device and never with an identity).
 #[derive(Default)]
 pub struct Sessions {
-    pub ratchets: BTreeMap<Keyhash, Ratchet>,
-    pub prefetched: BTreeMap<Keyhash, Prefetched>,
+    pub ratchets: BTreeMap<PeerDevice, Ratchet>,
+    pub prefetched: BTreeMap<PeerDevice, Prefetched>,
 }
 
 impl Sessions {
-    /// Open a session to `to` on its bundle and, where served, a one-time
-    /// key, and encrypt the first plaintext: the channel's initial message.
+    /// Keep a bundle under the device it names.
+    pub fn prefetch(&mut self, p: Prefetched) {
+        self.prefetched.insert((p.subject, p.device), p);
+    }
+
+    /// The bundles held for `peer`, one per device.
+    pub fn prefetched_of(&self, peer: &Keyhash) -> Vec<&Prefetched> {
+        self.prefetched
+            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
+            .map(|(_, p)| p)
+            .collect()
+    }
+
+    /// The devices of `peer` this client holds a bundle for.
+    pub fn devices_of(&self, peer: &Keyhash) -> Vec<[u8; 32]> {
+        self.prefetched_of(peer).iter().map(|p| p.device).collect()
+    }
+
+    pub fn has_bundle(&self, peer: &Keyhash) -> bool {
+        !self.prefetched_of(peer).is_empty()
+    }
+
+    /// Open a session to `to`'s device on its bundle and, where served, a
+    /// one-time key, and encrypt the first plaintext: the channel's
+    /// initial message, from `me`, this client's own device.
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         &mut self,
         keys: &PayloadKeys,
+        me: &[u8; 32],
         to: Keyhash,
         their: &Prefetched,
         one_time: Option<&OneTimeKey>,
@@ -540,7 +594,7 @@ impl Sessions {
             ad,
         );
         let first = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
-        self.ratchets.insert(to, r);
+        self.ratchets.insert((to, their.device), r);
         let msg = InitialMessage {
             ik: keys.ik.public(),
             ek: init.ek,
@@ -550,18 +604,47 @@ impl Sessions {
             opk_id: one_time.map(|o| o.id),
             first,
         };
-        Ok(channel(CHANNEL_INITIAL, &msg.encode()))
+        Ok(channel(CHANNEL_INITIAL, me, &msg.encode()))
     }
 
-    /// Encrypt on an open session.
-    pub fn send(&mut self, to: &Keyhash, plaintext: &[u8]) -> Result<Vec<u8>, PayloadError> {
-        let r = self.ratchets.get_mut(to).ok_or(PayloadError::NoSession)?;
-        let m = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
-        Ok(channel(CHANNEL_MESSAGE, &m))
+    /// Encrypt on every open session with `to`: one ciphertext per device,
+    /// each readable by that device alone (`wire-format.md` §7.10).
+    pub fn send(
+        &mut self,
+        me: &[u8; 32],
+        to: &Keyhash,
+        plaintext: &[u8],
+    ) -> Result<PerDevice, PayloadError> {
+        let devices: Vec<[u8; 32]> = self
+            .ratchets
+            .range((*to, [0; 32])..=(*to, [0xff; 32]))
+            .map(|((_, d), _)| *d)
+            .collect();
+        if devices.is_empty() {
+            return Err(PayloadError::NoSession);
+        }
+        let mut out = Vec::with_capacity(devices.len());
+        for d in devices {
+            let r = self
+                .ratchets
+                .get_mut(&(*to, d))
+                .ok_or(PayloadError::NoSession)?;
+            let m = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
+            out.push((d, channel(CHANNEL_MESSAGE, me, &m)));
+        }
+        Ok(out)
     }
 
+    /// Whether any session with `peer` is open.
     pub fn has_session(&self, peer: &Keyhash) -> bool {
-        self.ratchets.contains_key(peer)
+        self.ratchets
+            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
+            .next()
+            .is_some()
+    }
+
+    pub fn has_session_with(&self, peer: &Keyhash, device: &[u8; 32]) -> bool {
+        self.ratchets.contains_key(&(*peer, *device))
     }
 
     /// Read what arrived on the channel from `from`: an initial message
@@ -574,21 +657,27 @@ impl Sessions {
         bytes: &[u8],
         fresh: Fresh,
     ) -> Result<Vec<u8>, PayloadError> {
-        let (tag, inner) = unchannel(bytes).map_err(PayloadError::Malformed)?;
+        let (tag, device, inner) = unchannel(bytes).map_err(PayloadError::Malformed)?;
         let mut next = |out: &mut [u8; 32]| fresh(out);
         match tag {
             CHANNEL_INITIAL => {
                 let m = InitialMessage::decode(&inner).map_err(PayloadError::Malformed)?;
-                // The sender is the keyhash the channel names; the identity
-                // key is the one that keyhash published and signed for
-                // (design §14.2.4.2).  An initial message whose key is not
-                // the one bound to the name is not that party's, whatever
-                // it decrypts to, and the transport authenticating a relay
-                // hop says nothing about who wrote this.  Held under no
-                // binding, it cannot be attributed and is not opened.
+                // The sender is the keyhash the channel names and the device
+                // it says; the identity key is the one that keyhash
+                // published and signed for that device (design §14.2.4.2).
+                // An initial message whose key is not the one bound to the
+                // name is not that party's, whatever it decrypts to, and
+                // the transport authenticating a relay hop says nothing
+                // about who wrote this.  Held under no binding, it cannot
+                // be attributed and is not opened.
+                // the binding is the bundle held for the sending device;
+                // one held for another of the sender's devices still says
+                // whether the key is that party's at all
+                let held = self.prefetched_of(&from);
                 let bound = self
                     .prefetched
-                    .get(&from)
+                    .get(&(from, device))
+                    .or_else(|| held.first().copied())
                     .ok_or(PayloadError::NoBundle)?
                     .blob
                     .ik;
@@ -636,13 +725,13 @@ impl Sessions {
                 if let Some(o) = &one_time {
                     keys.take_one_time(o.id);
                 }
-                self.ratchets.insert(from, r);
+                self.ratchets.insert((from, device), r);
                 Ok(pt)
             }
             CHANNEL_MESSAGE => {
                 let r = self
                     .ratchets
-                    .get_mut(&from)
+                    .get_mut(&(from, device))
                     .ok_or(PayloadError::NoSession)?;
                 let mut seed = || {
                     let mut s = [0u8; 32];
@@ -664,8 +753,14 @@ pub struct PayloadState {
     pub keys: PayloadKeys,
     pub sessions: Sessions,
     pub serving: Option<Keyhash>,
-    pub pending: BTreeMap<Keyhash, Vec<Vec<u8>>>,
-    pub outstanding: BTreeMap<[u8; 16], Keyhash>,
+    /// This device, by the key it presents (`wire-format.md` §7.8): what
+    /// its bundle names and what its messages say they are from.  The
+    /// identity's classical member until a device says otherwise.
+    pub device: [u8; 32],
+    /// Plaintexts waiting for a session with one of a peer's devices.
+    pub pending: BTreeMap<PeerDevice, Vec<Vec<u8>>>,
+    /// One-time requests in flight, by nonce: the peer device asked for.
+    pub outstanding: BTreeMap<[u8; 16], PeerDevice>,
     /// What the node last reported of the pool, or what was uploaded.
     pub pool_reported: usize,
     /// Peers who sent an initial message this client could not attribute
@@ -682,6 +777,7 @@ impl PayloadState {
             cfg,
             sessions: Sessions::default(),
             serving: None,
+            device: [0; 32],
             pending: BTreeMap::new(),
             outstanding: BTreeMap::new(),
             pool_reported: 0,

@@ -3,22 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Refuse a publication whose device is not the key the session presented
-///
-/// Spec: wire-format.md §7.10
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.10): "and one whose device is not the key this session presented"
-///
-/// Given: Client S attached to N from device d1; a valid bundle by S naming device d2.
-/// When: S publishes it on d1's session.
-/// Then: The reply echoes the nonce with code 1 and N holds no bundle for (S, d2) from it; the same bundle published on a session d2 presented is taken.
-#[test]
-#[ignore = "acceptance SUB-12: owed at milestone after-5"]
-fn sub_12_refuse_a_publication_whose_device_is_not_the_key() {
-    todo!("SUB-12: Refuse a publication whose device is not the key the session presented")
-}
-
 /// Keep no history of publications and deposits beyond the bundle and the pool they produced
 ///
 /// Spec: infra-client-requirements.md §1

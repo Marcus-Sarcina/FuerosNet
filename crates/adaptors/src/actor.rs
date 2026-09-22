@@ -78,3 +78,17 @@ impl Handle {
         rrx.recv().expect("the client answers")
     }
 }
+
+/// The client's horizon view as what its direct path binds by
+/// (`wire-format.md` §9.1, `light-client-requirements.md` §4.2): the
+/// delegation held for the peer, read on the client's own thread.
+impl rhtn_transport::bind::Held for Handle {
+    fn delegation(&self, keyhash: &[u8; 32]) -> Option<rhtn_crypto::verify::Delegation> {
+        let kh = *keyhash;
+        self.with_blocking(move |c| c.horizon.delegation(&kh).cloned())
+    }
+    fn by_key(&self, key: &[u8; 32]) -> Option<rhtn_crypto::verify::Delegation> {
+        let k = *key;
+        self.with_blocking(move |c| c.horizon.delegation_by_key(&k).cloned())
+    }
+}

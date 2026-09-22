@@ -45,6 +45,11 @@ pub struct NodeView {
     pub credential: Option<Arc<rhtn_transport::tls::Credential>>,
     /// The `not_before` of the credential last pushed, so each is pushed once.
     pub pushed_credential: Option<u64>,
+    /// The standing acknowledgement policy (design §11.2.1,
+    /// `infra-client-requirements.md` §10.1): whether to acknowledge an
+    /// adoption of `node` under `patron`, one of this node's subordinates.
+    /// None issues nothing.
+    pub ack_policy: Option<rhtn_archive::topology::AckPolicy>,
     /// This node's own position in its primary subnet; its anchor names
     /// the subnet a memo may travel in (`wire-format.md` §10.2).
     pub position: Locator,
@@ -137,6 +142,7 @@ impl NodeView {
             signer,
             credential,
             pushed_credential: None,
+            ack_policy: None,
             position,
             positions: BTreeMap::new(),
             table,
@@ -160,6 +166,18 @@ impl NodeView {
             repairs: BTreeMap::new(),
             policy: Arc::new(ReferenceMetric::default()),
         }
+    }
+
+    /// What signs this node's acknowledgements: the delegated key where it
+    /// runs as an instance, its identity's classical member otherwise
+    /// (`wire-format.md` §7.5); nothing where it holds neither.
+    pub fn ack_signer(&self) -> Option<Arc<dyn rhtn_crypto::signer::Sign1 + Send + Sync>> {
+        if let Some(c) = &self.credential {
+            return Some(Arc::new(c.signer()));
+        }
+        self.signer
+            .clone()
+            .map(|s| s as Arc<dyn rhtn_crypto::signer::Sign1 + Send + Sync>)
     }
 
     /// The time now, by this node's clock.

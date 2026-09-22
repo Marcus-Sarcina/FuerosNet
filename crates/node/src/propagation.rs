@@ -8,12 +8,13 @@
 
 use crate::resolution::Path;
 use crate::store::{
-    Decision, EndpointRecord, Horizon, KIND_DELEGATION, KIND_ENDPOINT_RECORD, KIND_TRANSACTION,
-    Known,
+    Decision, EndpointRecord, Horizon, KIND_DELEGATION, KIND_ENDPOINT_RECORD, KIND_SUBTREE_ACK,
+    KIND_TRANSACTION, Known, Pending,
 };
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash, Txid};
 use rhtn_archive::record::Record;
+use rhtn_archive::topology::{AckIssuer, AckTaken};
 use rhtn_archive::topology::{Evaluation, Restored, Snapshot, Table, unfolded};
 use rhtn_archive::tx::{self, Locator, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_DISAVOWAL};
 use rhtn_codec::cbor::*;
@@ -309,6 +310,12 @@ impl NodeView {
         {
             return Decision::Refused(format!("{e:?}"));
         }
+        // an acknowledgement is the table's to take (`wire-format.md`
+        // §7.5): verified under the grandpatron's held delegation, against
+        // an open binding, deferred where the delegation is not yet held
+        if kind == KIND_SUBTREE_ACK {
+            return self.take_ack_object(adj, from, object, ids);
+        }
         let decision = self.store.accept(kind, object, from, ids, &hz);
         match &decision {
             Decision::Stored => {
@@ -319,9 +326,18 @@ impl NodeView {
                 }
                 if kind == KIND_TRANSACTION {
                     // a change to one of this node's own slots travels rootward
-                    // as a memo (§10.2)
-                    if let Some(slot) = self.apply_stored(object, ids) {
+                    // as a memo (§10.2); an adoption under one of them may be
+                    // acknowledged under standing policy, and the
+                    // acknowledgement goes to every adjacency (§7.5)
+                    let (slot, acks) = self.apply_stored(object, ids);
+                    if let Some(slot) = slot {
                         self.originate_memo(adj, slot);
+                    }
+                    for ack in acks {
+                        let push = encode_push(KIND_SUBTREE_ACK, &ack);
+                        for p in self.adjacent(adj, None) {
+                            adj.send(&p, FRAME_TOPOLOGY_PUSH, &push);
+                        }
                     }
                     // **membership moved, so the role table moves with
                     // it** (`infra-client-requirements.md` §10.2): a node
@@ -351,7 +367,18 @@ impl NodeView {
                         ids,
                         store: &self.store,
                     };
-                    self.table.release_deferred_acks(&known);
+                    let released = self.table.release_deferred_acks(&known);
+                    for (taken, bytes) in released {
+                        if taken == AckTaken::Taken
+                            && let Some((a, g)) = ack_pair(&bytes)
+                            && self.store.keep_ack(a, g, bytes.clone())
+                        {
+                            let push = encode_push(KIND_SUBTREE_ACK, &bytes);
+                            for p in self.adjacent(adj, None) {
+                                adj.send(&p, FRAME_TOPOLOGY_PUSH, &push);
+                            }
+                        }
+                    }
                 }
             }
             Decision::Conflict { subject, .. } => {
@@ -369,22 +396,112 @@ impl NodeView {
     /// the flood (`wire-format.md` §3.4's *valid versus effective*).  Where
     /// the transaction changes one of this node's own subordinate slots, the
     /// slot is written and returned.
-    fn apply_stored<L: Lookup + ?Sized>(&mut self, object: &[u8], ids: &L) -> Option<u64> {
-        let rec = Record::parse(object).ok()?;
-        let me = self.me();
-        let Ok(outcome) = self
-            .table
-            .apply_with(&rec, ids, &self.store, None, Evaluation::Deferred)
-        else {
-            return None;
+    /// Take a received acknowledgement (`wire-format.md` §7.5, §10.1):
+    /// stored and forwarded when the table takes it, held aside when its
+    /// signer's delegation is not yet held, refused otherwise.
+    fn take_ack_object<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        from: &Keyhash,
+        object: &[u8],
+        ids: &L,
+    ) -> Decision {
+        let Some((adoption, grandpatron)) = ack_pair(object) else {
+            return Decision::Malformed("not a subtree acknowledgement".into());
         };
+        if self.store.holds_ack(&adoption, &grandpatron) {
+            return Decision::Duplicate;
+        }
+        let known = Known {
+            ids,
+            store: &self.store,
+        };
+        let taken = self.table.take_ack(&known, object);
+        match taken {
+            Ok(AckTaken::Taken) => {
+                self.store.keep_ack(adoption, grandpatron, object.to_vec());
+                let push = encode_push(KIND_SUBTREE_ACK, object);
+                for p in self.adjacent(adj, Some(from)) {
+                    adj.send(&p, FRAME_TOPOLOGY_PUSH, &push);
+                }
+                Decision::Stored
+            }
+            Ok(AckTaken::Deferred(_)) => Decision::Held(Pending {
+                kind: KIND_SUBTREE_ACK,
+                bytes: object.to_vec(),
+                from: *from,
+                missing_key: None,
+                unproved_series: None,
+            }),
+            Ok(AckTaken::NoOpenBinding) => {
+                Decision::Refused("no open binding for the adoption it acknowledges".into())
+            }
+            Err(e) => Decision::Malformed(e),
+        }
+    }
+
+    /// Fold a stored transaction into the table: the slot it changed, if
+    /// one of this node's own, and the acknowledgements issued for it
+    /// under the standing policy.  Acknowledgements that lapsed with it
+    /// leave the store.
+    fn apply_stored<L: Lookup + ?Sized>(
+        &mut self,
+        object: &[u8],
+        ids: &L,
+    ) -> (Option<u64>, Vec<Vec<u8>>) {
+        let Ok(rec) = Record::parse(object) else {
+            return (None, Vec::new());
+        };
+        let me = self.me();
+        let issuer = match (&self.ack_policy, self.ack_signer()) {
+            (Some(policy), Some(signer)) => Some(AckIssuer {
+                signer,
+                policy: policy.clone(),
+                now: self.now(),
+            }),
+            _ => None,
+        };
+        let Ok(outcome) = self.table.apply_with(
+            &rec,
+            ids,
+            &self.store,
+            issuer.as_ref(),
+            Evaluation::Deferred,
+        ) else {
+            return (None, Vec::new());
+        };
+        for ack in &outcome.acks {
+            if let Some((a, g)) = ack_pair(ack) {
+                self.store.keep_ack(a, g, ack.clone());
+            }
+        }
+        // what lapsed with this record leaves the store with the table
+        self.table.lapse_acks();
+        let held: Vec<(Txid, Keyhash)> = self
+            .table
+            .acks()
+            .iter()
+            .map(|a| (a.adoption, a.grandpatron))
+            .collect();
+        self.store.retain_acks(|a, g| held.contains(&(*a, *g)));
+        let issued = outcome.acks.clone();
+        (self.fold_slot(&rec, me, &outcome), issued)
+    }
+
+    /// The slot of this node's own a folded transaction changed, if any.
+    fn fold_slot(
+        &mut self,
+        rec: &Record,
+        me: Keyhash,
+        outcome: &rhtn_archive::topology::Outcome,
+    ) -> Option<u64> {
         // **a recognised recovery ends the superseded key's relationship**
         // (design §9.0.2; `infra-client-requirements.md` §6.1): the old key
         // is not a party this node serves any more, so what it registered
         // to be woken at is not this node's to keep.  The fold is what
         // knows a supersession happened — the adoption names the new key,
         // and only the table can say whose bindings it closed.
-        if let rhtn_archive::topology::Applied::Replaced { prior, .. } = outcome.applied
+        if let rhtn_archive::topology::Applied::Replaced { prior, .. } = outcome.applied.clone()
             && !self.still_bound(&prior)
         {
             self.ended(&prior, rec.time);
@@ -423,13 +540,13 @@ impl NodeView {
             TYPE_DEPARTURE if rec.field_hash(2) == Some(me) => {
                 let node = rec.field_hash(1)?;
                 let slot = self.slot_of(&node)?;
-                self.clear_if_unbound(slot, node, &rec);
+                self.clear_if_unbound(slot, node, rec);
                 Some(slot)
             }
             TYPE_DISAVOWAL if rec.field_hash(1) == Some(me) => {
                 let node = rec.field_hash(2)?;
                 let slot = self.slot_of(&node)?;
-                self.clear_if_unbound(slot, node, &rec);
+                self.clear_if_unbound(slot, node, rec);
                 Some(slot)
             }
             _ => None,
@@ -1105,4 +1222,22 @@ fn read_slots(b: &[u8]) -> Option<BTreeMap<u64, Slot>> {
         );
     }
     Some(out)
+}
+
+/// The identity of an acknowledgement: (adoption txid, grandpatron) from
+/// fields 1 and 2 (`wire-format.md` §7.5, §10.1).
+pub fn ack_pair(bytes: &[u8]) -> Option<(Txid, Keyhash)> {
+    let item = rhtn_codec::cbor::parse_all(bytes).ok()?;
+    let rhtn_codec::cbor::Item::Map(m) = &item else {
+        return None;
+    };
+    let kh = |k: u64| -> Option<[u8; 32]> {
+        match rhtn_codec::cbor::map_get(m, k) {
+            Some(rhtn_codec::cbor::Item::Bytes(r)) if r.len() == 32 => {
+                bytes[r.clone()].try_into().ok()
+            }
+            _ => None,
+        }
+    };
+    Some((kh(1)?, kh(2)?))
 }

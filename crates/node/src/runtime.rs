@@ -394,14 +394,29 @@ impl LiveNode {
         // document states one.
         let attached = view.clone();
         let reconcile = adjacency.clone();
-        cfg.on_attach = Some(Arc::new(move |peer, up| {
+        // a client is attached while any of its devices holds a session
+        // (`wire-format.md` §8.2): the set of devices per client is what
+        // says when the last has gone
+        let devices: Arc<Mutex<HashMap<Keyhash, std::collections::BTreeSet<[u8; 32]>>>> =
+            Arc::default();
+        cfg.on_attach = Some(Arc::new(move |peer, device, up| {
             let mut v = attached.lock().unwrap();
+            let mut ds = devices.lock().unwrap();
             if up {
+                ds.entry(peer).or_default().insert(device);
                 v.attached.insert(peer);
             } else {
-                v.attached.remove(&peer);
+                let left = ds.get_mut(&peer).map(|s| {
+                    s.remove(&device);
+                    s.len()
+                });
+                if left.unwrap_or(0) == 0 {
+                    ds.remove(&peer);
+                    v.attached.remove(&peer);
+                }
                 return;
             }
+            drop(ds);
             drop(v);
             // **the replay is spawned, not run here.**  This hook is on
             // the accept path, between the ack and the session being
@@ -503,7 +518,7 @@ impl LiveNode {
         let ids_for_requests = ids.clone();
         let verifier: Arc<Mutex<Option<LocalVerifier>>> = Arc::default();
         let hosted_verifier = verifier.clone();
-        let on_request: RequestHandler = Arc::new(move |peer, family, body| {
+        let on_request: RequestHandler = Arc::new(move |peer, device, family, body| {
             let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) = (
                 v.clone(),
                 c.clone(),
@@ -583,11 +598,11 @@ impl LiveNode {
                     Family::PrekeyPublication => {
                         let mut view = v.lock().unwrap();
                         let i = ids_for_requests.lock().unwrap();
-                        crate::submissions::publication(&mut view, &i, &peer, &body)
+                        crate::submissions::publication(&mut view, &i, &peer, &device, &body)
                     }
                     Family::OneTimeDeposit => {
                         let mut view = v.lock().unwrap();
-                        crate::submissions::deposit(&mut view, &peer, &body)
+                        crate::submissions::deposit(&mut view, &peer, &device, &body)
                     }
                     Family::RelaySubmission => {
                         let node = s.lock().unwrap().clone();
@@ -595,7 +610,7 @@ impl LiveNode {
                     }
                     Family::WakeRegistration => {
                         let mut view = v.lock().unwrap();
-                        crate::submissions::wake(&mut view, &peer, &body)
+                        crate::submissions::wake(&mut view, &peer, &device, &body)
                     }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;

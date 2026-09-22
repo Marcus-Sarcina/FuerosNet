@@ -10343,6 +10343,35 @@ seven or fewer credentials remain. A memo confirming a cycle now empties the
 slot and sends the vacancy memo, and no transaction is minted, stored or
 pushed [author, 2026-09-21].
 
+**A session is with a device, in the code.** The queue holds the device a
+submission named and a session is one per key presented, so a subject's
+phone and desktop attach as two sessions and each drains what is for it;
+bundles, pools and wake endpoints are per device and a publication is bound
+to the session it arrived on; a client fetches a bundle per device, opens a
+session with each and sends to each, the channel saying which device sent.
+Five more catalogue entries: 432 of 455. The light client's horizon view
+holds the delegations of the parties in it, the newest per keyhash, and its
+direct path binds a delegated desktop by one before any frame arrives
+(`light-client-requirements.md` §4.2): 433.
+
+**A subtree acknowledgement travels as the push wrapper's fourth kind**
+[author, 2026-09-22]. §7.5 defined the record and said it was carried apart
+from the adoption; nothing said how, and §10.1's wrapper had no kind for
+it. Kind 3 is now stated with its identity, the adoption and grandpatron
+pair, its storage rule under the grandpatron's held delegation, and its
+lapse with the relationship; the vectors carry one and the codec admits it.
+A running node issues acknowledgements under a standing policy as it folds
+an adoption under one of its subordinates, signed by its delegated key,
+pushes them, takes a neighbour's against the adoption it holds, defers one
+whose signer's delegation it lacks, and drops them when the relationship
+ends: 434 of 455. The reach §11.2.1 names for acceptance, the grandpatron's
+siblings and the great-grandpatron, lies beyond where §10.1.1 carries the
+adoption itself; the code follows §10.1.1 and the question is recorded.
+
+**The gate sweeps its build cache** [author, 2026-09-22]: `cargo-sweep`,
+stamped before the first step and run after the last, leaves one copy of
+every artifact where cargo had left every superseded test binary.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the

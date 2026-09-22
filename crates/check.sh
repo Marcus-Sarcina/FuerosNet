@@ -14,6 +14,11 @@
 #  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
 #     are not run: they are the tests still owed, and `cargo test -- --ignored`
 #     lists them by failing each one.
+#  4. A bounded fuzz run on the decoders, under nightly where present.
+#  5. The build cache swept of what this pass did not build (cargo-sweep,
+#     stamped before step 0): cargo names artifacts by hash and deletes
+#     nothing itself, so a pass otherwise leaves every superseded test
+#     binary behind.
 #
 #  Every long job is fenced, as models/run-all.sh fences the prover: cargo is
 #  niced and capped at 8 jobs.
@@ -25,6 +30,17 @@ set -u
 set -o pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail=0
+
+# The build cache is stamped before anything builds and swept after
+# everything has: whatever the gate did not touch is a superseded artifact
+# (cargo names each by a hash of its inputs and deletes nothing itself), and
+# a full pass leaves one copy of everything.  cargo-sweep absent is a
+# failure, not a skip.
+if cargo sweep --version > /dev/null 2>&1; then
+  (cd "$HERE" && cargo sweep --stamp > /dev/null 2>&1)
+else
+  echo "  cargo-sweep absent: cargo install cargo-sweep --locked"; fail=1
+fi
 
 echo "=== 0. Specification pins ==="
 # Non-mutating: the documents the code last passed against, and the
@@ -110,6 +126,16 @@ if cargo +nightly --version > /dev/null 2>&1 && cargo fuzz --version > /dev/null
   done
 else
   echo "  nightly toolchain or cargo-fuzz absent: smoke skipped (seeded runs above still ran)"
+fi
+
+echo "=== 5. Build cache ==="
+# whatever this pass did not build is stale; the fuzz build under codec/
+# has a target of its own and is small
+if cargo sweep --version > /dev/null 2>&1; then
+  before=$(du -sm "$HERE/target" 2>/dev/null | cut -f1)
+  (cd "$HERE" && cargo sweep --file > /dev/null 2>&1)
+  after=$(du -sm "$HERE/target" 2>/dev/null | cut -f1)
+  echo "  cargo sweep: target ${before} MB -> ${after} MB"
 fi
 
 echo

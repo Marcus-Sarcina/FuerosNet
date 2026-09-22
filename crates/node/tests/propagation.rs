@@ -1177,6 +1177,7 @@ fn with_endpoint(s: &mut Scene, client: &str) {
     assert_eq!(
         s.n.wake.register(
             kh(client),
+            [0u8; 32],
             Some("https://push.example/rhtn/a3f9".into()),
             Some(vec![7; 32]),
             None

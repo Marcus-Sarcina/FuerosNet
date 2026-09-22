@@ -82,6 +82,14 @@ fn describe(d: &Dispatched) -> String {
     }
 }
 
+/// The device a seed-holding client presents: its classical member.
+fn phone_key(n: &str) -> [u8; 32] {
+    *rhtn_crypto::identity::testkit::test_identity(n)
+        .public
+        .ed
+        .as_bytes()
+}
+
 fn name(k: &[u8; 32]) -> String {
     NAMES
         .iter()
@@ -348,7 +356,7 @@ fn the_pool_is_replenished_before_exhaustion_and_the_signed_prekey_rotated_on_it
             subject: kh("alice"),
             one_time: true,
             nonce: [nonce; 16],
-            device: Some([0u8; 32]),
+            device: Some(phone_key("alice")),
         }
         .encode();
         let r = PrekeyReply::decode(
@@ -427,19 +435,12 @@ fn reusable_material_is_prefetched_for_the_whole_org_as_one_sweep() {
         )),
         "no single-subject reusable request for any of them"
     );
+    assert!(n.s.client("alice").payload.sessions.has_bundle(&kh("bob")));
     assert!(
         n.s.client("alice")
             .payload
             .sessions
-            .prefetched
-            .contains_key(&kh("bob"))
-    );
-    assert!(
-        n.s.client("alice")
-            .payload
-            .sessions
-            .prefetched
-            .contains_key(&kh("carol"))
+            .has_bundle(&kh("carol"))
     );
 }
 
@@ -567,7 +568,7 @@ fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
             subject: kh("bob"),
             one_time: true,
             nonce: [drained; 16],
-            device: Some([0u8; 32]),
+            device: Some(phone_key("bob")),
         }
         .encode();
         let now = n.now();
@@ -978,4 +979,160 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
         served.2, "Served(0, more false)",
         "a subject it is not gets an empty batch"
     );
+}
+
+// acceptance: PAY-20
+#[test]
+fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    n.attach("bob"); // bob's phone, d1: its bundle names bob's classical member
+    let d1 = *rhtn_crypto::identity::testkit::test_identity("bob")
+        .public
+        .ed
+        .as_bytes();
+    // bob's desktop, d2: its own material, its bundle signed by bob's
+    // identity (on the phone) and published under its own device
+    let d2 = [0x42u8; 32];
+    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let mut desktop = Client::new(id("bob"), ids(), Config::default(), dev);
+    desktop.as_device(d2);
+    let pop = n.population();
+    for m in desktop.attach(kh("w1"), &pop) {
+        match m {
+            Msg::PublishBundle(b) => {
+                let parsed = PrekeyBundle::parse(&b).unwrap();
+                assert_eq!(parsed.device, d2);
+                n.nodes
+                    .get_mut("w1")
+                    .unwrap()
+                    .prekeys
+                    .publish(&ids(), &b)
+                    .unwrap();
+            }
+            Msg::StockOneTime(keys) => {
+                assert!(
+                    n.nodes
+                        .get_mut("w1")
+                        .unwrap()
+                        .prekeys
+                        .stock_for(kh("bob"), d2, keys)
+                );
+            }
+            _ => {}
+        }
+    }
+    // S fetches T's material with field 4 absent: two bundles, one per device
+    let now = n.now();
+    let req = PrekeyRequest::One {
+        subject: kh("bob"),
+        one_time: false,
+        nonce: [3; 16],
+        device: None,
+    }
+    .encode();
+    let reply = PrekeyReply::decode(
+        &n.nodes
+            .get_mut("w1")
+            .unwrap()
+            .prekeys
+            .answer(&kh("alice"), &req, now)
+            .unwrap(),
+    )
+    .unwrap();
+    let mut devices: Vec<[u8; 32]> = reply
+        .bundles
+        .iter()
+        .map(|b| {
+            let p = PrekeyBundle::parse(b).unwrap();
+            assert_eq!(p.verify(&ids()), Ok(()), "each verifying under T");
+            p.device
+        })
+        .collect();
+    devices.sort();
+    let mut expected = vec![d1, d2];
+    expected.sort();
+    assert_eq!(
+        devices, expected,
+        "field 2 carries two bundles, one naming d1 and one d2"
+    );
+    n.s.client("alice")
+        .take_prekey_reply(&reply.encode())
+        .unwrap();
+    // both of T's devices hold S's bundle, as a sweep leaves them
+    n.attach("alice");
+    n.sweep("bob");
+    for m in desktop.sweep(&pop) {
+        if let Msg::PrekeyRequest(req) = m {
+            let now = n.now();
+            let reply = n
+                .nodes
+                .get_mut("w1")
+                .unwrap()
+                .prekeys
+                .answer(&kh("bob"), &req, now)
+                .unwrap();
+            desktop.take_prekey_reply(&reply).unwrap();
+        }
+    }
+    // S sends T one message: a one-time key is asked for each device, a
+    // session opened with each, and a ciphertext submitted to each
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_APPLICATION, b"to every device")
+            .unwrap();
+    let mut asked = Vec::new();
+    let mut ciphertexts: Vec<([u8; 32], Vec<u8>)> = Vec::new();
+    for m in msgs {
+        let Msg::PrekeyRequest(req) = m else {
+            panic!("{m:?}")
+        };
+        let PrekeyRequest::One {
+            device: Some(d), ..
+        } = PrekeyRequest::decode(&req).unwrap()
+        else {
+            panic!()
+        };
+        asked.push(d);
+        let now = n.now();
+        let reply = n
+            .nodes
+            .get_mut("w1")
+            .unwrap()
+            .prekeys
+            .answer(&kh("alice"), &req, now)
+            .unwrap();
+        for out in n.s.client("alice").take_prekey_reply(&reply).unwrap() {
+            match out {
+                Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } => {
+                    assert_eq!(to, kh("bob"));
+                    ciphertexts.push((device, bytes));
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+    asked.sort();
+    assert_eq!(asked, expected, "one one-time request per device");
+    assert_eq!(
+        ciphertexts.len(),
+        2,
+        "two ciphertexts, one naming d1 and one d2"
+    );
+    // each device decrypts the one addressed to it and cannot decrypt the other
+    for (device, bytes) in &ciphertexts {
+        let (mine, other): (&mut Client, &mut Client) = if *device == d1 {
+            (n.s.client("bob"), &mut desktop)
+        } else {
+            assert_eq!(*device, d2);
+            (&mut desktop, n.s.client("bob"))
+        };
+        let got = mine
+            .receive_payload(kh("alice"), bytes)
+            .expect("its own device decrypts");
+        assert_eq!(describe(&got), "Application(to every device)");
+        assert!(
+            other.receive_payload(kh("alice"), bytes).is_err(),
+            "the other device cannot decrypt it"
+        );
+    }
 }

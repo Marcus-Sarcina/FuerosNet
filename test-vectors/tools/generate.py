@@ -2619,6 +2619,7 @@ f_ack_deleg = frame(2, e_map([(e_uint(1), e_uint(0)),
                               (e_uint(6), deleg_bob)]))
 f_deleg = frame(7, deleg_bob)
 f_push_deleg = frame(5, e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_bstr(deleg_bob))]))
+f_push_ack = frame(5, e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_bstr(ack))]))
 
 _msg_pairs = [
     ('Attach (frame 1) — carrying the currency attestation and two capability parameters, one greased', f_attach),
@@ -2648,6 +2649,7 @@ _msg_pairs = [
     ('AttachAck — from an INSTANCE: field 6 carries bob\'s delegation, the normal case (§8.2)', f_ack_deleg),
     ('Delegation (frame 7) — a delegated peer\'s first frame on a connection that opens no session (§8.0, §8.2)', f_deleg),
     ('TopologyPush — kind 2, carrying bob\'s delegation byte-for-byte: an instance pushes each credential as it comes into force (§10.1, §8.2)', f_push_deleg),
+    ('TopologyPush — kind 3, carrying the subtree acknowledgement byte-for-byte: the grandpatron\'s node pushes it as it issues it (§10.1, §7.5)', f_push_ack),
 ]
 CONTROL_NAMES = ('Attach', 'Heartbeat', 'SiblingUpdate', 'TopologyPush', 'TopologyMemo', 'Delegation')
 def hkdf_sha256(ikm, info, length=32):
@@ -2943,8 +2945,8 @@ reg('N-enum-currency-role', 'bytes', REJ('CurrencyAttestation', 'schema', 'issue
     sign1_slot([p if p[0] != e_uint(5) else (e_uint(5), e_uint(9)) for p in cur_pairs], 7, AAD_CURRENCY, bob))
 reg('N-enum-resolve-code', 'bytes', REJ('ResolveReply', 'schema', 'result 9 outside 0-2'),
     e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))), (e_uint(2), e_uint(9))]))
-reg('N-enum-push-kind', 'bytes', REJ('frame', 'schema', 'TopologyPush kind 3 outside 0-2'),
-    frame(5, e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_bstr(adopt_env))])))
+reg('N-enum-push-kind', 'bytes', REJ('frame', 'schema', 'TopologyPush kind 4 outside 0-3'),
+    frame(5, e_map([(e_uint(1), e_uint(4)), (e_uint(2), e_bstr(adopt_env))])))
 reg('N-enum-memo-slot', 'bytes', REJ('frame', 'schema', 'memo slot 10 outside the nibble range 0-9'),
     frame(6, e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc),
                     (e_uint(3), e_uint(10)), (e_uint(4), e_uint(TS_ADOPT))])))

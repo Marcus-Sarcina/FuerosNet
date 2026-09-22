@@ -18,7 +18,7 @@ protocol fact; code cites them and never the other way round.
 | `policy/` | `rhtn-policy`: the reference flow metric over the graph an evaluator builds, the policy interface a node consults, and the conformance test that reports what a substitute policy gives up. `cargo run -p rhtn-policy --example report` prints the report for the reference and a decay policy |
 | `cli/` | `rhtn-cli`: `rhtn`, the developer command line — `inspect` decodes bytes with the parser a node uses and prints the shape, the derived values and the verdict, saying unverifiable where it holds no key; `keys` mints and examines identities without ever printing a private half; `probe` attaches and asks only the three questions the wire calls read-only |
 | `ffi/` | `rhtn-ffi`: the one boundary the mobile shells bind to — the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross. No decision is taken at the boundary that is not taken below it |
-| `daemon/` | `rhtn-daemon`: `rhtnd`, a node run from an operator's configuration — the file read strictly and refused rather than defaulted, the identity read and never minted, or, for an instance holding no seed (design §23.3), the operator's material, a transport key minted on the instance and a directory of credentials the operator's client signed, with the operator-signed endpoint record and anchor entry served in place of any of its own; the queue, the one-time pools and the topology store loaded before a session is accepted and written back on the way out, the upstream attached where one is named, and the operator's three views of what the configuration exposes |
+| `daemon/` | `rhtn-daemon`: `rhtnd`, a node run from an operator's configuration — the file read strictly and refused rather than defaulted, the identity read and never minted, or, for an instance holding no seed (design §23.3), the operator's material, a transport key minted on the instance and a directory of credentials the operator's client signed, with the operator-signed endpoint record and anchor entry served in place of any of its own, and a standing acknowledgement policy (`acknowledge`) under which the node acknowledges adoptions below its subordinates as they arrive; the queue, the one-time pools and the topology store loaded before a session is accepted and written back on the way out, the upstream attached where one is named, and the operator's three views of what the configuration exposes |
 | `conformance/` | The reviewer's conformance harness: tests written against the specification by a reviewer who saw neither this workspace's tests nor `Robot/`, moved here on 2026-09-22 so the gate runs them on every change and a reviewer's reproduction of a finding stays a regression for good. **We repair what stops a reviewer's test compiling and never what it asserts**; an assertion changes only when the reviewer changes it or the author withdraws it. The reviewer's reports at a commit are not tooling and are not in the tree |
 | `mobile/` | The light client application: Kotlin on Android and Swift on iOS over `ffi/`. Not Cargo members, and not built by the gate; they live here because eight of the nine manual product entries are theirs, and an entry is marked by a marker in a file the catalogue's walk reaches |
 
@@ -30,7 +30,10 @@ first.  Each one implements catalogue entries and marks them
 own, `spec-pins.json`, advanced only by `tools/pincheck.py --accept`, and the
 vectors'), checks the catalogue, checks that the generated stubs match it,
 checks the format at rustfmt's default width, lints, checks licences and
-advisories against `deny.toml`, and builds and tests the workspace.  It is
+advisories against `deny.toml`, builds and tests the workspace, and sweeps
+the build cache of what the pass did not build (`cargo-sweep`, stamped
+before the first step), since cargo names every artifact by hash and
+deletes nothing itself.  It is
 separate from `models/run-all.sh`, which runs on a different cadence, and it
 fences cargo the same way that script fences the prover.  The reformat of
 2026-09-22 is listed in `.git-blame-ignore-revs` at the repository root; set

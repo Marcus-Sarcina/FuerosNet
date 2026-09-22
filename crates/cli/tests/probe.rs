@@ -238,7 +238,7 @@ async fn an_archive_batch_that_is_not_a_chain_is_refused_rather_than_reported() 
     let flag = disconnected.clone();
     let mut cfg = NodeConfig::defaults(Arc::new(test_identity("bob")), pins(), 30);
     cfg.log = Log::recording();
-    cfg.on_request = Some(Arc::new(move |_peer, family, body| {
+    cfg.on_request = Some(Arc::new(move |_peer, _device, family, body| {
         let (flag, chain, broken) = (flag.clone(), chain.clone(), broken.clone());
         Box::pin(async move {
             if family != Family::ArchiveRequest {

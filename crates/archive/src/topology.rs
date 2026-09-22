@@ -946,7 +946,10 @@ impl Table {
     /// Discard acknowledgements whose relationship has ended
     /// (`wire-format.md` §7.5): the acknowledged adoption, or the patron's
     /// own binding under the grandpatron.
-    fn lapse_acks(&mut self) {
+    /// Drop every acknowledgement whose acknowledged relationship has
+    /// ended (`wire-format.md` §7.5): the adoption's binding closed, or
+    /// the patron's own under the grandpatron.
+    pub fn lapse_acks(&mut self) {
         let bindings = self.bindings.clone();
         self.acks.retain(|a| {
             let Some(b) = bindings.iter().find(|b| b.adoption == a.adoption) else {
@@ -1002,6 +1005,15 @@ impl Table {
         {
             return Ok(AckTaken::NoOpenBinding);
         }
+        // one per (adoption, grandpatron): the same acknowledgement
+        // arriving again, or this node's own coming back, is held once
+        if self
+            .acks
+            .iter()
+            .any(|a| a.adoption == adoption && a.grandpatron == grandpatron)
+        {
+            return Ok(AckTaken::Taken);
+        }
         self.acks.push(Ack {
             adoption,
             grandpatron,
@@ -1014,14 +1026,17 @@ impl Table {
 
     /// Re-take the acknowledgements deferred for a delegation `ids` now
     /// answers: what a holder does when a delegation enters its store.
-    pub fn release_deferred_acks<L: Lookup + ?Sized>(&mut self, ids: &L) -> Vec<AckTaken> {
+    pub fn release_deferred_acks<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+    ) -> Vec<(AckTaken, Vec<u8>)> {
         let (ready, still): (Vec<_>, Vec<_>) = std::mem::take(&mut self.deferred_acks)
             .into_iter()
             .partition(|(kh, _)| ids.delegated_key(kh).is_some());
         self.deferred_acks = still;
         ready
             .into_iter()
-            .filter_map(|(_, bytes)| self.take_ack(ids, &bytes).ok())
+            .filter_map(|(_, bytes)| self.take_ack(ids, &bytes).ok().map(|t| (t, bytes)))
             .collect()
     }
 

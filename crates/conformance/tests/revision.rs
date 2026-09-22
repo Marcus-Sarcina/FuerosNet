@@ -71,7 +71,7 @@ fn s01_failed_prekey_deposit_must_not_be_acknowledged_as_accepted() {
     std::fs::rename(dir.join("prekeys"),dir.join("saved-prekeys")).unwrap();
     std::fs::write(dir.join("prekeys"),b"directory unavailable").unwrap();
     let req=OneTimeDeposit {keys:vec![vec![7]],nonce:[1;16]};
-    let reply=SubmissionReply::decode(&rhtn_node::submissions::deposit(&mut v,&a.public.keyhash,&req.encode()).unwrap()).unwrap();
+    let reply=SubmissionReply::decode(&rhtn_node::submissions::deposit(&mut v,&a.public.keyhash,&[0;32],&req.encode()).unwrap()).unwrap();
     let held=v.prekeys.pool_size(&a.public.keyhash);std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(held,0,"control: storage failure prevented stock");
     assert_ne!(reply.code,SUBMISSION_ACCEPTED,"wire section 7.10: accepted must mean the node actually took the submitted keys");
@@ -82,7 +82,7 @@ fn s02_departure_must_forget_the_clients_registered_wake_endpoint() {
     let (a,b,c)=(test_identity("alice"),Arc::new(test_identity("bob")),test_identity("carol"));
     let ids=vec![a.public.clone(),b.public.clone(),c.public.clone()];let r=adoption(&a,&b,&c,0,100);let mut v=view(b.clone());
     assert_eq!(v.take_object(&Quiet,&b.public.keyhash,KIND_TRANSACTION,&r.bytes,&ids),Decision::Stored);
-    assert_eq!(v.wake.register(a.public.keyhash,Some("https://wake.example/client".into()),Some(vec![1;32]),None),rhtn_node::wake::Registered::Held);
+    assert_eq!(v.wake.register(a.public.keyhash,[0;32],Some("https://wake.example/client".into()),Some(vec![1;32]),None),rhtn_node::wake::Registered::Held);
     let d=envelope(TYPE_DEPARTURE,&departure_body(&[r.txid],&a.public.keyhash,&b.public.keyhash,Seqno {series:1,counter:1},101,None),&[&a]);
     assert_eq!(v.take_object(&Quiet,&b.public.keyhash,KIND_TRANSACTION,&d,&ids),Decision::Stored);
     assert!(!v.table.patrons(&a.public.keyhash).contains(&b.public.keyhash),"control: relationship ended");

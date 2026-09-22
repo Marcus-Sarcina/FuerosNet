@@ -56,6 +56,10 @@ pub type Answer<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// session knows neither.
 pub trait Serving: Send + Sync {
     fn me(&self) -> Keyhash;
+    /// The serving node's own device: the key it presents in a handshake
+    /// (`wire-format.md` §8.2), which is where material for the node
+    /// itself is addressed.
+    fn node_device(&self) -> [u8; 32];
     /// Whether this node is known here to hold `subject`'s prekey
     /// material.
     fn holds(&self, subject: &Keyhash) -> bool;
@@ -124,6 +128,10 @@ impl LocalNode {
 impl Serving for LocalNode {
     fn me(&self) -> Keyhash {
         self.node.me()
+    }
+
+    fn node_device(&self) -> [u8; 32] {
+        self.node.node.cfg.me.presenter.presented_key()
     }
 
     fn holds(&self, subject: &Keyhash) -> bool {
@@ -207,13 +215,21 @@ impl Serving for LocalNode {
             // (design §14.1.6), the sender named in front for the
             // recipient, as `wire-format.md` §7.10 composes it
             if self.node.node.has_session(&to) {
-                return self.node.node.enqueue(to, framed(from, &bytes)).is_ok();
+                return self
+                    .node
+                    .node
+                    .enqueue_for(to, device, framed(from, &bytes))
+                    .is_ok();
             }
             // a recipient the node beyond serves goes there; anyone else waits
             // here for a session (design §14.1.6)
             match self.beyond() {
                 Some(b) if b.serves(&to) => b.relay(from, to, bytes, device).await,
-                _ => self.node.node.enqueue(to, framed(from, &bytes)).is_ok(),
+                _ => self
+                    .node
+                    .node
+                    .enqueue_for(to, device, framed(from, &bytes))
+                    .is_ok(),
             }
         })
     }
@@ -222,10 +238,16 @@ impl Serving for LocalNode {
         Box::pin(async move {
             let mut view = self.node.view.lock().unwrap();
             match endpoint {
+                // a client beside its node speaks from no handshake: its
+                // endpoint is held for any of its devices
                 Some(e) => {
-                    view.wake
-                        .register(client, Some(e.url), Some(e.key), e.lapses_at)
-                        != rhtn_node::wake::Registered::Refused
+                    view.wake.register(
+                        client,
+                        rhtn_node::prekeys::ANY_DEVICE,
+                        Some(e.url),
+                        Some(e.key),
+                        e.lapses_at,
+                    ) != rhtn_node::wake::Registered::Refused
                 }
                 None => {
                     view.wake.forget(&client);

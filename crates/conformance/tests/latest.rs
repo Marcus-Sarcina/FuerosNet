@@ -40,7 +40,7 @@ async fn c01_archive_probe_must_reject_a_disconnected_batch() {
     let good=envelope(TYPE_DISAVOWAL,&disavowal_body(&[fid],&b.public.keyhash,&a.public.keyhash,101,None),&[&b]);
     let pins=Pins::new();for id in &ids { pins.pin_identity(id); }
     let mut cfg=NodeConfig::defaults(b.clone(),pins,30);
-    cfg.on_request=Some(Arc::new(move |_,_,body| {
+    cfg.on_request=Some(Arc::new(move |_,_,_,body| {
         let req=ArchiveRequest::decode(&body).unwrap();
         let records=if req.nonce==[1;16] {vec![good.clone(),first.clone()]} else {vec![second.clone(),first.clone()]};
         Box::pin(async move {Some(ArchiveReply {nonce:req.nonce,records,more:false,frontier:Vec::new()}.encode())})

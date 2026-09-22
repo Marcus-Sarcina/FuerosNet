@@ -791,6 +791,12 @@ land on their own.
    stated in §7.8 and not yet priced in design §19; and, from step 5
    (2026-09-22), `TopologyPush` body kind 2 for a `Delegation`, which §10.1's
    prose carried since 09-21 while its CDDL and identity table stopped at 1.
+   Kind 3 for a `SubtreeAck` was the author's [2026-09-22]. **One reading
+   is the author's too**: design §11.2.1 names the grandpatron's siblings
+   and the great-grandpatron as the parties who may accept an
+   acknowledgement, and §10.1.1 carries it only as far as the acknowledged
+   node's adoption, two edges from that node, which reaches neither; the
+   code follows §10.1.1 (TOP-44's sibling is the patron's).
 1. **Models** (section 4). The delegated bind, the non-attach modes covered or
    excluded by name, the mutant, the currency premise restated, `run-all.sh`
    rerun. A gap found here goes back to step 0.
@@ -823,7 +829,9 @@ land on their own.
    node where a bundle per device is owed (PAY-20, SUB-12), the queue per
    recipient where a queue per device is owed (QUE-05, QUE-21), and the
    courier's relay to the serving node itself carrying an all-zero device
-   until the node's own device reaches it (QUE-21).
+   until the node's own device reaches it (QUE-21). **All three done
+   2026-09-22 under step 5**: bundles, pools, queues and sessions per
+   device, and the courier addressing the node's presented key.
 4. **The gate** (section 6): the freshness check, so step 3 cannot go stale
    silently again; the format step; `cargo-deny`. **Done 2026-09-22**: step 0
    pins, step 3a format at the default width, step 3c deny; the reformat is
@@ -847,10 +855,13 @@ land on their own.
    seedless node and daemon (DMN-23 to DMN-26), the identity replaced by a
    party in the transport's configurations and by a public half and an
    optional signer in the view; the cycle repair as a removal (PRP-12,
-   PRP-27). Next: the queue and sessions per device (SES-26, QUE-05,
-   QUE-21, PAY-20, SUB-12); TOP-43; TOP-44; TRV-11; the no-history audit
-   (RSC-41, RSC-42, SUB-13); section 2.6's confirmations; the light client
-   and FFI holding a delegation and no seed.
+   PRP-27); the queue and sessions per device (SES-26, QUE-05, QUE-21,
+   PAY-20, SUB-12), which closes the three plumbed-not-done items of step
+   3; the light client's held delegations (TOP-43); acknowledgements
+   travelling as kind 3, issued and taken in a running node (TOP-44).
+   Next: TRV-11; the no-history audit (RSC-41, RSC-42, SUB-13); section
+   2.6's confirmations; the light client and FFI holding a delegation and
+   no seed.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the
