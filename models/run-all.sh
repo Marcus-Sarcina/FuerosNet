@@ -244,6 +244,15 @@ done
 #   compliant/ceremony, roster -- the signer checks the first attributed
 #                                witness twice and the second never: validate
 #                                one element, authorise the collection.
+#   wire-only/attach, delegated -- three, added 2026-09-22 with the delegated
+#                                bind (wire 8.2, 9.1).  Two delete the
+#                                comparison "field 1 against the key the
+#                                handshake presented", client side and server
+#                                side: a captured delegation then completes a
+#                                handshake under the adversary's own key.  The
+#                                third drops the check that a HELD delegation
+#                                verifies under the pinned material: the
+#                                adversary then delegates to itself.
 # A fifth field "bounded" splices the theory's .bounded fragment into the
 # mutant before proving, for a lemma that only discharges under the bound.
 # The substitution's from/to fields may carry \n for a line break.
@@ -255,6 +264,9 @@ MUTATIONS=(
   'compliant/attach|delivery_is_to_the_credential_it_was_queued_for|Queued($N, $C, k, m) ]|Queued($N, $C, kq, m) ]'
   'compliant/attach|no_attach_after_supersession|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ ]|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ Binding($N, $C, k) ]|bounded'
   'compliant/ceremony|no_signature_over_a_misattributed_nominee|, !Nomination($P, $Other, $W2) ]|, !Nomination($P, $Other, $W1) ]'
+  'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|, Eq(named, presented)             // (c)|, Eq(presented, presented)         // (c)'
+  'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|    , Eq(namedC, presentedC)\n    , Eq(verify(csig|    , Eq(presentedC, presentedC)\n    , Eq(verify(csig'
+  'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|Eq(verify(del, <'"'"'delegation'"'"', k, $S>, fst(km)), true)|Eq(true, true)'
 )
 
 echo "=== 3c. Theory mutations: each must FALSIFY ==="

@@ -10264,7 +10264,16 @@ its 67 tests on every change and a reproduced finding stays a regression; the ru
 that keeps it evidence is that its assertions are the reviewer's, and only what
 stops one compiling is ours to repair.
 
+**The delegated bind is modelled.** `models/tamarin/wire-only/attach.spthy`
+carried one bind, the pinned classical half; it now carries the three of
+`wire-format.md` §9.1 in both directions, a seized instance as §18.1's residual
+stated rather than hidden, and a lemma that a bind by delegation names a key the
+identity's own key delegated. The comparison §8.2 states is its own term, and the
+model gate runs three mutations of it that must falsify: the comparison on either
+side, and a held delegation taken unverified. `models/run-all.sh` passes: 38
+wire-only lemmas, 29 compliant, ten mutations falsified.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
-the staleness sweep reports its baseline; 1,194 citations across `models/` and the
+the staleness sweep reports its baseline; 1,233 citations across `models/` and the
 workspace resolve; check.py 395 of 433 implemented, 0 flags, stubs in sync; the
 workspace lints clean and the crates whose tests were unmarked pass.

@@ -303,7 +303,26 @@ codec passed every entry; update it for the new shapes, or retire it now.
 
 ---
 
-## 4. Models
+## 4. Models — **done 2026-09-22**
+
+`models/tamarin/wire-only/attach.spthy` now carries the delegated bind in
+both directions and by both of the ruling's binds: `Delegate`, a delegation
+the identity signs over a fresh transport key; `Server_Respond_Delegated`
+and `Delegated_Client_Answers`, the delegation presented first; `Client_Holds_
+Delegation` and `Client_Finish_Held`, the delegation already held from the
+topology class; `Server_Bind_Delegated`; `Compromise_Instance`, a seized
+instance as design §18.1's residual stated as a carve-out. The comparison
+the wire states, *field 1 against the key the handshake presented*, is its
+own term on both sides, and the gate now runs three mutations of it that
+must falsify: the client-side comparison, the server-side comparison, and
+the held path's verification under the pinned material. Eleven lemmas verify
+(seven before); `a_delegated_bind_names_a_key_the_identity_delegated` is the
+new all-traces property, with three exists-trace guards against vacuity.
+`run-all.sh`: ALL MODELS PASS, 38 wire-only lemmas, ten mutations falsified.
+What the theory says it does not reach: the window and leeway (no clock),
+the connection modes (one exchange), the flood (a held delegation arrives by
+`In`), and the run. The record below is what section 4 asked for.
+
 
 Results in `models/results/` are dated 2026-09-13. `models/tamarin/wire-only/attach.spthy`
 CHECK 2 (line 238) models only the pinned-classical-half bind; the delegated

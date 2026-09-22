@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 107 and seed -7464006361079028955 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 1288532] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 112 and seed -3570306062617215621 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 262992] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/CurrencyEscalation.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module CurrencyEscalation
-Starting... (2026-09-13 15:09:59)
+Starting... (2026-09-22 02:54:02)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-13 15:10:00.
+Finished computing initial states: 1 distinct state generated at 2026-09-22 02:54:03.
 Error: Action property FreshOnly is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -36,4 +36,4 @@ State 4: <GracePeriod line 188, col 3 to line 191, col 33 of module CurrencyEsca
 124 states generated, 46 distinct states found, 26 states left on queue.
 The depth of the complete state graph search is 6.
 The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 5 and the 95th percentile is 5).
-Finished in 00s at (2026-09-13 15:10:00)
+Finished in 00s at (2026-09-22 02:54:03)

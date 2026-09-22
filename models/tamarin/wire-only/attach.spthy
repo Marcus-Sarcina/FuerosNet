@@ -31,6 +31,36 @@ WHAT THIS FILE IS
   and not the target.  It is also the simplest of the four, chosen first as
   the model that teaches the tool.
 
+THE DELEGATED BIND (added 2026-09-22)
+  Since 2026-09-16 an instance holds no seed: it presents a DELEGATED
+  transport key, and a `Delegation` signed by the identity binds that key to
+  the keyhash for a window (wire Section 8.2).  Since 2026-09-21 the bind holds
+  on every connection, session or not, by any of three checks (wire Section
+  9.1): the presented key is the pinned classical member; a delegation naming
+  it is already held from the topology class; or the peer presents that
+  delegation first on the connection.  This theory now carries all three, in
+  both directions, and the comparison the wire states -- "a receiver checks
+  field 1 against the key the handshake actually presented" -- is its own
+  term, `Eq(named, presented)`, so the gate can delete it and must then find
+  the replay: a captured delegation completing a handshake under the
+  adversary's own key.
+
+  A seized instance holds the delegated key and can go on BEING THE NODE
+  until the credential lapses (design Section 18.1); that is a stated
+  carve-out here, `InstanceSeized`, beside `Compromised`, and the difference
+  between them is the point: seizing the instance never yields a new
+  delegation, because only the identity key signs one.
+
+  WHAT THE DELEGATED BIND HERE DOES NOT REACH.  The window and the receiver's
+  leeway: there is no clock, so a delegation is either verified or not, and
+  the currency theory's event-order expiry is not repeated here.  The
+  connection modes: an attach and a request-only contact are one exchange
+  here, so "first on the connection" is modelled as "before the commit" and
+  nothing distinguishes a frame from an attach field.  The topology-class
+  flood: a held delegation arrives by `In`, which over-approximates the flood
+  and strengthens the all-traces lemmas.  One transport key per run, and the
+  run itself, are not represented.
+
 HOW TO READ A TAMARIN THEORY (for a first-time reader)
   Tamarin proves properties of protocols in the SYMBOLIC (Dolev-Yao) model:
   cryptography is perfect (the only way to produce a signature is to hold
@@ -156,6 +186,42 @@ rule Compromise_Key:
 
 /*
 --------------------------------------------------------------------------------
+  DELEGATION -- `wire-format.md` Section 8.2
+--------------------------------------------------------------------------------
+  The instance mints its own transport keypair and sends the public half to
+  be signed (infra Section 7); the identity's key signs the delegation over
+  the key it names and the delegating keyhash.  The delegation is public: it
+  travels on every connection and floods the topology class, so it goes to
+  Out.  The private half never leaves the instance, so it is a fresh value
+  the identity's rules never see.
+*/
+rule Delegate:
+    [ !Ltk($A, ~skc), Fr(~skd) ]
+  --[ Delegated($A, pk(~skd)) ]->     // trace: $A's identity signed for this key
+    [ !DelegatedKey($A, ~skd)
+    , Out(<pk(~skd), sign(<'delegation', pk(~skd), $A>, ~skc)>) ]
+
+/*  A SEIZED INSTANCE.  The adversary takes the delegated key and nothing
+    else: it can present as the node for the window and cannot sign a new
+    delegation, which is design Section 18.1's narrowed residual.          */
+rule Compromise_Instance:
+    [ !DelegatedKey($A, ~skd) ]
+  --[ InstanceSeized($A) ]->
+    [ Out(~skd) ]
+
+/*  A HELD DELEGATION.  wire Section 10.1 floods a delegation to the
+    horizon and a holder keeps the newest per keyhash; wire Section 9.1's
+    second bind is against one already held.  It arrives over the network
+    and is checked against the pinned material before it is held: delete
+    the Eq and the adversary hands out delegations of its own.             */
+rule Client_Holds_Delegation:
+    [ !PinnedFor($C, $S, km), In(<k, del>) ]
+  --[ Eq(verify(del, <'delegation', k, $S>, fst(km)), true)
+    , Held($C, $S, k) ]->
+    [ !HeldDelegation($C, $S, k) ]
+
+/*
+--------------------------------------------------------------------------------
   THE ATTACH HANDSHAKE
 --------------------------------------------------------------------------------
   A minimal challenge-response capturing ONE HALF of wire Section 9.1's
@@ -223,6 +289,25 @@ rule Server_Respond:
     [ Out(<$S, ~ns, sign(<'attach', $C, $S, nc>, ~sks)>)
     , St_Server_1($S, ~ns) ]
 
+/*  THE INSTANCE'S RESPONSE.  Signed under the delegated key, with the
+    delegation presented alongside -- first on the connection, wire Section
+    8.2 -- so a client holding only the identity's material can bind the
+    key it sees.  The action is the same `AttachResponseSigned($S, ...)`:
+    the instance answers AS $S, which is what a delegation is for.        */
+rule Server_Respond_Delegated:
+    [ In(<$C, $S, nc>)
+    , !DelegatedKey($S, ~skd)
+    , !Ltk($S, ~sks)                   // only to reconstruct the public
+                                       //   delegation it sends; the identity
+                                       //   key signs nothing here
+    , Fr(~ns) ]
+  --[ ServerAccept($S, $C, nc)
+    , AttachResponseSigned($S, $C, nc)
+    , RespondedUnderDelegation($S, pk(~skd)) ]->
+    [ Out(<$S, ~ns, sign(<'attach', $C, $S, nc>, ~skd)
+          , pk(~skd), sign(<'delegation', pk(~skd), $S>, ~sks)>)
+    , St_Server_1($S, ~ns) ]
+
 // Step 3: the client checks the server's signature against the PUBLIC key
 // bound to the identity it intended to reach.  If it verifies, the client
 // COMMITS: it believes it is now attached to $S.  The Finish action is the
@@ -249,6 +334,47 @@ rule Client_Finish:
     // mutually authenticated transport, so it is not a separable token an
     // adversary can re-pair with a different claim.  Modelled with the claim
     // outside, `client_authentication` falsified on exactly that re-pairing.
+    [ Out(<$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)>) ]
+
+/*  CHECK 2, DELEGATED FORM, the delegation presented on the connection.
+    The pinned classical member is NOT the presented key; what binds it is a
+    delegation that (a) verifies under the pinned material, (b) names a key,
+    and (c) -- the comparison the wire states -- names THE KEY THE HANDSHAKE
+    PRESENTED.  (b) and (c) are separate terms on purpose: `named` is read
+    from the delegation and compared with `presented`.  Mutate the comparison
+    to a tautology and the adversary replays a captured delegation under its
+    own key, which is the trace `wire-format.md` Section 8.2 says the check
+    exists to prevent.                                                       */
+rule Client_Finish_Delegated:
+    [ St_Client_1($C, $S, ~nc)
+    , In(<presented, ns, sig, named, del>)
+    , !PinnedFor($C, $S, km)
+    , !PinnedFor($C, $C, kmSelf)
+    , !Ltk($C, ~skc) ]
+  --[ Eq(verify(del, <'delegation', named, $S>, fst(km)), true)
+                                       // (a) and (b): the identity delegated `named`
+    , Eq(named, presented)             // (c): and `named` is what was presented
+    , Eq(verify(sig, <'attach', $C, $S, ~nc>, presented), true)
+    , ClientFinish($C, $S, ~nc)
+    , BoundByDelegation($C, $S, presented)
+    , Claims($C, $S, $Claim)
+    , ClientAuthSigned($C, $S, ns, $Claim) ]->
+    [ Out(<$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)>) ]
+
+/*  CHECK 2, DELEGATED FORM, the delegation already held.  wire Section
+    9.1's second bind: nothing arrives on the connection but the response,
+    and the presented key is one a held delegation names.                  */
+rule Client_Finish_Held:
+    [ St_Client_1($C, $S, ~nc)
+    , In(<presented, ns, sig>)
+    , !HeldDelegation($C, $S, presented)
+    , !PinnedFor($C, $C, kmSelf)
+    , !Ltk($C, ~skc) ]
+  --[ Eq(verify(sig, <'attach', $C, $S, ~nc>, presented), true)
+    , ClientFinish($C, $S, ~nc)
+    , BoundByDelegation($C, $S, presented)
+    , Claims($C, $S, $Claim)
+    , ClientAuthSigned($C, $S, ns, $Claim) ]->
     [ Out(<$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)>) ]
 
 /*
@@ -306,6 +432,35 @@ rule Server_Bind:
     // connection handle carried through both endpoint facts; recorded, not
     // done.
 
+/*  THE SAME BIND, A DELEGATED CLIENT.  A desktop or an instrument attaches
+    under a delegation of its own (design Section 23.3); the serving node
+    verifies the delegation under the client's pinned material, compares the
+    key it names with the key the client-auth signature verifies under, and
+    only then binds.  `namedC` and `presentedC` are the same pair of terms as
+    on the client side, and the same mutation applies.                     */
+rule Server_Bind_Delegated:
+    [ St_Server_1($S, ~ns)
+    , In(<$A, $Claim, kmA, csig, presentedC, namedC, delC>)
+    , !Identity($A, khA) ]
+  --[ Eq(h(kmA), khA)
+    , Eq(verify(delC, <'delegation', namedC, $A>, fst(kmA)), true)
+    , Eq(namedC, presentedC)
+    , Eq(verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, presentedC), true)
+    , Eq($A, $Claim)
+    , AuthenticatedPeer($S, $A, ~ns)
+    , BoundByDelegation($S, $A, presentedC)
+    , Bound($S, $A, ~ns, $Claim) ]->
+    [ Session($S, $Claim, ~ns) ]
+
+/*  A delegated client's own answer: the client-auth term signed under its
+    delegated key, its delegation alongside.                               */
+rule Delegated_Client_Answers:
+    [ !DelegatedKey($C, ~skd), !Ltk($C, ~skc), !PinnedFor($C, $C, kmSelf)
+    , In(<$S, ns>) ]
+  --[ ClientAuthSigned($C, $S, ns, $Claim), AnsweredUnderDelegation($C, pk(~skd)) ]->
+    [ Out(<$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skd)
+          , pk(~skd), pk(~skd), sign(<'delegation', pk(~skd), $C>, ~skc)>) ]
+
 /*  Queued material and its release.  design 14.1.4 has the serving node hold
     ciphertext for an offline client; what matters here is only who it goes
     to.                                                                     */
@@ -346,6 +501,11 @@ rule Server_Signs_Without_Responding:
     [ !Ltk($S, ~sks), In(<$C, nc>) ]
   --[ AttachResponseSigned($S, $C, nc), SignedWithoutTransition($S) ]->
     [ Out(<$S, nc, sign(<'attach', $C, $S, nc>, ~sks)>) ]
+
+rule Instance_Signs_Without_Responding:
+    [ !DelegatedKey($S, ~skd), In(<$C, nc>) ]
+  --[ AttachResponseSigned($S, $C, nc), SignedWithoutTransition($S) ]->
+    [ Out(<$S, nc, sign(<'attach', $C, $S, nc>, ~skd)>) ]
 
 rule Client_Signs_Without_Attaching:
     [ !Ltk($C, ~skc), In(<$S, ns, $Claim, km>) ]
@@ -424,7 +584,64 @@ lemma server_authentication:
   "All C S nc #i.
      ClientFinish(C, S, nc) @ #i
      ==> ( (Ex #j. AttachResponseSigned(S, C, nc) @ #j & #j < #i)
-         | (Ex #k. Compromised(S) @ #k & #k < #i) )"
+         | (Ex #k. Compromised(S) @ #k & #k < #i)
+         | (Ex #k. InstanceSeized(S) @ #k & #k < #i) )"
+    // THE THIRD DISJUNCT IS design Section 18.1's RESIDUAL, stated: an actor
+    // holding a seized instance goes on being the node for the window.  It
+    // is not a weakening the delegation introduced; it is the exposure the
+    // delegation bounds, which the seed on the box did not.
+
+/*  THE DELEGATED BIND.  Whoever bound a presented key by a delegation --
+    a client binding its serving node, or a node binding a delegated client
+    -- bound a key the identity's own key delegated.  A seized instance is
+    no carve-out here: seizing the key yields no delegation.  Only the
+    identity's compromise does.
+
+    MUTATION-TESTED: replace `Eq(named, presented)` in Client_Finish_Delegated,
+    or `Eq(namedC, presentedC)` in Server_Bind_Delegated, with a tautology
+    and this falsifies with the replay wire Section 8.2 describes -- a
+    captured delegation naming k, a handshake under the adversary's own key.
+    Deleting the check that the delegation verifies under the pinned
+    material falsifies it too, the adversary then delegating to itself.    */
+lemma a_delegated_bind_names_a_key_the_identity_delegated:
+  all-traces
+  "All X Y k #i.
+     BoundByDelegation(X, Y, k) @ #i
+     ==> ( (Ex #d. Delegated(Y, k) @ #d & #d < #i)
+         | (Ex #c. Compromised(Y) @ #c & #c < #i) )"
+
+/*  SANITY for the delegated path, in both directions and by both binds:
+    the honest instance is reached with nothing compromised or seized.     */
+lemma a_delegated_attach_completes_honestly:
+  exists-trace
+  "Ex C S nc k #d #j #i.
+       Delegated(S, k) @ #d
+     & RespondedUnderDelegation(S, k) @ #j
+     & ClientFinish(C, S, nc) @ #i
+     & BoundByDelegation(C, S, k) @ #i
+     & #d < #j & #j < #i
+     & not(Ex A #x. Compromised(A) @ #x)
+     & not(Ex A #x. InstanceSeized(A) @ #x)
+     & not(Ex A #x. SignedWithoutTransition(A) @ #x)"
+
+lemma a_held_delegation_binds:
+  exists-trace
+  "Ex C S k #h #i.
+       Held(C, S, k) @ #h
+     & BoundByDelegation(C, S, k) @ #i
+     & #h < #i
+     & not(Ex A #x. Compromised(A) @ #x)
+     & not(Ex A #x. InstanceSeized(A) @ #x)"
+
+lemma a_delegated_client_is_bound:
+  exists-trace
+  "Ex S A ns k #a #i.
+       AnsweredUnderDelegation(A, k) @ #a
+     & BoundByDelegation(S, A, k) @ #i
+     & Bound(S, A, ns, A) @ #i
+     & #a < #i
+     & not(Ex X #x. Compromised(X) @ #x)
+     & not(Ex X #x. InstanceSeized(X) @ #x)"
 
 /*  THE MAILBOX PROPERTY, and the reason wire Section 9.1 states the
     consequence it does.  Queued material is released only to the party the
@@ -466,7 +683,10 @@ lemma client_authentication:
   "All S A ns C #i.
      Bound(S, A, ns, C) @ #i
      ==> ( (Ex #c. ClientAuthSigned(A, S, ns, C) @ #c & #c < #i)
-         | (Ex #k. Compromised(A) @ #k & #k < #i) )"
+         | (Ex #k. Compromised(A) @ #k & #k < #i)
+         | (Ex #k. InstanceSeized(A) @ #k & #k < #i) )"
+    // The seized-device carve-out in this direction is a seized desktop or
+    // instrument: it holds A's delegated key and answers as A for the window.
 
 /*  ANTI-VACUITY: an attach reaches a delivery with nobody compromised.      */
 lemma a_delivery_is_reachable:

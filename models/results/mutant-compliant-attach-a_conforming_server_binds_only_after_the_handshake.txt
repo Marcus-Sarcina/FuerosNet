@@ -326,7 +326,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-compliant-attach-a_conforming_server_binds_only_after_the_handshake.spthy
 
-  processing time: 0.80s
+  processing time: 0.84s
   
   service_follows_an_attach (all-traces): analysis incomplete (1 steps)
   delivery_is_to_the_credential_it_was_queued_for (all-traces): analysis incomplete (1 steps)

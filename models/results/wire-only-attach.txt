@@ -45,6 +45,56 @@ rule (modulo E) Compromise_Key:
 
   /* has exactly the trivial AC variant */
 
+rule (modulo E) Delegate:
+   [ !Ltk( $A, ~skc ), Fr( ~skd ) ]
+  --[ Delegated( $A, pk(~skd) ) ]->
+   [
+   !DelegatedKey( $A, ~skd ),
+   Out( <pk(~skd), sign(<'delegation', pk(~skd), $A>, ~skc)> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Compromise_Instance:
+   [ !DelegatedKey( $A, ~skd ) ]
+  --[ InstanceSeized( $A ) ]->
+   [ Out( ~skd ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Holds_Delegation:
+   [ !PinnedFor( $C, $S, km ), In( <k, del> ) ]
+  --[
+  Eq( verify(del, <'delegation', k, $S>, fst(km)), true ),
+  Held( $C, $S, k )
+  ]->
+   [ !HeldDelegation( $C, $S, k ) ]
+
+  /*
+  rule (modulo AC) Client_Holds_Delegation:
+     [ !PinnedFor( $C, $S, km ), In( <k, del> ) ]
+    --[ Eq( z, true ), Held( $C, $S, k ) ]->
+     [ !HeldDelegation( $C, $S, k ) ]
+    variants (modulo AC)
+    1. $S    = $S.7
+       del   = del.7
+       k     = k.7
+       km    = km.7
+       z     = verify(del.7, <'delegation', k.7, $S.7>, fst(km.7))
+    
+    2. $S    = $x.7
+       del   = sign(<'delegation', x.8, $x.7>, x.9)
+       k     = x.8
+       km    = <pk(x.9), x.10>
+       z     = true
+    
+    3. $S    = $S.9
+       del   = del.9
+       k     = k.9
+       km    = <x.7, x.8>
+       z     = verify(del.9, <'delegation', k.9, $S.9>, x.7)
+  */
+
 rule (modulo E) Client_Hello:
    [ Fr( ~nc ) ]
   --[ ClientStart( $C, $S, ~nc ) ]->
@@ -57,6 +107,24 @@ rule (modulo E) Server_Respond:
   --[ ServerAccept( $S, $C, nc ), AttachResponseSigned( $S, $C, nc ) ]->
    [
    Out( <$S, ~ns, sign(<'attach', $C, $S, nc>, ~sks)> ),
+   St_Server_1( $S, ~ns )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Server_Respond_Delegated:
+   [
+   In( <$C, $S, nc> ), !DelegatedKey( $S, ~skd ), !Ltk( $S, ~sks ),
+   Fr( ~ns )
+   ]
+  --[
+  ServerAccept( $S, $C, nc ), AttachResponseSigned( $S, $C, nc ),
+  RespondedUnderDelegation( $S, pk(~skd) )
+  ]->
+   [
+   Out( <$S, ~ns, sign(<'attach', $C, $S, nc>, ~skd), pk(~skd), 
+         sign(<'delegation', pk(~skd), $S>, ~sks)>
+   ),
    St_Server_1( $S, ~ns )
    ]
 
@@ -136,6 +204,166 @@ rule (modulo E) Client_Finish:
        z.1   = true
   */
 
+rule (modulo E) Client_Finish_Delegated:
+   [
+   St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig, named, del> ),
+   !PinnedFor( $C, $S, km ), !PinnedFor( $C, $C, kmSelf ), !Ltk( $C, ~skc )
+   ]
+  --[
+  Eq( verify(del, <'delegation', named, $S>, fst(km)), true ),
+  Eq( named, presented ),
+  Eq( verify(sig, <'attach', $C, $S, ~nc>, presented), true ),
+  ClientFinish( $C, $S, ~nc ), BoundByDelegation( $C, $S, presented ),
+  Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
+  ]->
+   [
+   Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Client_Finish_Delegated:
+     [
+     St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig, named, del> ),
+     !PinnedFor( $C, $S, km ), !PinnedFor( $C, $C, kmSelf ), !Ltk( $C, ~skc )
+     ]
+    --[
+    Eq( z, true ), Eq( named, presented ), Eq( z.1, true ),
+    ClientFinish( $C, $S, ~nc ), BoundByDelegation( $C, $S, presented ),
+    Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
+    ]->
+     [
+     Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. $C    = $C.17
+       $S    = $S.19
+       ~nc   = ~nc.20
+       del   = del.22
+       km    = km.23
+       named = named.25
+       presented
+             = presented.27
+       sig   = sig.28
+       z     = verify(del.22, <'delegation', named.25, $S.19>, fst(km.23))
+       z.1   = verify(sig.28, <'attach', $C.17, $S.19, ~nc.20>, presented.27)
+    
+    2. $C    = $C.19
+       $S    = $S.21
+       ~nc   = ~nc.22
+       del   = del.24
+       km    = <x.34, x.35>
+       named = named.27
+       presented
+             = presented.29
+       sig   = sig.30
+       z     = verify(del.24, <'delegation', named.27, $S.21>, x.34)
+       z.1   = verify(sig.30, <'attach', $C.19, $S.21, ~nc.22>, presented.29)
+    
+    3. $C    = $C.23
+       $S    = $S.25
+       ~nc   = ~nc.26
+       del   = sign(<'delegation', named.31, $S.25>, x.42)
+       km    = <pk(x.42), x.43>
+       named = named.31
+       presented
+             = presented.33
+       sig   = sig.34
+       z     = true
+       z.1   = verify(sig.34, <'attach', $C.23, $S.25, ~nc.26>, presented.33)
+    
+    4. $C    = $C.27
+       $S    = $S.29
+       ~nc   = ~nc.30
+       del   = sign(<'delegation', named.35, $S.29>, x.48)
+       km    = <pk(x.48), x.49>
+       named = named.35
+       presented
+             = pk(x.52)
+       sig   = sign(<'attach', $C.27, $S.29, ~nc.30>, x.52)
+       z     = true
+       z.1   = true
+    
+    5. $C    = $C.28
+       $S    = $S.30
+       ~nc   = ~nc.31
+       del   = del.33
+       km    = km.34
+       named = named.36
+       presented
+             = pk(x.53)
+       sig   = sign(<'attach', $C.28, $S.30, ~nc.31>, x.53)
+       z     = verify(del.33, <'delegation', named.36, $S.30>, fst(km.34))
+       z.1   = true
+    
+    6. $C    = $C.29
+       $S    = $S.31
+       ~nc   = ~nc.32
+       del   = del.34
+       km    = <x.50, x.51>
+       named = named.37
+       presented
+             = pk(x.55)
+       sig   = sign(<'attach', $C.29, $S.31, ~nc.32>, x.55)
+       z     = verify(del.34, <'delegation', named.37, $S.31>, x.50)
+       z.1   = true
+  */
+
+rule (modulo E) Client_Finish_Held:
+   [
+   St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig> ),
+   !HeldDelegation( $C, $S, presented ), !PinnedFor( $C, $C, kmSelf ),
+   !Ltk( $C, ~skc )
+   ]
+  --[
+  Eq( verify(sig, <'attach', $C, $S, ~nc>, presented), true ),
+  ClientFinish( $C, $S, ~nc ), BoundByDelegation( $C, $S, presented ),
+  Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
+  ]->
+   [
+   Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Client_Finish_Held:
+     [
+     St_Client_1( $C, $S, ~nc ), In( <presented, ns, sig> ),
+     !HeldDelegation( $C, $S, presented ), !PinnedFor( $C, $C, kmSelf ),
+     !Ltk( $C, ~skc )
+     ]
+    --[
+    Eq( z, true ), ClientFinish( $C, $S, ~nc ),
+    BoundByDelegation( $C, $S, presented ), Claims( $C, $S, $Claim ),
+    ClientAuthSigned( $C, $S, ns, $Claim )
+    ]->
+     [
+     Out( <$C, $Claim, kmSelf, sign(<'client-auth', $C, $S, ns, $Claim>, ~skc)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. $C    = $C.13
+       $S    = $S.15
+       ~nc   = ~nc.16
+       presented
+             = presented.20
+       sig   = sig.21
+       z     = verify(sig.21, <'attach', $C.13, $S.15, ~nc.16>, presented.20)
+    
+    2. $C    = $C.20
+       $S    = $S.22
+       ~nc   = ~nc.23
+       presented
+             = pk(x.38)
+       sig   = sign(<'attach', $C.20, $S.22, ~nc.23>, x.38)
+       z     = true
+  */
+
 rule (modulo E) Server_Bind:
    [
    St_Server_1( $S, ~ns ), In( <$A, $Claim, kmA, csig> ),
@@ -191,6 +419,149 @@ rule (modulo E) Server_Bind:
                       x.9)
   */
 
+rule (modulo E) Server_Bind_Delegated:
+   [
+   St_Server_1( $S, ~ns ),
+   In( <$A, $Claim, kmA, csig, presentedC, namedC, delC> ),
+   !Identity( $A, khA )
+   ]
+  --[
+  Eq( h(kmA), khA ),
+  Eq( verify(delC, <'delegation', namedC, $A>, fst(kmA)), true ),
+  Eq( namedC, presentedC ),
+  Eq( verify(csig, <'client-auth', $A, $S, ~ns, $Claim>, presentedC), true
+  ),
+  Eq( $A, $Claim ), AuthenticatedPeer( $S, $A, ~ns ),
+  BoundByDelegation( $S, $A, presentedC ), Bound( $S, $A, ~ns, $Claim )
+  ]->
+   [ Session( $S, $Claim, ~ns ) ]
+
+  /*
+  rule (modulo AC) Server_Bind_Delegated:
+     [
+     St_Server_1( $S, ~ns ),
+     In( <$A, $Claim, kmA, csig, presentedC, namedC, delC> ),
+     !Identity( $A, khA )
+     ]
+    --[
+    Eq( h(kmA), khA ), Eq( z, true ), Eq( namedC, presentedC ),
+    Eq( z.1, true ), Eq( $A, $Claim ), AuthenticatedPeer( $S, $A, ~ns ),
+    BoundByDelegation( $S, $A, presentedC ), Bound( $S, $A, ~ns, $Claim )
+    ]->
+     [ Session( $S, $Claim, ~ns ) ]
+    variants (modulo AC)
+    1. $A    = $A.13
+       $Claim
+             = $Claim.13
+       $S    = $S.13
+       ~ns   = ~ns.13
+       csig  = csig.13
+       delC  = delC.13
+       kmA   = kmA.13
+       namedC
+             = namedC.13
+       presentedC
+             = presentedC.13
+       z     = verify(delC.13, <'delegation', namedC.13, $A.13>, fst(kmA.13))
+       z.1   = verify(csig.13, <'client-auth', $A.13, $S.13, ~ns.13, $Claim.13>,
+                      presentedC.13)
+    
+    2. $A    = $x.13
+       $Claim
+             = $x.14
+       $S    = $x.15
+       ~ns   = ~x.16
+       csig  = sign(<'client-auth', $x.13, $x.15, ~x.16, $x.14>, x.17)
+       delC  = delC.18
+       kmA   = kmA.18
+       namedC
+             = namedC.18
+       presentedC
+             = pk(x.17)
+       z     = verify(delC.18, <'delegation', namedC.18, $x.13>, fst(kmA.18))
+       z.1   = true
+    
+    3. $A    = $x.13
+       $Claim
+             = $x.14
+       $S    = $x.15
+       ~ns   = ~x.16
+       csig  = sign(<'client-auth', $x.13, $x.15, ~x.16, $x.14>, x.17)
+       delC  = delC.22
+       kmA   = <x.20, x.21>
+       namedC
+             = namedC.22
+       presentedC
+             = pk(x.17)
+       z     = verify(delC.22, <'delegation', namedC.22, $x.13>, x.20)
+       z.1   = true
+    
+    4. $A    = $x.13
+       $Claim
+             = $x.14
+       $S    = $x.15
+       ~ns   = ~x.16
+       csig  = sign(<'client-auth', $x.13, $x.15, ~x.16, $x.14>, x.17)
+       delC  = sign(<'delegation', x.18, $x.13>, x.19)
+       kmA   = <pk(x.19), x.21>
+       namedC
+             = x.18
+       presentedC
+             = pk(x.17)
+       z     = true
+       z.1   = true
+    
+    5. $A    = $x.13
+       $Claim
+             = $Claim.22
+       $S    = $S.22
+       ~ns   = ~ns.22
+       csig  = csig.22
+       delC  = sign(<'delegation', x.18, $x.13>, x.19)
+       kmA   = <pk(x.19), x.21>
+       namedC
+             = x.18
+       presentedC
+             = presentedC.22
+       z     = true
+       z.1   = verify(csig.22, <'client-auth', $x.13, $S.22, ~ns.22, $Claim.22>,
+                      presentedC.22)
+    
+    6. $A    = $A.15
+       $Claim
+             = $Claim.15
+       $S    = $S.15
+       ~ns   = ~ns.15
+       csig  = csig.15
+       delC  = delC.15
+       kmA   = <x.13, x.14>
+       namedC
+             = namedC.15
+       presentedC
+             = presentedC.15
+       z     = verify(delC.15, <'delegation', namedC.15, $A.15>, x.13)
+       z.1   = verify(csig.15, <'client-auth', $A.15, $S.15, ~ns.15, $Claim.15>,
+                      presentedC.15)
+  */
+
+rule (modulo E) Delegated_Client_Answers:
+   [
+   !DelegatedKey( $C, ~skd ), !Ltk( $C, ~skc ),
+   !PinnedFor( $C, $C, kmSelf ), In( <$S, ns> )
+   ]
+  --[
+  ClientAuthSigned( $C, $S, ns, $Claim ),
+  AnsweredUnderDelegation( $C, pk(~skd) )
+  ]->
+   [
+   Out( <$C, $Claim, kmSelf, 
+         sign(<'client-auth', $C, $S, ns, $Claim>, ~skd), pk(~skd), pk(~skd), 
+         sign(<'delegation', pk(~skd), $C>, ~skc)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
 rule (modulo E) Enqueue:
    [ Fr( ~m ) ] --[ Queued( $R, ~m ) ]-> [ Mail( $R, ~m ) ]
 
@@ -207,6 +578,13 @@ rule (modulo E) Server_Signs_Without_Responding:
    [ !Ltk( $S, ~sks ), In( <$C, nc> ) ]
   --[ AttachResponseSigned( $S, $C, nc ), SignedWithoutTransition( $S ) ]->
    [ Out( <$S, nc, sign(<'attach', $C, $S, nc>, ~sks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Instance_Signs_Without_Responding:
+   [ !DelegatedKey( $S, ~skd ), In( <$C, nc> ) ]
+  --[ AttachResponseSigned( $S, $C, nc ), SignedWithoutTransition( $S ) ]->
+   [ Out( <$S, nc, sign(<'attach', $C, $S, nc>, ~skd)> ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -260,29 +638,35 @@ guarded formula characterizing all satisfying traces:
   (∀ X #t. (SignedWithoutTransition( X ) @ #t) ⇒ ⊥)"
 */
 simplify
-solve( !Ltk( $S, ~sks ) ▶₁ #j )
-  case Register_Node
-  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
-    case Client_Hello
-    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
-      case Client_Learns_KeyMaterial
-      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
-        case Client_Learns_KeyMaterial
-        solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
-          case Register_Node
-          solve( !KU( ~nc ) @ #vk.4 )
-            case Client_Hello
-            solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sks) ) @ #vk.10 )
-              case Server_Respond
-              solve( !KU( pk(~sks) ) @ #vk.7 )
-                case Register_Node
-                solve( !KU( pk(~skp) ) @ #vk.11 )
-                  case Register_Node
-                  solve( !KU( pk(~skc) ) @ #vk.13 )
+solve( ServerAccept( $S, $C, ~nc ) @ #j )
+  case Server_Respond
+  solve( !Ltk( $S, ~sks ) ▶₁ #j )
+    case Register_Node
+    solve( ClientFinish( $C, $S, ~nc ) @ #i )
+      case Client_Finish
+      solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+        case Client_Hello
+        solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
+          case Client_Learns_KeyMaterial
+          solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+            case Client_Learns_KeyMaterial
+            solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
+              case Register_Node
+              solve( !KU( ~nc ) @ #vk.4 )
+                case Client_Hello
+                solve( !KU( sign(<'attach', $C, $S, ~nc>, ~sks) ) @ #vk.10 )
+                  case Server_Respond
+                  solve( !KU( pk(~sks) ) @ #vk.7 )
                     case Register_Node
-                    solve( !KU( pk(~skp.1) ) @ #vk.14 )
+                    solve( !KU( pk(~skp) ) @ #vk.11 )
                       case Register_Node
-                      SOLVED // trace found
+                      solve( !KU( pk(~skc) ) @ #vk.13 )
+                        case Register_Node
+                        solve( !KU( pk(~skp.1) ) @ #vk.14 )
+                          case Register_Node
+                          SOLVED // trace found
+                        qed
+                      qed
                     qed
                   qed
                 qed
@@ -302,27 +686,30 @@ guarded formula characterizing all satisfying traces:
 "∃ C S nc #i. (ClientFinish( C, S, nc ) @ #i)"
 */
 simplify
-solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
-  case Client_Hello
-  solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
-    case Client_Learns_KeyMaterial
-    solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+solve( ClientFinish( C, S, nc ) @ #i )
+  case Client_Finish
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
       case Client_Learns_KeyMaterial
-      solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
-        case Register_Node
-        solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
-          case Server_Respond
-          solve( !KU( ~nc ) @ #vk.14 )
-            case Client_Hello
-            solve( !KU( pk(~skc) ) @ #vk.4 )
-              case Register_Node
-              solve( !KU( pk(~skp) ) @ #vk.9 )
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
+            case Server_Respond
+            solve( !KU( ~nc ) @ #vk.14 )
+              case Client_Hello
+              solve( !KU( pk(~skc) ) @ #vk.4 )
                 case Register_Node
-                solve( !KU( pk(~skc.1) ) @ #vk.11 )
+                solve( !KU( pk(~skp) ) @ #vk.9 )
                   case Register_Node
-                  solve( !KU( pk(~skp.1) ) @ #vk.12 )
+                  solve( !KU( pk(~skc.1) ) @ #vk.11 )
                     case Register_Node
-                    SOLVED // trace found
+                    solve( !KU( pk(~skp.1) ) @ #vk.12 )
+                      case Register_Node
+                      SOLVED // trace found
+                    qed
                   qed
                 qed
               qed
@@ -338,36 +725,612 @@ lemma server_authentication:
   all-traces
   "∀ C S nc #i.
     (ClientFinish( C, S, nc ) @ #i) ⇒
-    ((∃ #j. (AttachResponseSigned( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
-     (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i)))"
+    (((∃ #j. (AttachResponseSigned( S, C, nc ) @ #j) ∧ (#j < #i)) ∨
+      (∃ #k. (Compromised( S ) @ #k) ∧ (#k < #i))) ∨
+     (∃ #k. (InstanceSeized( S ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ C S nc #i.
   (ClientFinish( C, S, nc ) @ #i)
  ∧
   (∀ #j. (AttachResponseSigned( S, C, nc ) @ #j) ⇒ ¬(#j < #i)) ∧
-  (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i))"
+  (∀ #k. (Compromised( S ) @ #k) ⇒ ¬(#k < #i)) ∧
+  (∀ #k. (InstanceSeized( S ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
-solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
-  case Client_Hello
-  solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
-    case Client_Learns_KeyMaterial
-    solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+solve( ClientFinish( C, S, nc ) @ #i )
+  case Client_Finish
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i )
       case Client_Learns_KeyMaterial
-      solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
-        case Register_Node
-        solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
-          case Server_Respond
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skc) ) @ #vk.5 )
+            case Server_Respond
+            by contradiction /* from formulas */
+          next
+            case Server_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            solve( !KU( ~skc ) @ #vk.11 )
+              case Compromise_Key
+              by contradiction /* from formulas */
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Client_Finish_Delegated
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i )
+      case Client_Learns_KeyMaterial
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, x) ) @ #vk.6 )
+            case Instance_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case Server_Respond
+            by contradiction /* from formulas */
+          next
+            case Server_Respond_Delegated
+            by contradiction /* from formulas */
+          next
+            case Server_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            solve( !KU( sign(<'delegation', pk(x), $S>, ~skc) ) @ #vk.7 )
+              case Delegate
+              solve( !KU( ~skd ) @ #vk.15 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case Delegated_Client_Answers
+              solve( !KU( ~skd ) @ #vk.15 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case Server_Respond_Delegated
+              solve( !KU( ~skd ) @ #vk.15 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.24 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Client_Finish_Held
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !HeldDelegation( $C, $S, pk(x) ) ▶₂ #i )
+      case Client_Holds_Delegation
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, x) ) @ #vk.5 )
+            case Instance_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case Server_Respond
+            by contradiction /* from formulas */
+          next
+            case Server_Respond_Delegated
+            by contradiction /* from formulas */
+          next
+            case Server_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            solve( !KU( sign(<'delegation', pk(x), $S>, ~skc.1) ) @ #vk.6 )
+              case Delegate
+              solve( !KU( ~skd ) @ #vk.14 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case Delegated_Client_Answers
+              solve( !KU( ~skd ) @ #vk.14 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case Server_Respond_Delegated
+              solve( !KU( ~skd ) @ #vk.14 )
+                case Compromise_Instance
+                by contradiction /* from formulas */
+              qed
+            next
+              case c_sign
+              solve( !KU( ~skc.1 ) @ #vk.23 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_delegated_bind_names_a_key_the_identity_delegated:
+  all-traces
+  "∀ X Y k #i.
+    (BoundByDelegation( X, Y, k ) @ #i) ⇒
+    ((∃ #d. (Delegated( Y, k ) @ #d) ∧ (#d < #i)) ∨
+     (∃ #c. (Compromised( Y ) @ #c) ∧ (#c < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ X Y k #i.
+  (BoundByDelegation( X, Y, k ) @ #i)
+ ∧
+  (∀ #d. (Delegated( Y, k ) @ #d) ⇒ ¬(#d < #i)) ∧
+  (∀ #c. (Compromised( Y ) @ #c) ⇒ ¬(#c < #i))"
+*/
+simplify
+solve( BoundByDelegation( X, Y, k ) @ #i )
+  case Client_Finish_Delegated
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i )
+      case Client_Learns_KeyMaterial
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, x) ) @ #vk.6 )
+            case Instance_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case Server_Respond
+            solve( !KU( sign(<'delegation', pk(~skc), $S>, ~skc) ) @ #vk.8 )
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.20 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          next
+            case Server_Respond_Delegated
+            by contradiction /* from formulas */
+          next
+            case Server_Signs_Without_Responding
+            solve( !KU( sign(<'delegation', pk(~skc), $S>, ~skc) ) @ #vk.8 )
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.18 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          next
+            case c_sign
+            solve( !KU( sign(<'delegation', pk(x), $S>, ~skc) ) @ #vk.7 )
+              case Delegate
+              by contradiction /* from formulas */
+            next
+              case Delegated_Client_Answers
+              by contradiction /* from formulas */
+            next
+              case Server_Respond_Delegated
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.24 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Client_Finish_Held
+  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+    case Client_Hello
+    solve( !HeldDelegation( $C, $S, pk(x) ) ▶₂ #i )
+      case Client_Holds_Delegation
+      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+        case Client_Learns_KeyMaterial
+        solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
+          case Register_Node
+          solve( !KU( sign(<'attach', $C, $S, ~nc>, x) ) @ #vk.5 )
+            case Instance_Signs_Without_Responding
+            by contradiction /* from formulas */
+          next
+            case Server_Respond
+            solve( !KU( sign(<'delegation', pk(~skc), $S>, ~skc) ) @ #vk.7 )
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.19 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          next
+            case Server_Respond_Delegated
+            by contradiction /* from formulas */
+          next
+            case Server_Signs_Without_Responding
+            solve( !KU( sign(<'delegation', pk(~skc), $S>, ~skc) ) @ #vk.7 )
+              case c_sign
+              solve( !KU( ~skc ) @ #vk.17 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          next
+            case c_sign
+            solve( !KU( sign(<'delegation', pk(x), $S>, ~skc.1) ) @ #vk.6 )
+              case Delegate
+              by contradiction /* from formulas */
+            next
+              case Delegated_Client_Answers
+              by contradiction /* from formulas */
+            next
+              case Server_Respond_Delegated
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              solve( !KU( ~skc.1 ) @ #vk.23 )
+                case Compromise_Key
+                by contradiction /* from formulas */
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_Bind_Delegated
+  solve( St_Server_1( $S, ~ns ) ▶₀ #i )
+    case Server_Respond
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, x) ) @ #vk.6 )
+        case Client_Finish
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.26 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Finish_Delegated
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.30 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Finish_Held
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.29 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Signs_Without_Attaching
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.11 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.24 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Delegated_Client_Answers
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( sign(<'delegation', pk(x), $A>, ~skc) ) @ #vk.12 )
+          case Delegate
           by contradiction /* from formulas */
         next
-          case Server_Signs_Without_Responding
+          case Delegated_Client_Answers
+          by contradiction /* from formulas */
+        next
+          case Server_Respond_Delegated
           by contradiction /* from formulas */
         next
           case c_sign
-          solve( !KU( ~skc ) @ #vk.11 )
+          solve( !KU( ~skc ) @ #vk.27 )
             case Compromise_Key
             by contradiction /* from formulas */
+          qed
+        qed
+      qed
+    qed
+  next
+    case Server_Respond_Delegated
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, x) ) @ #vk.6 )
+        case Client_Finish
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.26 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Finish_Delegated
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.30 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Finish_Held
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.10 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.29 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Client_Signs_Without_Attaching
+        solve( !KU( sign(<'delegation', pk(~skc), $A>, ~skc) ) @ #vk.11 )
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.24 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      next
+        case Delegated_Client_Answers
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( sign(<'delegation', pk(x), $A>, ~skc) ) @ #vk.12 )
+          case Delegate
+          by contradiction /* from formulas */
+        next
+          case Delegated_Client_Answers
+          by contradiction /* from formulas */
+        next
+          case Server_Respond_Delegated
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.27 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_delegated_attach_completes_honestly:
+  exists-trace
+  "∃ C S nc k #d #j #i.
+    ((((((((Delegated( S, k ) @ #d) ∧
+           (RespondedUnderDelegation( S, k ) @ #j)) ∧
+          (ClientFinish( C, S, nc ) @ #i)) ∧
+         (BoundByDelegation( C, S, k ) @ #i)) ∧
+        (#d < #j)) ∧
+       (#j < #i)) ∧
+      (¬(∃ A #x. Compromised( A ) @ #x))) ∧
+     (¬(∃ A #x. InstanceSeized( A ) @ #x))) ∧
+    (¬(∃ A #x. SignedWithoutTransition( A ) @ #x))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S nc k #d #j #i.
+  (Delegated( S, k ) @ #d) ∧
+  (RespondedUnderDelegation( S, k ) @ #j) ∧
+  (ClientFinish( C, S, nc ) @ #i) ∧
+  (BoundByDelegation( C, S, k ) @ #i)
+ ∧
+  (#d < #j) ∧
+  (#j < #i) ∧
+  (∀ A #x. (Compromised( A ) @ #x) ⇒ ⊥) ∧
+  (∀ A #x. (InstanceSeized( A ) @ #x) ⇒ ⊥) ∧
+  (∀ A #x. (SignedWithoutTransition( A ) @ #x) ⇒ ⊥)"
+*/
+simplify
+solve( !Ltk( $A, ~skc ) ▶₀ #d )
+  case Register_Node
+  solve( !DelegatedKey( $A, ~skd ) ▶₁ #j )
+    case Delegate
+    solve( !Ltk( $A, ~sks ) ▶₂ #j )
+      case Register_Node
+      solve( ClientFinish( C.1, $A, nc.1 ) @ #i )
+        case Client_Finish_Delegated
+        solve( St_Client_1( $C, $A, ~nc ) ▶₀ #i )
+          case Client_Hello
+          solve( !PinnedFor( $C, $A, <pk(x.1), x.2> ) ▶₂ #i )
+            case Client_Learns_KeyMaterial
+            solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+              case Client_Learns_KeyMaterial
+              solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+                case Register_Node
+                solve( BoundByDelegation( $C, $A, pk(~skd) ) @ #i )
+                  case Client_Finish_Delegated
+                  solve( !KU( sign(<'attach', $C, $A, ~nc>, ~skd) ) @ #vk.11 )
+                    case Server_Respond_Delegated
+                    solve( !KU( ~nc ) @ #vk.22 )
+                      case Client_Hello
+                      solve( !KU( sign(<'delegation', pk(~skd), $A>, ~skc) ) @ #vk.15 )
+                        case Delegate
+                        solve( !KU( pk(~skd) ) @ #vk.13 )
+                          case Delegate
+                          solve( !KU( pk(~skc) ) @ #vk.17 )
+                            case Register_Node
+                            solve( !KU( pk(~skp) ) @ #vk.18 )
+                              case Register_Node
+                              solve( !KU( pk(~skc.1) ) @ #vk.20 )
+                                case Register_Node
+                                solve( !KU( pk(~skp.1) ) @ #vk.21 )
+                                  case Register_Node
+                                  SOLVED // trace found
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_held_delegation_binds:
+  exists-trace
+  "∃ C S k #h #i.
+    ((((Held( C, S, k ) @ #h) ∧ (BoundByDelegation( C, S, k ) @ #i)) ∧
+      (#h < #i)) ∧
+     (¬(∃ A #x. Compromised( A ) @ #x))) ∧
+    (¬(∃ A #x. InstanceSeized( A ) @ #x))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S k #h #i.
+  (Held( C, S, k ) @ #h) ∧ (BoundByDelegation( C, S, k ) @ #i)
+ ∧
+  (#h < #i) ∧
+  (∀ A #x. (Compromised( A ) @ #x) ⇒ ⊥) ∧
+  (∀ A #x. (InstanceSeized( A ) @ #x) ⇒ ⊥)"
+*/
+simplify
+solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₀ #h )
+  case Client_Learns_KeyMaterial
+  solve( BoundByDelegation( $C, $S, k ) @ #i )
+    case Client_Finish_Delegated
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
+      case Client_Hello
+      solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i )
+        case Client_Learns_KeyMaterial
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
+            case Register_Node
+            solve( !KU( sign(<'delegation', pk(x), $S>, ~skc) ) @ #vk.5 )
+              case Delegate
+              solve( !KU( sign(<'attach', $C, $S, ~nc>, ~skd) ) @ #vk.10 )
+                case Instance_Signs_Without_Responding
+                solve( !KU( ~nc ) @ #vk.16 )
+                  case Client_Hello
+                  solve( !KU( pk(~skc) ) @ #vk.9 )
+                    case Register_Node
+                    solve( !KU( pk(~skp) ) @ #vk.11 )
+                      case Register_Node
+                      solve( !KU( pk(~skd) ) @ #vk.11 )
+                        case Delegate
+                        solve( !KU( pk(~skc.1) ) @ #vk.14 )
+                          case Register_Node
+                          solve( !KU( pk(~skp.1) ) @ #vk.15 )
+                            case Register_Node
+                            SOLVED // trace found
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_delegated_client_is_bound:
+  exists-trace
+  "∃ S A ns k #a #i.
+    (((((AnsweredUnderDelegation( A, k ) @ #a) ∧
+        (BoundByDelegation( S, A, k ) @ #i)) ∧
+       (Bound( S, A, ns, A ) @ #i)) ∧
+      (#a < #i)) ∧
+     (¬(∃ X #x. Compromised( X ) @ #x))) ∧
+    (¬(∃ X #x. InstanceSeized( X ) @ #x))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ S A ns k #a #i.
+  (AnsweredUnderDelegation( A, k ) @ #a) ∧
+  (BoundByDelegation( S, A, k ) @ #i) ∧
+  (Bound( S, A, ns, A ) @ #i)
+ ∧
+  (#a < #i) ∧
+  (∀ X #x. (Compromised( X ) @ #x) ⇒ ⊥) ∧
+  (∀ X #x. (InstanceSeized( X ) @ #x) ⇒ ⊥)"
+*/
+simplify
+solve( !DelegatedKey( $C, ~skd ) ▶₀ #a )
+  case Delegate
+  solve( !Ltk( $C, ~skc ) ▶₁ #a )
+    case Register_Node
+    solve( !PinnedFor( $C, $C, kmSelf ) ▶₂ #a )
+      case Client_Learns_KeyMaterial
+      solve( BoundByDelegation( S.1, $C, pk(~skd) ) @ #i )
+        case Server_Bind_Delegated
+        solve( St_Server_1( $S.1, ~ns.1 ) ▶₀ #i )
+          case Server_Respond
+          solve( !Identity( $C, h(<pk(x), x.1>) ) ▶₂ #i )
+            case Register_Node
+            solve( Bound( $S.1, $C, ns.2, $C ) @ #i )
+              case Server_Bind_Delegated
+              solve( !KU( sign(<'client-auth', $C, $S.1, ~ns.1, $C>, ~skd) ) @ #vk.11 )
+                case Delegated_Client_Answers
+                solve( !KU( ~ns.1 ) @ #vk.22 )
+                  case Server_Respond
+                  solve( !KU( sign(<'delegation', pk(~skd), $C>, ~skc) ) @ #vk.16 )
+                    case Delegate
+                    solve( !KU( pk(~skc) ) @ #vk.12 )
+                      case Register_Node
+                      solve( !KU( pk(~skp) ) @ #vk.14 )
+                        case Register_Node
+                        solve( !KU( pk(~skd) ) @ #vk.17 )
+                          case Delegate
+                          SOLVED // trace found
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
           qed
         qed
       qed
@@ -391,7 +1354,16 @@ guarded formula characterizing all counter-examples:
 */
 simplify
 solve( Session( $S, $R, ns ) ▶₀ #i )
-  case Server_Bind
+  case Server_Bind_Delegated_case_1
+  by contradiction /* from formulas */
+next
+  case Server_Bind_Delegated_case_2
+  by contradiction /* from formulas */
+next
+  case Server_Bind_case_1
+  by contradiction /* from formulas */
+next
+  case Server_Bind_case_2
   by contradiction /* from formulas */
 qed
 
@@ -399,32 +1371,166 @@ lemma client_authentication:
   all-traces
   "∀ S A ns C #i.
     (Bound( S, A, ns, C ) @ #i) ⇒
-    ((∃ #c. (ClientAuthSigned( A, S, ns, C ) @ #c) ∧ (#c < #i)) ∨
-     (∃ #k. (Compromised( A ) @ #k) ∧ (#k < #i)))"
+    (((∃ #c. (ClientAuthSigned( A, S, ns, C ) @ #c) ∧ (#c < #i)) ∨
+      (∃ #k. (Compromised( A ) @ #k) ∧ (#k < #i))) ∨
+     (∃ #k. (InstanceSeized( A ) @ #k) ∧ (#k < #i)))"
 /*
 guarded formula characterizing all counter-examples:
 "∃ S A ns C #i.
   (Bound( S, A, ns, C ) @ #i)
  ∧
   (∀ #c. (ClientAuthSigned( A, S, ns, C ) @ #c) ⇒ ¬(#c < #i)) ∧
-  (∀ #k. (Compromised( A ) @ #k) ⇒ ¬(#k < #i))"
+  (∀ #k. (Compromised( A ) @ #k) ⇒ ¬(#k < #i)) ∧
+  (∀ #k. (InstanceSeized( A ) @ #k) ⇒ ¬(#k < #i))"
 */
 simplify
-solve( St_Server_1( $S, ~ns ) ▶₀ #i )
-  case Server_Respond
-  solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
-    case Register_Node
-    solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~skc) ) @ #vk.5 )
-      case Client_Finish
-      by contradiction /* from formulas */
-    next
-      case Client_Signs_Without_Attaching
-      by contradiction /* from formulas */
-    next
-      case c_sign
-      solve( !KU( ~skc ) @ #vk.17 )
-        case Compromise_Key
+solve( Bound( S, A, ns, C ) @ #i )
+  case Server_Bind
+  solve( St_Server_1( $S, ~ns ) ▶₀ #i )
+    case Server_Respond
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~skc) ) @ #vk.5 )
+        case Client_Finish
         by contradiction /* from formulas */
+      next
+        case Client_Finish_Delegated
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Held
+        by contradiction /* from formulas */
+      next
+        case Client_Signs_Without_Attaching
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~skc ) @ #vk.17 )
+          case Compromise_Key
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  next
+    case Server_Respond_Delegated
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, ~skc) ) @ #vk.5 )
+        case Client_Finish
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Delegated
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Held
+        by contradiction /* from formulas */
+      next
+        case Client_Signs_Without_Attaching
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( ~skc ) @ #vk.17 )
+          case Compromise_Key
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_Bind_Delegated
+  solve( St_Server_1( $S, ~ns ) ▶₀ #i )
+    case Server_Respond
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, x) ) @ #vk.6 )
+        case Client_Finish
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Delegated
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Held
+        by contradiction /* from formulas */
+      next
+        case Client_Signs_Without_Attaching
+        by contradiction /* from formulas */
+      next
+        case Delegated_Client_Answers
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( sign(<'delegation', pk(x), $A>, ~skc) ) @ #vk.12 )
+          case Delegate
+          solve( !KU( ~skd ) @ #vk.22 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case Delegated_Client_Answers
+          solve( !KU( ~skd ) @ #vk.22 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case Server_Respond_Delegated
+          solve( !KU( ~skd ) @ #vk.23 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.27 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
+      qed
+    qed
+  next
+    case Server_Respond_Delegated
+    solve( !Identity( $A, h(<pk(x), x.1>) ) ▶₂ #i )
+      case Register_Node
+      solve( !KU( sign(<'client-auth', $A, $S, ~ns, $A>, x) ) @ #vk.6 )
+        case Client_Finish
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Delegated
+        by contradiction /* from formulas */
+      next
+        case Client_Finish_Held
+        by contradiction /* from formulas */
+      next
+        case Client_Signs_Without_Attaching
+        by contradiction /* from formulas */
+      next
+        case Delegated_Client_Answers
+        by contradiction /* from formulas */
+      next
+        case c_sign
+        solve( !KU( sign(<'delegation', pk(x), $A>, ~skc) ) @ #vk.12 )
+          case Delegate
+          solve( !KU( ~skd ) @ #vk.22 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case Delegated_Client_Answers
+          solve( !KU( ~skd ) @ #vk.22 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case Server_Respond_Delegated
+          solve( !KU( ~skd ) @ #vk.23 )
+            case Compromise_Instance
+            by contradiction /* from formulas */
+          qed
+        next
+          case c_sign
+          solve( !KU( ~skc ) @ #vk.27 )
+            case Compromise_Key
+            by contradiction /* from formulas */
+          qed
+        qed
       qed
     qed
   qed
@@ -441,7 +1547,7 @@ guarded formula characterizing all satisfying traces:
 */
 simplify
 solve( Session( $S, $R, ns ) ▶₀ #i )
-  case Server_Bind
+  case Server_Bind_case_1
   solve( Mail( $R, m ) ▶₁ #i )
     case Enqueue
     solve( !KU( sign(<'client-auth', $R, $S, ~ns, $R>, ~skc) ) @ #vk.5 )
@@ -475,17 +1581,83 @@ guarded formula characterizing all counter-examples:
 simplify
 solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
   case case_1
-  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
-    case Client_Hello
-    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
-      case Client_Learns_KeyMaterial
-      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+  solve( ClientFinish( C, S, nc ) @ #i1 )
+    case Client_Finish
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
         case Client_Learns_KeyMaterial
-        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
-          case Register_Node
-          solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
-            case Client_Hello
-            by contradiction /* cyclic */
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            next
+              case Client_Finish_Delegated
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Held
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Client_Finish_Delegated
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i1 )
+        case Client_Learns_KeyMaterial
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Delegated
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            next
+              case Client_Finish_Held
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Client_Finish_Held
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !HeldDelegation( $C, $S, pk(x) ) ▶₂ #i1 )
+        case Client_Holds_Delegation
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.1 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Delegated
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Held
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            qed
           qed
         qed
       qed
@@ -493,17 +1665,83 @@ solve( (#i1 < #i2)  ∥ (#i2 < #i1) )
   qed
 next
   case case_2
-  solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
-    case Client_Hello
-    solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
-      case Client_Learns_KeyMaterial
-      solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+  solve( ClientFinish( C, S, nc ) @ #i1 )
+    case Client_Finish
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !PinnedFor( $C, $S, <pk(x), x.1> ) ▶₂ #i1 )
         case Client_Learns_KeyMaterial
-        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
-          case Register_Node
-          solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
-            case Client_Hello
-            by contradiction /* cyclic */
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            next
+              case Client_Finish_Delegated
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Held
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Client_Finish_Delegated
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i1 )
+        case Client_Learns_KeyMaterial
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.2 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Delegated
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            next
+              case Client_Finish_Held
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Client_Finish_Held
+    solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i1 )
+      case Client_Hello
+      solve( !HeldDelegation( $C, $S, pk(x) ) ▶₂ #i1 )
+        case Client_Holds_Delegation
+        solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i1 )
+          case Client_Learns_KeyMaterial
+          solve( !Ltk( $C, ~skc.1 ) ▶₄ #i1 )
+            case Register_Node
+            solve( ClientFinish( $C, $S, ~nc ) @ #i2 )
+              case Client_Finish
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Delegated
+              by solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+            next
+              case Client_Finish_Held
+              solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i2 )
+                case Client_Hello
+                by contradiction /* cyclic */
+              qed
+            qed
           qed
         qed
       qed
@@ -528,14 +1766,18 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/attach.spthy
 
-  processing time: 1.59s
+  processing time: 13.21s
   
-  attach_completes_honestly (exists-trace): verified (13 steps)
-  attach_is_executable (exists-trace): verified (12 steps)
-  server_authentication (all-traces): verified (10 steps)
-  queued_data_reaches_only_the_authenticated_peer (all-traces): verified (3 steps)
-  client_authentication (all-traces): verified (8 steps)
+  attach_completes_honestly (exists-trace): verified (15 steps)
+  attach_is_executable (exists-trace): verified (13 steps)
+  server_authentication (all-traces): verified (47 steps)
+  a_delegated_bind_names_a_key_the_identity_delegated (all-traces): verified (83 steps)
+  a_delegated_attach_completes_honestly (exists-trace): verified (19 steps)
+  a_held_delegation_binds (exists-trace): verified (16 steps)
+  a_delegated_client_is_bound (exists-trace): verified (15 steps)
+  queued_data_reaches_only_the_authenticated_peer (all-traces): verified (6 steps)
+  client_authentication (all-traces): verified (52 steps)
   a_delivery_is_reachable (exists-trace): verified (8 steps)
-  client_commit_is_injective (all-traces): verified (14 steps)
+  client_commit_is_injective (all-traces): verified (58 steps)
 
 ==============================================================================

@@ -16,7 +16,7 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
 temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(34 lemmas) and `compliant/` (29 lemmas).
+(38 lemmas) and `compliant/` (29 lemmas).
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and
@@ -262,7 +262,7 @@ opens with the reading conventions. Every theory begins with an
 `exists-trace` executability lemma — the guard against a model that cannot run
 the honest protocol and so proves every security lemma vacuously.
 
-- **`wire-only/attach`** (design §14, wire §9.1) — session attach.
+- **`wire-only/attach`** (design §14, wire §9.1, §8.2) — session attach, and since 2026-09-22 the delegated bind: a presented key bound by a delegation the identity signed, presented first or already held, in both directions, with a seized instance as a stated carve-out.
   **Authentication is mutual**: a client that completes an attach
   authenticated the server it intended, and a serving node's bound session
   names a client that proved control of its key over that server's own

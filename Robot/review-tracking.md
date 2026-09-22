@@ -10535,3 +10535,42 @@ lint alone: the gate denies every clippy warning and the reviewer's code was
 written outside it, one site tripping `field_reassign_with_default`. Allowed in
 the crate's manifest with the reason, under the same rule, rather than repaired
 in the reviewer's test; a new lint is added there, never fixed here.
+
+## The delegated bind, modelled (2026-09-22)
+
+Milestone A step 1 of `Robot/outstanding-work-2026-09-21.md`. The wire-only
+attach theory modelled one bind, the pinned classical half (CHECK 2); every
+instance's normal case since 09-16 had no rule and no lemma. Added: `Delegate`
+(the identity's key over a fresh transport key, public), `Compromise_Instance`
+(design §18.1's residual as a carve-out: a seized instance answers as the node
+and can never mint a delegation), `Client_Holds_Delegation` (the topology-class
+bind, the delegation checked under the pinned material before it is held),
+`Server_Respond_Delegated` and `Client_Finish_Delegated` (presented first),
+`Client_Finish_Held`, `Server_Bind_Delegated` and `Delegated_Client_Answers`
+(the mirror, a delegated desktop or instrument), and
+`Instance_Signs_Without_Responding`. `server_authentication` and
+`client_authentication` gain the seized-instance disjunct. New all-traces lemma
+`a_delegated_bind_names_a_key_the_identity_delegated`: whoever bound a
+presented key by a delegation bound a key the identity's own key delegated,
+seizure being no carve-out. Three exists-trace guards.
+
+**Verified before wiring the gate**: eleven lemmas verify, wellformedness
+clean; each of the three candidate mutations falsifies the lemma when run by
+hand (13, 15 and 15 steps). Two of the three patterns matched more than once
+because the theory's own commentary quotes them; anchored to surrounding
+syntax, and the gate's substitution, which replaces every occurrence, is
+unaffected either way. The gate names a mutant's transcript by lemma, so the
+three mutations of one lemma share a transcript, each verdict checked at its
+own run.
+
+`models/run-all.sh`: **ALL MODELS PASS** — five TLA+ models and one further
+instance, five TLA+ mutations violated as expected, eight Tamarin theories
+(wire-only 11 + 7 + 14 + 6 = 38 lemmas, compliant 29), two bounded companions,
+ten theory mutations falsified. `modelrefcheck.py` 1,233 citations across 259
+files, 0 flags. The READMEs carry the new bullet, the exclusions, and the
+count. The currency premise had been restated the day before.
+
+**What the theory states it does not reach**, in its header and the folder's
+README: the window and the receiver's leeway; the distinction between an
+attach and a request-only contact; the flood as such; one key per run and the
+run.
