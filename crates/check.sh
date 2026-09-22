@@ -2,11 +2,13 @@
 # =============================================================================
 #  check.sh -- the code gate for the RHTN workspace.
 #
+#  0. The specification pins: the code's and the vectors', non-mutating.
 #  1. The acceptance catalogue: fields, ids, citations, verbatim quotes,
 #     gap coverage (tools/check.py; exit 1 on any flag).
 #  2. The generated stubs are in sync with the catalogue: regenerate into a
 #     temporary directory and diff.  A hand edit to tests/ fails here.
 #  3a. Every crate lints clean under clippy, all targets, warnings as errors.
+#  3b. Licences and advisories under cargo-deny, against deny.toml.
 #  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
 #     are not run: they are the tests still owed, and `cargo test -- --ignored`
 #     lists them by failing each one.
@@ -21,6 +23,15 @@ set -u
 set -o pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail=0
+
+echo "=== 0. Specification pins ==="
+# Non-mutating: the documents the code last passed against, and the
+# documents, tools and outputs the vectors were generated from, against the
+# tree now.  A specification-only change fails here, which no other step
+# would see (2026-09-21).  Re-pin the code with tools/pincheck.py --accept
+# once the gate passes against the changed documents; the vector pin is
+# generate.py's alone.
+if python3 "$HERE/tools/pincheck.py"; then :; else fail=1; fi
 
 echo "=== 1. Acceptance catalogue ==="
 if python3 "$HERE/acceptance/tools/check.py"; then :; else fail=1; fi
@@ -42,6 +53,21 @@ if (cd "$HERE" && nice -n 19 cargo clippy -j 8 --workspace --all-targets --quiet
   echo "  cargo clippy: clean"
 else
   echo "  cargo clippy: WARNINGS"; fail=1
+fi
+
+echo "=== 3b. Licences and advisories ==="
+# cargo-deny against deny.toml: the allow-list is what the dependency tree
+# carries, all permissive; copyleft fails by absence from it, and the
+# advisory database is checked.  Absence of the tool is a failure, not a
+# skip: a licence gate that silently did not run is no gate.
+if cargo deny --version > /dev/null 2>&1; then
+  if (cd "$HERE" && nice -n 19 cargo deny check 2>&1 | tail -12); then
+    echo "  cargo deny: clean"
+  else
+    echo "  cargo deny: FAILED"; fail=1
+  fi
+else
+  echo "  cargo-deny absent: cargo install cargo-deny --locked"; fail=1
 fi
 
 echo "=== 3. Build and live tests ==="

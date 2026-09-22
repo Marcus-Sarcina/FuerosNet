@@ -10662,3 +10662,35 @@ bundle per subject and ignores the device a request names (PAY-20, SUB-12);
 the queue is per recipient, not per device (QUE-05, QUE-21); the courier's relay
 to the serving node itself carries an all-zero device, the node's own transport
 key not yet reaching it (QUE-21).
+
+## The gate, pinned and licensed (2026-09-22)
+
+Milestone A step 4. Two of its three parts. **Step 0, `crates/tools/pincheck.py`**,
+before the catalogue: the six root documents hashed against a code pin,
+`crates/spec-pins.json`, which only `--accept` writes and which the note
+bootstrapped on the current tree; and the vector pin at
+`test-vectors/tools/spec-pins.json` read, never written, its three documents, two
+tools and outputs compared against the tree. 19 hashes, 0 stale. A
+specification-only commit now fails the gate at step 0 until the gate is re-run
+and the code pin accepted, which is the acknowledgement section 6 of the note
+asked for. **Step 3b, `cargo-deny` 0.20.2** against `crates/deny.toml`: the
+tree's licence expressions enumerated from `cargo metadata` (121 of 229 external
+packages `MIT OR Apache-2.0`, the rest permissive; `r-efi`'s `LGPL-2.1-or-later`
+is one arm of an OR and the `aws-lc-sys` compound is an AND of listed arms), an
+allow-list of twelve, copyleft refused by absence rather than by a deny list;
+`unknown-registry` and `unknown-git` denied; advisories at version 2 with yanked
+crates denied; duplicate versions warned (ten crates at two versions), not failed.
+Its first run: licences ok, bans ok, sources ok, advisories FAILED on
+RUSTSEC-2026-0285, `rustls` 0.23.44 accepting TLS 1.3 handshake messages across
+encryption-level boundaries; `cargo update -p rustls` to 0.23.45, one line of the
+lockfile; clean. The tool's absence is a gate failure, not a skip: a licence gate
+that silently did not run is no gate. **The format step is not landed.**
+`rustfmt` 1.9.0 installed; `cargo fmt --check` diff hunks: 3,395 at the default
+100 columns, 2,677 at 120, 1,705 at 160, 1,187 at 200, 995 at 240. The width is
+the author's and the reformat is its own commit, so nothing behavioural hides in
+it. **CODE GATE PASSES** with the two new steps: 548 passed, 0 failed, 55 ignored
+across the workspace; fuzz smoke envelope 26,822, frame_control 382,589,
+frame_request 994,405 runs, no crash. `refcheck` 2,296 / 0; `modelrefcheck`
+1,264 / 0; stalecheck 1 + 10 + 3, its baseline. `implementation-plan.md`
+section 3's deny and code-pin bullets marked landed; the note's section 6 and
+step 4 updated.

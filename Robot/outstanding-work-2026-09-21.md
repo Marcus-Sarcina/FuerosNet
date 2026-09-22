@@ -450,7 +450,20 @@ specification-only change invisible in exactly the way this one was. Owed: a
 non-mutating freshness check in the required gate, over the specification
 hashes and the fixture producer and outputs, with explicit acknowledgement
 kept for rebasing; the format step; and the licence gate before the
-application tier pulls dependencies.
+application tier pulls dependencies. **Two of the three landed 2026-09-22.**
+`crates/tools/pincheck.py` is step 0 of the gate: the six root documents
+against a code pin `crates/spec-pins.json` written only by `--accept`, and
+the vector pin's three documents, two tools and outputs read and compared,
+never rewritten; 19 hashes checked. `cargo-deny` 0.20.2 is step 3b against
+`crates/deny.toml`: the allow-list is the twelve licences the tree carried,
+every one permissive, copyleft refused by absence, sources pinned to
+crates.io, advisories failing the gate; its first run found one, RUSTSEC-2026-0285
+in `rustls` 0.23.44, closed by the lockfile advancing to 0.23.45. **The format
+step is not landed**: `rustfmt` 1.9.0 is installed and the tree was never
+formatted, and the width is the author's; `cargo fmt --check` counts 3,395
+diff hunks at the default 100 columns, 2,677 at 120, 1,705 at 160, 1,187 at
+200, 995 at 240. A reformat at any width is one commit touching most files,
+to be made on its own so no behavioural diff hides in it.
 
 **Also owed:**
 
@@ -807,7 +820,9 @@ land on their own.
    courier's relay to the serving node itself carrying an all-zero device
    until the node's own device reaches it (QUE-21).
 4. **The gate** (section 6): the freshness check, so step 3 cannot go stale
-   silently again; the format step; `cargo-deny`.
+   silently again; the format step; `cargo-deny`. **Done 2026-09-22 but for
+   the format step**: step 0 pins, step 3b deny; the width is the author's
+   (section 6), and the reformat is its own commit once chosen.
 5. **Behavioural code per mechanism**, each against its entries: archive,
    node, client and `probe` for `wire-format.md` §7.9; transport, node,
    daemon, client and FFI for the delegation, on the signing table as decided;

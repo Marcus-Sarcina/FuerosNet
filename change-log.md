@@ -10293,7 +10293,22 @@ each rule states. 214 → 238 entries, the independent harness at 100 checks, an
 reading the corpus stays green. The behaviour above the shapes, a bundle and a
 queue per device, is owed as entered.
 
+**The gate compares specification hashes, and reads the licences.** On the
+21st every checker reported clean while the vector pin was stale on all three of
+its documents, because no step of `crates/check.sh` compared a hash. Step 0 now
+does, non-mutating: the six root documents against a pin of the code's own,
+`crates/spec-pins.json`, rewritten only by an explicit `--accept` once the gate
+has passed against the changed text; and the vector pin's documents, tools and
+outputs read and compared, never rewritten. Step 3b runs `cargo-deny` against
+`crates/deny.toml`: the twelve permissive licences the tree carries as the
+allow-list, copyleft refused by absence, sources pinned to crates.io, an advisory
+failing the gate. Its first run found one, RUSTSEC-2026-0285 in `rustls`
+0.23.44, closed by the lockfile advancing to 0.23.45. The format step is not
+landed: `rustfmt` is installed, the tree was never formatted, and the column
+width is the author's; the reformat is one commit of its own once chosen.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the
-test-vector pins are current on all three documents.
+test-vector pins are current on all three documents; the gate's 19 hashes match,
+`cargo deny` clean.

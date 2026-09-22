@@ -1,0 +1,43 @@
+# cargo-deny for the RHTN workspace (Robot/implementation-plan.md section 3;
+# the gate's step 3b).  The licence policy [author]: Apache-2.0, MIT or
+# looser is free; copyleft is not taken into the library.  AGPL, which the
+# payload library's natural source carries, is admitted only in a segregated
+# client application and never here, and its absence from the list below is
+# what refuses it.  MPL-2.0 is uniffi's, accepted for the mobile boundary on
+# 2026-09-16; it is added here when uniffi arrives, with this comment moved
+# beside it.  The list is what the tree carried on 2026-09-22, every one
+# permissive; a new licence fails until it is read and listed.
+
+[graph]
+all-features = false
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "MIT-0",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "CC0-1.0",
+  "Unlicense",
+]
+confidence-threshold = 0.9
+
+[advisories]
+# a vulnerability in the tree fails the gate; the rest is reported
+version = 2
+yanked = "deny"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
