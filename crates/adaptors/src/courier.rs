@@ -73,9 +73,23 @@ pub struct Courier {
 impl Courier {
     /// A courier for `handle`, and where its application payload and the
     /// subject's copies arrive.
-    pub fn new(handle: Handle, serving: Arc<dyn Serving>, direct: Arc<dyn Direct>) -> (Arc<Courier>, mpsc::UnboundedReceiver<(Keyhash, Dispatched)>) {
+    pub fn new(
+        handle: Handle,
+        serving: Arc<dyn Serving>,
+        direct: Arc<dyn Direct>,
+    ) -> (Arc<Courier>, mpsc::UnboundedReceiver<(Keyhash, Dispatched)>) {
         let (app, rx) = mpsc::unbounded_channel();
-        (Arc::new(Courier { handle, serving, direct, app, verifiers: Mutex::new(None), offered: Mutex::new(HashSet::new()) }), rx)
+        (
+            Arc::new(Courier {
+                handle,
+                serving,
+                direct,
+                app,
+                verifiers: Mutex::new(None),
+                offered: Mutex::new(HashSet::new()),
+            }),
+            rx,
+        )
     }
 
     pub(crate) fn report_grants_to(&self, v: Arc<Verifiers>) {
@@ -101,7 +115,10 @@ impl Courier {
     /// this side offers its own if it has not; a grant that answered a
     /// waiting query completes its stream; the rest is the application's.
     pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>) {
-        let d = self.handle.with(move |c| c.receive_payload(from, &bytes)).await;
+        let d = self
+            .handle
+            .with(move |c| c.receive_payload(from, &bytes))
+            .await;
         match d {
             Ok(Dispatched::Candidates(b)) => {
                 if let Ok(cands) = decode_candidates(&b) {
@@ -131,7 +148,10 @@ impl Courier {
     /// publishes, stocks and sweeps at attach, carried there.
     pub async fn attach(self: &Arc<Self>, population: Vec<Keyhash>) -> Carried {
         let serving = self.serving.me();
-        let msgs = self.handle.with(move |c| c.attach(serving, &population)).await;
+        let msgs = self
+            .handle
+            .with(move |c| c.attach(serving, &population))
+            .await;
         self.carry(msgs).await
     }
 
@@ -148,15 +168,28 @@ impl Courier {
     /// where the path may be direct, sent as their own kind on whatever
     /// path exists now.  Whether an offer went.
     pub async fn offer(self: &Arc<Self>, peer: Keyhash) -> bool {
-        let Some(cands) = self.direct.gather(peer).await else { return false };
+        let Some(cands) = self.direct.gather(peer).await else {
+            return false;
+        };
         self.offered.lock().unwrap().insert(peer);
-        self.send(peer, KIND_CANDIDATES, encode_candidates(&cands)).await.is_ok()
+        self.send(peer, KIND_CANDIDATES, encode_candidates(&cands))
+            .await
+            .is_ok()
     }
 
     /// Send `bytes` of `kind` to `to` from the client, and carry what the
     /// client says out.  What the adaptors do not carry comes back.
-    pub async fn send(self: &Arc<Self>, to: Keyhash, kind: u64, bytes: Vec<u8>) -> Result<Carried, String> {
-        let msgs = self.handle.with(move |c| c.send_payload(to, kind, &bytes)).await.map_err(|e| e.to_string())?;
+    pub async fn send(
+        self: &Arc<Self>,
+        to: Keyhash,
+        kind: u64,
+        bytes: Vec<u8>,
+    ) -> Result<Carried, String> {
+        let msgs = self
+            .handle
+            .with(move |c| c.send_payload(to, kind, &bytes))
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(self.carry(msgs).await)
     }
 
@@ -171,7 +204,10 @@ impl Courier {
     /// fail to travel are kept apart: `left` is what the adaptors do not
     /// carry at all, the ceremony's own conversation between two present
     /// devices, and `refused` is what was handed over and turned down.
-    pub fn carry(self: &Arc<Self>, msgs: Vec<Msg>) -> Pin<Box<dyn Future<Output = Carried> + Send>> {
+    pub fn carry(
+        self: &Arc<Self>,
+        msgs: Vec<Msg>,
+    ) -> Pin<Box<dyn Future<Output = Carried> + Send>> {
         let me = self.clone();
         Box::pin(async move {
             let mut out = Carried::default();
@@ -199,7 +235,9 @@ impl Courier {
                         // a delivery short of complete leaves the message
                         // with the sender, and the relay carries it (design
                         // §14.1.1)
-                        if !me.direct.deliver(to, bytes.clone()).await && !me.serving.relay(me.me(), to, bytes.clone(), device).await {
+                        if !me.direct.deliver(to, bytes.clone()).await
+                            && !me.serving.relay(me.me(), to, bytes.clone(), device).await
+                        {
                             out.refused.push(Msg::Payload { to, bytes, device });
                         }
                     }

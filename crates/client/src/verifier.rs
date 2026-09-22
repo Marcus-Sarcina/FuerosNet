@@ -4,7 +4,7 @@
 //! comparison itself is behind [`Matcher`], the biometric engine being
 //! undecided (design §22.2).
 
-use crate::query::{Basis, KeyGrant, QueryRequest, Response, VerificationQuery, Verdict};
+use crate::query::{Basis, KeyGrant, QueryRequest, Response, Verdict, VerificationQuery};
 use crate::store::{ClientStore, SealParams, open};
 use crate::{Keyhash, query};
 use rhtn_codec::cose::sha256;
@@ -24,7 +24,11 @@ pub struct ByteEquality;
 
 impl Matcher for ByteEquality {
     fn compare(&self, template: &[u8], profile: &[u8], _template_version: u64) -> Verdict {
-        if template == profile { Verdict::Match } else { Verdict::NoMatch }
+        if template == profile {
+            Verdict::Match
+        } else {
+            Verdict::NoMatch
+        }
     }
 }
 
@@ -43,7 +47,13 @@ pub struct VerifierConfig {
 
 impl Default for VerifierConfig {
     fn default() -> Self {
-        VerifierConfig { seal: SealParams::default(), grant_buffer_ms: 60_000, per_requester_limit: 16, window_ms: 600_000, template_versions: BTreeSet::from([1]) }
+        VerifierConfig {
+            seal: SealParams::default(),
+            grant_buffer_ms: 60_000,
+            per_requester_limit: 16,
+            window_ms: 600_000,
+            template_versions: BTreeSet::from([1]),
+        }
     }
 }
 
@@ -113,7 +123,14 @@ pub struct VerifierState {
 
 impl VerifierState {
     pub fn new(cfg: VerifierConfig) -> Self {
-        VerifierState { cfg, ceremonies: BTreeMap::new(), counters: BTreeMap::new(), pending_queries: BTreeMap::new(), pending_grants: BTreeMap::new(), answered: BTreeSet::new() }
+        VerifierState {
+            cfg,
+            ceremonies: BTreeMap::new(),
+            counters: BTreeMap::new(),
+            pending_queries: BTreeMap::new(),
+            pending_grants: BTreeMap::new(),
+            answered: BTreeSet::new(),
+        }
     }
 
     /// Queries waiting for their grant, by id.
@@ -133,8 +150,16 @@ impl VerifierState {
     /// this one, and the requester's allowance.  Then a claimed `met` this
     /// verifier's own records refute, or a template version it cannot
     /// compare under, is answered `unavailable` with no comparison run.
-    pub fn take_query<L: Lookup + ?Sized>(&mut self, cx: &Verifying<L>, peer: Keyhash, body: &[u8], now_ms: u64) -> QueryOutcome {
-        let Ok(req) = QueryRequest::decode(body) else { return QueryOutcome::Closed("malformed request") };
+    pub fn take_query<L: Lookup + ?Sized>(
+        &mut self,
+        cx: &Verifying<L>,
+        peer: Keyhash,
+        body: &[u8],
+        now_ms: u64,
+    ) -> QueryOutcome {
+        let Ok(req) = QueryRequest::decode(body) else {
+            return QueryOutcome::Closed("malformed request");
+        };
         let q = req.query;
         if q.verifier != cx.me.public.keyhash {
             return QueryOutcome::Closed("not addressed to this verifier");
@@ -142,7 +167,9 @@ impl VerifierState {
         if q.querier != peer {
             return QueryOutcome::Closed("querier is not the authenticated requester");
         }
-        let Some(subject) = cx.ids.identity(&q.subject) else { return QueryOutcome::Closed("subject's key not held") };
+        let Some(subject) = cx.ids.identity(&q.subject) else {
+            return QueryOutcome::Closed("subject's key not held");
+        };
         let qid = q.query_id();
         if !query::consent_verifies(subject, &req.consent, &qid) {
             return QueryOutcome::Closed("consent does not verify under the subject");
@@ -150,7 +177,9 @@ impl VerifierState {
         // one profile per ceremony (design §7.4.1, §7.4.2)
         let digest = sha256(&q.profile);
         match self.ceremonies.get(&q.ceremony_id) {
-            Some(d) if *d != digest => return QueryOutcome::Closed("a second profile within one ceremony"),
+            Some(d) if *d != digest => {
+                return QueryOutcome::Closed("a second profile within one ceremony");
+            }
             Some(_) => {}
             None => {
                 self.ceremonies.insert(q.ceremony_id, digest);
@@ -170,20 +199,38 @@ impl VerifierState {
         }
         // a claimed `met` this verifier's own records refute, or a version
         // it cannot compare under: unavailable, and nothing compared
-        if (req.selection_basis == 0 && !cx.store.has_met(&peer)) || !self.cfg.template_versions.contains(&q.template_version) {
+        if (req.selection_basis == 0 && !cx.store.has_met(&peer))
+            || !self.cfg.template_versions.contains(&q.template_version)
+        {
             let answer = self.answer(cx, &q, &req.consent, req.selection_basis, None);
             return QueryOutcome::Answered(answer);
         }
         if let Some((sender, grant, _)) = self.pending_grants.remove(&qid) {
             if sender != q.subject {
                 // a buffered grant from anyone but the subject is fabrication
-                self.pending_queries.insert(qid, Pending { query: q, consent: req.consent, selection_basis: req.selection_basis, received_at: now_ms });
+                self.pending_queries.insert(
+                    qid,
+                    Pending {
+                        query: q,
+                        consent: req.consent,
+                        selection_basis: req.selection_basis,
+                        received_at: now_ms,
+                    },
+                );
                 return QueryOutcome::AwaitingGrant;
             }
             let answer = self.answer(cx, &q, &req.consent, req.selection_basis, Some(grant));
             return QueryOutcome::Answered(answer);
         }
-        self.pending_queries.insert(qid, Pending { query: q, consent: req.consent, selection_basis: req.selection_basis, received_at: now_ms });
+        self.pending_queries.insert(
+            qid,
+            Pending {
+                query: q,
+                consent: req.consent,
+                selection_basis: req.selection_basis,
+                received_at: now_ms,
+            },
+        );
         QueryOutcome::AwaitingGrant
     }
 
@@ -191,8 +238,16 @@ impl VerifierState {
     /// the subject of the query it names, once that query is known; the
     /// first grant for a query stands and later ones change nothing; one
     /// arriving before its query waits, bounded.
-    pub fn take_grant<L: Lookup + ?Sized>(&mut self, cx: &Verifying<L>, sender: Keyhash, bytes: &[u8], now_ms: u64) -> GrantOutcome {
-        let Ok(grant) = KeyGrant::decode(bytes) else { return GrantOutcome::Rejected("malformed grant") };
+    pub fn take_grant<L: Lookup + ?Sized>(
+        &mut self,
+        cx: &Verifying<L>,
+        sender: Keyhash,
+        bytes: &[u8],
+        now_ms: u64,
+    ) -> GrantOutcome {
+        let Ok(grant) = KeyGrant::decode(bytes) else {
+            return GrantOutcome::Rejected("malformed grant");
+        };
         if self.answered.contains(&grant.query_id) {
             return GrantOutcome::Ignored;
         }
@@ -200,14 +255,18 @@ impl VerifierState {
             if p.query.subject != sender {
                 return GrantOutcome::Rejected("the sender is not the subject");
             }
-            let p = self.pending_queries.remove(&grant.query_id).expect("present");
+            let p = self
+                .pending_queries
+                .remove(&grant.query_id)
+                .expect("present");
             let answer = self.answer(cx, &p.query, &p.consent, p.selection_basis, Some(grant));
             return GrantOutcome::Answered(answer);
         }
         if self.pending_grants.contains_key(&grant.query_id) {
             return GrantOutcome::Ignored;
         }
-        self.pending_grants.insert(grant.query_id, (sender, grant, now_ms));
+        self.pending_grants
+            .insert(grant.query_id, (sender, grant, now_ms));
         GrantOutcome::Buffered
     }
 
@@ -217,10 +276,17 @@ impl VerifierState {
     /// comparison.  Counters whose window closed go too.
     pub fn expire<L: Lookup + ?Sized>(&mut self, cx: &Verifying<L>, now_ms: u64) -> Vec<Answer> {
         let bound = self.cfg.grant_buffer_ms;
-        self.pending_grants.retain(|_, (_, _, at)| now_ms.saturating_sub(*at) < bound);
+        self.pending_grants
+            .retain(|_, (_, _, at)| now_ms.saturating_sub(*at) < bound);
         let window = self.cfg.window_ms;
-        self.counters.retain(|_, (opened, _)| now_ms.saturating_sub(*opened) < window);
-        let due: Vec<[u8; 32]> = self.pending_queries.iter().filter(|(_, p)| now_ms.saturating_sub(p.received_at) >= bound).map(|(k, _)| *k).collect();
+        self.counters
+            .retain(|_, (opened, _)| now_ms.saturating_sub(*opened) < window);
+        let due: Vec<[u8; 32]> = self
+            .pending_queries
+            .iter()
+            .filter(|(_, p)| now_ms.saturating_sub(p.received_at) >= bound)
+            .map(|(k, _)| *k)
+            .collect();
         let mut out = Vec::new();
         for qid in due {
             let p = self.pending_queries.remove(&qid).expect("present");
@@ -235,7 +301,14 @@ impl VerifierState {
     /// fails to open is `inconclusive` with basis 0 and the query's
     /// version; a capture that opens is compared.  The grant's key is
     /// consumed here and kept nowhere.
-    fn answer<L: Lookup + ?Sized>(&mut self, cx: &Verifying<L>, q: &VerificationQuery, consent: &[u8], selection_basis: u64, grant: Option<KeyGrant>) -> Answer {
+    fn answer<L: Lookup + ?Sized>(
+        &mut self,
+        cx: &Verifying<L>,
+        q: &VerificationQuery,
+        consent: &[u8],
+        selection_basis: u64,
+        grant: Option<KeyGrant>,
+    ) -> Answer {
         let evaluated = grant.and_then(|g| {
             let sealed = cx.store.sealed.get(&g.record)?;
             if sealed.subject != q.subject {
@@ -243,7 +316,10 @@ impl VerifierState {
             }
             Some(match open(&self.cfg.seal, &g.key, sealed) {
                 Err(_) => Verdict::Inconclusive,
-                Ok(capture) => cx.matcher.compare(&capture.template, &q.profile, q.template_version),
+                Ok(capture) => {
+                    cx.matcher
+                        .compare(&capture.template, &q.profile, q.template_version)
+                }
             })
         });
         let (verdict, basis, template_version) = match evaluated {
@@ -251,8 +327,22 @@ impl VerifierState {
             None => (Verdict::Unavailable, None, None),
         };
         let qid = q.query_id();
-        let bytes = Response { verifier: cx.me.public.keyhash, subject: q.subject, query_id: qid, verdict, basis, template_version, consent: consent.to_vec(), selection_basis }.sign(cx.me);
+        let bytes = Response {
+            verifier: cx.me.public.keyhash,
+            subject: q.subject,
+            query_id: qid,
+            verdict,
+            basis,
+            template_version,
+            consent: consent.to_vec(),
+            selection_basis,
+        }
+        .sign(cx.me);
         self.answered.insert(qid);
-        Answer { query_id: qid, to_querier: bytes.clone(), to_subject: (q.subject, bytes) }
+        Answer {
+            query_id: qid,
+            to_querier: bytes.clone(),
+            to_subject: (q.subject, bytes),
+        }
     }
 }

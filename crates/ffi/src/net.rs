@@ -59,9 +59,17 @@ pub enum Event {
     Payload { from: Id, bytes: Vec<u8> },
     /// A verifier's copy of the response it gave about this subject: the
     /// query it answered, or why the copy was refused.
-    ResponseCopy { from: Id, query: Option<Id>, refused: Option<String> },
+    ResponseCopy {
+        from: Id,
+        query: Option<Id>,
+        refused: Option<String>,
+    },
     /// A late response, attached to the record it supplements or not.
-    Late { from: Id, record: Option<Id>, refused: Option<String> },
+    Late {
+        from: Id,
+        record: Option<Id>,
+        refused: Option<String>,
+    },
 }
 
 /// The session and everything hung off it, replaced whole on each attach.
@@ -105,28 +113,62 @@ impl Net {
     /// The endpoint takes an ephemeral port on the loopback interface; a
     /// light client dials and is never dialled, so nothing depends on which
     /// port it got.
-    pub(crate) fn new(me: Arc<SigningIdentity>, pins: Pins, nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>) -> Result<Net, Refused> {
-        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|e| Refused::new(format!("no runtime: {e}")))?;
+    pub(crate) fn new(
+        me: Arc<SigningIdentity>,
+        pins: Pins,
+        nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
+    ) -> Result<Net, Refused> {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| Refused::new(format!("no runtime: {e}")))?;
         // quinn binds inside a runtime, so the endpoint is built in this
         // one and not in whatever the caller happens to be on
-        let endpoint = rt.block_on(async { tls::client_endpoint("0.0.0.0:0".parse().unwrap()) }).map_err(|e| Refused::new(format!("no endpoint: {e:?}")))?;
+        let endpoint = rt
+            .block_on(async { tls::client_endpoint("0.0.0.0:0".parse().unwrap()) })
+            .map_err(|e| Refused::new(format!("no endpoint: {e:?}")))?;
 
-        Ok(Net { rt: Some(rt), endpoint, pins, me, live: Mutex::new(None), events: Mutex::new(None), nonce })
+        Ok(Net {
+            rt: Some(rt),
+            endpoint,
+            pins,
+            me,
+            live: Mutex::new(None),
+            events: Mutex::new(None),
+            nonce,
+        })
     }
 
     fn rt(&self) -> &tokio::runtime::Runtime {
-        self.rt.as_ref().expect("the runtime outlives every call on this side")
+        self.rt
+            .as_ref()
+            .expect("the runtime outlives every call on this side")
     }
 
     pub(crate) fn session(&self) -> Option<Arc<Session>> {
-        self.live.lock().unwrap().as_ref().map(|l| l.session.clone())
+        self.live
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|l| l.session.clone())
     }
 
     fn courier(&self) -> Result<Arc<Courier>, Refused> {
-        self.live.lock().unwrap().as_ref().map(|l| l.courier.clone()).ok_or_else(|| Refused::new("no serving node is attached"))
+        self.live
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|l| l.courier.clone())
+            .ok_or_else(|| Refused::new("no serving node is attached"))
     }
 
-    pub(crate) fn attach(&self, handle: &Handle, node: Keyhash, addrs: &[SocketAddr], population: Vec<Keyhash>) -> Result<Attached, Refused> {
+    pub(crate) fn attach(
+        &self,
+        handle: &Handle,
+        node: Keyhash,
+        addrs: &[SocketAddr],
+        population: Vec<Keyhash>,
+    ) -> Result<Attached, Refused> {
         let cfg = ClientConfig {
             identity: self.me.clone(),
             pins: self.pins.clone(),
@@ -140,13 +182,18 @@ impl Net {
             on_reachability: None,
             log: Log::default(),
         };
-        let (handle_for_task, ep, nonce) = (handle.clone(), self.endpoint.clone(), self.nonce.clone());
+        let (handle_for_task, ep, nonce) =
+            (handle.clone(), self.endpoint.clone(), self.nonce.clone());
         let addrs = addrs.to_vec();
         let built = self.rt().block_on(async move {
             let mut session = match attach_any(&cfg, &ep, node, &addrs, false).await {
                 AttachOutcome::Attached(s) => s,
-                AttachOutcome::Refused => return Err(Refused::new("the serving node refused this client")),
-                AttachOutcome::EndpointFailure(e) => return Err(Refused::new(format!("no session: {e}"))),
+                AttachOutcome::Refused => {
+                    return Err(Refused::new("the serving node refused this client"));
+                }
+                AttachOutcome::EndpointFailure(e) => {
+                    return Err(Refused::new(format!("no session: {e}")));
+                }
             };
             // the two readers take their ends before the session is shared
             let (_, spare) = tokio::sync::mpsc::unbounded_channel();
@@ -161,12 +208,30 @@ impl Net {
             // candidates on a socket, and this endpoint dials and is never
             // dialled; the relay is the answer where there is no path, which
             // is what the light client's own document already says.
-            let (courier, events) = Courier::new(handle_for_task.clone(), serving.clone(), Arc::new(NoDirect(Reachable::default())));
-            let tasks = vec![attached::follow(handle_for_task, frames), attached::collect(courier.inbound(), deliveries)];
+            let (courier, events) = Courier::new(
+                handle_for_task.clone(),
+                serving.clone(),
+                Arc::new(NoDirect(Reachable::default())),
+            );
+            let tasks = vec![
+                attached::follow(handle_for_task, frames),
+                attached::collect(courier.inbound(), deliveries),
+            ];
             // the bundle published, the pool stocked and the population
             // swept, all over this session
             let carried = courier.attach(population).await;
-            Ok((Live { session, courier, _serving: serving, tasks }, events, mode, queued, (carried.left.len(), carried.refused.len())))
+            Ok((
+                Live {
+                    session,
+                    courier,
+                    _serving: serving,
+                    tasks,
+                },
+                events,
+                mode,
+                queued,
+                (carried.left.len(), carried.refused.len()),
+            ))
         })?;
         let (live, events, mode, queued, (left, refused)) = built;
         // an attach produces nothing the adaptors cannot carry: what they
@@ -174,15 +239,23 @@ impl Net {
         // and no ceremony is open here.  What the node *refused* is a
         // different answer and is reported as one
         if refused > 0 {
-            return Err(Refused::new(format!("the serving node refused {refused} of what attaching published, stocked or swept")));
+            return Err(Refused::new(format!(
+                "the serving node refused {refused} of what attaching published, stocked or swept"
+            )));
         }
         if left > 0 {
-            return Err(Refused::new(format!("{left} message(s) an attach produced had no path")));
+            return Err(Refused::new(format!(
+                "{left} message(s) an attach produced had no path"
+            )));
         }
         *self.events.lock().unwrap() = Some(events);
         // the previous session's readers stop when this replaces it
         *self.live.lock().unwrap() = Some(live);
-        Ok(Attached { serving: id_of(&node), primary: mode == 0, queued })
+        Ok(Attached {
+            serving: id_of(&node),
+            primary: mode == 0,
+            queued,
+        })
     }
 
     /// Carry whatever the client has made and not yet handed up.
@@ -192,13 +265,17 @@ impl Net {
     /// the network cannot act on, and the party that made it is the only
     /// one that can offer it.
     pub(crate) fn carry_outbox(&self, handle: &Handle) -> Result<(), Refused> {
-        let Ok(courier) = self.courier() else { return Ok(()) };
+        let Ok(courier) = self.courier() else {
+            return Ok(());
+        };
         let carried = self.rt().block_on(async move {
             let msgs = handle.with(|c| c.outbox()).await;
             courier.carry(msgs).await
         });
         if !carried.refused.is_empty() {
-            return Err(Refused::new("the serving node would not take the record: it is unpropagated"));
+            return Err(Refused::new(
+                "the serving node would not take the record: it is unpropagated",
+            ));
         }
         Ok(())
     }
@@ -219,9 +296,14 @@ impl Net {
     /// (`light-client-requirements.md` §9).
     pub(crate) fn send(&self, to: Keyhash, kind: u64, bytes: Vec<u8>) -> Result<(), Refused> {
         let courier = self.courier()?;
-        let carried = self.rt().block_on(async move { courier.send(to, kind, bytes).await }).map_err(Refused::new)?;
+        let carried = self
+            .rt()
+            .block_on(async move { courier.send(to, kind, bytes).await })
+            .map_err(Refused::new)?;
         if !carried.refused.is_empty() {
-            return Err(Refused::new("the serving node would not take the message: it is unsent"));
+            return Err(Refused::new(
+                "the serving node would not take the message: it is unsent",
+            ));
         }
         if !carried.left.is_empty() {
             return Err(Refused::new("no path carried the message: it is unsent"));
@@ -232,15 +314,30 @@ impl Net {
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
         let courier = self.courier()?;
         let me = courier.me();
-        let ep = endpoint.map(|w| WakeEndpoint { url: w.url, key: w.key, lapses_at: w.lapses_at });
-        let took = self.rt().block_on(async move { courier.serving.wake(me, ep).await });
-        if took { Ok(()) } else { Err(Refused::new("the serving node did not take the endpoint")) }
+        let ep = endpoint.map(|w| WakeEndpoint {
+            url: w.url,
+            key: w.key,
+            lapses_at: w.lapses_at,
+        });
+        let took = self
+            .rt()
+            .block_on(async move { courier.serving.wake(me, ep).await });
+        if took {
+            Ok(())
+        } else {
+            Err(Refused::new("the serving node did not take the endpoint"))
+        }
     }
 
     pub(crate) fn next_event(&self, timeout_ms: u64) -> Option<Event> {
         let mut slot = self.events.lock().unwrap();
         let rx = slot.as_mut()?;
-        let got = self.rt().block_on(async { tokio::time::timeout(Duration::from_millis(timeout_ms), rx.recv()).await.ok().flatten() });
+        let got = self.rt().block_on(async {
+            tokio::time::timeout(Duration::from_millis(timeout_ms), rx.recv())
+                .await
+                .ok()
+                .flatten()
+        });
         got.and_then(|(from, d)| event_of(from, d))
     }
 }
@@ -249,15 +346,34 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
     let from = id_of(&from);
     match d {
         Dispatched::Application(bytes) => Some(Event::Payload { from, bytes }),
-        Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy { from, query: Some(q.to_vec()), refused: None }),
-        Dispatched::ResponseCopy(Err(why)) => Some(Event::ResponseCopy { from, query: None, refused: Some(why) }),
-        Dispatched::Late(Ok(txid)) => Some(Event::Late { from, record: Some(txid.to_vec()), refused: None }),
-        Dispatched::Late(Err(why)) => Some(Event::Late { from, record: None, refused: Some(why) }),
+        Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy {
+            from,
+            query: Some(q.to_vec()),
+            refused: None,
+        }),
+        Dispatched::ResponseCopy(Err(why)) => Some(Event::ResponseCopy {
+            from,
+            query: None,
+            refused: Some(why),
+        }),
+        Dispatched::Late(Ok(txid)) => Some(Event::Late {
+            from,
+            record: Some(txid.to_vec()),
+            refused: None,
+        }),
+        Dispatched::Late(Err(why)) => Some(Event::Late {
+            from,
+            record: None,
+            refused: Some(why),
+        }),
         // handled inside the adaptors and never the shell's; an archive
         // fetch is the kernel answering and evaluating for itself
         // (`light-client-requirements.md` §2), and its result reaches the
         // shell as the standing it changes rather than as an event
-        Dispatched::Grant(_) | Dispatched::Candidates(_) | Dispatched::Served { .. } | Dispatched::Fetched(_) => None,
+        Dispatched::Grant(_)
+        | Dispatched::Candidates(_)
+        | Dispatched::Served { .. }
+        | Dispatched::Fetched(_) => None,
     }
 }
 

@@ -5,11 +5,11 @@
 //! makes — which channel to report, how a capture is guided, what is
 //! stripped — are the client's, not the hardware's.
 
+use crate::Keyhash;
 use crate::notice::Notifier;
 use crate::query::Verdict;
 use crate::store::Frame;
 use crate::verifier::{ByteEquality, Matcher};
-use crate::Keyhash;
 use rhtn_codec::cose::sha256;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -26,7 +26,12 @@ pub enum ChannelKind {
 
 impl ChannelKind {
     /// Strongest first.
-    pub const RANKED: [ChannelKind; 4] = [ChannelKind::Uwb, ChannelKind::Nfc, ChannelKind::Optical, ChannelKind::Latency];
+    pub const RANKED: [ChannelKind; 4] = [
+        ChannelKind::Uwb,
+        ChannelKind::Nfc,
+        ChannelKind::Optical,
+        ChannelKind::Latency,
+    ];
 
     pub fn code(self) -> u64 {
         self as u64
@@ -65,7 +70,10 @@ pub trait Proximity {
 /// what was achieved: the outcomes as observed, and the strongest that
 /// passed.  A channel the hardware lacks is not listed, and nothing is
 /// promoted (`light-client-requirements.md` §1.3).
-pub fn run_channels(p: &dyn Proximity, peer: &Keyhash) -> (Vec<ChannelOutcome>, Option<ChannelKind>) {
+pub fn run_channels(
+    p: &dyn Proximity,
+    peer: &Keyhash,
+) -> (Vec<ChannelOutcome>, Option<ChannelKind>) {
     let supported = p.supported();
     let mut outcomes = Vec::new();
     let mut strongest = None;
@@ -74,7 +82,10 @@ pub fn run_channels(p: &dyn Proximity, peer: &Keyhash) -> (Vec<ChannelOutcome>, 
             continue;
         }
         let o = p.run(kind, peer);
-        assert_eq!(o.kind, kind, "the hardware reports the channel it was asked to run");
+        assert_eq!(
+            o.kind, kind,
+            "the hardware reports the channel it was asked to run"
+        );
         if o.result == ChannelResult::Pass && strongest.is_none() {
             strongest = Some(kind);
         }
@@ -97,7 +108,16 @@ pub enum Prompt {
 }
 
 impl Prompt {
-    pub const ALL: [Prompt; 8] = [Prompt::TurnLeft, Prompt::TurnRight, Prompt::LookUp, Prompt::LookDown, Prompt::Smile, Prompt::Neutral, Prompt::Blink, Prompt::Closer];
+    pub const ALL: [Prompt; 8] = [
+        Prompt::TurnLeft,
+        Prompt::TurnRight,
+        Prompt::LookUp,
+        Prompt::LookDown,
+        Prompt::Smile,
+        Prompt::Neutral,
+        Prompt::Blink,
+        Prompt::Closer,
+    ];
 }
 
 /// A frame as the camera pipeline hands it over: the pixels, and whatever
@@ -154,7 +174,10 @@ pub struct HashEngine {
 
 impl HashEngine {
     pub fn new(face_bytes: usize) -> Self {
-        HashEngine { face_bytes, matcher: ByteEquality }
+        HashEngine {
+            face_bytes,
+            matcher: ByteEquality,
+        }
     }
 }
 
@@ -184,7 +207,12 @@ pub struct CaptureParams {
 
 impl Default for CaptureParams {
     fn default() -> Self {
-        CaptureParams { min_frames: 3, max_frames: 5, min_span_ms: 10_000, max_span_ms: 15_000 }
+        CaptureParams {
+            min_frames: 3,
+            max_frames: 5,
+            min_span_ms: 10_000,
+            max_span_ms: 15_000,
+        }
     }
 }
 
@@ -198,7 +226,12 @@ fn draw(rng: &dyn Random, lo: u64, hi: u64) -> u64 {
 /// between three and five frames over ten to fifteen seconds, each under a
 /// prompt drawn at random, each stripped to its pixels before anything
 /// else touches it.  Returns the frames and the prompts given.
-pub fn guided_capture(cam: &dyn Camera, clock: &dyn Clock, rng: &dyn Random, p: &CaptureParams) -> (Vec<Frame>, Vec<Prompt>) {
+pub fn guided_capture(
+    cam: &dyn Camera,
+    clock: &dyn Clock,
+    rng: &dyn Random,
+    p: &CaptureParams,
+) -> (Vec<Frame>, Vec<Prompt>) {
     let n = draw(rng, p.min_frames, p.max_frames);
     let span = draw(rng, p.min_span_ms, p.max_span_ms);
     let start = clock.now_ms();
@@ -207,7 +240,10 @@ pub fn guided_capture(cam: &dyn Camera, clock: &dyn Clock, rng: &dyn Random, p: 
     for i in 0..n {
         let prompt = Prompt::ALL[draw(rng, 0, Prompt::ALL.len() as u64 - 1) as usize];
         let raw = cam.capture(prompt);
-        frames.push(Frame { at_ms: clock.now_ms() - start, bytes: strip(raw) });
+        frames.push(Frame {
+            at_ms: clock.now_ms() - start,
+            bytes: strip(raw),
+        });
         prompts.push(prompt);
         if i + 1 < n {
             clock.wait_ms(span / (n - 1));

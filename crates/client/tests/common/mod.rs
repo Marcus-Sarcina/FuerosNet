@@ -14,16 +14,27 @@ use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::{Identity, SigningIdentity};
 use std::collections::BTreeMap;
 
-pub const NAMES: [&str; 14] = ["alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "c1", "c2", "c3", "c4", "c5", "witness"];
+pub const NAMES: [&str; 14] = [
+    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "c1", "c2", "c3", "c4", "c5",
+    "witness",
+];
 
 pub fn corpus() -> serde_json::Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test-vectors/corpus.json"
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 pub fn fixture(id: &str) -> Vec<u8> {
     let c = corpus();
-    let e = c["entries"].as_array().unwrap().iter().find(|e| e["id"] == id).unwrap_or_else(|| panic!("no fixture {id}"));
+    let e = c["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap_or_else(|| panic!("no fixture {id}"));
     hex::decode(e["hex"].as_str().unwrap()).unwrap()
 }
 
@@ -62,7 +73,11 @@ impl Default for World {
 
 impl World {
     pub fn new() -> Self {
-        World { archives: NAMES.iter().map(|n| (kh(n), Archive::new(kh(n)))).collect(), store: BTreeMap::new(), clock: 1_790_000_000 }
+        World {
+            archives: NAMES.iter().map(|n| (kh(n), Archive::new(kh(n)))).collect(),
+            store: BTreeMap::new(),
+            clock: 1_790_000_000,
+        }
     }
 
     pub fn tick(&mut self) -> u64 {
@@ -79,7 +94,11 @@ impl World {
         let refs: Vec<&SigningIdentity> = sids.iter().collect();
         let rec = Record::parse(&envelope(tx_type, body, &refs)).expect("well-formed");
         for s in signers {
-            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&kh(s))
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         self.store.insert(rec.txid, rec.bytes.clone());
         rec
@@ -107,8 +126,19 @@ impl World {
     pub fn normal_at(&mut self, a: &str, b: &str, w: &str, started: u64, finalized: u64) -> Record {
         let back = vec![self.back(a), self.back(b), self.back(w)];
         let root = rhtn_codec::cose::sha256(format!("n:{a}:{b}:{w}:{started}").as_bytes());
-        let witness = Witness { keyhash: kh(w), nominated_by: kh(a), flags: 3 };
-        let body = presence_record_body(&back, [&kh(a), &kh(b)], &[witness], started, finalized, &root);
+        let witness = Witness {
+            keyhash: kh(w),
+            nominated_by: kh(a),
+            flags: 3,
+        };
+        let body = presence_record_body(
+            &back,
+            [&kh(a), &kh(b)],
+            &[witness],
+            started,
+            finalized,
+            &root,
+        );
         self.commit(TYPE_PRESENCE, &body, &[a, b, w])
     }
 

@@ -42,8 +42,15 @@ impl NodeView {
         // is the one the binding records, and the determination that lost
         // the race is still one the patron made. §4.3 puts the reason in
         // field 4; absent, nothing is alleged.
-        for rec in self.store.transactions().filter(|r| r.tx_type == rhtn_archive::tx::TYPE_DISAVOWAL) {
-            if !rec.field_uint(4).is_some_and(rhtn_archive::topology::End::band) {
+        for rec in self
+            .store
+            .transactions()
+            .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_DISAVOWAL)
+        {
+            if !rec
+                .field_uint(4)
+                .is_some_and(rhtn_archive::topology::End::band)
+            {
                 continue;
             }
             if let (Some(patron), Some(node)) = (rec.field_hash(1), rec.field_hash(2)) {

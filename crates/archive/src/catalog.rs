@@ -9,8 +9,8 @@ use crate::Keyhash;
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
-use rhtn_crypto::verify::{self, Lookup};
 use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::verify::{self, Lookup};
 
 /// Stream-1 request types (`wire-format.md` §9.2).
 pub const REQUEST_CATALOG_QUERY: u64 = 5;
@@ -98,7 +98,9 @@ impl Scope {
                     let mut ks = Vec::new();
                     for k in list {
                         match k {
-                            Item::Bytes(r) if r.len() == 32 => ks.push(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()),
+                            Item::Bytes(r) if r.len() == 32 => {
+                                ks.push(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())
+                            }
                             _ => return Err("scope list entry".into()),
                         }
                     }
@@ -144,7 +146,11 @@ pub struct CatalogEntry {
 }
 
 fn emit_entry_fields(out: &mut Vec<u8>, owner: &Keyhash, f: &EntryFields, sig: Option<&[u8]>) {
-    let n = 5 + f.connect_scope.is_some() as usize + f.metadata.is_some() as usize + f.data_practice.is_some() as usize + sig.is_some() as usize;
+    let n = 5
+        + f.connect_scope.is_some() as usize
+        + f.metadata.is_some() as usize
+        + f.data_practice.is_some() as usize
+        + sig.is_some() as usize;
     emit_map_head(out, n);
     emit_uint(out, 1);
     emit_bstr(out, &f.resource);
@@ -189,16 +195,22 @@ impl CatalogEntry {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "CatalogEntry", &item).map_err(|e| e.0.to_string())?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let kh = |k: u64| -> Result<Keyhash, String> {
             match map_get(m, k) {
-                Some(Item::Bytes(r)) if r.len() == 32 => Ok(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()),
+                Some(Item::Bytes(r)) if r.len() == 32 => {
+                    Ok(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())
+                }
                 _ => Err(format!("field {k}")),
             }
         };
         let text = |k: u64| -> Result<String, String> {
             match map_get(m, k) {
-                Some(Item::Text(r)) => String::from_utf8(b[r.clone()].to_vec()).map_err(|_| format!("field {k} utf-8")),
+                Some(Item::Text(r)) => {
+                    String::from_utf8(b[r.clone()].to_vec()).map_err(|_| format!("field {k} utf-8"))
+                }
                 _ => Err(format!("field {k}")),
             }
         };
@@ -212,7 +224,17 @@ impl CatalogEntry {
             Some(it) => Some(Scope::read(b, it)?),
             None => None,
         };
-        Ok(CatalogEntry { resource: kh(1)?, owner: kh(2)?, service_type: text(3)?, instance: text(4)?, endpoint: bytes(5).ok_or("field 5")?, connect_scope, metadata: bytes(7), data_practice: map_get(m, 9).and_then(as_uint), bytes: b.to_vec() })
+        Ok(CatalogEntry {
+            resource: kh(1)?,
+            owner: kh(2)?,
+            service_type: text(3)?,
+            instance: text(4)?,
+            endpoint: bytes(5).ok_or("field 5")?,
+            connect_scope,
+            metadata: bytes(7),
+            data_practice: map_get(m, 9).and_then(as_uint),
+            bytes: b.to_vec(),
+        })
     }
 
     /// Signed by the owner it names.
@@ -232,7 +254,12 @@ pub struct AbuseReport {
 }
 
 impl AbuseReport {
-    pub fn build(resource: &SigningIdentity, occurred_at: u64, category: u64, detail: Option<&[u8]>) -> Vec<u8> {
+    pub fn build(
+        resource: &SigningIdentity,
+        occurred_at: u64,
+        category: u64,
+        detail: Option<&[u8]>,
+    ) -> Vec<u8> {
         let emit = |out: &mut Vec<u8>, sig: Option<&[u8]>| {
             emit_map_head(out, 3 + detail.is_some() as usize + sig.is_some() as usize);
             emit_uint(out, 1);
@@ -261,7 +288,9 @@ impl AbuseReport {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "AbuseReport", &item).map_err(|e| e.0.to_string())?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let resource = match map_get(m, 1) {
             Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).unwrap(),
             _ => return Err("field 1".into()),
@@ -270,7 +299,13 @@ impl AbuseReport {
             Some(Item::Bytes(r)) => Some(b[r.clone()].to_vec()),
             _ => None,
         };
-        Ok(AbuseReport { resource, occurred_at: map_get(m, 2).and_then(as_uint).ok_or("field 2")?, category: map_get(m, 3).and_then(as_uint).ok_or("field 3")?, detail, bytes: b.to_vec() })
+        Ok(AbuseReport {
+            resource,
+            occurred_at: map_get(m, 2).and_then(as_uint).ok_or("field 2")?,
+            category: map_get(m, 3).and_then(as_uint).ok_or("field 3")?,
+            detail,
+            bytes: b.to_vec(),
+        })
     }
 
     /// Signed by the key whose keyhash is field 1, and no other.
@@ -310,12 +345,19 @@ impl CatalogQuery {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CatalogQuery, b, 0).map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let service_type = match map_get(m, 1) {
-            Some(Item::Text(r)) => Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "field 1 utf-8")?),
+            Some(Item::Text(r)) => {
+                Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "field 1 utf-8")?)
+            }
             _ => None,
         };
-        Ok(CatalogQuery { service_type, nonce: nonce_at(b, m, 2)? })
+        Ok(CatalogQuery {
+            service_type,
+            nonce: nonce_at(b, m, 2)?,
+        })
     }
 }
 
@@ -349,14 +391,26 @@ impl CatalogReply {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CatalogReply, b, 0).map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let r2 = value_slice(b, 2).ok_or("field 2")?;
-        let entries = array_item_ranges(b, r2.start).ok_or("entries")?.into_iter().map(|r| b[r].to_vec()).collect();
+        let entries = array_item_ranges(b, r2.start)
+            .ok_or("entries")?
+            .into_iter()
+            .map(|r| b[r].to_vec())
+            .collect();
         let continuation = match map_get(m, 3) {
-            Some(Item::Text(r)) => Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "field 3 utf-8")?),
+            Some(Item::Text(r)) => {
+                Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "field 3 utf-8")?)
+            }
             _ => None,
         };
-        Ok(CatalogReply { nonce: nonce_at(b, m, 1)?, entries, continuation })
+        Ok(CatalogReply {
+            nonce: nonce_at(b, m, 1)?,
+            entries,
+            continuation,
+        })
     }
 }
 
@@ -387,13 +441,19 @@ impl ResourceRegistration {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceRegistration, b, 0).map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let entry = value_slice(b, 1).map(|r| b[r].to_vec()).ok_or("field 1")?;
         let scope = match map_get(m, 2) {
             Some(it) => Some(Scope::read(b, it)?),
             None => None,
         };
-        Ok(ResourceRegistration { entry, scope, nonce: nonce_at(b, m, 3)? })
+        Ok(ResourceRegistration {
+            entry,
+            scope,
+            nonce: nonce_at(b, m, 3)?,
+        })
     }
 }
 
@@ -417,10 +477,16 @@ impl RegistrationReply {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
-        schema::check_unsigned(Family::ResourceRegistrationReply, b, 0).map_err(|e| e.0.to_string())?;
+        schema::check_unsigned(Family::ResourceRegistrationReply, b, 0)
+            .map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
-        Ok(RegistrationReply { nonce: nonce_at(b, m, 1)?, code: map_get(m, 2).and_then(as_uint).ok_or("field 2")? })
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        Ok(RegistrationReply {
+            nonce: nonce_at(b, m, 1)?,
+            code: map_get(m, 2).and_then(as_uint).ok_or("field 2")?,
+        })
     }
 }
 
@@ -447,7 +513,9 @@ impl ResourceRequest {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceRequest, b, 0).map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let resource = match map_get(m, 1) {
             Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).unwrap(),
             _ => return Err("field 1".into()),
@@ -489,11 +557,16 @@ impl ResourceResponse {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceResponse, b, 0).map_err(|e| e.0.to_string())?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let body = match map_get(m, 2) {
             Some(Item::Bytes(r)) => Some(b[r.clone()].to_vec()),
             _ => None,
         };
-        Ok(ResourceResponse { status: map_get(m, 1).and_then(as_uint).ok_or("field 1")?, body })
+        Ok(ResourceResponse {
+            status: map_get(m, 1).and_then(as_uint).ok_or("field 1")?,
+            body,
+        })
     }
 }

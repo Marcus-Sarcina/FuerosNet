@@ -36,7 +36,10 @@ impl Party {
         let mut out = Vec::new();
         loop {
             let mut line = String::new();
-            let n = self.stdout.read_line(&mut line).unwrap_or_else(|e| panic!("{}: {e}", self.name));
+            let n = self
+                .stdout
+                .read_line(&mut line)
+                .unwrap_or_else(|e| panic!("{}: {e}", self.name));
             if n == 0 {
                 panic!("{} stopped mid-command after {out:?}", self.name);
             }
@@ -51,7 +54,11 @@ impl Party {
     /// Run one command and insist it did not refuse.
     pub fn must(&mut self, command: &str) -> Vec<String> {
         let out = self.tell(command);
-        assert!(!out.iter().any(|l| l.starts_with("error ")), "{}: `{command}` refused: {out:?}", self.name);
+        assert!(
+            !out.iter().any(|l| l.starts_with("error ")),
+            "{}: `{command}` refused: {out:?}",
+            self.name
+        );
         out
     }
 
@@ -83,7 +90,11 @@ impl Participants {
         let root = std::env::temp_dir().join(format!("rhtn-parties-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("a directory for the set");
-        Participants { exe: exe.into(), root, parties: Vec::new() }
+        Participants {
+            exe: exe.into(),
+            root,
+            parties: Vec::new(),
+        }
     }
 
     /// Start `name`, authenticating `peers` and never itself.
@@ -92,7 +103,11 @@ impl Participants {
         std::fs::create_dir_all(&dir).expect("a directory for the party");
         let identity = dir.join("identity.key");
         write_identity(&identity, name);
-        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
+        let list: String = peers
+            .iter()
+            .filter(|p| **p != name)
+            .map(|p| format!("{}\n", hex(&test_identity(p).public.key_material())))
+            .collect();
         std::fs::write(dir.join("peers"), list).expect("the peers file");
 
         let mut child = Command::new(&self.exe)
@@ -104,16 +119,37 @@ impl Participants {
         let stdin = child.stdin.take().expect("stdin");
         let mut stdout = BufReader::new(child.stdout.take().expect("stdout"));
         let mut first = String::new();
-        stdout.read_line(&mut first).expect("the participant says who it is");
-        let said = first.trim().rsplit_once(' ').unwrap_or_else(|| panic!("the first line names a keyhash, not {first:?}")).1.to_string();
-        assert_eq!(said, hex(&test_identity(name).public.keyhash), "the process runs under the identity it was given");
+        stdout
+            .read_line(&mut first)
+            .expect("the participant says who it is");
+        let said = first
+            .trim()
+            .rsplit_once(' ')
+            .unwrap_or_else(|| panic!("the first line names a keyhash, not {first:?}"))
+            .1
+            .to_string();
+        assert_eq!(
+            said,
+            hex(&test_identity(name).public.keyhash),
+            "the process runs under the identity it was given"
+        );
 
-        self.parties.push(Party { name: name.to_string(), keyhash: test_identity(name).public.keyhash, dir, stdin, stdout, child });
+        self.parties.push(Party {
+            name: name.to_string(),
+            keyhash: test_identity(name).public.keyhash,
+            dir,
+            stdin,
+            stdout,
+            child,
+        });
         self.parties.last_mut().expect("just pushed")
     }
 
     pub fn get(&mut self, name: &str) -> &mut Party {
-        self.parties.iter_mut().find(|p| p.name == name).unwrap_or_else(|| panic!("no party {name}"))
+        self.parties
+            .iter_mut()
+            .find(|p| p.name == name)
+            .unwrap_or_else(|| panic!("no party {name}"))
     }
 }
 

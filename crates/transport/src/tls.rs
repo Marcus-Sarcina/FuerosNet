@@ -4,7 +4,9 @@ use ed25519_dalek::pkcs8::{DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use rhtn_crypto::SigningIdentity;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use rustls::pki_types::{
+    CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
+};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::sign::CertifiedKey;
 use rustls::{DigitallySignedStruct, DistinguishedName, Error as TlsError, SignatureScheme};
@@ -37,12 +39,16 @@ impl Pins {
         if rhtn_codec::cose::sha256(key_material) != keyhash {
             return Err("key material does not hash to the keyhash");
         }
-        self.inner.lock().unwrap().insert(keyhash, key_material.to_vec());
+        self.inner
+            .lock()
+            .unwrap()
+            .insert(keyhash, key_material.to_vec());
         Ok(())
     }
 
     pub fn pin_identity(&self, id: &rhtn_crypto::Identity) {
-        self.pin(id.keyhash, &id.key_material()).expect("an identity hashes to its own keyhash");
+        self.pin(id.keyhash, &id.key_material())
+            .expect("an identity hashes to its own keyhash");
     }
 
     /// The classical member's raw Ed25519 public key for a pinned keyhash.
@@ -53,7 +59,9 @@ impl Pins {
 
     /// The keyhash whose pinned classical member is `spki` (the presented raw key).
     pub fn keyhash_for_spki(&self, spki: &[u8]) -> Option<[u8; 32]> {
-        let want = ed25519_dalek::VerifyingKey::from_public_key_der(spki).ok()?.to_bytes();
+        let want = ed25519_dalek::VerifyingKey::from_public_key_der(spki)
+            .ok()?
+            .to_bytes();
         self.inner
             .lock()
             .unwrap()
@@ -69,7 +77,9 @@ pub fn classical_member(key_material: &[u8]) -> Option<[u8; 32]> {
     use rhtn_codec::cbor::*;
     let __km = parse_all(key_material).ok()?;
     let Item::Array(a) = &__km else { return None };
-    let Item::Map(m) = a.first()? else { return None };
+    let Item::Map(m) = a.first()? else {
+        return None;
+    };
     m.iter().find_map(|(k, v)| match (k, v) {
         (Item::Neg(-2), Item::Bytes(r)) if r.len() == 32 => key_material[r.clone()].try_into().ok(),
         _ => None,
@@ -77,7 +87,10 @@ pub fn classical_member(key_material: &[u8]) -> Option<[u8; 32]> {
 }
 
 pub fn spki_der(ed: &ed25519_dalek::VerifyingKey) -> Vec<u8> {
-    ed.to_public_key_der().expect("Ed25519 SPKI").as_bytes().to_vec()
+    ed.to_public_key_der()
+        .expect("Ed25519 SPKI")
+        .as_bytes()
+        .to_vec()
 }
 
 /// The provider: aws-lc-rs with the one key-exchange group the profile names.
@@ -94,7 +107,10 @@ fn certified_key(provider: &CryptoProvider, id: &SigningIdentity) -> Arc<Certifi
         .key_provider
         .load_private_key(PrivateKeyDer::Pkcs8(pkcs8.as_bytes().to_vec().into()))
         .expect("Ed25519 is supported");
-    Arc::new(CertifiedKey::new(vec![CertificateDer::from(spki_der(&id.public.ed))], key))
+    Arc::new(CertifiedKey::new(
+        vec![CertificateDer::from(spki_der(&id.public.ed))],
+        key,
+    ))
 }
 
 /// Dialling side: the presented raw key must be the pinned classical member
@@ -117,17 +133,38 @@ impl ServerCertVerifier for PinnedServer {
         if end_entity.as_ref() == self.expected_spki.as_slice() {
             Ok(ServerCertVerified::assertion())
         } else {
-            Err(TlsError::General("presented raw public key is not the pinned classical member".into()))
+            Err(TlsError::General(
+                "presented raw public key is not the pinned classical member".into(),
+            ))
         }
     }
-    fn verify_tls12_signature(&self, _m: &[u8], _c: &CertificateDer<'_>, _d: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, TlsError> {
-        Err(TlsError::PeerIncompatible(rustls::PeerIncompatible::Tls12NotOffered))
+    fn verify_tls12_signature(
+        &self,
+        _m: &[u8],
+        _c: &CertificateDer<'_>,
+        _d: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        Err(TlsError::PeerIncompatible(
+            rustls::PeerIncompatible::Tls12NotOffered,
+        ))
     }
-    fn verify_tls13_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, TlsError> {
-        rustls::crypto::verify_tls13_signature_with_raw_key(message, &SubjectPublicKeyInfoDer::from(cert.as_ref()), dss, &self.provider.signature_verification_algorithms)
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        rustls::crypto::verify_tls13_signature_with_raw_key(
+            message,
+            &SubjectPublicKeyInfoDer::from(cert.as_ref()),
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
     }
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.provider.signature_verification_algorithms.supported_schemes()
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
     }
     fn requires_raw_public_keys(&self) -> bool {
         true
@@ -146,19 +183,43 @@ impl ClientCertVerifier for AnyRawKeyClient {
     fn root_hint_subjects(&self) -> &[DistinguishedName] {
         &[]
     }
-    fn verify_client_cert(&self, end_entity: &CertificateDer<'_>, _intermediates: &[CertificateDer<'_>], _now: UnixTime) -> Result<ClientCertVerified, TlsError> {
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, TlsError> {
         ed25519_dalek::VerifyingKey::from_public_key_der(end_entity.as_ref())
             .map(|_| ClientCertVerified::assertion())
             .map_err(|_| TlsError::General("client raw public key is not an Ed25519 SPKI".into()))
     }
-    fn verify_tls12_signature(&self, _m: &[u8], _c: &CertificateDer<'_>, _d: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, TlsError> {
-        Err(TlsError::PeerIncompatible(rustls::PeerIncompatible::Tls12NotOffered))
+    fn verify_tls12_signature(
+        &self,
+        _m: &[u8],
+        _c: &CertificateDer<'_>,
+        _d: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        Err(TlsError::PeerIncompatible(
+            rustls::PeerIncompatible::Tls12NotOffered,
+        ))
     }
-    fn verify_tls13_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, TlsError> {
-        rustls::crypto::verify_tls13_signature_with_raw_key(message, &SubjectPublicKeyInfoDer::from(cert.as_ref()), dss, &self.provider.signature_verification_algorithms)
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        rustls::crypto::verify_tls13_signature_with_raw_key(
+            message,
+            &SubjectPublicKeyInfoDer::from(cert.as_ref()),
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
     }
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.provider.signature_verification_algorithms.supported_schemes()
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
     }
     fn requires_raw_public_keys(&self) -> bool {
         true
@@ -167,38 +228,63 @@ impl ClientCertVerifier for AnyRawKeyClient {
 
 /// A client configuration that reaches `target` and authenticates as `me`.
 /// `groups` defaults to the profile's one group; a test peer may pass others.
-pub fn client_config_with(me: &SigningIdentity, target_classical: &[u8; 32], groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>) -> rustls::ClientConfig {
+pub fn client_config_with(
+    me: &SigningIdentity,
+    target_classical: &[u8; 32],
+    groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+) -> rustls::ClientConfig {
     let mut p = aws_lc_rs::default_provider();
     p.kx_groups = groups;
     let provider = Arc::new(p);
-    let expected_spki = spki_der(&ed25519_dalek::VerifyingKey::from_bytes(target_classical).expect("pinned key"));
+    let expected_spki =
+        spki_der(&ed25519_dalek::VerifyingKey::from_bytes(target_classical).expect("pinned key"));
     let mut cfg = rustls::ClientConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("TLS 1.3")
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(PinnedServer { expected_spki, provider: provider.clone() }))
-        .with_client_cert_resolver(Arc::new(rustls::client::AlwaysResolvesClientRawPublicKeys::new(certified_key(&provider, me))));
+        .with_custom_certificate_verifier(Arc::new(PinnedServer {
+            expected_spki,
+            provider: provider.clone(),
+        }))
+        .with_client_cert_resolver(Arc::new(
+            rustls::client::AlwaysResolvesClientRawPublicKeys::new(certified_key(&provider, me)),
+        ));
     cfg.alpn_protocols = vec![ALPN.to_vec()];
     cfg.enable_early_data = true;
     cfg
 }
 
-pub fn client_config(me: &SigningIdentity, pins: &Pins, target: &[u8; 32]) -> Option<rustls::ClientConfig> {
+pub fn client_config(
+    me: &SigningIdentity,
+    pins: &Pins,
+    target: &[u8; 32],
+) -> Option<rustls::ClientConfig> {
     let classical = pins.classical_key(target)?;
-    Some(client_config_with(me, &classical, vec![aws_lc_rs::kx_group::X25519MLKEM768]))
+    Some(client_config_with(
+        me,
+        &classical,
+        vec![aws_lc_rs::kx_group::X25519MLKEM768],
+    ))
 }
 
 /// A server configuration presenting `me`'s classical component and
 /// requiring a raw public key from every client.
-pub fn server_config_with(me: &SigningIdentity, groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>) -> rustls::ServerConfig {
+pub fn server_config_with(
+    me: &SigningIdentity,
+    groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+) -> rustls::ServerConfig {
     let mut p = aws_lc_rs::default_provider();
     p.kx_groups = groups;
     let provider = Arc::new(p);
     let mut cfg = rustls::ServerConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("TLS 1.3")
-        .with_client_cert_verifier(Arc::new(AnyRawKeyClient { provider: provider.clone() }))
-        .with_cert_resolver(Arc::new(rustls::server::AlwaysResolvesServerRawPublicKeys::new(certified_key(&provider, me))));
+        .with_client_cert_verifier(Arc::new(AnyRawKeyClient {
+            provider: provider.clone(),
+        }))
+        .with_cert_resolver(Arc::new(
+            rustls::server::AlwaysResolvesServerRawPublicKeys::new(certified_key(&provider, me)),
+        ));
     cfg.alpn_protocols = vec![ALPN.to_vec()];
     cfg.max_early_data_size = u32::MAX;
     cfg.send_half_rtt_data = false;
@@ -210,12 +296,19 @@ pub fn server_config(me: &SigningIdentity) -> rustls::ServerConfig {
 }
 
 /// A quinn server endpoint on `addr` for `me`.
-pub fn server_endpoint(me: &SigningIdentity, addr: std::net::SocketAddr) -> std::io::Result<quinn::Endpoint> {
+pub fn server_endpoint(
+    me: &SigningIdentity,
+    addr: std::net::SocketAddr,
+) -> std::io::Result<quinn::Endpoint> {
     server_endpoint_with(server_config(me), addr)
 }
 
-pub fn server_endpoint_with(cfg: rustls::ServerConfig, addr: std::net::SocketAddr) -> std::io::Result<quinn::Endpoint> {
-    let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(cfg).expect("quinn accepts the profile");
+pub fn server_endpoint_with(
+    cfg: rustls::ServerConfig,
+    addr: std::net::SocketAddr,
+) -> std::io::Result<quinn::Endpoint> {
+    let crypto =
+        quinn::crypto::rustls::QuicServerConfig::try_from(cfg).expect("quinn accepts the profile");
     let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
     qcfg.transport_config(Arc::new(transport_config()));
     quinn::Endpoint::server(qcfg, addr)
@@ -231,23 +324,38 @@ pub fn transport_config() -> quinn::TransportConfig {
     let mut t = quinn::TransportConfig::default();
     // Liveness is the session's heartbeat, not QUIC's idle timer; keep the
     // idle timeout above any advertised interval so it never pre-empts §8.2.
-    t.max_idle_timeout(Some(quinn::IdleTimeout::try_from(std::time::Duration::from_secs(4000)).unwrap()));
+    t.max_idle_timeout(Some(
+        quinn::IdleTimeout::try_from(std::time::Duration::from_secs(4000)).unwrap(),
+    ));
     t
 }
 
 /// Dial `target` at `addr` from `endpoint`, authenticating as `me` with the
 /// pinned material for `target`.  Fails before any stream is opened when the
 /// presented key is not the pinned classical member.
-pub fn dial(endpoint: &quinn::Endpoint, me: &SigningIdentity, pins: &Pins, target: &[u8; 32], addr: std::net::SocketAddr) -> Result<quinn::Connecting, DialError> {
+pub fn dial(
+    endpoint: &quinn::Endpoint,
+    me: &SigningIdentity,
+    pins: &Pins,
+    target: &[u8; 32],
+    addr: std::net::SocketAddr,
+) -> Result<quinn::Connecting, DialError> {
     let cfg = client_config(me, pins, target).ok_or(DialError::NotPinned)?;
     dial_with(endpoint, cfg, addr)
 }
 
-pub fn dial_with(endpoint: &quinn::Endpoint, cfg: rustls::ClientConfig, addr: std::net::SocketAddr) -> Result<quinn::Connecting, DialError> {
-    let crypto = quinn::crypto::rustls::QuicClientConfig::try_from(cfg).map_err(|_| DialError::Config)?;
+pub fn dial_with(
+    endpoint: &quinn::Endpoint,
+    cfg: rustls::ClientConfig,
+    addr: std::net::SocketAddr,
+) -> Result<quinn::Connecting, DialError> {
+    let crypto =
+        quinn::crypto::rustls::QuicClientConfig::try_from(cfg).map_err(|_| DialError::Config)?;
     let mut qcfg = quinn::ClientConfig::new(Arc::new(crypto));
     qcfg.transport_config(Arc::new(transport_config()));
-    endpoint.connect_with(qcfg, addr, SERVER_NAME).map_err(|_| DialError::Config)
+    endpoint
+        .connect_with(qcfg, addr, SERVER_NAME)
+        .map_err(|_| DialError::Config)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,6 +383,9 @@ pub fn negotiated_alpn(conn: &quinn::Connection) -> Option<Vec<u8>> {
 /// One source of randomness for every nonce the node makes.
 pub fn random_bytes<const N: usize>() -> [u8; N] {
     let mut out = [0u8; N];
-    aws_lc_rs::default_provider().secure_random.fill(&mut out).expect("the provider's random source");
+    aws_lc_rs::default_provider()
+        .secure_random
+        .fill(&mut out)
+        .expect("the provider's random source");
     out
 }

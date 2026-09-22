@@ -36,21 +36,42 @@ fn a_recovery_whose_successor_statement_names_another_successor_or_patron_is_not
     let bindings = p.table.bindings().len();
     // the statement lifted from a recovery of another new key
     let lifted = recovery_block_for("bob", "alice2", "alice", "w2");
-    let body = p.propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back).expect("proposed");
-    assert!(p.countersign_adoption(&body, &id("carol"), &ids()).is_none(), "names a different successor");
+    let body = p
+        .propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back)
+        .expect("proposed");
+    assert!(
+        p.countersign_adoption(&body, &id("carol"), &ids())
+            .is_none(),
+        "names a different successor"
+    );
     // the statement lifted from a recovery under another patron
     let lifted = recovery_block_for("bob", "carol", "w2", "w2");
-    let body = p.propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back).expect("proposed");
-    assert!(p.countersign_adoption(&body, &id("carol"), &ids()).is_none(), "names a different patron");
+    let body = p
+        .propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back)
+        .expect("proposed");
+    assert!(
+        p.countersign_adoption(&body, &id("carol"), &ids())
+            .is_none(),
+        "names a different patron"
+    );
     // arriving signed by whoever, neither binds anything either
-    let rec = Record::parse(&tx::envelope(TYPE_ADOPTION, &body, &[&id("carol"), &id("alice")])).unwrap();
+    let rec = Record::parse(&tx::envelope(
+        TYPE_ADOPTION,
+        &body,
+        &[&id("carol"), &id("alice")],
+    ))
+    .unwrap();
     assert!(p.table.apply(&rec, &ids(), &w.store, None).is_err());
     assert_eq!(p.table.bindings().len(), bindings, "no binding for either");
     assert_eq!(p.table.current_key(&kh("bob")), kh("bob"));
     // the genuine one is countersigned and binds
     let good = recovery_block_for("bob", "carol", "alice", "w2");
-    let body = p.propose_adoption(&kh("carol"), Evidence::Recovery(good), 3, &back).expect("proposed");
-    let rec = p.countersign_adoption(&body, &id("carol"), &ids()).expect("countersigned");
+    let body = p
+        .propose_adoption(&kh("carol"), Evidence::Recovery(good), 3, &back)
+        .expect("proposed");
+    let rec = p
+        .countersign_adoption(&body, &id("carol"), &ids())
+        .expect("countersigned");
     p.table.apply(&rec, &ids(), &w.store, None).expect("binds");
     assert_eq!(p.table.current_key(&kh("bob")), kh("carol"));
 }
@@ -65,17 +86,58 @@ fn a_transfer_whose_statement_disagrees_with_the_enclosing_adoption_is_not_count
     let t = table_with(kh("carol"), &w, &[&uc, &pop, &ab], &["w1", "carol", "bob"]);
     let mut p = view("carol", t, "w1", &[0]);
     let back = w.back("alice");
-    let transfer = |former_named: &str, block: Vec<u8>| Evidence::Transfer { former: kh(former_named), block };
+    let transfer = |former_named: &str, block: Vec<u8>| Evidence::Transfer {
+        former: kh(former_named),
+        block,
+    };
     for (label, evidence) in [
-        ("a different node", transfer("bob", tx::transfer_block(&id("bob"), &kh("w2"), &kh("carol")))),
-        ("a different new patron", transfer("bob", tx::transfer_block(&id("bob"), &kh("alice"), &kh("w2")))),
-        ("a former patron other than the Transfer's field 1", transfer("w3", tx::transfer_block(&id("bob"), &kh("alice"), &kh("carol")))),
+        (
+            "a different node",
+            transfer(
+                "bob",
+                tx::transfer_block(&id("bob"), &kh("w2"), &kh("carol")),
+            ),
+        ),
+        (
+            "a different new patron",
+            transfer(
+                "bob",
+                tx::transfer_block(&id("bob"), &kh("alice"), &kh("w2")),
+            ),
+        ),
+        (
+            "a former patron other than the Transfer's field 1",
+            transfer(
+                "w3",
+                tx::transfer_block(&id("bob"), &kh("alice"), &kh("carol")),
+            ),
+        ),
     ] {
-        let body = p.propose_adoption(&kh("alice"), evidence, 5, &back).expect("proposed");
-        assert!(p.countersign_adoption(&body, &id("alice"), &ids()).is_none(), "{label}");
+        let body = p
+            .propose_adoption(&kh("alice"), evidence, 5, &back)
+            .expect("proposed");
+        assert!(
+            p.countersign_adoption(&body, &id("alice"), &ids())
+                .is_none(),
+            "{label}"
+        );
     }
-    let body = p.propose_adoption(&kh("alice"), transfer("bob", tx::transfer_block(&id("bob"), &kh("alice"), &kh("carol"))), 5, &back).unwrap();
-    assert!(p.countersign_adoption(&body, &id("alice"), &ids()).is_some(), "the consistent one");
+    let body = p
+        .propose_adoption(
+            &kh("alice"),
+            transfer(
+                "bob",
+                tx::transfer_block(&id("bob"), &kh("alice"), &kh("carol")),
+            ),
+            5,
+            &back,
+        )
+        .unwrap();
+    assert!(
+        p.countersign_adoption(&body, &id("alice"), &ids())
+            .is_some(),
+        "the consistent one"
+    );
 }
 
 // acceptance: REC-13
@@ -86,12 +148,20 @@ fn a_plain_rotation_carries_nothing_and_its_memo_names_no_prior_key() {
     // carol meets alice and is adopted on a meeting, like anyone
     let pop = w.meet("carol", "alice");
     let back = w.back("carol");
-    let body = p.propose_adoption(&kh("carol"), Evidence::Presence(pop.txid), 3, &back).unwrap();
+    let body = p
+        .propose_adoption(&kh("carol"), Evidence::Presence(pop.txid), 3, &back)
+        .unwrap();
     let rec = p.countersign_adoption(&body, &id("carol"), &ids()).unwrap();
     let k1 = kh("bob");
-    assert!(rhtn_codec::cbor::value_slice(&rec.bytes[rec.body.clone()], 6).is_none(), "no field 6");
+    assert!(
+        rhtn_codec::cbor::value_slice(&rec.bytes[rec.body.clone()], 6).is_none(),
+        "no field 6"
+    );
     assert!(rec.prior_key().is_none());
-    assert!(!rec.bytes.windows(32).any(|x| x == k1), "no field naming k1 anywhere");
+    assert!(
+        !rec.bytes.windows(32).any(|x| x == k1),
+        "no field naming k1 anywhere"
+    );
     // the memo for the adoption travels rootward, to w1
     p.store.keep_presence(pop.txid, pop.bytes.clone());
     let d = p.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids());
@@ -100,9 +170,14 @@ fn a_plain_rotation_carries_nothing_and_its_memo_names_no_prior_key() {
     assert_eq!(memos.len(), 1, "one memo rootward");
     let m = Memo::decode(&memos[0]).unwrap();
     assert_eq!(m.occupant, Some(kh("carol")));
-    assert!(!memos[0].windows(32).any(|x| x == k1), "the memo carries no prior key");
+    assert!(
+        !memos[0].windows(32).any(|x| x == k1),
+        "the memo carries no prior key"
+    );
     let memo_item = rhtn_codec::cbor::parse_all(&memos[0]).unwrap();
-    let rhtn_codec::cbor::Item::Map(fields) = &memo_item else { panic!("memo not a map") };
+    let rhtn_codec::cbor::Item::Map(fields) = &memo_item else {
+        panic!("memo not a map")
+    };
     assert_eq!(fields.len(), 5, "five fields and no sixth for a prior key");
 }
 
@@ -111,7 +186,15 @@ fn a_plain_rotation_carries_nothing_and_its_memo_names_no_prior_key() {
 fn the_chain_is_presented_when_asked_and_never_propagated() {
     let mut w = World::new();
     let (ua, _) = w.adopt("alice", "bob", 1);
-    let r = w.reissue("alice", "bob", Seqno { series: 1, counter: 2 }, 5);
+    let r = w.reissue(
+        "alice",
+        "bob",
+        Seqno {
+            series: 1,
+            counter: 2,
+        },
+        5,
+    );
     let t = table_with(kh("alice"), &w, &[&ua], &["bob"]);
     let mut s = view("alice", t, "bob", &[0]);
     s.archive = w.archives[&kh("alice")].clone();
@@ -126,7 +209,11 @@ fn the_chain_is_presented_when_asked_and_never_propagated() {
     assert!(holder.abandoned(&kh("alice"), 1));
     // nothing leaves S on any session in response, then or later
     s.set_now(s.now() + 7 * 86_400);
-    assert_eq!(fab.count(rhtn_node::propagation::FRAME_TOPOLOGY_PUSH), 0, "no TopologyPush carrying either");
+    assert_eq!(
+        fab.count(rhtn_node::propagation::FRAME_TOPOLOGY_PUSH),
+        0,
+        "no TopologyPush carrying either"
+    );
     assert!(fab.frames().is_empty());
     // no chain under a patron S was never adopted by
     assert!(s.present_chain(&kh("carol")).is_empty());
@@ -142,27 +229,61 @@ fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
     let (_w, mut p, fab) = patron();
     // bob, alice's subordinate, is served here and has somewhere to be
     // woken; so has an unrelated party, which this must not touch
-    p.wake.register(kh("bob"), Some("https://push.example/bob".into()), Some(vec![7; 32]), None);
-    p.wake.register(kh("w1"), Some("https://push.example/w1".into()), Some(vec![9; 32]), None);
+    p.wake.register(
+        kh("bob"),
+        Some("https://push.example/bob".into()),
+        Some(vec![7; 32]),
+        None,
+    );
+    p.wake.register(
+        kh("w1"),
+        Some("https://push.example/w1".into()),
+        Some(vec![9; 32]),
+        None,
+    );
     assert!(p.wake.get(&kh("bob")).is_some());
     let slot = p.slot_of(&kh("bob"));
 
     // carol recovers bob's identity under the same patron
     let good = recovery_block_for("bob", "carol", "alice", "w2");
     let back = [rhtn_archive::genesis(&kh("carol"))];
-    let body = p.propose_adoption(&kh("carol"), Evidence::Recovery(good), 3, &back).expect("proposed");
-    let rec = p.countersign_adoption(&body, &id("carol"), &ids()).expect("countersigned");
+    let body = p
+        .propose_adoption(&kh("carol"), Evidence::Recovery(good), 3, &back)
+        .expect("proposed");
+    let rec = p
+        .countersign_adoption(&body, &id("carol"), &ids())
+        .expect("countersigned");
     p.store.keep_presence(rec.txid, rec.bytes.clone());
-    assert_eq!(p.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()), rhtn_node::store::Decision::Stored);
+    assert_eq!(
+        p.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &rec.bytes, &ids()),
+        rhtn_node::store::Decision::Stored
+    );
 
     // controls: the supersession happened and the successor is bound
-    assert_eq!(p.table.current_key(&kh("bob")), kh("carol"), "the old key is superseded");
-    assert!(p.table.subordinates(&kh("alice")).contains(&kh("carol")), "and the successor is a subordinate");
+    assert_eq!(
+        p.table.current_key(&kh("bob")),
+        kh("carol"),
+        "the old key is superseded"
+    );
+    assert!(
+        p.table.subordinates(&kh("alice")).contains(&kh("carol")),
+        "and the successor is a subordinate"
+    );
 
-    assert!(p.wake.get(&kh("bob")).is_none(), "the superseded key's registration is forgotten");
-    assert!(p.wake.get(&kh("w1")).is_some(), "and an unrelated party's is not");
+    assert!(
+        p.wake.get(&kh("bob")).is_none(),
+        "the superseded key's registration is forgotten"
+    );
+    assert!(
+        p.wake.get(&kh("w1")).is_some(),
+        "and an unrelated party's is not"
+    );
     if let Some(s) = slot {
-        assert_ne!(p.slots.get(&s).and_then(|r| r.occupant), Some(kh("bob")), "nor does the old key still hold its row");
+        assert_ne!(
+            p.slots.get(&s).and_then(|r| r.occupant),
+            Some(kh("bob")),
+            "nor does the old key still hold its row"
+        );
     }
     // the successor's own registration is its own to make and is not
     // pre-empted by the old key's going

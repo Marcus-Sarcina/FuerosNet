@@ -16,7 +16,8 @@ fn kh(n: &str) -> Keyhash {
 /// A presence record between `a` and `b` whose signatures are placeholders:
 /// the evaluation reads participants, and verification is not what it does.
 fn presence(a: Keyhash, b: Keyhash, t: u64) -> Record {
-    let root = cose::sha256(&[a, b, t.to_be_bytes().to_vec().try_into().unwrap_or([0; 32])].concat());
+    let root =
+        cose::sha256(&[a, b, t.to_be_bytes().to_vec().try_into().unwrap_or([0; 32])].concat());
     let (ba, bb) = (vec![genesis(&a)], vec![genesis(&b)]);
     let body = formation_body([&ba, &bb], [&a, &b], t, t + 600, &root);
     let mut signers = [a, b];
@@ -56,31 +57,61 @@ fn only_the_intersection_with_known_identities_is_weighed() {
     // P's evidence: its subnet, and three identities beyond the horizon it
     // knows through a horizon member's meetings
     let m = ReferenceMetric::default();
-    let (p, h, k1, k2, k3, subject) = (kh("p"), kh("h"), kh("k1"), kh("k2"), kh("k3"), kh("subject"));
+    let (p, h, k1, k2, k3, subject) = (
+        kh("p"),
+        kh("h"),
+        kh("k1"),
+        kh("k2"),
+        kh("k3"),
+        kh("subject"),
+    );
     let mut ev = Evidence::new(p);
     ev.adopt(p, h);
     ev.meet(h, k1);
     ev.meet(h, k2);
     ev.adopt(k2, k3);
     let weights: Vec<f64> = [k1, k2, k3].iter().map(|k| m.score(&ev, k)).collect();
-    assert_eq!(weights, [10.0, 10.0, 8.0], "each recognised counterparty at what P's own graph pushes to it: the two met at the horizon's edge take the edge, the one behind them its relay");
+    assert_eq!(
+        weights,
+        [10.0, 10.0, 8.0],
+        "each recognised counterparty at what P's own graph pushes to it: the two met at the horizon's edge take the edge, the one behind them its relay"
+    );
     assert!(!ev.knows(&subject));
 
-    let known: Vec<Record> = [k1, k2, k3].iter().enumerate().map(|(i, k)| presence(subject, *k, 1_800_000_000 + i as u64)).collect();
-    let strangers: Vec<Record> = (0..1000).map(|i| presence(subject, stranger(i), 1_800_100_000 + i as u64)).collect();
+    let known: Vec<Record> = [k1, k2, k3]
+        .iter()
+        .enumerate()
+        .map(|(i, k)| presence(subject, *k, 1_800_000_000 + i as u64))
+        .collect();
+    let strangers: Vec<Record> = (0..1000)
+        .map(|i| presence(subject, stranger(i), 1_800_100_000 + i as u64))
+        .collect();
     let alone = evaluate_archive(&m, &ev, &subject, &known);
-    assert_eq!((alone.weighed.len(), alone.ignored, alone.total), (3, 0, 28.0));
+    assert_eq!(
+        (alone.weighed.len(), alone.ignored, alone.total),
+        (3, 0, 28.0)
+    );
 
     let mut presented = known.clone();
     presented.extend(strangers.iter().cloned());
     let with_strangers = evaluate_archive(&m, &ev, &subject, &presented);
-    assert_eq!(with_strangers.total, alone.total, "the standing equals that from the three known records alone");
+    assert_eq!(
+        with_strangers.total, alone.total,
+        "the standing equals that from the three known records alone"
+    );
     assert_eq!(with_strangers.weighed, alone.weighed);
-    assert_eq!(with_strangers.ignored, 1000, "not weighed less: not weighed");
+    assert_eq!(
+        with_strangers.ignored, 1000,
+        "not weighed less: not weighed"
+    );
 
-    presented.extend((1000..1500).map(|i| presence(subject, stranger(i), 1_800_200_000 + i as u64)));
+    presented
+        .extend((1000..1500).map(|i| presence(subject, stranger(i), 1_800_200_000 + i as u64)));
     let more = evaluate_archive(&m, &ev, &subject, &presented);
-    assert_eq!(more.total, alone.total, "appending records naming only unknown identities leaves it unchanged");
+    assert_eq!(
+        more.total, alone.total,
+        "appending records naming only unknown identities leaves it unchanged"
+    );
     assert_eq!(more.ignored, 1500);
 
     // records among strangers only, none naming the subject's counterparty

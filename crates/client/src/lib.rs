@@ -51,8 +51,8 @@ pub mod record;
 pub mod rotation;
 pub mod selection;
 pub mod store;
-pub mod trust;
 pub mod subject;
+pub mod trust;
 pub mod verifier;
 
 pub use rhtn_archive::{Keyhash, Txid};

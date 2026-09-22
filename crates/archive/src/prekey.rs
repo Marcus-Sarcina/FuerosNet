@@ -40,7 +40,13 @@ impl PrekeyBundle {
     /// prekey tag over fields 1 to 5 (§7.8).  The identity signs; the
     /// material and the device may be another device's than the one that
     /// holds the seed (design §23.3).
-    pub fn build(subject: &rhtn_crypto::SigningIdentity, construction: u64, blob: &[u8], published_at: u64, device: &[u8; 32]) -> Vec<u8> {
+    pub fn build(
+        subject: &rhtn_crypto::SigningIdentity,
+        construction: u64,
+        blob: &[u8],
+        published_at: u64,
+        device: &[u8; 32],
+    ) -> Vec<u8> {
         let mut payload = Vec::new();
         emit_map_head(&mut payload, 5);
         emit_uint(&mut payload, 1);
@@ -66,9 +72,13 @@ impl PrekeyBundle {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "PrekeyBundle", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let subject = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?
+            }
             _ => return Err("field 1".into()),
         };
         let construction = map_get(m, 2).and_then(as_uint).ok_or("field 2")?;
@@ -78,10 +88,19 @@ impl PrekeyBundle {
         };
         let published_at = map_get(m, 4).and_then(as_uint).ok_or("field 4")?;
         let device = match map_get(m, 5) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "device")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "device")?
+            }
             _ => return Err("field 5".into()),
         };
-        Ok(PrekeyBundle { subject, construction, blob, published_at, device, bytes: b.to_vec() })
+        Ok(PrekeyBundle {
+            subject,
+            construction,
+            blob,
+            published_at,
+            device,
+            bytes: b.to_vec(),
+        })
     }
 
     /// Signed by the subject it names.
@@ -98,20 +117,40 @@ pub enum PrekeyRequest {
     /// key asked for means every device's reusable material, and a
     /// one-time key is one device's, so the decoder requires it then
     /// (`wire-format.md` §7.8 field 4).
-    One { subject: Keyhash, one_time: bool, nonce: [u8; 16], device: Option<[u8; 32]> },
-    Batch { subjects: Vec<Keyhash>, nonce: [u8; 16] },
+    One {
+        subject: Keyhash,
+        one_time: bool,
+        nonce: [u8; 16],
+        device: Option<[u8; 32]>,
+    },
+    Batch {
+        subjects: Vec<Keyhash>,
+        nonce: [u8; 16],
+    },
 }
 
 impl PrekeyRequest {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         match self {
-            PrekeyRequest::One { subject, one_time, nonce, device } => {
+            PrekeyRequest::One {
+                subject,
+                one_time,
+                nonce,
+                device,
+            } => {
                 emit_map_head(&mut out, 3 + device.is_some() as usize);
                 emit_uint(&mut out, 1);
                 emit_bstr(&mut out, subject);
                 emit_uint(&mut out, 2);
-                emit_uint(&mut out, if *one_time { MODE_ONE_TIME } else { MODE_REUSABLE });
+                emit_uint(
+                    &mut out,
+                    if *one_time {
+                        MODE_ONE_TIME
+                    } else {
+                        MODE_REUSABLE
+                    },
+                );
                 emit_uint(&mut out, 3);
                 emit_bstr(&mut out, nonce);
                 if let Some(d) = device {
@@ -137,10 +176,14 @@ impl PrekeyRequest {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyRequestOrBatch, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let kh = |it: &Item| -> Result<Keyhash, String> {
             match it {
-                Item::Bytes(r) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "keyhash".into()),
+                Item::Bytes(r) if r.len() == 32 => {
+                    <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "keyhash".into())
+                }
                 _ => Err("keyhash".into()),
             }
         };
@@ -151,7 +194,9 @@ impl PrekeyRequest {
                     return Err("population not ascending".into());
                 }
                 let nonce = match map_get(m, 2) {
-                    Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+                    Some(Item::Bytes(r)) if r.len() == 16 => {
+                        <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+                    }
                     _ => return Err("nonce".into()),
                 };
                 Ok(PrekeyRequest::Batch { subjects, nonce })
@@ -160,14 +205,23 @@ impl PrekeyRequest {
                 let subject = kh(it)?;
                 let one_time = map_get(m, 2).and_then(as_uint).ok_or("mode")? == MODE_ONE_TIME;
                 let nonce = match map_get(m, 3) {
-                    Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+                    Some(Item::Bytes(r)) if r.len() == 16 => {
+                        <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+                    }
                     _ => return Err("nonce".into()),
                 };
                 let device = match map_get(m, 4) {
-                    Some(Item::Bytes(r)) if r.len() == 32 => Some(<[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "device")?),
+                    Some(Item::Bytes(r)) if r.len() == 32 => {
+                        Some(<[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "device")?)
+                    }
                     _ => None,
                 };
-                Ok(PrekeyRequest::One { subject, one_time, nonce, device })
+                Ok(PrekeyRequest::One {
+                    subject,
+                    one_time,
+                    nonce,
+                    device,
+                })
             }
             None => Err("field 1".into()),
         }
@@ -191,7 +245,12 @@ pub struct PrekeyReply {
 impl PrekeyReply {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 1 + !self.bundles.is_empty() as usize + self.one_time.is_some() as usize + self.code.is_some() as usize);
+        emit_map_head(
+            &mut out,
+            1 + !self.bundles.is_empty() as usize
+                + self.one_time.is_some() as usize
+                + self.code.is_some() as usize,
+        );
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.nonce);
         if !self.bundles.is_empty() {
@@ -216,13 +275,21 @@ impl PrekeyReply {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyReply, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let nonce = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+            Some(Item::Bytes(r)) if r.len() == 16 => {
+                <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+            }
             _ => return Err("nonce".into()),
         };
         let bundles = match value_slice(b, 2) {
-            Some(r2) => array_item_ranges(b, r2.start).ok_or("bundles walk")?.into_iter().map(|r| b[r].to_vec()).collect(),
+            Some(r2) => array_item_ranges(b, r2.start)
+                .ok_or("bundles walk")?
+                .into_iter()
+                .map(|r| b[r].to_vec())
+                .collect(),
             None => Vec::new(),
         };
         let one_time = match map_get(m, 3) {
@@ -230,7 +297,12 @@ impl PrekeyReply {
             _ => None,
         };
         let code = map_get(m, 4).and_then(as_uint);
-        Ok(PrekeyReply { nonce, bundles, one_time, code })
+        Ok(PrekeyReply {
+            nonce,
+            bundles,
+            one_time,
+            code,
+        })
     }
 }
 
@@ -250,5 +322,8 @@ pub fn encode_batch_reply(replies: &[PrekeyReply]) -> Vec<u8> {
 pub fn decode_batch_reply(b: &[u8]) -> Result<Vec<PrekeyReply>, String> {
     parse_all(b).map_err(|e| e.0)?;
     let parts = array_item_ranges(b, 0).ok_or("batch reply not an array")?;
-    parts.into_iter().map(|r| PrekeyReply::decode(&b[r])).collect()
+    parts
+        .into_iter()
+        .map(|r| PrekeyReply::decode(&b[r]))
+        .collect()
 }

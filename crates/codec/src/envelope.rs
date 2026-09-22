@@ -54,12 +54,16 @@ pub fn signer_set(b: &[u8], tx_type: u64, body: &[(Item, Item)]) -> Result<Vec<V
                 return Err(Error("participants not array"));
             };
             for pi in parts {
-                let Item::Map(pm) = pi else { return Err(Error("participant not map")) };
+                let Item::Map(pm) = pi else {
+                    return Err(Error("participant not map"));
+                };
                 signers.push(bs(b, map_get(pm, 1).ok_or(Error("participant keyhash"))?).to_vec());
             }
             if let Some(Item::Array(ws)) = map_get(body, 4) {
                 for w in ws {
-                    let Item::Map(wm) = w else { return Err(Error("witness not map")) };
+                    let Item::Map(wm) = w else {
+                        return Err(Error("witness not map"));
+                    };
                     signers.push(bs(b, map_get(wm, 1).ok_or(Error("witness keyhash"))?).to_vec());
                 }
             }
@@ -74,25 +78,33 @@ pub fn signer_set(b: &[u8], tx_type: u64, body: &[(Item, Item)]) -> Result<Vec<V
 /// unsigned material); the body is signed and keeps its unknown keys.
 pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
     let item = parse_all(b)?;
-    let Item::Map(top) = &item else { return Err(Error("envelope not a map")) };
+    let Item::Map(top) = &item else {
+        return Err(Error("envelope not a map"));
+    };
     for (k, _) in top {
         match k {
             Item::Uint(1..=4) => {}
             _ => return Err(Error("unknown envelope key")),
         }
     }
-    let version = map_get(top, KEY_VERSION).and_then(as_uint).ok_or(Error("no version"))?;
+    let version = map_get(top, KEY_VERSION)
+        .and_then(as_uint)
+        .ok_or(Error("no version"))?;
     if version != 1 {
         return Err(Error("version != 1"));
     }
-    let tx_type = map_get(top, KEY_TYPE).and_then(as_uint).ok_or(Error("no type"))?;
+    let tx_type = map_get(top, KEY_TYPE)
+        .and_then(as_uint)
+        .ok_or(Error("no type"))?;
     let body = value_slice(b, KEY_BODY).ok_or(Error("no body"))?;
     let p = Parser { b };
     let (body_item, bend) = p.item(body.start)?;
     if bend != body.end {
         return Err(Error("body length disagreement"));
     }
-    let Item::Map(body_map) = &body_item else { return Err(Error("body not map")) };
+    let Item::Map(body_map) = &body_item else {
+        return Err(Error("body not map"));
+    };
     let signers = signer_set(b, tx_type, body_map)?;
 
     let sigs = value_slice(b, KEY_SIGNATURES).ok_or(Error("no signatures"))?;
@@ -115,11 +127,14 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
     if !matches!(cs[2], Item::Null) {
         return Err(Error("payload not detached"));
     }
-    let Item::Array(ents) = &cs[3] else { return Err(Error("entries not array")) };
+    let Item::Array(ents) = &cs[3] else {
+        return Err(Error("entries not array"));
+    };
     if let Some(ceiling) = crate::bounds::envelope_entry_ceiling(tx_type)
-        && ents.len() > ceiling {
-            return Err(Error("entries over the derived ceiling"));
-        }
+        && ents.len() > ceiling
+    {
+        return Err(Error("entries over the derived ceiling"));
+    }
     if ents.len() != signers.len() * 2 {
         return Err(Error("entry count != 2x signers"));
     }
@@ -128,7 +143,9 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
     let entry_ranges = array_item_ranges(b, outer[3].start).ok_or(Error("entries walk"))?;
     let mut entries = Vec::new();
     for (e, er) in ents.iter().zip(entry_ranges) {
-        let Item::Array(ea) = e else { return Err(Error("entry not array")) };
+        let Item::Array(ea) = e else {
+            return Err(Error("entry not array"));
+        };
         if ea.len() != 3 {
             return Err(Error("entry arity"));
         }
@@ -142,7 +159,9 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
             return Err(Error("unprotected header not empty"));
         }
         let prot = &b[pr.clone()];
-         let Item::Map(ref pm) = parse_all(prot)? else { return Err(Error("protected not map")) };
+        let Item::Map(ref pm) = parse_all(prot)? else {
+            return Err(Error("protected not map"));
+        };
         let alg = pm
             .iter()
             .find_map(|(k, v)| match (k, v) {
@@ -166,13 +185,34 @@ pub fn parse(b: &[u8]) -> Result<Envelope, Error> {
         if pm.len() != 2 {
             return Err(Error("protected header carries more than alg and kid"));
         }
-        entries.push(Entry { protected: pr.clone(), kid, alg, signature: sr.clone() });
+        entries.push(Entry {
+            protected: pr.clone(),
+            kid,
+            alg,
+            signature: sr.clone(),
+        });
     }
     // the canonical order (§3.5): by kid, then classical before post-quantum;
     // two entries at one place are a duplicate
-    let rank = |e: &Entry| (e.kid.clone(), if e.alg == crate::cose::ALG_EDDSA { 0u8 } else { 1u8 });
+    let rank = |e: &Entry| {
+        (
+            e.kid.clone(),
+            if e.alg == crate::cose::ALG_EDDSA {
+                0u8
+            } else {
+                1u8
+            },
+        )
+    };
     if entries.windows(2).any(|w| rank(&w[0]) >= rank(&w[1])) {
         return Err(Error("entries out of canonical order"));
     }
-    Ok(Envelope { version, tx_type, body, body_item, signers, entries })
+    Ok(Envelope {
+        version,
+        tx_type,
+        body,
+        body_item,
+        signers,
+        entries,
+    })
 }

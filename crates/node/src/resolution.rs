@@ -57,7 +57,11 @@ fn emit_points(out: &mut Vec<u8>, points: &[NetworkPoint]) {
 }
 
 fn decode_points(b: &[u8], at: usize) -> Result<Vec<NetworkPoint>, String> {
-    array_item_ranges(b, at).ok_or("points walk")?.iter().map(|r| NetworkPoint::decode_bytes(&b[r.clone()])).collect()
+    array_item_ranges(b, at)
+        .ok_or("points walk")?
+        .iter()
+        .map(|r| NetworkPoint::decode_bytes(&b[r.clone()]))
+        .collect()
 }
 
 /// An anchor-relative path (`wire-format.md` §2.1): 4-bit hop indices, high
@@ -83,14 +87,23 @@ impl Path {
                 bytes[i / 2] |= v & 0x0f;
             }
         }
-        Path { bytes, nibbles: ix.len() as u64 }
+        Path {
+            bytes,
+            nibbles: ix.len() as u64,
+        }
     }
 
     /// The hop indices.  A decoded path satisfies `wire-format.md` §2.1's
     /// invariant; this is total regardless, so a path reached by any other
     /// route cannot index past its bytes.
     pub fn indices(&self) -> Vec<u8> {
-        (0..self.nibbles as usize).map(|i| self.bytes.get(i / 2).map_or(0, |b| if i % 2 == 0 { b >> 4 } else { b & 0x0f })).collect()
+        (0..self.nibbles as usize)
+            .map(|i| {
+                self.bytes
+                    .get(i / 2)
+                    .map_or(0, |b| if i % 2 == 0 { b >> 4 } else { b & 0x0f })
+            })
+            .collect()
     }
 
     pub fn len(&self) -> usize {
@@ -120,7 +133,9 @@ impl Path {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("path not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("path not a map".into());
+        };
         let bytes = match map_get(m, 1) {
             Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
             _ => return Err("path field 1".into()),
@@ -147,7 +162,10 @@ pub struct ResolveRequest {
 
 impl ResolveRequest {
     pub fn path(&self) -> Path {
-        Path { bytes: self.path.clone(), nibbles: self.nibbles }
+        Path {
+            bytes: self.path.clone(),
+            nibbles: self.nibbles,
+        }
     }
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
@@ -166,7 +184,9 @@ impl ResolveRequest {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResolveRequest, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let kh = |k: u64| match map_get(m, k) {
             Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).ok(),
             _ => None,
@@ -174,10 +194,18 @@ impl ResolveRequest {
         let r3 = value_slice(b, 3).ok_or("field 3")?;
         let p = Path::decode(&b[r3])?;
         let nonce = match map_get(m, 4) {
-            Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+            Some(Item::Bytes(r)) if r.len() == 16 => {
+                <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+            }
             _ => return Err("field 4".into()),
         };
-        Ok(ResolveRequest { subject: kh(1).ok_or("field 1")?, anchor: kh(2).ok_or("field 2")?, path: p.bytes, nibbles: p.nibbles, nonce })
+        Ok(ResolveRequest {
+            subject: kh(1).ok_or("field 1")?,
+            anchor: kh(2).ok_or("field 2")?,
+            path: p.bytes,
+            nibbles: p.nibbles,
+            nonce,
+        })
     }
 }
 
@@ -204,15 +232,26 @@ pub struct Referral {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveReply {
-    Serving { nonce: [u8; 16], serving: ServingInfra },
-    Failure { nonce: [u8; 16], code: u64 },
-    Referral { nonce: [u8; 16], referral: Referral },
+    Serving {
+        nonce: [u8; 16],
+        serving: ServingInfra,
+    },
+    Failure {
+        nonce: [u8; 16],
+        code: u64,
+    },
+    Referral {
+        nonce: [u8; 16],
+        referral: Referral,
+    },
 }
 
 impl ResolveReply {
     pub fn nonce(&self) -> [u8; 16] {
         match self {
-            ResolveReply::Serving { nonce, .. } | ResolveReply::Failure { nonce, .. } | ResolveReply::Referral { nonce, .. } => *nonce,
+            ResolveReply::Serving { nonce, .. }
+            | ResolveReply::Failure { nonce, .. }
+            | ResolveReply::Referral { nonce, .. } => *nonce,
         }
     }
 
@@ -268,9 +307,13 @@ impl ResolveReply {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResolveReply, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let nonce = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+            Some(Item::Bytes(r)) if r.len() == 16 => {
+                <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+            }
             _ => return Err("field 1".into()),
         };
         let kh_at = |seg: &[u8], k: u64| -> Option<Keyhash> {
@@ -286,9 +329,20 @@ impl ResolveReply {
                 let pts = decode_points(seg, value_slice(seg, 2).ok_or("endpoints")?.start)?;
                 let residual = Path::decode(&seg[value_slice(seg, 3).ok_or("residual")?])?;
                 let km = value_slice(seg, 4).map(|r| seg[r].to_vec());
-                Ok(ResolveReply::Serving { nonce, serving: ServingInfra { node: kh_at(seg, 1).ok_or("serving node")?, endpoints: pts, residual, key_material: km } })
+                Ok(ResolveReply::Serving {
+                    nonce,
+                    serving: ServingInfra {
+                        node: kh_at(seg, 1).ok_or("serving node")?,
+                        endpoints: pts,
+                        residual,
+                        key_material: km,
+                    },
+                })
             }
-            REPLY_FAILURE => Ok(ResolveReply::Failure { nonce, code: map_get(m, 4).and_then(as_uint).ok_or("field 4")? }),
+            REPLY_FAILURE => Ok(ResolveReply::Failure {
+                nonce,
+                code: map_get(m, 4).and_then(as_uint).ok_or("field 4")?,
+            }),
             REPLY_REFERRAL => {
                 let r5 = value_slice(b, 5).ok_or("field 5")?;
                 let seg = &b[r5];
@@ -298,7 +352,15 @@ impl ResolveReply {
                     as_uint(&parse_all(&seg[r]).map_err(|e| e.0)?).ok_or("advances uint")?
                 };
                 let km = value_slice(seg, 4).map(|r| seg[r].to_vec());
-                Ok(ResolveReply::Referral { nonce, referral: Referral { next: kh_at(seg, 1).ok_or("next hop")?, endpoints: pts, advances, key_material: km } })
+                Ok(ResolveReply::Referral {
+                    nonce,
+                    referral: Referral {
+                        next: kh_at(seg, 1).ok_or("next hop")?,
+                        endpoints: pts,
+                        advances,
+                        key_material: km,
+                    },
+                })
             }
             _ => Err("unknown reply code".into()),
         }
@@ -319,18 +381,27 @@ impl AnchorEntry {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "AnchorEntry", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let anchor: Keyhash = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "anchor")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "anchor")?
+            }
             _ => return Err("field 1".into()),
         };
         let endpoints = decode_points(b, value_slice(b, 2).ok_or("field 2")?.start)?;
-        let Some(Item::Array(sq)) = map_get(m, 4) else { return Err("field 4".into()) };
+        let Some(Item::Array(sq)) = map_get(m, 4) else {
+            return Err("field 4".into());
+        };
         Ok(AnchorEntry {
             anchor,
             endpoints,
             subtree_size: map_get(m, 3).and_then(as_uint).ok_or("field 3")?,
-            seqno: Seqno { series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32, counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32 },
+            seqno: Seqno {
+                series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
+                counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32,
+            },
             bytes: b.to_vec(),
         })
     }
@@ -372,13 +443,21 @@ pub struct AnchorTable {
 
 impl Default for AnchorTable {
     fn default() -> Self {
-        AnchorTable { entries: BTreeMap::new(), threshold: 0, ingestion: Ingestion::UnverifiedGossip }
+        AnchorTable {
+            entries: BTreeMap::new(),
+            threshold: 0,
+            ingestion: Ingestion::UnverifiedGossip,
+        }
     }
 }
 
 impl AnchorTable {
     pub fn new(threshold: u64, ingestion: Ingestion) -> Self {
-        AnchorTable { entries: BTreeMap::new(), threshold, ingestion }
+        AnchorTable {
+            entries: BTreeMap::new(),
+            threshold,
+            ingestion,
+        }
     }
 
     pub fn get(&self, anchor: &Keyhash) -> Option<&AnchorEntry> {
@@ -403,7 +482,9 @@ impl AnchorTable {
         if entry.subtree_size < self.threshold {
             return false;
         }
-        if self.ingestion == Ingestion::VerifiedOnAcceptance && entry.signature_checks(ids) != Some(true) {
+        if self.ingestion == Ingestion::VerifiedOnAcceptance
+            && entry.signature_checks(ids) != Some(true)
+        {
             return false;
         }
         match self.entries.get(&entry.anchor) {
@@ -434,7 +515,10 @@ pub enum Step {
     /// The reply is malformed: a referral advancing nothing is a loop, and
     /// one advancing past the path's end is malformed (`wire-format.md` §7.7.3).
     Malformed(String),
-    Failed { code: u64, disposition: Disposition },
+    Failed {
+        code: u64,
+        disposition: Disposition,
+    },
     /// The nonce does not echo the request's.
     WrongNonce,
 }
@@ -447,7 +531,10 @@ pub fn step(req: &ResolveRequest, consumed: usize, reply: &ResolveReply) -> Step
     }
     match reply {
         ResolveReply::Serving { serving, .. } => Step::Arrived(serving.clone()),
-        ResolveReply::Failure { code, .. } => Step::Failed { code: *code, disposition: disposition(*code) },
+        ResolveReply::Failure { code, .. } => Step::Failed {
+            code: *code,
+            disposition: disposition(*code),
+        },
         ResolveReply::Referral { referral, .. } => {
             if referral.advances < 1 {
                 return Step::Malformed("a referral that advances nothing is a loop".into());
@@ -489,30 +576,65 @@ impl NodeView {
     /// infra node begins it from its anchor table, and a locator whose
     /// anchor is absent from that table is a caller-side condition with no
     /// request sent (`wire-format.md` §7.7.1, §7.7.3).
-    pub fn resolve(&self, adj: &dyn Adjacency, anchors: &AnchorTable, subject: Keyhash, anchor: Keyhash, path: Path, nonce: [u8; 16]) -> Result<(Resolution, Carried), NotResolvable> {
+    pub fn resolve(
+        &self,
+        adj: &dyn Adjacency,
+        anchors: &AnchorTable,
+        subject: Keyhash,
+        anchor: Keyhash,
+        path: Path,
+        nonce: [u8; 16],
+    ) -> Result<(Resolution, Carried), NotResolvable> {
         // the request goes on a bidirectional stream (`wire-format.md`
         // §9.2) of a session that can carry one; the caller holds the
         // resolution and takes its reply
-        let req = ResolveRequest { subject, anchor, path: path.bytes.clone(), nibbles: path.nibbles, nonce };
+        let req = ResolveRequest {
+            subject,
+            anchor,
+            path: path.bytes.clone(),
+            nibbles: path.nibbles,
+            nonce,
+        };
         if let Some(serving) = self.serving_node
-            && adj.request(&serving, REQUEST_RESOLVE, &req.encode()) {
-                let r = Resolution { request: req, consumed: 0, hops: vec![serving], endpoints: Vec::new(), arrived: None };
-                return Ok((r, Carried::Delegated(serving)));
-            }
+            && adj.request(&serving, REQUEST_RESOLVE, &req.encode())
+        {
+            let r = Resolution {
+                request: req,
+                consumed: 0,
+                hops: vec![serving],
+                endpoints: Vec::new(),
+                arrived: None,
+            };
+            return Ok((r, Carried::Delegated(serving)));
+        }
         let r = Resolution::begin(anchors, subject, anchor, path, nonce)?;
-        let on_session = adj.has_session(&anchor) && adj.request(&anchor, REQUEST_RESOLVE, &r.request.encode());
-        Ok((r, Carried::Direct { sent_on_session: on_session }))
+        let on_session =
+            adj.has_session(&anchor) && adj.request(&anchor, REQUEST_RESOLVE, &r.request.encode());
+        Ok((
+            r,
+            Carried::Direct {
+                sent_on_session: on_session,
+            },
+        ))
     }
 
     /// A resolution request from an attached client (`wire-format.md`
     /// §7.7.1): answered from this node's own tables where it is on the
     /// path, and otherwise resolved on the client's behalf.
-    pub fn resolve_for_client(&self, anchors: &AnchorTable, req: &ResolveRequest) -> Result<ClientResolution, NotResolvable> {
-        let mine = self.position_in(&req.anchor).map(|p| Path { bytes: p.path.clone(), nibbles: p.nibbles });
+    pub fn resolve_for_client(
+        &self,
+        anchors: &AnchorTable,
+        req: &ResolveRequest,
+    ) -> Result<ClientResolution, NotResolvable> {
+        let mine = self.position_in(&req.anchor).map(|p| Path {
+            bytes: p.path.clone(),
+            nibbles: p.nibbles,
+        });
         if let Some(my) = mine
-            && my.is_prefix_of(&req.path()) {
-                return Ok(ClientResolution::Answered(self.answer_resolution(req)));
-            }
+            && my.is_prefix_of(&req.path())
+        {
+            return Ok(ClientResolution::Answered(self.answer_resolution(req)));
+        }
         let r = Resolution::begin(anchors, req.subject, req.anchor, req.path(), req.nonce)?;
         Ok(ClientResolution::Proxied(r))
     }
@@ -522,9 +644,18 @@ impl NodeView {
     /// the failure the last hop gave.
     pub fn reply_for_client(&self, r: &Resolution, last: Option<&ResolveReply>) -> ResolveReply {
         match (&r.arrived, last) {
-            (Some(si), _) => ResolveReply::Serving { nonce: r.request.nonce, serving: si.clone() },
-            (None, Some(ResolveReply::Failure { code, .. })) => ResolveReply::Failure { nonce: r.request.nonce, code: *code },
-            (None, _) => ResolveReply::Failure { nonce: r.request.nonce, code: FAIL_NOT_AUTHORITATIVE },
+            (Some(si), _) => ResolveReply::Serving {
+                nonce: r.request.nonce,
+                serving: si.clone(),
+            },
+            (None, Some(ResolveReply::Failure { code, .. })) => ResolveReply::Failure {
+                nonce: r.request.nonce,
+                code: *code,
+            },
+            (None, _) => ResolveReply::Failure {
+                nonce: r.request.nonce,
+                code: FAIL_NOT_AUTHORITATIVE,
+            },
         }
     }
 
@@ -534,12 +665,21 @@ impl NodeView {
         let nonce = req.nonce;
         // a node bound in several subnets has a position in each
         let Some(pos) = self.position_in(&req.anchor) else {
-            return ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE };
+            return ResolveReply::Failure {
+                nonce,
+                code: FAIL_NOT_AUTHORITATIVE,
+            };
         };
-        let my = Path { bytes: pos.path.clone(), nibbles: pos.nibbles };
+        let my = Path {
+            bytes: pos.path.clone(),
+            nibbles: pos.nibbles,
+        };
         let full = req.path();
         if !my.is_prefix_of(&full) {
-            return ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE };
+            return ResolveReply::Failure {
+                nonce,
+                code: FAIL_NOT_AUTHORITATIVE,
+            };
         }
         let consumed = my.len();
         let residual = full.suffix(consumed);
@@ -550,7 +690,10 @@ impl NodeView {
         }
         let next_index = residual.indices()[0];
         let Some(child) = self.child_at(next_index) else {
-            return ResolveReply::Failure { nonce, code: FAIL_NO_SUCH_CHILD };
+            return ResolveReply::Failure {
+                nonce,
+                code: FAIL_NO_SUCH_CHILD,
+            };
         };
         // an attached client, or a light-client chain below this node: this
         // node is the serving infra node and answers authoritatively with
@@ -562,10 +705,25 @@ impl NodeView {
         // contacting it (`infra-client-requirements.md` §4.4)
         match self.store.endpoint(&child) {
             Some(er) => {
-                let endpoints = er.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect();
-                ResolveReply::Referral { nonce, referral: Referral { next: child, endpoints, advances: 1, key_material: None } }
+                let endpoints = er
+                    .endpoints
+                    .iter()
+                    .filter_map(|p| NetworkPoint::decode_bytes(p).ok())
+                    .collect();
+                ResolveReply::Referral {
+                    nonce,
+                    referral: Referral {
+                        next: child,
+                        endpoints,
+                        advances: 1,
+                        key_material: None,
+                    },
+                }
             }
-            None => ResolveReply::Failure { nonce, code: FAIL_NOT_AUTHORITATIVE },
+            None => ResolveReply::Failure {
+                nonce,
+                code: FAIL_NOT_AUTHORITATIVE,
+            },
         }
     }
 
@@ -576,17 +734,33 @@ impl NodeView {
     fn serving_answer(&self, nonce: [u8; 16], residual: Path) -> ResolveReply {
         let endpoints = self.own_endpoints();
         if endpoints.is_empty() {
-            return ResolveReply::Failure { nonce, code: FAIL_UNAVAILABLE };
+            return ResolveReply::Failure {
+                nonce,
+                code: FAIL_UNAVAILABLE,
+            };
         }
         ResolveReply::Serving {
             nonce,
-            serving: ServingInfra { node: self.me(), endpoints, residual, key_material: Some(self.identity.public.key_material()) },
+            serving: ServingInfra {
+                node: self.me(),
+                endpoints,
+                residual,
+                key_material: Some(self.identity.public.key_material()),
+            },
         }
     }
 
     /// This node's own published endpoints, from its own endpoint record.
     pub fn own_endpoints(&self) -> Vec<NetworkPoint> {
-        self.store.endpoint(&self.me()).map(|er| er.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect()).unwrap_or_default()
+        self.store
+            .endpoint(&self.me())
+            .map(|er| {
+                er.endpoints
+                    .iter()
+                    .filter_map(|p| NetworkPoint::decode_bytes(p).ok())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// The subordinate this node holds at child index `ix`.
@@ -601,17 +775,29 @@ impl NodeView {
     /// carries, which the position advances with (§2.3: one counter for
     /// position and endpoint changes).  `None` where this node has no
     /// position in that subnet.
-    pub fn publish_own_endpoints(&mut self, anchor: &Keyhash, endpoints: &[NetworkPoint]) -> Option<Vec<u8>> {
+    pub fn publish_own_endpoints(
+        &mut self,
+        anchor: &Keyhash,
+        endpoints: &[NetworkPoint],
+    ) -> Option<Vec<u8>> {
         let me = self.me();
         let pos = self.position_in(anchor)?.clone();
         let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
         let held = self.store.endpoint_in(&me, pos.seqno.series);
         if let Some(h) = held
-            && h.endpoints == points {
-                return Some(h.bytes.clone());
-            }
-        let counter = held.map(|h| h.seqno.counter).unwrap_or(0).max(pos.seqno.counter) + 1;
-        let seqno = Seqno { series: pos.seqno.series, counter };
+            && h.endpoints == points
+        {
+            return Some(h.bytes.clone());
+        }
+        let counter = held
+            .map(|h| h.seqno.counter)
+            .unwrap_or(0)
+            .max(pos.seqno.counter)
+            + 1;
+        let seqno = Seqno {
+            series: pos.seqno.series,
+            counter,
+        };
         if self.position.anchor == *anchor {
             self.position.seqno = seqno;
         } else if let Some(p) = self.positions.get_mut(anchor) {
@@ -627,9 +813,10 @@ impl NodeView {
         let me = self.me();
         let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
         if let Some(held) = self.store.endpoint_in(&me, seqno.series)
-            && held.endpoints == points {
-                return held.bytes.clone();
-            }
+            && held.endpoints == points
+        {
+            return held.bytes.clone();
+        }
         let mut payload = Vec::new();
         emit_map_head(&mut payload, 3);
         emit_uint(&mut payload, 1);
@@ -638,7 +825,9 @@ impl NodeView {
         emit_points(&mut payload, endpoints);
         emit_uint(&mut payload, 3);
         seqno.emit(&mut payload);
-        let sig = self.identity.sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
+        let sig = self
+            .identity
+            .sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
         let mut out = Vec::new();
         emit_map_head(&mut out, 4);
         out.extend_from_slice(&payload[1..]);
@@ -649,7 +838,11 @@ impl NodeView {
 }
 
 /// Build an `EndpointRecord` for `identity` at `seqno` (`wire-format.md` §7.6).
-pub fn endpoint_record(identity: &rhtn_crypto::SigningIdentity, endpoints: &[NetworkPoint], seqno: Seqno) -> Vec<u8> {
+pub fn endpoint_record(
+    identity: &rhtn_crypto::SigningIdentity,
+    endpoints: &[NetworkPoint],
+    seqno: Seqno,
+) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 3);
     emit_uint(&mut payload, 1);
@@ -668,7 +861,12 @@ pub fn endpoint_record(identity: &rhtn_crypto::SigningIdentity, endpoints: &[Net
 }
 
 /// An `AnchorEntry` for `identity` (`wire-format.md` §7.2).
-pub fn anchor_entry(identity: &rhtn_crypto::SigningIdentity, endpoints: &[NetworkPoint], subtree_size: u64, seqno: Seqno) -> Vec<u8> {
+pub fn anchor_entry(
+    identity: &rhtn_crypto::SigningIdentity,
+    endpoints: &[NetworkPoint],
+    subtree_size: u64,
+    seqno: Seqno,
+) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 4);
     emit_uint(&mut payload, 1);
@@ -781,7 +979,10 @@ impl LocatorStore {
         if self.abandoned.contains(&(sl.subject, sq.series)) {
             return LocatorOutcome::Abandoned;
         }
-        if self.conflicts.contains(&(sl.subject, sq.series, sq.counter)) {
+        if self
+            .conflicts
+            .contains(&(sl.subject, sq.series, sq.counter))
+        {
             return LocatorOutcome::Conflict;
         }
         let key = (sl.subject, sq.series);
@@ -789,7 +990,11 @@ impl LocatorStore {
             None => {
                 let other_series = self.held.keys().any(|(s, _)| *s == sl.subject);
                 self.held.insert(key, sl);
-                if other_series { LocatorOutcome::Incomparable } else { LocatorOutcome::Installed }
+                if other_series {
+                    LocatorOutcome::Incomparable
+                } else {
+                    LocatorOutcome::Installed
+                }
             }
             Some(held) => match compare(held.locator.seqno, sq) {
                 Order::Newer => {
@@ -812,7 +1017,11 @@ impl LocatorStore {
 
     /// Every locator held for `subject`, one per series.
     pub fn all(&self, subject: &Keyhash) -> Vec<&SignedLocator> {
-        self.held.iter().filter(|((s, _), _)| s == subject).map(|(_, v)| v).collect()
+        self.held
+            .iter()
+            .filter(|((s, _), _)| s == subject)
+            .map(|(_, v)| v)
+            .collect()
     }
 
     pub fn in_series(&self, subject: &Keyhash, series: u32) -> Option<&SignedLocator> {
@@ -829,7 +1038,11 @@ impl LocatorStore {
     pub fn reach(&self, subject: &Keyhash) -> Reach {
         let held = self.all(subject);
         if held.is_empty() {
-            return if self.conflicted(subject) { Reach::MustReResolve } else { Reach::Unknown };
+            return if self.conflicted(subject) {
+                Reach::MustReResolve
+            } else {
+                Reach::Unknown
+            };
         }
         if self.conflicted(subject) && held.len() == 1 {
             // the conflicted line is retired; another proved series may stand
@@ -841,7 +1054,10 @@ impl LocatorStore {
         match held.len() {
             1 => Reach::Dial(held[0].locator.clone()),
             _ => {
-                let proved: Vec<_> = held.iter().filter(|l| self.proved.contains(&(*subject, l.locator.seqno.series))).collect();
+                let proved: Vec<_> = held
+                    .iter()
+                    .filter(|l| self.proved.contains(&(*subject, l.locator.seqno.series)))
+                    .collect();
                 match proved.len() {
                     1 => Reach::Dial(proved[0].locator.clone()),
                     _ => Reach::Indeterminate,
@@ -870,10 +1086,24 @@ impl Resolution {
     /// Begin a resolution.  A locator whose anchor is absent from the table
     /// is a caller-side condition and no request is sent
     /// (`wire-format.md` §7.7.3).
-    pub fn begin(anchors: &AnchorTable, subject: Keyhash, anchor: Keyhash, path: Path, nonce: [u8; 16]) -> Result<Resolution, NotResolvable> {
-        let entry = anchors.get(&anchor).ok_or(NotResolvable::AnchorAbsent(anchor))?;
+    pub fn begin(
+        anchors: &AnchorTable,
+        subject: Keyhash,
+        anchor: Keyhash,
+        path: Path,
+        nonce: [u8; 16],
+    ) -> Result<Resolution, NotResolvable> {
+        let entry = anchors
+            .get(&anchor)
+            .ok_or(NotResolvable::AnchorAbsent(anchor))?;
         Ok(Resolution {
-            request: ResolveRequest { subject, anchor, path: path.bytes, nibbles: path.nibbles, nonce },
+            request: ResolveRequest {
+                subject,
+                anchor,
+                path: path.bytes,
+                nibbles: path.nibbles,
+                nonce,
+            },
             consumed: 0,
             hops: vec![anchor],
             endpoints: entry.endpoints.clone(),
@@ -922,7 +1152,10 @@ pub enum Contact {
     /// requester authenticates the subject it intended to reach, so a wrong
     /// address produces a handshake failure rather than a silent
     /// misdirection (`wire-format.md` §7.7.3, §9.1).
-    Failed { target: Keyhash, attempts: Vec<EndpointFailure> },
+    Failed {
+        target: Keyhash,
+        attempts: Vec<EndpointFailure>,
+    },
 }
 
 /// Try a published endpoint list as alternatives, in the publisher's
@@ -943,15 +1176,27 @@ pub async fn contact(
         let connecting = match rhtn_transport::tls::dial(ep, me, pins, target, e.socket()) {
             Ok(c) => c,
             Err(err) => {
-                attempts.push(EndpointFailure { endpoint: e.clone(), why: format!("{err:?}") });
+                attempts.push(EndpointFailure {
+                    endpoint: e.clone(),
+                    why: format!("{err:?}"),
+                });
                 continue;
             }
         };
         match tokio::time::timeout(per_endpoint, connecting).await {
             Ok(Ok(conn)) => return Contact::Reached(conn),
-            Ok(Err(err)) => attempts.push(EndpointFailure { endpoint: e.clone(), why: format!("{err}") }),
-            Err(_) => attempts.push(EndpointFailure { endpoint: e.clone(), why: "no answer".into() }),
+            Ok(Err(err)) => attempts.push(EndpointFailure {
+                endpoint: e.clone(),
+                why: format!("{err}"),
+            }),
+            Err(_) => attempts.push(EndpointFailure {
+                endpoint: e.clone(),
+                why: "no answer".into(),
+            }),
         }
     }
-    Contact::Failed { target: *target, attempts }
+    Contact::Failed {
+        target: *target,
+        attempts,
+    }
 }

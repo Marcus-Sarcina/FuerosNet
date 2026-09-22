@@ -33,10 +33,15 @@ fn kh(b: &[u8], m: &[(Item, Item)], k: u64) -> Option<Keyhash> {
 pub fn parse_attestation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Attestation, String> {
     let item = parse_all(bytes).map_err(|e| e.0)?;
     rhtn_codec::schema::check_kind(bytes, "CurrencyAttestation", &item).map_err(|e| e.0)?;
-    if verify::record(ids, "CurrencyAttestation", bytes).map_err(|e| e.to_string()).is_err() {
+    if verify::record(ids, "CurrencyAttestation", bytes)
+        .map_err(|e| e.to_string())
+        .is_err()
+    {
         return Err("issuer signature fails".into());
     }
-    let Item::Map(m) = &item else { return Err("map".into()) };
+    let Item::Map(m) = &item else {
+        return Err("map".into());
+    };
     Ok(Attestation {
         subject: kh(bytes, m, 1).ok_or("subject")?,
         current: kh(bytes, m, 2).ok_or("current")?,
@@ -51,7 +56,9 @@ pub fn parse_attestation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<At
 
 /// The attestation a `CurrencyReply` carries, if its code says one follows.
 pub fn reply_attestation(reply: &[u8]) -> Option<Vec<u8>> {
-    let Ok(item) = parse_all(reply) else { return None };
+    let Ok(item) = parse_all(reply) else {
+        return None;
+    };
     let Item::Map(m) = &item else { return None };
     if map_get(m, 2).and_then(as_uint) != Some(0) {
         return None;
@@ -82,7 +89,9 @@ pub fn assess(atts: Vec<Attestation>) -> CurrencyView {
 /// patrons (design §9.0.2).  The notice's content is unspecified (design
 /// §22.3); `notify` is handed each issuer once.  Returns how many were told.
 pub fn notify_fork(view: &CurrencyView, mut notify: impl FnMut(&Keyhash)) -> usize {
-    let CurrencyView::Fork(atts) = view else { return 0 };
+    let CurrencyView::Fork(atts) = view else {
+        return 0;
+    };
     let issuers: BTreeSet<Keyhash> = atts.iter().map(|a| a.issuer).collect();
     for i in &issuers {
         notify(i);

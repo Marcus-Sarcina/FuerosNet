@@ -49,11 +49,19 @@ pub fn in_window(finalized_at: u64, started_at: u64) -> bool {
 /// `subject` as a participant, finalized inside the window; counted once
 /// by txid; the current `counterparty` never a candidate for their own
 /// verification.  A record that fails contributes nothing.
-pub fn pool<L: Lookup + ?Sized>(ids: &L, bundle: &[Vec<u8>], subject: &Keyhash, counterparty: &Keyhash, started_at: u64) -> Pool {
+pub fn pool<L: Lookup + ?Sized>(
+    ids: &L,
+    bundle: &[Vec<u8>],
+    subject: &Keyhash,
+    counterparty: &Keyhash,
+    started_at: u64,
+) -> Pool {
     let mut out = Pool::default();
     let mut seen: BTreeMap<Txid, ()> = BTreeMap::new();
     for bytes in bundle {
-        let Ok(rec) = Record::parse(bytes) else { continue };
+        let Ok(rec) = Record::parse(bytes) else {
+            continue;
+        };
         if rec.tx_type != TYPE_PRESENCE || seen.contains_key(&rec.txid) {
             continue;
         }
@@ -61,7 +69,11 @@ pub fn pool<L: Lookup + ?Sized>(ids: &L, bundle: &[Vec<u8>], subject: &Keyhash, 
         if !parts.contains(subject) || parts.len() != 2 {
             continue;
         }
-        let other = if parts[0] == *subject { parts[1] } else { parts[0] };
+        let other = if parts[0] == *subject {
+            parts[1]
+        } else {
+            parts[0]
+        };
         if !in_window(rec.effective, started_at) {
             continue;
         }
@@ -80,7 +92,11 @@ pub fn pool<L: Lookup + ?Sized>(ids: &L, bundle: &[Vec<u8>], subject: &Keyhash, 
         if other != *counterparty {
             out.candidates.insert(other);
         }
-        out.records.push(Qualified { txid: rec.txid, counterparty: other, finalized_at: rec.effective });
+        out.records.push(Qualified {
+            txid: rec.txid,
+            counterparty: other,
+            finalized_at: rec.effective,
+        });
     }
     out
 }
@@ -135,10 +151,23 @@ impl Acquaintance {
 /// Pick up to `required` verifiers from the pool in descending tier, each
 /// with the basis claimed for it; `fill` says whether the remainder is
 /// filled at the selector's discretion from strangers, marked as such.
-pub fn select(pool: &Pool, me: &Acquaintance, required: usize, fill: bool) -> Vec<(Keyhash, SelectionBasis)> {
-    let mut ranked: Vec<(SelectionBasis, Keyhash)> = pool.candidates.iter().filter_map(|c| me.basis_of(c).map(|b| (b, *c))).collect();
+pub fn select(
+    pool: &Pool,
+    me: &Acquaintance,
+    required: usize,
+    fill: bool,
+) -> Vec<(Keyhash, SelectionBasis)> {
+    let mut ranked: Vec<(SelectionBasis, Keyhash)> = pool
+        .candidates
+        .iter()
+        .filter_map(|c| me.basis_of(c).map(|b| (b, *c)))
+        .collect();
     ranked.sort();
-    let mut out: Vec<(Keyhash, SelectionBasis)> = ranked.into_iter().take(required).map(|(b, k)| (k, b)).collect();
+    let mut out: Vec<(Keyhash, SelectionBasis)> = ranked
+        .into_iter()
+        .take(required)
+        .map(|(b, k)| (k, b))
+        .collect();
     if fill {
         for c in &pool.candidates {
             if out.len() >= required {

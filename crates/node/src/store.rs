@@ -53,14 +53,20 @@ pub fn subjects(rec: &Record) -> Vec<Keyhash> {
     match rec.tx_type {
         TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_REISSUE => rec.field_hash(1).into_iter().collect(),
         TYPE_DISAVOWAL => rec.field_hash(2).into_iter().collect(),
-        TYPE_PEERING => [rec.field_hash(1), rec.field_hash(2)].into_iter().flatten().collect(),
+        TYPE_PEERING => [rec.field_hash(1), rec.field_hash(2)]
+            .into_iter()
+            .flatten()
+            .collect(),
         _ => Vec::new(),
     }
 }
 
 /// Whether a transaction type travels in the topology class at all.
 pub fn is_topology_class(tx_type: u64) -> bool {
-    matches!(tx_type, TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_DISAVOWAL | TYPE_PEERING | TYPE_REISSUE)
+    matches!(
+        tx_type,
+        TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_DISAVOWAL | TYPE_PEERING | TYPE_REISSUE
+    )
 }
 
 /// An object held for a prerequisite: a signer's key material, or a chain
@@ -156,17 +162,28 @@ impl TopologyStore {
     /// none, since records in different series do not rank and a reader
     /// MUST NOT invent an order (`wire-format.md` §2.3).
     pub fn endpoint(&self, subject: &Keyhash) -> Option<&EndpointRecord> {
-        let mine: Vec<_> = self.endpoints.iter().filter(|((s, _), _)| s == subject).collect();
+        let mine: Vec<_> = self
+            .endpoints
+            .iter()
+            .filter(|((s, _), _)| s == subject)
+            .collect();
         match mine.len() {
             0 => None,
             1 => Some(&mine[0].1.record),
-            _ => mine.iter().find(|((s, ser), _)| self.proved_series.contains(&(*s, *ser))).map(|(_, h)| &h.record),
+            _ => mine
+                .iter()
+                .find(|((s, ser), _)| self.proved_series.contains(&(*s, *ser)))
+                .map(|(_, h)| &h.record),
         }
     }
 
     /// Every endpoint record held for `subject`, one per series.
     pub fn endpoints_of(&self, subject: &Keyhash) -> Vec<&EndpointRecord> {
-        self.endpoints.iter().filter(|((s, _), _)| s == subject).map(|(_, h)| &h.record).collect()
+        self.endpoints
+            .iter()
+            .filter(|((s, _), _)| s == subject)
+            .map(|(_, h)| &h.record)
+            .collect()
     }
 
     /// The nodes this store holds an endpoint record for.
@@ -196,7 +213,8 @@ impl TopologyStore {
     }
 
     pub fn conflicted(&self, subject: &Keyhash, seqno: Seqno) -> bool {
-        self.conflicts.contains(&(*subject, seqno.series, seqno.counter))
+        self.conflicts
+            .contains(&(*subject, seqno.series, seqno.counter))
     }
 
     pub fn pending(&self) -> &[Pending] {
@@ -221,15 +239,30 @@ impl TopologyStore {
     /// Every object the store holds, as `(kind, bytes)`: what a
     /// reconciliation replays (`wire-format.md` §10.1.3).
     pub fn objects(&self) -> Vec<(u64, Vec<u8>)> {
-        let mut out: Vec<(u64, Vec<u8>)> = self.transactions.values().map(|r| (KIND_TRANSACTION, r.bytes.clone())).collect();
-        out.extend(self.endpoints.values().map(|h| (KIND_ENDPOINT_RECORD, h.record.bytes.clone())));
+        let mut out: Vec<(u64, Vec<u8>)> = self
+            .transactions
+            .values()
+            .map(|r| (KIND_TRANSACTION, r.bytes.clone()))
+            .collect();
+        out.extend(
+            self.endpoints
+                .values()
+                .map(|h| (KIND_ENDPOINT_RECORD, h.record.bytes.clone())),
+        );
         out
     }
 
     /// Decide an arriving object against this node's own view.  `in_store`
     /// answers §10.1.1's storage question for a subject; the caller owns the
     /// topology the answer comes from.
-    pub fn accept<L: Lookup + ?Sized>(&mut self, kind: u64, bytes: &[u8], from: &Keyhash, ids: &L, hz: &dyn Horizon) -> Decision {
+    pub fn accept<L: Lookup + ?Sized>(
+        &mut self,
+        kind: u64,
+        bytes: &[u8],
+        from: &Keyhash,
+        ids: &L,
+        hz: &dyn Horizon,
+    ) -> Decision {
         match kind {
             KIND_TRANSACTION => self.accept_transaction(bytes, from, ids, hz),
             KIND_ENDPOINT_RECORD => self.accept_endpoint(bytes, from, ids, hz),
@@ -237,7 +270,13 @@ impl TopologyStore {
         }
     }
 
-    fn accept_transaction<L: Lookup + ?Sized>(&mut self, bytes: &[u8], from: &Keyhash, ids: &L, hz: &dyn Horizon) -> Decision {
+    fn accept_transaction<L: Lookup + ?Sized>(
+        &mut self,
+        bytes: &[u8],
+        from: &Keyhash,
+        ids: &L,
+        hz: &dyn Horizon,
+    ) -> Decision {
         let rec = match Record::parse(bytes) {
             Ok(r) => r,
             Err(e) => return Decision::Malformed(e),
@@ -256,7 +295,13 @@ impl TopologyStore {
         match rec.check_signatures(ids) {
             SigStatus::Verified => {}
             SigStatus::Unverifiable { missing } => {
-                let p = Pending { kind: KIND_TRANSACTION, bytes: bytes.to_vec(), from: *from, missing_key: Some(missing), unproved_series: None };
+                let p = Pending {
+                    kind: KIND_TRANSACTION,
+                    bytes: bytes.to_vec(),
+                    from: *from,
+                    missing_key: Some(missing),
+                    unproved_series: None,
+                };
                 if !self.pending.contains(&p) {
                     self.pending.push(p.clone());
                 }
@@ -268,7 +313,13 @@ impl TopologyStore {
         Decision::Stored
     }
 
-    fn accept_endpoint<L: Lookup + ?Sized>(&mut self, bytes: &[u8], from: &Keyhash, ids: &L, hz: &dyn Horizon) -> Decision {
+    fn accept_endpoint<L: Lookup + ?Sized>(
+        &mut self,
+        bytes: &[u8],
+        from: &Keyhash,
+        ids: &L,
+        hz: &dyn Horizon,
+    ) -> Decision {
         let er = match EndpointRecord::parse(bytes) {
             Ok(r) => r,
             Err(e) => return Decision::Malformed(e),
@@ -288,19 +339,31 @@ impl TopologyStore {
             self.endpoints.get(&key).map(|h| &h.record),
             &er,
             self.conflicted(&er.node, er.seqno),
-            self.endpoints.keys().any(|(s, ser)| *s == er.node && *ser != er.seqno.series),
+            self.endpoints
+                .keys()
+                .any(|(s, ser)| *s == er.node && *ser != er.seqno.series),
             self.series_proved(&er.node, er.seqno.series),
         );
         match line {
             Line::Duplicate => return Decision::Duplicate,
             Line::Conflict => {
                 self.endpoints.remove(&key);
-                self.conflicts.insert((er.node, er.seqno.series, er.seqno.counter));
-                return Decision::Conflict { subject: er.node, seqno: er.seqno };
+                self.conflicts
+                    .insert((er.node, er.seqno.series, er.seqno.counter));
+                return Decision::Conflict {
+                    subject: er.node,
+                    seqno: er.seqno,
+                };
             }
             Line::Unproved => {
                 // held, and it enters when a §4.6 chain proves the series
-                let p = Pending { kind: KIND_ENDPOINT_RECORD, bytes: bytes.to_vec(), from: *from, missing_key: None, unproved_series: Some((er.node, er.seqno.series)) };
+                let p = Pending {
+                    kind: KIND_ENDPOINT_RECORD,
+                    bytes: bytes.to_vec(),
+                    from: *from,
+                    missing_key: None,
+                    unproved_series: Some((er.node, er.seqno.series)),
+                };
                 if !self.pending.contains(&p) {
                     self.pending.push(p.clone());
                 }
@@ -315,15 +378,16 @@ impl TopologyStore {
     /// Objects whose prerequisite is now satisfied, removed from the pending
     /// list for the caller to re-offer.
     pub fn release_pending<L: Lookup + ?Sized>(&mut self, ids: &L) -> Vec<Pending> {
-        let (ready, still): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut self.pending).into_iter().partition(|p| match (&p.missing_key, &p.unproved_series) {
-            (Some(k), _) => ids.identity(k).is_some(),
-            (_, Some((s, ser))) => self.proved_series.contains(&(*s, *ser)),
-            _ => true,
-        });
+        let (ready, still): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| match (&p.missing_key, &p.unproved_series) {
+                (Some(k), _) => ids.identity(k).is_some(),
+                (_, Some((s, ser))) => self.proved_series.contains(&(*s, *ser)),
+                _ => true,
+            });
         self.pending = still;
         ready
     }
-
 }
 
 fn hex(b: &[u8]) -> String {
@@ -334,7 +398,10 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
 }
 
 impl TopologyStore {
@@ -359,14 +426,25 @@ impl TopologyStore {
             }
         }
         for ((subject, series), h) in &self.endpoints {
-            std::fs::write(dir.join("ep").join(format!("{}-{series}", hex(subject))), &h.record.bytes)?;
+            std::fs::write(
+                dir.join("ep").join(format!("{}-{series}", hex(subject))),
+                &h.record.bytes,
+            )?;
         }
         for (t, b) in &self.presence {
             std::fs::write(dir.join("presence").join(hex(t)), b)?;
         }
-        let proved: Vec<String> = self.proved_series.iter().map(|(s, ser)| format!("{} {ser}", hex(s))).collect();
+        let proved: Vec<String> = self
+            .proved_series
+            .iter()
+            .map(|(s, ser)| format!("{} {ser}", hex(s)))
+            .collect();
         std::fs::write(dir.join("proved"), proved.join("\n"))?;
-        let conflicts: Vec<String> = self.conflicts.iter().map(|(s, ser, c)| format!("{} {ser} {c}", hex(s))).collect();
+        let conflicts: Vec<String> = self
+            .conflicts
+            .iter()
+            .map(|(s, ser, c)| format!("{} {ser} {c}", hex(s)))
+            .collect();
         std::fs::write(dir.join("conflicts"), conflicts.join("\n"))?;
         Ok(())
     }
@@ -386,7 +464,8 @@ impl TopologyStore {
         if let Ok(rd) = std::fs::read_dir(dir.join("ep")) {
             for e in rd.flatten() {
                 if let Ok(er) = EndpointRecord::parse(&std::fs::read(e.path())?) {
-                    st.endpoints.insert((er.node, er.seqno.series), HeldEndpoint { record: er });
+                    st.endpoints
+                        .insert((er.node, er.seqno.series), HeldEndpoint { record: er });
                 }
             }
         }
@@ -401,7 +480,12 @@ impl TopologyStore {
         if let Ok(text) = std::fs::read_to_string(dir.join("proved")) {
             for line in text.lines() {
                 let mut it = line.split(' ');
-                if let (Some(s), Some(ser)) = (it.next().and_then(unhex).and_then(|v| <[u8; 32]>::try_from(v).ok()), it.next().and_then(|x| x.parse().ok())) {
+                if let (Some(s), Some(ser)) = (
+                    it.next()
+                        .and_then(unhex)
+                        .and_then(|v| <[u8; 32]>::try_from(v).ok()),
+                    it.next().and_then(|x| x.parse().ok()),
+                ) {
                     st.proved_series.insert((s, ser));
                 }
             }
@@ -409,7 +493,10 @@ impl TopologyStore {
         if let Ok(text) = std::fs::read_to_string(dir.join("conflicts")) {
             for line in text.lines() {
                 let mut it = line.split(' ');
-                let s = it.next().and_then(unhex).and_then(|v| <[u8; 32]>::try_from(v).ok());
+                let s = it
+                    .next()
+                    .and_then(unhex)
+                    .and_then(|v| <[u8; 32]>::try_from(v).ok());
                 let ser = it.next().and_then(|x| x.parse().ok());
                 let c = it.next().and_then(|x| x.parse().ok());
                 if let (Some(s), Some(ser), Some(c)) = (s, ser, c) {
@@ -420,7 +507,9 @@ impl TopologyStore {
         // a record whose number the conflict markers retire is not current,
         // whatever the directory held (`wire-format.md` §10.1.2)
         let conflicts = st.conflicts.clone();
-        st.endpoints.retain(|_, h| !conflicts.contains(&(h.record.node, h.record.seqno.series, h.record.seqno.counter)));
+        st.endpoints.retain(|_, h| {
+            !conflicts.contains(&(h.record.node, h.record.seqno.series, h.record.seqno.counter))
+        });
         Ok(st)
     }
 }
@@ -429,6 +518,9 @@ impl TopologyStore {
 /// holds, which is what an adoption's evaluation dereferences.
 impl rhtn_archive::walk::Fetch for TopologyStore {
     fn fetch(&self, txid: &Txid) -> Option<Vec<u8>> {
-        self.transactions.get(txid).map(|r| r.bytes.clone()).or_else(|| self.presence.get(txid).cloned())
+        self.transactions
+            .get(txid)
+            .map(|r| r.bytes.clone())
+            .or_else(|| self.presence.get(txid).cloned())
     }
 }

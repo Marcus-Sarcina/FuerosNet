@@ -28,13 +28,25 @@ pub enum Root {
     Genesis,
     /// A series reissue whose predecessors were not served: the range is
     /// unbroken from the head to it, and `beyond` lies past the checkpoint.
-    Checkpoint { at: Txid, beyond: Vec<Txid> },
+    Checkpoint {
+        at: Txid,
+        beyond: Vec<Txid>,
+    },
     /// `at` names `missing`, which could not be fetched.
-    Unfetched { at: Txid, missing: Txid },
+    Unfetched {
+        at: Txid,
+        missing: Txid,
+    },
     /// `at` names `named` as the subject's predecessor, and the subject did
     /// not sign it.
-    DoesNotReachBack { at: Txid, named: Txid },
-    Malformed { at: Txid, why: String },
+    DoesNotReachBack {
+        at: Txid,
+        named: Txid,
+    },
+    Malformed {
+        at: Txid,
+        why: String,
+    },
 }
 
 impl Root {
@@ -72,7 +84,13 @@ impl Walk {
 /// Walk `subject`'s chain backward from `head`, fetching from `holder` and
 /// checking signatures against `ids`, visiting at most `max_records`.  The
 /// patron chooses its own depth (design §16.7).
-pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txid, holder: &F, ids: &L, max_records: usize) -> Walk {
+pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(
+    subject: &Keyhash,
+    head: &Txid,
+    holder: &F,
+    ids: &L,
+    max_records: usize,
+) -> Walk {
     let g = genesis(subject);
     let mut pending: VecDeque<(Txid, Option<Txid>)> = VecDeque::from([(*head, None)]);
     let mut seen: BTreeSet<Txid> = BTreeSet::new();
@@ -85,13 +103,22 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txi
             continue;
         }
         if records.len() >= max_records {
-            ends.push(Root::Unfetched { at: from.unwrap_or(t), missing: t });
+            ends.push(Root::Unfetched {
+                at: from.unwrap_or(t),
+                missing: t,
+            });
             continue;
         }
         let Some(bytes) = holder.fetch(&t) else {
             match from.and_then(|f| times.get(&f).map(|x| (f, x.1))) {
-                Some((f, true)) => ends.push(Root::Checkpoint { at: f, beyond: vec![t] }),
-                _ => ends.push(Root::Unfetched { at: from.unwrap_or(t), missing: t }),
+                Some((f, true)) => ends.push(Root::Checkpoint {
+                    at: f,
+                    beyond: vec![t],
+                }),
+                _ => ends.push(Root::Unfetched {
+                    at: from.unwrap_or(t),
+                    missing: t,
+                }),
             }
             continue;
         };
@@ -103,19 +130,29 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txi
             }
         };
         if rec.txid != t {
-            ends.push(Root::Malformed { at: t, why: "served record's txid differs from the one named".into() });
+            ends.push(Root::Malformed {
+                at: t,
+                why: "served record's txid differs from the one named".into(),
+            });
             continue;
         }
         let Some(ptrs) = rec.back_pointers_of(subject).map(|p| p.to_vec()) else {
-            ends.push(Root::DoesNotReachBack { at: from.unwrap_or(t), named: t });
+            ends.push(Root::DoesNotReachBack {
+                at: from.unwrap_or(t),
+                named: t,
+            });
             continue;
         };
         if let Some(f) = from
             && let Some((ft, _)) = times.get(&f)
-                && rec.effective > *ft {
-                    ends.push(Root::Malformed { at: f, why: "time before predecessor's effective time".into() });
-                    continue;
-                }
+            && rec.effective > *ft
+        {
+            ends.push(Root::Malformed {
+                at: f,
+                why: "time before predecessor's effective time".into(),
+            });
+            continue;
+        }
         times.insert(t, (rec.time, rec.is_checkpoint()));
         signatures.push((t, rec.check_signatures(ids)));
         for p in ptrs {
@@ -132,7 +169,10 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txi
     let mut beyond_by_cp: BTreeMap<Txid, Vec<Txid>> = BTreeMap::new();
     for e in &ends {
         if let Root::Checkpoint { at, beyond } = e {
-            beyond_by_cp.entry(*at).or_default().extend(beyond.iter().copied());
+            beyond_by_cp
+                .entry(*at)
+                .or_default()
+                .extend(beyond.iter().copied());
         }
         if e.rank() > root.rank() {
             root = e.clone();
@@ -144,7 +184,13 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(subject: &Keyhash, head: &Txi
         b.dedup();
         root = Root::Checkpoint { at: *at, beyond: b };
     }
-    Walk { subject: *subject, head: *head, records, signatures, root }
+    Walk {
+        subject: *subject,
+        head: *head,
+        records,
+        signatures,
+        root,
+    }
 }
 
 /// How one fetched batch ends.
@@ -154,9 +200,15 @@ pub enum BatchEnd {
     Checkpoint(Txid),
     /// Predecessors named but not returned; the next request names
     /// `continue_from`, the oldest record returned.
-    Unfetched { continue_from: Txid, missing: Vec<Txid> },
+    Unfetched {
+        continue_from: Txid,
+        missing: Vec<Txid>,
+    },
     /// Record `index` is not what the chain says follows.
-    Mismatch { index: usize, why: String },
+    Mismatch {
+        index: usize,
+        why: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -182,7 +234,12 @@ impl BatchVerdict {
 /// the reply's frontier.  Reachability, not sequence, is what a merge
 /// needs (`wire-format.md` §3.1).  An empty `requested` is the recovery
 /// case: the first record is the holder's claim of newest, unmatched.
-pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested: &[Txid], reply: &ArchiveReply, ids: &L) -> BatchVerdict {
+pub fn verify_batch<L: Lookup + ?Sized>(
+    subject: &Keyhash,
+    requested: &[Txid],
+    reply: &ArchiveReply,
+    ids: &L,
+) -> BatchVerdict {
     let g = genesis(subject);
     let mut verified: Vec<Record> = Vec::new();
     let mut signatures = Vec::new();
@@ -194,23 +251,38 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested: &[Txid], r
         let rec = match Record::parse(bytes) {
             Ok(r) => r,
             Err(why) => {
-                end = Some(BatchEnd::Mismatch { index: i, why: format!("malformed: {why}") });
+                end = Some(BatchEnd::Mismatch {
+                    index: i,
+                    why: format!("malformed: {why}"),
+                });
                 break;
             }
         };
         let Some(ptrs) = rec.back_pointers_of(subject).map(|p| p.to_vec()) else {
-            end = Some(BatchEnd::Mismatch { index: i, why: "not signed by the subject".into() });
+            end = Some(BatchEnd::Mismatch {
+                index: i,
+                why: "not signed by the subject".into(),
+            });
             break;
         };
         if !(i == 0 && requested.is_empty()) && !expected.contains(&rec.txid) {
-            end = Some(BatchEnd::Mismatch { index: i, why: "named neither by the requested frontier nor by another record's back-pointers".into() });
+            end = Some(BatchEnd::Mismatch {
+                index: i,
+                why:
+                    "named neither by the requested frontier nor by another record's back-pointers"
+                        .into(),
+            });
             break;
         }
         if let Some(js) = named_by.get(&rec.txid)
-            && js.iter().any(|j| rec.effective > verified[*j].time) {
-                end = Some(BatchEnd::Mismatch { index: i, why: "effective time after the record that names it".into() });
-                break;
-            }
+            && js.iter().any(|j| rec.effective > verified[*j].time)
+        {
+            end = Some(BatchEnd::Mismatch {
+                index: i,
+                why: "effective time after the record that names it".into(),
+            });
+            break;
+        }
         expected.remove(&rec.txid);
         for p in &ptrs {
             if *p != g {
@@ -229,19 +301,35 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested: &[Txid], r
     if end.is_none() && reply.more {
         let named: BTreeSet<Txid> = reply.frontier.iter().copied().collect();
         if named != expected {
-            end = Some(BatchEnd::Mismatch { index: reply.records.len(), why: "the frontier does not name what was left unreturned".into() });
+            end = Some(BatchEnd::Mismatch {
+                index: reply.records.len(),
+                why: "the frontier does not name what was left unreturned".into(),
+            });
         }
     }
     let end = end.unwrap_or_else(|| {
         if expected.is_empty() {
             BatchEnd::Genesis
-        } else if let Some(cp) = expected.iter().filter_map(|m| checkpoint_names.get(m)).next().filter(|_| expected.iter().all(|m| checkpoint_names.contains_key(m))) {
+        } else if let Some(cp) = expected
+            .iter()
+            .filter_map(|m| checkpoint_names.get(m))
+            .next()
+            .filter(|_| expected.iter().all(|m| checkpoint_names.contains_key(m)))
+        {
             BatchEnd::Checkpoint(*cp)
         } else {
-            BatchEnd::Unfetched { continue_from: verified.last().map(|r| r.txid).unwrap_or(g), missing: expected.iter().copied().collect() }
+            BatchEnd::Unfetched {
+                continue_from: verified.last().map(|r| r.txid).unwrap_or(g),
+                missing: expected.iter().copied().collect(),
+            }
         }
     });
-    BatchVerdict { verified, signatures, end, head_verified: !requested.is_empty() }
+    BatchVerdict {
+        verified,
+        signatures,
+        end,
+        head_verified: !requested.is_empty(),
+    }
 }
 
 /// The result of fetching a whole chain batch by batch: what a requester
@@ -262,18 +350,35 @@ pub struct FetchOutcome {
 /// Fetch a chain through `serve` from `head` (or the holder's newest), one
 /// batch of `max_records` at a time, verifying each and continuing from
 /// the oldest record returned until the holder reports no more.
-pub fn fetch_chain<L: Lookup + ?Sized>(subject: &Keyhash, head: Option<Txid>, max_records: u64, ids: &L, mut serve: impl FnMut(&crate::chain::ArchiveRequest) -> ArchiveReply) -> FetchOutcome {
+pub fn fetch_chain<L: Lookup + ?Sized>(
+    subject: &Keyhash,
+    head: Option<Txid>,
+    max_records: u64,
+    ids: &L,
+    mut serve: impl FnMut(&crate::chain::ArchiveRequest) -> ArchiveReply,
+) -> FetchOutcome {
     let mut records: Vec<Txid> = Vec::new();
     let mut next: Vec<Txid> = head.into_iter().collect();
     let mut newest = None;
     let mut end;
     let mut first = true;
     loop {
-        let nonce = rhtn_codec::cose::sha256(&records.len().to_be_bytes())[..16].try_into().unwrap();
-        let req = crate::chain::ArchiveRequest { subject: *subject, frontier: next.clone(), max_records, stop_before: None, nonce };
+        let nonce = rhtn_codec::cose::sha256(&records.len().to_be_bytes())[..16]
+            .try_into()
+            .unwrap();
+        let req = crate::chain::ArchiveRequest {
+            subject: *subject,
+            frontier: next.clone(),
+            max_records,
+            stop_before: None,
+            nonce,
+        };
         let reply = serve(&req);
         if reply.nonce != nonce {
-            end = BatchEnd::Mismatch { index: 0, why: "nonce not echoed".into() };
+            end = BatchEnd::Mismatch {
+                index: 0,
+                why: "nonce not echoed".into(),
+            };
             break;
         }
         let v = verify_batch(subject, &next, &reply, ids);
@@ -289,7 +394,11 @@ pub fn fetch_chain<L: Lookup + ?Sized>(subject: &Keyhash, head: Option<Txid>, ma
         end = v.end.clone();
         match &v.end {
             BatchEnd::Unfetched { continue_from, .. } if reply.more => {
-                let cont: Vec<Txid> = if reply.frontier.is_empty() { vec![*continue_from] } else { reply.frontier.clone() };
+                let cont: Vec<Txid> = if reply.frontier.is_empty() {
+                    vec![*continue_from]
+                } else {
+                    reply.frontier.clone()
+                };
                 if cont == next {
                     break; // no progress: the holder repeats itself
                 }
@@ -299,5 +408,11 @@ pub fn fetch_chain<L: Lookup + ?Sized>(subject: &Keyhash, head: Option<Txid>, ma
         }
     }
     let unbroken = matches!(end, BatchEnd::Genesis | BatchEnd::Checkpoint(_));
-    FetchOutcome { records, end, verified_complete: unbroken && head.is_some(), newest, newest_is_holders_claim: head.is_none() }
+    FetchOutcome {
+        records,
+        end,
+        verified_complete: unbroken && head.is_some(),
+        newest,
+        newest_is_holders_claim: head.is_none(),
+    }
 }

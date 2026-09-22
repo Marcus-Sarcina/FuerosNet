@@ -162,12 +162,24 @@ impl Told {
                     Role::Participant => "participant".into(),
                 },
             },
-            Notice::QuerySurfaced { verifier } => Told::QuerySurfaced { verifier: id_of(verifier) },
-            Notice::ProbingRefused { requester } => Told::ProbingRefused { requester: id_of(requester) },
-            Notice::NomineesOutnumbered { mine, theirs } => Told::NomineesOutnumbered { mine: *mine as u32, theirs: *theirs as u32 },
+            Notice::QuerySurfaced { verifier } => Told::QuerySurfaced {
+                verifier: id_of(verifier),
+            },
+            Notice::ProbingRefused { requester } => Told::ProbingRefused {
+                requester: id_of(requester),
+            },
+            Notice::NomineesOutnumbered { mine, theirs } => Told::NomineesOutnumbered {
+                mine: *mine as u32,
+                theirs: *theirs as u32,
+            },
             Notice::NoCandidateRecognised => Told::NoCandidateRecognised,
-            Notice::UnrecognisedDeclaration { resource, value } => Told::UnrecognisedDeclaration { resource: id_of(resource), value: *value },
-            Notice::PayloadUnattributable { from } => Told::PayloadUnattributable { from: id_of(from) },
+            Notice::UnrecognisedDeclaration { resource, value } => Told::UnrecognisedDeclaration {
+                resource: id_of(resource),
+                value: *value,
+            },
+            Notice::PayloadUnattributable { from } => {
+                Told::PayloadUnattributable { from: id_of(from) }
+            }
         }
     }
 }
@@ -184,7 +196,9 @@ pub struct Refused {
 
 impl Refused {
     pub fn new(reason: impl Into<String>) -> Refused {
-        Refused { reason: reason.into() }
+        Refused {
+            reason: reason.into(),
+        }
     }
 }
 

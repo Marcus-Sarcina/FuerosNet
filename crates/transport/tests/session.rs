@@ -26,8 +26,15 @@ fn pins_for(names: &[&str]) -> Pins {
 }
 
 fn node_cfg(name: &str, interval: u64) -> NodeConfig {
-    let mut cfg = NodeConfig::defaults(Arc::new(test_identity(name)), pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]), interval);
-    cfg.capabilities = BTreeMap::from([(capability_id("rhtn/core:max-archive-batch"), vec![0x01, 0x00])]);
+    let mut cfg = NodeConfig::defaults(
+        Arc::new(test_identity(name)),
+        pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]),
+        interval,
+    );
+    cfg.capabilities = BTreeMap::from([(
+        capability_id("rhtn/core:max-archive-batch"),
+        vec![0x01, 0x00],
+    )]);
     cfg.log = Log::recording();
     cfg
 }
@@ -36,7 +43,10 @@ fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
         identity: Arc::new(test_identity(name)),
         pins: pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]),
-        capabilities: BTreeMap::from([(capability_id("rhtn/core:max-archive-batch"), vec![0x00, 0x40])]),
+        capabilities: BTreeMap::from([(
+            capability_id("rhtn/core:max-archive-batch"),
+            vec![0x00, 0x40],
+        )]),
         attestation: None,
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
@@ -62,34 +72,58 @@ fn client_ep() -> quinn::Endpoint {
 }
 
 /// A raw peer that dials a node and speaks stream 0 by hand.
-async fn raw_dial(me: &str, target: &str, addr: SocketAddr) -> (quinn::Connection, quinn::SendStream, quinn::RecvStream) {
+async fn raw_dial(
+    me: &str,
+    target: &str,
+    addr: SocketAddr,
+) -> (quinn::Connection, quinn::SendStream, quinn::RecvStream) {
     let ep = client_ep();
     let id = test_identity(me);
     let pins = pins_for(&[target]);
-    let conn = tls::dial(&ep, &id, &pins, &test_identity(target).public.keyhash, addr).unwrap().await.unwrap();
+    let conn = tls::dial(&ep, &id, &pins, &test_identity(target).public.keyhash, addr)
+        .unwrap()
+        .await
+        .unwrap();
     let (s, r) = conn.open_bi().await.unwrap();
     std::mem::forget(ep);
     (conn, s, r)
 }
 
 /// A raw serving peer: accepts one connection and its stream 0.
-async fn raw_accept(ep: &quinn::Endpoint) -> (quinn::Connection, quinn::SendStream, quinn::RecvStream) {
+async fn raw_accept(
+    ep: &quinn::Endpoint,
+) -> (quinn::Connection, quinn::SendStream, quinn::RecvStream) {
     let conn = ep.accept().await.unwrap().await.unwrap();
     let (s, r) = conn.accept_bi().await.unwrap();
     (conn, s, r)
 }
 
 fn ack_body(interval: u64) -> Vec<u8> {
-    AttachAck { mode: 0, siblings: vec![], interval, queued: 0, capabilities: BTreeMap::new() }.encode()
+    AttachAck {
+        mode: 0,
+        siblings: vec![],
+        interval,
+        queued: 0,
+        capabilities: BTreeMap::new(),
+    }
+    .encode()
 }
 
 fn sent_frames(log: &Log, t: u64) -> Vec<Vec<u8>> {
-    log.events().into_iter().filter_map(|(_, e)| match e { Event::Sent { frame_type, bytes } if frame_type == t => Some(bytes), _ => None }).collect()
+    log.events()
+        .into_iter()
+        .filter_map(|(_, e)| match e {
+            Event::Sent { frame_type, bytes } if frame_type == t => Some(bytes),
+            _ => None,
+        })
+        .collect()
 }
 
 fn heartbeat_counter(frame: &[u8]) -> Option<u64> {
     let f = frame::parse(Stream::Control, frame).ok()?;
-    let Item::Map(m) = &f.body_item else { return None };
+    let Item::Map(m) = &f.body_item else {
+        return None;
+    };
     map_get(m, 1).and_then(as_uint)
 }
 
@@ -98,7 +132,17 @@ fn heartbeat_counter(frame: &[u8]) -> Option<u64> {
 async fn ses_01_primary_mode_for_a_client_under_this_node() {
     let (node, addr) = spawn_node(node_cfg("bob", 7));
     let cfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), node.cfg.identity.public.keyhash, addr, false).await else { panic!("attached") };
+    let AttachOutcome::Attached(s) = attach(
+        &cfg,
+        &client_ep(),
+        node.cfg.identity.public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!("attached")
+    };
     assert_eq!(s.ack.mode, 0);
     assert_eq!(s.ack.interval, 7);
 }
@@ -112,7 +156,15 @@ async fn ses_02_accepts_a_client_whose_patron_is_a_light_client() {
     cfg.in_subtree = Arc::new(move |kh| *kh == c);
     let (node, addr) = spawn_node(cfg);
     let ccfg = client_cfg("c1");
-    match attach(&ccfg, &client_ep(), node.cfg.identity.public.keyhash, addr, false).await {
+    match attach(
+        &ccfg,
+        &client_ep(),
+        node.cfg.identity.public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    {
         AttachOutcome::Attached(s) => assert_eq!(s.ack.mode, 0),
         other => panic!("walk-up client was not attached: {other:?}"),
     }
@@ -126,9 +178,14 @@ async fn trn_04_attach_naming_another_identity_gets_no_ack_and_no_delivery() {
     node.enqueue(b, b"for carol".to_vec()).unwrap();
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     let body = encode_attach(&b, None, &BTreeMap::new());
-    send.write_all(&control_frame(FRAME_ATTACH, &body)).await.unwrap();
+    send.write_all(&control_frame(FRAME_ATTACH, &body))
+        .await
+        .unwrap();
     let r = read_frame(&mut recv, 65536).await;
-    assert!(matches!(r, FrameRead::Closed(_)), "no frame of any kind in reply, got {r:?}");
+    assert!(
+        matches!(r, FrameRead::Closed(_)),
+        "no frame of any kind in reply, got {r:?}"
+    );
     assert_eq!(node.queued(&b), 1, "carol's queue is unchanged");
     assert!(!node.has_session(&b));
     let _ = conn;
@@ -137,9 +194,21 @@ async fn trn_04_attach_naming_another_identity_gets_no_ack_and_no_delivery() {
 // acceptance: TRN-06
 #[tokio::test]
 async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures() {
-    let corpus: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json")).unwrap()).unwrap();
+    let corpus: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test-vectors/corpus.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
     let fixture = |id: &str| -> Vec<u8> {
-        let e = corpus["entries"].as_array().unwrap().iter().find(|e| e["id"] == id).unwrap();
+        let e = corpus["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["id"] == id)
+            .unwrap();
         hex::decode(e["hex"].as_str().unwrap()).unwrap()
     };
     // the corpus derives its named capability from the bare name
@@ -151,12 +220,23 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let body_fx = &payload[parts[1].clone()];
     let __bm_item = parse_all(body_fx).unwrap();
     let Item::Map(bm) = &__bm_item else { panic!() };
-    let kh: [u8; 32] = match map_get(bm, 1) { Some(Item::Bytes(r)) => body_fx[r.clone()].try_into().unwrap(), _ => panic!() };
+    let kh: [u8; 32] = match map_get(bm, 1) {
+        Some(Item::Bytes(r)) => body_fx[r.clone()].try_into().unwrap(),
+        _ => panic!(),
+    };
     let attestation = body_fx[value_slice(body_fx, 2).unwrap()].to_vec();
     let caps_fx = decode_capabilities(body_fx, map_get(bm, 3).unwrap());
-    let named_value = caps_fx.get(&named).expect("the fixture carries the named capability").clone();
-    let names = ["alice", "bob", "carol", "alice2", "c1", "c2", "c3", "c4", "c5", "w1"];
-    let who = names.iter().find(|n| test_identity(n).public.keyhash == kh).expect("fixture identity is a test identity");
+    let named_value = caps_fx
+        .get(&named)
+        .expect("the fixture carries the named capability")
+        .clone();
+    let names = [
+        "alice", "bob", "carol", "alice2", "c1", "c2", "c3", "c4", "c5", "w1",
+    ];
+    let who = names
+        .iter()
+        .find(|n| test_identity(n).public.keyhash == kh)
+        .expect("fixture identity is a test identity");
     // the corpus AttachAck: mode, siblings, queued and named capability; interval is the test's
     let ack_fx = fixture("P-frame-02");
     let ap = &ack_fx[4..];
@@ -168,21 +248,38 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
         let list = ack_fx_decoded.siblings.clone();
         std::sync::Arc::new(move || list.clone())
     };
-    ncfg.capabilities = ack_fx_decoded.capabilities.iter().filter(|(k, _)| **k == named).map(|(k, v)| (*k, v.clone())).collect();
+    ncfg.capabilities = ack_fx_decoded
+        .capabilities
+        .iter()
+        .filter(|(k, _)| **k == named)
+        .map(|(k, v)| (*k, v.clone()))
+        .collect();
     ncfg.pins.pin_identity(&test_identity(who).public);
     let (node, addr) = spawn_node(ncfg);
     let mut ccfg = client_cfg(who);
     ccfg.pins.pin_identity(&test_identity("bob").public);
     ccfg.attestation = Some(attestation);
     ccfg.capabilities = BTreeMap::from([(named, named_value)]);
-    let AttachOutcome::Attached(s) = attach(&ccfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!("attached") };
+    let AttachOutcome::Attached(s) = attach(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!("attached")
+    };
     // the client's first frame on stream 0
     let sent = sent_frames(&s.log, FRAME_ATTACH);
     let first = &sent[0];
     let n = u32::from_be_bytes(first[..4].try_into().unwrap()) as usize;
     assert_eq!(n, first.len() - 4);
     let __a_item = parse_all(&first[4..]).unwrap();
-    let Item::Array(a) = &__a_item else { panic!("typed array") };
+    let Item::Array(a) = &__a_item else {
+        panic!("typed array")
+    };
     assert_eq!(as_uint(&a[0]), Some(1));
     let strip_grease = |body: &[u8]| -> Vec<u8> {
         let __m_item = parse_all(body).unwrap();
@@ -196,7 +293,11 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
         out
     };
     let ranges = array_item_ranges(&first[4..], 0).unwrap();
-    assert_eq!(strip_grease(&first[4..][ranges[1].clone()]), strip_grease(body_fx), "Attach body equals the fixture minus greasing");
+    assert_eq!(
+        strip_grease(&first[4..][ranges[1].clone()]),
+        strip_grease(body_fx),
+        "Attach body equals the fixture minus greasing"
+    );
     // the node's reply
     sleep(Duration::from_millis(200)).await;
     let acks = sent_frames(&node.log, FRAME_ATTACH_ACK);
@@ -210,7 +311,11 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
         d.capabilities.retain(|k, _| *k == named);
         d.encode()
     };
-    assert_eq!(strip_ack(&ack[4..][aranges[1].clone()]), strip_ack(ack_body_fx), "AttachAck body equals the fixture minus greasing");
+    assert_eq!(
+        strip_ack(&ack[4..][aranges[1].clone()]),
+        strip_ack(ack_body_fx),
+        "AttachAck body equals the fixture minus greasing"
+    );
 }
 
 fn unknown_frame_at_bound() -> Vec<u8> {
@@ -231,22 +336,54 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
     let saddr = sep.local_addr().unwrap();
     let server = tokio::spawn(async move {
         let (_c, mut s, mut r) = raw_accept(&sep).await;
-        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else { panic!("attach") };
+        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else {
+            panic!("attach")
+        };
         s.write_all(&unknown_frame_at_bound()).await.unwrap();
-        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack_body(30))).await.unwrap();
+        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack_body(30)))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(1)).await;
     });
     let cfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, saddr, false).await else { panic!("attached after the unknown frame") };
+    let AttachOutcome::Attached(s) = attach(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        saddr,
+        false,
+    )
+    .await
+    else {
+        panic!("attached after the unknown frame")
+    };
     assert_eq!(s.ack.mode, 0);
-    assert_eq!(s.log.count(|e| matches!(e, Event::Skipped { frame_type: 99 })), 1);
+    assert_eq!(
+        s.log
+            .count(|e| matches!(e, Event::Skipped { frame_type: 99 })),
+        1
+    );
     server.abort();
     // as node: a raw client sends it mid-session, then a request on a new stream is answered
     let (node, addr) = spawn_node(node_cfg("bob", 30));
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&test_identity("alice").public.keyhash, None, &BTreeMap::new()))).await.unwrap();
-    let FrameRead::Payload(p) = read_frame(&mut recv, 65536).await else { panic!("ack") };
-    assert!(matches!(classify(&p), Control::Known(rhtn_codec::schema::Family::AttachAck, ..)));
+    send.write_all(&control_frame(
+        FRAME_ATTACH,
+        &encode_attach(
+            &test_identity("alice").public.keyhash,
+            None,
+            &BTreeMap::new(),
+        ),
+    ))
+    .await
+    .unwrap();
+    let FrameRead::Payload(p) = read_frame(&mut recv, 65536).await else {
+        panic!("ack")
+    };
+    assert!(matches!(
+        classify(&p),
+        Control::Known(rhtn_codec::schema::Family::AttachAck, ..)
+    ));
     send.write_all(&unknown_frame_at_bound()).await.unwrap();
     let (mut rs, mut rr) = conn.open_bi().await.unwrap();
     let mut req = Vec::new();
@@ -263,19 +400,32 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
     fr.extend_from_slice(&payload);
     rs.write_all(&fr).await.unwrap();
     rs.finish().unwrap();
-    let FrameRead::Payload(reply) = read_frame(&mut rr, 262_144).await else { panic!("request answered after the unknown frame") };
+    let FrameRead::Payload(reply) = read_frame(&mut rr, 262_144).await else {
+        panic!("request answered after the unknown frame")
+    };
     let __m_item = parse_all(&reply).unwrap();
     let Item::Map(m) = &__m_item else { panic!() };
     assert_eq!(map_get(m, 2).and_then(as_uint), Some(1));
     // the request path is independent of stream 0, so the unknown frame may still be in flight
     for _ in 0..40 {
-        if node.log.count(|e| matches!(e, Event::Skipped { frame_type: 99 })) == 1 {
+        if node
+            .log
+            .count(|e| matches!(e, Event::Skipped { frame_type: 99 }))
+            == 1
+        {
             break;
         }
         sleep(Duration::from_millis(50)).await;
     }
-    assert_eq!(node.log.count(|e| matches!(e, Event::Skipped { frame_type: 99 })), 1);
-    assert!(conn.close_reason().is_none(), "the session survived the unknown frame");
+    assert_eq!(
+        node.log
+            .count(|e| matches!(e, Event::Skipped { frame_type: 99 })),
+        1
+    );
+    assert!(
+        conn.close_reason().is_none(),
+        "the session survived the unknown frame"
+    );
 }
 
 // acceptance: TRN-08
@@ -286,8 +436,12 @@ async fn trn_08_declared_length_over_the_bound_ends_the_session() {
     let saddr = sep.local_addr().unwrap();
     let server = tokio::spawn(async move {
         let (c, mut s, mut r) = raw_accept(&sep).await;
-        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else { panic!("attach") };
-        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack_body(30))).await.unwrap();
+        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else {
+            panic!("attach")
+        };
+        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack_body(30)))
+            .await
+            .unwrap();
         sleep(Duration::from_millis(200)).await;
         let mut over = 65_537u32.to_be_bytes().to_vec();
         over.extend_from_slice(&[0u8; 64]);
@@ -295,27 +449,66 @@ async fn trn_08_declared_length_over_the_bound_ends_the_session() {
         c.closed().await
     });
     let cfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, saddr, false).await else { panic!() };
-    let reason = tokio::time::timeout(Duration::from_secs(3), s.conn.closed()).await.expect("client closes the connection");
-    assert!(matches!(reason, quinn::ConnectionError::LocallyClosed), "closed by the client: {reason:?}");
+    let AttachOutcome::Attached(s) = attach(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        saddr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
+    let reason = tokio::time::timeout(Duration::from_secs(3), s.conn.closed())
+        .await
+        .expect("client closes the connection");
+    assert!(
+        matches!(reason, quinn::ConnectionError::LocallyClosed),
+        "closed by the client: {reason:?}"
+    );
     assert_eq!(s.log.count(|e| matches!(e, Event::OverBound)), 1);
     server.abort();
     // as node
     let (node, addr) = spawn_node(node_cfg("bob", 30));
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&test_identity("alice").public.keyhash, None, &BTreeMap::new()))).await.unwrap();
-    let FrameRead::Payload(_) = read_frame(&mut recv, 65536).await else { panic!("ack") };
+    send.write_all(&control_frame(
+        FRAME_ATTACH,
+        &encode_attach(
+            &test_identity("alice").public.keyhash,
+            None,
+            &BTreeMap::new(),
+        ),
+    ))
+    .await
+    .unwrap();
+    let FrameRead::Payload(_) = read_frame(&mut recv, 65536).await else {
+        panic!("ack")
+    };
     let mut over = 65_537u32.to_be_bytes().to_vec();
     over.extend_from_slice(&[0u8; 64]);
     send.write_all(&over).await.unwrap();
-    let reason = tokio::time::timeout(Duration::from_secs(3), conn.closed()).await.expect("node closes the connection");
-    assert!(matches!(reason, quinn::ConnectionError::ApplicationClosed(_)), "{reason:?}");
+    let reason = tokio::time::timeout(Duration::from_secs(3), conn.closed())
+        .await
+        .expect("node closes the connection");
+    assert!(
+        matches!(reason, quinn::ConnectionError::ApplicationClosed(_)),
+        "{reason:?}"
+    );
     assert_eq!(node.log.count(|e| matches!(e, Event::OverBound)), 1);
 }
 
 fn sibling(name: &str, port: u16) -> SiblingRef {
     let id = test_identity(name).public;
-    SiblingRef { keyhash: id.keyhash, endpoints: vec![NetworkPoint { ip: [127, 0, 0, 1], asn: None, port: Some(port as u64) }], key_material: Some(id.key_material()) }
+    SiblingRef {
+        keyhash: id.keyhash,
+        endpoints: vec![NetworkPoint {
+            ip: [127, 0, 0, 1],
+            asn: None,
+            port: Some(port as u64),
+        }],
+        key_material: Some(id.key_material()),
+    }
 }
 
 // acceptance: TRN-09
@@ -329,25 +522,60 @@ async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_app
     let l2s = l2.clone();
     let server = tokio::spawn(async move {
         let (_c, mut s, mut r) = raw_accept(&sep).await;
-        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else { panic!("attach") };
-        let ack = AttachAck { mode: 0, siblings: l1s, interval: 30, queued: 0, capabilities: BTreeMap::new() };
-        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode())).await.unwrap();
+        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else {
+            panic!("attach")
+        };
+        let ack = AttachAck {
+            mode: 0,
+            siblings: l1s,
+            interval: 30,
+            queued: 0,
+            capabilities: BTreeMap::new(),
+        };
+        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode()))
+            .await
+            .unwrap();
         sleep(Duration::from_millis(200)).await;
         let mut text = Vec::new();
         emit_tstr(&mut text, "not a sibling update");
-        s.write_all(&control_frame(FRAME_SIBLING_UPDATE, &text)).await.unwrap();
+        s.write_all(&control_frame(FRAME_SIBLING_UPDATE, &text))
+            .await
+            .unwrap();
         sleep(Duration::from_millis(300)).await;
-        s.write_all(&control_frame(FRAME_SIBLING_UPDATE, &encode_sibling_update(&l2s))).await.unwrap();
+        s.write_all(&control_frame(
+            FRAME_SIBLING_UPDATE,
+            &encode_sibling_update(&l2s),
+        ))
+        .await
+        .unwrap();
         sleep(Duration::from_secs(2)).await;
     });
     let cfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, saddr, false).await else { panic!() };
+    let AttachOutcome::Attached(s) = attach(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        saddr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
     assert_eq!(*cfg.sibling_cache.lock().unwrap(), l1);
     sleep(Duration::from_millis(400)).await;
-    assert_eq!(*cfg.sibling_cache.lock().unwrap(), l1, "still L after the malformed update");
+    assert_eq!(
+        *cfg.sibling_cache.lock().unwrap(),
+        l1,
+        "still L after the malformed update"
+    );
     assert!(!s.conn.close_reason().is_some(), "connection still open");
     sleep(Duration::from_millis(400)).await;
-    assert_eq!(*cfg.sibling_cache.lock().unwrap(), l2, "L2 after the valid update");
+    assert_eq!(
+        *cfg.sibling_cache.lock().unwrap(),
+        l2,
+        "L2 after the valid update"
+    );
     assert_eq!(s.log.count(|e| matches!(e, Event::Discarded)), 1);
     server.abort();
 }
@@ -357,12 +585,24 @@ async fn client_attaches_on_raw_ack(ack: AttachAck) -> Session {
     let saddr = sep.local_addr().unwrap();
     tokio::spawn(async move {
         let (_c, mut s, mut r) = raw_accept(&sep).await;
-        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else { panic!("attach") };
-        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode())).await.unwrap();
+        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else {
+            panic!("attach")
+        };
+        s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode()))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(2)).await;
     });
     let cfg = client_cfg("alice");
-    match attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, saddr, false).await {
+    match attach(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        saddr,
+        false,
+    )
+    .await
+    {
         AttachOutcome::Attached(s) => s,
         other => panic!("not attached: {other:?}"),
     }
@@ -371,9 +611,19 @@ async fn client_attaches_on_raw_ack(ack: AttachAck) -> Session {
 async fn node_acks_raw_attach(caps: BTreeMap<u64, Vec<u8>>) -> Arc<Node> {
     let (node, addr) = spawn_node(node_cfg("bob", 30));
     let (_conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&test_identity("alice").public.keyhash, None, &caps))).await.unwrap();
-    let FrameRead::Payload(p) = read_frame(&mut recv, 65536).await else { panic!("no ack") };
-    assert!(matches!(classify(&p), Control::Known(rhtn_codec::schema::Family::AttachAck, ..)));
+    send.write_all(&control_frame(
+        FRAME_ATTACH,
+        &encode_attach(&test_identity("alice").public.keyhash, None, &caps),
+    ))
+    .await
+    .unwrap();
+    let FrameRead::Payload(p) = read_frame(&mut recv, 65536).await else {
+        panic!("no ack")
+    };
+    assert!(matches!(
+        classify(&p),
+        Control::Known(rhtn_codec::schema::Family::AttachAck, ..)
+    ));
     node
 }
 
@@ -381,7 +631,14 @@ async fn node_acks_raw_attach(caps: BTreeMap<u64, Vec<u8>>) -> Arc<Node> {
 #[tokio::test]
 async fn trn_10_unrecognised_capability_id_is_tolerated_in_both_roles() {
     let unknown = BTreeMap::from([(0x9e3779b97f4a7c15u64, vec![1u8; 8])]);
-    let s = client_attaches_on_raw_ack(AttachAck { mode: 0, siblings: vec![], interval: 30, queued: 0, capabilities: unknown.clone() }).await;
+    let s = client_attaches_on_raw_ack(AttachAck {
+        mode: 0,
+        siblings: vec![],
+        interval: 30,
+        queued: 0,
+        capabilities: unknown.clone(),
+    })
+    .await;
     assert!(s.conn.close_reason().is_none());
     let node = node_acks_raw_attach(unknown).await;
     assert_eq!(node.log.count(|e| matches!(e, Event::Attached { .. })), 1);
@@ -390,7 +647,14 @@ async fn trn_10_unrecognised_capability_id_is_tolerated_in_both_roles() {
 // acceptance: TRN-11
 #[tokio::test]
 async fn trn_11_empty_capabilities_and_no_grease_still_attach_in_both_roles() {
-    let s = client_attaches_on_raw_ack(AttachAck { mode: 0, siblings: vec![], interval: 30, queued: 0, capabilities: BTreeMap::new() }).await;
+    let s = client_attaches_on_raw_ack(AttachAck {
+        mode: 0,
+        siblings: vec![],
+        interval: 30,
+        queued: 0,
+        capabilities: BTreeMap::new(),
+    })
+    .await;
     assert!(s.conn.close_reason().is_none());
     let node = node_acks_raw_attach(BTreeMap::new()).await;
     assert_eq!(node.log.count(|e| matches!(e, Event::Attached { .. })), 1);
@@ -404,7 +668,17 @@ async fn trn_12_every_session_carries_a_fresh_greased_parameter_in_both_roles() 
     let mut grease_ids = Vec::new();
     for _ in 0..2 {
         let cfg = client_cfg("alice");
-        let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+        let AttachOutcome::Attached(s) = attach(
+            &cfg,
+            &client_ep(),
+            test_identity("bob").public.keyhash,
+            addr,
+            false,
+        )
+        .await
+        else {
+            panic!()
+        };
         let at = &sent_frames(&s.log, FRAME_ATTACH)[0];
         let f = frame::parse(Stream::Control, at).unwrap();
         let Item::Map(m) = &f.body_item else { panic!() };
@@ -413,12 +687,24 @@ async fn trn_12_every_session_carries_a_fresh_greased_parameter_in_both_roles() 
         assert_eq!(greased.len(), 1);
         assert_eq!(greased[0].1.len(), 8);
         grease_ids.push(*greased[0].0);
-        let ack_greased: Vec<u64> = s.ack.capabilities.iter().filter(|(k, v)| **k != named && v.len() == 8).map(|(k, _)| *k).collect();
+        let ack_greased: Vec<u64> = s
+            .ack
+            .capabilities
+            .iter()
+            .filter(|(k, v)| **k != named && v.len() == 8)
+            .map(|(k, _)| *k)
+            .collect();
         assert_eq!(ack_greased.len(), 1, "the node greases too");
         grease_ids.push(ack_greased[0]);
     }
-    assert_ne!(grease_ids[0], grease_ids[2], "client grease differs between sessions");
-    assert_ne!(grease_ids[1], grease_ids[3], "node grease differs between sessions");
+    assert_ne!(
+        grease_ids[0], grease_ids[2],
+        "client grease differs between sessions"
+    );
+    assert_ne!(
+        grease_ids[1], grease_ids[3],
+        "node grease differs between sessions"
+    );
     let _ = node;
 }
 
@@ -430,12 +716,23 @@ async fn trn_13_refusal_is_close_code_1_with_no_frame() {
     cfg.policy = Arc::new(move |kh| *kh != alice);
     let (node, addr) = spawn_node(cfg);
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&alice, None, &BTreeMap::new()))).await.unwrap();
+    send.write_all(&control_frame(
+        FRAME_ATTACH,
+        &encode_attach(&alice, None, &BTreeMap::new()),
+    ))
+    .await
+    .unwrap();
     match read_frame(&mut recv, 65536).await {
-        FrameRead::Closed(Some(quinn::ConnectionError::ApplicationClosed(ac))) => assert_eq!(ac.error_code.into_inner(), 1),
+        FrameRead::Closed(Some(quinn::ConnectionError::ApplicationClosed(ac))) => {
+            assert_eq!(ac.error_code.into_inner(), 1)
+        }
         other => panic!("expected close code 1 and no frame, got {other:?}"),
     }
-    assert_eq!(node.log.count(|e| matches!(e, Event::Sent { .. })), 0, "no frame of any type in reply");
+    assert_eq!(
+        node.log.count(|e| matches!(e, Event::Sent { .. })),
+        0,
+        "no frame of any type in reply"
+    );
     let _ = conn;
 }
 
@@ -463,11 +760,25 @@ async fn trn_14_close_code_1_ends_the_attempt_without_trying_other_endpoints_or_
     }
     let ccfg = client_cfg("alice");
     *ccfg.sibling_cache.lock().unwrap() = vec![sibling("carol", extra_addrs[1].port())];
-    ccfg.addresses.lock().unwrap().insert(test_identity("carol").public.keyhash, vec![extra_addrs[1]]);
-    let outcome = attach_any(&ccfg, &client_ep(), test_identity("bob").public.keyhash, &[addr, extra_addrs[0]], false).await;
+    ccfg.addresses
+        .lock()
+        .unwrap()
+        .insert(test_identity("carol").public.keyhash, vec![extra_addrs[1]]);
+    let outcome = attach_any(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        &[addr, extra_addrs[0]],
+        false,
+    )
+    .await;
     assert!(matches!(outcome, AttachOutcome::Refused), "{outcome:?}");
     sleep(Duration::from_secs(1)).await;
-    assert_eq!(*count.lock().unwrap(), 0, "no second endpoint and no sibling was dialled");
+    assert_eq!(
+        *count.lock().unwrap(),
+        0,
+        "no second endpoint and no sibling was dialled"
+    );
     for t in tasks {
         t.abort();
     }
@@ -479,19 +790,42 @@ async fn ses_03_first_heartbeat_after_one_interval_at_counter_0_then_one_per_int
     let (node, addr) = spawn_node(node_cfg("bob", 1));
     let cfg = client_cfg("alice");
     let t0 = Instant::now();
-    let AttachOutcome::Attached(s) = attach(&cfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(s) = attach(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
     sleep(Duration::from_millis(3400)).await;
     for (log, who) in [(&s.log, "client"), (&node.log, "node")] {
-        let beats: Vec<(Instant, u64)> = log.events().into_iter().filter_map(|(t, e)| match e {
-            Event::Sent { frame_type: 3, bytes } => Some((t, heartbeat_counter(&bytes).unwrap())),
-            _ => None,
-        }).collect();
+        let beats: Vec<(Instant, u64)> = log
+            .events()
+            .into_iter()
+            .filter_map(|(t, e)| match e {
+                Event::Sent {
+                    frame_type: 3,
+                    bytes,
+                } => Some((t, heartbeat_counter(&bytes).unwrap())),
+                _ => None,
+            })
+            .collect();
         assert!(beats.len() >= 3, "{who}: {} beats", beats.len());
         assert_eq!(beats[0].1, 0, "{who}: first counter");
-        assert!(beats[0].0 >= t0 + Duration::from_millis(950), "{who}: first beat no earlier than one interval");
+        assert!(
+            beats[0].0 >= t0 + Duration::from_millis(950),
+            "{who}: first beat no earlier than one interval"
+        );
         assert_eq!((beats[1].1, beats[2].1), (1, 2));
         let gap = beats[2].0 - beats[1].0;
-        assert!(gap > Duration::from_millis(900) && gap < Duration::from_millis(1100), "{who}: one per interval, gap {gap:?}");
+        assert!(
+            gap > Duration::from_millis(900) && gap < Duration::from_millis(1100),
+            "{who}: one per interval, gap {gap:?}"
+        );
     }
 }
 
@@ -503,17 +837,48 @@ async fn ses_04_one_lost_beat_does_not_fail_over() {
         let list = vec![sibling("carol", 4009)];
         std::sync::Arc::new(move || list.clone())
     };
-    cfg.filter = Some(Arc::new(|t, bytes| if t == 3 && heartbeat_counter(bytes) == Some(1) { None } else { Some(bytes.to_vec()) }));
+    cfg.filter = Some(Arc::new(|t, bytes| {
+        if t == 3 && heartbeat_counter(bytes) == Some(1) {
+            None
+        } else {
+            Some(bytes.to_vec())
+        }
+    }));
     let (_node, addr) = spawn_node(cfg);
     let ccfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(&ccfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(s) = attach(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
     sleep(Duration::from_millis(6500)).await;
-    assert_eq!(*s.reach.lock().unwrap(), Reachability::Reachable, "the client never judged the node unreachable");
-    assert_eq!(s.log.count(|e| matches!(e, Event::Failover { .. } | Event::PeerUnreachable)), 0);
-    let sent = s.log.count(|e| matches!(e, Event::Sent { frame_type: 3, .. }));
+    assert_eq!(
+        *s.reach.lock().unwrap(),
+        Reachability::Reachable,
+        "the client never judged the node unreachable"
+    );
+    assert_eq!(
+        s.log
+            .count(|e| matches!(e, Event::Failover { .. } | Event::PeerUnreachable)),
+        0
+    );
+    let sent = s
+        .log
+        .count(|e| matches!(e, Event::Sent { frame_type: 3, .. }));
     assert!(sent >= 5, "the client kept sending its own beats: {sent}");
-    let received = s.log.count(|e| matches!(e, Event::Received { frame_type: 3 }));
-    assert!(received >= 5, "beats after the dropped one were received: {received}");
+    let received = s
+        .log
+        .count(|e| matches!(e, Event::Received { frame_type: 3 }));
+    assert!(
+        received >= 5,
+        "beats after the dropped one were received: {received}"
+    );
 }
 
 // acceptance: SES-05
@@ -531,13 +896,37 @@ async fn ses_05_malformed_heartbeats_count_as_absence_and_three_misses_govern() 
         }
     }));
     let alice = test_identity("alice").public.keyhash;
-    let AttachOutcome::Attached(s) = attach(&ccfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(s) = attach(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
     sleep(Duration::from_millis(2500)).await;
-    assert_eq!(node.reachability(&alice), Some(Reachability::Reachable), "not before three full intervals");
-    assert!(node.log.count(|e| matches!(e, Event::Discarded)) >= 1, "malformed beats were discarded, not fatal");
-    assert!(s.conn.close_reason().is_none(), "no close on a malformed frame");
+    assert_eq!(
+        node.reachability(&alice),
+        Some(Reachability::Reachable),
+        "not before three full intervals"
+    );
+    assert!(
+        node.log.count(|e| matches!(e, Event::Discarded)) >= 1,
+        "malformed beats were discarded, not fatal"
+    );
+    assert!(
+        s.conn.close_reason().is_none(),
+        "no close on a malformed frame"
+    );
     sleep(Duration::from_millis(1200)).await;
-    assert_eq!(node.reachability(&alice), Some(Reachability::Unreachable), "after the third full interval");
+    assert_eq!(
+        node.reachability(&alice),
+        Some(Reachability::Unreachable),
+        "after the third full interval"
+    );
 }
 
 // acceptance: SES-13
@@ -546,19 +935,42 @@ async fn ses_13_unreachable_after_three_full_intervals_of_silence() {
     let (node, addr) = spawn_node(node_cfg("bob", 1));
     let mut ccfg = client_cfg("alice");
     // the blackhole starts after the attach: the filter lets Attach through and drops all else
-    ccfg.filter = Some(Arc::new(|t, bytes| if t == 1 { Some(bytes.to_vec()) } else { None }));
+    ccfg.filter = Some(Arc::new(
+        |t, bytes| if t == 1 { Some(bytes.to_vec()) } else { None },
+    ));
     let alice = test_identity("alice").public.keyhash;
-    let AttachOutcome::Attached(_s) = attach(&ccfg, &client_ep(), test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(_s) = attach(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
     for ms in [500, 1500, 2500] {
         sleep(Duration::from_millis(if ms == 500 { 500 } else { 1000 })).await;
-        assert_eq!(node.reachability(&alice), Some(Reachability::Reachable), "reachable at {ms} ms");
+        assert_eq!(
+            node.reachability(&alice),
+            Some(Reachability::Reachable),
+            "reachable at {ms} ms"
+        );
     }
     sleep(Duration::from_millis(1100)).await;
-    assert_eq!(node.reachability(&alice), Some(Reachability::Unreachable), "unreachable after the third full interval");
+    assert_eq!(
+        node.reachability(&alice),
+        Some(Reachability::Unreachable),
+        "unreachable after the third full interval"
+    );
 }
 
 fn instant_of(log: &Log, pred: impl Fn(&Event) -> bool) -> Option<Instant> {
-    log.events().into_iter().find(|(_, e)| pred(e)).map(|(t, _)| t)
+    log.events()
+        .into_iter()
+        .find(|(_, e)| pred(e))
+        .map(|(t, _)| t)
 }
 
 // acceptance: SES-15
@@ -569,16 +981,36 @@ async fn ses_15_a_0rtt_reattach_is_acknowledged_only_after_its_own_handshake() {
     let ep = client_ep();
     let target = test_identity("bob").public.keyhash;
     // an earlier completed session leaves a resumption ticket in the shared store
-    let AttachOutcome::Attached(first) = attach(&cfg, &ep, target, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(first) = attach(&cfg, &ep, target, addr, false).await else {
+        panic!()
+    };
     first.conn.close(quinn::VarInt::from_u32(0), b"");
     sleep(Duration::from_millis(300)).await;
-    let AttachOutcome::Attached(s) = attach(&cfg, &ep, target, addr, true).await else { panic!("reattached") };
+    let AttachOutcome::Attached(s) = attach(&cfg, &ep, target, addr, true).await else {
+        panic!("reattached")
+    };
     sleep(Duration::from_millis(300)).await;
-    assert!(s.log.count(|e| matches!(e, Event::EarlyDataSent)) == 1, "the Attach went as early data; otherwise this test proves nothing");
-    let done = instant_of(&s.log, |e| matches!(e, Event::HandshakeDone { .. })).expect("handshake completion observed");
-    assert!(s.log.count(|e| matches!(e, Event::HandshakeDone { early_accepted: true })) == 1, "the server accepted the early data");
-    let acked = instant_of(&s.log, |e| matches!(e, Event::Received { frame_type: 2 })).expect("an AttachAck arrived");
-    assert!(acked >= done, "no AttachAck before this connection's handshake completed");
+    assert!(
+        s.log.count(|e| matches!(e, Event::EarlyDataSent)) == 1,
+        "the Attach went as early data; otherwise this test proves nothing"
+    );
+    let done = instant_of(&s.log, |e| matches!(e, Event::HandshakeDone { .. }))
+        .expect("handshake completion observed");
+    assert!(
+        s.log.count(|e| matches!(
+            e,
+            Event::HandshakeDone {
+                early_accepted: true
+            }
+        )) == 1,
+        "the server accepted the early data"
+    );
+    let acked = instant_of(&s.log, |e| matches!(e, Event::Received { frame_type: 2 }))
+        .expect("an AttachAck arrived");
+    assert!(
+        acked >= done,
+        "no AttachAck before this connection's handshake completed"
+    );
     assert_eq!(s.ack.mode, 0);
     assert_eq!(node.log.count(|e| matches!(e, Event::Attached { .. })), 2);
 }
@@ -590,27 +1022,62 @@ async fn trn_15_the_session_survives_a_client_address_change_without_a_new_attac
     let cfg = client_cfg("alice");
     let ep = client_ep();
     let alice = test_identity("alice").public.keyhash;
-    let AttachOutcome::Attached(mut s) = attach(&cfg, &ep, test_identity("bob").public.keyhash, addr, false).await else { panic!() };
+    let AttachOutcome::Attached(mut s) =
+        attach(&cfg, &ep, test_identity("bob").public.keyhash, addr, false).await
+    else {
+        panic!()
+    };
     let before = node.remote_address(&alice).expect("session up");
     sleep(Duration::from_millis(1200)).await;
     // the client moves to a new local socket and continues the same connection
-    ep.rebind(std::net::UdpSocket::bind("127.0.0.1:0").unwrap()).unwrap();
+    ep.rebind(std::net::UdpSocket::bind("127.0.0.1:0").unwrap())
+        .unwrap();
     let moved_at = Instant::now();
     sleep(Duration::from_millis(2500)).await;
     let after = node.remote_address(&alice).expect("session still up");
     assert_ne!(before, after, "the node sees the new address");
     assert!(s.conn.close_reason().is_none());
-    let beats_after = |log: &Log| log.events().into_iter().filter(|(t, e)| *t > moved_at && matches!(e, Event::Received { frame_type: 3 })).count();
-    assert!(beats_after(&s.log) >= 2, "client keeps receiving beats after the move: {}", beats_after(&s.log));
-    assert!(beats_after(&node.log) >= 2, "node keeps receiving beats after the move: {}", beats_after(&node.log));
+    let beats_after = |log: &Log| {
+        log.events()
+            .into_iter()
+            .filter(|(t, e)| *t > moved_at && matches!(e, Event::Received { frame_type: 3 }))
+            .count()
+    };
+    assert!(
+        beats_after(&s.log) >= 2,
+        "client keeps receiving beats after the move: {}",
+        beats_after(&s.log)
+    );
+    assert!(
+        beats_after(&node.log) >= 2,
+        "node keeps receiving beats after the move: {}",
+        beats_after(&node.log)
+    );
     node.enqueue(alice, b"after the move".to_vec()).unwrap();
-    let item = tokio::time::timeout(Duration::from_secs(3), s.deliveries.recv()).await.expect("delivered").unwrap();
+    let item = tokio::time::timeout(Duration::from_secs(3), s.deliveries.recv())
+        .await
+        .expect("delivered")
+        .unwrap();
     assert_eq!(item, b"after the move");
-    assert_eq!(s.log.count(|e| matches!(e, Event::Sent { frame_type: 1, .. })), 1, "no new Attach");
-    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: 1 })), 1, "no new Attach received");
-    assert_eq!(node.log.count(|e| matches!(e, Event::Sent { frame_type: 2, .. })), 1, "no new AttachAck");
+    assert_eq!(
+        s.log
+            .count(|e| matches!(e, Event::Sent { frame_type: 1, .. })),
+        1,
+        "no new Attach"
+    );
+    assert_eq!(
+        node.log
+            .count(|e| matches!(e, Event::Received { frame_type: 1 })),
+        1,
+        "no new Attach received"
+    );
+    assert_eq!(
+        node.log
+            .count(|e| matches!(e, Event::Sent { frame_type: 2, .. })),
+        1,
+        "no new AttachAck"
+    );
 }
-
 
 // acceptance: SES-16
 #[tokio::test]
@@ -618,24 +1085,46 @@ async fn a_running_node_retains_no_session_history() {
     // both sides on their defaults: a session attaches, heartbeats once and
     // carries a delivery, and neither side has an event to show for it
     let kh = |n: &str| test_identity(n).public.keyhash;
-    let cfg = NodeConfig::defaults(Arc::new(test_identity("alice")), pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]), 1);
+    let cfg = NodeConfig::defaults(
+        Arc::new(test_identity("alice")),
+        pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]),
+        1,
+    );
     assert!(!cfg.log.is_recording(), "the default retains nothing");
     let (node, addr) = spawn_node(cfg);
     let mut ccfg = client_cfg("bob");
     ccfg.log = Log::default();
-    let AttachOutcome::Attached(mut s) = attach(&ccfg, &client_ep(), kh("alice"), addr, false).await else { panic!("attached") };
+    let AttachOutcome::Attached(mut s) =
+        attach(&ccfg, &client_ep(), kh("alice"), addr, false).await
+    else {
+        panic!("attached")
+    };
     node.enqueue(kh("bob"), b"hello".to_vec()).unwrap();
-    let got = tokio::time::timeout(std::time::Duration::from_secs(3), s.deliveries.recv()).await.expect("delivered").unwrap();
+    let got = tokio::time::timeout(std::time::Duration::from_secs(3), s.deliveries.recv())
+        .await
+        .expect("delivered")
+        .unwrap();
     assert_eq!(got, b"hello");
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     assert!(node.has_session(&kh("bob")), "the session runs");
-    assert_eq!(node.reachability(&kh("bob")), Some(Reachability::Reachable), "the resulting state is kept");
-    assert!(node.log.events().is_empty(), "and no history of how it got there");
+    assert_eq!(
+        node.reachability(&kh("bob")),
+        Some(Reachability::Reachable),
+        "the resulting state is kept"
+    );
+    assert!(
+        node.log.events().is_empty(),
+        "and no history of how it got there"
+    );
     assert!(s.log.events().is_empty(), "on the client either");
     // the recording log is the test facility, and it is switched on by the
     // configuration alone
     let (rec, addr2) = spawn_node(node_cfg("carol", 1));
-    let AttachOutcome::Attached(s2) = attach(&client_cfg("bob"), &client_ep(), kh("carol"), addr2, false).await else { panic!("attached") };
+    let AttachOutcome::Attached(s2) =
+        attach(&client_cfg("bob"), &client_ep(), kh("carol"), addr2, false).await
+    else {
+        panic!("attached")
+    };
     assert_eq!(rec.log.count(|e| matches!(e, Event::Attached { .. })), 1);
     assert_eq!(s2.log.count(|e| matches!(e, Event::Attached { .. })), 1);
 }
@@ -646,23 +1135,57 @@ async fn a_frame_half_received_when_an_outbound_frame_goes_is_finished_not_lost(
     let kh = |n: &str| test_identity(n).public.keyhash;
     let (node, addr) = spawn_node(node_cfg("alice", 3600));
     let (conn, mut send, mut recv) = raw_dial("bob", "alice", addr).await;
-    send.write_all(&control_frame(FRAME_ATTACH, &encode_attach(&kh("bob"), None, &Default::default()))).await.unwrap();
-    assert!(matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)), "the ack");
+    send.write_all(&control_frame(
+        FRAME_ATTACH,
+        &encode_attach(&kh("bob"), None, &Default::default()),
+    ))
+    .await
+    .unwrap();
+    assert!(
+        matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)),
+        "the ack"
+    );
     // one whole heartbeat, then the next frame's length prefix alone
-    send.write_all(&control_frame(FRAME_HEARTBEAT, &encode_heartbeat(0, 100))).await.unwrap();
+    send.write_all(&control_frame(FRAME_HEARTBEAT, &encode_heartbeat(0, 100)))
+        .await
+        .unwrap();
     sleep(Duration::from_millis(80)).await;
-    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: FRAME_HEARTBEAT })), 1);
+    assert_eq!(
+        node.log.count(|e| matches!(
+            e,
+            Event::Received {
+                frame_type: FRAME_HEARTBEAT
+            }
+        )),
+        1
+    );
     let frame = control_frame(FRAME_HEARTBEAT, &encode_heartbeat(1, 101));
     send.write_all(&frame[..4]).await.unwrap();
     sleep(Duration::from_millis(80)).await;
     // an outbound frame wins the node's select while the payload is owed
     assert!(node.send_control(&kh("bob"), 99, &[0xa0]));
-    assert!(matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)), "the outbound frame went");
+    assert!(
+        matches!(read_frame(&mut recv, 1 << 16).await, FrameRead::Payload(_)),
+        "the outbound frame went"
+    );
     // the rest of the heartbeat arrives, and the whole of it is read
     send.write_all(&frame[4..]).await.unwrap();
     sleep(Duration::from_millis(120)).await;
-    assert_eq!(node.log.count(|e| matches!(e, Event::Received { frame_type: FRAME_HEARTBEAT })), 2, "the second heartbeat is received whole");
-    assert_eq!(node.log.count(|e| matches!(e, Event::Discarded | Event::OverBound)), 0);
+    assert_eq!(
+        node.log.count(|e| matches!(
+            e,
+            Event::Received {
+                frame_type: FRAME_HEARTBEAT
+            }
+        )),
+        2,
+        "the second heartbeat is received whole"
+    );
+    assert_eq!(
+        node.log
+            .count(|e| matches!(e, Event::Discarded | Event::OverBound)),
+        0
+    );
     assert!(node.has_session(&kh("bob")), "the session lives");
     conn.close(0u32.into(), b"");
 }
@@ -673,7 +1196,11 @@ fn a_pin_takes_only_key_material_of_the_profiles_shape() {
     let id = test_identity("alice").public;
     let km = id.key_material();
     let pins = Pins::new();
-    assert_eq!(pins.pin(id.keyhash, &km), Ok(()), "the identity's own material");
+    assert_eq!(
+        pins.pin(id.keyhash, &km),
+        Ok(()),
+        "the identity's own material"
+    );
     assert!(pins.classical_key(&id.keyhash).is_some());
     let members = array_item_ranges(&km, 0).unwrap();
     let hash = |b: &[u8]| rhtn_codec::cose::sha256(b);
@@ -707,5 +1234,8 @@ fn a_pin_takes_only_key_material_of_the_profiles_shape() {
     labelled.extend_from_slice(&c);
     labelled.extend_from_slice(&km[members[1].clone()]);
     assert!(fresh.pin(hash(&labelled), &labelled).is_err());
-    assert!(fresh.classical_key(&hash(&labelled)).is_none(), "nothing entered the pins");
+    assert!(
+        fresh.classical_key(&hash(&labelled)).is_none(),
+        "nothing entered the pins"
+    );
 }

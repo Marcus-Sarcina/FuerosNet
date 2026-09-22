@@ -32,7 +32,12 @@ pub fn pre_commitment(a: (&Keyhash, &[u8; 16]), b: (&Keyhash, &[u8; 16])) -> [u8
 /// the raw subject and holder keyhashes and the ceremony pre-commitment,
 /// 32 bytes out.  Bound to subject, holder and ceremony, so a key released
 /// to one holder opens nobody else's copy and no later ceremony's.
-pub fn capture_key(seed: &[u8; 32], subject: &Keyhash, holder: &Keyhash, ceremony_id: &[u8; 32]) -> [u8; 32] {
+pub fn capture_key(
+    seed: &[u8; 32],
+    subject: &Keyhash,
+    holder: &Keyhash,
+    ceremony_id: &[u8; 32],
+) -> [u8; 32] {
     let mut info = Vec::with_capacity(CAPTURE_TAG.len() + 96);
     info.extend_from_slice(CAPTURE_TAG);
     info.extend_from_slice(subject);
@@ -40,7 +45,10 @@ pub fn capture_key(seed: &[u8; 32], subject: &Keyhash, holder: &Keyhash, ceremon
     info.extend_from_slice(ceremony_id);
     let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, &[]).extract(seed);
     let mut out = [0u8; 32];
-    prk.expand(&[&info], hkdf::HKDF_SHA256).expect("32 bytes is within HKDF's bound").fill(&mut out).expect("filled");
+    prk.expand(&[&info], hkdf::HKDF_SHA256)
+        .expect("32 bytes is within HKDF's bound")
+        .fill(&mut out)
+        .expect("filled");
     out
 }
 
@@ -48,13 +56,17 @@ pub fn capture_key(seed: &[u8; 32], subject: &Keyhash, holder: &Keyhash, ceremon
 /// holds (design §7.5.2), kept in its own record of the transaction.
 pub fn random_seed() -> [u8; 32] {
     let mut s = [0u8; 32];
-    SystemRandom::new().fill(&mut s).expect("the system's random source");
+    SystemRandom::new()
+        .fill(&mut s)
+        .expect("the system's random source");
     s
 }
 
 /// A participant's contribution to the pre-commitment: 16 random bytes.
 pub fn random_contribution() -> [u8; 16] {
     let mut c = [0u8; 16];
-    SystemRandom::new().fill(&mut c).expect("the system's random source");
+    SystemRandom::new()
+        .fill(&mut c)
+        .expect("the system's random source");
     c
 }

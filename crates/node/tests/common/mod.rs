@@ -20,8 +20,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 pub const NAMES: [&str; 26] = [
-    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11",
-    "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5", "witness",
+    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10",
+    "w11", "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5", "witness",
 ];
 
 pub fn ids() -> Vec<Identity> {
@@ -93,25 +93,43 @@ impl Fabric {
 
     /// Requests of one type sent to one peer.
     pub fn requests_to(&self, peer: &Keyhash, request_type: u64) -> Vec<Vec<u8>> {
-        self.requests().into_iter().filter(|f| f.to == *peer && f.frame_type == request_type).map(|f| f.body).collect()
+        self.requests()
+            .into_iter()
+            .filter(|f| f.to == *peer && f.frame_type == request_type)
+            .map(|f| f.body)
+            .collect()
     }
 
     pub fn request_count(&self, request_type: u64) -> usize {
-        self.requests().iter().filter(|f| f.frame_type == request_type).count()
+        self.requests()
+            .iter()
+            .filter(|f| f.frame_type == request_type)
+            .count()
     }
 
     /// Frames of one type sent to one peer.
     pub fn to(&self, peer: &Keyhash, frame_type: u64) -> Vec<Vec<u8>> {
-        self.frames().into_iter().filter(|f| f.to == *peer && f.frame_type == frame_type).map(|f| f.body).collect()
+        self.frames()
+            .into_iter()
+            .filter(|f| f.to == *peer && f.frame_type == frame_type)
+            .map(|f| f.body)
+            .collect()
     }
 
     /// Every peer that got a frame of this type.
     pub fn recipients(&self, frame_type: u64) -> BTreeSet<Keyhash> {
-        self.frames().into_iter().filter(|f| f.frame_type == frame_type).map(|f| f.to).collect()
+        self.frames()
+            .into_iter()
+            .filter(|f| f.frame_type == frame_type)
+            .map(|f| f.to)
+            .collect()
     }
 
     pub fn count(&self, frame_type: u64) -> usize {
-        self.frames().iter().filter(|f| f.frame_type == frame_type).count()
+        self.frames()
+            .iter()
+            .filter(|f| f.frame_type == frame_type)
+            .count()
     }
 }
 
@@ -120,13 +138,22 @@ impl Adjacency for Fabric {
         self.peers.lock().unwrap().iter().copied().collect()
     }
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
-        self.sent.lock().unwrap().push(SentFrame { to: *peer, frame_type, body: body.to_vec() });
+        self.sent.lock().unwrap().push(SentFrame {
+            to: *peer,
+            frame_type,
+            body: body.to_vec(),
+        });
     }
     fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
-        if !self.peers.lock().unwrap().contains(peer) || self.served.lock().unwrap().contains(peer) {
+        if !self.peers.lock().unwrap().contains(peer) || self.served.lock().unwrap().contains(peer)
+        {
             return false;
         }
-        self.requests.lock().unwrap().push(SentFrame { to: *peer, frame_type: request_type, body: body.to_vec() });
+        self.requests.lock().unwrap().push(SentFrame {
+            to: *peer,
+            frame_type: request_type,
+            body: body.to_vec(),
+        });
         true
     }
 }
@@ -153,7 +180,13 @@ impl Default for World {
 
 impl World {
     pub fn new() -> Self {
-        let mut w = World { archives: BTreeMap::new(), store: BTreeMap::new(), clock: 1_800_000_000, slots: BTreeMap::new(), next_slot: BTreeMap::new() };
+        let mut w = World {
+            archives: BTreeMap::new(),
+            store: BTreeMap::new(),
+            clock: 1_800_000_000,
+            slots: BTreeMap::new(),
+            next_slot: BTreeMap::new(),
+        };
         for n in NAMES {
             w.archives.insert(kh(n), Archive::new(kh(n)));
         }
@@ -175,7 +208,11 @@ impl World {
         let env = envelope(tx_type, body, &refs);
         let rec = Record::parse(&env).expect("well-formed");
         for s in signers {
-            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&kh(s))
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         self.store.insert(rec.txid, env);
         rec
@@ -200,7 +237,11 @@ impl World {
         let t = self.tick();
         let back = vec![self.back(a), self.back(b), self.back("witness")];
         let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
-        let w = Witness { keyhash: kh("witness"), nominated_by: kh(a), flags: 3 };
+        let w = Witness {
+            keyhash: kh("witness"),
+            nominated_by: kh(a),
+            flags: 3,
+        };
         let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
@@ -214,7 +255,10 @@ impl World {
         }
         let next = self.next_slot.entry(patron.to_string()).or_default();
         let i = *next;
-        assert!(i < 10, "patron {patron} has no free slot: design §3.1 gives ten");
+        assert!(
+            i < 10,
+            "patron {patron} has no free slot: design §3.1 gives ten"
+        );
         *next += 1;
         self.slots.insert(key, i);
         i
@@ -229,7 +273,12 @@ impl World {
         let a = Adoption {
             node: kh(node),
             patron: kh(patron),
-            locator: Locator { anchor: kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } },
+            locator: Locator {
+                anchor: kh(patron),
+                path: vec![0x10 | slot],
+                nibbles: 2,
+                seqno: Seqno { series, counter: 0 },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),
@@ -243,14 +292,25 @@ impl World {
 
     /// An adoption placing `node` in a slot of the caller's choosing, for
     /// the tests that need a patron to get it wrong.
-    pub fn adopt_in_slot(&mut self, node: &str, patron: &str, series: u32, slot: u8) -> (Record, Record) {
+    pub fn adopt_in_slot(
+        &mut self,
+        node: &str,
+        patron: &str,
+        series: u32,
+        slot: u8,
+    ) -> (Record, Record) {
         let pop = self.meet(patron, node);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
         let a = Adoption {
             node: kh(node),
             patron: kh(patron),
-            locator: Locator { anchor: kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } },
+            locator: Locator {
+                anchor: kh(patron),
+                path: vec![0x10 | slot],
+                nibbles: 2,
+                seqno: Seqno { series, counter: 0 },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),
@@ -297,14 +357,26 @@ pub fn table_with(me: Keyhash, w: &World, records: &[&Record], infra: &[&str]) -
     }
     let lookup = ids();
     for r in records {
-        t.apply(r, &lookup, &w.store, None).unwrap_or_else(|e| panic!("apply: {e:?}"));
+        t.apply(r, &lookup, &w.store, None)
+            .unwrap_or_else(|e| panic!("apply: {e:?}"));
     }
     t
 }
 
 /// A node view for `name` with the given position and table.
 pub fn view(name: &str, table: Table, anchor: &str, path: &[u8]) -> NodeView {
-    let mut v = NodeView::new(Arc::new(id(name)), Locator { anchor: kh(anchor), path: pack_path(path), nibbles: path.len() as u64, seqno: Seqno { series: 1, counter: 0 } });
+    let mut v = NodeView::new(
+        Arc::new(id(name)),
+        Locator {
+            anchor: kh(anchor),
+            path: pack_path(path),
+            nibbles: path.len() as u64,
+            seqno: Seqno {
+                series: 1,
+                counter: 0,
+            },
+        },
+    );
     v.table = table;
     v
 }

@@ -20,7 +20,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// The seven disclosable labels, in ascending byte order
 /// (`wire-format.md` §4.5.1.1).
-pub const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention", "p1.integrity", "p1.retention", "proximity"];
+pub const LABELS: [&str; 7] = [
+    "capture",
+    "location",
+    "p0.integrity",
+    "p0.retention",
+    "p1.integrity",
+    "p1.retention",
+    "proximity",
+];
 
 /// One disclosable field: its label, a fresh 16-byte salt, and the CBOR the
 /// field carries.
@@ -97,10 +105,20 @@ pub fn proximity_value(channels: &[(u64, u64, Option<u64>)], strongest: u64) -> 
 
 /// A capture value (`wire-format.md` §4.5): modality, image count, liveness
 /// and its version.
-pub fn capture_value(modality: u64, image_count: u64, liveness: u64, liveness_version: u64) -> Vec<u8> {
+pub fn capture_value(
+    modality: u64,
+    image_count: u64,
+    liveness: u64,
+    liveness_version: u64,
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 4);
-    for (k, v) in [(1u64, modality), (2, image_count), (3, liveness), (4, liveness_version)] {
+    for (k, v) in [
+        (1u64, modality),
+        (2, image_count),
+        (3, liveness),
+        (4, liveness_version),
+    ] {
         emit_uint(&mut out, k);
         emit_uint(&mut out, v);
     }
@@ -154,7 +172,11 @@ pub struct Proposal {
 /// Sort responses as the body requires (`wire-format.md` §4.5 field 5):
 /// by verifier keyhash, ties by subject keyhash.
 pub fn sort_responses(responses: &mut [Vec<u8>]) {
-    responses.sort_by_key(|r| Response::read(r).map(|x| (x.verifier, x.subject)).unwrap_or(([0; 32], [0; 32])));
+    responses.sort_by_key(|r| {
+        Response::read(r)
+            .map(|x| (x.verifier, x.subject))
+            .unwrap_or(([0; 32], [0; 32]))
+    });
 }
 
 impl Proposal {
@@ -167,7 +189,11 @@ impl Proposal {
 
     /// The body, with one back-pointer list per signer in signer order.
     pub fn body(&self, back: &[Vec<Txid>]) -> Vec<u8> {
-        assert_eq!(back.len(), self.signers().len(), "one back-pointer list per signer");
+        assert_eq!(
+            back.len(),
+            self.signers().len(),
+            "one back-pointer list per signer"
+        );
         let mut out = Vec::new();
         emit_map_head(&mut out, 7 + (!self.responses.is_empty()) as usize);
         emit_back_pointers(&mut out, back);
@@ -226,7 +252,13 @@ pub enum Refusal {
 /// it is one it nominated; every response it holds about itself is in the
 /// body; and the person is told when its own nominees are absent or
 /// outnumbered, which is no refusal.
-pub fn participant_check(me: &Keyhash, p: &Proposal, my_nominees: &BTreeSet<Keyhash>, held: &BTreeMap<[u8; 32], Vec<u8>>, notifier: &dyn Notifier) -> Result<(), Refusal> {
+pub fn participant_check(
+    me: &Keyhash,
+    p: &Proposal,
+    my_nominees: &BTreeSet<Keyhash>,
+    held: &BTreeMap<[u8; 32], Vec<u8>>,
+    notifier: &dyn Notifier,
+) -> Result<(), Refusal> {
     for w in &p.witnesses {
         if w.nominated_by == *me && !my_nominees.contains(&w.keyhash) {
             return Err(Refusal::NomineeNotMine(w.keyhash));
@@ -249,7 +281,10 @@ pub fn participant_check(me: &Keyhash, p: &Proposal, my_nominees: &BTreeSet<Keyh
 /// tolerance of the time it observes.
 pub fn witness_check(started_at: u64, observed: u64, tolerance: u64) -> Result<(), Refusal> {
     if started_at.abs_diff(observed) > tolerance {
-        return Err(Refusal::ClockFar { claimed: started_at, observed });
+        return Err(Refusal::ClockFar {
+            claimed: started_at,
+            observed,
+        });
     }
     Ok(())
 }
@@ -289,9 +324,16 @@ pub fn present(envelope: &[u8], set: &DisclosureSet, reveal: &[&str]) -> Vec<u8>
 /// responder's reliability whatever became of it** [author, 2026-09-12].
 /// Only a response that verified and named a participant is recorded;
 /// anyone can manufacture one that does not, and a forgery is no signal.
-pub fn take_late_response<L: Lookup + ?Sized>(store: &mut ClientStore, ids: &L, bytes: &[u8], consented: &BTreeMap<[u8; 32], BTreeSet<[u8; 32]>>) -> Result<Txid, String> {
+pub fn take_late_response<L: Lookup + ?Sized>(
+    store: &mut ClientStore,
+    ids: &L,
+    bytes: &[u8],
+    consented: &BTreeMap<[u8; 32], BTreeSet<[u8; 32]>>,
+) -> Result<Txid, String> {
     let late = LateResponse::decode(bytes)?;
-    let Some(record) = store.records.get(&late.record) else { return Err("names a record not held".into()) };
+    let Some(record) = store.records.get(&late.record) else {
+        return Err("names a record not held".into());
+    };
     let rec = Record::parse(record)?;
     if !rec.participants().contains(&late.subject) {
         return Err("subject is not a participant of the record".into());
@@ -303,14 +345,25 @@ pub fn take_late_response<L: Lookup + ?Sized>(store: &mut ClientStore, ids: &L, 
     rhtn_crypto::verify::response(ids, &late.response, false).map_err(|e| e.to_string())?;
     // the ceremony is the record's, and consent is read within it
     let Some(seed) = store.seeds.get(&late.record) else {
-        store.unattached_late.entry(late.record).or_default().push(r.verifier);
+        store
+            .unattached_late
+            .entry(late.record)
+            .or_default()
+            .push(r.verifier);
         return Err("the record's ceremony is not resolvable here".into());
     };
     let ceremony = seed.ceremony_id;
-    if !consented.get(&ceremony).is_some_and(|qs| qs.contains(&r.query_id)) {
+    if !consented
+        .get(&ceremony)
+        .is_some_and(|qs| qs.contains(&r.query_id))
+    {
         return Err("a query the subject did not countersign for this record's ceremony".into());
     }
-    store.late.entry(late.record).or_default().push(bytes.to_vec());
+    store
+        .late
+        .entry(late.record)
+        .or_default()
+        .push(bytes.to_vec());
     Ok(late.record)
 }
 
@@ -334,7 +387,9 @@ fn is_uint(it: &Item) -> bool {
 fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
     match label {
         "capture" => {
-            let Item::Map(m) = item else { return Err("capture not a map".into()) };
+            let Item::Map(m) = item else {
+                return Err("capture not a map".into());
+            };
             if m.len() != 4 || !(1..=4).all(|k| map_get(m, k).is_some_and(is_uint)) {
                 return Err("capture shape".into());
             }
@@ -349,10 +404,14 @@ fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
             schema::check_kind(b, "Proximity", item).map_err(|e| e.0.to_string())?;
             let Item::Map(m) = item else { unreachable!() };
             let strongest = map_get(m, 2).and_then(as_uint).ok_or("strongest")?;
-            let Some(Item::Array(ch)) = map_get(m, 1) else { unreachable!() };
+            let Some(Item::Array(ch)) = map_get(m, 1) else {
+                unreachable!()
+            };
             let mut passed = Vec::new();
             for c in ch {
-                let Item::Map(cm) = c else { return Err("channel not a map".into()) };
+                let Item::Map(cm) = c else {
+                    return Err("channel not a map".into());
+                };
                 let kind = map_get(cm, 1).and_then(as_uint).ok_or("channel kind")?;
                 let result = map_get(cm, 2).and_then(as_uint).ok_or("channel result")?;
                 if !(1..=4).contains(&kind) || result > 2 {
@@ -368,14 +427,25 @@ fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
             }
             Ok(())
         }
-        "p0.retention" | "p1.retention" => if is_uint(item) { Ok(()) } else { Err("retention not uint".into()) },
+        "p0.retention" | "p1.retention" => {
+            if is_uint(item) {
+                Ok(())
+            } else {
+                Err("retention not uint".into())
+            }
+        }
         "p0.integrity" | "p1.integrity" => {
-            let Item::Map(m) = item else { return Err("integrity not a map".into()) };
-            if !matches!(map_get(m, 1), Some(Item::Bool(_))) || !map_get(m, 2).is_some_and(is_uint) {
+            let Item::Map(m) = item else {
+                return Err("integrity not a map".into());
+            };
+            if !matches!(map_get(m, 1), Some(Item::Bool(_))) || !map_get(m, 2).is_some_and(is_uint)
+            {
                 return Err("integrity shape".into());
             }
             match map_get(m, 3) {
-                None | Some(Item::Bytes(_)) if m.len() == 2 + map_get(m, 3).is_some() as usize => Ok(()),
+                None | Some(Item::Bytes(_)) if m.len() == 2 + map_get(m, 3).is_some() as usize => {
+                    Ok(())
+                }
                 _ => Err("integrity evidence".into()),
             }
         }
@@ -402,16 +472,24 @@ pub fn read_presentation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Pr
         return Err("exactly seven slots".into());
     }
     let mut pre = vec![1u8];
-    let mut out = Presented { record, revealed: BTreeMap::new(), withheld: Vec::new() };
+    let mut out = Presented {
+        record,
+        revealed: BTreeMap::new(),
+        withheld: Vec::new(),
+    };
     for (i, slot) in slots.iter().enumerate() {
-        let (item, _) = Parser { b: bytes }.item(slot.start).map_err(|e| e.0.to_string())?;
+        let (item, _) = Parser { b: bytes }
+            .item(slot.start)
+            .map_err(|e| e.0.to_string())?;
         match &item {
             Item::Bytes(r) if r.len() == 32 => {
                 pre.extend_from_slice(&bytes[r.clone()]);
                 out.withheld.push(LABELS[i]);
             }
             Item::Array(a) if a.len() == 3 => {
-                let (Item::Bytes(salt), Item::Text(label)) = (&a[0], &a[1]) else { return Err("disclosure shape".into()) };
+                let (Item::Bytes(salt), Item::Text(label)) = (&a[0], &a[1]) else {
+                    return Err("disclosure shape".into());
+                };
                 if salt.len() != 16 {
                     return Err("salt not 16 bytes".into());
                 }
@@ -432,8 +510,12 @@ pub fn read_presentation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Pr
     }
     let body = &out.record.bytes[out.record.body.clone()];
     let r8 = value_slice(body, 8).ok_or("field 8")?;
-    let (root, _) = Parser { b: body }.item(r8.start).map_err(|e| e.0.to_string())?;
-    let Item::Bytes(rr) = &root else { return Err("root not bytes".into()) };
+    let (root, _) = Parser { b: body }
+        .item(r8.start)
+        .map_err(|e| e.0.to_string())?;
+    let Item::Bytes(rr) = &root else {
+        return Err("root not bytes".into());
+    };
     if body[rr.clone()] != sha256(&pre) {
         return Err("recomputed root differs from body field 8".into());
     }

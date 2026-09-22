@@ -25,7 +25,10 @@ pub const IDENTITY_BYTES: usize = 64;
 /// cannot be done from a terminal (design §6, §7).
 pub fn mint(path: &Path, seeds: [[u8; 32]; 2]) -> Result<Identity, String> {
     if path.exists() {
-        return Err(format!("{} exists, and a key file is never replaced in place", path.display()));
+        return Err(format!(
+            "{} exists, and a key file is never replaced in place",
+            path.display()
+        ));
     }
     let mut bytes = seeds[0].to_vec();
     bytes.extend_from_slice(&seeds[1]);
@@ -38,7 +41,8 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(|e| format!("{}: {e}", path.display()))?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(())
 }
@@ -49,9 +53,16 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
 pub fn describe(path: &Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if bytes.len() != IDENTITY_BYTES {
-        return Err(format!("{} is {} bytes, not {IDENTITY_BYTES}", path.display(), bytes.len()));
+        return Err(format!(
+            "{} is {} bytes, not {IDENTITY_BYTES}",
+            path.display(),
+            bytes.len()
+        ));
     }
-    let (ed, pq): ([u8; 32], [u8; 32]) = (bytes[..32].try_into().unwrap(), bytes[32..].try_into().unwrap());
+    let (ed, pq): ([u8; 32], [u8; 32]) = (
+        bytes[..32].try_into().unwrap(),
+        bytes[32..].try_into().unwrap(),
+    );
     Ok(public_lines(&SigningIdentity::from_seeds(&ed, &pq).public))
 }
 
@@ -59,7 +70,11 @@ pub fn describe(path: &Path) -> Result<String, String> {
 /// itself, since a keyhash alone cannot be pinned (`wire-format.md` §2.2).
 pub fn public_lines(id: &Identity) -> String {
     let km = id.key_material();
-    format!("keyhash   {}\nmaterial  {}\n", crate::inspect::hex(&id.keyhash), crate::inspect::hex(&km))
+    format!(
+        "keyhash   {}\nmaterial  {}\n",
+        crate::inspect::hex(&id.keyhash),
+        crate::inspect::hex(&km)
+    )
 }
 
 /// The seeds `test-vectors/keys.md` derives for a named test identity.

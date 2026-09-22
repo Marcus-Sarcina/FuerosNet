@@ -35,7 +35,9 @@ pub enum Reject {
 }
 
 fn is_token(s: &str) -> bool {
-    !s.is_empty() && s.bytes().all(|c| c.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&c))
+    !s.is_empty()
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&c))
 }
 
 /// A header value is visible characters, spaces and horizontal tabs (RFC
@@ -51,14 +53,18 @@ fn is_field_value(s: &str) -> bool {
 }
 
 fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    hay[from..].windows(needle.len()).position(|w| w == needle).map(|p| p + from)
+    hay[from..]
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| p + from)
 }
 
 /// Parse one HTTP/1.1 request, strictly (RFC 9112 with every tolerance
 /// removed).
 pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
     let head_end = find(bytes, b"\r\n\r\n", 0).ok_or(Reject::Malformed("no end of headers"))?;
-    let head = std::str::from_utf8(&bytes[..head_end]).map_err(|_| Reject::Malformed("head not ascii"))?;
+    let head =
+        std::str::from_utf8(&bytes[..head_end]).map_err(|_| Reject::Malformed("head not ascii"))?;
     if !head.is_ascii() {
         return Err(Reject::Malformed("head not ascii"));
     }
@@ -82,7 +88,10 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
     // else refused — the resource keyhash routes, not the target
     let target = if target.starts_with('/') {
         target.to_string()
-    } else if let Some(rest) = target.strip_prefix("http://").or_else(|| target.strip_prefix("https://")) {
+    } else if let Some(rest) = target
+        .strip_prefix("http://")
+        .or_else(|| target.strip_prefix("https://"))
+    {
         match rest.find('/') {
             Some(i) => rest[i..].to_string(),
             None => "/".to_string(),
@@ -113,7 +122,9 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
                 if content_length.is_some() || value.contains(',') {
                     return Err(Reject::Ambiguous("duplicate content-length"));
                 }
-                let n: usize = value.parse().map_err(|_| Reject::Malformed("content-length"))?;
+                let n: usize = value
+                    .parse()
+                    .map_err(|_| Reject::Malformed("content-length"))?;
                 content_length = Some(n);
             }
             "transfer-encoding" => {
@@ -130,13 +141,22 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
             }
             "upgrade" => return Err(Reject::NotOneExchange("Upgrade")),
             "expect" => return Err(Reject::NotOneExchange("Expect")),
-            "connection" if value.to_ascii_lowercase().split(',').any(|v| v.trim() == "upgrade") => return Err(Reject::NotOneExchange("Upgrade")),
+            "connection"
+                if value
+                    .to_ascii_lowercase()
+                    .split(',')
+                    .any(|v| v.trim() == "upgrade") =>
+            {
+                return Err(Reject::NotOneExchange("Upgrade"));
+            }
             _ => {
                 if lname.starts_with("rhtn-") {
                     // the caller's assertion in the trusted namespace: gone
                     continue;
                 }
-                if headers.iter().any(|(n, _)| *n == lname) && matches!(lname.as_str(), "authorization" | "content-type") {
+                if headers.iter().any(|(n, _)| *n == lname)
+                    && matches!(lname.as_str(), "authorization" | "content-type")
+                {
                     return Err(Reject::Ambiguous("duplicate singleton header"));
                 }
                 headers.push((lname, value.to_string()));
@@ -164,7 +184,12 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
         // bytes after the message: a second message, which is the attack
         return Err(Reject::MoreThanOne);
     }
-    Ok(Request { method: method.to_string(), target, headers, body })
+    Ok(Request {
+        method: method.to_string(),
+        target,
+        headers,
+        body,
+    })
 }
 
 /// Decode a chunked body strictly: hex sizes without extensions, exact
@@ -174,11 +199,16 @@ fn decode_chunked(b: &[u8]) -> Result<(Vec<u8>, usize), Reject> {
     let mut at = 0;
     loop {
         let eol = find(b, b"\r\n", at).ok_or(Reject::Malformed("chunk size line"))?;
-        let size_str = std::str::from_utf8(&b[at..eol]).map_err(|_| Reject::Malformed("chunk size"))?;
-        if size_str.is_empty() || size_str.contains(';') || !size_str.bytes().all(|c| c.is_ascii_hexdigit()) {
+        let size_str =
+            std::str::from_utf8(&b[at..eol]).map_err(|_| Reject::Malformed("chunk size"))?;
+        if size_str.is_empty()
+            || size_str.contains(';')
+            || !size_str.bytes().all(|c| c.is_ascii_hexdigit())
+        {
             return Err(Reject::Ambiguous("chunk size"));
         }
-        let size = usize::from_str_radix(size_str, 16).map_err(|_| Reject::Malformed("chunk size"))?;
+        let size =
+            usize::from_str_radix(size_str, 16).map_err(|_| Reject::Malformed("chunk size"))?;
         at = eol + 2;
         if size == 0 {
             if b.get(at..at.saturating_add(2)) != Some(b"\r\n") {
@@ -189,7 +219,9 @@ fn decode_chunked(b: &[u8]) -> Result<(Vec<u8>, usize), Reject> {
         // a length is a claim about bytes that are here: added to the
         // offset unchecked it overflows, which is a panic in one build
         // profile and a wrapped slice in another
-        let end = at.checked_add(size).ok_or(Reject::Malformed("chunk size over the message"))?;
+        let end = at
+            .checked_add(size)
+            .ok_or(Reject::Malformed("chunk size over the message"))?;
         let data = b.get(at..end).ok_or(Reject::Malformed("chunk short"))?;
         out.extend_from_slice(data);
         at = end;
@@ -222,7 +254,11 @@ pub fn base64url(bytes: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
         out.push(A[(n >> 18) as usize & 63] as char);
         out.push(A[(n >> 12) as usize & 63] as char);
@@ -240,7 +276,11 @@ pub fn base64url(bytes: &[u8]) -> String {
 /// authority as `host`, the caller's headers as parsed, the body under its
 /// exact length, and the credential last.
 pub fn serialise(req: &Request, authority: &str, cred: &Credential) -> Vec<u8> {
-    let mut out = format!("{} {} HTTP/1.1\r\nhost: {}\r\n", req.method, req.target, authority).into_bytes();
+    let mut out = format!(
+        "{} {} HTTP/1.1\r\nhost: {}\r\n",
+        req.method, req.target, authority
+    )
+    .into_bytes();
     for (n, v) in &req.headers {
         out.extend_from_slice(format!("{n}: {v}\r\n").as_bytes());
     }
@@ -256,7 +296,15 @@ pub fn serialise(req: &Request, authority: &str, cred: &Credential) -> Vec<u8> {
 /// The headers of a serialised message, lowercased, for a backend or a
 /// test to read.
 pub fn headers_of(message: &[u8]) -> Vec<(String, String)> {
-    let Some(end) = find(message, b"\r\n\r\n", 0) else { return Vec::new() };
+    let Some(end) = find(message, b"\r\n\r\n", 0) else {
+        return Vec::new();
+    };
     let head = String::from_utf8_lossy(&message[..end]);
-    head.split("\r\n").skip(1).filter_map(|l| l.split_once(':').map(|(n, v)| (n.trim().to_ascii_lowercase(), v.trim().to_string()))).collect()
+    head.split("\r\n")
+        .skip(1)
+        .filter_map(|l| {
+            l.split_once(':')
+                .map(|(n, v)| (n.trim().to_ascii_lowercase(), v.trim().to_string()))
+        })
+        .collect()
 }

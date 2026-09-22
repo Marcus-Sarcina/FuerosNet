@@ -44,7 +44,14 @@ pub struct Ratchet {
 
 impl std::fmt::Debug for Ratchet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ratchet(ns {}, nr {}, pn {}, skipped {})", self.ns, self.nr, self.pn, self.skipped.len())
+        write!(
+            f,
+            "Ratchet(ns {}, nr {}, pn {}, skipped {})",
+            self.ns,
+            self.nr,
+            self.pn,
+            self.skipped.len()
+        )
     }
 }
 
@@ -81,9 +88,13 @@ fn header_bytes(dh: &DhPublic, pn: u32, n: u32) -> Vec<u8> {
 
 fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32), String> {
     let item = parse_all(h).map_err(|e| e.0)?;
-    let Item::Map(m) = &item else { return Err("header not a map".into()) };
+    let Item::Map(m) = &item else {
+        return Err("header not a map".into());
+    };
     let dh = match map_get(m, 1) {
-        Some(Item::Bytes(r)) if r.len() == 32 => DhPublic(<[u8; 32]>::try_from(&h[r.clone()]).unwrap()),
+        Some(Item::Bytes(r)) if r.len() == 32 => {
+            DhPublic(<[u8; 32]>::try_from(&h[r.clone()]).unwrap())
+        }
         _ => return Err("header dh".into()),
     };
     let pn = map_get(m, 2).and_then(as_uint).ok_or("header pn")? as u32;
@@ -97,7 +108,12 @@ fn seal(mk: &[u8; 32], ad: &[u8], header: &[u8], plaintext: &[u8]) -> Vec<u8> {
     let mut aad = ad.to_vec();
     aad.extend_from_slice(header);
     let mut buf = plaintext.to_vec();
-    key.seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from(&aad), &mut buf).expect("sealing cannot fail");
+    key.seal_in_place_append_tag(
+        Nonce::assume_unique_for_key(nonce),
+        Aad::from(&aad),
+        &mut buf,
+    )
+    .expect("sealing cannot fail");
     buf
 }
 
@@ -107,7 +123,14 @@ fn open(mk: &[u8; 32], ad: &[u8], header: &[u8], ciphertext: &[u8]) -> Result<Ve
     let mut aad = ad.to_vec();
     aad.extend_from_slice(header);
     let mut buf = ciphertext.to_vec();
-    let n = key.open_in_place(Nonce::assume_unique_for_key(nonce), Aad::from(&aad), &mut buf).map_err(|_| "message does not authenticate")?.len();
+    let n = key
+        .open_in_place(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::from(&aad),
+            &mut buf,
+        )
+        .map_err(|_| "message does not authenticate")?
+        .len();
     buf.truncate(n);
     Ok(buf)
 }
@@ -117,12 +140,34 @@ impl Ratchet {
     /// prekey as its first ratchet key, with a fresh ratchet key of its own.
     pub fn initiator(sk: [u8; 32], their_spk: DhPublic, dhs: DhSecret, ad: Vec<u8>) -> Self {
         let (rk, cks) = kdf_rk(&sk, &dhs.agree(&their_spk));
-        Ratchet { dhs, dhr: Some(their_spk), rk, cks: Some(cks), ckr: None, ns: 0, nr: 0, pn: 0, skipped: BTreeMap::new(), ad }
+        Ratchet {
+            dhs,
+            dhr: Some(their_spk),
+            rk,
+            cks: Some(cks),
+            ckr: None,
+            ns: 0,
+            nr: 0,
+            pn: 0,
+            skipped: BTreeMap::new(),
+            ad,
+        }
     }
 
     /// The responder, whose signed prekey is its first ratchet key.
     pub fn responder(sk: [u8; 32], spk: DhSecret, ad: Vec<u8>) -> Self {
-        Ratchet { dhs: spk, dhr: None, rk: sk, cks: None, ckr: None, ns: 0, nr: 0, pn: 0, skipped: BTreeMap::new(), ad }
+        Ratchet {
+            dhs: spk,
+            dhr: None,
+            rk: sk,
+            cks: None,
+            ckr: None,
+            ns: 0,
+            nr: 0,
+            pn: 0,
+            skipped: BTreeMap::new(),
+            ad,
+        }
     }
 
     /// Encrypt one message: the sending chain advances, the message key is
@@ -146,7 +191,11 @@ impl Ratchet {
     /// Diffie-Hellman ratchet, with `fresh` supplying the seed of this
     /// party's next key; messages skipped are kept for later, bounded.  On
     /// any failure the state is as it was.
-    pub fn decrypt(&mut self, msg: &[u8], fresh: &mut dyn FnMut() -> [u8; 32]) -> Result<Vec<u8>, String> {
+    pub fn decrypt(
+        &mut self,
+        msg: &[u8],
+        fresh: &mut dyn FnMut() -> [u8; 32],
+    ) -> Result<Vec<u8>, String> {
         let parts = array_item_ranges(msg, 0).ok_or("message not an array")?;
         if parts.len() != 2 {
             return Err("message is header and ciphertext".into());
@@ -166,7 +215,15 @@ impl Ratchet {
         Ok(plaintext)
     }
 
-    fn decrypt_in(&mut self, header: &[u8], ct: &[u8], dh: DhPublic, pn: u32, n: u32, fresh: &mut dyn FnMut() -> [u8; 32]) -> Result<Vec<u8>, String> {
+    fn decrypt_in(
+        &mut self,
+        header: &[u8],
+        ct: &[u8],
+        dh: DhPublic,
+        pn: u32,
+        n: u32,
+        fresh: &mut dyn FnMut() -> [u8; 32],
+    ) -> Result<Vec<u8>, String> {
         if let Some(mk) = self.skipped.remove(&(dh.0, n)) {
             return open(&mk, &self.ad, header, ct);
         }

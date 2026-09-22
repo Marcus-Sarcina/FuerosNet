@@ -51,7 +51,11 @@ pub struct Cost {
 
 impl Default for Cost {
     fn default() -> Self {
-        Cost { m_kib: 65_536, passes: 3, lanes: 1 }
+        Cost {
+            m_kib: 65_536,
+            passes: 3,
+            lanes: 1,
+        }
     }
 }
 
@@ -68,7 +72,9 @@ impl Wrap {
     /// A fresh passphrase wrap at the given cost.
     pub fn passphrase(cost: Cost) -> Wrap {
         let mut salt = [0u8; 16];
-        SystemRandom::new().fill(&mut salt).expect("the system's random source");
+        SystemRandom::new()
+            .fill(&mut salt)
+            .expect("the system's random source");
         Wrap::Passphrase { salt, cost }
     }
 
@@ -76,10 +82,16 @@ impl Wrap {
     fn kek(&self, secret: &[u8]) -> Result<[u8; 32], Failure> {
         match self {
             Wrap::Passphrase { salt, cost } => {
-                let params = argon2::Params::new(cost.m_kib, cost.passes, cost.lanes, Some(32)).map_err(|_| Failure::Cost)?;
-                let a = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+                let params = argon2::Params::new(cost.m_kib, cost.passes, cost.lanes, Some(32))
+                    .map_err(|_| Failure::Cost)?;
+                let a = argon2::Argon2::new(
+                    argon2::Algorithm::Argon2id,
+                    argon2::Version::V0x13,
+                    params,
+                );
                 let mut out = [0u8; 32];
-                a.hash_password_into(secret, salt, &mut out).map_err(|_| Failure::Cost)?;
+                a.hash_password_into(secret, salt, &mut out)
+                    .map_err(|_| Failure::Cost)?;
                 Ok(out)
             }
         }
@@ -128,9 +140,14 @@ impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Failure::Version(v) => write!(f, "backup version {v} is not one this reader knows"),
-            Failure::UnsupportedWrap(k) => write!(f, "wrap method {k} is not one this reader implements"),
+            Failure::UnsupportedWrap(k) => {
+                write!(f, "wrap method {k} is not one this reader implements")
+            }
             Failure::Malformed(w) => write!(f, "not a backup: {w}"),
-            Failure::Secret => write!(f, "the data key did not unwrap: wrong secret, or an altered header"),
+            Failure::Secret => write!(
+                f,
+                "the data key did not unwrap: wrong secret, or an altered header"
+            ),
             Failure::Payload => write!(f, "the payload did not authenticate: altered ciphertext"),
             Failure::Contents => write!(f, "the payload opened and is not a backup's contents"),
             Failure::Cost => write!(f, "the cost parameters are ones this reader cannot run"),
@@ -157,12 +174,20 @@ pub fn export(contents: &Contents, wrap: &Wrap, secret: &[u8]) -> Result<Vec<u8>
     // deriving a different one
     let mut wrapped = data_key.to_vec();
     key(&wrap.kek(secret)?)
-        .seal_in_place_append_tag(Nonce::assume_unique_for_key(wrap_nonce), Aad::from(aad(AAD_WRAP, &header)), &mut wrapped)
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(wrap_nonce),
+            Aad::from(aad(AAD_WRAP, &header)),
+            &mut wrapped,
+        )
         .map_err(|_| Failure::Secret)?;
 
     let mut body = encode_contents(contents);
     key(&data_key)
-        .seal_in_place_append_tag(Nonce::assume_unique_for_key(body_nonce), Aad::from(aad(AAD_BODY, &header)), &mut body)
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(body_nonce),
+            Aad::from(aad(AAD_BODY, &header)),
+            &mut body,
+        )
         .map_err(|_| Failure::Payload)?;
 
     let mut out = Vec::new();
@@ -178,20 +203,32 @@ pub fn export(contents: &Contents, wrap: &Wrap, secret: &[u8]) -> Result<Vec<u8>
 /// intact identity with half of an old one.
 pub fn import(blob: &[u8], secret: &[u8]) -> Result<Contents, Failure> {
     let item = parse_all(blob).map_err(|_| Failure::Malformed("does not parse"))?;
-    let Item::Array(parts) = &item else { return Err(Failure::Malformed("not an array")) };
-    let [h, w, b] = parts.as_slice() else { return Err(Failure::Malformed("not three fields")) };
+    let Item::Array(parts) = &item else {
+        return Err(Failure::Malformed("not an array"));
+    };
+    let [h, w, b] = parts.as_slice() else {
+        return Err(Failure::Malformed("not three fields"));
+    };
     let (header, wrapped, body) = (raw(blob, h)?, raw(blob, w)?, raw(blob, b)?);
     let (wrap, wrap_nonce, body_nonce) = decode_header(&header)?;
 
     let mut key_buf = wrapped.clone();
     let opened = key(&wrap.kek(secret)?)
-        .open_in_place(Nonce::assume_unique_for_key(wrap_nonce), Aad::from(aad(AAD_WRAP, &header)), &mut key_buf)
+        .open_in_place(
+            Nonce::assume_unique_for_key(wrap_nonce),
+            Aad::from(aad(AAD_WRAP, &header)),
+            &mut key_buf,
+        )
         .map_err(|_| Failure::Secret)?;
     let data_key: [u8; 32] = opened.try_into().map_err(|_| Failure::Secret)?;
 
     let mut body_buf = body.clone();
     let plain = key(&data_key)
-        .open_in_place(Nonce::assume_unique_for_key(body_nonce), Aad::from(aad(AAD_BODY, &header)), &mut body_buf)
+        .open_in_place(
+            Nonce::assume_unique_for_key(body_nonce),
+            Aad::from(aad(AAD_BODY, &header)),
+            &mut body_buf,
+        )
         .map_err(|_| Failure::Payload)?;
     decode_contents(plain).ok_or(Failure::Contents)
 }
@@ -219,30 +256,50 @@ fn encode_header(wrap: &Wrap, wrap_nonce: &[u8; 12], body_nonce: &[u8; 12]) -> V
 
 fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
     let item = parse_all(b).map_err(|_| Failure::Malformed("header does not parse"))?;
-    let Item::Array(f) = &item else { return Err(Failure::Malformed("header not an array")) };
-    let version = f.first().and_then(uint).ok_or(Failure::Malformed("no version"))?;
+    let Item::Array(f) = &item else {
+        return Err(Failure::Malformed("header not an array"));
+    };
+    let version = f
+        .first()
+        .and_then(uint)
+        .ok_or(Failure::Malformed("no version"))?;
     if version != VERSION {
         return Err(Failure::Version(version));
     }
-    let method = f.get(1).and_then(uint).ok_or(Failure::Malformed("no wrap method"))?;
+    let method = f
+        .get(1)
+        .and_then(uint)
+        .ok_or(Failure::Malformed("no wrap method"))?;
     if method != WRAP_PASSPHRASE {
         return Err(Failure::UnsupportedWrap(method));
     }
     if f.len() != 7 {
         return Err(Failure::Malformed("passphrase header is seven fields"));
     }
-    let salt: [u8; 16] = raw(b, &f[2])?.try_into().map_err(|_| Failure::Malformed("salt is not 16 bytes"))?;
+    let salt: [u8; 16] = raw(b, &f[2])?
+        .try_into()
+        .map_err(|_| Failure::Malformed("salt is not 16 bytes"))?;
     let cost = Cost {
-        m_kib: uint(&f[3]).and_then(|v| u32::try_from(v).ok()).ok_or(Failure::Malformed("memory cost"))?,
-        passes: uint(&f[4]).and_then(|v| u32::try_from(v).ok()).ok_or(Failure::Malformed("passes"))?,
-        lanes: uint(&f[5]).and_then(|v| u32::try_from(v).ok()).ok_or(Failure::Malformed("lanes"))?,
+        m_kib: uint(&f[3])
+            .and_then(|v| u32::try_from(v).ok())
+            .ok_or(Failure::Malformed("memory cost"))?,
+        passes: uint(&f[4])
+            .and_then(|v| u32::try_from(v).ok())
+            .ok_or(Failure::Malformed("passes"))?,
+        lanes: uint(&f[5])
+            .and_then(|v| u32::try_from(v).ok())
+            .ok_or(Failure::Malformed("lanes"))?,
     };
     let nonces = raw(b, &f[6])?;
     if nonces.len() != 24 {
         return Err(Failure::Malformed("nonces are two of twelve bytes"));
     }
     let (w, y) = nonces.split_at(12);
-    Ok((Wrap::Passphrase { salt, cost }, w.try_into().unwrap(), y.try_into().unwrap()))
+    Ok((
+        Wrap::Passphrase { salt, cost },
+        w.try_into().unwrap(),
+        y.try_into().unwrap(),
+    ))
 }
 
 fn encode_contents(c: &Contents) -> Vec<u8> {
@@ -267,16 +324,25 @@ fn encode_contents(c: &Contents) -> Vec<u8> {
 fn decode_contents(b: &[u8]) -> Option<Contents> {
     let item = parse_all(b).ok()?;
     let Item::Array(f) = &item else { return None };
-    let [s, r, st] = f.as_slice() else { return None };
+    let [s, r, st] = f.as_slice() else {
+        return None;
+    };
     let Item::Array(sa) = s else { return None };
     let seeds = match sa.as_slice() {
         [] => None,
-        [a, b2] => Some([raw(b, a).ok()?.try_into().ok()?, raw(b, b2).ok()?.try_into().ok()?]),
+        [a, b2] => Some([
+            raw(b, a).ok()?.try_into().ok()?,
+            raw(b, b2).ok()?.try_into().ok()?,
+        ]),
         _ => return None,
     };
     let Item::Array(ra) = r else { return None };
     let records: Vec<Vec<u8>> = ra.iter().map(|x| raw(b, x).ok()).collect::<Option<_>>()?;
-    Some(Contents { seeds, records, store: ClientStore::decode(&raw(b, st).ok()?)? })
+    Some(Contents {
+        seeds,
+        records,
+        store: ClientStore::decode(&raw(b, st).ok()?)?,
+    })
 }
 
 fn key(k: &[u8; 32]) -> LessSafeKey {
@@ -348,14 +414,23 @@ impl Contents {
             .store
             .sealed
             .iter()
-            .filter(|(txid, c)| subject_window(&self.store, txid, &c.subject).is_some_and(|(at, w)| now.saturating_sub(at) >= w))
+            .filter(|(txid, c)| {
+                subject_window(&self.store, txid, &c.subject)
+                    .is_some_and(|(at, w)| now.saturating_sub(at) >= w)
+            })
             .map(|(t, _)| *t)
             .collect();
         for t in stale {
             self.store.sealed.remove(&t);
             out.captures += 1;
         }
-        let spent: Vec<crate::Txid> = self.store.seeds.iter().filter(|(_, s)| now.saturating_sub(s.finalized_at) >= own_window_s).map(|(t, _)| *t).collect();
+        let spent: Vec<crate::Txid> = self
+            .store
+            .seeds
+            .iter()
+            .filter(|(_, s)| now.saturating_sub(s.finalized_at) >= own_window_s)
+            .map(|(t, _)| *t)
+            .collect();
         for t in spent {
             self.store.seeds.remove(&t);
             out.seeds += 1;
@@ -371,7 +446,11 @@ impl Contents {
 /// set — an unreadable commitment is not a licence to discard, and it is
 /// not a licence to keep either; it is simply not a judgement this scan
 /// can make.
-fn subject_window(store: &ClientStore, txid: &crate::Txid, subject: &crate::Keyhash) -> Option<(u64, u64)> {
+fn subject_window(
+    store: &ClientStore,
+    txid: &crate::Txid,
+    subject: &crate::Keyhash,
+) -> Option<(u64, u64)> {
     let set = store.disclosures.get(txid)?;
     let rec = rhtn_archive::record::Record::parse(store.records.get(txid)?).ok()?;
     let parts = rec.participants();

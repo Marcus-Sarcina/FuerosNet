@@ -42,7 +42,12 @@ fn unordered<N: Ord + Clone>(a: N, b: N) -> (N, N) {
 
 impl<N: Ord + Clone + Debug> Evidence<N> {
     pub fn new(observer: N) -> Self {
-        Evidence { observer, adoptions: BTreeSet::new(), acquaintances: BTreeSet::new(), disavowed: BTreeSet::new() }
+        Evidence {
+            observer,
+            adoptions: BTreeSet::new(),
+            acquaintances: BTreeSet::new(),
+            disavowed: BTreeSet::new(),
+        }
     }
 
     /// An adoption of `node` under `patron` this observer holds.
@@ -104,7 +109,11 @@ impl<N: Ord + Clone + Debug> Evidence<N> {
     /// The pairs of the evaluator's graph: adoptions and acquaintances
     /// collapsed to one unordered pair each (design §16.2.1).
     pub fn pairs(&self) -> BTreeSet<(N, N)> {
-        self.adoptions.iter().map(|(p, c)| unordered(p.clone(), c.clone())).chain(self.acquaintances.iter().cloned()).collect()
+        self.adoptions
+            .iter()
+            .map(|(p, c)| unordered(p.clone(), c.clone()))
+            .chain(self.acquaintances.iter().cloned())
+            .collect()
     }
 }
 
@@ -120,7 +129,10 @@ pub struct World<N: Ord + Clone> {
 
 impl<N: Ord + Clone + Debug> World<N> {
     pub fn new() -> Self {
-        World { adoptions: Vec::new(), peerings: Vec::new() }
+        World {
+            adoptions: Vec::new(),
+            peerings: Vec::new(),
+        }
     }
 
     pub fn adopt(&mut self, patron: N, node: N) {
@@ -140,11 +152,19 @@ impl<N: Ord + Clone + Debug> World<N> {
     }
 
     pub fn children(&self, patron: &N) -> Vec<N> {
-        self.adoptions.iter().filter(|(p, _)| p == patron).map(|(_, c)| c.clone()).collect()
+        self.adoptions
+            .iter()
+            .filter(|(p, _)| p == patron)
+            .map(|(_, c)| c.clone())
+            .collect()
     }
 
     pub fn nodes(&self) -> BTreeSet<N> {
-        self.adoptions.iter().chain(&self.peerings).flat_map(|(a, b)| [a.clone(), b.clone()]).collect()
+        self.adoptions
+            .iter()
+            .chain(&self.peerings)
+            .flat_map(|(a, b)| [a.clone(), b.clone()])
+            .collect()
     }
 
     /// The evidence `observer` holds: the floor plus `reach` shells.
@@ -173,7 +193,11 @@ impl<N: Ord + Clone + Debug> World<N> {
         }
         let mut expanded = hz;
         for _ in 0..reach {
-            let frontier: Vec<N> = ev.known().into_iter().filter(|n| !expanded.contains(n)).collect();
+            let frontier: Vec<N> = ev
+                .known()
+                .into_iter()
+                .filter(|n| !expanded.contains(n))
+                .collect();
             for u in frontier {
                 expanded.insert(u.clone());
                 for (p, c) in &self.adoptions {

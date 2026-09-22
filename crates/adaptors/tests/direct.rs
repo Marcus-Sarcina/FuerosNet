@@ -36,7 +36,10 @@ struct Counting {
 
 impl Counting {
     fn over(inner: Arc<dyn Serving>) -> Arc<Counting> {
-        Arc::new(Counting { inner, relays: AtomicUsize::new(0) })
+        Arc::new(Counting {
+            inner,
+            relays: AtomicUsize::new(0),
+        })
     }
     fn relayed(&self) -> usize {
         self.relays.load(Ordering::SeqCst)
@@ -62,7 +65,13 @@ impl Serving for Counting {
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.prekey(from, body)
     }
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
+    fn relay<'a>(
+        &'a self,
+        from: Keyhash,
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    ) -> Answer<'a, bool> {
         self.relays.fetch_add(1, Ordering::SeqCst);
         self.inner.relay(from, to, bytes, device)
     }
@@ -77,20 +86,46 @@ impl Serving for Counting {
 
 /// A light client beside `node` on a socket of its own; whether the path
 /// may be direct is what the node's table says of its horizon.
-fn light(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
+fn light(
+    name: &'static str,
+    node: &Arc<LiveNode>,
+    serving: &Arc<dyn Serving>,
+    inboxes: &Inboxes,
+) -> Party {
     let inlet = Inlet::default();
     let gate: Gate = {
         let node = node.clone();
         let me = kh(name);
-        Arc::new(move |peer| node.view.lock().unwrap().table.horizon(&me, 2).contains(peer))
+        Arc::new(move |peer| {
+            node.view
+                .lock()
+                .unwrap()
+                .table
+                .horizon(&me, 2)
+                .contains(peer)
+        })
     };
-    let direct = LightDirect::bind(Arc::new(id(name)), pins(), loopback(), None, None, gate, inlet.inbound()).expect("bound");
+    let direct = LightDirect::bind(
+        Arc::new(id(name)),
+        pins(),
+        loopback(),
+        None,
+        None,
+        gate,
+        inlet.inbound(),
+    )
+    .expect("bound");
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound());
-    Party { handle, courier, app, reachable }
+    Party {
+        handle,
+        courier,
+        app,
+        reachable,
+    }
 }
 
 /// A light client whose local decision refuses every direct path: what a
@@ -98,17 +133,36 @@ fn light(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, i
 fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
     let inlet = Inlet::default();
     let gate: Gate = Arc::new(|_| false);
-    let direct = LightDirect::bind(Arc::new(id(name)), pins(), loopback(), None, None, gate, inlet.inbound()).expect("bound");
+    let direct = LightDirect::bind(
+        Arc::new(id(name)),
+        pins(),
+        loopback(),
+        None,
+        None,
+        gate,
+        inlet.inbound(),
+    )
+    .expect("bound");
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound());
-    Party { handle, courier, app, reachable }
+    Party {
+        handle,
+        courier,
+        app,
+        reachable,
+    }
 }
 
 /// A node that is a participant: its client on the node's own socket.
-fn infra(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
+fn infra(
+    name: &'static str,
+    node: &Arc<LiveNode>,
+    serving: &Arc<dyn Serving>,
+    inboxes: &Inboxes,
+) -> Party {
     let inlet = Inlet::default();
     let direct = NodeDirect::new(node.clone(), pins(), inlet.inbound());
     let reachable = direct.reachable();
@@ -116,11 +170,22 @@ fn infra(name: &'static str, node: &Arc<LiveNode>, serving: &Arc<dyn Serving>, i
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), direct);
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound());
-    Party { handle, courier, app, reachable }
+    Party {
+        handle,
+        courier,
+        app,
+        reachable,
+    }
 }
 
-async fn next(app: &mut UnboundedReceiver<(Keyhash, Dispatched)>, ms: u64) -> Option<(Keyhash, Dispatched)> {
-    tokio::time::timeout(Duration::from_millis(ms), app.recv()).await.ok().flatten()
+async fn next(
+    app: &mut UnboundedReceiver<(Keyhash, Dispatched)>,
+    ms: u64,
+) -> Option<(Keyhash, Dispatched)> {
+    tokio::time::timeout(Duration::from_millis(ms), app.recv())
+        .await
+        .ok()
+        .flatten()
 }
 
 // acceptance: TRV-07
@@ -142,17 +207,34 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
     // carol offers: her candidates go as their own kind over the relay;
     // w1 dials them, and offers its own back
     assert!(carol.courier.offer(kh("w1")).await);
-    assert!(until(4000, || carol.reachable.holds(&kh("w1")) && w1.reachable.holds(&kh("carol"))).await, "both hold the path");
+    assert!(
+        until(4000, || carol.reachable.holds(&kh("w1"))
+            && w1.reachable.holds(&kh("carol")))
+        .await,
+        "both hold the path"
+    );
     let relayed = counting.relayed();
     assert!(relayed >= 1, "the candidates went through the serving node");
     // payload from the client's own send takes the direct path, and the
     // serving node carries none of it
-    carol.courier.send(kh("w1"), KIND_APPLICATION, b"over the direct path".to_vec()).await.expect("sent");
+    carol
+        .courier
+        .send(kh("w1"), KIND_APPLICATION, b"over the direct path".to_vec())
+        .await
+        .expect("sent");
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"over the direct path"), "{d:?}");
+    assert!(
+        matches!(&d, Dispatched::Application(b) if b == b"over the direct path"),
+        "{d:?}"
+    );
     assert_eq!(counting.relayed(), relayed, "nothing more relayed");
-    assert!(carol.handle.with_blocking(|c| c.device.direct.reachable(&kh("w1"))), "the client's own interface says so");
+    assert!(
+        carol
+            .handle
+            .with_blocking(|c| c.device.direct.reachable(&kh("w1"))),
+        "the client's own interface says so"
+    );
     // a peer outside the horizon gets no offer at all: nothing gathered,
     // nothing sent (design §12.6.3)
     assert!(!carol.courier.offer(kh("w2")).await);
@@ -182,15 +264,29 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     p2.courier.attach(vec![kh("w1")]).await;
     p1.courier.sweep(vec![kh("w2")]).await;
     assert!(p1.courier.offer(kh("w2")).await);
-    assert!(until(4000, || p1.reachable.holds(&kh("w2")) && p2.reachable.holds(&kh("w1"))).await, "both hold the path");
+    assert!(
+        until(4000, || p1.reachable.holds(&kh("w2"))
+            && p2.reachable.holds(&kh("w1")))
+        .await,
+        "both hold the path"
+    );
     let relayed = c1.relayed() + c2.relayed();
-    p1.courier.send(kh("w2"), KIND_APPLICATION, b"node to node".to_vec()).await.expect("sent");
+    p1.courier
+        .send(kh("w2"), KIND_APPLICATION, b"node to node".to_vec())
+        .await
+        .expect("sent");
     let (from, d) = next(&mut p2.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("w1"));
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"node to node"), "{d:?}");
+    assert!(
+        matches!(&d, Dispatched::Application(b) if b == b"node to node"),
+        "{d:?}"
+    );
     assert_eq!(c1.relayed() + c2.relayed(), relayed, "nothing more relayed");
     assert_eq!(n1.direct_state(&kh("w2")), Some(true));
-    assert!(p2.handle.with_blocking(|c| c.device.direct.reachable(&kh("w1"))));
+    assert!(
+        p2.handle
+            .with_blocking(|c| c.device.direct.reachable(&kh("w1")))
+    );
 }
 
 // acceptance: TRV-08
@@ -211,18 +307,34 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     w1.courier.attach(vec![kh("carol")]).await;
     carol.courier.sweep(vec![kh("w1")]).await;
     // carol gathers nothing, so offers nothing
-    assert!(!carol.courier.offer(kh("w1")).await, "nothing gathered for a peer the gate refuses");
+    assert!(
+        !carol.courier.offer(kh("w1")).await,
+        "nothing gathered for a peer the gate refuses"
+    );
     // w1 offers its own: carol dials none of them
     assert!(w1.courier.offer(kh("carol")).await);
-    assert!(!until(2500, || carol.reachable.holds(&kh("w1"))).await, "carol opens nothing");
+    assert!(
+        !until(2500, || carol.reachable.holds(&kh("w1"))).await,
+        "carol opens nothing"
+    );
     // and w1 dialling carol directly is closed unheld
-    assert!(!until(2500, || w1.reachable.holds(&kh("carol"))).await, "carol accepts nothing either");
+    assert!(
+        !until(2500, || w1.reachable.holds(&kh("carol"))).await,
+        "carol accepts nothing either"
+    );
     // the payload still arrives, over the relay
     let relayed = counting.relayed();
-    carol.courier.send(kh("w1"), KIND_APPLICATION, b"over the relay".to_vec()).await.expect("sent");
+    carol
+        .courier
+        .send(kh("w1"), KIND_APPLICATION, b"over the relay".to_vec())
+        .await
+        .expect("sent");
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"over the relay"), "{d:?}");
+    assert!(
+        matches!(&d, Dispatched::Application(b) if b == b"over the relay"),
+        "{d:?}"
+    );
     assert!(counting.relayed() > relayed, "the serving node carried it");
 }
 
@@ -235,16 +347,29 @@ async fn an_infrastructure_node_opens_no_direct_path_it_would_not_have_gathered_
     let n1 = live_node("w1", scene.table("w1", &["w1"]), "w1", &[]);
     let n2 = live_node("w2", scene.table("w2", &["w2"]), "w2", &[]);
     assert!(!n1.permits_direct(&kh("w2")), "outside the horizon");
-    assert!(!n2.permits_direct(&kh("w1")), "and in the other direction too");
+    assert!(
+        !n2.permits_direct(&kh("w1")),
+        "and in the other direction too"
+    );
     // n2 gathers for itself, by asking for a peer it does permit: its own
     // candidates are what n1 would be given
     let cands = n2.gather().await;
     assert!(!cands.is_empty(), "n2 has candidates of its own");
     // n1 gathers nothing for n2, and opening on n2's candidates by hand
     // dials nothing either
-    assert!(n1.prepare_direct(&kh("w2")).await.is_none(), "nothing gathered");
-    assert!(!n1.open_direct(kh("w2"), &pins(), &cands).await, "and nothing dialled");
-    assert_eq!(n1.direct_state(&kh("w2")), None, "no path was even attempted");
+    assert!(
+        n1.prepare_direct(&kh("w2")).await.is_none(),
+        "nothing gathered"
+    );
+    assert!(
+        !n1.open_direct(kh("w2"), &pins(), &cands).await,
+        "and nothing dialled"
+    );
+    assert_eq!(
+        n1.direct_state(&kh("w2")),
+        None,
+        "no path was even attempted"
+    );
     // nor does n2 accept what n1 opens: the same decision on the way in
     let c1 = n1.gather().await;
     assert!(!n2.open_direct(kh("w1"), &pins(), &c1).await);
@@ -253,6 +378,9 @@ async fn an_infrastructure_node_opens_no_direct_path_it_would_not_have_gathered_
     let inboxes = Inboxes::default();
     let serving: Arc<dyn Serving> = LocalNode::new(n1.clone(), inboxes.clone());
     let p1 = infra("w1", &n1, &serving, &inboxes);
-    assert!(!p1.courier.offer(kh("w2")).await, "no offer for a peer it may not reach");
+    assert!(
+        !p1.courier.offer(kh("w2")).await,
+        "no offer for a peer it may not reach"
+    );
     assert!(!p1.reachable.holds(&kh("w2")));
 }

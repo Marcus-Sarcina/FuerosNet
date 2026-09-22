@@ -51,15 +51,22 @@ impl Record {
         // the body rules index the body's own bytes
         let body_bytes = &bytes[env.body.clone()];
         let body_item = parse_all(body_bytes).map_err(|e| format!("body: {e}"))?;
-        schema::check_body_of_type(body_bytes, &body_item, env.tx_type).map_err(|e| format!("body: {e}"))?;
-        let Item::Map(m) = &env.body_item else { return Err("body".into()) };
-        let Item::Array(lists) = map_get(m, 0).ok_or("key 0")? else { return Err("key 0".into()) };
+        schema::check_body_of_type(body_bytes, &body_item, env.tx_type)
+            .map_err(|e| format!("body: {e}"))?;
+        let Item::Map(m) = &env.body_item else {
+            return Err("body".into());
+        };
+        let Item::Array(lists) = map_get(m, 0).ok_or("key 0")? else {
+            return Err("key 0".into());
+        };
         if lists.len() != env.signers.len() {
             return Err("back-pointer lists != signers".into());
         }
         let mut back = Vec::new();
         for l in lists {
-            let Item::Array(hs) = l else { return Err("list".into()) };
+            let Item::Array(hs) = l else {
+                return Err("list".into());
+            };
             let mut v = Vec::new();
             for h in hs {
                 v.push(kh(bytes, h).ok_or("back-pointer width")?);
@@ -90,7 +97,16 @@ impl Record {
         for s in &env.signers {
             signers.push(<[u8; 32]>::try_from(s.as_slice()).map_err(|_| "signer width")?);
         }
-        Ok(Record { bytes: bytes.to_vec(), txid: cose::txid(&bytes[env.body.clone()]), tx_type: env.tx_type, signers, back, time, effective, body: env.body })
+        Ok(Record {
+            bytes: bytes.to_vec(),
+            txid: cose::txid(&bytes[env.body.clone()]),
+            tx_type: env.tx_type,
+            signers,
+            back,
+            time,
+            effective,
+            body: env.body,
+        })
     }
 
     /// Verify the signatures against pinned identities: a missing signer is
@@ -108,7 +124,9 @@ impl Record {
             Ok(_) => SigStatus::Verified,
             Err(verify::Failure::MissingKey(k)) => match <[u8; 32]>::try_from(k.as_slice()) {
                 Ok(missing) => SigStatus::Unverifiable { missing },
-                Err(_) => SigStatus::Invalid("a signer named by a value that is not a keyhash".into()),
+                Err(_) => {
+                    SigStatus::Invalid("a signer named by a value that is not a keyhash".into())
+                }
             },
             Err(verify::Failure::Invalid(e)) => SigStatus::Invalid(e),
         }
@@ -125,7 +143,9 @@ impl Record {
     pub fn field_hash(&self, key: u64) -> Option<[u8; 32]> {
         let body = &self.bytes[self.body.clone()];
         let r = value_slice(body, key)?;
-        let Ok(it) = parse_all(&body[r.clone()]) else { return None };
+        let Ok(it) = parse_all(&body[r.clone()]) else {
+            return None;
+        };
         let Item::Bytes(br) = &it else { return None };
         body[r.start + br.start..r.start + br.end].try_into().ok()
     }
@@ -136,7 +156,10 @@ impl Record {
 
     /// The back-pointer list this record carries for `signer`, if it signed.
     pub fn back_pointers_of(&self, signer: &Keyhash) -> Option<&[Txid]> {
-        self.signers.iter().position(|s| s == signer).map(|i| self.back[i].as_slice())
+        self.signers
+            .iter()
+            .position(|s| s == signer)
+            .map(|i| self.back[i].as_slice())
     }
 
     /// A series reissue is the checkpoint a presentation may root at
@@ -158,7 +181,10 @@ impl Record {
             _ => return None,
         };
         let Item::Array(a) = &sq else { return None };
-        Some(Seqno { series: as_uint(a.first()?)? as u32, counter: as_uint(a.get(1)?)? as u32 })
+        Some(Seqno {
+            series: as_uint(a.first()?)? as u32,
+            counter: as_uint(a.get(1)?)? as u32,
+        })
     }
 
     /// The seqno a reissue leaves (field 3).
@@ -167,8 +193,13 @@ impl Record {
             return None;
         }
         let m = self.body_map();
-        let Item::Array(a) = map_get(&m, 3)? else { return None };
-        Some(Seqno { series: as_uint(a.first()?)? as u32, counter: as_uint(a.get(1)?)? as u32 })
+        let Item::Array(a) = map_get(&m, 3)? else {
+            return None;
+        };
+        Some(Seqno {
+            series: as_uint(a.first()?)? as u32,
+            counter: as_uint(a.get(1)?)? as u32,
+        })
     }
 
     /// The locator an adoption or peering carries in field 3.
@@ -189,9 +220,10 @@ impl Record {
         if let Some(Item::Array(ps)) = map_get(&m, 3) {
             for p in ps {
                 if let Item::Map(pm) = p
-                    && let Some(k) = map_get(pm, 1).and_then(|it| kh(body, it)) {
-                        out.push(k);
-                    }
+                    && let Some(k) = map_get(pm, 1).and_then(|it| kh(body, it))
+                {
+                    out.push(k);
+                }
             }
         }
         out
@@ -205,7 +237,9 @@ impl Record {
         let body = &self.bytes[self.body.clone()];
         let r6 = value_slice(body, 6)?;
         let r1 = value_slice_at(body, r6.start, 1)?;
-        let Ok(it) = parse_all(&body[r1.clone()]) else { return None };
+        let Ok(it) = parse_all(&body[r1.clone()]) else {
+            return None;
+        };
         let Item::Bytes(br) = &it else { return None };
         body[r1.start + br.start..r1.start + br.end].try_into().ok()
     }

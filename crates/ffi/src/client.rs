@@ -68,7 +68,11 @@ impl Intent {
     }
 
     fn inward(&self) -> Result<rhtn_client::ceremony::Intent, Refused> {
-        let contribution: [u8; 16] = self.contribution.as_slice().try_into().map_err(|_| Refused::new("a contribution is 16 bytes"))?;
+        let contribution: [u8; 16] = self
+            .contribution
+            .as_slice()
+            .try_into()
+            .map_err(|_| Refused::new("a contribution is 16 bytes"))?;
         let nominees: Option<Vec<Keyhash>> = self.nominees.iter().map(|n| keyhash(n)).collect();
         Ok(rhtn_client::ceremony::Intent {
             contribution,
@@ -97,7 +101,6 @@ pub struct Response {
     pub subject: Id,
     pub answer: Answer,
 }
-
 
 /// A witness's place on a record (`wire-format.md` §4.5 field 4).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,13 +156,18 @@ pub struct Answered {
 
 impl Witnessing {
     fn of(w: &rhtn_archive::tx::Witness) -> Witnessing {
-        Witnessing { witness: id_of(&w.keyhash), nominated_by: id_of(&w.nominated_by), flags: w.flags }
+        Witnessing {
+            witness: id_of(&w.keyhash),
+            nominated_by: id_of(&w.nominated_by),
+            flags: w.flags,
+        }
     }
 
     fn inward(&self) -> Result<rhtn_archive::tx::Witness, Refused> {
         Ok(rhtn_archive::tx::Witness {
             keyhash: keyhash(&self.witness).ok_or_else(|| Refused::new("a witness is 32 bytes"))?,
-            nominated_by: keyhash(&self.nominated_by).ok_or_else(|| Refused::new("a nominator is 32 bytes"))?,
+            nominated_by: keyhash(&self.nominated_by)
+                .ok_or_else(|| Refused::new("a nominator is 32 bytes"))?,
             flags: self.flags,
         })
     }
@@ -171,16 +179,35 @@ impl WitnessAsk {
             ceremony: r.ceremony_id.to_vec(),
             participants: r.participants.iter().map(id_of).collect(),
             started_at: r.started_at,
-            channels: r.channels.iter().map(|c| Achieved { channel: Channel::of(c.kind), outcome: outcome_of(c.result), resolution_m: c.resolution_m }).collect(),
+            channels: r
+                .channels
+                .iter()
+                .map(|c| Achieved {
+                    channel: Channel::of(c.kind),
+                    outcome: outcome_of(c.result),
+                    resolution_m: c.resolution_m,
+                })
+                .collect(),
         }
     }
 
     fn inward(&self) -> Result<rhtn_client::ceremony::WitnessRequest, Refused> {
-        let ceremony: [u8; 32] = self.ceremony.as_slice().try_into().map_err(|_| Refused::new("a ceremony id is 32 bytes"))?;
+        let ceremony: [u8; 32] = self
+            .ceremony
+            .as_slice()
+            .try_into()
+            .map_err(|_| Refused::new("a ceremony id is 32 bytes"))?;
         let p: Option<Vec<Keyhash>> = self.participants.iter().map(|k| keyhash(k)).collect();
         let p = p.ok_or_else(|| Refused::new("a participant is 32 bytes"))?;
-        let participants: [Keyhash; 2] = p.try_into().map_err(|_| Refused::new("a ceremony has two participants"))?;
-        Ok(rhtn_client::ceremony::WitnessRequest { ceremony_id: ceremony, participants, started_at: self.started_at, channels: self.channels.iter().map(inward_channel).collect() })
+        let participants: [Keyhash; 2] = p
+            .try_into()
+            .map_err(|_| Refused::new("a ceremony has two participants"))?;
+        Ok(rhtn_client::ceremony::WitnessRequest {
+            ceremony_id: ceremony,
+            participants,
+            started_at: self.started_at,
+            channels: self.channels.iter().map(inward_channel).collect(),
+        })
     }
 }
 
@@ -199,15 +226,22 @@ impl Proposed {
     fn inward(&self) -> Result<rhtn_client::record::Proposal, Refused> {
         let p: Option<Vec<Keyhash>> = self.participants.iter().map(|k| keyhash(k)).collect();
         let p = p.ok_or_else(|| Refused::new("a participant is 32 bytes"))?;
-        let participants: [Keyhash; 2] = p.try_into().map_err(|_| Refused::new("a ceremony has two participants"))?;
-        let witnesses: Result<Vec<_>, Refused> = self.witnesses.iter().map(|w| w.inward()).collect();
+        let participants: [Keyhash; 2] = p
+            .try_into()
+            .map_err(|_| Refused::new("a ceremony has two participants"))?;
+        let witnesses: Result<Vec<_>, Refused> =
+            self.witnesses.iter().map(|w| w.inward()).collect();
         Ok(rhtn_client::record::Proposal {
             started_at: self.started_at,
             finalized_at: self.finalized_at,
             participants,
             witnesses: witnesses?,
             responses: self.responses.clone(),
-            root: self.root.as_slice().try_into().map_err(|_| Refused::new("a disclosure root is 32 bytes"))?,
+            root: self
+                .root
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a disclosure root is 32 bytes"))?,
         })
     }
 
@@ -215,7 +249,9 @@ impl Proposed {
     /// witnesses, which is what a shell needs to know who to carry it to.
     #[must_use]
     pub fn signers(&self) -> Vec<Id> {
-        self.inward().map(|p| p.signers().iter().map(id_of).collect()).unwrap_or_default()
+        self.inward()
+            .map(|p| p.signers().iter().map(id_of).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -226,39 +262,73 @@ impl Proposed {
 /// carrying a label that does not belong at its position is refused rather
 /// than sorted into place.
 fn revealed_of(set: &rhtn_client::record::DisclosureSet) -> Vec<Revealed> {
-    set.iter().map(|d| Revealed { label: d.label.to_string(), salt: d.salt.to_vec(), value: d.value.clone() }).collect()
+    set.iter()
+        .map(|d| Revealed {
+            label: d.label.to_string(),
+            salt: d.salt.to_vec(),
+            value: d.value.clone(),
+        })
+        .collect()
 }
 
 fn revealed_inward(set: &[Revealed]) -> Result<rhtn_client::record::DisclosureSet, Refused> {
     if set.len() != rhtn_client::record::LABELS.len() {
-        return Err(Refused::new(format!("a disclosure set is {} values, not {}", rhtn_client::record::LABELS.len(), set.len())));
+        return Err(Refused::new(format!(
+            "a disclosure set is {} values, not {}",
+            rhtn_client::record::LABELS.len(),
+            set.len()
+        )));
     }
     let mut out: Vec<rhtn_client::record::Disclosure> = Vec::with_capacity(set.len());
     for (i, r) in set.iter().enumerate() {
         let label = rhtn_client::record::LABELS[i];
         if r.label != label {
-            return Err(Refused::new(format!("disclosure {i} is `{}` where the record's order has `{label}`", r.label)));
+            return Err(Refused::new(format!(
+                "disclosure {i} is `{}` where the record's order has `{label}`",
+                r.label
+            )));
         }
         out.push(rhtn_client::record::Disclosure {
             label,
-            salt: r.salt.as_slice().try_into().map_err(|_| Refused::new("a salt is 16 bytes"))?,
+            salt: r
+                .salt
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a salt is 16 bytes"))?,
             value: r.value.clone(),
         });
     }
-    out.try_into().map_err(|_| Refused::new("a disclosure set is seven values"))
+    out.try_into()
+        .map_err(|_| Refused::new("a disclosure set is seven values"))
 }
 
 fn inward_channel(a: &Achieved) -> rhtn_client::device::ChannelOutcome {
-    rhtn_client::device::ChannelOutcome { kind: a.channel.kind(), result: a.outcome.result(), resolution_m: a.resolution_m }
+    rhtn_client::device::ChannelOutcome {
+        kind: a.channel.kind(),
+        result: a.outcome.result(),
+        resolution_m: a.resolution_m,
+    }
 }
 
 fn answered_of(a: &rhtn_client::verifier::Answer) -> Answered {
-    Answered { query: a.query_id.to_vec(), to_querier: a.to_querier.clone(), to_subject: Some((id_of(&a.to_subject.0), a.to_subject.1.clone())) }
+    Answered {
+        query: a.query_id.to_vec(),
+        to_querier: a.to_querier.clone(),
+        to_subject: Some((id_of(&a.to_subject.0), a.to_subject.1.clone())),
+    }
 }
 
 fn back_inward(back: &[Vec<Vec<u8>>]) -> Result<Vec<Vec<rhtn_archive::Txid>>, Refused> {
     back.iter()
-        .map(|one| one.iter().map(|t| t.as_slice().try_into().map_err(|_| Refused::new("a transaction id is 32 bytes"))).collect())
+        .map(|one| {
+            one.iter()
+                .map(|t| {
+                    t.as_slice()
+                        .try_into()
+                        .map_err(|_| Refused::new("a transaction id is 32 bytes"))
+                })
+                .collect()
+        })
         .collect()
 }
 
@@ -269,14 +339,27 @@ impl Participant {
     /// reader of one takes them. The platform's objects are wrapped inside
     /// that thread, which is the only place the client's own device may be
     /// built.
-    pub fn start(seeds: Vec<u8>, known: Vec<Vec<u8>>, platform: Platform) -> Result<Participant, Refused> {
+    pub fn start(
+        seeds: Vec<u8>,
+        known: Vec<Vec<u8>>,
+        platform: Platform,
+    ) -> Result<Participant, Refused> {
         if seeds.len() != 64 {
-            return Err(Refused::new(format!("an identity is 64 bytes of seed, not {}", seeds.len())));
+            return Err(Refused::new(format!(
+                "an identity is 64 bytes of seed, not {}",
+                seeds.len()
+            )));
         }
-        let (ed, pq): ([u8; 32], [u8; 32]) = (seeds[..32].try_into().unwrap(), seeds[32..].try_into().unwrap());
+        let (ed, pq): ([u8; 32], [u8; 32]) = (
+            seeds[..32].try_into().unwrap(),
+            seeds[32..].try_into().unwrap(),
+        );
         let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
             .iter()
-            .map(|k| rhtn_crypto::Identity::from_key_material(k).ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array")))
+            .map(|k| {
+                rhtn_crypto::Identity::from_key_material(k)
+                    .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+            })
             .collect();
         let ids = ids?;
         // this key twice, from the same seeds: the transport needs one and
@@ -296,7 +379,8 @@ impl Participant {
         let known = ids.clone();
         let handle = Handle::spawn(move || {
             let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
-            let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(rhtn_client::device::NoDirectPath);
+            let direct: std::rc::Rc<dyn DirectPath> =
+                std::rc::Rc::new(rhtn_client::device::NoDirectPath);
             Client::new(me, known, Config::default(), platform.device(direct))
         })
         .map_err(Refused::new)?;
@@ -314,8 +398,14 @@ impl Participant {
     /// The intent is for the shell to carry to the other device by
     /// whatever means the two have; the protocol does not say how, and
     /// neither does this.
-    pub fn begin(&self, counterparty: Id, nominees: Vec<Id>, initiator: bool) -> Result<Intent, Refused> {
-        let cp = keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
+    pub fn begin(
+        &self,
+        counterparty: Id,
+        nominees: Vec<Id>,
+        initiator: bool,
+    ) -> Result<Intent, Refused> {
+        let cp =
+            keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
         let noms: Option<Vec<Keyhash>> = nominees.iter().map(|n| keyhash(n)).collect();
         let noms = noms.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?;
         self.handle
@@ -328,7 +418,11 @@ impl Participant {
     pub fn take_intent(&self, from: Id, intent: Intent) -> Result<Id, Refused> {
         let f = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
         let i = intent.inward()?;
-        self.handle.with_blocking(move |c| c.take_intent(f, &i).map(|id| id.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.take_intent(f, &i)
+                .map(|id| id.to_vec())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Run every channel the hardware has, strongest first, and report
@@ -339,7 +433,11 @@ impl Participant {
             .with_blocking(|c| c.proximity())
             .map(|outs| {
                 outs.into_iter()
-                    .map(|o| Achieved { channel: Channel::of(o.kind), outcome: outcome_of(o.result), resolution_m: o.resolution_m })
+                    .map(|o| Achieved {
+                        channel: Channel::of(o.kind),
+                        outcome: outcome_of(o.result),
+                        resolution_m: o.resolution_m,
+                    })
                     .collect()
             })
             .map_err(|a| Refused::new(format!("{a:?}")))
@@ -350,7 +448,15 @@ impl Participant {
     pub fn select_verifiers(&self) -> Result<Vec<Selected>, Refused> {
         self.handle
             .with_blocking(|c| c.select_verifiers())
-            .map(|picked| picked.into_iter().map(|(v, b)| Selected { verifier: id_of(&v), basis: b as u32 }).collect())
+            .map(|picked| {
+                picked
+                    .into_iter()
+                    .map(|(v, b)| Selected {
+                        verifier: id_of(&v),
+                        basis: b as u32,
+                    })
+                    .collect()
+            })
             .map_err(|a| Refused::new(format!("{a:?}")))
     }
 
@@ -361,7 +467,11 @@ impl Participant {
             c.responses()
                 .iter()
                 .filter_map(|r| rhtn_client::query::Response::read(r).ok())
-                .map(|r| Response { verifier: id_of(&r.verifier), subject: id_of(&r.subject), answer: Answer::of(r.verdict) })
+                .map(|r| Response {
+                    verifier: id_of(&r.verifier),
+                    subject: id_of(&r.subject),
+                    answer: Answer::of(r.verdict),
+                })
                 .collect()
         })
     }
@@ -388,11 +498,22 @@ impl Participant {
     ///
     /// A second attach replaces the first, which is how a client returns to
     /// its patron after a spell on a sibling.
-    pub fn attach(&self, serving: Id, addresses: Vec<String>, population: Vec<Id>) -> Result<Attached, Refused> {
+    pub fn attach(
+        &self,
+        serving: Id,
+        addresses: Vec<String>,
+        population: Vec<Id>,
+    ) -> Result<Attached, Refused> {
         let node = keyhash(&serving).ok_or_else(|| Refused::new("a serving node is 32 bytes"))?;
         let pop: Option<Vec<Keyhash>> = population.iter().map(|p| keyhash(p)).collect();
         let pop = pop.ok_or_else(|| Refused::new("a population member is 32 bytes"))?;
-        let addrs: Result<Vec<SocketAddr>, Refused> = addresses.iter().map(|a| a.parse::<SocketAddr>().map_err(|_| Refused::new(format!("{a} is not an address")))).collect();
+        let addrs: Result<Vec<SocketAddr>, Refused> = addresses
+            .iter()
+            .map(|a| {
+                a.parse::<SocketAddr>()
+                    .map_err(|_| Refused::new(format!("{a} is not an address")))
+            })
+            .collect();
         let addrs = addrs?;
         if addrs.is_empty() {
             return Err(Refused::new("a serving node needs at least one address"));
@@ -453,7 +574,16 @@ impl Participant {
                 .resolvable()
                 .into_iter()
                 .flat_map(|n| {
-                    c.horizon.places_of(&n).into_iter().map(move |p| Placed { node: id_of(&n), anchor: id_of(&p.anchor), path: p.path.clone(), nibbles: p.nibbles }).collect::<Vec<_>>()
+                    c.horizon
+                        .places_of(&n)
+                        .into_iter()
+                        .map(move |p| Placed {
+                            node: id_of(&n),
+                            anchor: id_of(&p.anchor),
+                            path: p.path.clone(),
+                            nibbles: p.nibbles,
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect()
         })
@@ -473,7 +603,11 @@ impl Participant {
                 .reachable_infra()
                 .into_iter()
                 .map(|(n, points)| {
-                    let addrs = points.iter().filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok()).map(|p| p.socket().to_string()).collect();
+                    let addrs = points
+                        .iter()
+                        .filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok())
+                        .map(|p| p.socket().to_string())
+                        .collect();
                     (id_of(&n), addrs)
                 })
                 .collect()
@@ -483,7 +617,8 @@ impl Participant {
     /// Everybody this client can place without asking anyone.
     #[must_use]
     pub fn resolvable(&self) -> Vec<Id> {
-        self.handle.with_blocking(|c| c.horizon.resolvable().iter().map(id_of).collect())
+        self.handle
+            .with_blocking(|c| c.horizon.resolvable().iter().map(id_of).collect())
     }
 
     /// How many adoption or sibling edges away a party is, or nothing
@@ -491,15 +626,19 @@ impl Participant {
     #[must_use]
     pub fn distance(&self, node: Id) -> Option<u32> {
         let k = keyhash(&node)?;
-        self.handle.with_blocking(move |c| c.horizon.distance(&k).map(|d| d as u32))
+        self.handle
+            .with_blocking(move |c| c.horizon.distance(&k).map(|d| d as u32))
     }
 
     /// Whether this client holds the transaction `txid` names, in its own
     /// archive or in what its patron propagated.
     #[must_use]
     pub fn holds(&self, txid: Id) -> bool {
-        let Some(t) = keyhash(&txid) else { return false };
-        self.handle.with_blocking(move |c| c.horizon.holds(&t) || c.archive.get(&t).is_some())
+        let Some(t) = keyhash(&txid) else {
+            return false;
+        };
+        self.handle
+            .with_blocking(move |c| c.horizon.holds(&t) || c.archive.get(&t).is_some())
     }
 
     /// How many records the copy is a fold over.
@@ -522,7 +661,8 @@ impl Participant {
     /// The ceremony this client is in, once both intents have crossed.
     #[must_use]
     pub fn ceremony(&self) -> Option<Id> {
-        self.handle.with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
+        self.handle
+            .with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
     }
 
     /// Take what the counterparty's hardware achieved.
@@ -533,33 +673,53 @@ impl Participant {
     /// has to settle (`light-client-requirements.md` §1.3).
     pub fn take_channels(&self, theirs: Vec<Achieved>) -> Result<(), Refused> {
         let ch: Vec<_> = theirs.iter().map(inward_channel).collect();
-        self.handle.with_blocking(move |c| c.take_channels(&ch).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.take_channels(&ch)
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The key this client's own captures will be sealed under, for the
     /// counterparty to capture with (design §7.5.2).
     pub fn capture_key(&self) -> Result<Vec<u8>, Refused> {
-        self.handle.with_blocking(|c| c.capture_key().map(|k| k.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(|c| {
+            c.capture_key()
+                .map(|k| k.to_vec())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Run the guided capture of the counterparty, sealed under the key
     /// they supplied.  **The key is discarded once the capture is sealed**,
     /// so this client holds no decryptable likeness of them.
     pub fn capture(&self, their_key: Vec<u8>) -> Result<(), Refused> {
-        let k: [u8; 32] = their_key.as_slice().try_into().map_err(|_| Refused::new("a capture key is 32 bytes"))?;
-        self.handle.with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))
+        let k: [u8; 32] = their_key
+            .as_slice()
+            .try_into()
+            .map_err(|_| Refused::new("a capture key is 32 bytes"))?;
+        self.handle
+            .with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))
     }
 
     /// The query to put to one selected verifier (`wire-format.md` §5.5),
     /// encoded as the verifier will read it.
     pub fn query_for(&self, verifier: Id) -> Result<Vec<u8>, Refused> {
         let v = keyhash(&verifier).ok_or_else(|| Refused::new("a verifier is 32 bytes"))?;
-        self.handle.with_blocking(move |c| c.query_for(v).map(|q| q.encode()).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.query_for(v)
+                .map(|q| q.encode())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The request that carries a query, the subject's consent and the
     /// basis the verifier was selected on.
-    pub fn request(&self, query: Vec<u8>, consent: Vec<u8>, basis: u32) -> Result<Vec<u8>, Refused> {
+    pub fn request(
+        &self,
+        query: Vec<u8>,
+        consent: Vec<u8>,
+        basis: u32,
+    ) -> Result<Vec<u8>, Refused> {
         let b = basis_of(basis)?;
         self.handle.with_blocking(move |c| {
             let q = rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
@@ -574,26 +734,30 @@ impl Participant {
     /// response is fabricated** for one.
     pub fn take_query(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
         let f = keyhash(&from).ok_or_else(|| Refused::new("a requester is 32 bytes"))?;
-        self.handle.with_blocking(move |c| match c.take_query(f, &bytes) {
-            rhtn_client::verifier::QueryOutcome::Answered(a) => Ok(Some(answered_of(&a))),
-            rhtn_client::verifier::QueryOutcome::AwaitingGrant => Ok(None),
-            rhtn_client::verifier::QueryOutcome::Closed(why) => Err(Refused::new(why)),
-        })
+        self.handle
+            .with_blocking(move |c| match c.take_query(f, &bytes) {
+                rhtn_client::verifier::QueryOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+                rhtn_client::verifier::QueryOutcome::AwaitingGrant => Ok(None),
+                rhtn_client::verifier::QueryOutcome::Closed(why) => Err(Refused::new(why)),
+            })
     }
 
     /// Take a capture key released to this client as a verifier.
     pub fn take_grant(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
         let f = keyhash(&from).ok_or_else(|| Refused::new("a subject is 32 bytes"))?;
-        self.handle.with_blocking(move |c| match c.take_grant(f, &bytes) {
-            rhtn_client::verifier::GrantOutcome::Answered(a) => Ok(Some(answered_of(&a))),
-            rhtn_client::verifier::GrantOutcome::Buffered | rhtn_client::verifier::GrantOutcome::Ignored => Ok(None),
-            rhtn_client::verifier::GrantOutcome::Rejected(why) => Err(Refused::new(why)),
-        })
+        self.handle
+            .with_blocking(move |c| match c.take_grant(f, &bytes) {
+                rhtn_client::verifier::GrantOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+                rhtn_client::verifier::GrantOutcome::Buffered
+                | rhtn_client::verifier::GrantOutcome::Ignored => Ok(None),
+                rhtn_client::verifier::GrantOutcome::Rejected(why) => Err(Refused::new(why)),
+            })
     }
 
     /// Take a verifier's response about the counterparty.
     pub fn take_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
-        self.handle.with_blocking(move |c| c.take_response(&bytes).map_err(Refused::new))
+        self.handle
+            .with_blocking(move |c| c.take_response(&bytes).map_err(Refused::new))
     }
 
     /// The responses gathered so far, as they will sit in the body.
@@ -607,13 +771,20 @@ impl Participant {
     pub fn nominees(&self) -> (Vec<Id>, Vec<Id>) {
         self.handle.with_blocking(|c| {
             let (mine, theirs) = c.nominees();
-            (mine.iter().map(id_of).collect(), theirs.iter().map(id_of).collect())
+            (
+                mine.iter().map(id_of).collect(),
+                theirs.iter().map(id_of).collect(),
+            )
         })
     }
 
     /// What this client asks its nominees to witness.
     pub fn witness_ask(&self) -> Result<WitnessAsk, Refused> {
-        self.handle.with_blocking(|c| c.witness_request().map(|r| WitnessAsk::of(&r)).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(|c| {
+            c.witness_request()
+                .map(|r| WitnessAsk::of(&r))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Answer an ask put to this client as a nominee: the flags it will
@@ -621,24 +792,33 @@ impl Participant {
     #[must_use]
     pub fn take_witness_ask(&self, ask: WitnessAsk) -> Option<u64> {
         let Ok(r) = ask.inward() else { return None };
-        self.handle.with_blocking(move |c| c.take_witness_request(&r))
+        self.handle
+            .with_blocking(move |c| c.take_witness_request(&r))
     }
 
     /// The back-pointers this client will put in its own signer entry
     /// (`wire-format.md` §3.1).
     #[must_use]
     pub fn back_pointers(&self) -> Vec<Vec<u8>> {
-        self.handle.with_blocking(|c| c.back_pointers().iter().map(|t| t.to_vec()).collect())
+        self.handle
+            .with_blocking(|c| c.back_pointers().iter().map(|t| t.to_vec()).collect())
     }
 
     /// Propose the record, given the counterparty's responses and the
     /// witnesses who accepted.  The disclosures come back with it: they are
     /// what the record commits to and what a holder may later reveal.
-    pub fn propose(&self, theirs: Vec<Vec<u8>>, witnesses: Vec<Witnessing>) -> Result<(Proposed, Vec<Revealed>), Refused> {
+    pub fn propose(
+        &self,
+        theirs: Vec<Vec<u8>>,
+        witnesses: Vec<Witnessing>,
+    ) -> Result<(Proposed, Vec<Revealed>), Refused> {
         let w: Result<Vec<_>, Refused> = witnesses.iter().map(|x| x.inward()).collect();
         let w = w?;
-        self.handle
-            .with_blocking(move |c| c.propose(theirs, w).map(|(p, set)| (Proposed::of(&p), revealed_of(&set))).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.propose(theirs, w)
+                .map(|(p, set)| (Proposed::of(&p), revealed_of(&set)))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The body every signer signs over, given each signer's back-pointers
@@ -654,18 +834,33 @@ impl Participant {
     /// **The disclosures are reviewed, not taken on trust**: a participant
     /// signing a root it has not seen the values behind would be committing
     /// to a record it cannot read.
-    pub fn review_and_sign(&self, proposal: Proposed, set: Vec<Revealed>, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
+    pub fn review_and_sign(
+        &self,
+        proposal: Proposed,
+        set: Vec<Revealed>,
+        back: Vec<Vec<Vec<u8>>>,
+    ) -> Result<Vec<u8>, Refused> {
         let p = proposal.inward()?;
         let d = revealed_inward(&set)?;
         let b = back_inward(&back)?;
-        self.handle.with_blocking(move |c| c.review_and_sign(&p, &d, &b).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.review_and_sign(&p, &d, &b)
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Sign a proposal as a witness, which sees no disclosures.
-    pub fn witness_sign(&self, proposal: Proposed, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
+    pub fn witness_sign(
+        &self,
+        proposal: Proposed,
+        back: Vec<Vec<Vec<u8>>>,
+    ) -> Result<Vec<u8>, Refused> {
         let p = proposal.inward()?;
         let b = back_inward(&back)?;
-        self.handle.with_blocking(move |c| c.witness_sign(&p, &b).map_err(|a| Refused::new(format!("{a:?}"))))
+        self.handle.with_blocking(move |c| {
+            c.witness_sign(&p, &b)
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Where this client sits in the subnet `anchor` names, or nothing
@@ -687,7 +882,8 @@ impl Participant {
     /// Every subnet this client has a position in, its own first.
     #[must_use]
     pub fn anchors(&self) -> Vec<Id> {
-        self.handle.with_blocking(|c| c.anchors().iter().map(id_of).collect())
+        self.handle
+            .with_blocking(|c| c.anchors().iter().map(id_of).collect())
     }
 
     /// As a patron: the adoption body putting `node` one hop below this
@@ -696,19 +892,32 @@ impl Participant {
     /// **Which tree is the patron's to say**, because a patron in two
     /// subnets sits at a different path in each and the address it issues
     /// is its path in the one it is adopting into.
-    pub fn propose_adoption(&self, anchor: Id, node: Id, presence: Id, series: u32, node_back: Vec<Vec<u8>>) -> Result<Vec<u8>, Refused> {
+    pub fn propose_adoption(
+        &self,
+        anchor: Id,
+        node: Id,
+        presence: Id,
+        series: u32,
+        node_back: Vec<Vec<u8>>,
+    ) -> Result<Vec<u8>, Refused> {
         let a = keyhash(&anchor).ok_or_else(|| Refused::new("an anchor is 32 bytes"))?;
         let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
-        let p = keyhash(&presence).ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
+        let p = keyhash(&presence)
+            .ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
         let back = back_inward(&[node_back])?.remove(0);
         self.handle.with_blocking(move |c| {
             c.propose_adoption_in(
                 a,
                 n,
                 &back,
-                rhtn_client::ceremony::Adopting { evidence: rhtn_archive::tx::Evidence::Presence(p), series, presented_head: None, key_material: None },
+                rhtn_client::ceremony::Adopting {
+                    evidence: rhtn_archive::tx::Evidence::Presence(p),
+                    series,
+                    presented_head: None,
+                    key_material: None,
+                },
             )
-                .map_err(|e| Refused::new(format!("{e:?}")))
+            .map_err(|e| Refused::new(format!("{e:?}")))
         })
     }
 
@@ -723,7 +932,11 @@ impl Participant {
     /// adoption of this client, it is also what tells it where it now
     /// sits.
     pub fn take_adoption(&self, envelope: Vec<u8>) -> Result<Id, Refused> {
-        let t = self.handle.with_blocking(move |c| c.take_adoption(&envelope).map(|t| t.to_vec()).map_err(|e| Refused::new(format!("{e:?}"))))?;
+        let t = self.handle.with_blocking(move |c| {
+            c.take_adoption(&envelope)
+                .map(|t| t.to_vec())
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })?;
         self.net.carry_outbox(&self.handle)?;
         Ok(t)
     }
@@ -735,7 +948,11 @@ impl Participant {
             None => None,
             Some(s) => Some(revealed_inward(&s)?),
         };
-        let t = self.handle.with_blocking(move |c| c.finalize(&envelope, d.as_ref()).map(|t| t.to_vec()).map_err(|a| Refused::new(format!("{a:?}"))))?;
+        let t = self.handle.with_blocking(move |c| {
+            c.finalize(&envelope, d.as_ref())
+                .map(|t| t.to_vec())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })?;
         // **the record goes up as soon as it exists.** A ceremony that
         // ended in a record nobody else will ever see did the work and
         // none of the good.
@@ -758,14 +975,20 @@ pub struct Placed {
 /// signed and each signer's entry (`wire-format.md` §3.2).
 #[must_use]
 pub fn presence_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
-    let e: Vec<(Keyhash, Vec<u8>)> = entries.into_iter().filter_map(|(k, v)| keyhash(&k).map(|k| (k, v))).collect();
+    let e: Vec<(Keyhash, Vec<u8>)> = entries
+        .into_iter()
+        .filter_map(|(k, v)| keyhash(&k).map(|k| (k, v)))
+        .collect();
     rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_PRESENCE, &body, &e)
 }
 
 /// The envelope an adoption travels in.
 #[must_use]
 pub fn adoption_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
-    let e: Vec<(Keyhash, Vec<u8>)> = entries.into_iter().filter_map(|(k, v)| keyhash(&k).map(|k| (k, v))).collect();
+    let e: Vec<(Keyhash, Vec<u8>)> = entries
+        .into_iter()
+        .filter_map(|(k, v)| keyhash(&k).map(|k| (k, v)))
+        .collect();
     rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_ADOPTION, &body, &e)
 }
 
@@ -775,7 +998,9 @@ fn basis_of(b: u32) -> Result<rhtn_client::selection::SelectionBasis, Refused> {
         1 => Ok(rhtn_client::selection::SelectionBasis::InHorizon),
         2 => Ok(rhtn_client::selection::SelectionBasis::Reachable),
         3 => Ok(rhtn_client::selection::SelectionBasis::Discretionary),
-        _ => Err(Refused::new(format!("{b} is not a selection basis (`wire-format.md` §5.5 fixes 0 to 3)"))),
+        _ => Err(Refused::new(format!(
+            "{b} is not a selection basis (`wire-format.md` §5.5 fixes 0 to 3)"
+        ))),
     }
 }
 
@@ -796,5 +1021,12 @@ pub fn platform(
     operator: Arc<dyn crate::device::Operator>,
     notices: Arc<dyn crate::device::Notices>,
 ) -> Platform {
-    Platform { proximity, camera, clock, random, operator, notices }
+    Platform {
+        proximity,
+        camera,
+        clock,
+        random,
+        operator,
+        notices,
+    }
 }

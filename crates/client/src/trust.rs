@@ -32,7 +32,11 @@ impl Client {
         for b in self.horizon.table.bindings().iter().filter(|b| b.open()) {
             ev.adopt(b.patron, b.node);
         }
-        for rec in self.archive.records().filter(|r| r.tx_type == TYPE_PRESENCE) {
+        for rec in self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_PRESENCE)
+        {
             let p = rec.participants();
             if p.len() == 2 {
                 ev.meet(p[0], p[1]);

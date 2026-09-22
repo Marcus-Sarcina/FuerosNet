@@ -6,11 +6,11 @@ mod common;
 use common::*;
 use rhtn_archive::record::Record;
 use rhtn_archive::tx;
+use rhtn_node::Keyhash;
 use rhtn_node::peering::peering_body;
 use rhtn_node::resolution::NetworkPoint;
 use rhtn_node::store::{Decision, KIND_TRANSACTION};
 use rhtn_node::view::NodeView;
-use rhtn_node::Keyhash;
 use rhtn_policy::{Evaluation, Policy, ReferenceMetric, Uniform};
 use std::sync::Arc;
 
@@ -27,7 +27,10 @@ fn observed() -> (World, Vec<Record>, Vec<Record>) {
     let (ib, i5) = (id("bob"), id("w5"));
     let pop = rhtn_codec::cose::sha256(b"pop:bob:w5");
     let body = peering_body(
-        [&w.archives[&kh("bob")].next_back_pointers(), &[rhtn_archive::genesis(&kh("w5"))]],
+        [
+            &w.archives[&kh("bob")].next_back_pointers(),
+            &[rhtn_archive::genesis(&kh("w5"))],
+        ],
         &kh("bob"),
         &kh("w5"),
         &NetworkPoint::new([203, 0, 113, 7], None).with_asn(64_496),
@@ -36,7 +39,8 @@ fn observed() -> (World, Vec<Record>, Vec<Record>) {
         Some(1 << 20),
         &pop,
     );
-    let peering = Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&ib, &i5])).expect("well-formed");
+    let peering =
+        Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&ib, &i5])).expect("well-formed");
     (w, vec![a_bob, a_carol, a_w2], vec![a_w1, peering, a_w6])
 }
 
@@ -50,7 +54,12 @@ struct Run {
 
 fn run(policy: Arc<dyn Policy<Keyhash>>) -> Run {
     let (w, own, pushed) = observed();
-    let table = table_with(kh("carol"), &w, &own.iter().collect::<Vec<_>>(), &["alice", "bob", "carol", "w1", "w5"]);
+    let table = table_with(
+        kh("carol"),
+        &w,
+        &own.iter().collect::<Vec<_>>(),
+        &["alice", "bob", "carol", "w1", "w5"],
+    );
     let mut v: NodeView = view("carol", table, "alice", &[1]);
     v.set_now(w.clock);
     v.policy = policy;
@@ -58,7 +67,10 @@ fn run(policy: Arc<dyn Policy<Keyhash>>) -> Run {
     // forwarded to the other
     let fab = Fabric::with(&[kh("alice"), kh("w2")]);
     let lookup = ids();
-    let decisions = pushed.iter().map(|r| v.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &lookup)).collect();
+    let decisions = pushed
+        .iter()
+        .map(|r| v.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &lookup))
+        .collect();
     let targets = [kh("bob"), kh("w1"), kh("w5"), kh("w6")];
     Run {
         decisions,
@@ -74,7 +86,10 @@ fn run(policy: Arc<dyn Policy<Keyhash>>) -> Run {
 fn a_substitute_policy_changes_standing_and_nothing_on_the_wire() {
     let reference = run(Arc::new(ReferenceMetric::default()));
     let uniform = run(Arc::new(Uniform));
-    assert_eq!(reference.decisions, uniform.decisions, "the same objects are stored");
+    assert_eq!(
+        reference.decisions, uniform.decisions,
+        "the same objects are stored"
+    );
     assert_eq!(reference.decisions[0], Decision::Stored);
     assert_eq!(reference.decisions[1], Decision::Stored);
     assert_eq!(reference.objects, uniform.objects);
@@ -101,14 +116,22 @@ fn a_substitute_policy_changes_standing_and_nothing_on_the_wire() {
 #[test]
 fn a_peering_is_an_acquaintance_edge_and_gives_its_parties_no_scope_over_each_other() {
     let (w, own, pushed) = observed();
-    let table = table_with(kh("carol"), &w, &own.iter().collect::<Vec<_>>(), &["alice", "bob", "carol", "w1", "w5"]);
+    let table = table_with(
+        kh("carol"),
+        &w,
+        &own.iter().collect::<Vec<_>>(),
+        &["alice", "bob", "carol", "w1", "w5"],
+    );
     let mut v: NodeView = view("carol", table, "alice", &[1]);
     v.set_now(w.clock);
     let fab = Fabric::with(&[kh("alice"), kh("w2")]);
     let lookup = ids();
 
     let before = v.evidence();
-    assert!(!before.acquaintances.contains(&(kh("bob"), kh("w5"))), "no edge before the peering arrives");
+    assert!(
+        !before.acquaintances.contains(&(kh("bob"), kh("w5"))),
+        "no edge before the peering arrives"
+    );
 
     for r in &pushed {
         v.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &r.bytes, &lookup);
@@ -116,19 +139,35 @@ fn a_peering_is_an_acquaintance_edge_and_gives_its_parties_no_scope_over_each_ot
     let ev = v.evidence();
 
     // the positive: the pair is joined in the acquaintance graph
-    assert!(ev.acquaintances.contains(&(kh("bob"), kh("w5"))), "the peering is an acquaintance edge: {:?}", ev.acquaintances);
+    assert!(
+        ev.acquaintances.contains(&(kh("bob"), kh("w5"))),
+        "the peering is an acquaintance edge: {:?}",
+        ev.acquaintances
+    );
 
     // **and it is not an adoption edge**: nothing about a peering says one
     // party holds authority over the other, which is the whole reason
     // peering can create the cycles the authority relation forbids
-    assert!(!ev.adoptions.contains(&(kh("bob"), kh("w5"))), "and not an authority edge");
-    assert!(!ev.adoptions.contains(&(kh("w5"), kh("bob"))), "in either direction");
+    assert!(
+        !ev.adoptions.contains(&(kh("bob"), kh("w5"))),
+        "and not an authority edge"
+    );
+    assert!(
+        !ev.adoptions.contains(&(kh("w5"), kh("bob"))),
+        "in either direction"
+    );
 
     // the negative: it confers no scope.  w5 is reachable to the metric
     // over the acquaintance edge and is in nobody's subtree by it
     let scope = ev.scope();
-    assert!(!scope.horizon(&kh("bob"), 1).contains(&kh("w5")), "a peering puts neither party in the other's scope");
+    assert!(
+        !scope.horizon(&kh("bob"), 1).contains(&kh("w5")),
+        "a peering puts neither party in the other's scope"
+    );
     assert!(!scope.horizon(&kh("w5"), 1).contains(&kh("bob")));
     // while an adoption in the same evidence does exactly that
-    assert!(scope.horizon(&kh("bob"), 1).contains(&kh("w1")), "control: an adoption does confer scope");
+    assert!(
+        scope.horizon(&kh("bob"), 1).contains(&kh("w1")),
+        "control: an adoption does confer scope"
+    );
 }

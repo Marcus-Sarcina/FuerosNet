@@ -23,7 +23,12 @@ use std::sync::Arc;
 /// another party is refused: publishing it would be choosing the material
 /// that party's peers open sessions against
 /// (`infra-client-requirements.md` §6.1).
-pub fn publication(view: &mut NodeView, ids: &[rhtn_crypto::identity::Identity], peer: &Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+pub fn publication(
+    view: &mut NodeView,
+    ids: &[rhtn_crypto::identity::Identity],
+    peer: &Keyhash,
+    body: &[u8],
+) -> Option<Vec<u8>> {
     let p = PrekeyPublication::decode(body).ok()?;
     let subject = PrekeyBundle::parse(&p.bundle).ok().map(|b| b.subject);
     let code = if subject != Some(*peer) {
@@ -42,7 +47,9 @@ pub fn publication(view: &mut NodeView, ids: &[rhtn_crypto::identity::Identity],
 pub fn deposit(view: &mut NodeView, peer: &Keyhash, body: &[u8]) -> Option<Vec<u8>> {
     let d = OneTimeDeposit::decode(body).ok()?;
     let cfg = view.prekeys.cfg.clone();
-    let code = if d.keys.len() > cfg.per_deposit || view.prekeys.pool_size(peer) + d.keys.len() > cfg.pool {
+    let code = if d.keys.len() > cfg.per_deposit
+        || view.prekeys.pool_size(peer) + d.keys.len() > cfg.pool
+    {
         SUBMISSION_OVER_BOUND
     } else if view.prekeys.stock(*peer, d.keys) {
         SUBMISSION_ACCEPTED

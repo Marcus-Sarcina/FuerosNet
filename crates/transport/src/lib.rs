@@ -14,7 +14,7 @@
 pub mod queue;
 pub mod session;
 pub mod stun;
-pub mod traversal;
 pub mod tls;
+pub mod traversal;
 
 pub use tls::{Pins, client_config, client_endpoint, server_config, server_endpoint};

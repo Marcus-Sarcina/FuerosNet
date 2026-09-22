@@ -50,8 +50,16 @@ impl Terminal {
     /// What has been declared, strongest first.
     pub fn declarations(&self) -> Vec<(Channel, ChannelOutcome, Option<u64>)> {
         let d = self.declared.lock().unwrap();
-        let order = [Channel::Uwb, Channel::Nfc, Channel::Optical, Channel::Latency];
-        order.iter().filter_map(|c| d.iter().find(|(k, _, _)| k == c).copied()).collect()
+        let order = [
+            Channel::Uwb,
+            Channel::Nfc,
+            Channel::Optical,
+            Channel::Latency,
+        ];
+        order
+            .iter()
+            .filter_map(|c| d.iter().find(|(k, _, _)| k == c).copied())
+            .collect()
     }
 
     /// Set the standing answer to a question put to the person.
@@ -81,11 +89,17 @@ impl Proximity for Terminal {
     }
 
     fn run(&self, channel: Channel, _peer: Vec<u8>) -> ChannelOutcome {
-        self.declarations().iter().find(|(c, _, _)| *c == channel).map_or(ChannelOutcome::Unavailable, |(_, o, _)| *o)
+        self.declarations()
+            .iter()
+            .find(|(c, _, _)| *c == channel)
+            .map_or(ChannelOutcome::Unavailable, |(_, o, _)| *o)
     }
 
     fn resolution_m(&self, channel: Channel) -> Option<u64> {
-        self.declarations().iter().find(|(c, _, _)| *c == channel).and_then(|(_, _, m)| *m)
+        self.declarations()
+            .iter()
+            .find(|(c, _, _)| *c == channel)
+            .and_then(|(_, _, m)| *m)
     }
 }
 
@@ -108,7 +122,10 @@ impl Clock for Terminal {
     /// §1.2): a skew corrected here would move a witness's tolerance check
     /// without saying so.
     fn now_ms(&self) -> u64 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
     }
 
     fn wait_ms(&self, ms: u64) {
@@ -130,7 +147,11 @@ impl Random for Terminal {
 impl Operator for Terminal {
     fn ask(&self, question: String) -> bool {
         let yes = self.answering();
-        self.say(format!("asked {} -> {}", question, if yes { "yes" } else { "no" }));
+        self.say(format!(
+            "asked {} -> {}",
+            question,
+            if yes { "yes" } else { "no" }
+        ));
         yes
     }
 }
@@ -146,11 +167,20 @@ fn describe(t: &Told) -> String {
     match t {
         Told::RecordDisclosure { role } => format!("record-disclosure role={role}"),
         Told::QuerySurfaced { verifier } => format!("query-surfaced verifier={}", hex(verifier)),
-        Told::ProbingRefused { requester } => format!("probing-refused requester={}", hex(requester)),
-        Told::NomineesOutnumbered { mine, theirs } => format!("nominees-outnumbered mine={mine} theirs={theirs}"),
+        Told::ProbingRefused { requester } => {
+            format!("probing-refused requester={}", hex(requester))
+        }
+        Told::NomineesOutnumbered { mine, theirs } => {
+            format!("nominees-outnumbered mine={mine} theirs={theirs}")
+        }
         Told::NoCandidateRecognised => "no-candidate-recognised".into(),
-        Told::UnrecognisedDeclaration { resource, value } => format!("unrecognised-declaration resource={} value={value}", hex(resource)),
-        Told::PayloadUnattributable { from } => format!("payload-unattributable from={}", hex(from)),
+        Told::UnrecognisedDeclaration { resource, value } => format!(
+            "unrecognised-declaration resource={} value={value}",
+            hex(resource)
+        ),
+        Told::PayloadUnattributable { from } => {
+            format!("payload-unattributable from={}", hex(from))
+        }
         Told::Unknown { described } => format!("unknown {described}"),
     }
 }
@@ -163,5 +193,7 @@ pub fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok())
+        .collect()
 }

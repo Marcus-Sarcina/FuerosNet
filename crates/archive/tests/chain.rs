@@ -40,8 +40,16 @@ fn a_first_transaction_carries_the_genesis_value() {
     *fresh.archive_mut("alice") = w.archive("alice").clone();
     let adoption = fresh.adopt("carol", "alice", pop.txid, 9);
     let lists = key0_lists(&adoption);
-    assert_eq!(lists[0], vec![genesis(&carol)], "K's list is exactly the genesis value");
-    assert_eq!(genesis(&carol), rhtn_codec::cose::sha256(&carol), "SHA-256 over the 32 keyhash bytes");
+    assert_eq!(
+        lists[0],
+        vec![genesis(&carol)],
+        "K's list is exactly the genesis value"
+    );
+    assert_eq!(
+        genesis(&carol),
+        rhtn_codec::cose::sha256(&carol),
+        "SHA-256 over the 32 keyhash bytes"
+    );
     // a verifier recomputing it reports the chain rooted at genesis at this record
     let wk = walk::walk(&carol, &adoption.txid, &fresh, &fresh.lookup(), 64);
     assert_eq!(wk.root, Root::Genesis);
@@ -64,10 +72,25 @@ fn an_adoption_advances_both_chains_in_signer_order() {
     // field 3 order (alice, bob), then the witness's
     let lists = key0_lists(&f);
     assert_eq!(lists.len(), 3, "two participants and a witness");
-    assert_eq!(lists[..2], [vec![h_p], vec![h_n]], "presence: participants in field 3 order (alice, bob)");
+    assert_eq!(
+        lists[..2],
+        [vec![h_p], vec![h_n]],
+        "presence: participants in field 3 order (alice, bob)"
+    );
     let adoption = w.adopt("bob", "alice", f.txid, 6);
-    assert_eq!(key0_lists(&adoption), vec![vec![h_n2], vec![h_p2]], "node then patron");
-    let dep = w.depart("bob", "alice", Seqno { series: 6, counter: 1 });
+    assert_eq!(
+        key0_lists(&adoption),
+        vec![vec![h_n2], vec![h_p2]],
+        "node then patron"
+    );
+    let dep = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 6,
+            counter: 1,
+        },
+    );
     assert_eq!(key0_lists(&dep), vec![vec![adoption.txid]]);
     let dis = w.disavow("alice", "carol", Some(0));
     assert_eq!(key0_lists(&dis), vec![vec![adoption.txid]]);
@@ -85,7 +108,15 @@ fn swapped_lists_verify_and_do_not_reach_back() {
     let a = Adoption {
         node: w.kh("bob"),
         patron: w.kh("alice"),
-        locator: Locator { anchor: w.kh("alice"), path: vec![0x10], nibbles: 2, seqno: Seqno { series: 6, counter: 0 } },
+        locator: Locator {
+            anchor: w.kh("alice"),
+            path: vec![0x10],
+            nibbles: 2,
+            seqno: Seqno {
+                series: 6,
+                counter: 0,
+            },
+        },
         timestamp: t,
         key_material: None,
         evidence: Evidence::Presence(pop.txid),
@@ -95,12 +126,25 @@ fn swapped_lists_verify_and_do_not_reach_back() {
     let body = adoption_body(&a);
     let env = envelope(TYPE_ADOPTION, &body, &[w.id("bob"), w.id("alice")]);
     let rec = Record::parse(&env).expect("structurally valid");
-    assert_eq!(rec.check_signatures(&w.lookup()), rhtn_archive::record::SigStatus::Verified);
+    assert_eq!(
+        rec.check_signatures(&w.lookup()),
+        rhtn_archive::record::SigStatus::Verified
+    );
     w.store.insert(rec.txid, env);
     let bob = w.kh("bob");
     let wk = walk::walk(&bob, &rec.txid, &w, &w.lookup(), 64);
-    assert_eq!(wk.root, Root::DoesNotReachBack { at: rec.txid, named: h_p });
-    assert_eq!(wk.txids(), vec![rec.txid], "no complete prefix for N from that head");
+    assert_eq!(
+        wk.root,
+        Root::DoesNotReachBack {
+            at: rec.txid,
+            named: h_p
+        }
+    );
+    assert_eq!(
+        wk.txids(),
+        vec![rec.txid],
+        "no complete prefix for N from that head"
+    );
 }
 
 // acceptance: ARC-04
@@ -108,17 +152,44 @@ fn swapped_lists_verify_and_do_not_reach_back() {
 fn a_series_opens_at_zero_and_a_departure_names_the_one_it_ends() {
     let (mut w, _) = formed();
     let adoption = w.archive("bob").get(&w.head("bob")).unwrap().clone();
-    assert_eq!(adoption.seqno(), Some(Seqno { series: 5, counter: 0 }), "the adoption establishes the series, opening it at zero");
+    assert_eq!(
+        adoption.seqno(),
+        Some(Seqno {
+            series: 5,
+            counter: 0
+        }),
+        "the adoption establishes the series, opening it at zero"
+    );
 
     // **the series is what selects the binding**, and the counter ranks
     // nothing here [author, 2026-09-15]: a departure is terminal, not an
     // update to be ordered against anything
-    let dep = w.depart("bob", "alice", Seqno { series: 5, counter: 3 });
-    assert_eq!(dep.seqno().unwrap().series, 5, "the departure names the series it ends");
+    let dep = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 3,
+        },
+    );
+    assert_eq!(
+        dep.seqno().unwrap().series,
+        5,
+        "the departure names the series it ends"
+    );
 
     // a second departure naming the same series is a repeat, and what
     // catches it is its own identity rather than any comparison
-    let again = w.loose_departure("bob", "alice", &[dep.txid], Seqno { series: 5, counter: 3 }, w.clock + 1);
+    let again = w.loose_departure(
+        "bob",
+        "alice",
+        &[dep.txid],
+        Seqno {
+            series: 5,
+            counter: 3,
+        },
+        w.clock + 1,
+    );
     assert_ne!(again.txid, dep.txid, "two records, so two identities");
     assert_eq!(again.seqno().unwrap().series, 5);
 }
@@ -130,11 +201,53 @@ fn counter_gaps_and_unknown_series_are_accepted() {
     // endpoint lines apply (§10.1.2).  Tested on the sequences rather than
     // on a transaction: nothing ranks a departure, so using one as the
     // vehicle would teach the wrong thing
-    let held = Seqno { series: 5, counter: 0 };
-    assert_eq!(compare(held, Seqno { series: 5, counter: 7 }), Order::Newer, "0 to 7 is not an error: a verifier may have missed the ones between");
-    assert_eq!(compare(held, Seqno { series: 5, counter: 0 }), Order::Same, "and the same number is not newer");
-    assert_eq!(compare(held, Seqno { series: 77, counter: 5 }), Order::Incomparable, "no prior state in another series is not a failure, and no rank against this one");
-    assert_eq!(compare(Seqno { series: 5, counter: 7 }, held), Order::Older);
+    let held = Seqno {
+        series: 5,
+        counter: 0,
+    };
+    assert_eq!(
+        compare(
+            held,
+            Seqno {
+                series: 5,
+                counter: 7
+            }
+        ),
+        Order::Newer,
+        "0 to 7 is not an error: a verifier may have missed the ones between"
+    );
+    assert_eq!(
+        compare(
+            held,
+            Seqno {
+                series: 5,
+                counter: 0
+            }
+        ),
+        Order::Same,
+        "and the same number is not newer"
+    );
+    assert_eq!(
+        compare(
+            held,
+            Seqno {
+                series: 77,
+                counter: 5
+            }
+        ),
+        Order::Incomparable,
+        "no prior state in another series is not a failure, and no rank against this one"
+    );
+    assert_eq!(
+        compare(
+            Seqno {
+                series: 5,
+                counter: 7
+            },
+            held
+        ),
+        Order::Older
+    );
 }
 
 // acceptance: ARC-06
@@ -144,8 +257,26 @@ fn a_timestamp_at_the_floor_or_far_ahead_is_admissible() {
     let head = w.head("bob");
     let t0 = w.archive("bob").get(&head).unwrap().effective;
     let t_now = w.clock;
-    let at_floor = w.loose_departure("bob", "alice", &[head], Seqno { series: 5, counter: 1 }, t0);
-    let far = w.loose_departure("bob", "alice", &[head], Seqno { series: 5, counter: 1 }, t_now + 30 * 86_400);
+    let at_floor = w.loose_departure(
+        "bob",
+        "alice",
+        &[head],
+        Seqno {
+            series: 5,
+            counter: 1,
+        },
+        t0,
+    );
+    let far = w.loose_departure(
+        "bob",
+        "alice",
+        &[head],
+        Seqno {
+            series: 5,
+            counter: 1,
+        },
+        t_now + 30 * 86_400,
+    );
     let bob = w.kh("bob");
     for r in [&at_floor, &far] {
         let wk = walk::walk(&bob, &r.txid, &w, &w.lookup(), 64);
@@ -153,7 +284,16 @@ fn a_timestamp_at_the_floor_or_far_ahead_is_admissible() {
         assert!(!matches!(wk.root, Root::Malformed { .. }));
     }
     // and below the floor is malformed
-    let early = w.loose_departure("bob", "alice", &[head], Seqno { series: 5, counter: 1 }, t0 - 1);
+    let early = w.loose_departure(
+        "bob",
+        "alice",
+        &[head],
+        Seqno {
+            series: 5,
+            counter: 1,
+        },
+        t0 - 1,
+    );
     let wk = walk::walk(&bob, &early.txid, &w, &w.lookup(), 64);
     assert!(matches!(wk.root, Root::Malformed { .. }));
 }
@@ -165,21 +305,53 @@ fn two_heads_are_merged_by_the_next_ordinary_transaction() {
     let base = w.head("bob");
     let t = w.clock;
     // two devices each sign a record after the same base
-    let a = w.loose_departure("bob", "alice", &[base], Seqno { series: 5, counter: 1 }, t + 1);
-    let b = w.loose_departure("bob", "alice", &[base], Seqno { series: 5, counter: 2 }, t + 2);
+    let a = w.loose_departure(
+        "bob",
+        "alice",
+        &[base],
+        Seqno {
+            series: 5,
+            counter: 1,
+        },
+        t + 1,
+    );
+    let b = w.loose_departure(
+        "bob",
+        "alice",
+        &[base],
+        Seqno {
+            series: 5,
+            counter: 2,
+        },
+        t + 2,
+    );
     w.archive_mut("bob").append(a.clone()).unwrap();
     w.archive_mut("bob").append(b.clone()).unwrap();
     assert!(w.archive("bob").is_forked());
     let mut expect = vec![a.txid, b.txid];
     expect.sort();
     assert_eq!(w.archive("bob").next_back_pointers(), expect);
-    let merge = w.depart("bob", "alice", Seqno { series: 5, counter: 3 });
-    assert_eq!(merge.back[0], expect, "both heads, sorted ascending bytewise");
+    let merge = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 3,
+        },
+    );
+    assert_eq!(
+        merge.back[0], expect,
+        "both heads, sorted ascending bytewise"
+    );
     assert_eq!(merge.tx_type, TYPE_DEPARTURE, "no separate merge object");
     assert!(!w.archive("bob").is_forked());
     let bob = w.kh("bob");
     let wk = walk::walk(&bob, &merge.txid, &w, &w.lookup(), 64);
-    assert_eq!(wk.root, Root::Genesis, "both branches reached, nothing unsatisfied");
+    assert_eq!(
+        wk.root,
+        Root::Genesis,
+        "both branches reached, nothing unsatisfied"
+    );
     assert_eq!(wk.records.len(), 5);
 }
 
@@ -190,7 +362,14 @@ fn long_chain(n: usize) -> World {
     let f = w.meet("alice", "bob");
     w.adopt("bob", "alice", f.txid, 5);
     for c in 1..=(n - 2) as u32 {
-        w.depart("bob", "alice", Seqno { series: 5, counter: c });
+        w.depart(
+            "bob",
+            "alice",
+            Seqno {
+                series: 5,
+                counter: c,
+            },
+        );
     }
     assert_eq!(w.archive("bob").len(), n);
     w
@@ -208,15 +387,29 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
     let mut replies = 0;
     loop {
         let nonce = [replies as u8; 16];
-        let req = ArchiveRequest { subject: bob, frontier: next.clone(), max_records: m, stop_before: None, nonce };
+        let req = ArchiveRequest {
+            subject: bob,
+            frontier: next.clone(),
+            max_records: m,
+            stop_before: None,
+            nonce,
+        };
         let reply = w.archive("bob").serve(&req);
         assert_eq!(reply.nonce, nonce);
-        let recs: Vec<Record> = reply.records.iter().map(|b| Record::parse(b).unwrap()).collect();
+        let recs: Vec<Record> = reply
+            .records
+            .iter()
+            .map(|b| Record::parse(b).unwrap())
+            .collect();
         if replies == 0 {
             assert_eq!(recs[0].txid, head, "first envelope is the requested head");
         }
         for pair in recs.windows(2) {
-            assert_eq!(pair[0].back_pointers_of(&bob).unwrap(), &[pair[1].txid], "each record names the one that follows");
+            assert_eq!(
+                pair[0].back_pointers_of(&bob).unwrap(),
+                &[pair[1].txid],
+                "each record names the one that follows"
+            );
         }
         for r in &recs {
             if !all.contains(&r.txid) {
@@ -226,14 +419,26 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
         replies += 1;
         if reply.more {
             // the frontier: what the oldest returned record points back to
-            assert_eq!(reply.frontier, recs.last().unwrap().back_pointers_of(&bob).unwrap().to_vec(), "the frontier names what was left unreturned");
+            assert_eq!(
+                reply.frontier,
+                recs.last()
+                    .unwrap()
+                    .back_pointers_of(&bob)
+                    .unwrap()
+                    .to_vec(),
+                "the frontier names what was left unreturned"
+            );
             next = reply.frontier.clone();
         } else {
             assert!(reply.frontier.is_empty());
             break;
         }
     }
-    assert_eq!(all.len(), 11, "the batches concatenated are the whole chain");
+    assert_eq!(
+        all.len(),
+        11,
+        "the batches concatenated are the whole chain"
+    );
     assert!(replies > 1);
     let wk = walk::walk(&bob, &head, &w, &w.lookup(), 64);
     assert_eq!(wk.txids(), all);
@@ -245,15 +450,29 @@ fn a_batch_that_does_not_chain_fails_at_the_first_mismatch() {
     let w = long_chain(6);
     let bob = w.kh("bob");
     let head = w.head("bob");
-    let req = ArchiveRequest { subject: bob, frontier: vec![head], max_records: 6, stop_before: None, nonce: [1; 16] };
+    let req = ArchiveRequest {
+        subject: bob,
+        frontier: vec![head],
+        max_records: 6,
+        stop_before: None,
+        nonce: [1; 16],
+    };
     let honest = w.archive("bob").serve(&req);
     assert_eq!(honest.records.len(), 6);
     // run 1: the middle record replaced by another record of S the preceding one does not name
     let mut bad = honest.clone();
     bad.records[2] = honest.records[4].clone();
     let v = walk::verify_batch(&bob, &[head], &bad, &w.lookup());
-    assert!(matches!(v.end, BatchEnd::Mismatch { index: 2, .. }), "{:?}", v.end);
-    assert_eq!(v.verified.len(), 2, "records from the mismatch on are not a verified prefix");
+    assert!(
+        matches!(v.end, BatchEnd::Mismatch { index: 2, .. }),
+        "{:?}",
+        v.end
+    );
+    assert_eq!(
+        v.verified.len(),
+        2,
+        "records from the mismatch on are not a verified prefix"
+    );
     // run 2: the first record is not the requested head
     let mut bad2 = honest.clone();
     bad2.records.remove(0);
@@ -271,7 +490,11 @@ fn a_batch_that_does_not_chain_fails_at_the_first_mismatch() {
     bad3.more = true;
     bad3.frontier = Vec::new();
     let v3 = walk::verify_batch(&bob, &[head], &bad3, &w.lookup());
-    assert!(matches!(v3.end, BatchEnd::Mismatch { index: 3, .. }), "{:?}", v3.end);
+    assert!(
+        matches!(v3.end, BatchEnd::Mismatch { index: 3, .. }),
+        "{:?}",
+        v3.end
+    );
 }
 
 // acceptance: ARC-10
@@ -280,7 +503,13 @@ fn a_short_reply_is_not_a_short_archive() {
     let w = long_chain(8);
     let bob = w.kh("bob");
     let head = w.head("bob");
-    let req = ArchiveRequest { subject: bob, frontier: vec![head], max_records: 8, stop_before: None, nonce: [2; 16] };
+    let req = ArchiveRequest {
+        subject: bob,
+        frontier: vec![head],
+        max_records: 8,
+        stop_before: None,
+        nonce: [2; 16],
+    };
     let full = w.archive("bob").serve(&req);
     for more in [true, false] {
         let mut short = full.clone();
@@ -288,17 +517,31 @@ fn a_short_reply_is_not_a_short_archive() {
         short.more = more;
         let oldest_rec = Record::parse(&short.records[2]).unwrap();
         // when more remain the reply's frontier names what was left unreturned
-        short.frontier = if more { oldest_rec.back_pointers_of(&bob).unwrap().to_vec() } else { Vec::new() };
+        short.frontier = if more {
+            oldest_rec.back_pointers_of(&bob).unwrap().to_vec()
+        } else {
+            Vec::new()
+        };
         let v = walk::verify_batch(&bob, &[head], &short, &w.lookup());
         let oldest = oldest_rec.txid;
         match &v.end {
-            BatchEnd::Unfetched { continue_from, missing } => {
-                assert_eq!(*continue_from, oldest, "the next request names the oldest returned record");
+            BatchEnd::Unfetched {
+                continue_from,
+                missing,
+            } => {
+                assert_eq!(
+                    *continue_from, oldest,
+                    "the next request names the oldest returned record"
+                );
                 assert_eq!(missing.len(), 1);
             }
             other => panic!("short reply read as {other:?}"),
         }
-        assert_ne!(v.end, BatchEnd::Genesis, "not recorded as rooted at genesis");
+        assert_ne!(
+            v.end,
+            BatchEnd::Genesis,
+            "not recorded as rooted at genesis"
+        );
         // continuing fetches the rest and only then roots at genesis
         let mut calls = 0;
         let out = walk::fetch_chain(&bob, Some(head), 3, &w.lookup(), |r| {
@@ -318,13 +561,22 @@ fn a_restore_without_a_head_is_internally_verified_not_complete() {
     let bob = w.kh("bob");
     let holders_newest = w.head("bob");
     let out = walk::fetch_chain(&bob, None, 3, &w.lookup(), |r| w.archive("bob").serve(r));
-    assert_eq!(out.end, BatchEnd::Genesis, "every back-pointer matched the following record");
+    assert_eq!(
+        out.end,
+        BatchEnd::Genesis,
+        "every back-pointer matched the following record"
+    );
     assert_eq!(out.records.len(), 7);
-    assert!(!out.verified_complete, "a restored archive is never marked verified-complete");
+    assert!(
+        !out.verified_complete,
+        "a restored archive is never marked verified-complete"
+    );
     assert!(out.newest_is_holders_claim);
     assert_eq!(out.newest, Some(holders_newest));
     // the head-verified fetch is distinguishable
-    let anchored = walk::fetch_chain(&bob, Some(holders_newest), 3, &w.lookup(), |r| w.archive("bob").serve(r));
+    let anchored = walk::fetch_chain(&bob, Some(holders_newest), 3, &w.lookup(), |r| {
+        w.archive("bob").serve(r)
+    });
     assert!(anchored.verified_complete);
     assert!(!anchored.newest_is_holders_claim);
 }
@@ -339,9 +591,16 @@ fn an_earlier_head_presents_an_unbroken_prefix() {
     let r_j = all[4]; // an earlier head
     let wk = walk::walk(&bob, &r_j, &w, &w.lookup(), 64);
     assert_eq!(wk.root, Root::Genesis);
-    assert_eq!(wk.txids(), all[4..].to_vec(), "r_j back to genesis, unbroken");
+    assert_eq!(
+        wk.txids(),
+        all[4..].to_vec(),
+        "r_j back to genesis, unbroken"
+    );
     for later in &all[..4] {
-        assert!(!wk.txids().contains(later), "records after r_j are neither fetched nor reported");
+        assert!(
+            !wk.txids().contains(later),
+            "records after r_j are neither fetched nor reported"
+        );
     }
 }
 
@@ -351,8 +610,23 @@ fn a_walk_stops_at_a_reissue_as_a_checkpoint() {
     let mut w = long_chain(4);
     let bob = w.kh("bob");
     let before = w.head("bob");
-    let r_c = w.reissue("bob", "alice", Seqno { series: 5, counter: 2 }, 6);
-    w.depart("bob", "alice", Seqno { series: 6, counter: 1 });
+    let r_c = w.reissue(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 2,
+        },
+        6,
+    );
+    w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 6,
+            counter: 1,
+        },
+    );
     let head = w.head("bob");
     // S no longer serves what lies before r_c
     let mut served: BTreeMap<Txid, Vec<u8>> = BTreeMap::new();
@@ -362,16 +636,31 @@ fn a_walk_stops_at_a_reissue_as_a_checkpoint() {
         if t == r_c.txid {
             break;
         }
-        t = Record::parse(&w.store[&t]).unwrap().back_pointers_of(&bob).unwrap()[0];
+        t = Record::parse(&w.store[&t])
+            .unwrap()
+            .back_pointers_of(&bob)
+            .unwrap()[0];
     }
     let wk = walk::walk(&bob, &head, &served, &w.lookup(), 64);
-    assert_eq!(wk.root, Root::Checkpoint { at: r_c.txid, beyond: vec![before] });
+    assert_eq!(
+        wk.root,
+        Root::Checkpoint {
+            at: r_c.txid,
+            beyond: vec![before]
+        }
+    );
     assert_eq!(wk.txids(), vec![head, r_c.txid]);
     assert!(wk.is_unbroken());
     // an ordinary unfetchable record is a different result
     served.remove(&r_c.txid);
     let wk2 = walk::walk(&bob, &head, &served, &w.lookup(), 64);
-    assert_eq!(wk2.root, Root::Unfetched { at: head, missing: r_c.txid });
+    assert_eq!(
+        wk2.root,
+        Root::Unfetched {
+            at: head,
+            missing: r_c.txid
+        }
+    );
 }
 
 // acceptance: ARC-16
@@ -382,21 +671,58 @@ fn pruning_at_a_checkpoint_keeps_the_evidence() {
     w.adopt("bob", "alice", f1.txid, 5);
     let f2 = w.meet("alice", "bob");
     for (t, name) in [(f1.txid, "f1"), (f2.txid, "f2")] {
-        let ev = Kept { record: w.store[&t].clone(), sealed_capture: format!("capture:{name}").into_bytes(), seed: format!("seed:{name}").into_bytes() };
+        let ev = Kept {
+            record: w.store[&t].clone(),
+            sealed_capture: format!("capture:{name}").into_bytes(),
+            seed: format!("seed:{name}").into_bytes(),
+        };
         w.archive_mut("bob").keep_evidence(t, ev);
     }
-    let r_c = w.reissue("bob", "alice", Seqno { series: 5, counter: 0 }, 6);
-    let after = w.depart("bob", "alice", Seqno { series: 6, counter: 1 });
+    let r_c = w.reissue(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 0,
+        },
+        6,
+    );
+    let after = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 6,
+            counter: 1,
+        },
+    );
     let bob = w.kh("bob");
     let now = r_c.effective + WINDOW_SECONDS + 1;
-    assert!(w.archive_mut("bob").prune(&r_c.txid, r_c.effective + 10).is_err(), "never inside the window");
+    assert!(
+        w.archive_mut("bob")
+            .prune(&r_c.txid, r_c.effective + 10)
+            .is_err(),
+        "never inside the window"
+    );
     let released = w.archive_mut("bob").prune(&r_c.txid, now).unwrap();
     assert_eq!(released, 3);
     let wk = walk::walk(&bob, &after.txid, w.archive("bob"), &w.lookup(), 64);
-    assert_eq!(wk.root, Root::Checkpoint { at: r_c.txid, beyond: vec![f2.txid] });
-    assert_eq!(w.archive("bob").fetch(&f1.txid), None, "chain records before r_c are no longer served");
+    assert_eq!(
+        wk.root,
+        Root::Checkpoint {
+            at: r_c.txid,
+            beyond: vec![f2.txid]
+        }
+    );
+    assert_eq!(
+        w.archive("bob").fetch(&f1.txid),
+        None,
+        "chain records before r_c are no longer served"
+    );
     for (t, name) in [(f1.txid, "f1"), (f2.txid, "f2")] {
-        let ev = w.archive("bob").evidence(&t).expect("still present by txid");
+        let ev = w
+            .archive("bob")
+            .evidence(&t)
+            .expect("still present by txid");
         assert_eq!(ev.record, w.store[&t]);
         assert_eq!(ev.sealed_capture, format!("capture:{name}").into_bytes());
         assert_eq!(ev.seed, format!("seed:{name}").into_bytes());
@@ -416,9 +742,25 @@ fn one_chain_per_key_across_bindings_partitioned_by_series() {
     let bob = w.kh("bob");
     let out = walk::fetch_chain(&bob, None, 256, &w.lookup(), |r| w.archive("bob").serve(r));
     assert_eq!(out.end, BatchEnd::Genesis);
-    assert_eq!(out.records, vec![p2.txid, a2.txid, f2.txid, p1.txid, a1.txid, f1.txid], "one chain, back-pointing across both relationships in signing order");
-    assert_eq!(a1.seqno(), Some(Seqno { series: 11, counter: 0 }));
-    assert_eq!(a2.seqno(), Some(Seqno { series: 22, counter: 0 }));
+    assert_eq!(
+        out.records,
+        vec![p2.txid, a2.txid, f2.txid, p1.txid, a1.txid, f1.txid],
+        "one chain, back-pointing across both relationships in signing order"
+    );
+    assert_eq!(
+        a1.seqno(),
+        Some(Seqno {
+            series: 11,
+            counter: 0
+        })
+    );
+    assert_eq!(
+        a2.seqno(),
+        Some(Seqno {
+            series: 22,
+            counter: 0
+        })
+    );
     assert_eq!(w.archive("bob").series_occupied().len(), 2);
 }
 
@@ -428,7 +770,14 @@ fn appending_a_record_already_held_changes_nothing() {
     let mut w = World::new(&["alice", "bob"]);
     let f = w.meet("alice", "bob");
     let a = w.adopt("bob", "alice", f.txid, 1);
-    let d = w.depart("bob", "alice", Seqno { series: 1, counter: 1 });
+    let d = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
     // an archive holding all three; the same records offered again, in any
     // order, leave one DAG with one head
     let mut ar = rhtn_archive::chain::Archive::new(w.kh("bob"));
@@ -439,7 +788,11 @@ fn appending_a_record_already_held_changes_nothing() {
     ar.append(a.clone()).unwrap();
     ar.append(f.clone()).unwrap();
     ar.append(d.clone()).unwrap();
-    assert_eq!(ar.heads(), vec![d.txid], "a predecessor offered again is not a head beside its successor");
+    assert_eq!(
+        ar.heads(),
+        vec![d.txid],
+        "a predecessor offered again is not a head beside its successor"
+    );
     assert!(!ar.is_forked());
     assert_eq!(ar.next_back_pointers(), vec![d.txid]);
     assert_eq!(ar.len(), 3);

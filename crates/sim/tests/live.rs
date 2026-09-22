@@ -7,7 +7,9 @@ mod common;
 
 use common::*;
 use rhtn_node::currency::{CurrencyReply, CurrencyRequest, ROLE_PATRON};
-use rhtn_node::resolution::{AnchorTable, Ingestion, Path, REQUEST_CURRENCY, REQUEST_RESOLVE, ResolveReply, ResolveRequest};
+use rhtn_node::resolution::{
+    AnchorTable, Ingestion, Path, REQUEST_CURRENCY, REQUEST_RESOLVE, ResolveReply, ResolveRequest,
+};
 use rhtn_node::runtime::{LiveNode, pump_client};
 use rhtn_node::view::NodeView;
 use rhtn_transport::session::*;
@@ -49,15 +51,37 @@ async fn tree() -> Tree {
 
     let mut pcfg = node_cfg("alice", I);
     pcfg.in_subtree = Arc::new(|_| true);
-    let mut p_view = view_of("alice", table_of("alice", &s, &records, &infra), "alice", &[], s.clock);
+    let mut p_view = view_of(
+        "alice",
+        table_of("alice", &s, &records, &infra),
+        "alice",
+        &[],
+        s.clock,
+    );
     p_view.set_slot(0, Some(kh("bob")), s.clock);
-    let p = LiveNode::start(pcfg, p_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let p = LiveNode::start(
+        pcfg,
+        p_view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    );
 
     let ncfg = node_cfg("bob", I);
-    let mut n_view = view_of("bob", table_of("bob", &s, &records, &infra), "alice", &[0], s.clock);
+    let mut n_view = view_of(
+        "bob",
+        table_of("bob", &s, &records, &infra),
+        "alice",
+        &[0],
+        s.clock,
+    );
     n_view.set_slot(2, Some(kh("carol")), s.clock);
     n_view.attached.insert(kh("carol"));
-    let n = LiveNode::start(ncfg, n_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let n = LiveNode::start(
+        ncfg,
+        n_view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    );
 
     // N holds a session upstream to P
     let ncli = client_cfg("bob");
@@ -75,12 +99,30 @@ async fn tree() -> Tree {
         AttachOutcome::Attached(x) => x,
         other => panic!("{other:?}"),
     };
-    let mut cv = view_of("carol", table_of("carol", &s, &records, &infra), "alice", &[0, 2], s.clock);
+    let mut cv = view_of(
+        "carol",
+        table_of("carol", &s, &records, &infra),
+        "alice",
+        &[0, 2],
+        s.clock,
+    );
     cv.serving_node = Some(kh("bob"));
     let c_view = Arc::new(Mutex::new(cv));
-    let _adj = pump_client(&mut c, kh("bob"), c_view.clone(), Arc::new(Mutex::new(ids())));
+    let _adj = pump_client(
+        &mut c,
+        kh("bob"),
+        c_view.clone(),
+        Arc::new(Mutex::new(ids())),
+    );
     tokio::time::sleep(Duration::from_millis(200)).await;
-    Tree { signers: s, p, n, upstream, c, c_view }
+    Tree {
+        signers: s,
+        p,
+        n,
+        upstream,
+        c,
+        c_view,
+    }
 }
 
 /// PRP-01 over real sessions: P originates an adoption in N's h_store; N
@@ -92,22 +134,53 @@ async fn a_push_crosses_two_real_sessions() {
     // attached (`wire-format.md` §10.1.3), which handed P the endpoint
     // record N published at start; the claim below is about the push, so
     // it is measured from here rather than from nothing
-    let before = t.p.node.log.count(|e| matches!(e, Event::Received { frame_type: 5 }));
+    let before =
+        t.p.node
+            .log
+            .count(|e| matches!(e, Event::Received { frame_type: 5 }));
     // w1 adopted under N: its patron is N itself, so it is in N's h_store,
     // and one edge below P's subordinate, so in P's
     let obj = t.signers.adopt("w1", "bob", "alice", &[0, 3], 3);
     for v in [&t.p.view, &t.n.view, &t.c_view] {
-        v.lock().unwrap().store.keep_presence(obj.field_hash(8).unwrap(), t.signers.store[&obj.field_hash(8).unwrap()].clone());
+        v.lock().unwrap().store.keep_presence(
+            obj.field_hash(8).unwrap(),
+            t.signers.store[&obj.field_hash(8).unwrap()].clone(),
+        );
     }
-    assert_eq!(t.p.originate_transaction(&obj.bytes), rhtn_node::store::Decision::Stored);
+    assert_eq!(
+        t.p.originate_transaction(&obj.bytes),
+        rhtn_node::store::Decision::Stored
+    );
     // it reaches N on the upstream session, and C on its own
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-    while tokio::time::Instant::now() < deadline && !t.n.view.lock().unwrap().store.holds_txid(&obj.txid) {
+    while tokio::time::Instant::now() < deadline
+        && !t.n.view.lock().unwrap().store.holds_txid(&obj.txid)
+    {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert!(t.n.view.lock().unwrap().store.holds_txid(&obj.txid), "N stored it");
-    assert!(t.n.view.lock().unwrap().table.patrons(&kh("w1")).contains(&kh("bob")), "and its table followed");
-    assert_eq!(t.n.view.lock().unwrap().slots.get(&3).and_then(|s| s.occupant), Some(kh("w1")), "and its slot was written");
+    assert!(
+        t.n.view.lock().unwrap().store.holds_txid(&obj.txid),
+        "N stored it"
+    );
+    assert!(
+        t.n.view
+            .lock()
+            .unwrap()
+            .table
+            .patrons(&kh("w1"))
+            .contains(&kh("bob")),
+        "and its table followed"
+    );
+    assert_eq!(
+        t.n.view
+            .lock()
+            .unwrap()
+            .slots
+            .get(&3)
+            .and_then(|s| s.occupant),
+        Some(kh("w1")),
+        "and its slot was written"
+    );
     let got = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             if t.c_view.lock().unwrap().store.holds_txid(&obj.txid) {
@@ -118,11 +191,20 @@ async fn a_push_crosses_two_real_sessions() {
     })
     .await;
     assert!(got.is_ok(), "C received it on its session with N");
-    let held = t.c_view.lock().unwrap().store.transaction(&obj.txid).map(|r| r.bytes.clone()).unwrap();
+    let held = t
+        .c_view
+        .lock()
+        .unwrap()
+        .store
+        .transaction(&obj.txid)
+        .map(|r| r.bytes.clone())
+        .unwrap();
     assert_eq!(held, obj.bytes, "byte for byte");
     // and P did not get it back: N's forwarding excluded the arrival session
     assert_eq!(
-        t.p.node.log.count(|e| matches!(e, Event::Received { frame_type: 5 })),
+        t.p.node
+            .log
+            .count(|e| matches!(e, Event::Received { frame_type: 5 })),
         before,
         "nothing came back up to P"
     );
@@ -134,13 +216,28 @@ async fn a_push_crosses_two_real_sessions() {
 #[tokio::test]
 async fn a_resolution_is_answered_on_a_request_stream() {
     let t = tree().await;
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Path::from_indices(&[0, 2]).bytes, nibbles: 2, nonce: [8; 16] };
-    let bytes = t.c.request(REQUEST_RESOLVE, &req.encode()).await.expect("a reply");
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: Path::from_indices(&[0, 2]).bytes,
+        nibbles: 2,
+        nonce: [8; 16],
+    };
+    let bytes =
+        t.c.request(REQUEST_RESOLVE, &req.encode())
+            .await
+            .expect("a reply");
     let reply = ResolveReply::decode(&bytes).unwrap();
-    let ResolveReply::Serving { nonce, serving } = reply else { panic!("{reply:?}") };
+    let ResolveReply::Serving { nonce, serving } = reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(nonce, [8; 16]);
     assert_eq!(serving.node, kh("bob"), "N answers for itself");
-    assert_eq!(serving.residual.indices(), vec![2], "with the suffix that names C");
+    assert_eq!(
+        serving.residual.indices(),
+        vec![2],
+        "with the suffix that names C"
+    );
     assert!(serving.key_material.is_some());
     drop(t.upstream);
 }
@@ -156,26 +253,89 @@ async fn a_resolution_is_proxied_through_a_real_referral() {
     let a_v = s2.adopt("w2", "w1", "w1", &[4], 1);
     let a_x = s2.adopt("c1", "w2", "w1", &[4, 1], 2);
     let recs = [&a_v, &a_x];
-    let mut w_view = view_of("w1", table_of("w1", &s2, &recs, &["w1", "w2"]), "w1", &[], s2.clock);
+    let mut w_view = view_of(
+        "w1",
+        table_of("w1", &s2, &recs, &["w1", "w2"]),
+        "w1",
+        &[],
+        s2.clock,
+    );
     w_view.set_slot(4, Some(kh("w2")), s2.clock);
-    let mut v_view = view_of("w2", table_of("w2", &s2, &recs, &["w1", "w2"]), "w1", &[4], s2.clock);
+    let mut v_view = view_of(
+        "w2",
+        table_of("w2", &s2, &recs, &["w1", "w2"]),
+        "w1",
+        &[4],
+        s2.clock,
+    );
     v_view.set_slot(1, Some(kh("c1")), s2.clock);
     v_view.attached.insert(kh("c1"));
-    let v = LiveNode::start(node_cfg("w2", I), v_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let v = LiveNode::start(
+        node_cfg("w2", I),
+        v_view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    );
     // W holds V's endpoint record, so it can refer
-    let v_record = rhtn_node::resolution::endpoint_record(&id("w2"), &[NetworkPoint::from_socket(v.addr).unwrap()], rhtn_archive::tx::Seqno { series: 1, counter: 1 });
-    w_view.take_object(&Quiet, &kh("w2"), rhtn_node::store::KIND_ENDPOINT_RECORD, &v_record, &ids());
-    let w = LiveNode::start(node_cfg("w1", I), w_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let v_record = rhtn_node::resolution::endpoint_record(
+        &id("w2"),
+        &[NetworkPoint::from_socket(v.addr).unwrap()],
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    w_view.take_object(
+        &Quiet,
+        &kh("w2"),
+        rhtn_node::store::KIND_ENDPOINT_RECORD,
+        &v_record,
+        &ids(),
+    );
+    let w = LiveNode::start(
+        node_cfg("w1", I),
+        w_view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    );
     // V publishes its own endpoints, so its serving answer names them
-    v.view.lock().unwrap().take_object(&Quiet, &kh("w2"), rhtn_node::store::KIND_ENDPOINT_RECORD, &v_record, &ids());
+    v.view.lock().unwrap().take_object(
+        &Quiet,
+        &kh("w2"),
+        rhtn_node::store::KIND_ENDPOINT_RECORD,
+        &v_record,
+        &ids(),
+    );
     // N's anchor table has an entry for W
-    let entry = rhtn_node::resolution::anchor_entry(&id("w1"), &[NetworkPoint::from_socket(w.addr).unwrap()], 50, rhtn_archive::tx::Seqno { series: 1, counter: 1 });
-    assert!(t.n.anchors.lock().unwrap().offer(rhtn_node::resolution::AnchorEntry::parse(&entry).unwrap(), &ids()));
+    let entry = rhtn_node::resolution::anchor_entry(
+        &id("w1"),
+        &[NetworkPoint::from_socket(w.addr).unwrap()],
+        50,
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert!(t.n.anchors.lock().unwrap().offer(
+        rhtn_node::resolution::AnchorEntry::parse(&entry).unwrap(),
+        &ids()
+    ));
     // C asks N about X under W
-    let req = ResolveRequest { subject: kh("c1"), anchor: kh("w1"), path: Path::from_indices(&[4, 1]).bytes, nibbles: 2, nonce: [9; 16] };
-    let bytes = t.c.request(REQUEST_RESOLVE, &req.encode()).await.expect("a reply");
+    let req = ResolveRequest {
+        subject: kh("c1"),
+        anchor: kh("w1"),
+        path: Path::from_indices(&[4, 1]).bytes,
+        nibbles: 2,
+        nonce: [9; 16],
+    };
+    let bytes =
+        t.c.request(REQUEST_RESOLVE, &req.encode())
+            .await
+            .expect("a reply");
     let reply = ResolveReply::decode(&bytes).unwrap();
-    let ResolveReply::Serving { nonce, serving } = reply else { panic!("{reply:?}") };
+    let ResolveReply::Serving { nonce, serving } = reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(nonce, [9; 16], "under C's nonce");
     assert_eq!(serving.node, kh("w2"), "X's serving node");
     assert_eq!(serving.residual.indices(), vec![1]);
@@ -188,16 +348,40 @@ async fn a_resolution_is_proxied_through_a_real_referral() {
 #[tokio::test]
 async fn a_currency_request_is_answered_by_the_patron() {
     let t = tree().await;
-    let req = CurrencyRequest { subject: kh("carol"), nonce: [7; 16] };
-    let bytes = t.c.request(REQUEST_CURRENCY, &req.encode()).await.expect("a reply");
+    let req = CurrencyRequest {
+        subject: kh("carol"),
+        nonce: [7; 16],
+    };
+    let bytes =
+        t.c.request(REQUEST_CURRENCY, &req.encode())
+            .await
+            .expect("a reply");
     let reply = CurrencyReply::decode(&bytes).unwrap();
-    let CurrencyReply::Attestation { nonce, bytes } = reply else { panic!("{reply:?}") };
+    let CurrencyReply::Attestation { nonce, bytes } = reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(nonce, [7; 16]);
     let a = rhtn_archive::currency::parse_attestation(&ids(), &bytes).unwrap();
-    assert_eq!((a.subject, a.current, a.issuer, a.role), (kh("carol"), kh("carol"), kh("bob"), ROLE_PATRON));
+    assert_eq!(
+        (a.subject, a.current, a.issuer, a.role),
+        (kh("carol"), kh("carol"), kh("bob"), ROLE_PATRON)
+    );
     // and a subject N holds no record of gets code 1
-    let bytes = t.c.request(REQUEST_CURRENCY, &CurrencyRequest { subject: kh("c2"), nonce: [6; 16] }.encode()).await.unwrap();
-    assert_eq!(CurrencyReply::decode(&bytes).unwrap(), CurrencyReply::CannotIssue { nonce: [6; 16] });
+    let bytes =
+        t.c.request(
+            REQUEST_CURRENCY,
+            &CurrencyRequest {
+                subject: kh("c2"),
+                nonce: [6; 16],
+            }
+            .encode(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        CurrencyReply::decode(&bytes).unwrap(),
+        CurrencyReply::CannotIssue { nonce: [6; 16] }
+    );
     drop(t.upstream);
 }
 
@@ -215,21 +399,46 @@ async fn a_running_node_replicates_its_store_and_never_its_mailbox() {
     assert!(!t.n.node.has_session(&kh("carol")));
     let queued = b"ciphertext for C".to_vec();
     t.n.node.enqueue(kh("carol"), queued.clone()).unwrap();
-    assert_eq!(t.n.node.queued(&kh("carol")), 1, "N holds it in its mailbox");
+    assert_eq!(
+        t.n.node.queued(&kh("carol")),
+        1,
+        "N holds it in its mailbox"
+    );
     // C's adoption is in N's store; a presence record beside it
-    let a_c = t.signers.store.values().find(|b| rhtn_archive::record::Record::parse(b).map(|r| r.field_hash(1) == Some(kh("carol"))).unwrap_or(false)).unwrap().clone();
+    let a_c = t
+        .signers
+        .store
+        .values()
+        .find(|b| {
+            rhtn_archive::record::Record::parse(b)
+                .map(|r| r.field_hash(1) == Some(kh("carol")))
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
     let a_c = rhtn_archive::record::Record::parse(&a_c).unwrap();
     t.n.originate_transaction(&a_c.bytes);
     let pop = t.signers.store[&a_c.field_hash(8).unwrap()].clone();
-    t.n.view.lock().unwrap().store.keep_presence(a_c.field_hash(8).unwrap(), pop.clone());
+    t.n.view
+        .lock()
+        .unwrap()
+        .store
+        .keep_presence(a_c.field_hash(8).unwrap(), pop.clone());
     let payload = t.n.replication_payload();
     assert!(payload.iter().any(|i| matches!(i, rhtn_node::peering::Replicated::Topology { object, .. } if *object == a_c.bytes)), "C's adoption replicates");
     let carries_queue = payload.iter().any(|i| match i {
-        rhtn_node::peering::Replicated::Topology { object, .. } | rhtn_node::peering::Replicated::TrustBearing { object } => object.windows(queued.len()).any(|w| w == queued),
+        rhtn_node::peering::Replicated::Topology { object, .. }
+        | rhtn_node::peering::Replicated::TrustBearing { object } => {
+            object.windows(queued.len()).any(|w| w == queued)
+        }
         _ => false,
     });
     assert!(!carries_queue, "and the mailbox is no part of it");
-    assert_eq!(t.n.node.queued(&kh("carol")), 1, "which still waits at N alone");
+    assert_eq!(
+        t.n.node.queued(&kh("carol")),
+        1,
+        "which still waits at N alone"
+    );
     drop(t.upstream);
 }
 
@@ -240,9 +449,21 @@ async fn a_running_node_replicates_its_store_and_never_its_mailbox() {
 async fn requests_past_the_allowance_fail_the_stream() {
     let mut s = Signers::new();
     let a_c = s.adopt("carol", "bob", "bob", &[2], 2);
-    let mut n_view = view_of("bob", table_of("bob", &s, &[&a_c], &["bob"]), "bob", &[], s.clock);
+    let mut n_view = view_of(
+        "bob",
+        table_of("bob", &s, &[&a_c], &["bob"]),
+        "bob",
+        &[],
+        s.clock,
+    );
     n_view.attached.insert(kh("carol"));
-    let n = LiveNode::start_with(node_cfg("bob", I), n_view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip), rhtn_node::runtime::RateLimit::new(3, Duration::from_secs(60)));
+    let n = LiveNode::start_with(
+        node_cfg("bob", I),
+        n_view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+        rhtn_node::runtime::RateLimit::new(3, Duration::from_secs(60)),
+    );
     let ccfg = client_cfg("carol");
     know(&ccfg, "bob", n.addr);
     let c = match attach(&ccfg, &client_ep(), kh("bob"), n.addr, false).await {
@@ -252,15 +473,32 @@ async fn requests_past_the_allowance_fail_the_stream() {
     let mut answered = 0;
     let mut failed = 0;
     for i in 0..6u8 {
-        match c.request(REQUEST_CURRENCY, &CurrencyRequest { subject: kh("carol"), nonce: [i; 16] }.encode()).await {
+        match c
+            .request(
+                REQUEST_CURRENCY,
+                &CurrencyRequest {
+                    subject: kh("carol"),
+                    nonce: [i; 16],
+                }
+                .encode(),
+            )
+            .await
+        {
             Ok(bytes) => {
-                assert!(matches!(CurrencyReply::decode(&bytes).unwrap(), CurrencyReply::Attestation { .. }));
+                assert!(matches!(
+                    CurrencyReply::decode(&bytes).unwrap(),
+                    CurrencyReply::Attestation { .. }
+                ));
                 answered += 1;
             }
             Err(_) => failed += 1,
         }
     }
-    assert_eq!((answered, failed), (3, 3), "three within the allowance, three past it");
+    assert_eq!(
+        (answered, failed),
+        (3, 3),
+        "three within the allowance, three past it"
+    );
     assert_eq!(n.limits.per_window, 3);
 }
 
@@ -275,12 +513,36 @@ async fn a_node_names_its_own_siblings_and_says_where_they_answer() {
     let a_s2 = s.adopt("w1", "alice", "alice", &[2], 3);
     let records = [&a_n, &a_s1, &a_s2];
     let infra = ["alice", "bob", "carol", "w1"];
-    let mut view = view_of("bob", table_of("bob", &s, &records, &infra), "alice", &[0], s.clock);
+    let mut view = view_of(
+        "bob",
+        table_of("bob", &s, &records, &infra),
+        "alice",
+        &[0],
+        s.clock,
+    );
     let point = NetworkPoint::new([127, 0, 0, 1], Some(7777));
-    let er = rhtn_node::resolution::endpoint_record(&id("carol"), std::slice::from_ref(&point), rhtn_archive::tx::Seqno { series: 2, counter: 1 });
-    view.store.accept(rhtn_node::store::KIND_ENDPOINT_RECORD, &er, &kh("alice"), &ids(), &Anywhere);
+    let er = rhtn_node::resolution::endpoint_record(
+        &id("carol"),
+        std::slice::from_ref(&point),
+        rhtn_archive::tx::Seqno {
+            series: 2,
+            counter: 1,
+        },
+    );
+    view.store.accept(
+        rhtn_node::store::KIND_ENDPOINT_RECORD,
+        &er,
+        &kh("alice"),
+        &ids(),
+        &Anywhere,
+    );
 
-    let n = LiveNode::start(node_cfg("bob", I), view, ids(), AnchorTable::new(0, Ingestion::UnverifiedGossip));
+    let n = LiveNode::start(
+        node_cfg("bob", I),
+        view,
+        ids(),
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    );
     let ccfg = client_cfg("c1");
     know(&ccfg, "bob", n.addr);
     let sess = match attach(&ccfg, &client_ep(), kh("bob"), n.addr, false).await {
@@ -291,22 +553,41 @@ async fn a_node_names_its_own_siblings_and_says_where_they_answer() {
     // **the list is a fold over the node's own table**, not a thing its
     // operator wrote down: S1 and S2 because they share N's patron, and
     // not P, which does not.
-    let named: std::collections::BTreeSet<[u8; 32]> = sess.ack.siblings.iter().map(|r| r.keyhash).collect();
-    assert_eq!(named, [kh("carol")].into_iter().collect(), "the sibling it has an address for");
-    assert!(!named.contains(&kh("alice")), "and not its patron, which is not a sibling");
-    assert!(!named.contains(&kh("w1")), "nor the sibling it holds no endpoint record for");
+    let named: std::collections::BTreeSet<[u8; 32]> =
+        sess.ack.siblings.iter().map(|r| r.keyhash).collect();
+    assert_eq!(
+        named,
+        [kh("carol")].into_iter().collect(),
+        "the sibling it has an address for"
+    );
+    assert!(
+        !named.contains(&kh("alice")),
+        "and not its patron, which is not a sibling"
+    );
+    assert!(
+        !named.contains(&kh("w1")),
+        "nor the sibling it holds no endpoint record for"
+    );
 
     // the key material goes with the name, because a sibling whose
     // material the client lacks is one it must treat as unusable rather
     // than dial unauthenticated (`light-client-requirements.md` §4)
-    assert!(sess.ack.siblings.iter().all(|r| r.key_material.is_some()), "each named with what authenticates it");
+    assert!(
+        sess.ack.siblings.iter().all(|r| r.key_material.is_some()),
+        "each named with what authenticates it"
+    );
 
     // **and the address comes from the endpoint record the node holds.**
     // §7.6 is the only carrier there is for an infra node's address, and
     // §8.2 gives a `SiblingRef` one to eight points and no way to say
     // none — so a sibling this node has no address for is left out rather
     // than named unreachably.
-    let s1 = sess.ack.siblings.iter().find(|r| r.keyhash == kh("carol")).expect("S1");
+    let s1 = sess
+        .ack
+        .siblings
+        .iter()
+        .find(|r| r.keyhash == kh("carol"))
+        .expect("S1");
     assert_eq!(s1.endpoints, vec![point], "where S1 said it answers");
 }
 

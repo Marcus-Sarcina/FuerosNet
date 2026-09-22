@@ -55,11 +55,20 @@ impl SeriesChain {
         let node = rec.field_hash(1).ok_or("node")?;
         let patron = rec.field_hash(2).ok_or("patron")?;
         rec.seqno().ok_or("series")?;
-        Ok(SeriesChain { node, patron, adoption: rec.clone(), reissues: Vec::new() })
+        Ok(SeriesChain {
+            node,
+            patron,
+            adoption: rec.clone(),
+            reissues: Vec::new(),
+        })
     }
 
     /// Take a reissue that must verify.
-    pub fn take_reissue<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L) -> Result<(), String> {
+    pub fn take_reissue<L: Lookup + ?Sized>(
+        &mut self,
+        rec: &Record,
+        ids: &L,
+    ) -> Result<(), String> {
         if rec.check_signatures(ids) != SigStatus::Verified {
             return Err("reissue does not verify".into());
         }
@@ -99,13 +108,28 @@ impl SeriesChain {
 
     /// The series the chain is in now.
     pub fn current(&self) -> u32 {
-        self.reissues.last().and_then(|r| r.seqno()).or_else(|| self.adoption.seqno()).map(|s| s.series).expect("opened with a series")
+        self.reissues
+            .last()
+            .and_then(|r| r.seqno())
+            .or_else(|| self.adoption.seqno())
+            .map(|s| s.series)
+            .expect("opened with a series")
     }
 
     /// Every series the chain has been in, first to current.
     pub fn series(&self) -> Vec<u32> {
-        let mut v: Vec<u32> = self.adoption.seqno().map(|s| s.series).into_iter().collect();
-        v.extend(self.reissues.iter().filter_map(|r| r.seqno()).map(|s| s.series));
+        let mut v: Vec<u32> = self
+            .adoption
+            .seqno()
+            .map(|s| s.series)
+            .into_iter()
+            .collect();
+        v.extend(
+            self.reissues
+                .iter()
+                .filter_map(|r| r.seqno())
+                .map(|s| s.series),
+        );
         v
     }
 
@@ -122,13 +146,18 @@ impl SeriesChain {
     }
 
     pub fn records(&self) -> Vec<&Record> {
-        std::iter::once(&self.adoption).chain(self.reissues.iter()).collect()
+        std::iter::once(&self.adoption)
+            .chain(self.reissues.iter())
+            .collect()
     }
 
     /// The chain as it is presented: the adoption's envelope, then each
     /// reissue's.
     pub fn bytes(&self) -> Vec<Vec<u8>> {
-        self.records().into_iter().map(|r| r.bytes.clone()).collect()
+        self.records()
+            .into_iter()
+            .map(|r| r.bytes.clone())
+            .collect()
     }
 
     /// Read a presented chain: the adoption first, then each reissue in
@@ -148,7 +177,10 @@ impl SeriesChain {
         if self.adoption.txid != other.adoption.txid {
             return Ranking::Unrelated;
         }
-        let (a, b): (Vec<_>, Vec<_>) = (self.reissues.iter().map(|r| r.txid).collect(), other.reissues.iter().map(|r| r.txid).collect());
+        let (a, b): (Vec<_>, Vec<_>) = (
+            self.reissues.iter().map(|r| r.txid).collect(),
+            other.reissues.iter().map(|r| r.txid).collect(),
+        );
         let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
         match (common == a.len(), common == b.len()) {
             (true, true) => Ranking::Same,

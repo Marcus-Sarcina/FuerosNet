@@ -25,7 +25,10 @@ fn seeds(start: u8) -> impl FnMut() -> [u8; 32] {
 fn messages_cross_in_both_directions_and_out_of_order_and_decrypt_once() {
     let (mut a, mut b) = pair();
     let (mut fa, mut fb) = (seeds(100), seeds(200));
-    assert!(a.can_send() && !b.can_send(), "the responder waits for the first message");
+    assert!(
+        a.can_send() && !b.can_send(),
+        "the responder waits for the first message"
+    );
     let m1 = a.encrypt(b"one").unwrap();
     let m2 = a.encrypt(b"two").unwrap();
     let m3 = a.encrypt(b"three").unwrap();

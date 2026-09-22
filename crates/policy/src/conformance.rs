@@ -46,7 +46,12 @@ impl Rng {
 
 /// A random adoption tree: `depth` generations, one to `fanout` subordinates
 /// per node.  Names encode the path from the root.
-pub fn build_tree(rng: &mut Rng, depth: usize, fanout: u64, prefix: &str) -> (World<String>, Vec<String>) {
+pub fn build_tree(
+    rng: &mut Rng,
+    depth: usize,
+    fanout: u64,
+    prefix: &str,
+) -> (World<String>, Vec<String>) {
     let mut w = World::new();
     let mut nodes = vec![prefix.to_string()];
     let mut frontier = vec![prefix.to_string()];
@@ -68,7 +73,12 @@ pub fn build_tree(rng: &mut Rng, depth: usize, fanout: u64, prefix: &str) -> (Wo
 /// A fake subtree — `width` subordinates per node, `depth` generations —
 /// under one fake root adopted by `boundary`.  Only the boundary is real
 /// (design §17.2: topology cannot provide Sybil resistance).
-pub fn attach_fake_region(w: &mut World<String>, boundary: &str, width: usize, depth: usize) -> Vec<String> {
+pub fn attach_fake_region(
+    w: &mut World<String>,
+    boundary: &str,
+    width: usize,
+    depth: usize,
+) -> Vec<String> {
     let root = "FAKE".to_string();
     w.adopt(boundary.to_string(), root.clone());
     let mut fakes = vec![root.clone()];
@@ -93,7 +103,11 @@ pub fn attach_fake_region(w: &mut World<String>, boundary: &str, width: usize, d
 /// `FANOUT` subordinates per node.  Returns the identities and how many
 /// generations lie behind the gate, which is the reach an observer's
 /// evidence must cover to see them all.
-pub fn attach_region_behind(w: &mut World<String>, gate: &str, width: usize) -> (Vec<String>, usize) {
+pub fn attach_region_behind(
+    w: &mut World<String>,
+    gate: &str,
+    width: usize,
+) -> (Vec<String>, usize) {
     let mut fakes: Vec<String> = Vec::new();
     let mut depth = 0;
     let mut frontier = vec![gate.to_string()];
@@ -101,7 +115,11 @@ pub fn attach_region_behind(w: &mut World<String>, gate: &str, width: usize) -> 
     while fakes.len() < width {
         depth += 1;
         let mut shell = Vec::new();
-        while fakes.len() < width && frontier.iter().any(|p| count.get(p).copied().unwrap_or(0) < FANOUT) {
+        while fakes.len() < width
+            && frontier
+                .iter()
+                .any(|p| count.get(p).copied().unwrap_or(0) < FANOUT)
+        {
             for parent in &frontier {
                 if fakes.len() == width {
                     break;
@@ -117,7 +135,10 @@ pub fn attach_region_behind(w: &mut World<String>, gate: &str, width: usize) -> 
         }
         frontier = shell;
     }
-    assert!(count.values().all(|c| *c <= FANOUT), "a patronage node exceeded design §3.1's f subordinates");
+    assert!(
+        count.values().all(|c| *c <= FANOUT),
+        "a patronage node exceeded design §3.1's f subordinates"
+    );
     (fakes, depth)
 }
 
@@ -161,7 +182,9 @@ impl Region {
     fn judge(title: &'static str, rows: Vec<Row>) -> Self {
         let n = rows.len();
         let cut = rows.last().map(|r| r.cut).unwrap_or(0);
-        let within = rows.iter().all(|r| r.best <= r.cut as f64 && r.joint <= r.cut as f64 && r.cut == cut);
+        let within = rows
+            .iter()
+            .all(|r| r.best <= r.cut as f64 && r.joint <= r.cut as f64 && r.cut == cut);
         let saturated = n >= 2 && rows[n - 1].joint == rows[n - 2].joint;
         let grows = rows.windows(2).all(|w| w[1].joint > w[0].joint);
         let verdict = if within && saturated {
@@ -171,7 +194,11 @@ impl Region {
         } else {
             Verdict::Unbounded
         };
-        Region { title, rows, verdict }
+        Region {
+            title,
+            rows,
+            verdict,
+        }
     }
 }
 
@@ -194,8 +221,13 @@ pub struct Branching {
 /// level's increment to the last, as `series::classify` does for the
 /// arithmetic.
 pub fn classify_levels(cumulative: &[f64]) -> Convergence {
-    let increments: Vec<f64> = std::iter::once(cumulative.first().copied().unwrap_or(0.0)).chain(cumulative.windows(2).map(|w| w[1] - w[0])).collect();
-    let ratios: Vec<f64> = increments.windows(2).map(|w| if w[0] > 0.0 { w[1] / w[0] } else { 0.0 }).collect();
+    let increments: Vec<f64> = std::iter::once(cumulative.first().copied().unwrap_or(0.0))
+        .chain(cumulative.windows(2).map(|w| w[1] - w[0]))
+        .collect();
+    let ratios: Vec<f64> = increments
+        .windows(2)
+        .map(|w| if w[0] > 0.0 { w[1] / w[0] } else { 0.0 })
+        .collect();
     match (ratios.first(), ratios.last()) {
         (Some(first), Some(last)) if *last >= 1.0 || *last > *first => Convergence::Diverges,
         _ => Convergence::Converges,
@@ -224,14 +256,19 @@ impl Report {
         for region in [&self.cut_bound, &self.conservation] {
             let _ = writeln!(s, "{}", region.title);
             for r in &region.rows {
-                let _ = writeln!(s, "  {:>4} identities: best individual {:.3}  independent sum {:.3}  joint {:.3}  cut {}", r.identities, r.best, r.independent_sum, r.joint, r.cut);
+                let _ = writeln!(
+                    s,
+                    "  {:>4} identities: best individual {:.3}  independent sum {:.3}  joint {:.3}  cut {}",
+                    r.identities, r.best, r.independent_sum, r.joint, r.cut
+                );
             }
             let _ = writeln!(
                 s,
                 "  {}",
                 match &region.verdict {
                     Verdict::Bounded { cut } => format!("bounded by the cut ({cut}) at every size"),
-                    Verdict::GrowsWithSize => "the region's standing grows with its population".to_string(),
+                    Verdict::GrowsWithSize =>
+                        "the region's standing grows with its population".to_string(),
                     Verdict::Unbounded => "not bounded by the cut".to_string(),
                 }
             );
@@ -240,16 +277,38 @@ impl Report {
         let _ = writeln!(s, "the branching criterion (f = {})", b.fanout);
         match (b.lambda, b.criterion_satisfied) {
             (Some(l), Some(ok)) => {
-                let _ = writeln!(s, "  lambda = {l}: lambda < 1/f is {}", if ok { "SATISFIED" } else { "NOT satisfied" });
+                let _ = writeln!(
+                    s,
+                    "  lambda = {l}: lambda < 1/f is {}",
+                    if ok { "SATISFIED" } else { "NOT satisfied" }
+                );
             }
             _ => {
                 let _ = writeln!(s, "  no decay parameter: the policy is independent of f");
             }
         }
-        let show = |v: &[f64]| v.iter().map(|x| format!("{x:.3}")).collect::<Vec<_>>().join(", ");
-        let _ = writeln!(s, "  hierarchy only, by depth:            {}  {:?}", show(&b.hierarchy_only), b.hierarchy_verdict);
-        let _ = writeln!(s, "  acquaintance degree growing, by depth: {}  {:?}", show(&b.with_acquaintance), b.acquaintance_verdict);
-        let _ = writeln!(s, "  the criterion bounds the hierarchy's fanout and not the acquaintance degree: necessary, not sufficient");
+        let show = |v: &[f64]| {
+            v.iter()
+                .map(|x| format!("{x:.3}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let _ = writeln!(
+            s,
+            "  hierarchy only, by depth:            {}  {:?}",
+            show(&b.hierarchy_only),
+            b.hierarchy_verdict
+        );
+        let _ = writeln!(
+            s,
+            "  acquaintance degree growing, by depth: {}  {:?}",
+            show(&b.with_acquaintance),
+            b.acquaintance_verdict
+        );
+        let _ = writeln!(
+            s,
+            "  the criterion bounds the hierarchy's fanout and not the acquaintance degree: necessary, not sufficient"
+        );
         s
     }
 }
@@ -266,7 +325,15 @@ pub const BRANCHING_LAMBDA: f64 = 0.095;
 /// Grow a region behind `parent` to `levels` generations: `fanout`
 /// subordinates per node and, when `acquaintance` is set, as many fresh
 /// acquaintances at depth `d` as `d`, every one of whom continues.
-fn grow(w: &mut World<String>, parent: &str, depth: usize, levels: usize, fanout: u64, acquaintance: bool, members: &mut Vec<String>) {
+fn grow(
+    w: &mut World<String>,
+    parent: &str,
+    depth: usize,
+    levels: usize,
+    fanout: u64,
+    acquaintance: bool,
+    members: &mut Vec<String>,
+) {
     if depth > levels {
         return;
     }
@@ -307,13 +374,20 @@ pub fn run(policy: &dyn Policy<String>) -> Report {
         shell = next.difference(&ring).cloned().collect();
         ring.extend(shell.iter().cloned());
     }
-    let boundary = shell.iter().min().cloned().expect("a node at the horizon's edge");
+    let boundary = shell
+        .iter()
+        .min()
+        .cloned()
+        .expect("a node at the horizon's edge");
     let mut rows = Vec::new();
     for (width, depth) in CUT_BOUND_SHAPES {
         let mut w = base.clone();
         let fakes = attach_fake_region(&mut w, &boundary, width, depth);
         let ev = w.full_view(&observer);
-        assert!(!ev.horizon().contains("FAKE"), "the fake root must sit outside the horizon or there is no bound to test");
+        assert!(
+            !ev.horizon().contains("FAKE"),
+            "the fake root must sit outside the horizon or there is no bound to test"
+        );
         let e = policy.evaluate(&ev, &fakes);
         rows.push(Row {
             identities: fakes.len(),
@@ -323,7 +397,10 @@ pub fn run(policy: &dyn Policy<String>) -> Report {
             cut: reference.edge_capacity,
         });
     }
-    let cut_bound = Region::judge("a fake region entered by one adoption at the horizon's edge (E2)", rows);
+    let cut_bound = Region::judge(
+        "a fake region entered by one adoption at the horizon's edge (E2)",
+        rows,
+    );
 
     // E3: one peering edge from a horizon member to a gate with no position
     // in the observer's subnet, and a region behind the gate.
@@ -335,7 +412,10 @@ pub fn run(policy: &dyn Policy<String>) -> Report {
         let (fakes, depth) = attach_region_behind(&mut w, &gate, width);
         w.peer(inside.clone(), gate.clone());
         let ev = w.view(&observer, depth);
-        assert!(fakes.iter().all(|f| ev.knows(f)), "the region must all be visible");
+        assert!(
+            fakes.iter().all(|f| ev.knows(f)),
+            "the region must all be visible"
+        );
         let e = policy.evaluate(&ev, &fakes);
         rows.push(Row {
             identities: fakes.len(),
@@ -345,7 +425,10 @@ pub fn run(policy: &dyn Policy<String>) -> Report {
             cut: reference.ceiling(&ev, &gate),
         });
     }
-    let conservation = Region::judge("a region behind one acquired peering edge beyond the horizon (E3)", rows);
+    let conservation = Region::judge(
+        "a region behind one acquired peering edge beyond the horizon (E3)",
+        rows,
+    );
 
     // The branching criterion: the same gate, and behind it two regions at
     // the design's fanout.
@@ -372,5 +455,10 @@ pub fn run(policy: &dyn Policy<String>) -> Report {
         with_acquaintance,
     };
 
-    Report { policy: policy.name(), cut_bound, conservation, branching }
+    Report {
+        policy: policy.name(),
+        cut_bound,
+        conservation,
+        branching,
+    }
 }

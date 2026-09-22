@@ -40,7 +40,11 @@ pub trait Policy<N: Ord + Clone + Debug>: Send + Sync {
 
     /// One target's individual standing.
     fn score(&self, ev: &Evidence<N>, target: &N) -> f64 {
-        self.evaluate(ev, std::slice::from_ref(target)).individual.first().map(|(_, s)| *s).unwrap_or(0.0)
+        self.evaluate(ev, std::slice::from_ref(target))
+            .individual
+            .first()
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0)
     }
 
     /// The per-hop decay a distance-decay policy runs with, where it is one;
@@ -94,12 +98,27 @@ impl ReferenceMetric {
     }
 
     /// The reference allocation over a set, `demand` units each.
-    pub fn admit<N: Ord + Clone + Debug>(&self, ev: &Evidence<N>, candidates: &[N], demand: u64) -> Allocation<N> {
-        landscape::admit(&self.graph(ev), &ev.observer, candidates, demand, Some(&ev.scope()))
+    pub fn admit<N: Ord + Clone + Debug>(
+        &self,
+        ev: &Evidence<N>,
+        candidates: &[N],
+        demand: u64,
+    ) -> Allocation<N> {
+        landscape::admit(
+            &self.graph(ev),
+            &ev.observer,
+            candidates,
+            demand,
+            Some(&ev.scope()),
+        )
     }
 
     /// The flow deliverable to a set at once under the demands given.
-    pub fn deliverable<N: Ord + Clone + Debug>(&self, ev: &Evidence<N>, demands: &[(N, u64)]) -> u64 {
+    pub fn deliverable<N: Ord + Clone + Debug>(
+        &self,
+        ev: &Evidence<N>,
+        demands: &[(N, u64)],
+    ) -> u64 {
         landscape::deliverable(&self.graph(ev), &ev.observer, demands, Some(&ev.scope()))
     }
 
@@ -129,11 +148,22 @@ impl<N: Ord + Clone + Debug> Policy<N> for ReferenceMetric {
         // could have used and `joint` would report a set that includes it
         // — an allocation, an admission and a usable total disagreeing
         // about the same set.
-        let eligible: Vec<N> = candidates.iter().filter(|c| !ev.blacklisted(c)).cloned().collect();
+        let eligible: Vec<N> = candidates
+            .iter()
+            .filter(|c| !ev.blacklisted(c))
+            .cloned()
+            .collect();
         let alloc = self.admit(ev, &eligible, 1);
-        let flows: BTreeMap<&N, u64> = alloc.ranked.iter().map(|r| (&r.candidate, r.flow)).collect();
+        let flows: BTreeMap<&N, u64> = alloc
+            .ranked
+            .iter()
+            .map(|r| (&r.candidate, r.flow))
+            .collect();
         Evaluation {
-            individual: candidates.iter().map(|c| (c.clone(), flows.get(c).copied().unwrap_or(0) as f64)).collect(),
+            individual: candidates
+                .iter()
+                .map(|c| (c.clone(), flows.get(c).copied().unwrap_or(0) as f64))
+                .collect(),
             admitted: alloc.admitted,
             joint: alloc.total as f64,
         }
@@ -162,10 +192,28 @@ impl<N: Ord + Clone + Debug> Policy<N> for DistanceDecay {
 
     fn evaluate(&self, ev: &Evidence<N>, candidates: &[N]) -> Evaluation<N> {
         let dist = ReferenceMetric::default().distance(ev);
-        let individual: Vec<(N, f64)> = candidates.iter().map(|c| (c.clone(), dist.get(c).map(|d| self.lambda.powi(*d as i32)).unwrap_or(0.0))).collect();
-        let admitted = individual.iter().filter(|(_, s)| *s > 0.0).map(|(c, _)| c.clone()).collect();
+        let individual: Vec<(N, f64)> = candidates
+            .iter()
+            .map(|c| {
+                (
+                    c.clone(),
+                    dist.get(c)
+                        .map(|d| self.lambda.powi(*d as i32))
+                        .unwrap_or(0.0),
+                )
+            })
+            .collect();
+        let admitted = individual
+            .iter()
+            .filter(|(_, s)| *s > 0.0)
+            .map(|(c, _)| c.clone())
+            .collect();
         let joint = individual.iter().map(|(_, s)| s).sum();
-        Evaluation { individual, admitted, joint }
+        Evaluation {
+            individual,
+            admitted,
+            joint,
+        }
     }
 
     fn decay(&self) -> Option<f64> {
@@ -185,9 +233,29 @@ impl<N: Ord + Clone + Debug> Policy<N> for Uniform {
 
     fn evaluate(&self, ev: &Evidence<N>, candidates: &[N]) -> Evaluation<N> {
         let known = ev.known();
-        let individual: Vec<(N, f64)> = candidates.iter().map(|c| (c.clone(), if known.contains(c) && *c != ev.observer { 1.0 } else { 0.0 })).collect();
-        let admitted = individual.iter().filter(|(_, s)| *s > 0.0).map(|(c, _)| c.clone()).collect();
+        let individual: Vec<(N, f64)> = candidates
+            .iter()
+            .map(|c| {
+                (
+                    c.clone(),
+                    if known.contains(c) && *c != ev.observer {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                )
+            })
+            .collect();
+        let admitted = individual
+            .iter()
+            .filter(|(_, s)| *s > 0.0)
+            .map(|(c, _)| c.clone())
+            .collect();
         let joint = individual.iter().map(|(_, s)| s).sum();
-        Evaluation { individual, admitted, joint }
+        Evaluation {
+            individual,
+            admitted,
+            joint,
+        }
     }
 }

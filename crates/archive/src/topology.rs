@@ -124,7 +124,9 @@ pub enum Refusal {
     /// (`wire-format.md` §3.4's evaluation step).
     Evidence(String),
     /// The proposed patron sits in this node's own down-line (design §6.2.5).
-    Cycle { below: Keyhash },
+    Cycle {
+        below: Keyhash,
+    },
     /// The slot the locator claims is already held by an open subordinate
     /// of the same patron in the same subnet (design §3.1).
     ///
@@ -134,16 +136,27 @@ pub enum Refusal {
     /// stored.  Nothing here adjudicates which of two signed adoptions was
     /// the patron's real intent — that is the patron's to get right, and
     /// §1.1 leaves a holder no way to find out.
-    Slot { patron: Keyhash, slot: u8, held: Keyhash },
+    Slot {
+        patron: Keyhash,
+        slot: u8,
+        held: Keyhash,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Applied {
     Adopted,
     /// A reissue moved a relationship into the series it entered.
-    Reissued { node: Keyhash, patron: Keyhash, series: u32 },
+    Reissued {
+        node: Keyhash,
+        patron: Keyhash,
+        series: u32,
+    },
     /// A recovery replaced `prior` with `successor` as the current key.
-    Replaced { prior: Keyhash, successor: Keyhash },
+    Replaced {
+        prior: Keyhash,
+        successor: Keyhash,
+    },
     Ended,
     /// Verified, and there was no binding for it to change.
     Nothing,
@@ -204,7 +217,10 @@ impl Table {
     }
 
     pub fn with_me(me: Keyhash) -> Self {
-        let mut t = Table { me: Some(me), ..Default::default() };
+        let mut t = Table {
+            me: Some(me),
+            ..Default::default()
+        };
         t.nodes.insert(me);
         t
     }
@@ -260,11 +276,17 @@ impl Table {
     }
 
     pub fn patrons(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
-        self.open_bindings().filter(|b| b.node == *node).map(|b| b.patron).collect()
+        self.open_bindings()
+            .filter(|b| b.node == *node)
+            .map(|b| b.patron)
+            .collect()
     }
 
     pub fn subordinates(&self, patron: &Keyhash) -> BTreeSet<Keyhash> {
-        self.open_bindings().filter(|b| b.patron == *patron).map(|b| b.node).collect()
+        self.open_bindings()
+            .filter(|b| b.patron == *patron)
+            .map(|b| b.node)
+            .collect()
     }
 
     /// Siblings share a patron (design §3.4).
@@ -352,7 +374,11 @@ impl Table {
     /// §6.2.5): refuse only where local topology places the proposed patron
     /// at or below this node, never for absence of knowledge.
     pub fn propose_patron(&self, me: &Keyhash, candidate: &Keyhash) -> Result<(), Refusal> {
-        if self.downline_contains(me, candidate) { Err(Refusal::Cycle { below: *candidate }) } else { Ok(()) }
+        if self.downline_contains(me, candidate) {
+            Err(Refusal::Cycle { below: *candidate })
+        } else {
+            Ok(())
+        }
     }
 
     /// The nearest infrastructure node on `client`'s patron chain, walking
@@ -403,8 +429,12 @@ impl Table {
     pub fn current_key(&self, k: &Keyhash) -> Keyhash {
         let mut cur = *k;
         for _ in 0..64 {
-            let Some(succs) = self.lineage.get(&cur) else { return cur };
-            let Some(chosen) = self.resolve(succs) else { return cur };
+            let Some(succs) = self.lineage.get(&cur) else {
+                return cur;
+            };
+            let Some(chosen) = self.resolve(succs) else {
+                return cur;
+            };
             cur = chosen;
         }
         cur
@@ -427,7 +457,11 @@ impl Table {
     /// when emptied (design §6.2.2).
     pub fn slot_history(&self, p: &Keyhash, n: &Keyhash) -> Vec<(u64, Option<u32>)> {
         let mut ev = Vec::new();
-        for b in self.bindings.iter().filter(|b| b.patron == *p && b.node == *n) {
+        for b in self
+            .bindings
+            .iter()
+            .filter(|b| b.patron == *p && b.node == *n)
+        {
             ev.push((b.from, Some(b.series)));
             if let Some((_, t, _)) = &b.end {
                 ev.push((*t, None));
@@ -439,7 +473,11 @@ impl Table {
 
     /// The series in `p`'s slot for `n` at time `t`, by `p`'s own clock.
     pub fn status_at(&self, p: &Keyhash, n: &Keyhash, t: u64) -> Option<u32> {
-        self.slot_history(p, n).into_iter().take_while(|(at, _)| *at <= t).last().and_then(|(_, s)| s)
+        self.slot_history(p, n)
+            .into_iter()
+            .take_while(|(at, _)| *at <= t)
+            .last()
+            .and_then(|(_, s)| s)
     }
 
     // ------------------------------------------------------------ applying
@@ -469,25 +507,55 @@ impl Table {
         if rec.tx_type != TYPE_ADOPTION || self.bindings.iter().any(|b| b.adoption == rec.txid) {
             return Ok(());
         }
-        let (Some(node), Some(patron)) = (rec.field_hash(1), rec.field_hash(2)) else { return Ok(()) };
-        let Some(loc) = rec.locator() else { return Ok(()) };
-        let Some(slot) = loc.slot() else { return Ok(()) };
+        let (Some(node), Some(patron)) = (rec.field_hash(1), rec.field_hash(2)) else {
+            return Ok(());
+        };
+        let Some(loc) = rec.locator() else {
+            return Ok(());
+        };
+        let Some(slot) = loc.slot() else {
+            return Ok(());
+        };
         let prior = rec.prior_key();
         match self.bindings.iter().find(|b| {
-            b.open() && b.patron == patron && b.anchor == Some(loc.anchor) && b.slot == Some(slot) && b.node != node && Some(b.node) != prior
+            b.open()
+                && b.patron == patron
+                && b.anchor == Some(loc.anchor)
+                && b.slot == Some(slot)
+                && b.node != node
+                && Some(b.node) != prior
         }) {
-            Some(held) => Err(Refusal::Slot { patron, slot, held: held.node }),
+            Some(held) => Err(Refusal::Slot {
+                patron,
+                slot,
+                held: held.node,
+            }),
             None => Ok(()),
         }
     }
 
-    pub fn apply<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L, presence: &dyn Fetch, issuer: Option<&AckIssuer>) -> Result<Outcome, Refusal> {
+    pub fn apply<L: Lookup + ?Sized>(
+        &mut self,
+        rec: &Record,
+        ids: &L,
+        presence: &dyn Fetch,
+        issuer: Option<&AckIssuer>,
+    ) -> Result<Outcome, Refusal> {
         self.apply_with(rec, ids, presence, issuer, Evaluation::Required)
     }
 
     /// Check the presence record an adoption names against the two parties.
-    fn evidence_status<L: Lookup + ?Sized>(rec: &Record, ids: &L, node: &Keyhash, patron: &Keyhash, presence: &dyn Fetch, mode: Evaluation) -> Result<EvidenceStatus, Refusal> {
-        let Some(pop) = rec.field_hash(8) else { return Ok(EvidenceStatus::Satisfied) };
+    fn evidence_status<L: Lookup + ?Sized>(
+        rec: &Record,
+        ids: &L,
+        node: &Keyhash,
+        patron: &Keyhash,
+        presence: &dyn Fetch,
+        mode: Evaluation,
+    ) -> Result<EvidenceStatus, Refusal> {
+        let Some(pop) = rec.field_hash(8) else {
+            return Ok(EvidenceStatus::Satisfied);
+        };
         let Some(bytes) = presence.fetch(&pop) else {
             return match mode {
                 Evaluation::Required => Err(Refusal::Evidence("presence record not held".into())),
@@ -496,8 +564,13 @@ impl Table {
         };
         let pr = Record::parse(&bytes).map_err(Refusal::Evidence)?;
         let parts = pr.participants();
-        if pr.tx_type != TYPE_PRESENCE || pr.txid != pop || !(parts.contains(node) && parts.contains(patron)) {
-            return Err(Refusal::Evidence("presence record does not name these two parties".into()));
+        if pr.tx_type != TYPE_PRESENCE
+            || pr.txid != pop
+            || !(parts.contains(node) && parts.contains(patron))
+        {
+            return Err(Refusal::Evidence(
+                "presence record does not name these two parties".into(),
+            ));
         }
         // evidence counts only once its own signatures verify
         // (`wire-format.md` §3.4): a record that fails is never evidence,
@@ -505,41 +578,70 @@ impl Table {
         // is deferred and refused, naming the key, where it is required
         match pr.check_signatures(ids) {
             SigStatus::Verified => Ok(EvidenceStatus::Satisfied),
-            SigStatus::Invalid(e) => Err(Refusal::Evidence(format!("presence record fails verification: {e}"))),
+            SigStatus::Invalid(e) => Err(Refusal::Evidence(format!(
+                "presence record fails verification: {e}"
+            ))),
             SigStatus::Unverifiable { missing } => match mode {
-                Evaluation::Required => Err(Refusal::Evidence(format!("presence record unverifiable: missing key {}", missing.iter().map(|b| format!("{b:02x}")).collect::<String>()))),
+                Evaluation::Required => Err(Refusal::Evidence(format!(
+                    "presence record unverifiable: missing key {}",
+                    missing
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<String>()
+                ))),
                 Evaluation::Deferred => Ok(EvidenceStatus::Unevaluated),
             },
         }
     }
 
     /// `apply`, with the evidence gate applied as `mode` says.
-    pub fn apply_with<L: Lookup + ?Sized>(&mut self, rec: &Record, ids: &L, presence: &dyn Fetch, issuer: Option<&AckIssuer>, mode: Evaluation) -> Result<Outcome, Refusal> {
+    pub fn apply_with<L: Lookup + ?Sized>(
+        &mut self,
+        rec: &Record,
+        ids: &L,
+        presence: &dyn Fetch,
+        issuer: Option<&AckIssuer>,
+        mode: Evaluation,
+    ) -> Result<Outcome, Refusal> {
         match rec.check_signatures(ids) {
             SigStatus::Verified => {}
             s => return Err(Refusal::Signatures(s)),
         }
-        let f = |k| rec.field_hash(k).ok_or_else(|| Refusal::Structure(format!("field {k}")));
+        let f = |k| {
+            rec.field_hash(k)
+                .ok_or_else(|| Refusal::Structure(format!("field {k}")))
+        };
         // an ending transaction already held is not applied twice: it ended
         // what it ended, or waits where it waits
         if self.held.contains(&rec.txid) && matches!(rec.tx_type, TYPE_DEPARTURE | TYPE_DISAVOWAL) {
-            return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
+            return Ok(Outcome {
+                applied: Applied::Nothing,
+                acks: Vec::new(),
+            });
         }
         let out = match rec.tx_type {
             TYPE_ADOPTION => {
                 let node = f(1)?;
                 let patron = f(2)?;
-                let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
+                let series = rec
+                    .seqno()
+                    .ok_or(Refusal::Structure("seqno".into()))?
+                    .series;
                 let evidence = Self::evidence_status(rec, ids, &node, &patron, presence, mode)?;
                 let anchor = rec.locator().map(|l| l.anchor);
                 let slot = rec.locator().and_then(|l| l.slot());
                 // an adoption already held is not bound twice; an unevaluated
                 // one whose evidence has since arrived is upgraded
                 if let Some(b) = self.bindings.iter_mut().find(|b| b.adoption == rec.txid) {
-                    if b.evidence == EvidenceStatus::Unevaluated && evidence == EvidenceStatus::Satisfied {
+                    if b.evidence == EvidenceStatus::Unevaluated
+                        && evidence == EvidenceStatus::Satisfied
+                    {
                         b.evidence = EvidenceStatus::Satisfied;
                     }
-                    return Ok(Outcome { applied: Applied::Nothing, acks: Vec::new() });
+                    return Ok(Outcome {
+                        applied: Applied::Nothing,
+                        acks: Vec::new(),
+                    });
                 }
                 self.admits_slot(rec)?;
                 let mut applied = Applied::Adopted;
@@ -549,7 +651,9 @@ impl Table {
                     for b in self.bindings.iter_mut().filter(|b| b.node == prior) {
                         match &b.end {
                             None => b.end = Some((rec.txid, rec.time, End::Superseded(successor))),
-                            Some((_, _, End::Superseded(_))) => b.end = Some((rec.txid, rec.time, End::Superseded(successor))),
+                            Some((_, _, End::Superseded(_))) => {
+                                b.end = Some((rec.txid, rec.time, End::Superseded(successor)))
+                            }
                             _ => {}
                         }
                     }
@@ -557,17 +661,34 @@ impl Table {
                 }
                 self.nodes.insert(node);
                 self.nodes.insert(patron);
-                self.bindings.push(Binding { node, patron, series, adoption: rec.txid, from: rec.time, end: None, anchor, slot, evidence });
+                self.bindings.push(Binding {
+                    node,
+                    patron,
+                    series,
+                    adoption: rec.txid,
+                    from: rec.time,
+                    end: None,
+                    anchor,
+                    slot,
+                    evidence,
+                });
                 self.settle_pending_reissues();
                 self.settle_pending_departures();
                 self.settle_pending_disavowals();
                 let mut acks = Vec::new();
                 if let (Some(me), Some(iss)) = (self.me, issuer)
-                    && self.subordinates(&me).contains(&patron) && (iss.policy)(&patron, &node) {
-                        let bytes = subtree_ack(&iss.identity, &rec.txid, &node, iss.now);
-                        self.acks.push(Ack { adoption: rec.txid, grandpatron: me, node, bytes: bytes.clone() });
-                        acks.push(bytes);
-                    }
+                    && self.subordinates(&me).contains(&patron)
+                    && (iss.policy)(&patron, &node)
+                {
+                    let bytes = subtree_ack(&iss.identity, &rec.txid, &node, iss.now);
+                    self.acks.push(Ack {
+                        adoption: rec.txid,
+                        grandpatron: me,
+                        node,
+                        bytes: bytes.clone(),
+                    });
+                    acks.push(bytes);
+                }
                 Outcome { applied, acks }
             }
             TYPE_REISSUE => {
@@ -583,25 +704,45 @@ impl Table {
                 // number: succession is proved by the countersigned chain
                 // (§4.6.1), and a re-adoption that happens to open a higher
                 // series is a different binding this must not touch.
-                let left = rec.seqno_left().ok_or(Refusal::Structure("field 3".into()))?.series;
-                let entered = rec.seqno().ok_or(Refusal::Structure("field 4".into()))?.series;
-                let advanced = match self.bindings.iter_mut().find(|b| b.node == node && b.patron == patron && b.series == left && b.open()) {
-                    Some(b) => {
-                        b.series = entered;
-                        true
-                    }
-                    // held for the adoption it advances, as a departure is:
-                    // arrival order cannot lose a series change
-                    None => {
-                        self.pending_reissues.push((node, patron, left, entered));
-                        false
-                    }
-                };
+                let left = rec
+                    .seqno_left()
+                    .ok_or(Refusal::Structure("field 3".into()))?
+                    .series;
+                let entered = rec
+                    .seqno()
+                    .ok_or(Refusal::Structure("field 4".into()))?
+                    .series;
+                let advanced =
+                    match self.bindings.iter_mut().find(|b| {
+                        b.node == node && b.patron == patron && b.series == left && b.open()
+                    }) {
+                        Some(b) => {
+                            b.series = entered;
+                            true
+                        }
+                        // held for the adoption it advances, as a departure is:
+                        // arrival order cannot lose a series change
+                        None => {
+                            self.pending_reissues.push((node, patron, left, entered));
+                            false
+                        }
+                    };
                 if advanced {
                     self.settle_pending_departures();
                 }
                 self.nodes.insert(node);
-                Outcome { applied: if advanced { Applied::Reissued { node, patron, series: entered } } else { Applied::Nothing }, acks: Vec::new() }
+                Outcome {
+                    applied: if advanced {
+                        Applied::Reissued {
+                            node,
+                            patron,
+                            series: entered,
+                        }
+                    } else {
+                        Applied::Nothing
+                    },
+                    acks: Vec::new(),
+                }
             }
             TYPE_DEPARTURE => {
                 let node = f(1)?;
@@ -612,25 +753,59 @@ impl Table {
                 // binding's adoption, it is held and settled when the
                 // adoption arrives, so arrival order cannot resurrect a
                 // relationship the node ended (§10.1.3's replay)
-                let series = rec.seqno().ok_or(Refusal::Structure("seqno".into()))?.series;
-                let ended = self.end_binding(&node, &patron, Some(series), (rec.txid, rec.time, End::Departure), None);
+                let series = rec
+                    .seqno()
+                    .ok_or(Refusal::Structure("seqno".into()))?
+                    .series;
+                let ended = self.end_binding(
+                    &node,
+                    &patron,
+                    Some(series),
+                    (rec.txid, rec.time, End::Departure),
+                    None,
+                );
                 if !ended {
-                    self.pending_departures.push((node, patron, series, rec.txid, rec.time));
+                    self.pending_departures
+                        .push((node, patron, series, rec.txid, rec.time));
                 }
                 self.nodes.insert(node);
-                Outcome { applied: if ended { Applied::Ended } else { Applied::Nothing }, acks: Vec::new() }
+                Outcome {
+                    applied: if ended {
+                        Applied::Ended
+                    } else {
+                        Applied::Nothing
+                    },
+                    acks: Vec::new(),
+                }
             }
             TYPE_DISAVOWAL => {
                 let patron = f(1)?;
                 let node = f(2)?;
                 let code = rec.field_uint(4);
-                let ended = self.end_binding(&node, &patron, None, (rec.txid, rec.time, End::Disavowal(code)), Some(rec.time));
+                let ended = self.end_binding(
+                    &node,
+                    &patron,
+                    None,
+                    (rec.txid, rec.time, End::Disavowal(code)),
+                    Some(rec.time),
+                );
                 if !ended {
-                    self.pending_disavowals.push((patron, node, rec.time, rec.txid, code));
+                    self.pending_disavowals
+                        .push((patron, node, rec.time, rec.txid, code));
                 }
-                Outcome { applied: if ended { Applied::Ended } else { Applied::Nothing }, acks: Vec::new() }
+                Outcome {
+                    applied: if ended {
+                        Applied::Ended
+                    } else {
+                        Applied::Nothing
+                    },
+                    acks: Vec::new(),
+                }
             }
-            _ => Outcome { applied: Applied::Nothing, acks: Vec::new() },
+            _ => Outcome {
+                applied: Applied::Nothing,
+                acks: Vec::new(),
+            },
         };
         self.held.insert(rec.txid);
         self.lapse_acks();
@@ -641,21 +816,43 @@ impl Table {
     /// series of the relationship it ends; a disavowal is ordered by the
     /// patron's own clock: it ends the adoption in that slot whose
     /// timestamp precedes it and which no later adoption has replaced.
-    fn end_binding(&mut self, node: &Keyhash, patron: &Keyhash, series: Option<u32>, ending: (Txid, u64, End), ordered_at: Option<u64>) -> bool {
+    fn end_binding(
+        &mut self,
+        node: &Keyhash,
+        patron: &Keyhash,
+        series: Option<u32>,
+        ending: (Txid, u64, End),
+        ordered_at: Option<u64>,
+    ) -> bool {
         let idx = match ordered_at {
-            None => self.bindings.iter().position(|b| b.node == *node && b.patron == *patron && series.is_none_or(|s| b.series == s) && b.open()),
+            None => self.bindings.iter().position(|b| {
+                b.node == *node
+                    && b.patron == *patron
+                    && series.is_none_or(|s| b.series == s)
+                    && b.open()
+            }),
             Some(t) => self
                 .bindings
                 .iter()
                 .enumerate()
-                .filter(|(_, b)| b.node == *node && b.patron == *patron && b.from <= t && b.end.as_ref().is_none_or(|(_, e, _)| *e > t))
+                .filter(|(_, b)| {
+                    b.node == *node
+                        && b.patron == *patron
+                        && b.from <= t
+                        && b.end.as_ref().is_none_or(|(_, e, _)| *e > t)
+                })
                 .max_by_key(|(_, b)| b.from)
                 .map(|(i, _)| i),
         };
         let Some(i) = idx else { return false };
         // a later adoption in the same slot bounds what this disavowal can end
         if let Some(t) = ordered_at {
-            let later = self.bindings.iter().any(|b| b.node == *node && b.patron == *patron && b.from > self.bindings[i].from && b.from <= t);
+            let later = self.bindings.iter().any(|b| {
+                b.node == *node
+                    && b.patron == *patron
+                    && b.from > self.bindings[i].from
+                    && b.from <= t
+            });
             if later {
                 return false;
             }
@@ -673,7 +870,11 @@ impl Table {
             let mut moved = false;
             let pending = std::mem::take(&mut self.pending_reissues);
             for (node, patron, left, entered) in pending {
-                match self.bindings.iter_mut().find(|b| b.node == node && b.patron == patron && b.series == left && b.open()) {
+                match self
+                    .bindings
+                    .iter_mut()
+                    .find(|b| b.node == node && b.patron == patron && b.series == left && b.open())
+                {
                     Some(b) => {
                         b.series = entered;
                         moved = true;
@@ -690,8 +891,15 @@ impl Table {
     fn settle_pending_departures(&mut self) {
         let pending = std::mem::take(&mut self.pending_departures);
         for (node, patron, series, txid, t) in pending {
-            if !self.end_binding(&node, &patron, Some(series), (txid, t, End::Departure), None) {
-                self.pending_departures.push((node, patron, series, txid, t));
+            if !self.end_binding(
+                &node,
+                &patron,
+                Some(series),
+                (txid, t, End::Departure),
+                None,
+            ) {
+                self.pending_departures
+                    .push((node, patron, series, txid, t));
             }
         }
     }
@@ -699,7 +907,13 @@ impl Table {
     fn settle_pending_disavowals(&mut self) {
         let pending = std::mem::take(&mut self.pending_disavowals);
         for (patron, node, t, txid, code) in pending {
-            if !self.end_binding(&node, &patron, None, (txid, t, End::Disavowal(code)), Some(t)) {
+            if !self.end_binding(
+                &node,
+                &patron,
+                None,
+                (txid, t, End::Disavowal(code)),
+                Some(t),
+            ) {
                 self.pending_disavowals.push((patron, node, t, txid, code));
             }
         }
@@ -711,8 +925,13 @@ impl Table {
     fn lapse_acks(&mut self) {
         let bindings = self.bindings.clone();
         self.acks.retain(|a| {
-            let Some(b) = bindings.iter().find(|b| b.adoption == a.adoption) else { return false };
-            b.open() && bindings.iter().any(|pb| pb.node == b.patron && pb.patron == a.grandpatron && pb.open())
+            let Some(b) = bindings.iter().find(|b| b.adoption == a.adoption) else {
+                return false;
+            };
+            b.open()
+                && bindings
+                    .iter()
+                    .any(|pb| pb.node == b.patron && pb.patron == a.grandpatron && pb.open())
         });
     }
 
@@ -722,21 +941,37 @@ impl Table {
     pub fn take_ack<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<bool, String> {
         let item = rhtn_codec::cbor::parse_all(bytes).map_err(|e| e.0)?;
         rhtn_codec::schema::check_kind(bytes, "SubtreeAck", &item).map_err(|e| e.0)?;
-        if verify::record(ids, "SubtreeAck", bytes).map_err(|e| e.to_string()).is_err() {
+        if verify::record(ids, "SubtreeAck", bytes)
+            .map_err(|e| e.to_string())
+            .is_err()
+        {
             return Err("grandpatron signature fails".into());
         }
-        let rhtn_codec::cbor::Item::Map(m) = &item else { return Err("map".into()) };
+        let rhtn_codec::cbor::Item::Map(m) = &item else {
+            return Err("map".into());
+        };
         let kh = |k: u64| match rhtn_codec::cbor::map_get(m, k) {
-            Some(rhtn_codec::cbor::Item::Bytes(r)) if r.len() == 32 => bytes[r.clone()].try_into().ok(),
+            Some(rhtn_codec::cbor::Item::Bytes(r)) if r.len() == 32 => {
+                bytes[r.clone()].try_into().ok()
+            }
             _ => None,
         };
         let adoption: Txid = kh(1).ok_or("field 1")?;
         let grandpatron: Keyhash = kh(2).ok_or("field 2")?;
         let node: Keyhash = kh(3).ok_or("field 3")?;
-        if !self.bindings.iter().any(|b| b.adoption == adoption && b.open()) {
+        if !self
+            .bindings
+            .iter()
+            .any(|b| b.adoption == adoption && b.open())
+        {
             return Ok(false);
         }
-        self.acks.push(Ack { adoption, grandpatron, node, bytes: bytes.to_vec() });
+        self.acks.push(Ack {
+            adoption,
+            grandpatron,
+            node,
+            bytes: bytes.to_vec(),
+        });
         self.lapse_acks();
         Ok(true)
     }
@@ -763,11 +998,19 @@ impl Supersession {
             TYPE_ADOPTION => {
                 let prior = rec.prior_key().ok_or("not a recovery adoption")?;
                 let successor = rec.field_hash(1).ok_or("node")?;
-                Ok(Supersession { superseded: prior, successor, evidence: rec.txid })
+                Ok(Supersession {
+                    superseded: prior,
+                    successor,
+                    evidence: rec.txid,
+                })
             }
             TYPE_REISSUE => {
                 let node = rec.field_hash(1).ok_or("node")?;
-                Ok(Supersession { superseded: node, successor: node, evidence: rec.txid })
+                Ok(Supersession {
+                    superseded: node,
+                    successor: node,
+                    evidence: rec.txid,
+                })
             }
             _ => Err("neither a recovery nor a reissue".into()),
         }
@@ -783,7 +1026,11 @@ pub struct InitialTrust {
     pub by_counterparty: BTreeMap<Keyhash, Vec<Txid>>,
 }
 
-pub fn initial_trust(known: &BTreeSet<Keyhash>, subject: &Keyhash, records: &[Record]) -> InitialTrust {
+pub fn initial_trust(
+    known: &BTreeSet<Keyhash>,
+    subject: &Keyhash,
+    records: &[Record],
+) -> InitialTrust {
     let mut out = InitialTrust::default();
     for r in records {
         for s in &r.signers {
@@ -865,7 +1112,11 @@ pub fn fold_digest<'a>(txids: impl Iterator<Item = &'a Txid>) -> [u8; 32] {
 /// Ordering is the caller's, since it holds the records in whatever form
 /// it keeps them; both callers sort by `(effective, txid)`, which is the
 /// order [`Table::apply`] is fed in.
-pub fn unfolded<T>(snap: &Snapshot, records: &[T], at: impl Fn(&T) -> (u64, Txid)) -> Option<Vec<usize>> {
+pub fn unfolded<T>(
+    snap: &Snapshot,
+    records: &[T],
+    at: impl Fn(&T) -> (u64, Txid),
+) -> Option<Vec<usize>> {
     let (mut later, mut below) = (Vec::new(), Vec::new());
     for (i, r) in records.iter().enumerate() {
         let k = at(r);
@@ -902,7 +1153,9 @@ impl Snapshot {
     pub fn decode(b: &[u8]) -> Option<Snapshot> {
         let item = parse_all(b).ok()?;
         let Item::Map(m) = &item else { return None };
-        let Item::Bytes(f) = map_get(m, 1)? else { return None };
+        let Item::Bytes(f) = map_get(m, 1)? else {
+            return None;
+        };
         let folded: [u8; 32] = b[f.clone()].try_into().ok()?;
         let high = match map_get(m, 2)? {
             Item::Array(a) if a.is_empty() => None,
@@ -912,8 +1165,14 @@ impl Snapshot {
             },
             _ => return None,
         };
-        let Item::Bytes(r) = map_get(m, 3)? else { return None };
-        Some(Snapshot { folded, high, table: b[r.clone()].to_vec() })
+        let Item::Bytes(r) = map_get(m, 3)? else {
+            return None;
+        };
+        Some(Snapshot {
+            folded,
+            high,
+            table: b[r.clone()].to_vec(),
+        })
     }
 }
 
@@ -1019,7 +1278,10 @@ impl Table {
                 }
                 None => emit_array_head(&mut out, 0),
             }
-            emit_uint(&mut out, matches!(b.evidence, EvidenceStatus::Satisfied) as u64);
+            emit_uint(
+                &mut out,
+                matches!(b.evidence, EvidenceStatus::Satisfied) as u64,
+            );
         }
 
         emit_uint(&mut out, 3);
@@ -1068,7 +1330,10 @@ impl Table {
         // refers to: dropping these would silently un-end a relationship a
         // disavowal already closed
         emit_uint(&mut out, 9);
-        emit_array_head(&mut out, self.pending_disavowals.len() + self.pending_departures.len());
+        emit_array_head(
+            &mut out,
+            self.pending_disavowals.len() + self.pending_departures.len(),
+        );
         for (p, n, at, txid, code) in &self.pending_disavowals {
             emit_array_head(&mut out, 6);
             emit_uint(&mut out, 0);
@@ -1120,7 +1385,9 @@ impl Table {
         let me = bytes_of(b, map_get(m, 1)?)?;
         t.me = (!me.is_empty()).then(|| me.try_into().ok()).flatten();
 
-        let Item::Array(bindings) = map_get(m, 2)? else { return None };
+        let Item::Array(bindings) = map_get(m, 2)? else {
+            return None;
+        };
         for row in bindings {
             let Item::Array(f) = row else { return None };
             if f.len() != 9 {
@@ -1156,27 +1423,42 @@ impl Table {
                 adoption: kh_of(b, &f[3])?,
                 from: uint_of(&f[4])?,
                 end,
-                anchor: (!anchor.is_empty()).then(|| anchor.try_into().ok()).flatten(),
+                anchor: (!anchor.is_empty())
+                    .then(|| anchor.try_into().ok())
+                    .flatten(),
                 slot,
-                evidence: if uint_of(&f[8])? == 1 { EvidenceStatus::Satisfied } else { EvidenceStatus::Unevaluated },
+                evidence: if uint_of(&f[8])? == 1 {
+                    EvidenceStatus::Satisfied
+                } else {
+                    EvidenceStatus::Unevaluated
+                },
             });
         }
 
         t.nodes = kh_list(b, map_get(m, 3)?)?.into_iter().collect();
         t.held = kh_list(b, map_get(m, 4)?)?.into_iter().collect();
 
-        let Item::Array(acks) = map_get(m, 5)? else { return None };
+        let Item::Array(acks) = map_get(m, 5)? else {
+            return None;
+        };
         for row in acks {
             let Item::Array(f) = row else { return None };
             if f.len() != 4 {
                 return None;
             }
-            t.acks.push(Ack { adoption: kh_of(b, &f[0])?, grandpatron: kh_of(b, &f[1])?, node: kh_of(b, &f[2])?, bytes: bytes_of(b, &f[3])? });
+            t.acks.push(Ack {
+                adoption: kh_of(b, &f[0])?,
+                grandpatron: kh_of(b, &f[1])?,
+                node: kh_of(b, &f[2])?,
+                bytes: bytes_of(b, &f[3])?,
+            });
         }
 
         t.infra = kh_list(b, map_get(m, 6)?)?.into_iter().collect();
 
-        let Item::Array(attached) = map_get(m, 7)? else { return None };
+        let Item::Array(attached) = map_get(m, 7)? else {
+            return None;
+        };
         for row in attached {
             let Item::Array(f) = row else { return None };
             if f.len() != 2 {
@@ -1185,13 +1467,17 @@ impl Table {
             t.attached.insert(kh_of(b, &f[0])?, kh_list(b, &f[1])?);
         }
 
-        let Item::Array(lineage) = map_get(m, 8)? else { return None };
+        let Item::Array(lineage) = map_get(m, 8)? else {
+            return None;
+        };
         for row in lineage {
             let Item::Array(f) = row else { return None };
             if f.len() != 2 {
                 return None;
             }
-            let Item::Array(succs) = &f[1] else { return None };
+            let Item::Array(succs) = &f[1] else {
+                return None;
+            };
             let mut out = Vec::with_capacity(succs.len());
             for s in succs {
                 let Item::Array(pair) = s else { return None };
@@ -1203,13 +1489,20 @@ impl Table {
             t.lineage.insert(kh_of(b, &f[0])?, out);
         }
 
-        let Item::Array(pending) = map_get(m, 9)? else { return None };
+        let Item::Array(pending) = map_get(m, 9)? else {
+            return None;
+        };
         for row in pending {
             let Item::Array(f) = row else { return None };
             if f.len() != 6 {
                 return None;
             }
-            let (a, c, at, txid) = (kh_of(b, &f[1])?, kh_of(b, &f[2])?, uint_of(&f[3])?, kh_of(b, &f[4])?);
+            let (a, c, at, txid) = (
+                kh_of(b, &f[1])?,
+                kh_of(b, &f[2])?,
+                uint_of(&f[3])?,
+                kh_of(b, &f[4])?,
+            );
             let Item::Array(arg) = &f[5] else { return None };
             match uint_of(&f[0])? {
                 0 => {
@@ -1222,19 +1515,27 @@ impl Table {
                 }
                 1 => {
                     let [s] = arg.as_slice() else { return None };
-                    t.pending_departures.push((a, c, uint_of(s)?.try_into().ok()?, txid, at));
+                    t.pending_departures
+                        .push((a, c, uint_of(s)?.try_into().ok()?, txid, at));
                 }
                 _ => return None,
             }
         }
 
-        let Item::Array(reissues) = map_get(m, 10)? else { return None };
+        let Item::Array(reissues) = map_get(m, 10)? else {
+            return None;
+        };
         for row in reissues {
             let Item::Array(f) = row else { return None };
             if f.len() != 4 {
                 return None;
             }
-            t.pending_reissues.push((kh_of(b, &f[0])?, kh_of(b, &f[1])?, uint_of(&f[2])?.try_into().ok()?, uint_of(&f[3])?.try_into().ok()?));
+            t.pending_reissues.push((
+                kh_of(b, &f[0])?,
+                kh_of(b, &f[1])?,
+                uint_of(&f[2])?.try_into().ok()?,
+                uint_of(&f[3])?.try_into().ok()?,
+            ));
         }
 
         Some(t)

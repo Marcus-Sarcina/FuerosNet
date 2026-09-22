@@ -32,7 +32,10 @@ pub struct ArchiveRequest {
 impl ArchiveRequest {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3 + !self.frontier.is_empty() as usize + self.stop_before.is_some() as usize);
+        emit_map_head(
+            &mut out,
+            3 + !self.frontier.is_empty() as usize + self.stop_before.is_some() as usize,
+        );
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.subject);
         if !self.frontier.is_empty() {
@@ -57,8 +60,13 @@ impl ArchiveRequest {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ArchiveRequest, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("map".into()) };
-        let bytes = |k: u64| match map_get(m, k) { Some(Item::Bytes(r)) => Some(b[r.clone()].to_vec()), _ => None };
+        let Item::Map(m) = &item else {
+            return Err("map".into());
+        };
+        let bytes = |k: u64| match map_get(m, k) {
+            Some(Item::Bytes(r)) => Some(b[r.clone()].to_vec()),
+            _ => None,
+        };
         Ok(ArchiveRequest {
             subject: bytes(1).and_then(|v| v.try_into().ok()).ok_or("subject")?,
             frontier: txids_at(b, 2)?,
@@ -82,18 +90,27 @@ pub struct ArchiveReply {
 
 /// Field `k` as an array of txids, empty where absent.
 fn txids_at(b: &[u8], k: u64) -> Result<Vec<Txid>, String> {
-    let Some(r) = value_slice(b, k) else { return Ok(Vec::new()) };
+    let Some(r) = value_slice(b, k) else {
+        return Ok(Vec::new());
+    };
     array_item_ranges(b, r.start)
         .ok_or("frontier walk")?
         .into_iter()
-        .map(|ir| b[ir.start + 2..ir.end].try_into().map_err(|_| "txid".to_string()))
+        .map(|ir| {
+            b[ir.start + 2..ir.end]
+                .try_into()
+                .map_err(|_| "txid".to_string())
+        })
         .collect()
 }
 
 impl ArchiveReply {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3 + (self.more && !self.frontier.is_empty()) as usize);
+        emit_map_head(
+            &mut out,
+            3 + (self.more && !self.frontier.is_empty()) as usize,
+        );
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.nonce);
         emit_uint(&mut out, 2);
@@ -117,13 +134,27 @@ impl ArchiveReply {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ArchiveReply, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("map".into()) };
-        let nonce = match map_get(m, 1) { Some(Item::Bytes(r)) => b[r.clone()].to_vec().try_into().map_err(|_| "nonce")?, _ => return Err("nonce".into()) };
+        let Item::Map(m) = &item else {
+            return Err("map".into());
+        };
+        let nonce = match map_get(m, 1) {
+            Some(Item::Bytes(r)) => b[r.clone()].to_vec().try_into().map_err(|_| "nonce")?,
+            _ => return Err("nonce".into()),
+        };
         let r2 = value_slice(b, 2).ok_or("records")?;
-        let records = array_item_ranges(b, r2.start).ok_or("records walk")?.into_iter().map(|r| b[r].to_vec()).collect();
+        let records = array_item_ranges(b, r2.start)
+            .ok_or("records walk")?
+            .into_iter()
+            .map(|r| b[r].to_vec())
+            .collect();
         let more = matches!(map_get(m, 3), Some(Item::Bool(true)));
         let frontier = txids_at(b, 4)?;
-        Ok(ArchiveReply { nonce, records, more, frontier })
+        Ok(ArchiveReply {
+            nonce,
+            records,
+            more,
+            frontier,
+        })
     }
 }
 
@@ -150,14 +181,24 @@ pub struct Archive {
 
 impl Archive {
     pub fn new(key: Keyhash) -> Self {
-        Archive { key, records: BTreeMap::new(), heads: BTreeSet::new(), checkpoint: None, evidence: BTreeMap::new() }
+        Archive {
+            key,
+            records: BTreeMap::new(),
+            heads: BTreeSet::new(),
+            checkpoint: None,
+            evidence: BTreeMap::new(),
+        }
     }
 
     /// The back-pointers this key's next transaction carries: every branch
     /// head, or the genesis value for a key with no transaction.  Longer
     /// than one means the next transaction is a merge (design §10.3).
     pub fn next_back_pointers(&self) -> Vec<Txid> {
-        if self.heads.is_empty() { vec![genesis(&self.key)] } else { self.heads.iter().copied().collect() }
+        if self.heads.is_empty() {
+            vec![genesis(&self.key)]
+        } else {
+            self.heads.iter().copied().collect()
+        }
     }
 
     /// Write this archive to `dir`: one file per record, named by its
@@ -194,7 +235,9 @@ impl Archive {
     pub fn load(dir: &std::path::Path, key: Keyhash) -> std::io::Result<Archive> {
         let mut a = Archive::new(key);
         let root = dir.join("archive");
-        let Ok(rd) = std::fs::read_dir(&root) else { return Ok(a) };
+        let Ok(rd) = std::fs::read_dir(&root) else {
+            return Ok(a);
+        };
         let mut records: Vec<Record> = Vec::new();
         for e in rd.flatten() {
             if let Ok(bytes) = std::fs::read(e.path())
@@ -241,7 +284,10 @@ impl Archive {
         if self.records.contains_key(&rec.txid) {
             return Ok(rec.txid);
         }
-        let ptrs = rec.back_pointers_of(&self.key).ok_or("not signed by this key")?.to_vec();
+        let ptrs = rec
+            .back_pointers_of(&self.key)
+            .ok_or("not signed by this key")?
+            .to_vec();
         let g = genesis(&self.key);
         for p in &ptrs {
             if *p != g && !self.records.contains_key(p) {
@@ -254,9 +300,10 @@ impl Archive {
         // §3.3: the record's own time is at or after every predecessor's effective time
         for p in &ptrs {
             if let Some(prev) = self.records.get(p)
-                && rec.time < prev.effective {
-                    return Err("timestamp before predecessor's effective time".into());
-                }
+                && rec.time < prev.effective
+            {
+                return Err("timestamp before predecessor's effective time".into());
+            }
         }
         let txid = rec.txid;
         for p in &ptrs {
@@ -275,7 +322,11 @@ impl Archive {
     /// The seqno this key last used in `series`, from its adoptions,
     /// departures and reissues.
     pub fn last_seqno(&self, series: u32) -> Option<Seqno> {
-        self.records.values().filter_map(|r| r.seqno()).filter(|s| s.series == series).max_by_key(|s| s.counter)
+        self.records
+            .values()
+            .filter_map(|r| r.seqno())
+            .filter(|s| s.series == series)
+            .max_by_key(|s| s.counter)
     }
 
     /// Every record held, in no particular order.
@@ -286,16 +337,37 @@ impl Archive {
     /// Every series this key has occupied (`light-client-requirements.md`
     /// §2: never reissue into one of them).
     pub fn series_occupied(&self) -> BTreeSet<u32> {
-        self.records.values().filter_map(|r| r.seqno()).map(|s| s.series).collect()
+        self.records
+            .values()
+            .filter_map(|r| r.seqno())
+            .map(|s| s.series)
+            .collect()
     }
 
     /// This key's chain under `patron` (`wire-format.md` §4.6.1): its
     /// latest adoption there and every reissue since, which is what it
     /// presents when asked which series it is in.
     pub fn chain_for(&self, patron: &Keyhash) -> Option<crate::series::SeriesChain> {
-        let adoption = self.records.values().filter(|r| r.tx_type == TYPE_ADOPTION && r.field_hash(1) == Some(self.key) && r.field_hash(2) == Some(*patron)).max_by_key(|r| (r.time, r.txid))?;
+        let adoption = self
+            .records
+            .values()
+            .filter(|r| {
+                r.tx_type == TYPE_ADOPTION
+                    && r.field_hash(1) == Some(self.key)
+                    && r.field_hash(2) == Some(*patron)
+            })
+            .max_by_key(|r| (r.time, r.txid))?;
         let mut chain = crate::series::SeriesChain::open(adoption).ok()?;
-        let mut reissues: Vec<&Record> = self.records.values().filter(|r| r.tx_type == TYPE_REISSUE && r.field_hash(1) == Some(self.key) && r.field_hash(2) == Some(*patron) && r.time >= adoption.time).collect();
+        let mut reissues: Vec<&Record> = self
+            .records
+            .values()
+            .filter(|r| {
+                r.tx_type == TYPE_REISSUE
+                    && r.field_hash(1) == Some(self.key)
+                    && r.field_hash(2) == Some(*patron)
+                    && r.time >= adoption.time
+            })
+            .collect();
         reissues.sort_by_key(|r| (r.time, r.txid));
         for r in reissues {
             // a reissue that does not extend the chain is not a link of it,
@@ -335,14 +407,24 @@ impl Archive {
         // ready, newest first; a head another head points back to is
         // released when its namer is out
         let mut ready: VecDeque<Txid> = VecDeque::new();
-        let mut starts: Vec<Txid> = heads.iter().copied().filter(|h| indeg.get(h) == Some(&0)).collect();
+        let mut starts: Vec<Txid> = heads
+            .iter()
+            .copied()
+            .filter(|h| indeg.get(h) == Some(&0))
+            .collect();
         starts.sort_by_key(|h| std::cmp::Reverse(self.records[h].effective));
         starts.dedup();
         ready.extend(starts);
         let mut out = Vec::new();
         while let Some(t) = ready.pop_front() {
             out.push(t);
-            let mut preds: Vec<Txid> = self.records[&t].back_pointers_of(&self.key).unwrap_or(&[]).iter().filter(|p| reach.contains(*p)).copied().collect();
+            let mut preds: Vec<Txid> = self.records[&t]
+                .back_pointers_of(&self.key)
+                .unwrap_or(&[])
+                .iter()
+                .filter(|p| reach.contains(*p))
+                .copied()
+                .collect();
             preds.sort_by_key(|p| std::cmp::Reverse(self.records[p].effective));
             for p in preds {
                 let d = indeg.get_mut(&p).unwrap();
@@ -358,7 +440,10 @@ impl Archive {
     /// The record this archive serves as newest when a request names no
     /// head: the head with the latest effective time.
     pub fn newest(&self) -> Option<Txid> {
-        self.heads.iter().max_by_key(|h| self.records[*h].effective).copied()
+        self.heads
+            .iter()
+            .max_by_key(|h| self.records[*h].effective)
+            .copied()
     }
 
     /// Answer an archive request (`wire-format.md` §7.9): every record
@@ -366,11 +451,20 @@ impl Archive {
     /// remain the frontier, every back-pointer named and not returned.  A
     /// frontier this archive does not hold gets an empty batch.
     pub fn serve(&self, req: &ArchiveRequest) -> ArchiveReply {
-        let empty = ArchiveReply { nonce: req.nonce, records: Vec::new(), more: false, frontier: Vec::new() };
+        let empty = ArchiveReply {
+            nonce: req.nonce,
+            records: Vec::new(),
+            more: false,
+            frontier: Vec::new(),
+        };
         if req.subject != self.key || !(1..=256).contains(&req.max_records) {
             return empty;
         }
-        let heads: Vec<Txid> = if req.frontier.is_empty() { self.newest().into_iter().collect() } else { req.frontier.clone() };
+        let heads: Vec<Txid> = if req.frontier.is_empty() {
+            self.newest().into_iter().collect()
+        } else {
+            req.frontier.clone()
+        };
         if heads.is_empty() || heads.iter().any(|h| !self.records.contains_key(h)) {
             return empty;
         }
@@ -406,7 +500,12 @@ impl Archive {
                 }
             }
         }
-        ArchiveReply { nonce: req.nonce, records, more, frontier }
+        ArchiveReply {
+            nonce: req.nonce,
+            records,
+            more,
+            frontier,
+        }
     }
 
     // ---------------------------------------------------------------- evidence

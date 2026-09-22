@@ -16,8 +16,8 @@
 //! and it is why the harness hands out addresses rather than assigning
 //! them.
 
-use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::identity::testkit::test_identity;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -80,7 +80,12 @@ impl Daemons {
         let root = std::env::temp_dir().join(format!("rhtn-daemons-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("a directory for the set");
-        Daemons { exe: exe.into(), root, daemons: Vec::new(), hosting: Vec::new() }
+        Daemons {
+            exe: exe.into(),
+            root,
+            daemons: Vec::new(),
+            hosting: Vec::new(),
+        }
     }
 
     /// The directory `name`'s files live in, made if it is not there yet,
@@ -107,14 +112,27 @@ impl Daemons {
     /// drifts: the bare keys must precede every table header or TOML puts
     /// them inside the last one, and that is easy to get right once and
     /// wrong twice.
-    fn write_files(&self, name: &str, dir: &Path, peers: &[&str], up: Option<&(String, SocketAddr)>) -> (PathBuf, PathBuf) {
+    fn write_files(
+        &self,
+        name: &str,
+        dir: &Path,
+        peers: &[&str],
+        up: Option<&(String, SocketAddr)>,
+    ) -> (PathBuf, PathBuf) {
         let (config, peers_path) = (dir.join("rhtnd.conf"), dir.join("peers"));
         write_identity(&dir.join("identity.key"), name);
-        let list: String = peers.iter().filter(|p| **p != name).map(|p| format!("{}\n", hex(&test_identity(p).public.key_material()))).collect();
+        let list: String = peers
+            .iter()
+            .filter(|p| **p != name)
+            .map(|p| format!("{}\n", hex(&test_identity(p).public.key_material())))
+            .collect();
         std::fs::write(&peers_path, list).expect("the peers file");
         let mut text = String::new();
         if self.hosting.iter().any(|h| h == name) {
-            text.push_str(&format!("resources = \"{}\"\n", dir.join("hosting").display()));
+            text.push_str(&format!(
+                "resources = \"{}\"\n",
+                dir.join("hosting").display()
+            ));
         }
         text.push_str(&format!(
             "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
@@ -125,7 +143,9 @@ impl Daemons {
             dir.join("archive").display()
         ));
         if let Some((key, addr)) = up {
-            text.push_str(&format!("\n[upstream]\nnode = \"{key}\"\naddresses = [\"{addr}\"]\n"));
+            text.push_str(&format!(
+                "\n[upstream]\nnode = \"{key}\"\naddresses = [\"{addr}\"]\n"
+            ));
         }
         std::fs::write(&config, text).expect("the configuration");
         (config, peers_path)
@@ -166,13 +186,27 @@ impl Daemons {
     pub fn refuses(&mut self, name: &str, peers: &[&str]) -> String {
         let dir = self.dir(name);
         let (config, peers_path) = self.write_files(name, &dir, peers, None);
-        let out = Command::new(&self.exe).arg(&config).arg(&peers_path).output().expect("the daemon runs");
-        assert!(!out.status.success(), "{name} was expected not to start, and it did");
-        format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+        let out = Command::new(&self.exe)
+            .arg(&config)
+            .arg(&peers_path)
+            .output()
+            .expect("the daemon runs");
+        assert!(
+            !out.status.success(),
+            "{name} was expected not to start, and it did"
+        );
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
     }
 
     pub fn get(&self, name: &str) -> &Daemon {
-        self.daemons.iter().find(|d| d.name == name).unwrap_or_else(|| panic!("no daemon {name}"))
+        self.daemons
+            .iter()
+            .find(|d| d.name == name)
+            .unwrap_or_else(|| panic!("no daemon {name}"))
     }
 
     /// Whether `name`'s process is still up.
@@ -182,7 +216,10 @@ impl Daemons {
     }
 
     fn index(&self, name: &str) -> usize {
-        self.daemons.iter().position(|d| d.name == name).unwrap_or_else(|| panic!("no daemon {name}"))
+        self.daemons
+            .iter()
+            .position(|d| d.name == name)
+            .unwrap_or_else(|| panic!("no daemon {name}"))
     }
 
     /// SIGTERM, then wait: the daemon writes its state back on the way out,
@@ -202,7 +239,10 @@ impl Daemons {
     pub fn restart(&mut self, name: &str) -> SocketAddr {
         self.stop(name);
         let i = self.index(name);
-        let (config, peers) = (self.daemons[i].config.clone(), self.daemons[i].peers.clone());
+        let (config, peers) = (
+            self.daemons[i].config.clone(),
+            self.daemons[i].peers.clone(),
+        );
         let mut child = None;
         let addr = spawn(&self.exe, &config, &peers, &mut child);
         self.daemons[i].child = child;
@@ -239,7 +279,8 @@ fn spawn(exe: &Path, config: &Path, peers: &Path, slot: &mut Option<Child>) -> S
     let mut out = BufReader::new(child.stdout.take().expect("stdout"));
     let mut err = child.stderr.take().expect("stderr");
     let mut line = String::new();
-    out.read_line(&mut line).expect("the daemon says where it is serving");
+    out.read_line(&mut line)
+        .expect("the daemon says where it is serving");
     // a daemon that refused its configuration said why before it exited,
     // and a harness that swallows that turns every configuration mistake
     // into the same unhelpful failure
@@ -273,7 +314,10 @@ fn terminate(mut child: Child, expect_clean: bool) {
         match child.try_wait() {
             Ok(Some(status)) => {
                 if expect_clean {
-                    assert!(status.success(), "the daemon exits cleanly on SIGTERM: {status:?}");
+                    assert!(
+                        status.success(),
+                        "the daemon exits cleanly on SIGTERM: {status:?}"
+                    );
                 }
                 return;
             }
@@ -296,8 +340,12 @@ unsafe extern "C" {
 }
 
 pub fn write_identity(path: &Path, name: &str) {
-    let mut bytes = rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes()).to_vec();
-    bytes.extend_from_slice(&rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes()));
+    let mut bytes =
+        rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes())
+            .to_vec();
+    bytes.extend_from_slice(&rhtn_codec::cose::sha256(
+        format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes(),
+    ));
     std::fs::write(path, &bytes).expect("the identity file");
     #[cfg(unix)]
     {

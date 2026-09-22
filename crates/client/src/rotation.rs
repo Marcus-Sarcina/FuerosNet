@@ -5,12 +5,12 @@
 //! that proves the series it is in.
 
 use crate::Keyhash;
+use rhtn_archive::Txid;
 use rhtn_archive::chain::Archive;
 use rhtn_archive::locator::{COUNTER_MAX, seal};
 use rhtn_archive::record::Record;
 use rhtn_archive::series::SeriesChain;
 use rhtn_archive::tx::{Locator, Seqno, TYPE_REISSUE, reissue_body};
-use rhtn_archive::Txid;
 use rhtn_crypto::SigningIdentity;
 
 /// One patron relationship as the subject's archive shows it: the patron,
@@ -32,7 +32,11 @@ impl Relationship {
 /// adopted under.
 pub fn relationships(archive: &Archive) -> Vec<Relationship> {
     let me = archive.key;
-    let mut patrons: Vec<Keyhash> = archive.records().filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION && r.field_hash(1) == Some(me)).filter_map(|r| r.field_hash(2)).collect();
+    let mut patrons: Vec<Keyhash> = archive
+        .records()
+        .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION && r.field_hash(1) == Some(me))
+        .filter_map(|r| r.field_hash(2))
+        .collect();
     patrons.sort();
     patrons.dedup();
     patrons
@@ -40,7 +44,11 @@ pub fn relationships(archive: &Archive) -> Vec<Relationship> {
         .filter_map(|p| {
             let chain = archive.chain_for(&p)?;
             let position = chain.adoption.locator()?;
-            Some(Relationship { patron: p, position, chain })
+            Some(Relationship {
+                patron: p,
+                position,
+                chain,
+            })
         })
         .collect()
 }
@@ -54,7 +62,10 @@ pub fn seal_line(identity: &SigningIdentity, rel: &Relationship) -> Vec<u8> {
 /// Seal every line at once (`light-client-requirements.md` §2): one
 /// self-signed locator per relationship, no patron needed.
 pub fn seal_all(identity: &SigningIdentity, archive: &Archive) -> Vec<(Keyhash, Vec<u8>)> {
-    relationships(archive).iter().map(|r| (r.patron, seal_line(identity, r))).collect()
+    relationships(archive)
+        .iter()
+        .map(|r| (r.patron, seal_line(identity, r)))
+        .collect()
 }
 
 /// Why a reissue is not taken.
@@ -79,13 +90,33 @@ pub fn fresh_series(archive: &Archive, candidates: impl IntoIterator<Item = u32>
 /// `new_series` at 0.  The patron's back-pointers are the patron's to
 /// supply; the countersignature is theirs too.  Refused into any series
 /// this key has occupied.
-pub fn propose_reissue(archive: &Archive, patron: &Keyhash, patron_back: &[Txid], leaving_counter: u32, new_series: u32, timestamp: u64) -> Result<Vec<u8>, Refusal> {
+pub fn propose_reissue(
+    archive: &Archive,
+    patron: &Keyhash,
+    patron_back: &[Txid],
+    leaving_counter: u32,
+    new_series: u32,
+    timestamp: u64,
+) -> Result<Vec<u8>, Refusal> {
     if archive.series_occupied().contains(&new_series) {
         return Err(Refusal::SeriesOccupied(new_series));
     }
-    let rel = relationships(archive).into_iter().find(|r| r.patron == *patron).ok_or(Refusal::NoRelationship)?;
+    let rel = relationships(archive)
+        .into_iter()
+        .find(|r| r.patron == *patron)
+        .ok_or(Refusal::NoRelationship)?;
     let back = archive.next_back_pointers();
-    Ok(reissue_body([&back, patron_back], &archive.key, patron, Seqno { series: rel.series(), counter: leaving_counter }, new_series, timestamp))
+    Ok(reissue_body(
+        [&back, patron_back],
+        &archive.key,
+        patron,
+        Seqno {
+            series: rel.series(),
+            counter: leaving_counter,
+        },
+        new_series,
+        timestamp,
+    ))
 }
 
 /// One relationship's repair on suspected compromise (`light-client-requirements.md`
@@ -103,15 +134,37 @@ pub struct Repair {
 /// maximum counter, then propose the reissue naming that maximum into a
 /// fresh series.  `patron_back` supplies each patron's back-pointers and
 /// `fresh` the series to try, first unused taken.
-pub fn suspect_compromise(identity: &SigningIdentity, archive: &Archive, timestamp: u64, patron_back: &dyn Fn(&Keyhash) -> Vec<Txid>, fresh: &[u32]) -> Result<Vec<Repair>, Refusal> {
+pub fn suspect_compromise(
+    identity: &SigningIdentity,
+    archive: &Archive,
+    timestamp: u64,
+    patron_back: &dyn Fn(&Keyhash) -> Vec<Txid>,
+    fresh: &[u32],
+) -> Result<Vec<Repair>, Refusal> {
     let mut out = Vec::new();
     let mut taken: Vec<u32> = Vec::new();
     for rel in relationships(archive) {
         let seal = seal_line(identity, &rel);
-        let new_series = fresh_series(archive, fresh.iter().copied().filter(|s| !taken.contains(s))).ok_or(Refusal::SeriesOccupied(0))?;
+        let new_series = fresh_series(
+            archive,
+            fresh.iter().copied().filter(|s| !taken.contains(s)),
+        )
+        .ok_or(Refusal::SeriesOccupied(0))?;
         taken.push(new_series);
-        let reissue = propose_reissue(archive, &rel.patron, &patron_back(&rel.patron), COUNTER_MAX, new_series, timestamp)?;
-        out.push(Repair { patron: rel.patron, seal, reissue, new_series });
+        let reissue = propose_reissue(
+            archive,
+            &rel.patron,
+            &patron_back(&rel.patron),
+            COUNTER_MAX,
+            new_series,
+            timestamp,
+        )?;
+        out.push(Repair {
+            patron: rel.patron,
+            seal,
+            reissue,
+            new_series,
+        });
     }
     Ok(out)
 }
@@ -119,7 +172,12 @@ pub fn suspect_compromise(identity: &SigningIdentity, archive: &Archive, timesta
 /// Take the patron-countersigned reissue back: it must be the body
 /// proposed, verified; then it is this key's own transaction and extends
 /// the chain.
-pub fn take_reissue<L: rhtn_crypto::verify::Lookup + ?Sized>(archive: &mut Archive, proposed_body: &[u8], envelope: &[u8], ids: &L) -> Result<Txid, Refusal> {
+pub fn take_reissue<L: rhtn_crypto::verify::Lookup + ?Sized>(
+    archive: &mut Archive,
+    proposed_body: &[u8],
+    envelope: &[u8],
+    ids: &L,
+) -> Result<Txid, Refusal> {
     let rec = Record::parse(envelope).map_err(|_| Refusal::NotTheProposal)?;
     if rec.tx_type != TYPE_REISSUE || &rec.bytes[rec.body.clone()] != proposed_body {
         return Err(Refusal::NotTheProposal);
@@ -144,7 +202,11 @@ pub struct Rotation {
 
 impl Rotation {
     pub fn begin(old: Box<SigningIdentity>, archive: Archive) -> Self {
-        Rotation { old: Some(old), archive, seals: Vec::new() }
+        Rotation {
+            old: Some(old),
+            archive,
+            seals: Vec::new(),
+        }
     }
 
     /// The old key while it is still in hand: for the successor statement

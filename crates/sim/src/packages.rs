@@ -54,7 +54,9 @@ const PREAMBLE: &str = r#"
 "#;
 
 fn bound(body: &str) -> Vec<u8> {
-    let src = format!("(component {BINDINGS}{ARENA}{LOWER}\n  (core module $main{PREAMBLE}{body}\n  )\n{WIRE}\n)");
+    let src = format!(
+        "(component {BINDINGS}{ARENA}{LOWER}\n  (core module $main{PREAMBLE}{body}\n  )\n{WIRE}\n)"
+    );
     wat::parse_str(&src).expect("a component")
 }
 
@@ -134,21 +136,25 @@ pub fn silent() -> Vec<u8> {
 
 /// Asks for a binding from somewhere else entirely.
 pub fn reaching(instance: &str) -> Vec<u8> {
-    wat::parse_str(format!(
-        r#"(component
+    wat::parse_str(
+        format!(
+            r#"(component
   (import "{instance}" (instance $x (export "get" (func (result u32)))))
   (core module $main (func (export "handle")))
   (core instance $maini (instantiate $main))
   (func (export "handle") (canon lift (core func $maini "handle")))
 )"#
-    ).as_str())
+        )
+        .as_str(),
+    )
     .expect("a component")
 }
 
 /// Asks the host's own instance for a hook it does not have.
 pub fn overreaching(hook: &str) -> Vec<u8> {
-    wat::parse_str(format!(
-        r#"(component
+    wat::parse_str(
+        format!(
+            r#"(component
   (import "rhtn:host/bindings@1.0.0" (instance $b
     (export "request" (func (result (list u8))))
     (export "{hook}" (func (result u32)))
@@ -157,7 +163,9 @@ pub fn overreaching(hook: &str) -> Vec<u8> {
   (core instance $maini (instantiate $main))
   (func (export "handle") (canon lift (core func $maini "handle")))
 )"#
-    ).as_str())
+        )
+        .as_str(),
+    )
     .expect("a component")
 }
 

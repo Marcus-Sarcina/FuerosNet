@@ -24,7 +24,9 @@ pub struct Scope<N: Ord + Clone> {
 
 impl<N: Ord + Clone> Scope<N> {
     pub fn new() -> Self {
-        Scope { adj: BTreeMap::new() }
+        Scope {
+            adj: BTreeMap::new(),
+        }
     }
 
     /// From `(patron, node)` pairs: an adoption edge for each, and a sibling
@@ -99,7 +101,11 @@ pub const HORIZON: usize = 2;
 /// vertex-capacity schedule, since policy is local (design §16.2, §16.4).
 /// What is not a choice is the horizon being unthrottled.
 pub fn node_capacity(dist: usize, in_horizon: bool) -> u64 {
-    if dist == 0 || in_horizon { UNTHROTTLED } else { (32u64 >> dist.min(63)).max(1) }
+    if dist == 0 || in_horizon {
+        UNTHROTTLED
+    } else {
+        (32u64 >> dist.min(63)).max(1)
+    }
 }
 
 /// Distance in the trust landscape (design §16.2.1), not hops in the graph:
@@ -109,8 +115,16 @@ pub fn node_capacity(dist: usize, in_horizon: bool) -> u64 {
 /// every edge alike.  The walk uses the observer's own graph and nothing
 /// wider: an edge absent from the capacity graph shortens no distance,
 /// or design §16.3.1's bound would not be observer-relative.
-pub fn landscape_distance<N: Ord + Clone + Debug>(scope: &Scope<N>, flow: &FlowGraph<N>, observer: &N) -> BTreeMap<N, usize> {
-    let mut dist: BTreeMap<N, usize> = scope.horizon(observer, HORIZON).into_iter().map(|n| (n, 1)).collect();
+pub fn landscape_distance<N: Ord + Clone + Debug>(
+    scope: &Scope<N>,
+    flow: &FlowGraph<N>,
+    observer: &N,
+) -> BTreeMap<N, usize> {
+    let mut dist: BTreeMap<N, usize> = scope
+        .horizon(observer, HORIZON)
+        .into_iter()
+        .map(|n| (n, 1))
+        .collect();
     // The observer's own counterparties are at 1 whether or not they are in
     // the horizon: an edge incident to the observer is one it is party to.
     for (v, _) in flow.edges_from(observer) {
@@ -118,7 +132,11 @@ pub fn landscape_distance<N: Ord + Clone + Debug>(scope: &Scope<N>, flow: &FlowG
     }
     dist.insert(observer.clone(), 0);
     let acq = flow.adjacency();
-    let mut frontier: BTreeSet<N> = dist.iter().filter(|(_, d)| **d == 1).map(|(n, _)| n.clone()).collect();
+    let mut frontier: BTreeSet<N> = dist
+        .iter()
+        .filter(|(_, d)| **d == 1)
+        .map(|(n, _)| n.clone())
+        .collect();
     let mut d = 1;
     while !frontier.is_empty() {
         d += 1;
@@ -197,17 +215,32 @@ impl<N: Ord + Clone + Debug> Split<N> {
 /// starts working.  Built any other way, an in-horizon edge decides the
 /// bound for a region beyond the horizon, and hops re-grade the inside of
 /// the horizon the design flattens.
-pub fn split<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, scope: Option<&Scope<N>>) -> Split<N> {
+pub fn split<N: Ord + Clone + Debug>(
+    g: &FlowGraph<N>,
+    observer: &N,
+    scope: Option<&Scope<N>>,
+) -> Split<N> {
     let (dist, hz) = match scope {
-        Some(s) => (landscape_distance(s, g, observer), s.horizon(observer, HORIZON)),
+        Some(s) => (
+            landscape_distance(s, g, observer),
+            s.horizon(observer, HORIZON),
+        ),
         None => (hops_from(g, observer), BTreeSet::from([observer.clone()])),
     };
     // every node the observer can place, the observer and its horizon
     // included even where the capacity graph lacks them
-    let mut names: BTreeSet<N> = g.nodes().filter(|u| dist.contains_key(u)).cloned().collect();
+    let mut names: BTreeSet<N> = g
+        .nodes()
+        .filter(|u| dist.contains_key(u))
+        .cloned()
+        .collect();
     names.extend(hz.iter().cloned());
     names.insert(observer.clone());
-    let index: BTreeMap<N, usize> = names.iter().enumerate().map(|(i, n)| (n.clone(), i)).collect();
+    let index: BTreeMap<N, usize> = names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), i))
+        .collect();
     let mut network = Network::new(2 * index.len() + 1);
     let sink = 2 * index.len();
     let (inn, out) = (|i: usize| 2 * i, |i: usize| 2 * i + 1);
@@ -228,14 +261,24 @@ pub fn split<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, scope: Opti
             network.add_edge(source, inn(index[m]), UNTHROTTLED);
         }
     }
-    Split { network, index, sink, source }
+    Split {
+        network,
+        index,
+        sink,
+        source,
+    }
 }
 
 /// A target's individual standing: the maximum flow from the observer to
 /// it, which is the minimum cut between them.  The drain ends at the
 /// target's in-vertex: a candidate is a destination, not a relay, and its
 /// own throughput does not gate what it receives.
-pub fn score<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, target: &N, scope: Option<&Scope<N>>) -> u64 {
+pub fn score<N: Ord + Clone + Debug>(
+    g: &FlowGraph<N>,
+    observer: &N,
+    target: &N,
+    scope: Option<&Scope<N>>,
+) -> u64 {
     split(g, observer, scope).flow_to(target)
 }
 
@@ -278,7 +321,13 @@ pub struct Allocation<N> {
 /// implementation note).  Admitting in rank against a shared residual
 /// cannot displace an earlier candidate, and the final total is still the
 /// maximum, so the rule fixes only who is admitted.
-pub fn admit<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, candidates: &[N], demand: u64, scope: Option<&Scope<N>>) -> Allocation<N> {
+pub fn admit<N: Ord + Clone + Debug>(
+    g: &FlowGraph<N>,
+    observer: &N,
+    candidates: &[N],
+    demand: u64,
+    scope: Option<&Scope<N>>,
+) -> Allocation<N> {
     let mut s = split(g, observer, scope);
     let hops = s.network.hops_from(s.source);
     let mut seen = BTreeSet::new();
@@ -286,12 +335,21 @@ pub fn admit<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, candidates:
         .iter()
         .enumerate()
         .filter(|(_, c)| s.inn(c).is_some() && seen.insert((*c).clone()))
-        .map(|(i, c)| Ranked { candidate: c.clone(), flow: s.flow_to(c), hops: hops[s.inn(c).unwrap()].map(|h| h.div_ceil(2)), considered: i })
+        .map(|(i, c)| Ranked {
+            candidate: c.clone(),
+            flow: s.flow_to(c),
+            hops: hops[s.inn(c).unwrap()].map(|h| h.div_ceil(2)),
+            considered: i,
+        })
         .collect();
     ranked.sort_by(|a, b| {
         b.flow
             .cmp(&a.flow)
-            .then_with(|| a.hops.unwrap_or(usize::MAX).cmp(&b.hops.unwrap_or(usize::MAX)))
+            .then_with(|| {
+                a.hops
+                    .unwrap_or(usize::MAX)
+                    .cmp(&b.hops.unwrap_or(usize::MAX))
+            })
             .then_with(|| a.considered.cmp(&b.considered))
     });
     let mut admitted = Vec::new();
@@ -305,14 +363,23 @@ pub fn admit<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, candidates:
         }
         total += gained;
     }
-    Allocation { ranked, admitted, total }
+    Allocation {
+        ranked,
+        admitted,
+        total,
+    }
 }
 
 /// The flow deliverable to a set at once under arbitrary demands: design
 /// §16.2's setwise conservation in its general form.  Passing each
 /// candidate's own individual standing is the strongest reading, every
 /// identity asking for everything it could get alone.
-pub fn deliverable<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, demands: &[(N, u64)], scope: Option<&Scope<N>>) -> u64 {
+pub fn deliverable<N: Ord + Clone + Debug>(
+    g: &FlowGraph<N>,
+    observer: &N,
+    demands: &[(N, u64)],
+    scope: Option<&Scope<N>>,
+) -> u64 {
     let mut s = split(g, observer, scope);
     let mut seen = BTreeSet::new();
     for (t, d) in demands {
@@ -329,7 +396,12 @@ pub fn deliverable<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, deman
 /// design §16.2's sentence made a number: everything behind `entry` drains
 /// through its out-vertex, so no set of identities there can use more at
 /// once than flows from the observer to that vertex.
-pub fn ceiling<N: Ord + Clone + Debug>(g: &FlowGraph<N>, observer: &N, entry: &N, scope: Option<&Scope<N>>) -> u64 {
+pub fn ceiling<N: Ord + Clone + Debug>(
+    g: &FlowGraph<N>,
+    observer: &N,
+    entry: &N,
+    scope: Option<&Scope<N>>,
+) -> u64 {
     let mut s = split(g, observer, scope);
     match s.out(entry) {
         Some(t) => s.network.max_flow(s.source, t),

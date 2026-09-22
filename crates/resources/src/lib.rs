@@ -33,7 +33,10 @@ pub const GUEST_ENTRY: &str = "handle";
 /// is how a component names a function inside an imported instance.
 /// Derived rather than written out, so the two lists cannot drift apart.
 fn offered() -> Vec<&'static str> {
-    HOST_EXPORTS.iter().map(|n| n.rsplit_once(':').map_or(*n, |(_, f)| f)).collect()
+    HOST_EXPORTS
+        .iter()
+        .map(|n| n.rsplit_once(':').map_or(*n, |(_, f)| f))
+        .collect()
 }
 
 /// What a package may spend on one request.
@@ -57,7 +60,12 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { memory: 64 << 20, fuel: 200_000_000, table_elements: 10_000, response: 8 << 20 }
+        Self {
+            memory: 64 << 20,
+            fuel: 200_000_000,
+            table_elements: 10_000,
+            response: 8 << 20,
+        }
     }
 }
 
@@ -89,7 +97,9 @@ impl std::fmt::Display for Refusal {
             Self::NoEntry => write!(f, "no `{GUEST_ENTRY}` export"),
             Self::Exhausted => write!(f, "the request spent what it was given"),
             Self::Trapped(e) => write!(f, "trapped: {e}"),
-            Self::Oversized(n) => write!(f, "the response is {n} bytes, over what the host carries"),
+            Self::Oversized(n) => {
+                write!(f, "the response is {n} bytes, over what the host carries")
+            }
         }
     }
 }
@@ -128,7 +138,8 @@ impl Sandbox {
         cfg.wasm_component_model(true);
         cfg.consume_fuel(true);
         let engine = Engine::new(&cfg).map_err(|e| Refusal::NotAComponent(e.to_string()))?;
-        let component = Component::new(&engine, bytes).map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+        let component =
+            Component::new(&engine, bytes).map_err(|e| Refusal::NotAComponent(e.to_string()))?;
 
         let mut imports = Vec::new();
         let ty = component.component_type();
@@ -148,7 +159,11 @@ impl Sandbox {
                 }
             }
         }
-        if !component.component_type().exports(&engine).any(|(n, _)| n == GUEST_ENTRY) {
+        if !component
+            .component_type()
+            .exports(&engine)
+            .any(|(n, _)| n == GUEST_ENTRY)
+        {
             return Err(Refusal::NoEntry);
         }
 
@@ -158,29 +173,52 @@ impl Sandbox {
             // a component importing one of the two still links against an
             // instance carrying both, and asking for one is not a promise
             // not to be handed the other's name
-            let mut inst = linker.instance(HOST_INSTANCE).map_err(|e| Refusal::NotAComponent(e.to_string()))?;
-            inst.func_new("request", |store: wasmtime::StoreContextMut<'_, Call>, _: wasmtime::component::types::ComponentFunc, _: &[Val], out: &mut [Val]| {
-                out[0] = Val::List(store.data().request.iter().map(|b| Val::U8(*b)).collect());
-                Ok(())
-            })
+            let mut inst = linker
+                .instance(HOST_INSTANCE)
+                .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+            inst.func_new(
+                "request",
+                |store: wasmtime::StoreContextMut<'_, Call>,
+                 _: wasmtime::component::types::ComponentFunc,
+                 _: &[Val],
+                 out: &mut [Val]| {
+                    out[0] = Val::List(store.data().request.iter().map(|b| Val::U8(*b)).collect());
+                    Ok(())
+                },
+            )
             .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
-            inst.func_new("response", |mut store: wasmtime::StoreContextMut<'_, Call>, _: wasmtime::component::types::ComponentFunc, args: &[Val], _: &mut [Val]| {
-                let Some(Val::List(body)) = args.first() else {
-                    return Err(wasmtime::Error::msg("response takes one list<u8>"));
-                };
-                let bytes: Vec<u8> = body.iter().map(|v| if let Val::U8(b) = v { *b } else { 0 }).collect();
-                if bytes.len() > store.data().cap {
-                    let n = bytes.len();
-                    store.data_mut().over = Some(n);
-                    return Err(wasmtime::Error::msg(format!("response is {n} bytes")));
-                }
-                store.data_mut().response = Some(bytes);
-                Ok(())
-            })
+            inst.func_new(
+                "response",
+                |mut store: wasmtime::StoreContextMut<'_, Call>,
+                 _: wasmtime::component::types::ComponentFunc,
+                 args: &[Val],
+                 _: &mut [Val]| {
+                    let Some(Val::List(body)) = args.first() else {
+                        return Err(wasmtime::Error::msg("response takes one list<u8>"));
+                    };
+                    let bytes: Vec<u8> = body
+                        .iter()
+                        .map(|v| if let Val::U8(b) = v { *b } else { 0 })
+                        .collect();
+                    if bytes.len() > store.data().cap {
+                        let n = bytes.len();
+                        store.data_mut().over = Some(n);
+                        return Err(wasmtime::Error::msg(format!("response is {n} bytes")));
+                    }
+                    store.data_mut().response = Some(bytes);
+                    Ok(())
+                },
+            )
             .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
         }
 
-        Ok(Self { engine, component, linker, limits, imports })
+        Ok(Self {
+            engine,
+            component,
+            linker,
+            limits,
+            imports,
+        })
     }
 
     /// The host bindings this package asked for, in the manifest's own
@@ -227,13 +265,17 @@ impl Sandbox {
             },
         );
         store.limiter(|c| &mut c.limits);
-        store.set_fuel(self.limits.fuel).map_err(|e| Refusal::Trapped(e.to_string()))?;
+        store
+            .set_fuel(self.limits.fuel)
+            .map_err(|e| Refusal::Trapped(e.to_string()))?;
 
         let instance = self
             .linker
             .instantiate(&mut store, &self.component)
             .map_err(|e| classify(&e, &store))?;
-        let entry = instance.get_func(&mut store, GUEST_ENTRY).ok_or(Refusal::NoEntry)?;
+        let entry = instance
+            .get_func(&mut store, GUEST_ENTRY)
+            .ok_or(Refusal::NoEntry)?;
         if let Err(e) = entry.call(&mut store, &[], &mut []) {
             if let Some(n) = store.data().over {
                 return Err(Refusal::Oversized(n));
@@ -279,7 +321,10 @@ pub struct Hosted {
 impl Hosted {
     #[must_use]
     pub fn new(sandbox: Sandbox) -> Self {
-        Self { sandbox, running: Arc::new(Mutex::new(true)) }
+        Self {
+            sandbox,
+            running: Arc::new(Mutex::new(true)),
+        }
     }
 
     /// Stop serving without unbinding: `resource-requirements.md` §8 has a

@@ -73,24 +73,46 @@ impl Nat {
             let task = tokio::spawn(async move {
                 let mut buf = [0u8; 4096];
                 loop {
-                    let Ok((n, from)) = sock.recv_from(&mut buf).await else { continue };
+                    let Ok((n, from)) = sock.recv_from(&mut buf).await else {
+                        continue;
+                    };
                     let Some(nat) = w.upgrade() else { return };
-                    let Some((dest, payload)) = unwrap(&buf[..n]) else { continue };
+                    let Some((dest, payload)) = unwrap(&buf[..n]) else {
+                        continue;
+                    };
                     let payload = payload.to_vec();
                     let ext = nat.external_for(from, dest).await;
-                    st.lock().unwrap().sent_to.entry(from).or_default().push(dest);
+                    st.lock()
+                        .unwrap()
+                        .sent_to
+                        .entry(from)
+                        .or_default()
+                        .push(dest);
                     nat.forwarded.fetch_add(1, Ordering::SeqCst);
                     let _ = ext.send_to(&payload, dest).await;
                 }
             });
-            Nat { mapping, filtering, inside, inside_sock: inside_sock.clone(), state, filtered: AtomicU64::new(0), forwarded: AtomicU64::new(0), task }
+            Nat {
+                mapping,
+                filtering,
+                inside,
+                inside_sock: inside_sock.clone(),
+                state,
+                filtered: AtomicU64::new(0),
+                forwarded: AtomicU64::new(0),
+                task,
+            }
         });
         Ok(nat)
     }
 
     /// The external socket for `inside` sending to `dest`, opened on first
     /// use with a reader that hands inbound datagrams back inside.
-    async fn external_for(self: &Arc<Self>, inside: SocketAddr, dest: SocketAddr) -> Arc<UdpSocket> {
+    async fn external_for(
+        self: &Arc<Self>,
+        inside: SocketAddr,
+        dest: SocketAddr,
+    ) -> Arc<UdpSocket> {
         let key = match self.mapping {
             Mapping::EndpointIndependent => (inside, None),
             Mapping::AddressAndPortDependent => (inside, Some(dest)),
@@ -98,13 +120,19 @@ impl Nat {
         if let Some(s) = self.state.lock().unwrap().external.get(&key) {
             return s.clone();
         }
-        let ext = Arc::new(UdpSocket::bind("127.0.0.1:0").await.expect("an external port"));
+        let ext = Arc::new(
+            UdpSocket::bind("127.0.0.1:0")
+                .await
+                .expect("an external port"),
+        );
         self.state.lock().unwrap().external.insert(key, ext.clone());
         let (nat, sock) = (self.clone(), ext.clone());
         tokio::spawn(async move {
             let mut buf = [0u8; 4096];
             loop {
-                let Ok((n, src)) = sock.recv_from(&mut buf).await else { return };
+                let Ok((n, src)) = sock.recv_from(&mut buf).await else {
+                    return;
+                };
                 let admitted = {
                     let st = nat.state.lock().unwrap();
                     let sent = st.sent_to.get(&inside).cloned().unwrap_or_default();
@@ -128,7 +156,13 @@ impl Nat {
     /// order is the map's and means nothing: a caller that wants one
     /// socket's mapping asks for it by inside address.
     pub fn mappings(&self) -> Vec<SocketAddr> {
-        self.state.lock().unwrap().external.values().filter_map(|s| s.local_addr().ok()).collect()
+        self.state
+            .lock()
+            .unwrap()
+            .external
+            .values()
+            .filter_map(|s| s.local_addr().ok())
+            .collect()
     }
 
     /// The external addresses this NAT holds for one inside socket: one
@@ -136,6 +170,10 @@ impl Nat {
     /// address-and-port-dependent mapping (RFC 4787 §4.1).
     pub fn mappings_for(&self, inside: SocketAddr) -> Vec<SocketAddr> {
         let st = self.state.lock().unwrap();
-        st.external.iter().filter(|((i, _), _)| *i == inside).filter_map(|(_, s)| s.local_addr().ok()).collect()
+        st.external
+            .iter()
+            .filter(|((i, _), _)| *i == inside)
+            .filter_map(|(_, s)| s.local_addr().ok())
+            .collect()
     }
 }

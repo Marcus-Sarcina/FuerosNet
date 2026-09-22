@@ -82,7 +82,13 @@ struct Signers {
 
 impl Signers {
     fn new() -> Signers {
-        Signers { archives: CAST.iter().map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n)))).collect(), clock: 1_800_000_000 }
+        Signers {
+            archives: CAST
+                .iter()
+                .map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n))))
+                .collect(),
+            clock: 1_800_000_000,
+        }
     }
     fn tick(&mut self) -> u64 {
         self.clock += 3600;
@@ -96,7 +102,11 @@ impl Signers {
         let refs: Vec<&SigningIdentity> = sids.iter().collect();
         let rec = Record::parse(&envelope(ty, body, &refs)).expect("well-formed");
         for s in signers {
-            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&kh(s))
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         rec
     }
@@ -106,8 +116,19 @@ impl Signers {
         let t = self.tick();
         let (bn, bp, bw) = (self.back(node), self.back(patron), self.back("witness"));
         let root = rhtn_codec::cose::sha256(format!("m:{node}:{patron}:{t}").as_bytes());
-        let w = Witness { keyhash: kh("witness"), nominated_by: kh(patron), flags: 3 };
-        let body = presence_record_body(&[bn, bp, bw], [&kh(node), &kh(patron)], &[w], t, t + 600, &root);
+        let w = Witness {
+            keyhash: kh("witness"),
+            nominated_by: kh(patron),
+            flags: 3,
+        };
+        let body = presence_record_body(
+            &[bn, bp, bw],
+            [&kh(node), &kh(patron)],
+            &[w],
+            t,
+            t + 600,
+            &root,
+        );
         let pop = self.commit(TYPE_PRESENCE, &body, &[node, patron, "witness"]);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
@@ -115,20 +136,34 @@ impl Signers {
         let a = Adoption {
             node: kh(node),
             patron: kh(patron),
-            locator: Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series: 1, counter: 0 } },
+            locator: Locator {
+                anchor: kh(anchor),
+                path: p.bytes,
+                nibbles: p.nibbles,
+                seqno: Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
         };
-        (pop, self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron]))
+        (
+            pop,
+            self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron]),
+        )
     }
 }
 
 /// Push one object into a daemon on stream 0, the way a peer does.
 fn push(s: &Session, bytes: &[u8]) {
-    assert!(s.send_control(5, &encode_push(KIND_TRANSACTION, bytes)), "the frame went");
+    assert!(
+        s.send_control(5, &encode_push(KIND_TRANSACTION, bytes)),
+        "the frame went"
+    );
 }
 
 /// Wait for a frame carrying `txid` on this session, or give up.
@@ -155,7 +190,10 @@ async fn a_transaction_crosses_two_daemon_processes_and_survives_a_restart() {
     // so it attaches on the way up
     let p_addr = set.start("alice", &CAST, None);
     let n_addr = set.start("bob", &CAST, Some("alice"));
-    assert!(set.running("bob") && set.running("alice"), "both processes are up");
+    assert!(
+        set.running("bob") && set.running("alice"),
+        "both processes are up"
+    );
 
     let mut s = Signers::new();
     // the binding that puts each process in the other's reach: N's own
@@ -174,19 +212,29 @@ async fn a_transaction_crosses_two_daemon_processes_and_survives_a_restart() {
     for r in [&n_pop, &n_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, n_adopt.txid, 30_000).await, "N stored its own adoption and forwarded it");
+    assert!(
+        awaits(&mut observer, n_adopt.txid, 30_000).await,
+        "N stored its own adoption and forwarded it"
+    );
 
     for r in [&w_pop, &w_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, w_adopt.txid, 30_000).await, "and the adoption under N crossed both processes");
+    assert!(
+        awaits(&mut observer, w_adopt.txid, 30_000).await,
+        "and the adoption under N crossed both processes"
+    );
 
     // **the process wrote down what it accepted.**  A stop is a SIGTERM,
     // and the daemon writes its state back on the way out
     drop(observer);
     set.stop("bob");
     let held = set.get("bob").topology().join("tx");
-    let names: Vec<String> = std::fs::read_dir(&held).expect("a topology store").flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    let names: Vec<String> = std::fs::read_dir(&held)
+        .expect("a topology store")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
     for r in [&n_adopt, &w_adopt] {
         let want: String = r.txid.iter().map(|b| format!("{b:02x}")).collect();
         assert!(names.contains(&want), "the store holds {}", &want[..8]);
@@ -225,11 +273,17 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     for r in [&n_pop, &n_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, n_adopt.txid, 30_000).await, "the first binding landed");
+    assert!(
+        awaits(&mut observer, n_adopt.txid, 30_000).await,
+        "the first binding landed"
+    );
     for r in [&c_pop, &c_adopt] {
         push(&injector, &r.bytes);
     }
-    assert!(awaits(&mut observer, c_adopt.txid, 30_000).await, "and the second");
+    assert!(
+        awaits(&mut observer, c_adopt.txid, 30_000).await,
+        "and the second"
+    );
 
     // **N starts after it has been adopted**, which is the order a
     // deployment has: a node is adopted, its patron countersigns, and the
@@ -245,53 +299,104 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     // an infra node do [author, 2026-09-14].  The record reaches P when N
     // attaches and reconciles, so this waits for it rather than assuming
     // the attach has completed.
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Path::from_indices(&[0, 2]).bytes, nibbles: 2, nonce: [8; 16] };
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: Path::from_indices(&[0, 2]).bytes,
+        nibbles: 2,
+        nonce: [8; 16],
+    };
     let mut last = None;
     for _ in 0..50 {
-        let bytes = observer.request(REQUEST_RESOLVE, &req.encode()).await.expect("the daemon answers on the stream");
+        let bytes = observer
+            .request(REQUEST_RESOLVE, &req.encode())
+            .await
+            .expect("the daemon answers on the stream");
         let reply = ResolveReply::decode(&bytes).expect("a reply");
         assert_eq!(reply.nonce(), [8; 16], "the nonce it was asked with");
         if let ResolveReply::Referral { referral, .. } = reply {
-            assert_eq!(referral.next, kh("bob"), "P refers into the subtree of the infra node one hop down");
-            assert!(referral.advances >= 1, "a referral that advances nothing is a loop");
-            assert!(!referral.endpoints.is_empty(), "and names where the next hop is");
+            assert_eq!(
+                referral.next,
+                kh("bob"),
+                "P refers into the subtree of the infra node one hop down"
+            );
+            assert!(
+                referral.advances >= 1,
+                "a referral that advances nothing is a loop"
+            );
+            assert!(
+                !referral.endpoints.is_empty(),
+                "and names where the next hop is"
+            );
             last = None;
             break;
         }
         // the whole reply is a page of key material; what a failure needs
         // is which answer it settled on
         last = Some(match reply {
-            ResolveReply::Serving { serving, .. } => format!("serving {}, residual {:?}", hex(&serving.node), serving.residual.bytes),
+            ResolveReply::Serving { serving, .. } => format!(
+                "serving {}, residual {:?}",
+                hex(&serving.node),
+                serving.residual.bytes
+            ),
             ResolveReply::Failure { code, .. } => format!("failure {code}"),
             ResolveReply::Referral { .. } => unreachable!("taken above"),
         });
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert!(last.is_none(), "P never learned N is infrastructure, and answered {}", last.unwrap_or_default());
+    assert!(
+        last.is_none(),
+        "P never learned N is infrastructure, and answered {}",
+        last.unwrap_or_default()
+    );
 
     // **a party that attaches late is reconciled with, not left behind.**
     // §10.1.3 makes reconciliation a replay of the same frames, and this
     // one arrives after every record did: nothing is pushed to it, and it
     // is handed what the process holds because its session came up.
     let mut late = attach_to("w2", kh("alice"), p_addr).await;
-    assert!(awaits(&mut late, c_adopt.txid, 30_000).await, "the store it never saw arrive is replayed to it");
+    assert!(
+        awaits(&mut late, c_adopt.txid, 30_000).await,
+        "the store it never saw arrive is replayed to it"
+    );
 
     // a subject in no record it holds is a failure it can state, not a hang
-    let unknown = ResolveRequest { subject: kh("w1"), anchor: kh("alice"), path: Path::from_indices(&[9]).bytes, nibbles: 1, nonce: [9; 16] };
-    let bytes = observer.request(REQUEST_RESOLVE, &unknown.encode()).await.expect("answered");
-    assert!(matches!(ResolveReply::decode(&bytes).expect("a reply"), ResolveReply::Failure { .. }), "a path it cannot walk is a stated failure");
+    let unknown = ResolveRequest {
+        subject: kh("w1"),
+        anchor: kh("alice"),
+        path: Path::from_indices(&[9]).bytes,
+        nibbles: 1,
+        nonce: [9; 16],
+    };
+    let bytes = observer
+        .request(REQUEST_RESOLVE, &unknown.encode())
+        .await
+        .expect("answered");
+    assert!(
+        matches!(
+            ResolveReply::decode(&bytes).expect("a reply"),
+            ResolveReply::Failure { .. }
+        ),
+        "a path it cannot walk is a stated failure"
+    );
 }
 
 // acceptance: DMN-19
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request_to_it() {
-    use rhtn_archive::catalog::{REQUEST_RESOURCE, ResourceRequest, ResourceResponse, STATUS_DELIVERED, STATUS_REFUSED};
+    use rhtn_archive::catalog::{
+        REQUEST_RESOURCE, ResourceRequest, ResourceResponse, STATUS_DELIVERED, STATUS_REFUSED,
+    };
 
     let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "hosting");
     let package = set.dir("alice").join("echo.wasm");
     std::fs::write(&package, rhtn_sim::packages::echo()).expect("a package on disk");
     let manifest = set.dir("alice").join("echo.manifest");
-    std::fs::write(&manifest, "roles = reader,writer\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n").expect("its manifest beside it");
+    std::fs::write(
+        &manifest,
+        "roles = reader,writer\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n",
+    )
+    .expect("its manifest beside it");
     let shop = [9u8; 32];
     let absent = [5u8; 32];
     set.hosting(
@@ -307,32 +412,74 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     let addr = set.start("alice", &CAST, None);
 
     let s = attach_to("w1", kh("alice"), addr).await;
-    let req = ResourceRequest { resource: shop, message: b"GET /orders HTTP/1.1\r\nhost: ignored\r\naccept: application/json\r\n\r\n".to_vec() };
-    let bytes = s.request(REQUEST_RESOURCE, &req.encode()).await.expect("the daemon answers on the stream");
+    let req = ResourceRequest {
+        resource: shop,
+        message: b"GET /orders HTTP/1.1\r\nhost: ignored\r\naccept: application/json\r\n\r\n"
+            .to_vec(),
+    };
+    let bytes = s
+        .request(REQUEST_RESOURCE, &req.encode())
+        .await
+        .expect("the daemon answers on the stream");
     let answer = ResourceResponse::decode(&bytes).expect("a reply");
-    assert_eq!(answer.status, STATUS_DELIVERED, "the process ran the package its configuration named");
+    assert_eq!(
+        answer.status, STATUS_DELIVERED,
+        "the process ran the package its configuration named"
+    );
     let body = String::from_utf8(answer.body.expect("a body")).expect("text");
 
     // the package hands back what it was given, so this is the whole of
     // what crossed into it out of a real node
-    for header in ["rhtn-principal:", "rhtn-roles: reader", "rhtn-audience:", "rhtn-session:", "host: shop.internal"] {
-        assert!(body.contains(header), "the package is handed {header}, and {body:?} does not carry it");
+    for header in [
+        "rhtn-principal:",
+        "rhtn-roles: reader",
+        "rhtn-audience:",
+        "rhtn-session:",
+        "host: shop.internal",
+    ] {
+        assert!(
+            body.contains(header),
+            "the package is handed {header}, and {body:?} does not carry it"
+        );
     }
-    for absent_header in ["rhtn-topology", "rhtn-liveness", "rhtn-queue", "rhtn-patron"] {
-        assert!(!body.contains(absent_header), "and nothing about the network: {absent_header}");
+    for absent_header in [
+        "rhtn-topology",
+        "rhtn-liveness",
+        "rhtn-queue",
+        "rhtn-patron",
+    ] {
+        assert!(
+            !body.contains(absent_header),
+            "and nothing about the network: {absent_header}"
+        );
     }
 
     // a resource this node was not told to host is refused, not answered
-    let other = ResourceRequest { resource: absent, message: b"GET / HTTP/1.1\r\n\r\n".to_vec() };
-    let bytes = s.request(REQUEST_RESOURCE, &other.encode()).await.expect("answered");
-    assert_eq!(ResourceResponse::decode(&bytes).expect("a reply").status, STATUS_REFUSED, "nothing is bound for it");
+    let other = ResourceRequest {
+        resource: absent,
+        message: b"GET / HTTP/1.1\r\n\r\n".to_vec(),
+    };
+    let bytes = s
+        .request(REQUEST_RESOURCE, &other.encode())
+        .await
+        .expect("answered");
+    assert_eq!(
+        ResourceResponse::decode(&bytes).expect("a reply").status,
+        STATUS_REFUSED,
+        "nothing is bound for it"
+    );
 
     // and a daemon whose hosting file names a package it cannot admit does
     // not come up half configured
     let bad = set.dir("bob").join("bad.wasm");
-    std::fs::write(&bad, rhtn_sim::packages::reaching("wasi:sockets/network@0.2.0")).expect("a package on disk");
+    std::fs::write(
+        &bad,
+        rhtn_sim::packages::reaching("wasi:sockets/network@0.2.0"),
+    )
+    .expect("a package on disk");
     let bad_manifest = set.dir("bob").join("bad.manifest");
-    std::fs::write(&bad_manifest, "roles = reader\ncomponent = bad.wasm\n").expect("a manifest that does not mention it");
+    std::fs::write(&bad_manifest, "roles = reader\ncomponent = bad.wasm\n")
+        .expect("a manifest that does not mention it");
     set.hosting(
         "bob",
         &format!(
@@ -342,5 +489,9 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
             bad_manifest.display()
         ),
     );
-    assert!(set.refuses("bob", &CAST).contains("wasi:sockets/network@0.2.0"), "the daemon says which binding it would not give");
+    assert!(
+        set.refuses("bob", &CAST)
+            .contains("wasi:sockets/network@0.2.0"),
+        "the daemon says which binding it would not give"
+    );
 }

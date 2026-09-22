@@ -11,8 +11,8 @@
 
 use crate::queue::{self, QueueStore, Queued};
 use crate::tls::{self, Pins};
-use rhtn_archive::topology::Supersession;
 use quinn::{Connection, RecvStream, SendStream, VarInt};
+use rhtn_archive::topology::Supersession;
 use rhtn_codec::bounds;
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
@@ -40,7 +40,10 @@ pub fn capability_id(name: &str) -> u64 {
 }
 
 fn secure_random(buf: &mut [u8]) {
-    rustls::crypto::aws_lc_rs::default_provider().secure_random.fill(buf).expect("os randomness");
+    rustls::crypto::aws_lc_rs::default_provider()
+        .secure_random
+        .fill(buf)
+        .expect("os randomness");
 }
 
 /// One greased parameter: a random id avoiding `known`, and 8 random bytes (§8.1.1).
@@ -142,7 +145,10 @@ pub struct FrameReader {
 
 impl FrameReader {
     pub fn new(recv: RecvStream) -> Self {
-        FrameReader { recv, buf: Vec::new() }
+        FrameReader {
+            recv,
+            buf: Vec::new(),
+        }
     }
 
     /// The next whole frame's payload, or how the stream ended.  Dropping
@@ -214,7 +220,11 @@ pub const DEFAULT_PORT: u64 = 7431;
 
 impl NetworkPoint {
     pub fn new(ip: [u8; 4], port: Option<u64>) -> Self {
-        NetworkPoint { ip, asn: None, port: port.filter(|p| *p != DEFAULT_PORT) }
+        NetworkPoint {
+            ip,
+            asn: None,
+            port: port.filter(|p| *p != DEFAULT_PORT),
+        }
     }
     pub fn with_asn(mut self, asn: u64) -> Self {
         self.asn = Some(asn);
@@ -227,7 +237,9 @@ impl NetworkPoint {
     /// A point for a loopback socket address, as a test on one host makes.
     pub fn from_socket(addr: std::net::SocketAddr) -> Option<Self> {
         match addr.ip() {
-            std::net::IpAddr::V4(v4) => Some(NetworkPoint::new(v4.octets(), Some(addr.port() as u64))),
+            std::net::IpAddr::V4(v4) => {
+                Some(NetworkPoint::new(v4.octets(), Some(addr.port() as u64)))
+            }
             _ => None,
         }
     }
@@ -241,7 +253,10 @@ impl NetworkPoint {
         Self::decode(b, &item).ok_or_else(|| "network point".to_string())
     }
     pub fn encode(&self, out: &mut Vec<u8>) {
-        emit_map_head(out, 1 + self.asn.is_some() as usize + self.port.is_some_and(|p| p != DEFAULT_PORT) as usize);
+        emit_map_head(
+            out,
+            1 + self.asn.is_some() as usize + self.port.is_some_and(|p| p != DEFAULT_PORT) as usize,
+        );
         emit_uint(out, 1);
         emit_bstr(out, &self.ip);
         if let Some(a) = self.asn {
@@ -256,8 +271,15 @@ impl NetworkPoint {
     }
     pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
-        let ip = match map_get(m, 1) { Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?, _ => return None };
-        Some(NetworkPoint { ip, asn: map_get(m, 2).and_then(as_uint), port: map_get(m, 3).and_then(as_uint) })
+        let ip = match map_get(m, 1) {
+            Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?,
+            _ => return None,
+        };
+        Some(NetworkPoint {
+            ip,
+            asn: map_get(m, 2).and_then(as_uint),
+            port: map_get(m, 3).and_then(as_uint),
+        })
     }
 }
 
@@ -278,11 +300,23 @@ impl SiblingRef {
     }
     pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
-        let keyhash = match map_get(m, 1) { Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?, _ => return None };
-        let Some(Item::Array(eps)) = map_get(m, 2) else { return None };
-        let endpoints = eps.iter().map(|e| NetworkPoint::decode(b, e)).collect::<Option<Vec<_>>>()?;
+        let keyhash = match map_get(m, 1) {
+            Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?,
+            _ => return None,
+        };
+        let Some(Item::Array(eps)) = map_get(m, 2) else {
+            return None;
+        };
+        let endpoints = eps
+            .iter()
+            .map(|e| NetworkPoint::decode(b, e))
+            .collect::<Option<Vec<_>>>()?;
         let key_material = map_get(m, 3).map(|km| reencode(km, b));
-        Some(SiblingRef { keyhash, endpoints, key_material })
+        Some(SiblingRef {
+            keyhash,
+            endpoints,
+            key_material,
+        })
     }
 }
 
@@ -341,7 +375,11 @@ impl AttachAck {
     }
 }
 
-pub fn encode_attach(keyhash: &[u8; 32], attestation: Option<&[u8]>, caps: &BTreeMap<u64, Vec<u8>>) -> Vec<u8> {
+pub fn encode_attach(
+    keyhash: &[u8; 32],
+    attestation: Option<&[u8]>,
+    caps: &BTreeMap<u64, Vec<u8>>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 2 + attestation.is_some() as usize);
     emit_uint(&mut out, 1);
@@ -373,7 +411,10 @@ pub fn encode_sibling_update(refs: &[SiblingRef]) -> Vec<u8> {
 }
 
 fn unix_now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 // ------------------------------------------------------------ shared machinery
@@ -385,23 +426,38 @@ pub type OutboundFilter = Arc<dyn Fn(u64, &[u8]) -> Option<Vec<u8>> + Send + Syn
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    Sent { frame_type: u64, bytes: Vec<u8> },
-    Received { frame_type: u64 },
-    Skipped { frame_type: u64 },
+    Sent {
+        frame_type: u64,
+        bytes: Vec<u8>,
+    },
+    Received {
+        frame_type: u64,
+    },
+    Skipped {
+        frame_type: u64,
+    },
     Discarded,
     OverBound,
-    Attached { mode: u64 },
+    Attached {
+        mode: u64,
+    },
     Refused,
     PeerUnreachable,
-    Failover { to: [u8; 32] },
-    Delivered { bytes: Vec<u8> },
+    Failover {
+        to: [u8; 32],
+    },
+    Delivered {
+        bytes: Vec<u8>,
+    },
     /// The Attach went as 0-RTT early data on this connection.
     EarlyDataSent,
     /// A peer opened the direct payload path on this connection.
     DirectOpened,
     /// This connection's own handshake completed; `early_accepted` says
     /// whether the server took the early data.
-    HandshakeDone { early_accepted: bool },
+    HandshakeDone {
+        early_accepted: bool,
+    },
     Closed,
     /// An attach under a credential this node has verified superseded: no
     /// AttachAck, nothing delivered (design §12.6.5).
@@ -423,12 +479,19 @@ pub struct Log {
 impl Log {
     /// A log that keeps every event: the test facility.
     pub fn recording() -> Self {
-        Log { events: Arc::default(), recording: true }
+        Log {
+            events: Arc::default(),
+            recording: true,
+        }
     }
     /// A fresh log with this one's setting: each session records into its
     /// own, or into nothing.
     pub fn fresh(&self) -> Self {
-        if self.recording { Log::recording() } else { Log::default() }
+        if self.recording {
+            Log::recording()
+        } else {
+            Log::default()
+        }
     }
     pub fn is_recording(&self) -> bool {
         self.recording
@@ -442,7 +505,12 @@ impl Log {
         self.events.lock().unwrap().clone()
     }
     pub fn count(&self, f: impl Fn(&Event) -> bool) -> usize {
-        self.events.lock().unwrap().iter().filter(|(_, e)| f(e)).count()
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, e)| f(e))
+            .count()
     }
 }
 
@@ -462,7 +530,10 @@ impl Sender {
             },
             None => bytes,
         };
-        self.log.push(Event::Sent { frame_type, bytes: bytes.clone() });
+        self.log.push(Event::Sent {
+            frame_type,
+            bytes: bytes.clone(),
+        });
         self.send.write_all(&bytes).await
     }
 }
@@ -487,8 +558,19 @@ struct LoopIo {
 /// The heartbeat and liveness loop both roles run after the ack (§8.2).
 /// Returns when the stream or connection ends.  `on_frame` sees every
 /// known non-heartbeat frame.
-async fn control_loop(mut sender: Sender, recv: RecvStream, io: LoopIo, mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool) -> Option<quinn::ConnectionError> {
-    let LoopIo { interval, log, reach, on_change, mut outbound } = io;
+async fn control_loop(
+    mut sender: Sender,
+    recv: RecvStream,
+    io: LoopIo,
+    mut on_frame: impl FnMut(Family, &[u8], std::ops::Range<usize>, &Item) -> bool,
+) -> Option<quinn::ConnectionError> {
+    let LoopIo {
+        interval,
+        log,
+        reach,
+        on_change,
+        mut outbound,
+    } = io;
     // the reader outlives every select below, so a frame half-read when
     // another branch wins is finished on the next turn
     let mut reader = FrameReader::new(recv);
@@ -583,7 +665,15 @@ pub type DirectHandler = Arc<dyn Fn([u8; 32], Vec<u8>) + Send + Sync>;
 /// What a node answers on a request stream (`wire-format.md` §9.2): the
 /// authenticated peer, the family, and the body bytes, to a reply body or
 /// `None` to fail the stream.
-pub type RequestHandler = Arc<dyn Fn([u8; 32], Family, Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>> + Send + Sync>;
+pub type RequestHandler = Arc<
+    dyn Fn(
+            [u8; 32],
+            Family,
+            Vec<u8>,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>>
+        + Send
+        + Sync,
+>;
 
 pub struct NodeConfig {
     pub identity: Arc<SigningIdentity>,
@@ -675,7 +765,12 @@ impl NodeConfig {
             on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
-            clock: Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)),
+            clock: Arc::new(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0)
+            }),
             log: Log::default(),
         }
     }
@@ -710,7 +805,12 @@ pub struct Node {
 impl Node {
     pub fn new(cfg: NodeConfig) -> Arc<Self> {
         let log = cfg.log.clone();
-        Arc::new(Node { cfg, state: Mutex::new(NodeState::default()), queue_gate: Mutex::new(()), log })
+        Arc::new(Node {
+            cfg,
+            state: Mutex::new(NodeState::default()),
+            queue_gate: Mutex::new(()),
+            log,
+        })
     }
 
     /// Accept material for a client: delivered now on a unidirectional
@@ -718,7 +818,11 @@ impl Node {
     /// queue is at its cap, when the newest is refused and the sender told
     /// (design §14.1.6), or the credential is one this node has verified
     /// superseded (design §12.6.5).
-    pub fn enqueue(self: &Arc<Self>, keyhash: [u8; 32], bytes: Vec<u8>) -> Result<(), queue::Refusal> {
+    pub fn enqueue(
+        self: &Arc<Self>,
+        keyhash: [u8; 32],
+        bytes: Vec<u8>,
+    ) -> Result<(), queue::Refusal> {
         if !(self.cfg.serves)(&keyhash) {
             return Err(queue::Refusal::NoRecord);
         }
@@ -731,7 +835,11 @@ impl Node {
             // delivered to: the material waits for its return (design
             // §14.1.2).  A session object outlives the reachability the
             // detector settled on, and the detector is what decides.
-            let live = st.reach.get(&keyhash).map(|r| *r.lock().unwrap()).or_else(|| st.marked.get(&keyhash).copied());
+            let live = st
+                .reach
+                .get(&keyhash)
+                .map(|r| *r.lock().unwrap())
+                .or_else(|| st.marked.get(&keyhash).copied());
             if live == Some(Reachability::Unreachable) {
                 None
             } else {
@@ -743,13 +851,18 @@ impl Node {
         // the store this one leaves
         let _gate = self.queue_gate.lock().unwrap();
         if let Some(cap) = self.cfg.queue_cap
-            && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap {
-                return Err(queue::Refusal::AtCap);
-            }
+            && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap
+        {
+            return Err(queue::Refusal::AtCap);
+        }
         // accepted means stored: the message enters the mailbox, and a live
         // session drains it from there, so nothing is reported delivered
         // before the peer has taken it
-        self.cfg.queue.push(Queued { ciphertext: bytes, recipient: keyhash, arrival: (self.cfg.clock)() });
+        self.cfg.queue.push(Queued {
+            ciphertext: bytes,
+            recipient: keyhash,
+            arrival: (self.cfg.clock)(),
+        });
         if let Some(conn) = conn {
             tokio::spawn(drain(self.clone(), keyhash, conn));
         }
@@ -757,7 +870,13 @@ impl Node {
     }
 
     fn drain_lock(&self, recipient: &[u8; 32]) -> Arc<tokio::sync::Mutex<()>> {
-        self.state.lock().unwrap().drains.entry(*recipient).or_default().clone()
+        self.state
+            .lock()
+            .unwrap()
+            .drains
+            .entry(*recipient)
+            .or_default()
+            .clone()
     }
 
     pub fn queued(&self, keyhash: &[u8; 32]) -> usize {
@@ -788,12 +907,20 @@ impl Node {
     }
 
     pub fn is_superseded(&self, keyhash: &[u8; 32]) -> bool {
-        self.state.lock().unwrap().superseded.get(keyhash).is_some_and(|s| s != keyhash)
+        self.state
+            .lock()
+            .unwrap()
+            .superseded
+            .get(keyhash)
+            .is_some_and(|s| s != keyhash)
     }
 
     pub fn reachability(&self, keyhash: &[u8; 32]) -> Option<Reachability> {
         let st = self.state.lock().unwrap();
-        st.reach.get(keyhash).map(|r| *r.lock().unwrap()).or_else(|| st.marked.get(keyhash).copied())
+        st.reach
+            .get(keyhash)
+            .map(|r| *r.lock().unwrap())
+            .or_else(|| st.marked.get(keyhash).copied())
     }
 
     /// Take a sibling's replicated reachability for a client this node does
@@ -814,7 +941,13 @@ impl Node {
 
     /// Every peer with a live session on this node.
     pub fn sessions(&self) -> Vec<[u8; 32]> {
-        self.state.lock().unwrap().sessions.keys().copied().collect()
+        self.state
+            .lock()
+            .unwrap()
+            .sessions
+            .keys()
+            .copied()
+            .collect()
     }
 
     /// Send a control frame on the session with `peer`, where one exists.
@@ -827,7 +960,12 @@ impl Node {
 
     /// The address the client's session currently comes from.
     pub fn remote_address(&self, keyhash: &[u8; 32]) -> Option<std::net::SocketAddr> {
-        self.state.lock().unwrap().sessions.get(keyhash).map(|c| c.remote_address())
+        self.state
+            .lock()
+            .unwrap()
+            .sessions
+            .get(keyhash)
+            .map(|c| c.remote_address())
     }
 
     /// Accept connections forever.
@@ -877,7 +1015,11 @@ impl Node {
                 }
             }
         };
-        let mut sender = Sender { send, filter: self.cfg.filter.clone(), log: self.log.clone() };
+        let mut sender = Sender {
+            send,
+            filter: self.cfg.filter.clone(),
+            log: self.log.clone(),
+        };
         // the first known frame must be Attach; unknown ones are skipped
         let (attach_bytes, attach_item) = loop {
             match read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES).await {
@@ -892,14 +1034,21 @@ impl Node {
                     Control::Unknown(t) => self.log.push(Event::Skipped { frame_type: t }),
                     Control::Malformed => self.log.push(Event::Discarded),
                     Control::Known(..) => {
-                        conn.close(VarInt::from_u32(CLOSE_REFUSED), b"known frame before attach");
+                        conn.close(
+                            VarInt::from_u32(CLOSE_REFUSED),
+                            b"known frame before attach",
+                        );
                         return Err("known frame before attach".into());
                     }
                 },
             }
         };
-        self.log.push(Event::Received { frame_type: FRAME_ATTACH });
-        let Item::Map(m) = &attach_item else { unreachable!() };
+        self.log.push(Event::Received {
+            frame_type: FRAME_ATTACH,
+        });
+        let Item::Map(m) = &attach_item else {
+            unreachable!()
+        };
         let claimed: [u8; 32] = match map_get(m, 1) {
             Some(Item::Bytes(r)) => attach_bytes[r.clone()].try_into().unwrap(),
             _ => unreachable!("schema checked"),
@@ -921,14 +1070,27 @@ impl Node {
             conn.close(VarInt::from_u32(CLOSE_REFUSED), b"");
             return Err("refused".into());
         }
-        let mode = if (self.cfg.in_subtree)(&claimed) { 0 } else { 1 };
+        let mode = if (self.cfg.in_subtree)(&claimed) {
+            0
+        } else {
+            1
+        };
         let queued = self.queued(&claimed) as u64;
         let mut caps = self.cfg.capabilities.clone();
         let known: Vec<u64> = caps.keys().copied().collect();
         let (gid, gval) = grease(&known);
         caps.insert(gid, gval);
-        let ack = AttachAck { mode, siblings: (self.cfg.siblings)(), interval: self.cfg.interval_secs, queued, capabilities: caps };
-        sender.frame(FRAME_ATTACH_ACK, &ack.encode()).await.map_err(|e| e.to_string())?;
+        let ack = AttachAck {
+            mode,
+            siblings: (self.cfg.siblings)(),
+            interval: self.cfg.interval_secs,
+            queued,
+            capabilities: caps,
+        };
+        sender
+            .frame(FRAME_ATTACH_ACK, &ack.encode())
+            .await
+            .map_err(|e| e.to_string())?;
         self.log.push(Event::Attached { mode });
         let reach = Arc::new(Mutex::new(Reachability::Reachable));
         let (otx, orx) = mpsc::unbounded_channel();
@@ -966,12 +1128,22 @@ impl Node {
         let _ = control_loop(
             sender,
             recv,
-            LoopIo { interval, log, reach, on_change: Some(on_change), outbound: orx },
+            LoopIo {
+                interval,
+                log,
+                reach,
+                on_change: Some(on_change),
+                outbound: orx,
+            },
             move |fam, b, body, _| match fam {
                 Family::Attach | Family::AttachAck => false,
                 Family::TopologyPush | Family::TopologyMemo => {
                     if let Some(h) = &on_control {
-                        h(claimed, if fam == Family::TopologyPush { 5 } else { 6 }, b[body].to_vec());
+                        h(
+                            claimed,
+                            if fam == Family::TopologyPush { 5 } else { 6 },
+                            b[body].to_vec(),
+                        );
                     }
                     true
                 }
@@ -1000,7 +1172,9 @@ impl Node {
 /// caller leaves the message where it was.  The direct path delivers the
 /// same way, peer to peer.
 pub async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
-    let Ok(mut s) = conn.open_uni().await else { return false };
+    let Ok(mut s) = conn.open_uni().await else {
+        return false;
+    };
     if s.write_all(&bytes).await.is_err() || s.finish().is_err() {
         return false;
     }
@@ -1026,8 +1200,15 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], conn: Connection) {
 /// A request stream: the node's own handler answers where one is
 /// installed; otherwise a currency request gets `cannot issue` (§7.1) and
 /// anything else fails the stream (§9.2).
-async fn answer_request(mut send: SendStream, mut recv: RecvStream, peer: [u8; 32], handler: Option<RequestHandler>) {
-    let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else { return };
+async fn answer_request(
+    mut send: SendStream,
+    mut recv: RecvStream,
+    peer: [u8; 32],
+    handler: Option<RequestHandler>,
+) {
+    let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else {
+        return;
+    };
     let f = match frame::parse_payload(Stream::Request, &p) {
         Ok(f) => f,
         // A resource request whose body does not decode is answered code 3
@@ -1061,7 +1242,10 @@ async fn answer_request(mut send: SendStream, mut recv: RecvStream, peer: [u8; 3
     }
     if f.family == Some(Family::CurrencyRequest) {
         let Item::Map(m) = &f.body_item else { return };
-        let nonce = match map_get(m, 2) { Some(Item::Bytes(r)) => p[r.clone()].to_vec(), _ => return };
+        let nonce = match map_get(m, 2) {
+            Some(Item::Bytes(r)) => p[r.clone()].to_vec(),
+            _ => return,
+        };
         let mut body = Vec::new();
         emit_map_head(&mut body, 2);
         emit_uint(&mut body, 1);
@@ -1142,7 +1326,11 @@ pub enum AttachOutcome {
 
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Session(mode {}, interval {})", self.ack.mode, self.ack.interval)
+        write!(
+            f,
+            "Session(mode {}, interval {})",
+            self.ack.mode, self.ack.interval
+        )
     }
 }
 
@@ -1156,8 +1344,16 @@ fn close_code(e: &quinn::ConnectionError) -> Option<u64> {
 /// Dial `target` at `addr` and attach on stream 0.  With `early`, the Attach
 /// rides 0-RTT early data when a resumption ticket is held; the node acts on
 /// it only after the handshake (§8.2).
-pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8; 32], addr: std::net::SocketAddr, early: bool) -> AttachOutcome {
-    let Some(tls_cfg) = cfg.tls_for(&target) else { return AttachOutcome::EndpointFailure("NotPinned".into()) };
+pub async fn attach(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+    early: bool,
+) -> AttachOutcome {
+    let Some(tls_cfg) = cfg.tls_for(&target) else {
+        return AttachOutcome::EndpointFailure("NotPinned".into());
+    };
     let connecting = match tls::dial_with(endpoint, tls_cfg, addr) {
         Ok(c) => c,
         Err(e) => return AttachOutcome::EndpointFailure(format!("{e:?}")),
@@ -1176,7 +1372,9 @@ pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8;
             }
             Err(connecting) => match tokio::time::timeout(cfg.connect_timeout, connecting).await {
                 Ok(Ok(c)) => {
-                    log.push(Event::HandshakeDone { early_accepted: false });
+                    log.push(Event::HandshakeDone {
+                        early_accepted: false,
+                    });
                     c
                 }
                 Ok(Err(e)) => return AttachOutcome::EndpointFailure(e.to_string()),
@@ -1186,7 +1384,9 @@ pub async fn attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8;
     } else {
         match tokio::time::timeout(cfg.connect_timeout, connecting).await {
             Ok(Ok(c)) => {
-                log.push(Event::HandshakeDone { early_accepted: false });
+                log.push(Event::HandshakeDone {
+                    early_accepted: false,
+                });
                 c
             }
             Ok(Err(e)) => return AttachOutcome::EndpointFailure(e.to_string()),
@@ -1201,12 +1401,20 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
         Ok(s) => s,
         Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
     };
-    let mut sender = Sender { send, filter: cfg.filter.clone(), log: log.clone() };
+    let mut sender = Sender {
+        send,
+        filter: cfg.filter.clone(),
+        log: log.clone(),
+    };
     let mut caps = cfg.capabilities.clone();
     let known: Vec<u64> = caps.keys().copied().collect();
     let (gid, gval) = grease(&known);
     caps.insert(gid, gval);
-    let body = encode_attach(&cfg.identity.public.keyhash, cfg.attestation.as_deref(), &caps);
+    let body = encode_attach(
+        &cfg.identity.public.keyhash,
+        cfg.attestation.as_deref(),
+        &caps,
+    );
     if let Err(e) = sender.frame(FRAME_ATTACH, &body).await {
         return AttachOutcome::EndpointFailure(e.to_string());
     }
@@ -1217,7 +1425,9 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
                 log.push(Event::Refused);
                 return AttachOutcome::Refused;
             }
-            FrameRead::Closed(e) => return AttachOutcome::EndpointFailure(format!("closed before ack: {e:?}")),
+            FrameRead::Closed(e) => {
+                return AttachOutcome::EndpointFailure(format!("closed before ack: {e:?}"));
+            }
             FrameRead::OverBound(_) => {
                 conn.close(VarInt::from_u32(0), b"frame over bound");
                 return AttachOutcome::EndpointFailure("over-bound frame".into());
@@ -1229,11 +1439,15 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
                 },
                 Control::Unknown(t) => log.push(Event::Skipped { frame_type: t }),
                 Control::Malformed => log.push(Event::Discarded),
-                Control::Known(..) => return AttachOutcome::EndpointFailure("known frame before ack".into()),
+                Control::Known(..) => {
+                    return AttachOutcome::EndpointFailure("known frame before ack".into());
+                }
             },
         }
     };
-    log.push(Event::Received { frame_type: FRAME_ATTACH_ACK });
+    log.push(Event::Received {
+        frame_type: FRAME_ATTACH_ACK,
+    });
     log.push(Event::Attached { mode: ack.mode });
     *cfg.sibling_cache.lock().unwrap() = ack.siblings.clone();
     let (dtx, drx) = mpsc::unbounded_channel();
@@ -1242,7 +1456,9 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     tokio::spawn(async move {
         while let Ok(mut s) = dconn.accept_uni().await {
             if let Ok(bytes) = s.read_to_end(1 << 20).await {
-                dlog.push(Event::Delivered { bytes: bytes.clone() });
+                dlog.push(Event::Delivered {
+                    bytes: bytes.clone(),
+                });
                 let _ = dtx.send(bytes);
             }
         }
@@ -1262,12 +1478,20 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
         let _ = control_loop(
             sender,
             recv,
-            LoopIo { interval, log: loop_log.clone(), reach: loop_reach.clone(), on_change: on_reachability, outbound: orx },
+            LoopIo {
+                interval,
+                log: loop_log.clone(),
+                reach: loop_reach.clone(),
+                on_change: on_reachability,
+                outbound: orx,
+            },
             move |fam, b, body, it| match fam {
                 Family::SiblingUpdate => {
                     let Item::Map(m) = it else { return true };
                     match decode_sibling_list(b, map_get(m, 1)) {
-                        Some(list) if valid_sibling_list(&list, &me) => *cache.lock().unwrap() = list,
+                        Some(list) if valid_sibling_list(&list, &me) => {
+                            *cache.lock().unwrap() = list
+                        }
                         _ => loop_log.push(Event::Discarded),
                     }
                     true
@@ -1288,7 +1512,16 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
         task_conn.close(VarInt::from_u32(0), b"");
         task_log.push(Event::Closed);
     });
-    AttachOutcome::Attached(Session { conn, ack, deliveries: drx, frames: frx, outbound: otx, log, reach, task })
+    AttachOutcome::Attached(Session {
+        conn,
+        ack,
+        deliveries: drx,
+        frames: frx,
+        outbound: otx,
+        log,
+        reach,
+        task,
+    })
 }
 
 impl Session {
@@ -1306,9 +1539,15 @@ impl Session {
 
 /// One request on a fresh bidirectional stream of `conn` (`wire-format.md`
 /// §9.2): the framed request out, the length-prefixed reply body back.
-pub async fn request_on(conn: &Connection, frame_type: u64, body: &[u8]) -> Result<Vec<u8>, String> {
+pub async fn request_on(
+    conn: &Connection,
+    frame_type: u64,
+    body: &[u8],
+) -> Result<Vec<u8>, String> {
     let (mut send, mut recv) = conn.open_bi().await.map_err(|e| e.to_string())?;
-    send.write_all(&control_frame(frame_type, body)).await.map_err(|e| e.to_string())?;
+    send.write_all(&control_frame(frame_type, body))
+        .await
+        .map_err(|e| e.to_string())?;
     send.finish().map_err(|e| e.to_string())?;
     match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
         FrameRead::Payload(p) => Ok(p),
@@ -1320,7 +1559,13 @@ pub async fn request_on(conn: &Connection, frame_type: u64, body: &[u8]) -> Resu
 /// Try a node's endpoints as alternatives (`light-client-requirements.md`
 /// §4): an endpoint failure moves to the next address; a refusal is the
 /// node's answer and ends the attempt (§8.2).
-pub async fn attach_any(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: [u8; 32], addrs: &[std::net::SocketAddr], early: bool) -> AttachOutcome {
+pub async fn attach_any(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addrs: &[std::net::SocketAddr],
+    early: bool,
+) -> AttachOutcome {
     let mut last = AttachOutcome::EndpointFailure("no endpoints".into());
     for addr in addrs {
         match attach(cfg, endpoint, target, *addr, early).await {
@@ -1336,15 +1581,28 @@ pub async fn attach_any(cfg: &ClientConfig, endpoint: &quinn::Endpoint, target: 
 /// sibling list immediately where that node is unreachable at attach time
 /// (`wire-format.md` §8.2, design §14.1.2).  No wait of three intervals
 /// applies here — the three-interval rule governs a *running* session.
-pub async fn fresh_attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, serving: [u8; 32], early: bool) -> AttachOutcome {
-    let addrs = cfg.addresses.lock().unwrap().get(&serving).cloned().unwrap_or_default();
+pub async fn fresh_attach(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    serving: [u8; 32],
+    early: bool,
+) -> AttachOutcome {
+    let addrs = cfg
+        .addresses
+        .lock()
+        .unwrap()
+        .get(&serving)
+        .cloned()
+        .unwrap_or_default();
     match attach_any(cfg, endpoint, serving, &addrs, early).await {
         AttachOutcome::Attached(s) => return AttachOutcome::Attached(s),
         AttachOutcome::Refused => return AttachOutcome::Refused,
         _ => {}
     }
     let siblings = cfg.sibling_cache.lock().unwrap().clone();
-    let mut last = AttachOutcome::EndpointFailure("serving node unreachable and no cached sibling answered".into());
+    let mut last = AttachOutcome::EndpointFailure(
+        "serving node unreachable and no cached sibling answered".into(),
+    );
     for sib in siblings {
         if let Some(km) = &sib.key_material {
             let _ = cfg.pins.pin(sib.keyhash, km);
@@ -1354,7 +1612,13 @@ pub async fn fresh_attach(cfg: &ClientConfig, endpoint: &quinn::Endpoint, servin
         // at attach because it cannot be discovered once the serving node
         // is dark, and an address book this client filled in beforehand is
         // exactly what it would not have.
-        let mut addrs = cfg.addresses.lock().unwrap().get(&sib.keyhash).cloned().unwrap_or_default();
+        let mut addrs = cfg
+            .addresses
+            .lock()
+            .unwrap()
+            .get(&sib.keyhash)
+            .cloned()
+            .unwrap_or_default();
         for p in &sib.endpoints {
             let a = p.socket();
             if !addrs.contains(&a) {
@@ -1386,14 +1650,19 @@ impl Session {
 /// §8.2: a list naming the receiver or holding duplicates is malformed.
 fn valid_sibling_list(list: &[SiblingRef], me: &[u8; 32]) -> bool {
     let mut seen = HashSet::new();
-    list.iter().all(|s| s.keyhash != *me && seen.insert(s.keyhash))
+    list.iter()
+        .all(|s| s.keyhash != *me && seen.insert(s.keyhash))
 }
 
 impl Session {
     /// Wait until the peer is judged unreachable (three missed intervals),
     /// then try the cached siblings in order (§8.2).  Returns the sibling
     /// session or the outcome of the last attempt.
-    pub async fn failover(&mut self, cfg: &ClientConfig, endpoint: &quinn::Endpoint) -> AttachOutcome {
+    pub async fn failover(
+        &mut self,
+        cfg: &ClientConfig,
+        endpoint: &quinn::Endpoint,
+    ) -> AttachOutcome {
         loop {
             if *self.reach.lock().unwrap() == Reachability::Unreachable {
                 break;
@@ -1407,7 +1676,13 @@ impl Session {
             if let Some(km) = &s.key_material {
                 let _ = cfg.pins.pin(s.keyhash, km);
             }
-            let addrs = cfg.addresses.lock().unwrap().get(&s.keyhash).cloned().unwrap_or_default();
+            let addrs = cfg
+                .addresses
+                .lock()
+                .unwrap()
+                .get(&s.keyhash)
+                .cloned()
+                .unwrap_or_default();
             for addr in addrs {
                 self.log.push(Event::Failover { to: s.keyhash });
                 match attach(cfg, endpoint, s.keyhash, addr, false).await {

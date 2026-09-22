@@ -95,7 +95,9 @@ impl VerificationQuery {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "VerificationQuery", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("query not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("query not a map".into());
+        };
         let q = VerificationQuery {
             subject: bytes32(b, m, 1).ok_or("subject")?,
             querier: bytes32(b, m, 2).ok_or("querier")?,
@@ -122,17 +124,25 @@ pub fn consent(subject: &SigningIdentity, query_id: &[u8; 32]) -> Vec<u8> {
 /// profile's shape: alg -8 and nothing else protected, nothing unprotected,
 /// a nil payload.
 pub fn consent_verifies(subject: &Identity, consent: &[u8], query_id: &[u8; 32]) -> bool {
-    let Ok(item) = parse_all(consent) else { return false };
+    let Ok(item) = parse_all(consent) else {
+        return false;
+    };
     let Item::Array(a) = &item else { return false };
-    if a.len() != 4 || !matches!(a[2], Item::Null) || !matches!(&a[1], Item::Map(u) if u.is_empty()) {
+    if a.len() != 4 || !matches!(a[2], Item::Null) || !matches!(&a[1], Item::Map(u) if u.is_empty())
+    {
         return false;
     }
-    let (Item::Bytes(pr), Item::Bytes(sr)) = (&a[0], &a[3]) else { return false };
+    let (Item::Bytes(pr), Item::Bytes(sr)) = (&a[0], &a[3]) else {
+        return false;
+    };
     let prot = &consent[pr.clone()];
     if prot != cose::protected_alg(cose::ALG_EDDSA).as_slice() {
         return false;
     }
-    subject.verify_ed(&consent[sr.clone()], &cose::sig_structure_sign1(prot, aad::CONSENT, query_id))
+    subject.verify_ed(
+        &consent[sr.clone()],
+        &cose::sig_structure_sign1(prot, aad::CONSENT, query_id),
+    )
 }
 
 /// What a type-4 request stream carries (`wire-format.md` §5.6, §9.2):
@@ -165,7 +175,11 @@ impl QueryRequest {
         let query = VerificationQuery::decode(&b[parts[0].clone()])?;
         let consent = b[parts[1].clone()].to_vec();
         let (sb, _) = Parser { b }.item(parts[2].start).map_err(|e| e.0)?;
-        Ok(QueryRequest { query, consent, selection_basis: as_uint(&sb).ok_or("selection basis")? })
+        Ok(QueryRequest {
+            query,
+            consent,
+            selection_basis: as_uint(&sb).ok_or("selection basis")?,
+        })
     }
 }
 
@@ -232,7 +246,10 @@ pub struct Response {
 
 impl Response {
     fn emit(&self, out: &mut Vec<u8>, signature: Option<&[u8]>) {
-        let n = 6 + self.basis.is_some() as usize + self.template_version.is_some() as usize + signature.is_some() as usize;
+        let n = 6
+            + self.basis.is_some() as usize
+            + self.template_version.is_some() as usize
+            + signature.is_some() as usize;
         emit_map_head(out, n);
         emit_uint(out, 1);
         emit_bstr(out, &self.verifier);
@@ -265,8 +282,16 @@ impl Response {
     /// exactly when the result evaluated, and field 6 exactly when the
     /// basis is a photo one.
     pub fn sign(&self, verifier: &SigningIdentity) -> Vec<u8> {
-        assert_eq!(self.basis.is_some(), self.verdict != Verdict::Unavailable, "a basis accompanies every evaluated result and no unavailable one");
-        assert_eq!(self.template_version.is_some(), self.basis.is_some_and(Basis::carries_template_version), "a template version accompanies a photo basis and nothing else");
+        assert_eq!(
+            self.basis.is_some(),
+            self.verdict != Verdict::Unavailable,
+            "a basis accompanies every evaluated result and no unavailable one"
+        );
+        assert_eq!(
+            self.template_version.is_some(),
+            self.basis.is_some_and(Basis::carries_template_version),
+            "a template version accompanies a photo basis and nothing else"
+        );
         let mut payload = Vec::new();
         self.emit(&mut payload, None);
         let sig = verifier.sign1_ed_unnamed(aad::VERIFIER, &payload);
@@ -280,8 +305,11 @@ impl Response {
     pub fn read(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "VerifierResponse", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("response not a map".into()) };
-        let verdict = Verdict::from_u64(uint(m, 4).ok_or("result")?).ok_or("result out of range")?;
+        let Item::Map(m) = &item else {
+            return Err("response not a map".into());
+        };
+        let verdict =
+            Verdict::from_u64(uint(m, 4).ok_or("result")?).ok_or("result out of range")?;
         let basis = match uint(m, 5) {
             Some(v) => Some(Basis::from_u64(v).ok_or("basis out of range")?),
             None => None,
@@ -346,8 +374,14 @@ impl KeyGrant {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::KeyGrant, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("grant not a map".into()) };
-        Ok(KeyGrant { record: bytes32(b, m, 1).ok_or("record")?, query_id: bytes32(b, m, 2).ok_or("query_id")?, key: bytes32(b, m, 3).ok_or("key")? })
+        let Item::Map(m) = &item else {
+            return Err("grant not a map".into());
+        };
+        Ok(KeyGrant {
+            record: bytes32(b, m, 1).ok_or("record")?,
+            query_id: bytes32(b, m, 2).ok_or("query_id")?,
+            key: bytes32(b, m, 3).ok_or("key")?,
+        })
     }
 }
 
@@ -377,7 +411,13 @@ impl LateResponse {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::LateResponse, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("late response not a map".into()) };
-        Ok(LateResponse { record: bytes32(b, m, 1).ok_or("record")?, subject: bytes32(b, m, 2).ok_or("subject")?, response: bytes_of_value(b, 3).ok_or("response")? })
+        let Item::Map(m) = &item else {
+            return Err("late response not a map".into());
+        };
+        Ok(LateResponse {
+            record: bytes32(b, m, 1).ok_or("record")?,
+            subject: bytes32(b, m, 2).ok_or("subject")?,
+            response: bytes_of_value(b, 3).ok_or("response")?,
+        })
     }
 }

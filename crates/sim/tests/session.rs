@@ -45,7 +45,12 @@ fn pair(n_filter: Option<OutboundFilter>) -> Pair {
     let cfg = client_cfg("carol");
     know(&cfg, "alice", n.addr);
     know(&cfg, "bob", s.addr);
-    Pair { n, s, cfg, ep: client_ep() }
+    Pair {
+        n,
+        s,
+        cfg,
+        ep: client_ep(),
+    }
 }
 
 // acceptance: SES-08
@@ -53,14 +58,29 @@ fn pair(n_filter: Option<OutboundFilter>) -> Pair {
 async fn three_missed_intervals_move_the_client_to_a_sibling() {
     let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
-    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await
+    else {
+        panic!()
+    };
     assert_eq!(c.ack.mode, 0, "primary at first");
-    assert_eq!(c.ack.siblings.len(), 1, "N's ack listed S with key material");
-    let out = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep)).await.expect("failover within the bound");
-    let AttachOutcome::Attached(deg) = out else { panic!("{out:?}") };
+    assert_eq!(
+        c.ack.siblings.len(),
+        1,
+        "N's ack listed S with key material"
+    );
+    let out = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep))
+        .await
+        .expect("failover within the bound");
+    let AttachOutcome::Attached(deg) = out else {
+        panic!("{out:?}")
+    };
     assert_eq!(deg.ack.mode, 1, "S answers with mode 1");
     assert!(deg.degraded());
-    assert!(p.n.node.log.count(|e| *e == Event::PeerUnreachable) + c.log.count(|e| *e == Event::PeerUnreachable) > 0);
+    assert!(
+        p.n.node.log.count(|e| *e == Event::PeerUnreachable)
+            + c.log.count(|e| *e == Event::PeerUnreachable)
+            > 0
+    );
 }
 
 // acceptance: SES-06
@@ -68,7 +88,10 @@ async fn three_missed_intervals_move_the_client_to_a_sibling() {
 async fn payload_does_not_reset_the_detector() {
     let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
-    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await
+    else {
+        panic!()
+    };
     // N keeps sending payload on unidirectional streams and no Heartbeat
     let node = p.n.node.clone();
     let pump = tokio::spawn(async move {
@@ -77,9 +100,13 @@ async fn payload_does_not_reset_the_detector() {
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     });
-    let out = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep)).await.expect("incidental activity did not conceal the failure");
+    let out = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep))
+        .await
+        .expect("incidental activity did not conceal the failure");
     pump.abort();
-    let AttachOutcome::Attached(deg) = out else { panic!("{out:?}") };
+    let AttachOutcome::Attached(deg) = out else {
+        panic!("{out:?}")
+    };
     assert_eq!(deg.ack.mode, 1);
 }
 
@@ -88,10 +115,19 @@ async fn payload_does_not_reset_the_detector() {
 async fn misses_are_counted_by_elapsed_intervals_not_by_callbacks() {
     let _serial = serial().await;
     let p = partitioned().await;
-    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(mut c) =
+        attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await
+    else {
+        panic!()
+    };
     // the session is running: heartbeats have been exchanged both ways
     tokio::time::sleep(secs(I) + Duration::from_millis(300)).await;
-    assert!(c.log.count(|e| matches!(e, Event::Received { frame_type: 3 })) > 0, "in a session");
+    assert!(
+        c.log
+            .count(|e| matches!(e, Event::Received { frame_type: 3 }))
+            > 0,
+        "in a session"
+    );
     // N stops answering: the client sees silence rather than a close
     p.path.partition(true);
     // and the client's process is suspended, so no timer callback is
@@ -102,14 +138,21 @@ async fn misses_are_counted_by_elapsed_intervals_not_by_callbacks() {
     // elapsed on the monotonic clock and the peer is judged unreachable
     // without waiting for three more callbacks
     while *c.reach.lock().unwrap() != Reachability::Unreachable {
-        assert!(started.elapsed() < secs(I), "judged unreachable within one interval of waking, not after three more");
+        assert!(
+            started.elapsed() < secs(I),
+            "judged unreachable within one interval of waking, not after three more"
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let judged = started.elapsed();
     assert!(judged < secs(I), "{judged:?}");
     // and the failover that follows reaches the sibling
-    let out = tokio::time::timeout(secs(15), c.failover(&p.cfg, &client_ep())).await.expect("failover follows");
-    let AttachOutcome::Attached(deg) = out else { panic!("{out:?}") };
+    let out = tokio::time::timeout(secs(15), c.failover(&p.cfg, &client_ep()))
+        .await
+        .expect("failover follows");
+    let AttachOutcome::Attached(deg) = out else {
+        panic!("{out:?}")
+    };
     assert_eq!(deg.ack.mode, 1);
 }
 
@@ -118,7 +161,10 @@ async fn misses_are_counted_by_elapsed_intervals_not_by_callbacks() {
 async fn a_restarted_client_uses_its_persisted_sibling_list_at_once() {
     let _serial = serial().await;
     let p = pair(None);
-    let AttachOutcome::Attached(c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await
+    else {
+        panic!()
+    };
     let persisted = p.cfg.sibling_cache.lock().unwrap().clone();
     assert_eq!(persisted.len(), 1);
     drop(c);
@@ -130,9 +176,15 @@ async fn a_restarted_client_uses_its_persisted_sibling_list_at_once() {
     know(&fresh, "bob", p.s.addr);
     let started = std::time::Instant::now();
     let out = fresh_attach(&fresh, &client_ep(), kh("alice"), false).await;
-    let AttachOutcome::Attached(s) = out else { panic!("{out:?}") };
+    let AttachOutcome::Attached(s) = out else {
+        panic!("{out:?}")
+    };
     assert_eq!(s.ack.mode, 1, "S accepts a sibling's client in failover");
-    assert!(started.elapsed() < secs(3 * I), "without first waiting three intervals: {:?}", started.elapsed());
+    assert!(
+        started.elapsed() < secs(3 * I),
+        "without first waiting three intervals: {:?}",
+        started.elapsed()
+    );
 }
 
 // acceptance: SES-10
@@ -145,9 +197,16 @@ async fn a_degraded_session_produces_no_countersignature() {
     *fresh.sibling_cache.lock().unwrap() = vec![sibling_ref("bob", p.s.addr)];
     know(&fresh, "alice", p.n.addr);
     know(&fresh, "bob", p.s.addr);
-    let AttachOutcome::Attached(mut deg) = fresh_attach(&fresh, &client_ep(), kh("alice"), false).await else { panic!() };
+    let AttachOutcome::Attached(mut deg) =
+        fresh_attach(&fresh, &client_ep(), kh("alice"), false).await
+    else {
+        panic!()
+    };
     assert!(deg.degraded());
-    assert!(!deg.may_countersign(), "the client will not ask a sibling to countersign");
+    assert!(
+        !deg.may_countersign(),
+        "the client will not ask a sibling to countersign"
+    );
     // C submits a subnet-scoped transaction that needs its patron N's
     // countersignature: an adoption body naming N as patron.  S is not the
     // party the body names, so an envelope S signs is not that transaction
@@ -160,7 +219,13 @@ async fn a_degraded_session_produces_no_countersignature() {
         let a = rhtn_archive::tx::Adoption {
             node: kh("carol"),
             patron: kh("alice"),
-            locator: rhtn_archive::tx::Locator::root(kh("alice"), rhtn_archive::tx::Seqno { series: 5, counter: 0 }),
+            locator: rhtn_archive::tx::Locator::root(
+                kh("alice"),
+                rhtn_archive::tx::Seqno {
+                    series: 5,
+                    counter: 0,
+                },
+            ),
             timestamp: signers.clock,
             key_material: None,
             evidence: rhtn_archive::tx::Evidence::Presence(pop.txid),
@@ -169,10 +234,28 @@ async fn a_degraded_session_produces_no_countersignature() {
         };
         rhtn_archive::tx::adoption_body(&a)
     };
-    let mut s_view = view_of("bob", rhtn_archive::topology::Table::with_me(kh("bob")), "alice", &[1], signers.clock);
-    assert!(s_view.countersign_adoption(&body, &id("carol"), &ids()).is_none(), "S's signature over a body naming N is no transaction at all");
-    let by_n = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, &body, &[&id("carol"), &id("alice")]);
-    assert!(rhtn_archive::record::Record::parse(&by_n).is_ok(), "whereas N's would be");
+    let mut s_view = view_of(
+        "bob",
+        rhtn_archive::topology::Table::with_me(kh("bob")),
+        "alice",
+        &[1],
+        signers.clock,
+    );
+    assert!(
+        s_view
+            .countersign_adoption(&body, &id("carol"), &ids())
+            .is_none(),
+        "S's signature over a body naming N is no transaction at all"
+    );
+    let by_n = rhtn_archive::tx::envelope(
+        rhtn_archive::tx::TYPE_ADOPTION,
+        &body,
+        &[&id("carol"), &id("alice")],
+    );
+    assert!(
+        rhtn_archive::record::Record::parse(&by_n).is_ok(),
+        "whereas N's would be"
+    );
     // and payload flows on the same session
     p.s.node.enqueue(kh("carol"), b"payload".to_vec()).unwrap();
     let got = drain(&mut deg, 700).await;
@@ -184,16 +267,32 @@ async fn a_degraded_session_produces_no_countersignature() {
 async fn there_is_no_automatic_failback() {
     let _serial = serial().await;
     let p = pair(Some(drop_heartbeats()));
-    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await else { panic!() };
-    let AttachOutcome::Attached(deg) = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep)).await.unwrap() else { panic!() };
+    let AttachOutcome::Attached(mut c) = attach(&p.cfg, &p.ep, kh("alice"), p.n.addr, false).await
+    else {
+        panic!()
+    };
+    let AttachOutcome::Attached(deg) = tokio::time::timeout(secs(20), c.failover(&p.cfg, &p.ep))
+        .await
+        .unwrap()
+    else {
+        panic!()
+    };
     assert!(deg.degraded());
     let attaches_before = p.n.node.log.count(|e| matches!(e, Event::Attached { .. }));
     // N is reachable again and stays so for six intervals
     tokio::time::sleep(secs(6 * I)).await;
     let attaches_after = p.n.node.log.count(|e| matches!(e, Event::Attached { .. }));
-    assert_eq!(attaches_after, attaches_before, "C opens no connection to N");
-    assert!(deg.conn.close_reason().is_none(), "the degraded session continues");
-    let beats = deg.log.count(|e| matches!(e, Event::Received { frame_type: 3 }));
+    assert_eq!(
+        attaches_after, attaches_before,
+        "C opens no connection to N"
+    );
+    assert!(
+        deg.conn.close_reason().is_none(),
+        "the degraded session continues"
+    );
+    let beats = deg
+        .log
+        .count(|e| matches!(e, Event::Received { frame_type: 3 }));
     assert!(beats > 0, "and keeps exchanging heartbeats with S");
 }
 
@@ -203,16 +302,26 @@ async fn the_next_fresh_attach_tries_the_serving_node_first() {
     let _serial = serial().await;
     let p = pair(None);
     // C holds a degraded session on S
-    let AttachOutcome::Attached(deg) = attach(&p.cfg, &p.ep, kh("bob"), p.s.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(deg) = attach(&p.cfg, &p.ep, kh("bob"), p.s.addr, false).await
+    else {
+        panic!()
+    };
     assert!(deg.degraded());
     deg.conn.close(0u32.into(), b"done");
     drop(deg);
     // N has since become reachable again: the fresh attach goes there first
     let before = p.s.node.log.count(|e| matches!(e, Event::Attached { .. }));
-    let AttachOutcome::Attached(s) = fresh_attach(&p.cfg, &client_ep(), kh("alice"), false).await else { panic!() };
+    let AttachOutcome::Attached(s) = fresh_attach(&p.cfg, &client_ep(), kh("alice"), false).await
+    else {
+        panic!()
+    };
     assert_eq!(s.ack.mode, 0, "N answers with mode 0");
     assert!(p.n.node.has_session(&kh("carol")));
-    assert_eq!(p.s.node.log.count(|e| matches!(e, Event::Attached { .. })), before, "S was not dialled");
+    assert_eq!(
+        p.s.node.log.count(|e| matches!(e, Event::Attached { .. })),
+        before,
+        "S was not dialled"
+    );
 }
 
 /// N and S siblings, with a datagram path between C and N the test can
@@ -252,13 +361,28 @@ async fn partitioned() -> Partitioned {
 async fn a_clients_unreachability_replicates_to_the_siblings() {
     let _serial = serial().await;
     let p = partitioned().await;
-    let AttachOutcome::Attached(c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
-    assert_eq!(p.n.node.reachability(&kh("carol")), Some(Reachability::Reachable));
+    let AttachOutcome::Attached(c) =
+        attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await
+    else {
+        panic!()
+    };
+    assert_eq!(
+        p.n.node.reachability(&kh("carol")),
+        Some(Reachability::Reachable)
+    );
     // every packet from C to N is blackholed for three full intervals
     p.path.to_server.blackhole(true);
     tokio::time::sleep(secs(3 * I + 2)).await;
-    assert_eq!(p.n.node.reachability(&kh("carol")), Some(Reachability::Unreachable), "N marks C unreachable");
-    assert_eq!(p.s.node.reachability(&kh("carol")), Some(Reachability::Unreachable), "and S reads the same");
+    assert_eq!(
+        p.n.node.reachability(&kh("carol")),
+        Some(Reachability::Unreachable),
+        "N marks C unreachable"
+    );
+    assert_eq!(
+        p.s.node.reachability(&kh("carol")),
+        Some(Reachability::Unreachable),
+        "and S reads the same"
+    );
     assert!(p.path.to_server.dropped() > 0);
     drop(c);
 }
@@ -268,13 +392,22 @@ async fn a_clients_unreachability_replicates_to_the_siblings() {
 async fn material_queues_for_a_client_marked_unreachable() {
     let _serial = serial().await;
     let p = partitioned().await;
-    let AttachOutcome::Attached(c) = attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await else { panic!() };
+    let AttachOutcome::Attached(c) =
+        attach(&p.cfg, &client_ep(), kh("alice"), p.path.addr, false).await
+    else {
+        panic!()
+    };
     p.path.partition(true);
     tokio::time::sleep(secs(3 * I + 2)).await;
-    assert_eq!(p.n.node.reachability(&kh("carol")), Some(Reachability::Unreachable));
+    assert_eq!(
+        p.n.node.reachability(&kh("carol")),
+        Some(Reachability::Unreachable)
+    );
     drop(c);
     // X submits one message while C is away
-    p.n.node.enqueue(kh("carol"), b"while away".to_vec()).unwrap();
+    p.n.node
+        .enqueue(kh("carol"), b"while away".to_vec())
+        .unwrap();
     p.path.partition(false);
     // C performs a fresh attach
     let mut back = match fresh_attach(&p.cfg, &client_ep(), kh("alice"), false).await {
@@ -298,8 +431,15 @@ async fn an_offline_subordinate_differs_from_a_keyhash_with_no_record() {
     let for_c = n.node.enqueue(kh("carol"), b"for C".to_vec());
     let for_z = n.node.enqueue(kh("w2"), b"for Z".to_vec());
     assert_eq!(for_c, Ok(()));
-    assert_eq!(for_z, Err(Refusal::NoRecord), "a different answer from the one X received for C");
-    assert!(n.node.queue_records(&kh("w2")).is_empty(), "nothing is queued for Z");
+    assert_eq!(
+        for_z,
+        Err(Refusal::NoRecord),
+        "a different answer from the one X received for C"
+    );
+    assert!(
+        n.node.queue_records(&kh("w2")).is_empty(),
+        "nothing is queued for Z"
+    );
     let s = match attach(&ccfg, &client_ep(), kh("alice"), n.addr, false).await {
         AttachOutcome::Attached(s) => s,
         other => panic!("{other:?}"),
@@ -329,8 +469,15 @@ async fn a_failover_sibling_holds_no_queue_state() {
     assert_eq!(deg.ack.mode, 1, "field 1 is 1");
     assert_eq!(deg.ack.queued, 0, "field 4 does not count N's mailbox");
     assert!(drain(&mut deg, 700).await.is_empty(), "S delivers nothing");
-    assert!(p.s.node.queue_records(&kh("carol")).is_empty(), "S's store holds no ciphertext for C");
-    assert_eq!(p.n.node.queued(&kh("carol")), 3, "and N still holds all three");
+    assert!(
+        p.s.node.queue_records(&kh("carol")).is_empty(),
+        "S's store holds no ciphertext for C"
+    );
+    assert_eq!(
+        p.n.node.queued(&kh("carol")),
+        3,
+        "and N still holds all three"
+    );
 }
 
 // acceptance: QUE-13
@@ -345,9 +492,9 @@ async fn a_client_collects_from_its_own_serving_node_when_it_returns() {
     let ncfg = {
         let mut c = node_cfg("alice", I);
         c.siblings = {
-        let list = vec![sibling_ref("bob", s.addr)];
-        std::sync::Arc::new(move || list.clone())
-    };
+            let list = vec![sibling_ref("bob", s.addr)];
+            std::sync::Arc::new(move || list.clone())
+        };
         c
     };
     let n = Running::start(ncfg);
@@ -408,7 +555,18 @@ async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
     let a_p = sg.adopt("bob", "alice", "alice2", &[0, 0], 4);
     let a_q = sg.adopt("c1", "alice", "alice2", &[0, 1], 5);
     let a_l = sg.adopt("carol", "bob", "alice2", &[0, 0, 0], 6);
-    let s_view = view_of("alice", table_of("alice", &sg, &[&a_s, &a_t1, &a_t2, &a_p, &a_q, &a_l], &["alice2", "alice", "w1", "w2"]), "alice2", &[0], sg.clock);
+    let s_view = view_of(
+        "alice",
+        table_of(
+            "alice",
+            &sg,
+            &[&a_s, &a_t1, &a_t2, &a_p, &a_q, &a_l],
+            &["alice2", "alice", "w1", "w2"],
+        ),
+        "alice2",
+        &[0],
+        sg.clock,
+    );
     let t1 = Running::start(node_cfg("w1", I));
     let t2 = Running::start(node_cfg("w2", I));
     let known = [(kh("w1"), t1.addr), (kh("w2"), t2.addr)];
@@ -418,8 +576,16 @@ async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
     assert!(!set.contains(&kh("c1")), "Q is P's sibling, not S's");
     let mut cfg = node_cfg("alice", I);
     cfg.siblings = {
-        let list: Vec<rhtn_transport::session::SiblingRef> =
-            set.iter().map(|k| known.iter().find(|(x, _)| x == k).map(|(_, a)| sibling_ref(if *k == kh("w1") { "w1" } else { "w2" }, *a)).unwrap()).collect();
+        let list: Vec<rhtn_transport::session::SiblingRef> = set
+            .iter()
+            .map(|k| {
+                known
+                    .iter()
+                    .find(|(x, _)| x == k)
+                    .map(|(_, a)| sibling_ref(if *k == kh("w1") { "w1" } else { "w2" }, *a))
+                    .unwrap()
+            })
+            .collect();
         std::sync::Arc::new(move || list.clone())
     };
     let s = Running::start(cfg);
@@ -429,8 +595,13 @@ async fn the_pushed_replication_set_is_the_serving_nodes_siblings() {
         AttachOutcome::Attached(x) => x,
         other => panic!("{other:?}"),
     };
-    let named: std::collections::BTreeSet<[u8; 32]> = sess.ack.siblings.iter().map(|r| r.keyhash).collect();
-    assert_eq!(named, [kh("w1"), kh("w2")].into_iter().collect(), "T1 and T2 with their endpoints");
+    let named: std::collections::BTreeSet<[u8; 32]> =
+        sess.ack.siblings.iter().map(|r| r.keyhash).collect();
+    assert_eq!(
+        named,
+        [kh("w1"), kh("w2")].into_iter().collect(),
+        "T1 and T2 with their endpoints"
+    );
     assert!(!named.contains(&kh("c1")), "and not the patron's sibling Q");
     assert!(sess.ack.siblings.iter().all(|r| r.key_material.is_some()));
 }

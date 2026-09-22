@@ -92,12 +92,24 @@ impl Gateway {
     /// naming a reserved name, or naming a role the package did not
     /// declare.  A changed row ends the member's hosted session with that
     /// resource.
-    pub fn set_row(&mut self, resource: Keyhash, member: Keyhash, row: Row) -> Result<(), RowError> {
-        let b = self.bindings.get(&resource).ok_or(RowError::NoSuchResource)?;
+    pub fn set_row(
+        &mut self,
+        resource: Keyhash,
+        member: Keyhash,
+        row: Row,
+    ) -> Result<(), RowError> {
+        let b = self
+            .bindings
+            .get(&resource)
+            .ok_or(RowError::NoSuchResource)?;
         if row.roles.len() > MAX_ROLES {
             return Err(RowError::TooWide(row.roles.len()));
         }
-        if let Some(r) = row.roles.iter().find(|r| RESERVED_ROLES.contains(&r.as_str())) {
+        if let Some(r) = row
+            .roles
+            .iter()
+            .find(|r| RESERVED_ROLES.contains(&r.as_str()))
+        {
             return Err(RowError::Reserved(r.clone()));
         }
         if let Some(r) = row.roles.iter().find(|r| !b.declared_roles.contains(*r)) {
@@ -123,7 +135,12 @@ impl Gateway {
     /// the predicate matched among the owner's Dunbar Org, each given
     /// `row`.  The predicate is the operator's tool; what authorises a
     /// request afterwards is the table alone.
-    pub fn materialise(&mut self, resource: Keyhash, members: &[Keyhash], row: Row) -> Result<(), RowError> {
+    pub fn materialise(
+        &mut self,
+        resource: Keyhash,
+        members: &[Keyhash],
+        row: Row,
+    ) -> Result<(), RowError> {
         for m in members {
             self.set_row(resource, *m, row.clone())?;
         }
@@ -156,7 +173,12 @@ impl Gateway {
         // the row changes rather than in spite of it.  An operator's own
         // row is not the grant's to rewrite.
         if self.standing.get(&resource) != Some(&row) {
-            let stale: Vec<Keyhash> = self.derived.iter().filter(|(r, _)| *r == resource).map(|(_, m)| *m).collect();
+            let stale: Vec<Keyhash> = self
+                .derived
+                .iter()
+                .filter(|(r, _)| *r == resource)
+                .map(|(_, m)| *m)
+                .collect();
             for m in stale {
                 self.derived.remove(&(resource, m));
                 self.rows.remove(&(resource, m));
@@ -178,16 +200,21 @@ impl Gateway {
     /// the table, not a thing that overwrites it.
     pub fn refresh(&mut self, table: &Table) -> (usize, usize) {
         let (mut granted, mut dropped) = (0, 0);
-        let standing: Vec<(Keyhash, Row)> = self.standing.iter().map(|(k, r)| (*k, r.clone())).collect();
+        let standing: Vec<(Keyhash, Row)> =
+            self.standing.iter().map(|(k, r)| (*k, r.clone())).collect();
         for (resource, row) in standing {
-            let Some(owner) = self.bindings.get(&resource).map(|b| b.owner) else { continue };
+            let Some(owner) = self.bindings.get(&resource).map(|b| b.owner) else {
+                continue;
+            };
             let members = table.horizon(&owner, 2);
             let admissible = self.admissible(&resource, &row);
             for m in &members {
                 // an operator's own row is the floor's exception and is
                 // left alone; a row this grant wrote is the grant's to
                 // rewrite, and one already correct costs nothing
-                if self.rows.contains_key(&(resource, *m)) && !self.derived.contains(&(resource, *m)) {
+                if self.rows.contains_key(&(resource, *m))
+                    && !self.derived.contains(&(resource, *m))
+                {
                     continue;
                 }
                 if admissible && self.rows.get(&(resource, *m)) != Some(&row) {
@@ -209,12 +236,18 @@ impl Gateway {
         // bindings, so a departure takes the departing party's whole
         // down-line out of it in one step: nothing here enumerates a
         // subtree, and nothing can miss a generation of one.
-        let bound: Vec<(Keyhash, Keyhash)> = self.bindings.iter().map(|(r, b)| (*r, b.owner)).collect();
+        let bound: Vec<(Keyhash, Keyhash)> =
+            self.bindings.iter().map(|(r, b)| (*r, b.owner)).collect();
         for (resource, owner) in bound {
             let members = table.horizon(&owner, 2);
             // §10.2 has a departing party's rows removed, and §10.5 has
             // the row change end the session
-            let gone: Vec<Keyhash> = self.rows.keys().filter(|(r, m)| *r == resource && !members.contains(m)).map(|(_, m)| *m).collect();
+            let gone: Vec<Keyhash> = self
+                .rows
+                .keys()
+                .filter(|(r, m)| *r == resource && !members.contains(m))
+                .map(|(_, m)| *m)
+                .collect();
             for m in gone {
                 self.rows.remove(&(resource, m));
                 self.derived.remove(&(resource, m));
@@ -229,9 +262,14 @@ impl Gateway {
     /// same three checks `set_row` runs, asked once for the grant instead
     /// of once per member, since the answer cannot differ between them.
     fn admissible(&self, resource: &Keyhash, row: &Row) -> bool {
-        let Some(b) = self.bindings.get(resource) else { return false };
+        let Some(b) = self.bindings.get(resource) else {
+            return false;
+        };
         row.roles.len() <= MAX_ROLES
-            && !row.roles.iter().any(|r| RESERVED_ROLES.contains(&r.as_str()))
+            && !row
+                .roles
+                .iter()
+                .any(|r| RESERVED_ROLES.contains(&r.as_str()))
             && row.roles.iter().all(|r| b.declared_roles.contains(r))
     }
 
@@ -260,33 +298,67 @@ impl Gateway {
     /// owner's Dunbar Org, acknowledged where above the patron level, a
     /// row granting connect, a well-formed message, a running backend;
     /// then one handoff.
-    pub fn serve(&mut self, me: &Keyhash, table: &Table, requester: &Keyhash, body: &[u8]) -> ResourceResponse {
-        let Ok(req) = ResourceRequest::decode(body) else { return ResourceResponse::code(STATUS_MALFORMED) };
-        let Some(binding) = self.bindings.get(&req.resource) else { return ResourceResponse::code(STATUS_REFUSED) };
+    pub fn serve(
+        &mut self,
+        me: &Keyhash,
+        table: &Table,
+        requester: &Keyhash,
+        body: &[u8],
+    ) -> ResourceResponse {
+        let Ok(req) = ResourceRequest::decode(body) else {
+            return ResourceResponse::code(STATUS_MALFORMED);
+        };
+        let Some(binding) = self.bindings.get(&req.resource) else {
+            return ResourceResponse::code(STATUS_REFUSED);
+        };
         if !table.horizon(&binding.owner, 2).contains(requester) {
             return ResourceResponse::code(STATUS_REFUSED);
         }
         // above the patron level: this host's own acknowledgement
-        let below_me = table.downline_contains(me, requester) && !table.subordinates(me).contains(requester) && requester != me;
-        if below_me && !table.acks().iter().any(|a| a.node == *requester && a.grandpatron == *me) {
+        let below_me = table.downline_contains(me, requester)
+            && !table.subordinates(me).contains(requester)
+            && requester != me;
+        if below_me
+            && !table
+                .acks()
+                .iter()
+                .any(|a| a.node == *requester && a.grandpatron == *me)
+        {
             return ResourceResponse::code(STATUS_NO_ACK);
         }
-        let Some(row) = self.rows.get(&(req.resource, *requester)).filter(|r| r.connect).cloned() else { return ResourceResponse::code(STATUS_NO_ROLE) };
+        let Some(row) = self
+            .rows
+            .get(&(req.resource, *requester))
+            .filter(|r| r.connect)
+            .cloned()
+        else {
+            return ResourceResponse::code(STATUS_NO_ROLE);
+        };
         let parsed = match http::parse(&req.message) {
             Ok(p) => p,
             Err(_) => return ResourceResponse::code(STATUS_MALFORMED),
         };
-        let Some(backend) = binding.backend.clone() else { return ResourceResponse::code(STATUS_UNAVAILABLE) };
+        let Some(backend) = binding.backend.clone() else {
+            return ResourceResponse::code(STATUS_UNAVAILABLE);
+        };
         if !backend.running() {
             return ResourceResponse::code(STATUS_UNAVAILABLE);
         }
         let authority = binding.authority.clone();
         let session = self.session_for(*requester, req.resource);
-        let cred = Credential { principal: pairwise_principal(&req.resource, requester), roles: row.roles.iter().cloned().collect(), audience: req.resource, session };
+        let cred = Credential {
+            principal: pairwise_principal(&req.resource, requester),
+            roles: row.roles.iter().cloned().collect(),
+            audience: req.resource,
+            session,
+        };
         let message = http::serialise(&parsed, &authority, &cred);
         *self.attempts.entry(req.resource).or_insert(0) += 1;
         match backend.handle(&message) {
-            Ok(resp) => ResourceResponse { status: STATUS_DELIVERED, body: Some(resp) },
+            Ok(resp) => ResourceResponse {
+                status: STATUS_DELIVERED,
+                body: Some(resp),
+            },
             // one attempt, never a retry: the requester decides
             Err(_) => ResourceResponse::code(STATUS_UNAVAILABLE),
         }
@@ -296,7 +368,15 @@ impl Gateway {
     /// holds whose resource the viewer holds connect on, each with the
     /// roles the viewer holds, and nothing the viewer cannot use.
     pub fn page(&self, viewer: &Keyhash, catalog: &CatalogService) -> Vec<(Vec<u8>, Vec<String>)> {
-        self.rows.iter().filter(|((_, m), r)| m == viewer && r.connect).filter_map(|((res, _), r)| catalog.held(res).map(|h| (h.bytes.clone(), r.roles.iter().cloned().collect()))).collect()
+        self.rows
+            .iter()
+            .filter(|((_, m), r)| m == viewer && r.connect)
+            .filter_map(|((res, _), r)| {
+                catalog
+                    .held(res)
+                    .map(|h| (h.bytes.clone(), r.roles.iter().cloned().collect()))
+            })
+            .collect()
     }
 }
 
@@ -335,14 +415,30 @@ pub fn exports() -> &'static [&'static str] {
 
 /// Instantiate a package: every import must be an export the host has.
 pub fn instantiate(m: &Manifest) -> Result<Package, String> {
-    if let Some(i) = m.imports.iter().find(|i| !HOST_EXPORTS.contains(&i.as_str())) {
+    if let Some(i) = m
+        .imports
+        .iter()
+        .find(|i| !HOST_EXPORTS.contains(&i.as_str()))
+    {
         return Err(format!("no such binding: {i}"));
     }
-    if m.roles.iter().any(|r| r.is_empty() || r.len() > 32 || !r.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')) {
+    if m.roles.iter().any(|r| {
+        r.is_empty()
+            || r.len() > 32
+            || !r
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
+    }) {
         return Err("a role name is [a-z0-9_-], 1 to 32 bytes".into());
     }
-    if let Some(r) = m.roles.iter().find(|r| RESERVED_ROLES.contains(&r.as_str())) {
+    if let Some(r) = m
+        .roles
+        .iter()
+        .find(|r| RESERVED_ROLES.contains(&r.as_str()))
+    {
         return Err(format!("{r} is reserved for the node's own evaluation"));
     }
-    Ok(Package { roles: m.roles.clone() })
+    Ok(Package {
+        roles: m.roles.clone(),
+    })
 }

@@ -8,7 +8,12 @@
 /// The mass of a region under a decay policy: level `i` of `0..=levels`
 /// holds `branching(i)` times the identities of level `i-1`, every one of
 /// them at distance `depth + i`.
-pub fn fake_mass(lambda: f64, depth: usize, branching: impl Fn(usize) -> f64, levels: usize) -> f64 {
+pub fn fake_mass(
+    lambda: f64,
+    depth: usize,
+    branching: impl Fn(usize) -> f64,
+    levels: usize,
+) -> f64 {
     let mut count = 1.0;
     let mut mass = 0.0;
     for i in 0..=levels {
@@ -40,7 +45,11 @@ pub enum Convergence {
 pub fn classify(lambda: f64, branching: impl Fn(usize) -> f64, levels: usize) -> Convergence {
     let ratio = |i: usize| branching(i) * lambda;
     let (first, last) = (ratio(1), ratio(levels.max(1)));
-    if last >= 1.0 || last > first { Convergence::Diverges } else { Convergence::Converges }
+    if last >= 1.0 || last > first {
+        Convergence::Diverges
+    } else {
+        Convergence::Converges
+    }
 }
 
 /// Whether a per-hop decay satisfies the published criterion λ < 1/f.

@@ -12,17 +12,24 @@ use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
 use crate::payload::{self, PayloadError, PayloadState};
 use crate::query::{KeyGrant, QueryRequest, Response, VerificationQuery};
-use crate::record::{self, DisclosureSet, Proposal, Refusal, disclosure_root, disclosures, participant_check, sort_responses, witness_check};
+use crate::record::{
+    self, DisclosureSet, Proposal, Refusal, disclosure_root, disclosures, participant_check,
+    sort_responses, witness_check,
+};
 use crate::rotation::Rotation;
 use crate::selection::{self, Acquaintance, SelectionBasis, required};
 use crate::store::{Capture, ClientStore, OwnSeed, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
-use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
+use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use rhtn_archive::record::Record;
-use rhtn_archive::tx::{Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_PRESENCE, Witness, adoption_body, departure_body, envelope, envelope_from_entries, recovery_block, recovery_response_with_consent};
+use rhtn_archive::tx::{
+    Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_PRESENCE, Witness,
+    adoption_body, departure_body, envelope, envelope_from_entries, recovery_block,
+    recovery_response_with_consent,
+};
 use rhtn_codec::cose::aad;
 use rhtn_crypto::verify;
 use rhtn_crypto::{Identity, SigningIdentity};
@@ -116,7 +123,10 @@ pub enum Msg {
     Channels(Vec<ChannelOutcome>),
     CaptureKey([u8; 32]),
     ConsentRequest(VerificationQuery),
-    Consent { query_id: [u8; 32], consent: Vec<u8> },
+    Consent {
+        query_id: [u8; 32],
+        consent: Vec<u8>,
+    },
     /// A `KeyGrant`, subject to verifier.
     Grant(Vec<u8>),
     /// A type-4 request body, querier to verifier.
@@ -140,7 +150,10 @@ pub enum Msg {
     RecoveryResponse(Vec<u8>),
     /// The assembled `Recovery` block and the old archive's head, to the
     /// patron.
-    RecoveryProposal { block: Vec<u8>, presented_head: Option<Txid> },
+    RecoveryProposal {
+        block: Vec<u8>,
+        presented_head: Option<Txid>,
+    },
     /// The adoption body the patron proposes.
     AdoptionBody(Vec<u8>),
     /// A sealed line, to whoever holds a locator for it.
@@ -160,11 +173,19 @@ pub enum Msg {
     /// Bytes on the end-to-end channel, on the direct path to `to`.
     /// `device`: the recipient's device, carried so a failed direct path
     /// can fall back to the relay (`wire-format.md` §7.10 field 4).
-    Payload { to: Keyhash, bytes: Vec<u8>, device: [u8; 32] },
+    Payload {
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    },
     /// The same bytes handed to the serving node to relay to `to`.
     /// `device` is the recipient's device the ciphertext is for
     /// (`wire-format.md` §7.10 field 4).
-    Relay { to: Keyhash, bytes: Vec<u8>, device: [u8; 32] },
+    Relay {
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    },
     /// Application traffic to the serving node itself: it rides the
     /// transport session and needs no construction.
     Transport(Vec<u8>),
@@ -184,7 +205,18 @@ impl Msg {
     pub fn payload(&self) -> Vec<u8> {
         match self {
             Msg::CaptureKey(k) => k.to_vec(),
-            Msg::Grant(b) | Msg::Query(b) | Msg::Response(b) | Msg::ResponseCopy(b) | Msg::Record(b) | Msg::RecoveryResponse(b) | Msg::AdoptionBody(b) | Msg::Seal(b) | Msg::PublishBundle(b) | Msg::PrekeyRequest(b) | Msg::PrekeyReply(b) | Msg::Transport(b) => b.clone(),
+            Msg::Grant(b)
+            | Msg::Query(b)
+            | Msg::Response(b)
+            | Msg::ResponseCopy(b)
+            | Msg::Record(b)
+            | Msg::RecoveryResponse(b)
+            | Msg::AdoptionBody(b)
+            | Msg::Seal(b)
+            | Msg::PublishBundle(b)
+            | Msg::PrekeyRequest(b)
+            | Msg::PrekeyReply(b)
+            | Msg::Transport(b) => b.clone(),
             Msg::Payload { bytes, .. } | Msg::Relay { bytes, .. } => bytes.clone(),
             Msg::StockOneTime(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
@@ -338,7 +370,10 @@ pub enum Dispatched {
     /// An archive fetch this client answered from its own archive: how
     /// many records went back, and whether more remain.  The reply is in
     /// the outbox.
-    Served { records: usize, more: bool },
+    Served {
+        records: usize,
+        more: bool,
+    },
     /// A reply to a fetch this client made: the records it verified into
     /// its own store, or why it took none of them.
     Fetched(Result<usize, String>),
@@ -355,7 +390,28 @@ impl Client {
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        Client { id: Box::new(id), known, archive: Archive::new(kh), store: ClientStore::default(), payload, subject: SubjectState::new(cfg.subject.clone()), verifier: VerifierState::new(cfg.verifier.clone()), acquaintance: Acquaintance::default(), horizon: Horizon::new(kh), cfg, device, positions: BTreeMap::new(), outbox: Vec::new(), catalog: crate::catalog::View::default(), browsing: None, fetching: BTreeMap::new(), rotation: None, recovery_responses: Vec::new(), active: None, witnessing: None }
+        Client {
+            id: Box::new(id),
+            known,
+            archive: Archive::new(kh),
+            store: ClientStore::default(),
+            payload,
+            subject: SubjectState::new(cfg.subject.clone()),
+            verifier: VerifierState::new(cfg.verifier.clone()),
+            acquaintance: Acquaintance::default(),
+            horizon: Horizon::new(kh),
+            cfg,
+            device,
+            positions: BTreeMap::new(),
+            outbox: Vec::new(),
+            catalog: crate::catalog::View::default(),
+            browsing: None,
+            fetching: BTreeMap::new(),
+            rotation: None,
+            recovery_responses: Vec::new(),
+            active: None,
+            witnessing: None,
+        }
     }
 
     pub fn keyhash(&self) -> Keyhash {
@@ -393,15 +449,48 @@ impl Client {
     /// Step 1: announce intent to `counterparty`, nominating `nominees`
     /// from its neighbourhood.  The one question a ceremony asks the
     /// person is whether to start it.
-    pub fn begin(&mut self, counterparty: Keyhash, nominees: Vec<Keyhash>, initiator: bool) -> Result<Intent, Abort> {
-        if !self.device.operator.ask(&format!("Start a presence ceremony with {}?", hex8(&counterparty))) {
+    pub fn begin(
+        &mut self,
+        counterparty: Keyhash,
+        nominees: Vec<Keyhash>,
+        initiator: bool,
+    ) -> Result<Intent, Abort> {
+        if !self.device.operator.ask(&format!(
+            "Start a presence ceremony with {}?",
+            hex8(&counterparty)
+        )) {
             return Err(Abort::Declined);
         }
         let contribution = self.random::<16>();
         let seed = self.random::<32>();
         let started_at = self.now_s();
-        self.active = Some(Active { counterparty, initiator, started_at, contribution, ceremony_id: None, my_nominees: nominees.iter().copied().collect(), their_nominees: vec![], their_bundle: vec![], their_retention: 0, seed, channels: vec![], strongest: None, sealed: None, template: None, image_count: 0, issued: BTreeSet::new(), responses: vec![] });
-        Ok(Intent { contribution, nominees, bundle: self.store.records.values().cloned().collect(), started_at, retention_years: self.cfg.retention_years, initiator })
+        self.active = Some(Active {
+            counterparty,
+            initiator,
+            started_at,
+            contribution,
+            ceremony_id: None,
+            my_nominees: nominees.iter().copied().collect(),
+            their_nominees: vec![],
+            their_bundle: vec![],
+            their_retention: 0,
+            seed,
+            channels: vec![],
+            strongest: None,
+            sealed: None,
+            template: None,
+            image_count: 0,
+            issued: BTreeSet::new(),
+            responses: vec![],
+        });
+        Ok(Intent {
+            contribution,
+            nominees,
+            bundle: self.store.records.values().cloned().collect(),
+            started_at,
+            retention_years: self.cfg.retention_years,
+            initiator,
+        })
     }
 
     /// Take the counterparty's intent: its contribution fixes the
@@ -437,7 +526,8 @@ impl Client {
     /// what was achieved.
     pub fn proximity(&mut self) -> Result<Vec<ChannelOutcome>, Abort> {
         let peer = self.active()?.counterparty;
-        let (outcomes, strongest) = crate::device::run_channels(self.device.proximity.as_ref(), &peer);
+        let (outcomes, strongest) =
+            crate::device::run_channels(self.device.proximity.as_ref(), &peer);
         let a = self.active()?;
         a.channels = outcomes.clone();
         a.strongest = strongest;
@@ -451,7 +541,11 @@ impl Client {
     /// ones and must have seen the same strongest pass.
     pub fn take_channels(&mut self, theirs: &[ChannelOutcome]) -> Result<(), Abort> {
         let mine = self.proximity()?;
-        let strongest = |v: &[ChannelOutcome]| v.iter().find(|o| o.result == ChannelResult::Pass).map(|o| o.kind);
+        let strongest = |v: &[ChannelOutcome]| {
+            v.iter()
+                .find(|o| o.result == ChannelResult::Pass)
+                .map(|o| o.kind)
+        };
         if strongest(&mine) != strongest(theirs) {
             return Err(Abort::ChannelDisagreement);
         }
@@ -477,13 +571,25 @@ impl Client {
             let a = self.active()?;
             (a.counterparty, a.ceremony_id.ok_or(Abort::NotActive)?)
         };
-        self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Participant });
-        let (frames, _prompts) = guided_capture(self.device.camera.as_ref(), self.device.clock.as_ref(), self.device.random.as_ref(), &self.cfg.capture);
+        self.device.notifier.notify(Notice::RecordDisclosure {
+            role: Role::Participant,
+        });
+        let (frames, _prompts) = guided_capture(
+            self.device.camera.as_ref(),
+            self.device.clock.as_ref(),
+            self.device.random.as_ref(),
+            &self.cfg.capture,
+        );
         let template = self.device.engine.template(&frames);
         if template.len() != self.cfg.seal.template_len {
             return Err(Abort::TemplateLength);
         }
-        let capture = Capture { modality: 0, template_version: self.cfg.template_version, template: template.clone(), frames };
+        let capture = Capture {
+            modality: 0,
+            template_version: self.cfg.template_version,
+            template: template.clone(),
+            frames,
+        };
         let sealed = seal(&self.cfg.seal, &their_key, peer, me, cid, &capture);
         let a = self.active()?;
         a.image_count = capture.frames.len() as u64;
@@ -497,7 +603,13 @@ impl Client {
     pub fn select_verifiers(&mut self) -> Result<Vec<(Keyhash, SelectionBasis)>, Abort> {
         let me = self.keyhash();
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        let pool = selection::pool(&self.known, &a.their_bundle, &a.counterparty, &me, a.started_at);
+        let pool = selection::pool(
+            &self.known,
+            &a.their_bundle,
+            &a.counterparty,
+            &me,
+            a.started_at,
+        );
         if !pool.candidates.is_empty() && !self.acquaintance.recognises_any(&pool) {
             self.device.notifier.notify(Notice::NoCandidateRecognised);
         }
@@ -512,47 +624,93 @@ impl Client {
         let version = self.cfg.template_version;
         let (subject, cid, template) = {
             let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-            (a.counterparty, a.ceremony_id.ok_or(Abort::NotActive)?, a.template.clone().ok_or(Abort::NotActive)?)
+            (
+                a.counterparty,
+                a.ceremony_id.ok_or(Abort::NotActive)?,
+                a.template.clone().ok_or(Abort::NotActive)?,
+            )
         };
         let profile = self.device.engine.profile(&template);
-        let q = VerificationQuery { subject, querier: me, ceremony_id: cid, profile, template_version: version, verifier };
+        let q = VerificationQuery {
+            subject,
+            querier: me,
+            ceremony_id: cid,
+            profile,
+            template_version: version,
+            verifier,
+        };
         self.active()?.issued.insert(q.query_id());
         Ok(q)
     }
 
     /// The request that carries a consented query to its verifier.
-    pub fn request(&self, q: &VerificationQuery, consent: Vec<u8>, basis: SelectionBasis) -> Vec<u8> {
-        QueryRequest { query: q.clone(), consent, selection_basis: basis as u64 }.encode()
+    pub fn request(
+        &self,
+        q: &VerificationQuery,
+        consent: Vec<u8>,
+        basis: SelectionBasis,
+    ) -> Vec<u8> {
+        QueryRequest {
+            query: q.clone(),
+            consent,
+            selection_basis: basis as u64,
+        }
+        .encode()
     }
 
     /// Step 6, as subject: consent to a query about me, or not; and where I
     /// consent, the grant for its verifier, which goes to that verifier
     /// directly and to nobody else.
     pub fn consent(&mut self, q: &VerificationQuery) -> Option<(Vec<u8>, Option<KeyGrant>)> {
-        let consent = self.subject.consent_to(&self.id, q, self.device.notifier.as_ref())?;
-        let grant = self.subject.grant_for(&self.id, &self.store, &q.verifier, q.query_id(), self.now_s());
+        let consent = self
+            .subject
+            .consent_to(&self.id, q, self.device.notifier.as_ref())?;
+        let grant = self.subject.grant_for(
+            &self.id,
+            &self.store,
+            &q.verifier,
+            q.query_id(),
+            self.now_s(),
+        );
         Some((consent, grant))
     }
 
     /// As verifier: a grant from `from`.
     pub fn take_grant(&mut self, from: Keyhash, bytes: &[u8]) -> GrantOutcome {
-        let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
-        self.verifier.take_grant(&cx, from, bytes, self.device.clock.now_ms())
+        let cx = Verifying {
+            me: &self.id,
+            ids: &self.known,
+            store: &self.store,
+            matcher: self.device.engine.matcher(),
+        };
+        self.verifier
+            .take_grant(&cx, from, bytes, self.device.clock.now_ms())
     }
 
     /// As verifier: a query from `from`.  The person is neither asked nor
     /// told: answering is the client's background task, and design §19.6
     /// owes a verifier no warning.
     pub fn take_query(&mut self, from: Keyhash, bytes: &[u8]) -> QueryOutcome {
-        let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
-        self.verifier.take_query(&cx, from, bytes, self.device.clock.now_ms())
+        let cx = Verifying {
+            me: &self.id,
+            ids: &self.known,
+            store: &self.store,
+            matcher: self.device.engine.matcher(),
+        };
+        self.verifier
+            .take_query(&cx, from, bytes, self.device.clock.now_ms())
     }
 
     /// As verifier: let the bounds pass by this clock.  A query whose grant
     /// never came within the buffer is answered `unavailable`; a grant
     /// whose query never came is dropped unopened.
     pub fn expire(&mut self) -> Vec<crate::verifier::Answer> {
-        let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
+        let cx = Verifying {
+            me: &self.id,
+            ids: &self.known,
+            store: &self.store,
+            matcher: self.device.engine.matcher(),
+        };
         self.verifier.expire(&cx, self.device.clock.now_ms())
     }
 
@@ -571,22 +729,39 @@ impl Client {
 
     /// As subject: the copy of a response about me.
     pub fn take_response_copy(&mut self, bytes: &[u8]) -> Result<[u8; 32], String> {
-        self.subject.take_response_copy(&self.id, &self.known, bytes)
+        self.subject
+            .take_response_copy(&self.id, &self.known, bytes)
     }
 
     /// The responses I gathered about the counterparty.
     pub fn responses(&self) -> Vec<Vec<u8>> {
-        self.active.as_ref().map(|a| a.responses.clone()).unwrap_or_default()
+        self.active
+            .as_ref()
+            .map(|a| a.responses.clone())
+            .unwrap_or_default()
     }
 
     pub fn nominees(&self) -> (Vec<Keyhash>, Vec<Keyhash>) {
-        self.active.as_ref().map(|a| (a.my_nominees.iter().copied().collect(), a.their_nominees.clone())).unwrap_or_default()
+        self.active
+            .as_ref()
+            .map(|a| {
+                (
+                    a.my_nominees.iter().copied().collect(),
+                    a.their_nominees.clone(),
+                )
+            })
+            .unwrap_or_default()
     }
 
     /// What a nominee is asked to witness.
     pub fn witness_request(&self) -> Result<WitnessRequest, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        Ok(WitnessRequest { ceremony_id: a.ceremony_id.ok_or(Abort::NotActive)?, participants: participants(self.keyhash(), a.counterparty), started_at: a.started_at, channels: a.channels.clone() })
+        Ok(WitnessRequest {
+            ceremony_id: a.ceremony_id.ok_or(Abort::NotActive)?,
+            participants: participants(self.keyhash(), a.counterparty),
+            started_at: a.started_at,
+            channels: a.channels.clone(),
+        })
     }
 
     /// As nominee: witness, or decline.  The claimed start must be within
@@ -596,7 +771,10 @@ impl Client {
     /// latency bound where a latency channel passed.
     pub fn take_witness_request(&mut self, req: &WitnessRequest) -> Option<u64> {
         witness_check(req.started_at, self.now_s(), self.cfg.clock_tolerance_s).ok()?;
-        let latency = req.channels.iter().any(|c| c.kind == ChannelKind::Latency && c.result == ChannelResult::Pass);
+        let latency = req
+            .channels
+            .iter()
+            .any(|c| c.kind == ChannelKind::Latency && c.result == ChannelResult::Pass);
         self.witnessing = Some(req.clone());
         Some(3 | if latency { 4 } else { 0 })
     }
@@ -608,15 +786,28 @@ impl Client {
     /// Step 7, as proposer: the body everyone will sign.  Responses from
     /// both sides, sorted as the body requires; the disclosure set with
     /// fresh salts; the witnesses that accepted.
-    pub fn propose(&mut self, their_responses: Vec<Vec<u8>>, witnesses: Vec<Witness>) -> Result<(Proposal, DisclosureSet), Abort> {
+    pub fn propose(
+        &mut self,
+        their_responses: Vec<Vec<u8>>,
+        witnesses: Vec<Witness>,
+    ) -> Result<(Proposal, DisclosureSet), Abort> {
         let me = self.keyhash();
         let now = self.now_s();
         let salts: [[u8; 16]; 7] = std::array::from_fn(|_| self.random::<16>());
-        let (retention, their_retention) = (self.cfg.retention_years, self.active()?.their_retention);
+        let (retention, their_retention) =
+            (self.cfg.retention_years, self.active()?.their_retention);
         let a = self.active()?;
         let parts = participants(me, a.counterparty);
-        let (r0, r1) = if parts[0] == me { (retention, their_retention) } else { (their_retention, retention) };
-        let channels: Vec<(u64, u64, Option<u64>)> = a.channels.iter().map(|c| (c.kind.code(), c.result as u64, c.resolution_m)).collect();
+        let (r0, r1) = if parts[0] == me {
+            (retention, their_retention)
+        } else {
+            (their_retention, retention)
+        };
+        let channels: Vec<(u64, u64, Option<u64>)> = a
+            .channels
+            .iter()
+            .map(|c| (c.kind.code(), c.result as u64, c.resolution_m))
+            .collect();
         let values = [
             record::capture_value(0, a.image_count, 0, 1),
             record::empty_location_value(),
@@ -630,7 +821,14 @@ impl Client {
         let mut responses = a.responses.clone();
         responses.extend(their_responses);
         sort_responses(&mut responses);
-        let proposal = Proposal { started_at: a.started_at, finalized_at: now, participants: parts, witnesses, responses, root: disclosure_root(&set) };
+        let proposal = Proposal {
+            started_at: a.started_at,
+            finalized_at: now,
+            participants: parts,
+            witnesses,
+            responses,
+            root: disclosure_root(&set),
+        };
         Ok((proposal, set))
     }
 
@@ -639,20 +837,34 @@ impl Client {
     /// position.  Then the participant's own (`light-client-requirements.md`
     /// §1.1, §1.4), and the person is told where their nominees are absent
     /// or outnumbered.  Signing is the last thing that happens.
-    pub fn review_and_sign(&mut self, proposal: &Proposal, set: &DisclosureSet, back: &[Vec<Txid>]) -> Result<Vec<u8>, Abort> {
+    pub fn review_and_sign(
+        &mut self,
+        proposal: &Proposal,
+        set: &DisclosureSet,
+        back: &[Vec<Txid>],
+    ) -> Result<Vec<u8>, Abort> {
         let me = self.keyhash();
         if proposal.root != disclosure_root(set) {
             return Err(Abort::RootMismatch);
         }
         self.check_back(proposal, back)?;
         let held = self.subject.responses.clone();
-        let mine = self.active.as_ref().map(|a| a.my_nominees.clone()).unwrap_or_default();
-        participant_check(&me, proposal, &mine, &held, self.device.notifier.as_ref()).map_err(Abort::Refused)?;
+        let mine = self
+            .active
+            .as_ref()
+            .map(|a| a.my_nominees.clone())
+            .unwrap_or_default();
+        participant_check(&me, proposal, &mine, &held, self.device.notifier.as_ref())
+            .map_err(Abort::Refused)?;
         Ok(self.id.sign_entries(aad::ENVELOPE, &proposal.body(back)))
     }
 
     /// As witness: sign the ceremony I accepted, and only that one.
-    pub fn witness_sign(&mut self, proposal: &Proposal, back: &[Vec<Txid>]) -> Result<Vec<u8>, Abort> {
+    pub fn witness_sign(
+        &mut self,
+        proposal: &Proposal,
+        back: &[Vec<Txid>],
+    ) -> Result<Vec<u8>, Abort> {
         let w = self.witnessing.as_ref().ok_or(Abort::NotActive)?;
         if w.started_at != proposal.started_at || w.participants != proposal.participants {
             return Err(Abort::NotActive);
@@ -663,7 +875,11 @@ impl Client {
 
     fn check_back(&self, proposal: &Proposal, back: &[Vec<Txid>]) -> Result<(), Abort> {
         let me = self.keyhash();
-        let pos = proposal.signers().iter().position(|s| *s == me).ok_or(Abort::NotActive)?;
+        let pos = proposal
+            .signers()
+            .iter()
+            .position(|s| *s == me)
+            .ok_or(Abort::NotActive)?;
         if back.get(pos) != Some(&self.archive.next_back_pointers()) {
             return Err(Abort::BackPointers);
         }
@@ -681,7 +897,11 @@ impl Client {
     /// participant, the sealed capture of the counterparty and my own seed
     /// are filed under it, the disclosure set is kept as record state, and
     /// the ceremony's window closes with everything it counted.
-    pub fn finalize(&mut self, envelope: &[u8], set: Option<&DisclosureSet>) -> Result<Txid, Abort> {
+    pub fn finalize(
+        &mut self,
+        envelope: &[u8],
+        set: Option<&DisclosureSet>,
+    ) -> Result<Txid, Abort> {
         let rec = Record::parse(envelope).map_err(Abort::Record)?;
         verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
         let txid = rec.txid;
@@ -692,7 +912,15 @@ impl Client {
             if let Some(sealed) = a.sealed {
                 self.store.sealed.insert(txid, sealed);
             }
-            self.store.seeds.insert(txid, OwnSeed { seed: a.seed, counterparty: a.counterparty, ceremony_id: a.ceremony_id.unwrap_or([0; 32]), finalized_at });
+            self.store.seeds.insert(
+                txid,
+                OwnSeed {
+                    seed: a.seed,
+                    counterparty: a.counterparty,
+                    ceremony_id: a.ceremony_id.unwrap_or([0; 32]),
+                    finalized_at,
+                },
+            );
             if let Some(set) = set {
                 self.store.disclosures.insert(txid, set.clone());
             }
@@ -712,7 +940,10 @@ impl Client {
 impl Client {
     /// As the recovering subject: the prior key this rotation claims.
     pub fn prior_key(&self) -> Option<Keyhash> {
-        self.rotation.as_ref().and_then(|r| r.old_key()).map(|k| k.public.keyhash)
+        self.rotation
+            .as_ref()
+            .and_then(|r| r.old_key())
+            .map(|k| k.public.keyhash)
     }
 
     /// As a recovery verifier, its own querier (design §9.1): the query
@@ -730,12 +961,26 @@ impl Client {
     /// As a recovery verifier: the recognition is the person's (design
     /// §9.1), so the one question of the meeting is asked; on yes, the
     /// hybrid response naming the prior key, `personal_knowledge`, `met`.
-    pub fn recognise(&mut self, q: &VerificationQuery, consent: &[u8], prior: Keyhash) -> Result<Vec<u8>, Abort> {
+    pub fn recognise(
+        &mut self,
+        q: &VerificationQuery,
+        consent: &[u8],
+        prior: Keyhash,
+    ) -> Result<Vec<u8>, Abort> {
         let subject = q.subject;
-        if !self.device.operator.ask(&format!("Do you recognise the person in front of you as the holder of {}?", hex8(&prior))) {
+        if !self.device.operator.ask(&format!(
+            "Do you recognise the person in front of you as the holder of {}?",
+            hex8(&prior)
+        )) {
             return Err(Abort::NotRecognised);
         }
-        Ok(recovery_response_with_consent(&self.id, &subject, &q.query_id(), consent, &prior))
+        Ok(recovery_response_with_consent(
+            &self.id,
+            &subject,
+            &q.query_id(),
+            consent,
+            &prior,
+        ))
     }
 
     /// As the recovering subject: a response to the query I consented to,
@@ -746,7 +991,11 @@ impl Client {
         if r.subject != self.keyhash() || r.selection_basis != 0 {
             return Err("not about me as a recovery".into());
         }
-        if !self.subject.consented(&self.ceremony_id().ok_or("no ceremony")?).contains(&r.query_id) {
+        if !self
+            .subject
+            .consented(&self.ceremony_id().ok_or("no ceremony")?)
+            .contains(&r.query_id)
+        {
             return Err("a query I did not consent to".into());
         }
         verify::response(&self.known, bytes, true).map_err(|e| e.to_string())?;
@@ -763,16 +1012,33 @@ impl Client {
     pub fn recovery_block(&self, patron: &Keyhash) -> Result<(Vec<u8>, Option<Txid>), Abort> {
         let rot = self.rotation.as_ref().ok_or(Abort::NoPriorKey)?;
         let old = rot.old_key().ok_or(Abort::NoPriorKey)?;
-        if !self.recovery_responses.iter().any(|r| Response::read(r).is_ok_and(|x| x.verdict == crate::query::Verdict::Match)) {
+        if !self
+            .recovery_responses
+            .iter()
+            .any(|r| Response::read(r).is_ok_and(|x| x.verdict == crate::query::Verdict::Match))
+        {
             return Err(Abort::NotRecognised);
         }
-        Ok((recovery_block(old, &self.keyhash(), patron, self.recovery_responses.clone()), rot.old_head()))
+        Ok((
+            recovery_block(
+                old,
+                &self.keyhash(),
+                patron,
+                self.recovery_responses.clone(),
+            ),
+            rot.old_head(),
+        ))
     }
 
     /// As a patron: the adoption body for `node` under my position, the
     /// evidence checked against the body's own fields before anything is
     /// signed (`wire-format.md` §4.1).
-    pub fn propose_adoption(&self, node: Keyhash, node_back: &[Txid], what: Adopting) -> Result<Vec<u8>, Abort> {
+    pub fn propose_adoption(
+        &self,
+        node: Keyhash,
+        node_back: &[Txid],
+        what: Adopting,
+    ) -> Result<Vec<u8>, Abort> {
         self.propose_adoption_in(self.anchor(), node, node_back, what)
     }
 
@@ -783,9 +1049,22 @@ impl Client {
     /// is its path in the one it is adopting into; adopting "somewhere"
     /// would put the subordinate at an address the other subnet cannot
     /// read.
-    pub fn propose_adoption_in(&self, anchor: Keyhash, node: Keyhash, node_back: &[Txid], what: Adopting) -> Result<Vec<u8>, Abort> {
-        let Adopting { evidence, series, presented_head, key_material } = what;
-        let pos = self.position_in(&anchor).ok_or_else(|| Abort::PatronRefused(format!("no position under {}", hex8(&anchor))))?;
+    pub fn propose_adoption_in(
+        &self,
+        anchor: Keyhash,
+        node: Keyhash,
+        node_back: &[Txid],
+        what: Adopting,
+    ) -> Result<Vec<u8>, Abort> {
+        let Adopting {
+            evidence,
+            series,
+            presented_head,
+            key_material,
+        } = what;
+        let pos = self
+            .position_in(&anchor)
+            .ok_or_else(|| Abort::PatronRefused(format!("no position under {}", hex8(&anchor))))?;
         let index = self.free_index(&anchor)?;
         let mut path = pos.path.clone();
         let nibbles = pos.nibbles + 1;
@@ -795,11 +1074,26 @@ impl Client {
             let last = path.len() - 1;
             path[last] |= index;
         }
-        let locator = Locator { anchor: pos.anchor, path, nibbles, seqno: Seqno { series, counter: 0 } };
+        let locator = Locator {
+            anchor: pos.anchor,
+            path,
+            nibbles,
+            seqno: Seqno { series, counter: 0 },
+        };
         let back = self.archive.next_back_pointers();
-        let a = Adoption { node, patron: self.keyhash(), locator, timestamp: self.now_s(), key_material, evidence, presented_head, back: [node_back, &back] };
+        let a = Adoption {
+            node,
+            patron: self.keyhash(),
+            locator,
+            timestamp: self.now_s(),
+            key_material,
+            evidence,
+            presented_head,
+            back: [node_back, &back],
+        };
         let body = adoption_body(&a);
-        verify::adoption_evidence(&self.known, &body).map_err(|e| Abort::PatronRefused(e.to_string()))?;
+        verify::adoption_evidence(&self.known, &body)
+            .map_err(|e| Abort::PatronRefused(e.to_string()))?;
         Ok(body)
     }
 
@@ -823,11 +1117,25 @@ impl Client {
         // taken**: a patron that cannot observe a departure has no grounds
         // to reissue the slot, and reissuing one it was wrong about would
         // put two parties at one address.
-        let ended: BTreeSet<Keyhash> =
-            self.horizon.table.bindings().iter().filter(|b| b.patron == me && b.end.is_some()).map(|b| b.node).collect();
+        let ended: BTreeSet<Keyhash> = self
+            .horizon
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.patron == me && b.end.is_some())
+            .map(|b| b.node)
+            .collect();
         let mut taken: BTreeSet<u8> = BTreeSet::new();
-        for rec in self.archive.records().filter(|r| r.tx_type == TYPE_ADOPTION) {
-            let (Some(patron), Some(node), Some(loc)) = (rec.field_hash(2), rec.field_hash(1), rec.locator()) else { continue };
+        for rec in self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_ADOPTION)
+        {
+            let (Some(patron), Some(node), Some(loc)) =
+                (rec.field_hash(2), rec.field_hash(1), rec.locator())
+            else {
+                continue;
+            };
             if patron != me || loc.anchor != *anchor || ended.contains(&node) {
                 continue;
             }
@@ -835,7 +1143,12 @@ impl Client {
                 taken.insert(i);
             }
         }
-        (0..10).find(|i| !taken.contains(i)).ok_or_else(|| Abort::PatronRefused("all ten subordinate slots are taken (design §3.1: at most f = 10 subordinates)".into()))
+        (0..10).find(|i| !taken.contains(i)).ok_or_else(|| {
+            Abort::PatronRefused(
+                "all ten subordinate slots are taken (design §3.1: at most f = 10 subordinates)"
+                    .into(),
+            )
+        })
     }
 
     /// Sign a body I proposed or was shown, as its subject or its patron.
@@ -875,7 +1188,13 @@ impl Client {
     /// sits is a fold over its own archive ([`Client::adopt_own_positions`]),
     /// so a restored archive reaches the same answer and a stored position
     /// could disagree with the records that produced it.
-    pub fn at(dir: &std::path::Path, id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> std::io::Result<Client> {
+    pub fn at(
+        dir: &std::path::Path,
+        id: SigningIdentity,
+        known: Vec<Identity>,
+        cfg: Config,
+        device: Device,
+    ) -> std::io::Result<Client> {
         let kh = id.public.keyhash;
         let mut c = Client::new(id, known, cfg, device);
         c.archive = Archive::load(dir, kh)?;
@@ -891,7 +1210,12 @@ impl Client {
     /// where the archive and the key are deliberately together, which is
     /// the aggregation §13.7.1 names and exactly why the blob is
     /// encrypted. Seeds absent where this client cannot supply them.
-    pub fn export(&self, seeds: Option<[[u8; 32]; 2]>, cost: backup::Cost, secret: &[u8]) -> Result<Vec<u8>, backup::Failure> {
+    pub fn export(
+        &self,
+        seeds: Option<[[u8; 32]; 2]>,
+        cost: backup::Cost,
+        secret: &[u8],
+    ) -> Result<Vec<u8>, backup::Failure> {
         let contents = backup::Contents {
             seeds,
             records: self.archive.records().map(|r| r.bytes.clone()).collect(),
@@ -909,7 +1233,11 @@ impl Client {
     /// **Nothing is merged here.** This opens and scans; what a client
     /// does with contents that would replace an intact identity is its
     /// own decision and not this function's to make quietly.
-    pub fn import(&self, blob: &[u8], secret: &[u8]) -> Result<(backup::Contents, backup::Discarded), backup::Failure> {
+    pub fn import(
+        &self,
+        blob: &[u8],
+        secret: &[u8],
+    ) -> Result<(backup::Contents, backup::Discarded), backup::Failure> {
         let mut contents = backup::import(blob, secret)?;
         let discarded = contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
         Ok((contents, discarded))
@@ -939,10 +1267,27 @@ impl Client {
         // departure would advance the counter over a binding that closed.
         // The position is where that is known: one subnet, one patron, so
         // the anchor answers it.
-        let held = self.positions.get(&rel.position.anchor).ok_or(Abort::NoRelationship(patron))?;
-        let counter = held.seqno.counter.checked_add(1).ok_or(Abort::CounterExhausted)?;
+        let held = self
+            .positions
+            .get(&rel.position.anchor)
+            .ok_or(Abort::NoRelationship(patron))?;
+        let counter = held
+            .seqno
+            .counter
+            .checked_add(1)
+            .ok_or(Abort::CounterExhausted)?;
         let back = self.archive.next_back_pointers();
-        let body = departure_body(&back, &me, &patron, Seqno { series: rel.series(), counter }, self.now_s(), reason);
+        let body = departure_body(
+            &back,
+            &me,
+            &patron,
+            Seqno {
+                series: rel.series(),
+                counter,
+            },
+            self.now_s(),
+            reason,
+        );
         let env = envelope(TYPE_DEPARTURE, &body, &[&self.id]);
         let rec = Record::parse(&env).map_err(Abort::Record)?;
         let t = rec.txid;
@@ -968,14 +1313,27 @@ impl Client {
         if let Some(p) = self.positions.get(anchor) {
             return Some(p.clone());
         }
-        (*anchor == self.keyhash()).then(|| Locator::root(self.keyhash(), Seqno { series: 1, counter: 0 }))
+        (*anchor == self.keyhash()).then(|| {
+            Locator::root(
+                self.keyhash(),
+                Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+            )
+        })
     }
 
     /// Every subnet this client has a position in, its own first.
     #[must_use]
     pub fn anchors(&self) -> Vec<Keyhash> {
         let mut out = vec![self.keyhash()];
-        out.extend(self.positions.keys().copied().filter(|a| *a != self.keyhash()));
+        out.extend(
+            self.positions
+                .keys()
+                .copied()
+                .filter(|a| *a != self.keyhash()),
+        );
         out
     }
 
@@ -983,7 +1341,11 @@ impl Client {
     /// was adopted into, or its own while it has no patron.
     #[must_use]
     pub fn anchor(&self) -> Keyhash {
-        self.positions.keys().copied().find(|a| *a != self.keyhash()).unwrap_or_else(|| self.keyhash())
+        self.positions
+            .keys()
+            .copied()
+            .find(|a| *a != self.keyhash())
+            .unwrap_or_else(|| self.keyhash())
     }
 
     /// Fold this client's own adoptions and departures into where it
@@ -1024,7 +1386,10 @@ impl Client {
     /// The chain proving my series under `patron`, presented when asked
     /// (`wire-format.md` §4.6.1) and propagated to nobody.
     pub fn present_chain(&self, patron: &Keyhash) -> Vec<Vec<u8>> {
-        self.archive.chain_for(patron).map(|c| c.bytes()).unwrap_or_default()
+        self.archive
+            .chain_for(patron)
+            .map(|c| c.bytes())
+            .unwrap_or_default()
     }
 
     /// As the recovering subject: seal every old line as the old key's
@@ -1078,9 +1443,20 @@ impl Client {
             // is asked for singly, reusable material only
             1 => {
                 let nonce = self.nonce();
-                vec![Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce, device: None }.encode())]
+                vec![Msg::PrekeyRequest(
+                    rhtn_archive::prekey::PrekeyRequest::One {
+                        subject: others[0],
+                        one_time: false,
+                        nonce,
+                        device: None,
+                    }
+                    .encode(),
+                )]
             }
-            _ => vec![Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))],
+            _ => vec![Msg::PrekeyRequest(payload::batch_request(
+                &others,
+                self.nonce(),
+            ))],
         }
     }
 
@@ -1092,7 +1468,9 @@ impl Client {
     /// [`Client::take_catalog_reply`], which posts the continuation until
     /// the node's portion is complete or the hint repeats.
     pub fn browse(&mut self) -> Vec<Msg> {
-        let Some(serving) = self.payload.serving else { return Vec::new() };
+        let Some(serving) = self.payload.serving else {
+            return Vec::new();
+        };
         let mut sweep = crate::catalog::Sweep::default();
         let q = sweep.query(None, self.nonce());
         self.browsing = Some((serving, sweep));
@@ -1106,10 +1484,20 @@ impl Client {
     /// **A reply this sweep did not ask for is not taken** — §6.4's echoed
     /// nonce is what ties the two, and an entry out of a reply that cannot
     /// be attributed is an entry from nowhere.
-    pub fn take_catalog_reply(&mut self, bytes: &[u8]) -> Result<(crate::catalog::Step, Vec<Msg>), String> {
+    pub fn take_catalog_reply(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<(crate::catalog::Step, Vec<Msg>), String> {
         let reply = rhtn_archive::catalog::CatalogReply::decode(bytes)?;
-        let Some((node, mut sweep)) = self.browsing.take() else { return Err("no sweep is under way".into()) };
-        let step = sweep.take(&self.known, self.catalog.portion(node), &reply, rhtn_codec::bounds::CATALOG_REPLY_ENTRIES);
+        let Some((node, mut sweep)) = self.browsing.take() else {
+            return Err("no sweep is under way".into());
+        };
+        let step = sweep.take(
+            &self.known,
+            self.catalog.portion(node),
+            &reply,
+            rhtn_codec::bounds::CATALOG_REPLY_ENTRIES,
+        );
         let out = match &step {
             crate::catalog::Step::Again(t) => {
                 let q = sweep.query(Some(t.clone()), self.nonce());
@@ -1119,7 +1507,10 @@ impl Client {
         };
         // a sweep that asked again is still under way; one that is done,
         // truncated, or answered under a nonce it did not send is not
-        if matches!(step, crate::catalog::Step::Again(_) | crate::catalog::Step::WrongNonce) {
+        if matches!(
+            step,
+            crate::catalog::Step::Again(_) | crate::catalog::Step::WrongNonce
+        ) {
             self.browsing = Some((node, sweep));
         }
         Ok((step, out))
@@ -1135,9 +1526,20 @@ impl Client {
     /// behalf.  One fetch outstanding per subject; the nonce is what ties
     /// the answer to it (design §15: an attestation delivery carries the
     /// nonce the evaluator generated).
-    pub fn fetch_archive(&mut self, subject: Keyhash, head: Option<Txid>, max: u64) -> Result<Vec<Msg>, PayloadError> {
+    pub fn fetch_archive(
+        &mut self,
+        subject: Keyhash,
+        head: Option<Txid>,
+        max: u64,
+    ) -> Result<Vec<Msg>, PayloadError> {
         let nonce = self.nonce();
-        let req = rhtn_archive::chain::ArchiveRequest { subject, frontier: head.into_iter().collect(), max_records: max, stop_before: None, nonce };
+        let req = rhtn_archive::chain::ArchiveRequest {
+            subject,
+            frontier: head.into_iter().collect(),
+            max_records: max,
+            stop_before: None,
+            nonce,
+        };
         self.fetching.insert(subject, (nonce, head));
         self.send_payload(subject, payload::KIND_ARCHIVE_REQUEST, &req.encode())
     }
@@ -1152,7 +1554,10 @@ impl Client {
     /// archive.
     fn serve_archive(&mut self, from: Keyhash, bytes: &[u8]) -> Dispatched {
         let Ok(req) = rhtn_archive::chain::ArchiveRequest::decode(bytes) else {
-            return Dispatched::Served { records: 0, more: false };
+            return Dispatched::Served {
+                records: 0,
+                more: false,
+            };
         };
         let reply = self.archive.serve(&req);
         let (records, more) = (reply.records.len(), reply.more);
@@ -1193,7 +1598,8 @@ impl Client {
             {
                 return Err("the walk does not continue from the record before it".into());
             }
-            verify::envelope(&self.known, raw).map_err(|e| format!("record does not verify: {e}"))?;
+            verify::envelope(&self.known, raw)
+                .map_err(|e| format!("record does not verify: {e}"))?;
             expected = rec.back_pointers_of(&from).map(|b| b.to_vec());
             self.store.records.insert(rec.txid, raw.clone());
             kept += 1;
@@ -1221,7 +1627,15 @@ impl Client {
         // theirs: reusable material only, one request each
         for subject in std::mem::take(&mut self.payload.wanted) {
             let nonce = self.nonce();
-            out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject, one_time: false, nonce, device: None }.encode()));
+            out.push(Msg::PrekeyRequest(
+                rhtn_archive::prekey::PrekeyRequest::One {
+                    subject,
+                    one_time: false,
+                    nonce,
+                    device: None,
+                }
+                .encode(),
+            ));
         }
         out
     }
@@ -1229,7 +1643,11 @@ impl Client {
     fn restock(&mut self) -> Vec<Msg> {
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let n = self.payload.cfg.pool_target.saturating_sub(self.payload.pool_reported);
+        let n = self
+            .payload
+            .cfg
+            .pool_target
+            .saturating_sub(self.payload.pool_reported);
         if n == 0 {
             return Vec::new();
         }
@@ -1242,14 +1660,23 @@ impl Client {
     /// none do: below the threshold the pool is replenished at once.
     pub fn on_pool_report(&mut self, remaining: usize) -> Vec<Msg> {
         self.payload.pool_reported = remaining;
-        if remaining < self.payload.cfg.replenish_below { self.restock() } else { Vec::new() }
+        if remaining < self.payload.cfg.replenish_below {
+            self.restock()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Send `bytes` of `kind` to `to` (design §14.2.4.1): to the serving
     /// node it rides the transport session; to a leaf it goes on the
     /// session held, or waits for the one-time key requested now, and
     /// takes the direct path where one exists and the relay otherwise.
-    pub fn send_payload(&mut self, to: Keyhash, kind: u64, bytes: &[u8]) -> Result<Vec<Msg>, PayloadError> {
+    pub fn send_payload(
+        &mut self,
+        to: Keyhash,
+        kind: u64,
+        bytes: &[u8],
+    ) -> Result<Vec<Msg>, PayloadError> {
         if Some(to) == self.payload.serving {
             return Ok(vec![Msg::Transport(bytes.to_vec())]);
         }
@@ -1268,19 +1695,35 @@ impl Client {
         // this client holds, or the recipient's seed-holding device where
         // none was swept (`wire-format.md` §7.8 field 4)
         let device = self.device_of(&to).ok_or(PayloadError::NoBundle)?;
-        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(to, device, nonce))])
+        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(
+            to, device, nonce,
+        ))])
     }
 
     /// The recipient's device a session with `to` is with: the device its
     /// prefetched bundle names, else the classical key of the identity
     /// held for it, which names the seed-holding device.
     fn device_of(&self, to: &Keyhash) -> Option<[u8; 32]> {
-        self.payload.sessions.prefetched.get(to).map(|p| p.device).or_else(|| self.known.iter().find(|i| i.keyhash == *to).map(|i| *i.ed.as_bytes()))
+        self.payload
+            .sessions
+            .prefetched
+            .get(to)
+            .map(|p| p.device)
+            .or_else(|| {
+                self.known
+                    .iter()
+                    .find(|i| i.keyhash == *to)
+                    .map(|i| *i.ed.as_bytes())
+            })
     }
 
     fn route(&self, to: Keyhash, bytes: Vec<u8>) -> Msg {
         let device = self.device_of(&to).unwrap_or([0; 32]);
-        if self.device.direct.reachable(&to) { Msg::Payload { to, bytes, device } } else { Msg::Relay { to, bytes, device } }
+        if self.device.direct.reachable(&to) {
+            Msg::Payload { to, bytes, device }
+        } else {
+            Msg::Relay { to, bytes, device }
+        }
     }
 
     /// A reply from the serving node: a sweep's bundles are kept; a
@@ -1319,7 +1762,13 @@ impl Client {
                 self.payload.sessions.prefetched.insert(to, p.clone());
                 p
             }
-            None => self.payload.sessions.prefetched.get(&to).cloned().ok_or("no bundle for the peer")?,
+            None => self
+                .payload
+                .sessions
+                .prefetched
+                .get(&to)
+                .cloned()
+                .ok_or("no bundle for the peer")?,
         };
         let one_time = match r.one_time {
             Some(k) => Some(payload::OneTimeKey::decode(&k)?),
@@ -1331,10 +1780,25 @@ impl Client {
         }
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let first = self.payload.sessions.open(&self.payload.keys, to, &their, one_time.as_ref(), &mut fresh, &waiting[0]).map_err(|e| e.to_string())?;
+        let first = self
+            .payload
+            .sessions
+            .open(
+                &self.payload.keys,
+                to,
+                &their,
+                one_time.as_ref(),
+                &mut fresh,
+                &waiting[0],
+            )
+            .map_err(|e| e.to_string())?;
         let mut out = vec![self.route(to, first)];
         for p in &waiting[1..] {
-            let m = self.payload.sessions.send(&to, p).map_err(|e| e.to_string())?;
+            let m = self
+                .payload
+                .sessions
+                .send(&to, p)
+                .map_err(|e| e.to_string())?;
             out.push(self.route(to, m));
         }
         Ok(out)
@@ -1347,33 +1811,52 @@ impl Client {
     pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let plaintext = match self.payload.sessions.receive(&mut self.payload.keys, from, bytes, &mut fresh) {
-            Ok(p) => p,
-            Err(e) => {
-                // Nothing is opened and nothing dispatched under a name
-                // this client cannot give the message.  Where the binding
-                // is merely absent, it is asked for: the peer's next
-                // attempt is attributable, and this one is not recovered.
-                if matches!(e, payload::PayloadError::NoBundle) {
-                    self.payload.wanted.insert(from);
+        let plaintext =
+            match self
+                .payload
+                .sessions
+                .receive(&mut self.payload.keys, from, bytes, &mut fresh)
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    // Nothing is opened and nothing dispatched under a name
+                    // this client cannot give the message.  Where the binding
+                    // is merely absent, it is asked for: the peer's next
+                    // attempt is attributable, and this one is not recovered.
+                    if matches!(e, payload::PayloadError::NoBundle) {
+                        self.payload.wanted.insert(from);
+                    }
+                    if matches!(
+                        e,
+                        payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle
+                    ) {
+                        self.device
+                            .notifier
+                            .notify(Notice::PayloadUnattributable { from });
+                    }
+                    return Err(e.to_string());
                 }
-                if matches!(e, payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle) {
-                    self.device.notifier.notify(Notice::PayloadUnattributable { from });
-                }
-                return Err(e.to_string());
-            }
-        };
+            };
         let (kind, inner) = payload::unwrap(&plaintext)?;
         Ok(match kind {
             payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),
             payload::KIND_LATE_RESPONSE => {
                 let consented = self.subject.consented_by_ceremony().clone();
-                Dispatched::Late(record::take_late_response(&mut self.store, &self.known, &inner, &consented))
+                Dispatched::Late(record::take_late_response(
+                    &mut self.store,
+                    &self.known,
+                    &inner,
+                    &consented,
+                ))
             }
             payload::KIND_CANDIDATES => Dispatched::Candidates(inner),
-            payload::KIND_RESPONSE_COPY => Dispatched::ResponseCopy(self.take_response_copy(&inner)),
+            payload::KIND_RESPONSE_COPY => {
+                Dispatched::ResponseCopy(self.take_response_copy(&inner))
+            }
             payload::KIND_ARCHIVE_REQUEST => self.serve_archive(from, &inner),
-            payload::KIND_ARCHIVE_REPLY => Dispatched::Fetched(self.take_archive_reply(from, &inner)),
+            payload::KIND_ARCHIVE_REPLY => {
+                Dispatched::Fetched(self.take_archive_reply(from, &inner))
+            }
             _ => Dispatched::Application(inner),
         })
     }
@@ -1413,7 +1896,11 @@ impl Harness {
     }
 
     fn send(&mut self, from: Keyhash, to: Keyhash, msg: Msg) -> Msg {
-        self.log.push(Sent { from, to, msg: msg.clone() });
+        self.log.push(Sent {
+            from,
+            to,
+            msg: msg.clone(),
+        });
         msg
     }
 
@@ -1425,7 +1912,13 @@ impl Harness {
     /// Run one ceremony between `a` (the initiator) and `b`, each
     /// nominating from the other's neighbourhood, to a record every signer
     /// holds.
-    pub fn run(&mut self, a: Keyhash, b: Keyhash, a_nominees: Vec<Keyhash>, b_nominees: Vec<Keyhash>) -> Result<Txid, Abort> {
+    pub fn run(
+        &mut self,
+        a: Keyhash,
+        b: Keyhash,
+        a_nominees: Vec<Keyhash>,
+        b_nominees: Vec<Keyhash>,
+    ) -> Result<Txid, Abort> {
         // 1. intent
         let ia = self.client(&a).begin(b, a_nominees.clone(), true)?;
         let ib = self.client(&b).begin(a, b_nominees.clone(), false)?;
@@ -1438,7 +1931,9 @@ impl Harness {
         // 3–4. proximity
         let ch = self.client(&a).proximity()?;
         let m = self.send(a, b, Msg::Channels(ch));
-        let Msg::Channels(ch) = &m else { unreachable!() };
+        let Msg::Channels(ch) = &m else {
+            unreachable!()
+        };
         self.client(&b).take_channels(ch)?;
         // 5. capture keys cross, then each captures the other
         let ka = self.client(&a).capture_key()?;
@@ -1456,11 +1951,17 @@ impl Harness {
             let req = self.client(&nominator).witness_request()?;
             for w in nominees {
                 let m = self.send(nominator, *w, Msg::WitnessRequest(req.clone()));
-                let Msg::WitnessRequest(r) = &m else { unreachable!() };
+                let Msg::WitnessRequest(r) = &m else {
+                    unreachable!()
+                };
                 let answer = self.client(w).take_witness_request(r);
                 self.send(*w, nominator, Msg::WitnessAnswer(answer));
                 if let Some(flags) = answer {
-                    witnesses.push(Witness { keyhash: *w, nominated_by: nominator, flags });
+                    witnesses.push(Witness {
+                        keyhash: *w,
+                        nominated_by: nominator,
+                        flags,
+                    });
                 }
             }
         }
@@ -1470,14 +1971,18 @@ impl Harness {
         // 7. proposal, review, signatures
         let theirs = self.client(&b).responses();
         let m = self.send(b, a, Msg::Responses(theirs));
-        let Msg::Responses(theirs) = m else { unreachable!() };
+        let Msg::Responses(theirs) = m else {
+            unreachable!()
+        };
         let (proposal, set) = self.client(&a).propose(theirs, witnesses)?;
         let signers = proposal.signers();
         let mut back = Vec::new();
         for s in &signers {
             let bp = self.client(s).back_pointers();
             let m = self.send(*s, a, Msg::BackPointers(bp));
-            let Msg::BackPointers(bp) = m else { unreachable!() };
+            let Msg::BackPointers(bp) = m else {
+                unreachable!()
+            };
             back.push(bp);
         }
         let body = proposal.body(&back);
@@ -1486,8 +1991,20 @@ impl Harness {
             let signed = if *s == a {
                 self.client(&a).review_and_sign(&proposal, &set, &back)
             } else {
-                self.send(a, *s, Msg::Proposal(Box::new(Proposed { proposal: proposal.clone(), set: set.clone(), back: back.clone() })));
-                if *s == b { self.client(&b).review_and_sign(&proposal, &set, &back) } else { self.client(s).witness_sign(&proposal, &back) }
+                self.send(
+                    a,
+                    *s,
+                    Msg::Proposal(Box::new(Proposed {
+                        proposal: proposal.clone(),
+                        set: set.clone(),
+                        back: back.clone(),
+                    })),
+                );
+                if *s == b {
+                    self.client(&b).review_and_sign(&proposal, &set, &back)
+                } else {
+                    self.client(s).witness_sign(&proposal, &back)
+                }
             };
             let signed = match signed {
                 Ok(e) => e,
@@ -1516,16 +2033,38 @@ impl Harness {
     /// An ordinary adoption on the harness: `node` and `patron` meet in a
     /// ceremony, each nominating as given, and the patron adopts on that
     /// record.
-    pub fn run_adoption(&mut self, node: Keyhash, patron: Keyhash, node_nominees: Vec<Keyhash>, patron_nominees: Vec<Keyhash>, series: u32) -> Result<Txid, Abort> {
+    pub fn run_adoption(
+        &mut self,
+        node: Keyhash,
+        patron: Keyhash,
+        node_nominees: Vec<Keyhash>,
+        patron_nominees: Vec<Keyhash>,
+        series: u32,
+    ) -> Result<Txid, Abort> {
         let pop = self.run(node, patron, node_nominees, patron_nominees)?;
         let node_back = self.client(&node).back_pointers();
-        let body = self.client(&patron).propose_adoption(node, &node_back, Adopting { evidence: Evidence::Presence(pop), series, presented_head: None, key_material: None })?;
+        let body = self.client(&patron).propose_adoption(
+            node,
+            &node_back,
+            Adopting {
+                evidence: Evidence::Presence(pop),
+                series,
+                presented_head: None,
+                key_material: None,
+            },
+        )?;
         let m = self.send(patron, node, Msg::AdoptionBody(body));
-        let Msg::AdoptionBody(body) = m else { unreachable!() };
+        let Msg::AdoptionBody(body) = m else {
+            unreachable!()
+        };
         let n_entries = self.client(&node).sign_body(&body);
         self.send(node, patron, Msg::Signed(Ok(n_entries.clone())));
         let p_entries = self.client(&patron).sign_body(&body);
-        let envelope = envelope_from_entries(TYPE_ADOPTION, &body, &[(node, n_entries), (patron, p_entries)]);
+        let envelope = envelope_from_entries(
+            TYPE_ADOPTION,
+            &body,
+            &[(node, n_entries), (patron, p_entries)],
+        );
         let t = self.client(&patron).take_adoption(&envelope)?;
         self.send(patron, node, Msg::Record(envelope.clone()));
         self.client(&node).take_adoption(&envelope)?;
@@ -1539,7 +2078,11 @@ impl Harness {
     /// verifier's person recognises, and the hybrid response goes to the
     /// subject.  No record is produced; the response is what the meeting
     /// yields.
-    pub fn run_recovery_meeting(&mut self, subject: Keyhash, verifier: Keyhash) -> Result<Vec<u8>, Abort> {
+    pub fn run_recovery_meeting(
+        &mut self,
+        subject: Keyhash,
+        verifier: Keyhash,
+    ) -> Result<Vec<u8>, Abort> {
         let prior = self.client(&subject).prior_key().ok_or(Abort::NoPriorKey)?;
         let ia = self.client(&subject).begin(verifier, vec![], true)?;
         let ib = self.client(&verifier).begin(subject, vec![], false)?;
@@ -1551,7 +2094,9 @@ impl Harness {
         self.client(&subject).take_intent(verifier, i)?;
         let ch = self.client(&subject).proximity()?;
         let m = self.send(subject, verifier, Msg::Channels(ch));
-        let Msg::Channels(ch) = &m else { unreachable!() };
+        let Msg::Channels(ch) = &m else {
+            unreachable!()
+        };
         self.client(&verifier).take_channels(ch)?;
         let ks = self.client(&subject).capture_key()?;
         let kv = self.client(&verifier).capture_key()?;
@@ -1563,14 +2108,32 @@ impl Harness {
         self.send(subject, verifier, Msg::ClaimPrior(prior));
         let q = self.client(&verifier).recovery_query(prior)?;
         let m = self.send(verifier, subject, Msg::ConsentRequest(q.clone()));
-        let Msg::ConsentRequest(q) = m else { unreachable!() };
-        let (consent, _) = self.client(&subject).consent(&q).ok_or(Abort::NotRecognised)?;
-        let m = self.send(subject, verifier, Msg::Consent { query_id: q.query_id(), consent });
-        let Msg::Consent { consent, .. } = m else { unreachable!() };
+        let Msg::ConsentRequest(q) = m else {
+            unreachable!()
+        };
+        let (consent, _) = self
+            .client(&subject)
+            .consent(&q)
+            .ok_or(Abort::NotRecognised)?;
+        let m = self.send(
+            subject,
+            verifier,
+            Msg::Consent {
+                query_id: q.query_id(),
+                consent,
+            },
+        );
+        let Msg::Consent { consent, .. } = m else {
+            unreachable!()
+        };
         let resp = self.client(&verifier).recognise(&q, &consent, prior)?;
         let m = self.send(verifier, subject, Msg::RecoveryResponse(resp));
-        let Msg::RecoveryResponse(resp) = m else { unreachable!() };
-        self.client(&subject).take_recovery_response(&resp).map_err(Abort::Record)?;
+        let Msg::RecoveryResponse(resp) = m else {
+            unreachable!()
+        };
+        self.client(&subject)
+            .take_recovery_response(&resp)
+            .map_err(Abort::Record)?;
         // the meeting closes without a record
         self.client(&subject).subject.close_window();
         self.client(&subject).abandon();
@@ -1584,19 +2147,52 @@ impl Harness {
     /// old key's statement, the patron proposes the adoption and checks
     /// the block against it, both sign, and the old lines are sealed as
     /// the old key's last act before the adoption goes anywhere.
-    pub fn run_recovery_adoption(&mut self, subject: Keyhash, patron: Keyhash, series: u32) -> Result<Txid, Abort> {
+    pub fn run_recovery_adoption(
+        &mut self,
+        subject: Keyhash,
+        patron: Keyhash,
+        series: u32,
+    ) -> Result<Txid, Abort> {
         let (block, head) = self.client(&subject).recovery_block(&patron)?;
-        let m = self.send(subject, patron, Msg::RecoveryProposal { block, presented_head: head });
-        let Msg::RecoveryProposal { block, presented_head } = m else { unreachable!() };
+        let m = self.send(
+            subject,
+            patron,
+            Msg::RecoveryProposal {
+                block,
+                presented_head: head,
+            },
+        );
+        let Msg::RecoveryProposal {
+            block,
+            presented_head,
+        } = m
+        else {
+            unreachable!()
+        };
         let node_back = self.client(&subject).back_pointers();
         let km = self.client(&subject).id.public.key_material();
-        let body = self.client(&patron).propose_adoption(subject, &node_back, Adopting { evidence: Evidence::Recovery(block), series, presented_head, key_material: Some(km) })?;
+        let body = self.client(&patron).propose_adoption(
+            subject,
+            &node_back,
+            Adopting {
+                evidence: Evidence::Recovery(block),
+                series,
+                presented_head,
+                key_material: Some(km),
+            },
+        )?;
         let m = self.send(patron, subject, Msg::AdoptionBody(body));
-        let Msg::AdoptionBody(body) = m else { unreachable!() };
+        let Msg::AdoptionBody(body) = m else {
+            unreachable!()
+        };
         let s_entries = self.client(&subject).sign_body(&body);
         self.send(subject, patron, Msg::Signed(Ok(s_entries.clone())));
         let p_entries = self.client(&patron).sign_body(&body);
-        let envelope = envelope_from_entries(TYPE_ADOPTION, &body, &[(subject, s_entries), (patron, p_entries)]);
+        let envelope = envelope_from_entries(
+            TYPE_ADOPTION,
+            &body,
+            &[(subject, s_entries), (patron, p_entries)],
+        );
         // the old key's last act, before the adoption is pushed
         let seals = self.client(&subject).seal_old_lines();
         for (holder, seal) in seals {
@@ -1618,15 +2214,28 @@ impl Harness {
         for (v, basis) in picked {
             let q = self.client(&selector).query_for(v)?;
             let m = self.send(selector, subject, Msg::ConsentRequest(q.clone()));
-            let Msg::ConsentRequest(q) = m else { unreachable!() };
-            let Some((consent, grant)) = self.client(&subject).consent(&q) else { continue };
+            let Msg::ConsentRequest(q) = m else {
+                unreachable!()
+            };
+            let Some((consent, grant)) = self.client(&subject).consent(&q) else {
+                continue;
+            };
             if let Some(g) = grant {
                 let m = self.send(subject, v, Msg::Grant(g.encode()));
                 let Msg::Grant(bytes) = m else { unreachable!() };
                 self.client(&v).take_grant(subject, &bytes);
             }
-            let m = self.send(subject, selector, Msg::Consent { query_id: q.query_id(), consent });
-            let Msg::Consent { consent, .. } = m else { unreachable!() };
+            let m = self.send(
+                subject,
+                selector,
+                Msg::Consent {
+                    query_id: q.query_id(),
+                    consent,
+                },
+            );
+            let Msg::Consent { consent, .. } = m else {
+                unreachable!()
+            };
             let req = self.client(&selector).request(&q, consent, basis);
             let m = self.send(selector, v, Msg::Query(req));
             let Msg::Query(req) = m else { unreachable!() };
@@ -1638,10 +2247,14 @@ impl Harness {
             };
             for ans in answers {
                 let m = self.send(v, selector, Msg::Response(ans.to_querier.clone()));
-                let Msg::Response(bytes) = m else { unreachable!() };
+                let Msg::Response(bytes) = m else {
+                    unreachable!()
+                };
                 let _ = self.client(&selector).take_response(&bytes);
                 let m = self.send(v, subject, Msg::ResponseCopy(ans.to_subject.1.clone()));
-                let Msg::ResponseCopy(bytes) = m else { unreachable!() };
+                let Msg::ResponseCopy(bytes) = m else {
+                    unreachable!()
+                };
                 let _ = self.client(&subject).take_response_copy(&bytes);
             }
         }
@@ -1653,7 +2266,12 @@ impl Client {
     /// Let a query that will get no grant in this ceremony be answered
     /// now, `unavailable`: the harness has no later.
     fn expire_now(&mut self) -> Vec<crate::verifier::Answer> {
-        let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
+        let cx = Verifying {
+            me: &self.id,
+            ids: &self.known,
+            store: &self.store,
+            matcher: self.device.engine.matcher(),
+        };
         let later = self.device.clock.now_ms() + self.cfg.verifier.grant_buffer_ms;
         self.verifier.expire(&cx, later)
     }

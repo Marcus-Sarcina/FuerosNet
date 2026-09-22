@@ -89,8 +89,16 @@ impl BindingView {
     /// §10.6 means by following from where the resource runs, and it is why
     /// there is no field on [`Binding`] to disagree with.
     pub fn of_binding(resource: Keyhash, binding: &Binding) -> BindingView {
-        let hosting = if binding.backend.is_some() { Hosting::Hosted } else { Hosting::Brokered };
-        BindingView { resource, owner: binding.owner, hosting }
+        let hosting = if binding.backend.is_some() {
+            Hosting::Hosted
+        } else {
+            Hosting::Brokered
+        };
+        BindingView {
+            resource,
+            owner: binding.owner,
+            hosting,
+        }
     }
 
     /// The view of one resource bound at `gateway`, or `None` where the
@@ -103,7 +111,9 @@ impl BindingView {
     /// gateway's surface for the sake of a display would change the type
     /// that decides requests, and a display is not worth that.
     pub fn of(gateway: &Gateway, resource: Keyhash) -> Option<BindingView> {
-        gateway.binding(&resource).map(|b| BindingView::of_binding(resource, b))
+        gateway
+            .binding(&resource)
+            .map(|b| BindingView::of_binding(resource, b))
     }
 
     /// The binding as a person reads it.
@@ -122,7 +132,10 @@ impl BindingView {
             }
             Hosting::Brokered => {
                 let _ = writeln!(s, "  brokered to an external service");
-                let _ = writeln!(s, "  a session there continues on the terms of the service the operator chose");
+                let _ = writeln!(
+                    s,
+                    "  a session there continues on the terms of the service the operator chose"
+                );
             }
         }
         s
@@ -164,8 +177,18 @@ pub struct ExposureView {
 impl ExposureView {
     /// State the exposure.  The arguments are explicit for the reason given
     /// on the type: this module is told, and does not go looking.
-    pub fn new(subordinates: usize, relays_payload: bool, hosts_resources: bool, has_upstream: bool) -> ExposureView {
-        ExposureView { subordinates, relays_payload, hosts_resources, has_upstream }
+    pub fn new(
+        subordinates: usize,
+        relays_payload: bool,
+        hosts_resources: bool,
+        has_upstream: bool,
+    ) -> ExposureView {
+        ExposureView {
+            subordinates,
+            relays_payload,
+            hosts_resources,
+            has_upstream,
+        }
     }
 
     /// The exposure as a person reads it.
@@ -176,20 +199,35 @@ impl ExposureView {
     /// about in a thing this node does not do.
     pub fn render(&self) -> String {
         let mut s = String::new();
-        let _ = writeln!(s, "what this node's configuration exposes the identities below it to");
+        let _ = writeln!(
+            s,
+            "what this node's configuration exposes the identities below it to"
+        );
         let _ = writeln!(s, "  identities directly below  {}", self.subordinates);
-        let _ = writeln!(s, "  payload relayed here       {}", match self.relays_payload {
-            true => "yes: their payload passes through this node",
-            false => "no",
-        });
-        let _ = writeln!(s, "  resources hosted here      {}", match self.hosts_resources {
-            true => "yes: their requests reach a backend this operator runs",
-            false => "no",
-        });
-        let _ = writeln!(s, "  attaches to a patron       {}", match self.has_upstream {
-            true => "yes",
-            false => "no: this node attaches to nobody",
-        });
+        let _ = writeln!(
+            s,
+            "  payload relayed here       {}",
+            match self.relays_payload {
+                true => "yes: their payload passes through this node",
+                false => "no",
+            }
+        );
+        let _ = writeln!(
+            s,
+            "  resources hosted here      {}",
+            match self.hosts_resources {
+                true => "yes: their requests reach a backend this operator runs",
+                false => "no",
+            }
+        );
+        let _ = writeln!(
+            s,
+            "  attaches to a patron       {}",
+            match self.has_upstream {
+                true => "yes",
+                false => "no: this node attaches to nobody",
+            }
+        );
         s
     }
 }
@@ -229,14 +267,21 @@ pub struct RoleView {
 impl RoleView {
     /// The view of one row.
     pub fn of_row(principal: Keyhash, resource: Keyhash, row: &Row) -> RoleView {
-        RoleView { principal, resource, roles: row.roles.iter().cloned().collect(), connect: row.connect }
+        RoleView {
+            principal,
+            resource,
+            roles: row.roles.iter().cloned().collect(),
+            connect: row.connect,
+        }
     }
 
     /// The view of one principal's row for one resource at `gateway`, or
     /// `None` where the gateway holds no row for the pair.  A missing row
     /// is not an empty one: it is the case where nothing was ever assigned.
     pub fn of(gateway: &Gateway, resource: Keyhash, principal: Keyhash) -> Option<RoleView> {
-        gateway.row(&resource, &principal).map(|r| RoleView::of_row(principal, resource, r))
+        gateway
+            .row(&resource, &principal)
+            .map(|r| RoleView::of_row(principal, resource, r))
     }
 
     /// The roles as the accessing user reads them.
@@ -248,14 +293,22 @@ impl RoleView {
         let mut s = String::new();
         let _ = writeln!(s, "principal {}", hex(&self.principal));
         let _ = writeln!(s, "  on resource  {}", hex(&self.resource));
-        let _ = writeln!(s, "  roles        {}", match self.roles.is_empty() {
-            true => "none".to_string(),
-            false => self.roles.join(", "),
-        });
-        let _ = writeln!(s, "  may reach the resource  {}", match self.connect {
-            true => "yes",
-            false => "no",
-        });
+        let _ = writeln!(
+            s,
+            "  roles        {}",
+            match self.roles.is_empty() {
+                true => "none".to_string(),
+                false => self.roles.join(", "),
+            }
+        );
+        let _ = writeln!(
+            s,
+            "  may reach the resource  {}",
+            match self.connect {
+                true => "yes",
+                false => "no",
+            }
+        );
         s
     }
 }
@@ -285,7 +338,12 @@ mod tests {
     }
 
     fn binding(backend: Option<Arc<dyn Backend>>) -> Binding {
-        Binding { owner: [2u8; 32], authority: "records.example".to_string(), backend, declared_roles: roles(&["reader", "writer"]) }
+        Binding {
+            owner: [2u8; 32],
+            authority: "records.example".to_string(),
+            backend,
+            declared_roles: roles(&["reader", "writer"]),
+        }
     }
 
     #[test]
@@ -300,13 +358,27 @@ mod tests {
 
         // the model is named in words, not left to be inferred from a
         // field the reader cannot see
-        assert!(hosted.render().contains("hosted at this node"), "{}", hosted.render());
-        assert!(brokered.render().contains("brokered to an external service"), "{}", brokered.render());
+        assert!(
+            hosted.render().contains("hosted at this node"),
+            "{}",
+            hosted.render()
+        );
+        assert!(
+            brokered
+                .render()
+                .contains("brokered to an external service"),
+            "{}",
+            brokered.render()
+        );
 
         // and the consequence that `infra-client-requirements.md` §10.6
         // says makes it matter: where the session ends
         assert!(hosted.render().contains("ends when this node ends it"));
-        assert!(brokered.render().contains("continues on the terms of the service"));
+        assert!(
+            brokered
+                .render()
+                .contains("continues on the terms of the service")
+        );
 
         // both name the same resource and owner, so the model is the only
         // difference between the two screens
@@ -322,7 +394,10 @@ mod tests {
         let mut gateway = Gateway::default();
         gateway.bind(resource, binding(Some(Arc::new(Stub))));
 
-        assert_eq!(BindingView::of(&gateway, resource).map(|v| v.hosting), Some(Hosting::Hosted));
+        assert_eq!(
+            BindingView::of(&gateway, resource).map(|v| v.hosting),
+            Some(Hosting::Hosted)
+        );
         assert_eq!(BindingView::of(&gateway, [9u8; 32]), None);
     }
 
@@ -335,7 +410,16 @@ mod tests {
         let principal = [5u8; 32];
         let mut gateway = Gateway::default();
         gateway.bind(resource, binding(None));
-        gateway.materialise(resource, &[principal], Row { roles: roles(&["reader"]), connect: true }).unwrap();
+        gateway
+            .materialise(
+                resource,
+                &[principal],
+                Row {
+                    roles: roles(&["reader"]),
+                    connect: true,
+                },
+            )
+            .unwrap();
 
         let view = RoleView::of(&gateway, resource, principal).unwrap();
         let out = view.render();
@@ -349,7 +433,14 @@ mod tests {
         // any of the vocabulary `infra-client-requirements.md` §10.3 gives
         // a predicate is in the rendering.
         assert!(!out.contains(predicate), "{out}");
-        for leak in ["predicate", "rank", "percentile", "tier", "joined", "template"] {
+        for leak in [
+            "predicate",
+            "rank",
+            "percentile",
+            "tier",
+            "joined",
+            "template",
+        ] {
             assert!(!out.to_lowercase().contains(leak), "{leak} in: {out}");
         }
     }
@@ -358,11 +449,32 @@ mod tests {
     fn an_empty_role_set_is_distinguishable_from_a_closed_door() {
         let (resource, principal) = ([6u8; 32], [7u8; 32]);
         let none = RoleView::of_row(principal, resource, &Row::default());
-        let connect_only = RoleView::of_row(principal, resource, &Row { roles: BTreeSet::new(), connect: true });
+        let connect_only = RoleView::of_row(
+            principal,
+            resource,
+            &Row {
+                roles: BTreeSet::new(),
+                connect: true,
+            },
+        );
 
-        assert!(none.render().contains("roles        none"), "{}", none.render());
-        assert!(none.render().contains("may reach the resource  no"), "{}", none.render());
-        assert!(connect_only.render().contains("may reach the resource  yes"), "{}", connect_only.render());
+        assert!(
+            none.render().contains("roles        none"),
+            "{}",
+            none.render()
+        );
+        assert!(
+            none.render().contains("may reach the resource  no"),
+            "{}",
+            none.render()
+        );
+        assert!(
+            connect_only
+                .render()
+                .contains("may reach the resource  yes"),
+            "{}",
+            connect_only.render()
+        );
     }
 
     #[test]
@@ -370,13 +482,36 @@ mod tests {
         let exposed = ExposureView::new(4, true, true, true);
         let bare = ExposureView::new(0, false, false, false);
 
-        assert!(exposed.render().contains("identities directly below  4"), "{}", exposed.render());
-        assert!(exposed.render().contains("payload relayed here       yes"), "{}", exposed.render());
-        assert!(exposed.render().contains("resources hosted here      yes"), "{}", exposed.render());
-        assert!(exposed.render().contains("attaches to a patron       yes"), "{}", exposed.render());
+        assert!(
+            exposed.render().contains("identities directly below  4"),
+            "{}",
+            exposed.render()
+        );
+        assert!(
+            exposed.render().contains("payload relayed here       yes"),
+            "{}",
+            exposed.render()
+        );
+        assert!(
+            exposed.render().contains("resources hosted here      yes"),
+            "{}",
+            exposed.render()
+        );
+        assert!(
+            exposed.render().contains("attaches to a patron       yes"),
+            "{}",
+            exposed.render()
+        );
 
         // a root that carries nothing still answers all four questions
-        assert_eq!(bare.render().lines().count(), exposed.render().lines().count());
-        assert!(bare.render().contains("attaches to nobody"), "{}", bare.render());
+        assert_eq!(
+            bare.render().lines().count(),
+            exposed.render().lines().count()
+        );
+        assert!(
+            bare.render().contains("attaches to nobody"),
+            "{}",
+            bare.render()
+        );
     }
 }

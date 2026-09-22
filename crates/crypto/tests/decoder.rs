@@ -16,7 +16,10 @@ use std::time::{Duration, Instant};
 const T: Duration = Duration::from_secs(1);
 
 fn accept_set() -> Vec<Fixture> {
-    fixtures().into_iter().filter(|f| f.outcome == "accept").collect()
+    fixtures()
+        .into_iter()
+        .filter(|f| f.outcome == "accept")
+        .collect()
 }
 
 fn timed<R>(f: impl FnOnce() -> R) -> R {
@@ -97,14 +100,21 @@ fn dec_02_seeded_mutations_get_a_verdict_and_valid_ones_round_trip() {
                 Ok(()) => {
                     let span = canonical_span(&f.kind, &v);
                     let item = parse_all(span).expect("valid means parsed");
-                    assert_eq!(reencode(&item, span), span, "{}: a valid variant must round-trip", f.id);
+                    assert_eq!(
+                        reencode(&item, span),
+                        span,
+                        "{}: a valid variant must round-trip",
+                        f.id
+                    );
                     valid += 1;
                 }
                 Err(_) => malformed += 1,
             }
         }
     }
-    eprintln!("DEC-02: seed {SEED:#x}, {VARIANTS} variants per entry: {valid} valid, {malformed} malformed");
+    eprintln!(
+        "DEC-02: seed {SEED:#x}, {VARIANTS} variants per entry: {valid} valid, {malformed} malformed"
+    );
     assert_eq!(valid + malformed, set.len() * VARIANTS);
 }
 
@@ -130,7 +140,10 @@ fn dec_03_declared_lengths_beyond_the_input_are_rejected_at_once() {
     c.extend_from_slice(&body[adv..]);
     for (name, input) in [("bstr", a), ("array", b), ("map", c)] {
         let r = timed(|| decode(&ids, "P-adopt-min", "body", &input));
-        assert!(r.is_err(), "{name}: declared length beyond the input was accepted");
+        assert!(
+            r.is_err(),
+            "{name}: declared length beyond the input was accepted"
+        );
     }
 }
 
@@ -140,7 +153,11 @@ fn dec_04_self_describe_tag_is_rejected() {
     let ids = identities();
     let env = fixture("P-adopt-min").bytes;
     let tag = [0xd9, 0xd9, 0xf7];
-    let tagged = |b: &[u8]| { let mut v = tag.to_vec(); v.extend_from_slice(b); v };
+    let tagged = |b: &[u8]| {
+        let mut v = tag.to_vec();
+        v.extend_from_slice(b);
+        v
+    };
     assert!(decode(&ids, "P-adopt-min", "envelope", &tagged(&env)).is_err());
     assert!(decode(&ids, "P-adopt-min", "envelope", &env).is_ok());
     let body = body_of(&env);
@@ -178,7 +195,10 @@ fn dec_08_unknown_key_on_every_unsigned_message_is_rejected() {
     let extra = ext_entry(99, &[0xc0, 0xff, 0xee]);
     let mut tried = 0usize;
     for f in accept_set() {
-        let unsigned = f.kind == "frame" || f.kind == "reply" || f.kind == "e2e-payload" || unsigned_family(&f.kind).is_some();
+        let unsigned = f.kind == "frame"
+            || f.kind == "reply"
+            || f.kind == "e2e-payload"
+            || unsigned_family(&f.kind).is_some();
         if !unsigned {
             continue;
         }
@@ -188,7 +208,11 @@ fn dec_08_unknown_key_on_every_unsigned_message_is_rejected() {
             let parts = array_item_ranges(&span, 0).unwrap();
             // control frame 7 carries a Delegation, a signed object whose
             // unknown keys are extensions (`wire-format.md` §8.2, §1)
-            if matches!((Parser { b: &span }).item(parts[0].start), Ok((Item::Uint(7), _))) && f.id.contains("frame") {
+            if matches!(
+                (Parser { b: &span }).item(parts[0].start),
+                Ok((Item::Uint(7), _))
+            ) && f.id.contains("frame")
+            {
                 continue;
             }
             parts[1].start
@@ -199,9 +223,21 @@ fn dec_08_unknown_key_on_every_unsigned_message_is_rejected() {
             continue; // the verifier-query body is an array
         }
         let modified = append_entries(&span, map_at, &extra, 1);
-        let modified = if f.kind == "frame" { framed(&modified) } else { modified };
-        assert!(decode(&ids, &f.id, &f.kind, &modified).is_err(), "{}: unknown key accepted", f.id);
-        assert!(decode(&ids, &f.id, &f.kind, &f.bytes).is_ok(), "{}: original rejected", f.id);
+        let modified = if f.kind == "frame" {
+            framed(&modified)
+        } else {
+            modified
+        };
+        assert!(
+            decode(&ids, &f.id, &f.kind, &modified).is_err(),
+            "{}: unknown key accepted",
+            f.id
+        );
+        assert!(
+            decode(&ids, &f.id, &f.kind, &f.bytes).is_ok(),
+            "{}: original rejected",
+            f.id
+        );
         tried += 1;
     }
     assert!(tried >= 30, "{tried} unsigned vectors exercised");
@@ -248,7 +284,11 @@ fn dec_10_duplicated_unknown_key_is_rejected() {
 fn dec_11_non_deterministic_unknown_value_is_rejected() {
     let ids = identities();
     let body = extensions_body();
-    for bad in [vec![0x9f, 0x05, 0xff], vec![0x18, 0x0a], vec![0x58, 0x03, 0xc0, 0xff, 0xee]] {
+    for bad in [
+        vec![0x9f, 0x05, 0xff],
+        vec![0x18, 0x0a],
+        vec![0x58, 0x03, 0xc0, 0xff, 0xee],
+    ] {
         let v = replace_value(&body, 0, 99, &bad);
         assert!(decode(&ids, "", "body", &v).is_err(), "{bad:02x?} accepted");
     }
@@ -337,10 +377,27 @@ fn dec_18_extension_bounds_hold_in_every_nested_signed_map() {
     for k in 100..116u64 {
         sixteen.extend(ext_entry(k, &[0x01]));
     }
-    assert!(decode(&ids, "", "body", &append_entries(&body, first, &sixteen, 16)).is_ok());
+    assert!(
+        decode(
+            &ids,
+            "",
+            "body",
+            &append_entries(&body, first, &sixteen, 16)
+        )
+        .is_ok()
+    );
     let mut seventeen = sixteen.clone();
     seventeen.extend(ext_entry(116, &[0x01]));
-    assert!(decode(&ids, "", "body", &append_entries(&body, first, &seventeen, 17)).unwrap_err().contains("16 extension keys"));
+    assert!(
+        decode(
+            &ids,
+            "",
+            "body",
+            &append_entries(&body, first, &seventeen, 17)
+        )
+        .unwrap_err()
+        .contains("16 extension keys")
+    );
     // a network point inside an endpoint record: a value of 1024 encoded
     // bytes passes and 1025 does not, the slice counting head and all
     let er = fixture("P-endpointrecord").bytes.clone();
@@ -348,14 +405,39 @@ fn dec_18_extension_bounds_hold_in_every_nested_signed_map() {
     let point = array_item_ranges(&er, r2.start).unwrap()[0].start;
     // the entry helper wraps its payload as a bstr: a 1021-byte payload is
     // a value of 1024 encoded bytes, its three-byte head included
-    assert_eq!(decode(&ids, "", "EndpointRecord", &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1021]), 1)), Ok(()));
-    assert!(decode(&ids, "", "EndpointRecord", &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1022]), 1)).unwrap_err().contains("over 1024"));
+    assert_eq!(
+        decode(
+            &ids,
+            "",
+            "EndpointRecord",
+            &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1021]), 1)
+        ),
+        Ok(())
+    );
+    assert!(
+        decode(
+            &ids,
+            "",
+            "EndpointRecord",
+            &append_entries(&er, point, &ext_entry(100, &vec![0u8; 1022]), 1)
+        )
+        .unwrap_err()
+        .contains("over 1024")
+    );
     // and the record's own map is bounded as before
     let mut many = Vec::new();
     for k in 100..117u64 {
         many.extend(ext_entry(k, &[0x01]));
     }
-    assert!(decode(&ids, "", "EndpointRecord", &append_entries(&er, 0, &many, 17)).is_err());
+    assert!(
+        decode(
+            &ids,
+            "",
+            "EndpointRecord",
+            &append_entries(&er, 0, &many, 17)
+        )
+        .is_err()
+    );
 }
 
 /// A Locator over `packed` with `nibbles`, anchored at a fixed keyhash at seqno [5, 0].
@@ -386,11 +468,32 @@ fn dec_23_a_packed_path_departing_from_its_encoding_is_rejected() {
     ok(&[0x10], 1).expect("one nibble, zero pad");
     ok(&[0x12], 2).expect("two nibbles");
     ok(&[0x12, 0x30], 3).expect("three nibbles, zero pad");
-    assert!(ok(&[], 1).unwrap_err().contains("byte length"), "one nibble claimed, no bytes");
-    assert!(ok(&[0x12, 0x34], 2).unwrap_err().contains("byte length"), "a surplus byte");
-    assert!(ok(&[0x12], 3).unwrap_err().contains("byte length"), "a byte short");
-    assert!(ok(&[0x1a], 2).unwrap_err().contains("nibble over 9"), "nibble value 10");
-    assert!(ok(&[0xa0], 1).unwrap_err().contains("nibble over 9"), "nibble value 10, first position");
-    assert!(ok(&[0x1f], 1).unwrap_err().contains("pad nibble"), "a nonzero pad nibble");
-    assert!(ok(&[0x12, 0x35], 3).unwrap_err().contains("pad nibble"), "a nonzero pad nibble, three nibbles");
+    assert!(
+        ok(&[], 1).unwrap_err().contains("byte length"),
+        "one nibble claimed, no bytes"
+    );
+    assert!(
+        ok(&[0x12, 0x34], 2).unwrap_err().contains("byte length"),
+        "a surplus byte"
+    );
+    assert!(
+        ok(&[0x12], 3).unwrap_err().contains("byte length"),
+        "a byte short"
+    );
+    assert!(
+        ok(&[0x1a], 2).unwrap_err().contains("nibble over 9"),
+        "nibble value 10"
+    );
+    assert!(
+        ok(&[0xa0], 1).unwrap_err().contains("nibble over 9"),
+        "nibble value 10, first position"
+    );
+    assert!(
+        ok(&[0x1f], 1).unwrap_err().contains("pad nibble"),
+        "a nonzero pad nibble"
+    );
+    assert!(
+        ok(&[0x12, 0x35], 3).unwrap_err().contains("pad nibble"),
+        "a nonzero pad nibble, three nibbles"
+    );
 }

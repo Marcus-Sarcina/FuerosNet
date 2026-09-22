@@ -21,7 +21,15 @@ impl Proximity for Channels {
         self.0.clone()
     }
     fn run(&self, kind: ChannelKind, _peer: &[u8; 32]) -> ChannelOutcome {
-        ChannelOutcome { kind, result: ChannelResult::Pass, resolution_m: if kind == ChannelKind::Uwb { Some(1) } else { None } }
+        ChannelOutcome {
+            kind,
+            result: ChannelResult::Pass,
+            resolution_m: if kind == ChannelKind::Uwb {
+                Some(1)
+            } else {
+                None
+            },
+        }
     }
 }
 
@@ -39,7 +47,11 @@ impl Cam {
         self.captures.borrow().iter().map(|(_, p)| *p).collect()
     }
     pub fn first_capture_after(&self, t: u64) -> Option<u64> {
-        self.captures.borrow().iter().map(|(at, _)| *at).find(|at| *at >= t)
+        self.captures
+            .borrow()
+            .iter()
+            .map(|(at, _)| *at)
+            .find(|at| *at >= t)
     }
 }
 impl Camera for Cam {
@@ -49,7 +61,10 @@ impl Camera for Cam {
         pixels.extend_from_slice(format!(":{prompt:?}").as_bytes());
         let metadata = BTreeMap::from([
             ("GPSLatitude".to_string(), b"51.5074N".to_vec()),
-            ("DateTimeOriginal".to_string(), b"2026:09:11 10:00:00".to_vec()),
+            (
+                "DateTimeOriginal".to_string(),
+                b"2026:09:11 10:00:00".to_vec(),
+            ),
             ("Model".to_string(), b"HarnessCam 1".to_vec()),
         ]);
         RawFrame { pixels, metadata }
@@ -134,14 +149,47 @@ pub fn face(name: &str) -> Vec<u8> {
     format!("face:{name:<10}").into_bytes()
 }
 
-pub fn device(channels: Vec<ChannelKind>, clock: Rc<Cell<u64>>, seed: u64, skew_ms: i64) -> (Device, Handles) {
-    let cam = Rc::new(Cam { facing: RefCell::new(vec![]), clock: clock.clone(), captures: RefCell::new(vec![]) });
+pub fn device(
+    channels: Vec<ChannelKind>,
+    clock: Rc<Cell<u64>>,
+    seed: u64,
+    skew_ms: i64,
+) -> (Device, Handles) {
+    let cam = Rc::new(Cam {
+        facing: RefCell::new(vec![]),
+        clock: clock.clone(),
+        captures: RefCell::new(vec![]),
+    });
     let person = Rc::new(Person(RefCell::new(vec![])));
-    let hook = Rc::new(Hook { clock: clock.clone(), notices: RefCell::new(vec![]) });
-    let clk: Rc<dyn Clock> = if skew_ms == 0 { Rc::new(SharedClock(clock)) } else { Rc::new(SkewedClock(clock, skew_ms)) };
+    let hook = Rc::new(Hook {
+        clock: clock.clone(),
+        notices: RefCell::new(vec![]),
+    });
+    let clk: Rc<dyn Clock> = if skew_ms == 0 {
+        Rc::new(SharedClock(clock))
+    } else {
+        Rc::new(SkewedClock(clock, skew_ms))
+    };
     let reach = Rc::new(Reach(Cell::new(true)));
-    let d = Device { proximity: Rc::new(Channels(channels)), camera: cam.clone(), clock: clk, random: Rc::new(Seeded(Cell::new(seed))), operator: person.clone(), notifier: hook.clone(), engine: Rc::new(HashEngine::new(16)), direct: reach.clone() };
-    (d, Handles { cam, person, hook, reach })
+    let d = Device {
+        proximity: Rc::new(Channels(channels)),
+        camera: cam.clone(),
+        clock: clk,
+        random: Rc::new(Seeded(Cell::new(seed))),
+        operator: person.clone(),
+        notifier: hook.clone(),
+        engine: Rc::new(HashEngine::new(16)),
+        direct: reach.clone(),
+    };
+    (
+        d,
+        Handles {
+            cam,
+            person,
+            hook,
+            reach,
+        },
+    )
 }
 
 /// A harness of named clients, all with the same channels.
@@ -157,17 +205,35 @@ pub fn setup(names: &[&'static str], channels: &[ChannelKind]) -> Setup {
     setup_with(names, channels, &[])
 }
 
-pub fn setup_with(names: &[&'static str], channels: &[ChannelKind], skews: &[(&str, i64)]) -> Setup {
+pub fn setup_with(
+    names: &[&'static str],
+    channels: &[ChannelKind],
+    skews: &[(&str, i64)],
+) -> Setup {
     let clock = Rc::new(Cell::new(1_790_000_000_000u64));
     let mut h = Harness::default();
     let mut handles = BTreeMap::new();
     for (i, n) in names.iter().enumerate() {
-        let skew = skews.iter().find(|(s, _)| s == n).map(|(_, k)| *k).unwrap_or(0);
-        let (d, hd) = device(channels.to_vec(), clock.clone(), 0x9e37_79b9_7f4a_7c15 ^ (i as u64 + 1), skew);
+        let skew = skews
+            .iter()
+            .find(|(s, _)| s == n)
+            .map(|(_, k)| *k)
+            .unwrap_or(0);
+        let (d, hd) = device(
+            channels.to_vec(),
+            clock.clone(),
+            0x9e37_79b9_7f4a_7c15 ^ (i as u64 + 1),
+            skew,
+        );
         h.add(Client::new(id(n), ids(), Config::default(), d));
         handles.insert(*n, hd);
     }
-    Setup { h, handles, clock, last_start: 0 }
+    Setup {
+        h,
+        handles,
+        clock,
+        last_start: 0,
+    }
 }
 
 impl Setup {
@@ -179,9 +245,20 @@ impl Setup {
         *self.handles[a].cam.facing.borrow_mut() = face(b);
         *self.handles[b].cam.facing.borrow_mut() = face(a);
     }
-    pub fn run(&mut self, a: &str, b: &str, a_nom: &[&str], b_nom: &[&str]) -> Result<[u8; 32], Abort> {
+    pub fn run(
+        &mut self,
+        a: &str,
+        b: &str,
+        a_nom: &[&str],
+        b_nom: &[&str],
+    ) -> Result<[u8; 32], Abort> {
         self.face_off(a, b);
-        self.h.run(kh(a), kh(b), a_nom.iter().map(|n| kh(n)).collect(), b_nom.iter().map(|n| kh(n)).collect())
+        self.h.run(
+            kh(a),
+            kh(b),
+            a_nom.iter().map(|n| kh(n)).collect(),
+            b_nom.iter().map(|n| kh(n)).collect(),
+        )
     }
     pub fn client(&mut self, n: &str) -> &mut Client {
         self.h.client(&kh(n))

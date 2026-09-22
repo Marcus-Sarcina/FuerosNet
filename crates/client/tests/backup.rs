@@ -4,16 +4,20 @@
 mod common;
 
 use common::*;
+use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
 use rhtn_client::backup::{self, Contents, Cost, Failure, Wrap};
 use rhtn_client::record::*;
 use rhtn_client::store::{Capture, ClientStore, Frame, OwnSeed, SealParams, seal};
-use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
 
 /// Cheap enough to run in a test and still Argon2id: the cost is the
 /// operator's number, and a test asserting a shape has no business
 /// spending 64 MiB on it.
 fn cheap() -> Cost {
-    Cost { m_kib: 64, passes: 1, lanes: 1 }
+    Cost {
+        m_kib: 64,
+        passes: 1,
+        lanes: 1,
+    }
 }
 
 fn full_set() -> DisclosureSet {
@@ -38,7 +42,11 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
         started_at: t,
         finalized_at: t + 600,
         participants: [kh("alice"), kh("bob")],
-        witnesses: vec![Witness { keyhash: kh("w1"), nominated_by: kh("alice"), flags: 7 }],
+        witnesses: vec![Witness {
+            keyhash: kh("w1"),
+            nominated_by: kh("alice"),
+            flags: 7,
+        }],
         responses: vec![],
         root: disclosure_root(&set),
     };
@@ -48,10 +56,43 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     let mut store = ClientStore::default();
     store.records.insert(rec.txid, rec.bytes.clone());
     store.disclosures.insert(rec.txid, set);
-    store.seeds.insert(rec.txid, OwnSeed { seed: [9; 32], counterparty: kh("bob"), ceremony_id: [4; 32], finalized_at: t + 600 });
-    let capture = Capture { template: vec![3; 32], frames: vec![Frame { at_ms: 7, bytes: b"a frame".to_vec() }], modality: 0, template_version: 1 };
-    store.sealed.insert(rec.txid, seal(&SealParams::default(), &[1; 32], kh("bob"), kh("alice"), [4; 32], &capture));
-    (Contents { seeds: Some([[1; 32], [2; 32]]), records: vec![rec.bytes.clone()], store }, rec.txid)
+    store.seeds.insert(
+        rec.txid,
+        OwnSeed {
+            seed: [9; 32],
+            counterparty: kh("bob"),
+            ceremony_id: [4; 32],
+            finalized_at: t + 600,
+        },
+    );
+    let capture = Capture {
+        template: vec![3; 32],
+        frames: vec![Frame {
+            at_ms: 7,
+            bytes: b"a frame".to_vec(),
+        }],
+        modality: 0,
+        template_version: 1,
+    };
+    store.sealed.insert(
+        rec.txid,
+        seal(
+            &SealParams::default(),
+            &[1; 32],
+            kh("bob"),
+            kh("alice"),
+            [4; 32],
+            &capture,
+        ),
+    );
+    (
+        Contents {
+            seeds: Some([[1; 32], [2; 32]]),
+            records: vec![rec.bytes.clone()],
+            store,
+        },
+        rec.txid,
+    )
 }
 
 // acceptance: ARC-23
@@ -65,19 +106,32 @@ fn a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole() {
     // **the KEK is never stored with the ciphertext** (design §13.7.1):
     // neither the passphrase nor anything derived from it is in the blob,
     // and neither is the plaintext it protects
-    assert!(!find(&blob, b"a passphrase"), "the passphrase is not in the backup");
+    assert!(
+        !find(&blob, b"a passphrase"),
+        "the passphrase is not in the backup"
+    );
     let kek_probe = before.seeds.unwrap()[0];
-    assert!(!find(&blob, &kek_probe), "nor is the identity seed in the clear");
+    assert!(
+        !find(&blob, &kek_probe),
+        "nor is the identity seed in the clear"
+    );
     assert!(!find(&blob, b"a frame"), "nor a captured frame");
 
     let after = backup::import(&blob, b"a passphrase").expect("imports");
-    assert_eq!(after, before, "everything a device loss takes away comes back");
+    assert_eq!(
+        after, before,
+        "everything a device loss takes away comes back"
+    );
 
     // the salt is fresh per backup, so two exports of the same contents
     // under the same passphrase are different bytes
-    let again = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let again =
+        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
     assert_ne!(again, blob, "a fresh salt and fresh nonces each time");
-    assert_eq!(backup::import(&again, b"a passphrase").expect("imports"), before);
+    assert_eq!(
+        backup::import(&again, b"a passphrase").expect("imports"),
+        before
+    );
 }
 
 // acceptance: ARC-24
@@ -85,20 +139,33 @@ fn a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole() {
 fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name() {
     let mut w = World::new();
     let (before, _) = contents(&mut w);
-    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let blob =
+        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
 
     // **the secret is wrong, which is a different thing to tell a person
     // than a tampered payload**, and both are authentication failures
-    assert_eq!(backup::import(&blob, b"the wrong one"), Err(Failure::Secret));
+    assert_eq!(
+        backup::import(&blob, b"the wrong one"),
+        Err(Failure::Secret)
+    );
     assert_eq!(backup::import(&blob, b""), Err(Failure::Secret));
 
     // altering the header makes the data key refuse to unwrap: the header
     // is the wrap's aad, so a changed cost or salt is not a different
     // derivation but a failure
     let mut headered = blob.clone();
-    let at = headered.iter().position(|b| *b == 64).expect("the memory cost is in there");
+    let at = headered
+        .iter()
+        .position(|b| *b == 64)
+        .expect("the memory cost is in there");
     headered[at] = 65;
-    assert!(matches!(backup::import(&headered, b"a passphrase"), Err(Failure::Secret) | Err(Failure::Malformed(_))), "an altered header does not open");
+    assert!(
+        matches!(
+            backup::import(&headered, b"a passphrase"),
+            Err(Failure::Secret) | Err(Failure::Malformed(_))
+        ),
+        "an altered header does not open"
+    );
 
     // altering the payload authenticates the key and fails the body: the
     // two steps are distinguishable, which is what lets a person be told
@@ -106,13 +173,19 @@ fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name()
     let mut tampered = blob.clone();
     let n = tampered.len();
     tampered[n - 20] ^= 1;
-    assert_eq!(backup::import(&tampered, b"a passphrase"), Err(Failure::Payload));
+    assert_eq!(
+        backup::import(&tampered, b"a passphrase"),
+        Err(Failure::Payload)
+    );
 
     // **nothing is returned from a backup that did not authenticate
     // whole**: a truncated blob is refused rather than half-imported
     for cut in [blob.len() - 1, blob.len() / 2, 8, 0] {
         let short = &blob[..cut];
-        assert!(backup::import(short, b"a passphrase").is_err(), "a backup cut at {cut} opens nothing");
+        assert!(
+            backup::import(short, b"a passphrase").is_err(),
+            "a backup cut at {cut} opens nothing"
+        );
     }
 }
 
@@ -125,21 +198,40 @@ fn the_wrapping_is_replaceable_without_touching_what_it_wraps() {
     // **the cost is the operator's and travels in the header**, so a
     // reader uses what the writer used rather than what it would have
     // chosen: two backups at different costs both open
-    for cost in [cheap(), Cost { m_kib: 128, passes: 2, lanes: 1 }] {
-        let blob = backup::export(&before, &Wrap::passphrase(cost), b"a passphrase").expect("exports");
-        assert_eq!(backup::import(&blob, b"a passphrase").expect("imports"), before, "at {cost:?}");
+    for cost in [
+        cheap(),
+        Cost {
+            m_kib: 128,
+            passes: 2,
+            lanes: 1,
+        },
+    ] {
+        let blob =
+            backup::export(&before, &Wrap::passphrase(cost), b"a passphrase").expect("exports");
+        assert_eq!(
+            backup::import(&blob, b"a passphrase").expect("imports"),
+            before,
+            "at {cost:?}"
+        );
     }
 
     // **a wrap method this reader does not implement is named, not
     // guessed** (design §13.7.1: passphrase in v1, hardware token later,
     // split shares later still — none of which changes the format)
-    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let blob =
+        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
     let future = with_wrap_method(&blob, 7);
-    assert_eq!(backup::import(&future, b"a passphrase"), Err(Failure::UnsupportedWrap(7)));
+    assert_eq!(
+        backup::import(&future, b"a passphrase"),
+        Err(Failure::UnsupportedWrap(7))
+    );
 
     // and a later format version likewise
     let later = with_version(&blob, 2);
-    assert_eq!(backup::import(&later, b"a passphrase"), Err(Failure::Version(2)));
+    assert_eq!(
+        backup::import(&later, b"a passphrase"),
+        Err(Failure::Version(2))
+    );
 }
 
 fn find(hay: &[u8], needle: &[u8]) -> bool {
@@ -160,17 +252,28 @@ fn with_version(blob: &[u8], version: u64) -> Vec<u8> {
 fn rewrite_header_field(blob: &[u8], index: usize, value: u64) -> Vec<u8> {
     use rhtn_codec::cbor::{Item, parse_all};
     let item = parse_all(blob).expect("a backup");
-    let Item::Array(parts) = &item else { panic!("three fields") };
-    let Item::Bytes(hr) = &parts[0] else { panic!("a header") };
+    let Item::Array(parts) = &item else {
+        panic!("three fields")
+    };
+    let Item::Bytes(hr) = &parts[0] else {
+        panic!("a header")
+    };
     let header = &blob[hr.clone()];
     let hitem = parse_all(header).expect("a header");
-    let Item::Array(f) = &hitem else { panic!("an array") };
-    let Item::Uint(_) = &f[index] else { panic!("a uint") };
+    let Item::Array(f) = &hitem else {
+        panic!("an array")
+    };
+    let Item::Uint(_) = &f[index] else {
+        panic!("a uint")
+    };
     let mut fresh = header.to_vec();
     // a uint under 24 is one byte at a known offset: the array head, then
     // one byte per preceding small uint
     let at = 1 + index;
-    assert!(value < 24 && fresh[at] < 24, "only small values move no bytes");
+    assert!(
+        value < 24 && fresh[at] < 24,
+        "only small values move no bytes"
+    );
     fresh[at] = value as u8;
     let mut out = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut out, 3);
@@ -196,23 +299,46 @@ fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
 
     // inside the window, everything lands
     let mut fresh = before.clone();
-    assert_eq!(fresh.scan(finalized + 60, two_years), backup::Discarded::default(), "nothing is past anything yet");
+    assert_eq!(
+        fresh.scan(finalized + 60, two_years),
+        backup::Discarded::default(),
+        "nothing is past anything yet"
+    );
     assert_eq!(fresh, before);
 
     // a day past it, the likeness goes and the history stays
     let mut aged = before.clone();
     let out = aged.scan(finalized + two_years + 86_400, two_years);
-    assert_eq!(out, backup::Discarded { captures: 1, seeds: 1 }, "the capture and the seed");
-    assert!(aged.store.sealed.is_empty(), "no likeness past the window it was committed under");
-    assert!(aged.store.seeds.is_empty(), "nor the seed that would release one");
+    assert_eq!(
+        out,
+        backup::Discarded {
+            captures: 1,
+            seeds: 1
+        },
+        "the capture and the seed"
+    );
+    assert!(
+        aged.store.sealed.is_empty(),
+        "no likeness past the window it was committed under"
+    );
+    assert!(
+        aged.store.seeds.is_empty(),
+        "nor the seed that would release one"
+    );
 
     // **history is not likeness and is not touched** — §13.7.1's concern
     // is photographs outliving the commitment made about them, and L §2
     // separately forbids deleting presence records with a chain prune
     assert_eq!(aged.store.records, before.store.records, "the records stay");
-    assert_eq!(aged.store.disclosures, before.store.disclosures, "and what they committed to");
+    assert_eq!(
+        aged.store.disclosures, before.store.disclosures,
+        "and what they committed to"
+    );
     assert_eq!(aged.records, before.records, "and the archive");
-    assert_eq!(aged.seeds, before.seeds, "and the identity, which is not a retention question");
+    assert_eq!(
+        aged.seeds, before.seeds,
+        "and the identity, which is not a retention question"
+    );
 }
 
 /// The scan runs through the client, on its own clock and its own window,
@@ -223,7 +349,8 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     let mut w = World::new();
     let (before, txid) = contents(&mut w);
     let finalized = before.store.seeds[&txid].finalized_at;
-    let blob = backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let blob =
+        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
 
     // a client whose clock is inside the window imports the lot
     let mut c = fresh("alice", (finalized + 60) * 1000);
@@ -235,7 +362,14 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     // and is told so
     c = fresh("alice", (finalized + 2 * 365 * 86_400 + 1) * 1000);
     let (kept, dropped) = c.import(&blob, b"a passphrase").expect("imports");
-    assert_eq!(dropped, backup::Discarded { captures: 1, seeds: 1 }, "reported, not swallowed");
+    assert_eq!(
+        dropped,
+        backup::Discarded {
+            captures: 1,
+            seeds: 1
+        },
+        "reported, not swallowed"
+    );
     assert!(kept.store.sealed.is_empty());
     assert_eq!(kept.store.records, before.store.records);
 
@@ -246,9 +380,14 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     // the round trip through the client's own export
     let mut source = fresh("alice", (finalized + 60) * 1000);
     source.store = before.store.clone();
-    let own = source.export(before.seeds, cheap(), b"another passphrase").expect("exports");
+    let own = source
+        .export(before.seeds, cheap(), b"another passphrase")
+        .expect("exports");
     let (back, _) = source.import(&own, b"another passphrase").expect("imports");
-    assert_eq!(back.store, before.store, "what this client wrote, this client reads");
+    assert_eq!(
+        back.store, before.store,
+        "what this client wrote, this client reads"
+    );
     assert_eq!(back.seeds, before.seeds);
 }
 

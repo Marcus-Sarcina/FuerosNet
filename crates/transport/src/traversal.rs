@@ -84,7 +84,13 @@ impl TraversalSocket {
         let sock = std::net::UdpSocket::bind(addr)?;
         sock.set_nonblocking(true)?;
         let inner = TokioRuntime.wrap_udp_socket(sock)?;
-        Ok(Arc::new(TraversalSocket { inner, answered: AtomicU64::new(0), asked: AtomicU64::new(0), pending: Mutex::new(HashMap::new()), nat }))
+        Ok(Arc::new(TraversalSocket {
+            inner,
+            answered: AtomicU64::new(0),
+            asked: AtomicU64::new(0),
+            pending: Mutex::new(HashMap::new()),
+            nat,
+        }))
     }
 
     /// The socket's own address.
@@ -96,15 +102,31 @@ impl TraversalSocket {
         match self.nat {
             Some(nat) => {
                 let wrapped = wrap(to, bytes);
-                self.inner.try_send(&Transmit { destination: nat, ecn: None, contents: &wrapped, segment_size: None, src_ip: None })
+                self.inner.try_send(&Transmit {
+                    destination: nat,
+                    ecn: None,
+                    contents: &wrapped,
+                    segment_size: None,
+                    src_ip: None,
+                })
             }
-            None => self.inner.try_send(&Transmit { destination: to, ecn: None, contents: bytes, segment_size: None, src_ip: None }),
+            None => self.inner.try_send(&Transmit {
+                destination: to,
+                ecn: None,
+                contents: bytes,
+                segment_size: None,
+                src_ip: None,
+            }),
         }
     }
 
     /// Ask `server` what address it sees this socket at (RFC 8489 §5): the
     /// server-reflexive candidate.  Times out where nothing answers.
-    pub async fn reflexive(self: &Arc<Self>, server: SocketAddr, timeout: std::time::Duration) -> io::Result<SocketAddr> {
+    pub async fn reflexive(
+        self: &Arc<Self>,
+        server: SocketAddr,
+        timeout: std::time::Duration,
+    ) -> io::Result<SocketAddr> {
         let txid: [u8; 12] = crate::tls::random_bytes();
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(txid, tx);
@@ -115,7 +137,9 @@ impl TraversalSocket {
         loop {
             match self.send_raw(server, &req) {
                 Ok(()) => break,
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => tokio::time::sleep(std::time::Duration::from_millis(5)).await,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await
+                }
                 Err(e) => {
                     self.pending.lock().unwrap().remove(&txid);
                     return Err(e);
@@ -123,14 +147,20 @@ impl TraversalSocket {
             }
             if tokio::time::Instant::now() > deadline {
                 self.pending.lock().unwrap().remove(&txid);
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "socket not writable"));
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "socket not writable",
+                ));
             }
         }
         match tokio::time::timeout_at(deadline, rx).await {
             Ok(Ok(addr)) => Ok(addr),
             _ => {
                 self.pending.lock().unwrap().remove(&txid);
-                Err(io::Error::new(io::ErrorKind::TimedOut, "no binding response"))
+                Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "no binding response",
+                ))
             }
         }
     }
@@ -143,11 +173,19 @@ impl TraversalSocket {
             return true;
         }
         match stun::parse(datagram) {
-            Some(stun::Parsed { kind: stun::Binding::Request, txid, .. }) => {
+            Some(stun::Parsed {
+                kind: stun::Binding::Request,
+                txid,
+                ..
+            }) => {
                 self.answered.fetch_add(1, Ordering::SeqCst);
                 let _ = self.send_raw(from, &stun::binding_response(&txid, from));
             }
-            Some(stun::Parsed { kind: stun::Binding::Response, txid, mapped: Some(addr) }) => {
+            Some(stun::Parsed {
+                kind: stun::Binding::Response,
+                txid,
+                mapped: Some(addr),
+            }) => {
                 if let Some(tx) = self.pending.lock().unwrap().remove(&txid) {
                     let _ = tx.send(addr);
                 }
@@ -167,13 +205,24 @@ impl AsyncUdpSocket for TraversalSocket {
         match self.nat {
             Some(nat) => {
                 let wrapped = wrap(transmit.destination, transmit.contents);
-                self.inner.try_send(&Transmit { destination: nat, ecn: transmit.ecn, contents: &wrapped, segment_size: None, src_ip: None })
+                self.inner.try_send(&Transmit {
+                    destination: nat,
+                    ecn: transmit.ecn,
+                    contents: &wrapped,
+                    segment_size: None,
+                    src_ip: None,
+                })
             }
             None => self.inner.try_send(transmit),
         }
     }
 
-    fn poll_recv(&self, cx: &mut Context, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> Poll<io::Result<usize>> {
+    fn poll_recv(
+        &self,
+        cx: &mut Context,
+        bufs: &mut [IoSliceMut<'_>],
+        meta: &mut [RecvMeta],
+    ) -> Poll<io::Result<usize>> {
         loop {
             let n = match self.inner.poll_recv(cx, bufs, meta) {
                 Poll::Ready(Ok(n)) => n,
@@ -189,14 +238,22 @@ impl AsyncUdpSocket for TraversalSocket {
                 // the first, and the sender recovers only by retransmitting
                 // on a backoff — which is minutes, not milliseconds, once
                 // a message runs to a few thousand bytes.
-                let stride = if m.stride == 0 { m.len.max(1) } else { m.stride };
+                let stride = if m.stride == 0 {
+                    m.len.max(1)
+                } else {
+                    m.stride
+                };
                 let coalesced = m.len > stride;
                 let plain = self.nat.is_none();
                 // the fast path, and the only one a node on the real
                 // network takes: nothing to unwrap, and no STUN in the
                 // batch, so it passes exactly as it arrived and the
                 // receiver splits it by the stride it came with
-                if plain && !(0..m.len).step_by(stride).any(|o| stun::is_stun(&bufs[i][o..(o + stride).min(m.len)])) {
+                if plain
+                    && !(0..m.len)
+                        .step_by(stride)
+                        .any(|o| stun::is_stun(&bufs[i][o..(o + stride).min(m.len)]))
+                {
                     if kept != i {
                         let body = bufs[i][..m.len].to_vec();
                         bufs[kept][..body.len()].copy_from_slice(&body);
@@ -235,9 +292,17 @@ impl AsyncUdpSocket for TraversalSocket {
                     width = width.max(body.len());
                     out.extend_from_slice(&body);
                 }
-                let Some(from) = from.filter(|_| !out.is_empty()) else { continue };
+                let Some(from) = from.filter(|_| !out.is_empty()) else {
+                    continue;
+                };
                 bufs[kept][..out.len()].copy_from_slice(&out);
-                meta[kept] = RecvMeta { addr: from, len: out.len(), stride: width, ecn: m.ecn, dst_ip: m.dst_ip };
+                meta[kept] = RecvMeta {
+                    addr: from,
+                    len: out.len(),
+                    stride: width,
+                    ecn: m.ecn,
+                    dst_ip: m.dst_ip,
+                };
                 kept += 1;
                 let _ = coalesced;
             }
@@ -270,8 +335,16 @@ impl AsyncUdpSocket for TraversalSocket {
 
 /// A quinn endpoint on a traversal socket: a server's, answering STUN at
 /// the address it serves QUIC on, or a client's, able to ask.
-pub fn endpoint(socket: Arc<TraversalSocket>, server: Option<quinn::ServerConfig>) -> io::Result<quinn::Endpoint> {
-    quinn::Endpoint::new_with_abstract_socket(quinn::EndpointConfig::default(), server, socket, Arc::new(TokioRuntime))
+pub fn endpoint(
+    socket: Arc<TraversalSocket>,
+    server: Option<quinn::ServerConfig>,
+) -> io::Result<quinn::Endpoint> {
+    quinn::Endpoint::new_with_abstract_socket(
+        quinn::EndpointConfig::default(),
+        server,
+        socket,
+        Arc::new(TokioRuntime),
+    )
 }
 
 // ------------------------------------------------------------ candidates
@@ -310,10 +383,14 @@ pub fn encode_candidates(cs: &[Candidate]) -> Vec<u8> {
 pub fn decode_candidates(b: &[u8]) -> Result<Vec<Candidate>, String> {
     use rhtn_codec::cbor::*;
     let item = parse_all(b).map_err(|e| e.0)?;
-    let Item::Array(list) = &item else { return Err("candidates not an array".into()) };
+    let Item::Array(list) = &item else {
+        return Err("candidates not an array".into());
+    };
     let mut out = Vec::new();
     for c in list {
-        let Item::Array(f) = c else { return Err("candidate not an array".into()) };
+        let Item::Array(f) = c else {
+            return Err("candidate not an array".into());
+        };
         if f.len() != 3 {
             return Err("candidate has three fields".into());
         }
@@ -323,12 +400,21 @@ pub fn decode_candidates(b: &[u8]) -> Result<Vec<Candidate>, String> {
             _ => return Err("candidate kind".into()),
         };
         let ip = match &f[1] {
-            Item::Bytes(r) if r.len() == 4 => IpAddr::V4(<[u8; 4]>::try_from(&b[r.clone()]).unwrap().into()),
-            Item::Bytes(r) if r.len() == 16 => IpAddr::V6(<[u8; 16]>::try_from(&b[r.clone()]).unwrap().into()),
+            Item::Bytes(r) if r.len() == 4 => {
+                IpAddr::V4(<[u8; 4]>::try_from(&b[r.clone()]).unwrap().into())
+            }
+            Item::Bytes(r) if r.len() == 16 => {
+                IpAddr::V6(<[u8; 16]>::try_from(&b[r.clone()]).unwrap().into())
+            }
             _ => return Err("candidate address".into()),
         };
-        let port = as_uint(&f[2]).filter(|p| *p <= u16::MAX as u64).ok_or("candidate port")? as u16;
-        out.push(Candidate { kind, addr: SocketAddr::new(ip, port) });
+        let port = as_uint(&f[2])
+            .filter(|p| *p <= u16::MAX as u64)
+            .ok_or("candidate port")? as u16;
+        out.push(Candidate {
+            kind,
+            addr: SocketAddr::new(ip, port),
+        });
     }
     Ok(out)
 }
@@ -337,16 +423,27 @@ impl TraversalSocket {
     /// Gather this socket's candidates: its host address, and the
     /// server-reflexive address `stun` reports where one is given and it
     /// differs.
-    pub async fn gather(self: &Arc<Self>, stun: Option<SocketAddr>, timeout: std::time::Duration) -> Vec<Candidate> {
+    pub async fn gather(
+        self: &Arc<Self>,
+        stun: Option<SocketAddr>,
+        timeout: std::time::Duration,
+    ) -> Vec<Candidate> {
         let mut out = Vec::new();
         if let Ok(host) = self.addr() {
-            out.push(Candidate { kind: CandidateKind::Host, addr: host });
+            out.push(Candidate {
+                kind: CandidateKind::Host,
+                addr: host,
+            });
         }
         if let Some(server) = stun
             && let Ok(seen) = self.reflexive(server, timeout).await
-            && !out.iter().any(|c| c.addr == seen) {
-                out.push(Candidate { kind: CandidateKind::ServerReflexive, addr: seen });
-            }
+            && !out.iter().any(|c| c.addr == seen)
+        {
+            out.push(Candidate {
+                kind: CandidateKind::ServerReflexive,
+                addr: seen,
+            });
+        }
         out
     }
 }
@@ -356,7 +453,14 @@ impl TraversalSocket {
 /// once, authenticating as `me` against the pinned key for `peer`, and
 /// keep the first handshake that completes.  `None` within `timeout` is
 /// the direct path failing, and the relay is next.
-pub async fn connect_direct(endpoint: &quinn::Endpoint, me: &rhtn_crypto::SigningIdentity, pins: &crate::tls::Pins, peer: &[u8; 32], candidates: &[Candidate], timeout: std::time::Duration) -> Option<quinn::Connection> {
+pub async fn connect_direct(
+    endpoint: &quinn::Endpoint,
+    me: &rhtn_crypto::SigningIdentity,
+    pins: &crate::tls::Pins,
+    peer: &[u8; 32],
+    candidates: &[Candidate],
+    timeout: std::time::Duration,
+) -> Option<quinn::Connection> {
     let mut attempts = Vec::new();
     for c in candidates {
         if let Ok(connecting) = crate::tls::dial(endpoint, me, pins, peer, c.addr) {
@@ -405,5 +509,9 @@ where
             Poll::Pending
         }
     }
-    Select { futs, _t: std::marker::PhantomData }.await
+    Select {
+        futs,
+        _t: std::marker::PhantomData,
+    }
+    .await
 }

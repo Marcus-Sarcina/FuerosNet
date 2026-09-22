@@ -31,18 +31,23 @@ impl DirStore {
                 if let Ok(inner) = std::fs::read_dir(d.path()) {
                     for e in inner.flatten() {
                         if let Some((_, s)) = e.file_name().to_string_lossy().split_once('-')
-                            && let Ok(s) = s.parse::<u64>() {
-                                seq = seq.max(s);
-                            }
+                            && let Ok(s) = s.parse::<u64>()
+                        {
+                            seq = seq.max(s);
+                        }
                     }
                 }
             }
         }
-        DirStore { dir, seq: Mutex::new(seq) }
+        DirStore {
+            dir,
+            seq: Mutex::new(seq),
+        }
     }
 
     fn recipient_dir(&self, r: &[u8; 32]) -> PathBuf {
-        self.dir.join(r.iter().map(|b| format!("{b:02x}")).collect::<String>())
+        self.dir
+            .join(r.iter().map(|b| format!("{b:02x}")).collect::<String>())
     }
 
     /// Files for one recipient, oldest first: (arrival, path).
@@ -52,9 +57,10 @@ impl DirStore {
             for e in rd.flatten() {
                 let name = e.file_name().to_string_lossy().to_string();
                 if let Some((a, s)) = name.split_once('-')
-                    && let (Ok(a), Ok(s)) = (a.parse::<u64>(), s.parse::<u64>()) {
-                        out.push((a, s, e.path()));
-                    }
+                    && let (Ok(a), Ok(s)) = (a.parse::<u64>(), s.parse::<u64>())
+                {
+                    out.push((a, s, e.path()));
+                }
             }
         }
         out.sort();
@@ -87,7 +93,11 @@ impl QueueStore for DirStore {
             let path = dir.join(format!("{}-{}", item.arrival, *seq));
             // exclusive creation: a name already taken is passed over, and
             // nothing accepted is ever written over
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
                 Ok(mut f) => {
                     f.write_all(&item.ciphertext).expect("queue write");
                     return;
@@ -98,7 +108,15 @@ impl QueueStore for DirStore {
         }
     }
     fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued> {
-        self.files(recipient).into_iter().find_map(|(arrival, _, path)| std::fs::read(&path).ok().map(|ciphertext| Queued { ciphertext, recipient: *recipient, arrival }))
+        self.files(recipient)
+            .into_iter()
+            .find_map(|(arrival, _, path)| {
+                std::fs::read(&path).ok().map(|ciphertext| Queued {
+                    ciphertext,
+                    recipient: *recipient,
+                    arrival,
+                })
+            })
     }
     fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool {
         for (arrival, _, path) in self.files(recipient) {
@@ -111,7 +129,16 @@ impl QueueStore for DirStore {
         false
     }
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued> {
-        self.files(recipient).into_iter().filter_map(|(arrival, _, path)| std::fs::read(&path).ok().map(|ciphertext| Queued { ciphertext, recipient: *recipient, arrival })).collect()
+        self.files(recipient)
+            .into_iter()
+            .filter_map(|(arrival, _, path)| {
+                std::fs::read(&path).ok().map(|ciphertext| Queued {
+                    ciphertext,
+                    recipient: *recipient,
+                    arrival,
+                })
+            })
+            .collect()
     }
     fn drop_all(&self, recipient: &[u8; 32]) {
         let _ = std::fs::remove_dir_all(self.recipient_dir(recipient));

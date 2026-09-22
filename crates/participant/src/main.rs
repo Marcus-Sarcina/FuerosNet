@@ -21,7 +21,13 @@ Commands are read from standard input, one a line:
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (identity, peers) = match args.as_slice() {
-        [i] => (PathBuf::from(i), PathBuf::from(i).parent().unwrap_or(std::path::Path::new(".")).join("peers")),
+        [i] => (
+            PathBuf::from(i),
+            PathBuf::from(i)
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("peers"),
+        ),
         [i, p] => (PathBuf::from(i), PathBuf::from(p)),
         _ => {
             eprintln!("{USAGE}{HELP}");

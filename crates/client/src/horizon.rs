@@ -15,8 +15,8 @@
 //! only when the snapshot cannot account for them.
 
 use crate::{Keyhash, Txid};
-use rhtn_archive::record::Record;
 use rhtn_archive::endpoint::{self, EndpointRecord};
+use rhtn_archive::record::Record;
 use rhtn_archive::topology::{End, Evaluation, Snapshot, Table, unfolded};
 use rhtn_archive::tx::Locator;
 use rhtn_crypto::verify::Lookup;
@@ -27,8 +27,12 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum Woke {
     /// The snapshot was the record set's value: nothing was folded.
     Current,
-    Extended { folded: usize },
-    Replayed { replayed: usize },
+    Extended {
+        folded: usize,
+    },
+    Replayed {
+        replayed: usize,
+    },
 }
 
 /// Where a node sits, which is what a resolution needs to reach it: the
@@ -52,7 +56,15 @@ pub type Placement = (Keyhash, Keyhash);
 /// A packed path's nibbles, one per hop (`wire-format.md` §2.1).
 fn nibbles_of(path: &[u8], n: u64) -> Vec<u8> {
     (0..usize::try_from(n).unwrap_or(usize::MAX))
-        .map_while(|i| path.get(i / 2).map(|b| if i.is_multiple_of(2) { b >> 4 } else { b & 0x0f }))
+        .map_while(|i| {
+            path.get(i / 2).map(|b| {
+                if i.is_multiple_of(2) {
+                    b >> 4
+                } else {
+                    b & 0x0f
+                }
+            })
+        })
         .collect()
 }
 
@@ -137,7 +149,15 @@ pub struct Horizon {
 
 impl Horizon {
     pub fn new(me: Keyhash) -> Horizon {
-        Horizon { me, records: BTreeMap::new(), table: Table::with_me(me), places: BTreeMap::new(), locators: BTreeMap::new(), endpoints: BTreeMap::new(), conflicts: BTreeSet::new() }
+        Horizon {
+            me,
+            records: BTreeMap::new(),
+            table: Table::with_me(me),
+            places: BTreeMap::new(),
+            locators: BTreeMap::new(),
+            endpoints: BTreeMap::new(),
+            conflicts: BTreeSet::new(),
+        }
     }
 
     pub fn me(&self) -> Keyhash {
@@ -150,7 +170,9 @@ impl Horizon {
     /// client cannot place is not a party it has any use for an address
     /// of.
     pub fn ingest_endpoint<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
-        let Ok(er) = EndpointRecord::parse(bytes) else { return Took::Refused };
+        let Ok(er) = EndpointRecord::parse(bytes) else {
+            return Took::Refused;
+        };
         if er.signature_checks(ids) == Some(false) {
             return Took::Refused;
         }
@@ -162,12 +184,19 @@ impl Horizon {
         // `rhtn-archive` and stored here.  This client's series evidence
         // is its own table: an open binding's series is the one the
         // relationship is in, which a reissue moves and an adoption opens.
-        let proved = self.table.bindings().iter().any(|b| b.node == er.node && b.open() && b.series == er.seqno.series);
+        let proved = self
+            .table
+            .bindings()
+            .iter()
+            .any(|b| b.node == er.node && b.open() && b.series == er.seqno.series);
         let line = endpoint::decide(
             self.endpoints.get(&key),
             &er,
-            self.conflicts.contains(&(er.node, er.seqno.series, er.seqno.counter)),
-            self.endpoints.keys().any(|(n, ser)| *n == er.node && *ser != er.seqno.series),
+            self.conflicts
+                .contains(&(er.node, er.seqno.series, er.seqno.counter)),
+            self.endpoints
+                .keys()
+                .any(|(n, ser)| *n == er.node && *ser != er.seqno.series),
             proved,
         );
         match line {
@@ -177,7 +206,8 @@ impl Horizon {
                 // holder that kept the earlier one would let arrival order
                 // split the view
                 self.endpoints.remove(&key);
-                self.conflicts.insert((er.node, er.seqno.series, er.seqno.counter));
+                self.conflicts
+                    .insert((er.node, er.seqno.series, er.seqno.counter));
                 return Took::Conflict;
             }
             endpoint::Line::Unproved => return Took::Unproved,
@@ -222,9 +252,16 @@ impl Horizon {
     /// is the thing that is down.
     pub fn reachable_infra(&self) -> Vec<(Keyhash, Vec<Vec<u8>>)> {
         let inside = self.table.horizon(&self.me, 2);
-        let mut seen: Vec<Keyhash> = self.endpoints.keys().map(|(n, _)| *n).filter(|n| inside.contains(n)).collect();
+        let mut seen: Vec<Keyhash> = self
+            .endpoints
+            .keys()
+            .map(|(n, _)| *n)
+            .filter(|n| inside.contains(n))
+            .collect();
         seen.dedup();
-        seen.into_iter().map(|n| (n, self.endpoints_of(&n))).collect()
+        seen.into_iter()
+            .map(|n| (n, self.endpoints_of(&n)))
+            .collect()
     }
 
     pub fn holds(&self, txid: &Txid) -> bool {
@@ -242,7 +279,9 @@ impl Horizon {
     pub fn determinations(&self) -> Vec<(Keyhash, Keyhash)> {
         let mut out = Vec::new();
         for bytes in self.records.values() {
-            let Ok(rec) = Record::parse(bytes) else { continue };
+            let Ok(rec) = Record::parse(bytes) else {
+                continue;
+            };
             if rec.tx_type != rhtn_archive::tx::TYPE_DISAVOWAL {
                 continue;
             }
@@ -269,11 +308,17 @@ impl Horizon {
     /// that refused every adoption whose presence record it does not hold
     /// would hold almost no horizon at all.
     pub fn ingest<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
-        let Ok(rec) = Record::parse(bytes) else { return Took::Refused };
+        let Ok(rec) = Record::parse(bytes) else {
+            return Took::Refused;
+        };
         if self.records.contains_key(&rec.txid) {
             return Took::Duplicate;
         }
-        if self.table.apply_with(&rec, ids, &self.records, None, Evaluation::Deferred).is_err() {
+        if self
+            .table
+            .apply_with(&rec, ids, &self.records, None, Evaluation::Deferred)
+            .is_err()
+        {
             return Took::Refused;
         }
         self.note_locator(&rec);
@@ -308,7 +353,13 @@ impl Horizon {
         else {
             return;
         };
-        if anchor == node || self.table.bindings().iter().any(|b| b.node == node && b.anchor == Some(anchor) && b.open()) {
+        if anchor == node
+            || self
+                .table
+                .bindings()
+                .iter()
+                .any(|b| b.node == node && b.anchor == Some(anchor) && b.open())
+        {
             return;
         }
         self.reanchor(node, anchor);
@@ -318,7 +369,13 @@ impl Horizon {
     /// subnet and under `node` itself, each path shortened by the prefix
     /// that reached `node`.
     fn reanchor(&mut self, node: Keyhash, anchor: Keyhash) {
-        let Some(base) = self.places.get(&(node, anchor)).map(|p| nibbles_of(&p.path, p.nibbles)) else { return };
+        let Some(base) = self
+            .places
+            .get(&(node, anchor))
+            .map(|p| nibbles_of(&p.path, p.nibbles))
+        else {
+            return;
+        };
         // **an empty prefix is every path in the subnet**, and a party at
         // the empty path under an anchor that is not itself is malformed
         // (`wire-format.md` §2.1's self-anchor is the only empty one).
@@ -330,7 +387,11 @@ impl Horizon {
             .places
             .iter()
             .filter(|((_, a), _)| *a == anchor)
-            .filter_map(|((x, _), p)| nibbles_of(&p.path, p.nibbles).strip_prefix(&base[..]).map(|rest| (*x, rest.to_vec())))
+            .filter_map(|((x, _), p)| {
+                nibbles_of(&p.path, p.nibbles)
+                    .strip_prefix(&base[..])
+                    .map(|rest| (*x, rest.to_vec()))
+            })
             .collect();
         for (x, rest) in moved {
             self.places.remove(&(x, anchor));
@@ -340,7 +401,14 @@ impl Horizon {
             // of a party known only by where it sits.
             self.locators.remove(&(x, anchor));
             let (path, nibbles) = pack(&rest);
-            self.places.insert((x, node), Place { anchor: node, path, nibbles });
+            self.places.insert(
+                (x, node),
+                Place {
+                    anchor: node,
+                    path,
+                    nibbles,
+                },
+            );
         }
     }
 
@@ -349,7 +417,9 @@ impl Horizon {
     /// one for the same party replaces the earlier, which is what makes
     /// the propagated version the system of record here.
     fn note_locator(&mut self, rec: &Record) {
-        let (Some(node), Some(loc)) = (rec.field_hash(1), rec.locator()) else { return };
+        let (Some(node), Some(loc)) = (rec.field_hash(1), rec.locator()) else {
+            return;
+        };
         // **a party placed under someone is not its own anchor.** An
         // ending may have re-anchored it on itself ([`Horizon::reanchor`]);
         // an adoption propagated afterwards says that is over, and leaving
@@ -360,10 +430,23 @@ impl Horizon {
         if node != loc.anchor {
             self.places.remove(&(node, node));
         }
-        self.places.insert((node, loc.anchor), Place { anchor: loc.anchor, path: loc.path.clone(), nibbles: loc.nibbles });
+        self.places.insert(
+            (node, loc.anchor),
+            Place {
+                anchor: loc.anchor,
+                path: loc.path.clone(),
+                nibbles: loc.nibbles,
+            },
+        );
         // the anchor a path is relative to sits at the empty path under
         // itself: a fact the record states rather than one derived from it
-        self.places.entry((loc.anchor, loc.anchor)).or_insert(Place { anchor: loc.anchor, path: Vec::new(), nibbles: 0 });
+        self.places
+            .entry((loc.anchor, loc.anchor))
+            .or_insert(Place {
+                anchor: loc.anchor,
+                path: Vec::new(),
+                nibbles: 0,
+            });
         self.locators.insert((node, loc.anchor), loc);
     }
 
@@ -386,7 +469,10 @@ impl Horizon {
         if self.table.distance(&self.me, node, 2).is_none() {
             return Vec::new();
         }
-        self.places.range((*node, [0; 32])..=(*node, [0xff; 32])).map(|(_, p)| p).collect()
+        self.places
+            .range((*node, [0; 32])..=(*node, [0xff; 32]))
+            .map(|(_, p)| p)
+            .collect()
     }
 
     /// Where `node` sits in the subnet `anchor` names, if this client can
@@ -405,7 +491,10 @@ impl Horizon {
         if self.table.distance(&self.me, node, 2).is_none() {
             return Vec::new();
         }
-        self.locators.range((*node, [0; 32])..=(*node, [0xff; 32])).map(|(_, l)| l).collect()
+        self.locators
+            .range((*node, [0; 32])..=(*node, [0xff; 32]))
+            .map(|(_, l)| l)
+            .collect()
     }
 
     /// The locator a record carried for `node` in the subnet `anchor`
@@ -419,7 +508,12 @@ impl Horizon {
     /// horizon and no wider.
     pub fn resolvable(&self) -> Vec<Keyhash> {
         let inside = self.table.horizon(&self.me, 2);
-        let mut out: Vec<Keyhash> = self.places.keys().map(|(n, _)| *n).filter(|n| inside.contains(n)).collect();
+        let mut out: Vec<Keyhash> = self
+            .places
+            .keys()
+            .map(|(n, _)| *n)
+            .filter(|n| inside.contains(n))
+            .collect();
         out.dedup();
         out
     }
@@ -430,7 +524,11 @@ impl Horizon {
     /// its graph from the edges it holds, and the first ring is where a
     /// client's own evidence is densest.
     pub fn adjacent(&self) -> Vec<Keyhash> {
-        self.table.horizon(&self.me, 1).into_iter().filter(|k| *k != self.me).collect()
+        self.table
+            .horizon(&self.me, 1)
+            .into_iter()
+            .filter(|k| *k != self.me)
+            .collect()
     }
 
     /// How many adoption or sibling edges away `other` is; nothing beyond
@@ -449,13 +547,22 @@ impl Horizon {
     /// rebuild.
     pub fn prune(&mut self) -> usize {
         let inside = self.table.horizon(&self.me, 2);
-        let parties = |m: &BTreeMap<Placement, Place>| m.keys().map(|(n, _)| *n).collect::<std::collections::BTreeSet<_>>().len();
+        let parties = |m: &BTreeMap<Placement, Place>| {
+            m.keys()
+                .map(|(n, _)| *n)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+        };
         let before = parties(&self.places);
         self.places.retain(|(n, _), _| inside.contains(n));
         self.locators.retain(|(n, _), _| inside.contains(n));
         self.endpoints.retain(|(n, _), _| inside.contains(n));
         self.records.retain(|_, b| {
-            Record::parse(b).is_ok_and(|r| r.participants().iter().any(|p| inside.contains(p)) || r.field_hash(1).is_some_and(|k| inside.contains(&k)) || r.field_hash(2).is_some_and(|k| inside.contains(&k)))
+            Record::parse(b).is_ok_and(|r| {
+                r.participants().iter().any(|p| inside.contains(p))
+                    || r.field_hash(1).is_some_and(|k| inside.contains(&k))
+                    || r.field_hash(2).is_some_and(|k| inside.contains(&k))
+            })
         });
         before - parties(&self.places)
     }
@@ -463,7 +570,11 @@ impl Horizon {
     /// The derived shape as it goes to local storage, with the watermark
     /// that says which records produced it.
     pub fn materialise(&self) -> Snapshot {
-        let mut at: Vec<(u64, Txid)> = self.records.values().filter_map(|b| Record::parse(b).ok().map(|r| (r.effective, r.txid))).collect();
+        let mut at: Vec<(u64, Txid)> = self
+            .records
+            .values()
+            .filter_map(|b| Record::parse(b).ok().map(|r| (r.effective, r.txid)))
+            .collect();
         at.sort();
         let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut out = Vec::new();
@@ -477,7 +588,11 @@ impl Horizon {
         // replay cannot rebuild them — if they are not written here they
         // are gone until the patron floods them again.
         rhtn_codec::encode::emit_bstr(&mut out, &encode_lines(&self.endpoints, &self.conflicts));
-        Snapshot { folded, high: at.last().copied(), table: out }
+        Snapshot {
+            folded,
+            high: at.last().copied(),
+            table: out,
+        }
     }
 
     /// Wake: take the snapshot where it can account for the records held,
@@ -489,23 +604,45 @@ impl Horizon {
     /// from nothing gives.
     pub fn wake<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Woke {
         let mut all: Vec<Vec<u8>> = self.records.values().cloned().collect();
-        all.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
+        all.sort_by_key(|b| {
+            Record::parse(b)
+                .map(|r| (r.effective, r.txid))
+                .unwrap_or_default()
+        });
         let taken = snap.and_then(|s| {
-            let later = unfolded(s, &all, |b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default())?;
+            let later = unfolded(s, &all, |b| {
+                Record::parse(b)
+                    .map(|r| (r.effective, r.txid))
+                    .unwrap_or_default()
+            })?;
             self.take(s)?;
-            Some(later.into_iter().map(|i| all[i].clone()).collect::<Vec<_>>())
+            Some(
+                later
+                    .into_iter()
+                    .map(|i| all[i].clone())
+                    .collect::<Vec<_>>(),
+            )
         });
         match taken {
             Some(later) => {
                 for bytes in &later {
                     if let Ok(rec) = Record::parse(bytes)
-                        && self.table.apply_with(&rec, ids, &self.records, None, Evaluation::Deferred).is_ok()
+                        && self
+                            .table
+                            .apply_with(&rec, ids, &self.records, None, Evaluation::Deferred)
+                            .is_ok()
                     {
                         self.note_locator(&rec);
                         self.note_end(&rec);
                     }
                 }
-                if later.is_empty() { Woke::Current } else { Woke::Extended { folded: later.len() } }
+                if later.is_empty() {
+                    Woke::Current
+                } else {
+                    Woke::Extended {
+                        folded: later.len(),
+                    }
+                }
             }
             None => {
                 self.table = Table::with_me(self.me);
@@ -513,13 +650,18 @@ impl Horizon {
                 self.locators.clear();
                 for bytes in &all {
                     if let Ok(rec) = Record::parse(bytes)
-                        && self.table.apply_with(&rec, ids, &self.records, None, Evaluation::Deferred).is_ok()
+                        && self
+                            .table
+                            .apply_with(&rec, ids, &self.records, None, Evaluation::Deferred)
+                            .is_ok()
                     {
                         self.note_locator(&rec);
                         self.note_end(&rec);
                     }
                 }
-                Woke::Replayed { replayed: all.len() }
+                Woke::Replayed {
+                    replayed: all.len(),
+                }
             }
         }
     }
@@ -527,8 +669,17 @@ impl Horizon {
     /// Install a snapshot's table and locators.
     fn take(&mut self, snap: &Snapshot) -> Option<()> {
         let item = rhtn_codec::cbor::parse_all(&snap.table).ok()?;
-        let rhtn_codec::cbor::Item::Array(parts) = &item else { return None };
-        let [rhtn_codec::cbor::Item::Bytes(t), rhtn_codec::cbor::Item::Bytes(l), rhtn_codec::cbor::Item::Bytes(e)] = parts.as_slice() else { return None };
+        let rhtn_codec::cbor::Item::Array(parts) = &item else {
+            return None;
+        };
+        let [
+            rhtn_codec::cbor::Item::Bytes(t),
+            rhtn_codec::cbor::Item::Bytes(l),
+            rhtn_codec::cbor::Item::Bytes(e),
+        ] = parts.as_slice()
+        else {
+            return None;
+        };
         let mut table = Table::from_materialised(&snap.table[t.clone()])?;
         let (places, locators) = decode_places(&snap.table[l.clone()])?;
         let (endpoints, conflicts) = decode_lines(&snap.table[e.clone()])?;
@@ -575,7 +726,10 @@ impl Horizon {
 /// **The retirements travel with the lines.** A restored client that took
 /// the addresses and forgot which pairs were retired would accept a
 /// conflicting record it had already ruled out.
-fn encode_lines(endpoints: &BTreeMap<(Keyhash, u32), EndpointRecord>, conflicts: &BTreeSet<(Keyhash, u32, u32)>) -> Vec<u8> {
+fn encode_lines(
+    endpoints: &BTreeMap<(Keyhash, u32), EndpointRecord>,
+    conflicts: &BTreeSet<(Keyhash, u32, u32)>,
+) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
     emit_array_head(&mut out, 2);
@@ -593,13 +747,20 @@ fn encode_lines(endpoints: &BTreeMap<(Keyhash, u32), EndpointRecord>, conflicts:
     out
 }
 
-type Lines = (BTreeMap<(Keyhash, u32), EndpointRecord>, BTreeSet<(Keyhash, u32, u32)>);
+type Lines = (
+    BTreeMap<(Keyhash, u32), EndpointRecord>,
+    BTreeSet<(Keyhash, u32, u32)>,
+);
 
 fn decode_lines(b: &[u8]) -> Option<Lines> {
     use rhtn_codec::cbor::{Item, parse_all};
     let item = parse_all(b).ok()?;
-    let Item::Array(parts) = &item else { return None };
-    let [Item::Array(recs), Item::Array(cs)] = parts.as_slice() else { return None };
+    let Item::Array(parts) = &item else {
+        return None;
+    };
+    let [Item::Array(recs), Item::Array(cs)] = parts.as_slice() else {
+        return None;
+    };
     let mut endpoints = BTreeMap::new();
     for r in recs {
         let Item::Bytes(range) = r else { return None };
@@ -609,14 +770,23 @@ fn decode_lines(b: &[u8]) -> Option<Lines> {
     let mut conflicts = BTreeSet::new();
     for c in cs {
         let Item::Array(f) = c else { return None };
-        let [Item::Bytes(n), Item::Uint(series), Item::Uint(counter)] = f.as_slice() else { return None };
+        let [Item::Bytes(n), Item::Uint(series), Item::Uint(counter)] = f.as_slice() else {
+            return None;
+        };
         let node: Keyhash = b[n.clone()].try_into().ok()?;
-        conflicts.insert((node, u32::try_from(*series).ok()?, u32::try_from(*counter).ok()?));
+        conflicts.insert((
+            node,
+            u32::try_from(*series).ok()?,
+            u32::try_from(*counter).ok()?,
+        ));
     }
     Some((endpoints, conflicts))
 }
 
-fn encode_places(places: &BTreeMap<Placement, Place>, locators: &BTreeMap<Placement, Locator>) -> Vec<u8> {
+fn encode_places(
+    places: &BTreeMap<Placement, Place>,
+    locators: &BTreeMap<Placement, Locator>,
+) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
     emit_array_head(&mut out, places.len());
@@ -644,18 +814,35 @@ type Placed = (BTreeMap<Placement, Place>, BTreeMap<Placement, Locator>);
 fn decode_places(b: &[u8]) -> Option<Placed> {
     use rhtn_codec::cbor::{Item, parse_all};
     let item = parse_all(b).ok()?;
-    let Item::Array(rows) = &item else { return None };
+    let Item::Array(rows) = &item else {
+        return None;
+    };
     let (mut places, mut locators) = (BTreeMap::new(), BTreeMap::new());
     for row in rows {
         let Item::Array(f) = row else { return None };
-        let [Item::Bytes(k), Item::Bytes(a), Item::Bytes(p), Item::Uint(n), Item::Bytes(l)] = f.as_slice() else { return None };
+        let [
+            Item::Bytes(k),
+            Item::Bytes(a),
+            Item::Bytes(p),
+            Item::Uint(n),
+            Item::Bytes(l),
+        ] = f.as_slice()
+        else {
+            return None;
+        };
         let node: Keyhash = b[k.clone()].try_into().ok()?;
         let anchor: Keyhash = b[a.clone()].try_into().ok()?;
-        places.insert((node, anchor), Place { anchor, path: b[p.clone()].to_vec(), nibbles: *n });
+        places.insert(
+            (node, anchor),
+            Place {
+                anchor,
+                path: b[p.clone()].to_vec(),
+                nibbles: *n,
+            },
+        );
         if !l.is_empty() {
             locators.insert((node, anchor), Locator::decode(&b[l.clone()]).ok()?);
         }
     }
     Some((places, locators))
 }
-

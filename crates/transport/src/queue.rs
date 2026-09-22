@@ -46,7 +46,10 @@ pub trait QueueStore: Send + Sync {
         self.list(recipient).len()
     }
     fn bytes(&self, recipient: &[u8; 32]) -> usize {
-        self.list(recipient).iter().map(|q| q.ciphertext.len()).sum()
+        self.list(recipient)
+            .iter()
+            .map(|q| q.ciphertext.len())
+            .sum()
     }
 }
 
@@ -55,15 +58,28 @@ pub struct MemoryStore(Mutex<HashMap<[u8; 32], VecDeque<Queued>>>);
 
 impl QueueStore for MemoryStore {
     fn push(&self, item: Queued) {
-        self.0.lock().unwrap().entry(item.recipient).or_default().push_back(item);
+        self.0
+            .lock()
+            .unwrap()
+            .entry(item.recipient)
+            .or_default()
+            .push_back(item);
     }
     fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued> {
-        self.0.lock().unwrap().get(recipient).and_then(|q| q.front().cloned())
+        self.0
+            .lock()
+            .unwrap()
+            .get(recipient)
+            .and_then(|q| q.front().cloned())
     }
     fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool {
         let mut m = self.0.lock().unwrap();
-        let Some(q) = m.get_mut(recipient) else { return false };
-        let Some(i) = q.iter().position(|x| x == item) else { return false };
+        let Some(q) = m.get_mut(recipient) else {
+            return false;
+        };
+        let Some(i) = q.iter().position(|x| x == item) else {
+            return false;
+        };
         q.remove(i);
         if q.is_empty() {
             m.remove(recipient);
@@ -71,7 +87,12 @@ impl QueueStore for MemoryStore {
         true
     }
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued> {
-        self.0.lock().unwrap().get(recipient).map(|q| q.iter().cloned().collect()).unwrap_or_default()
+        self.0
+            .lock()
+            .unwrap()
+            .get(recipient)
+            .map(|q| q.iter().cloned().collect())
+            .unwrap_or_default()
     }
     fn drop_all(&self, recipient: &[u8; 32]) {
         self.0.lock().unwrap().remove(recipient);

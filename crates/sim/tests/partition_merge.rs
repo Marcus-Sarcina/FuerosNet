@@ -28,7 +28,11 @@ fn kh(n: &str) -> Keyhash {
 }
 
 fn ids() -> Vec<Identity> {
-    NODES.iter().chain([WITNESS].iter()).map(|n| test_identity(n).public).collect()
+    NODES
+        .iter()
+        .chain([WITNESS].iter())
+        .map(|n| test_identity(n).public)
+        .collect()
 }
 
 /// The signing side: archives advance as transactions are made, exactly as
@@ -40,7 +44,14 @@ struct Signers {
 
 impl Signers {
     fn new() -> Signers {
-        Signers { archives: NODES.iter().chain([WITNESS].iter()).map(|n| (kh(n), Archive::new(kh(n)))).collect(), clock: 1_800_000_000 }
+        Signers {
+            archives: NODES
+                .iter()
+                .chain([WITNESS].iter())
+                .map(|n| (kh(n), Archive::new(kh(n))))
+                .collect(),
+            clock: 1_800_000_000,
+        }
     }
     fn tick(&mut self) -> u64 {
         self.clock += 3600;
@@ -54,7 +65,11 @@ impl Signers {
         let refs: Vec<&SigningIdentity> = sids.iter().collect();
         let rec = Record::parse(&envelope(tx_type, body, &refs)).expect("well-formed");
         for s in signers {
-            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&kh(s))
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         rec
     }
@@ -74,7 +89,11 @@ impl Signers {
         let t = self.tick();
         let back = vec![self.back(a), self.back(b), self.back(WITNESS)];
         let root = rhtn_codec::cose::sha256(format!("m:{a}:{b}:{t}").as_bytes());
-        let w = Witness { keyhash: kh(WITNESS), nominated_by: kh(a), flags: 3 };
+        let w = Witness {
+            keyhash: kh(WITNESS),
+            nominated_by: kh(a),
+            flags: 3,
+        };
         let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b, WITNESS])
     }
@@ -110,7 +129,16 @@ fn mesh() -> Mesh {
             for m in NODES {
                 t.mark_infra(kh(m));
             }
-            let mut v = NodeView::new(Arc::new(test_identity(n)), Locator::root(kh("alice"), Seqno { series: 1, counter: 0 }));
+            let mut v = NodeView::new(
+                Arc::new(test_identity(n)),
+                Locator::root(
+                    kh("alice"),
+                    Seqno {
+                        series: 1,
+                        counter: 0,
+                    },
+                ),
+            );
             v.table = t;
             // every node is adjacent to the other two, so h_store covers them
             for m in NODES {
@@ -163,7 +191,10 @@ fn views_converge_after_a_partition_heals() {
     seed(&mut m, &mut s);
     safety(&m);
     m.agreed().expect("agreed before the partition");
-    assert_eq!(m.view_patrons(&kh("alice"), &kh("carol")), [kh("bob")].into());
+    assert_eq!(
+        m.view_patrons(&kh("alice"), &kh("carol")),
+        [kh("bob")].into()
+    );
 
     // the network partitions: carol is cut off from both others
     m.sever(&kh("alice"), &kh("carol"));
@@ -171,23 +202,49 @@ fn views_converge_after_a_partition_heals() {
     assert_eq!(m.severed_count(), 2);
 
     // carol departs from bob while cut off, so the two sides diverge
-    let dep = s.departure("carol", "bob", Seqno { series: 2, counter: 1 });
+    let dep = s.departure(
+        "carol",
+        "bob",
+        Seqno {
+            series: 2,
+            counter: 1,
+        },
+    );
     m.originate(&dep);
     m.flood(kh("carol"), &dep.bytes);
     safety(&m);
-    assert_eq!(m.view_patrons(&kh("carol"), &kh("carol")), [].into(), "carol knows she left");
-    assert_eq!(m.view_patrons(&kh("alice"), &kh("carol")), [kh("bob")].into(), "alice has not heard");
-    assert!(m.agreed().is_err(), "the views have diverged, which is the point of the partition");
+    assert_eq!(
+        m.view_patrons(&kh("carol"), &kh("carol")),
+        [].into(),
+        "carol knows she left"
+    );
+    assert_eq!(
+        m.view_patrons(&kh("alice"), &kh("carol")),
+        [kh("bob")].into(),
+        "alice has not heard"
+    );
+    assert!(
+        m.agreed().is_err(),
+        "the views have diverged, which is the point of the partition"
+    );
 
     // the network heals and stays healed; the topology quiesces
     m.heal_all();
     assert_eq!(m.severed_count(), 0);
     m.reconcile_all();
     safety(&m);
-    m.agreed().expect("every pair agrees about every subject once healed and quiesced");
+    m.agreed()
+        .expect("every pair agrees about every subject once healed and quiesced");
     for viewer in NODES {
-        assert_eq!(m.view_patrons(&kh(viewer), &kh("carol")), [].into(), "{viewer} sees the departure");
-        assert_eq!(m.view_patrons(&kh(viewer), &kh("bob")), [kh("alice")].into());
+        assert_eq!(
+            m.view_patrons(&kh(viewer), &kh("carol")),
+            [].into(),
+            "{viewer} sees the departure"
+        );
+        assert_eq!(
+            m.view_patrons(&kh(viewer), &kh("bob")),
+            [kh("alice")].into()
+        );
     }
 }
 
@@ -198,13 +255,23 @@ fn a_partition_that_never_heals_does_not_claim_convergence() {
     seed(&mut m, &mut s);
     m.sever(&kh("alice"), &kh("carol"));
     m.sever(&kh("bob"), &kh("carol"));
-    let dep = s.departure("carol", "bob", Seqno { series: 2, counter: 1 });
+    let dep = s.departure(
+        "carol",
+        "bob",
+        Seqno {
+            series: 2,
+            counter: 1,
+        },
+    );
     m.originate(&dep);
     m.flood(kh("carol"), &dep.bytes);
     m.reconcile_all();
     // reconciliation runs, and the cut links still carry nothing
     safety(&m);
-    assert!(m.agreed().is_err(), "convergence is conditional on the network healing");
+    assert!(
+        m.agreed().is_err(),
+        "convergence is conditional on the network healing"
+    );
 }
 
 #[test]
@@ -220,10 +287,18 @@ fn gossip_copies_and_never_creates() {
     let later = s.adoption("carol", "alice", pop.txid, 9);
     m.originate(&later);
     m.inject(kh("alice"), kh("bob"), &later.bytes);
-    assert!(m.no_invention().is_err(), "the check is live: a store holding what its subject does not is caught");
+    assert!(
+        m.no_invention().is_err(),
+        "the check is live: a store holding what its subject does not is caught"
+    );
     // once the subject holds what it signed, as origination makes it, it passes
     m.flood(kh("carol"), &later.bytes);
-    m.no_invention().expect("a genuinely originated object passes everywhere");
+    m.no_invention()
+        .expect("a genuinely originated object passes everywhere");
     safety(&m);
-    assert_eq!(m.view_patrons(&kh("alice"), &kh("carol")), [kh("alice"), kh("bob")].into(), "adopting elsewhere leaves the old binding in view");
+    assert_eq!(
+        m.view_patrons(&kh("alice"), &kh("carol")),
+        [kh("alice"), kh("bob")].into(),
+        "adopting elsewhere leaves the old binding in view"
+    );
 }

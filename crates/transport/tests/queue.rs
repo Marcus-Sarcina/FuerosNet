@@ -83,7 +83,9 @@ async fn drain(s: &mut Session) -> Vec<Vec<u8>> {
 }
 
 fn messages(k: usize, tag: &str) -> Vec<Vec<u8>> {
-    (0..k).map(|i| format!("{tag}:{i}:{}", "x".repeat(40)).into_bytes()).collect()
+    (0..k)
+        .map(|i| format!("{tag}:{i}:{}", "x".repeat(40)).into_bytes())
+        .collect()
 }
 
 fn same_set(a: &[Vec<u8>], b: &[Vec<u8>]) -> bool {
@@ -133,7 +135,10 @@ async fn delete_on_delivery_leaves_nothing_for_a_second_attach() {
     s.conn.close(0u32.into(), b"");
     drop(s);
     sleep(Duration::from_millis(200)).await;
-    assert!(node.queue_records(&kh("carol")).is_empty(), "no copy in the store");
+    assert!(
+        node.queue_records(&kh("carol")).is_empty(),
+        "no copy in the store"
+    );
     let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr).await;
     assert_eq!(s2.ack.queued, 0);
     assert!(drain(&mut s2).await.is_empty());
@@ -150,11 +155,22 @@ async fn a_waiting_message_carries_the_minimum() {
     let recs = node.queue_records(&kh("carol"));
     assert_eq!(recs.len(), 1);
     // the record is exactly these three fields, and nothing names or locates X
-    let Queued { ciphertext, recipient, arrival } = recs[0].clone();
+    let Queued {
+        ciphertext,
+        recipient,
+        arrival,
+    } = recs[0].clone();
     assert_eq!(ciphertext, m);
     assert_eq!(recipient, kh("carol"));
     assert_eq!(arrival, 1_900_000_000);
-    assert_eq!(recs[0], Queued { ciphertext: m, recipient: kh("carol"), arrival: 1_900_000_000 });
+    assert_eq!(
+        recs[0],
+        Queued {
+            ciphertext: m,
+            recipient: kh("carol"),
+            arrival: 1_900_000_000
+        }
+    );
 }
 
 /// A node whose per-subordinate cap fits exactly `k` of the test messages.
@@ -174,7 +190,11 @@ async fn at_the_cap_the_newest_is_refused_and_the_rest_kept() {
         assert_eq!(node.enqueue(kh("carol"), m.clone()), Ok(()));
     }
     let extra = b"cap:4:the one over".to_vec();
-    assert_eq!(node.enqueue(kh("carol"), extra.clone()), Err(Refusal::AtCap), "X is told, distinguishably");
+    assert_eq!(
+        node.enqueue(kh("carol"), extra.clone()),
+        Err(Refusal::AtCap),
+        "X is told, distinguishably"
+    );
     let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
     assert_eq!(s.ack.queued, 4);
     let got = drain(&mut s).await;
@@ -207,7 +227,8 @@ async fn a_message_survives_an_absence_of_any_length() {
     let c = now.clone();
     cfg.clock = Arc::new(move || *c.lock().unwrap());
     let (node, addr, _ep) = spawn_node(cfg);
-    node.enqueue(kh("carol"), b"before the absence".to_vec()).unwrap();
+    node.enqueue(kh("carol"), b"before the absence".to_vec())
+        .unwrap();
     let d = 20 * 365 * 86_400; // twenty years
     *now.lock().unwrap() += d;
     sleep(Duration::from_millis(100)).await;
@@ -223,8 +244,16 @@ async fn the_cap_is_per_subordinate() {
     for m in &msgs {
         node.enqueue(kh("carol"), m.clone()).unwrap();
     }
-    assert_eq!(node.enqueue(kh("carol"), msgs[0].clone()), Err(Refusal::AtCap), "C1 is at its cap");
-    assert_eq!(node.enqueue(kh("bob"), b"for c2".to_vec()), Ok(()), "C2's mail is accepted");
+    assert_eq!(
+        node.enqueue(kh("carol"), msgs[0].clone()),
+        Err(Refusal::AtCap),
+        "C1 is at its cap"
+    );
+    assert_eq!(
+        node.enqueue(kh("bob"), b"for c2".to_vec()),
+        Ok(()),
+        "C2's mail is accepted"
+    );
     let mut s = attach_ok(&client_cfg("bob"), "alice", addr).await;
     assert_eq!(s.ack.queued, 1);
     assert_eq!(drain(&mut s).await, vec![b"for c2".to_vec()]);
@@ -233,14 +262,25 @@ async fn the_cap_is_per_subordinate() {
 /// A validated recovery adoption of `new` under `patron` claiming `old`,
 /// with `verifier` recognising the subject: the evidence a node takes.
 fn recovery_evidence(old: &str, new: &str, patron: &str, verifier: &str) -> Supersession {
-    let (o, n, p, v) = (test_identity(old), test_identity(new), test_identity(patron), test_identity(verifier));
+    let (o, n, p, v) = (
+        test_identity(old),
+        test_identity(new),
+        test_identity(patron),
+        test_identity(verifier),
+    );
     let qid = rhtn_codec::cose::sha256(b"recovery query");
     let resp = recovery_response(&v, &n, &qid, &o.public.keyhash);
     let block = recovery_block(&o, &n.public.keyhash, &p.public.keyhash, vec![resp]);
     let a = Adoption {
         node: n.public.keyhash,
         patron: p.public.keyhash,
-        locator: Locator::root(p.public.keyhash, Seqno { series: 4, counter: 0 }),
+        locator: Locator::root(
+            p.public.keyhash,
+            Seqno {
+                series: 4,
+                counter: 0,
+            },
+        ),
         timestamp: 1_800_000_000,
         key_material: None,
         evidence: Evidence::Recovery(block),
@@ -263,7 +303,10 @@ async fn a_running_session_ends_on_supersession_evidence() {
     assert_eq!((ev.superseded, ev.successor), (kh("bob"), kh("carol")));
     node.supersede(ev);
     // nothing reaches the session after the evidence was taken
-    assert_eq!(node.enqueue(kh("bob"), b"late".to_vec()), Err(Refusal::Superseded));
+    assert_eq!(
+        node.enqueue(kh("bob"), b"late".to_vec()),
+        Err(Refusal::Superseded)
+    );
     let closed = timeout(Duration::from_secs(3), s.conn.closed()).await;
     assert!(closed.is_ok(), "N closes C's connection");
     assert!(drain(&mut s).await.is_empty());
@@ -279,7 +322,10 @@ async fn nothing_is_served_to_a_superseded_credential() {
     }
     node.supersede(recovery_evidence("bob", "carol", "alice", "w1"));
     let outcome = attach(&client_cfg("bob"), &client_ep(), kh("alice"), addr, false).await;
-    assert!(!matches!(outcome, AttachOutcome::Attached(_)), "no AttachAck: {outcome:?}");
+    assert!(
+        !matches!(outcome, AttachOutcome::Attached(_)),
+        "no AttachAck: {outcome:?}"
+    );
     assert_eq!(node.log.count(|e| matches!(e, Event::Attached { .. })), 0);
     assert_eq!(node.log.count(|e| *e == Event::Superseded), 1);
     assert_eq!(node.log.count(|e| matches!(e, Event::Delivered { .. })), 0);
@@ -316,15 +362,33 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
         let (bn, bp) = (head(&n.public.keyhash), head(&p.public.keyhash));
         // fresh keys form; an established key meets on a witnessed normal
         // record, a key forming only once (`wire-format.md` §3.2)
-        let fresh = !heads.contains_key(&n.public.keyhash) && !heads.contains_key(&p.public.keyhash);
+        let fresh =
+            !heads.contains_key(&n.public.keyhash) && !heads.contains_key(&p.public.keyhash);
         let w = test_identity("w1");
         let pop = if fresh {
-            let pop_body = formation_body([&[bn], &[bp]], [&n.public.keyhash, &p.public.keyhash], 1_800_000_000, 1_800_000_600, &[7u8; 32]);
+            let pop_body = formation_body(
+                [&[bn], &[bp]],
+                [&n.public.keyhash, &p.public.keyhash],
+                1_800_000_000,
+                1_800_000_600,
+                &[7u8; 32],
+            );
             Record::parse(&envelope(TYPE_PRESENCE, &pop_body, &[&n, &p])).unwrap()
         } else {
-            let witness = Witness { keyhash: w.public.keyhash, nominated_by: n.public.keyhash, flags: 3 };
+            let witness = Witness {
+                keyhash: w.public.keyhash,
+                nominated_by: n.public.keyhash,
+                flags: 3,
+            };
             let back = vec![vec![bn], vec![bp], vec![head(&w.public.keyhash)]];
-            let pop_body = presence_record_body(&back, [&n.public.keyhash, &p.public.keyhash], &[witness], 1_800_000_000, 1_800_000_600, &[7u8; 32]);
+            let pop_body = presence_record_body(
+                &back,
+                [&n.public.keyhash, &p.public.keyhash],
+                &[witness],
+                1_800_000_000,
+                1_800_000_600,
+                &[7u8; 32],
+            );
             let rec = Record::parse(&envelope(TYPE_PRESENCE, &pop_body, &[&n, &p, &w])).unwrap();
             heads.insert(w.public.keyhash, rec.txid);
             rec
@@ -334,7 +398,13 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
         let a = Adoption {
             node: n.public.keyhash,
             patron: p.public.keyhash,
-            locator: Locator::root(p.public.keyhash, Seqno { series: 1, counter: 0 }),
+            locator: Locator::root(
+                p.public.keyhash,
+                Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+            ),
             timestamp: 1_800_001_000,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),
@@ -349,7 +419,11 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
     adopt("bob", "alice", &mut table);
     adopt("carol", "bob", &mut table);
     // B's client holds the same topology and computes its serving node
-    assert_eq!(table.serving_node(&kh("carol")), Some(kh("alice")), "past the light-client patron to I");
+    assert_eq!(
+        table.serving_node(&kh("carol")),
+        Some(kh("alice")),
+        "past the light-client patron to I"
+    );
     let shared = Arc::new(Mutex::new(table));
     let mut cfg = node_cfg("alice");
     let t = shared.clone();
@@ -359,8 +433,18 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
     assert_eq!(s.ack.mode, 0, "primary");
     assert!(node.has_session(&kh("carol")));
     let path = shared.lock().unwrap().attach_client(&kh("carol")).unwrap();
-    assert_eq!(path, vec![kh("bob"), kh("carol")], "listed by path, beneath A");
-    assert!(shared.lock().unwrap().attached_clients().contains_key(&kh("carol")));
+    assert_eq!(
+        path,
+        vec![kh("bob"), kh("carol")],
+        "listed by path, beneath A"
+    );
+    assert!(
+        shared
+            .lock()
+            .unwrap()
+            .attached_clients()
+            .contains_key(&kh("carol"))
+    );
 }
 
 // acceptance: QUE-19
@@ -374,7 +458,10 @@ async fn a_delivery_the_peer_never_took_leaves_the_message_in_the_mailbox() {
     assert_eq!(node.queued(&kh("carol")), 40);
     // C attaches, takes what arrives in a moment, and its connection dies
     let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
-    let first = timeout(Duration::from_secs(3), s.deliveries.recv()).await.expect("a first delivery").unwrap();
+    let first = timeout(Duration::from_secs(3), s.deliveries.recv())
+        .await
+        .expect("a first delivery")
+        .unwrap();
     s.conn.close(0u32.into(), b"gone");
     let mut got1 = vec![first];
     got1.extend(drain(&mut s).await);
@@ -382,13 +469,20 @@ async fn a_delivery_the_peer_never_took_leaves_the_message_in_the_mailbox() {
     sleep(Duration::from_millis(500)).await;
     // what C took is gone from the store; what it never took is still there
     let left = node.queued(&kh("carol"));
-    assert!((1..40).contains(&left), "the drain stopped where the connection died: {left} left");
+    assert!(
+        (1..40).contains(&left),
+        "the drain stopped where the connection died: {left} left"
+    );
     let got2 = {
         let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr).await;
         assert_eq!(s2.ack.queued as usize, left);
         drain(&mut s2).await
     };
-    assert_eq!(got2.len(), left, "the next session gets exactly what was left");
+    assert_eq!(
+        got2.len(),
+        left,
+        "the next session gets exactly what was left"
+    );
     let mut all: Vec<Vec<u8>> = got1.iter().chain(got2.iter()).cloned().collect();
     all.sort();
     all.dedup();
@@ -414,7 +508,11 @@ async fn a_message_for_an_attached_client_is_stored_until_taken() {
     while node.queued(&kh("carol")) > 0 && tokio::time::Instant::now() < deadline {
         sleep(Duration::from_millis(20)).await;
     }
-    assert_eq!(node.queued(&kh("carol")), 0, "deleted on delivery, once taken");
+    assert_eq!(
+        node.queued(&kh("carol")),
+        0,
+        "deleted on delivery, once taken"
+    );
 }
 
 // acceptance: QUE-20
@@ -455,6 +553,10 @@ fn two_submissions_at_once_cannot_both_take_the_room_for_one() {
         let b = s.spawn(|| node.enqueue(kh("carol"), vec![2]));
         [a.join().unwrap(), b.join().unwrap()]
     });
-    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1, "one fits, the other is refused: {results:?}");
+    assert_eq!(
+        results.iter().filter(|r| r.is_ok()).count(),
+        1,
+        "one fits, the other is refused: {results:?}"
+    );
     assert_eq!(node.queued(&kh("carol")), 1);
 }

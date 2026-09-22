@@ -14,7 +14,9 @@ use std::path::PathBuf;
 const CAST: [&str; 3] = ["bob", "alice", "carol"];
 
 fn kh(name: &str) -> [u8; 32] {
-    rhtn_crypto::identity::testkit::test_identity(name).public.keyhash
+    rhtn_crypto::identity::testkit::test_identity(name)
+        .public
+        .keyhash
 }
 
 /// The daemon beside us.  Cargo tells a test where its own package's
@@ -49,15 +51,30 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
     // (`wire-format.md` §7.8, design §14.2.4).
     let attached = format!("attached serving={} primary=true queued=0", hex(&kh("bob")));
     let node = hex(&kh("bob"));
-    assert_eq!(set.get("carol").must(&format!("attach {node} {addr}")), vec![attached.clone()]);
-    assert_eq!(set.get("alice").must(&format!("attach {node} {addr} {}", hex(&kh("carol")))), vec![attached.clone()]);
-    assert_eq!(set.get("carol").must(&format!("attach {node} {addr} {}", hex(&kh("alice")))), [attached]);
+    assert_eq!(
+        set.get("carol").must(&format!("attach {node} {addr}")),
+        vec![attached.clone()]
+    );
+    assert_eq!(
+        set.get("alice")
+            .must(&format!("attach {node} {addr} {}", hex(&kh("carol")))),
+        vec![attached.clone()]
+    );
+    assert_eq!(
+        set.get("carol")
+            .must(&format!("attach {node} {addr} {}", hex(&kh("alice")))),
+        [attached]
+    );
     assert_eq!(set.get("alice").must("attached"), ["attached true"]);
 
     // and what alice sends comes out of carol's events, decrypted, having
     // crossed two sockets and a process that never held the plaintext
     let body = b"the chain, end to end";
-    assert_eq!(set.get("alice").must(&format!("send {} 0 {}", hex(&kh("carol")), hex(body))), ["sent"]);
+    assert_eq!(
+        set.get("alice")
+            .must(&format!("send {} 0 {}", hex(&kh("carol")), hex(body))),
+        ["sent"]
+    );
     let want = format!("payload from={} bytes={}", hex(&kh("alice")), hex(body));
     let mut got = Vec::new();
     for _ in 0..300 {
@@ -79,13 +96,24 @@ fn an_instrument_reports_what_it_was_told_the_hardware_did_and_nothing_more() {
     // no radio and no camera pointed at anybody has no proximity channel,
     // and `light-client-requirements.md` §1.3 forbids presenting a weaker
     // one as a stronger one — so the instrument starts by claiming none.
-    assert!(p.must("channel").is_empty(), "an undeclared instrument claims no channel");
+    assert!(
+        p.must("channel").is_empty(),
+        "an undeclared instrument claims no channel"
+    );
 
     assert_eq!(p.must("channel latency pass 30"), ["channel latency pass"]);
     assert_eq!(p.must("channel optical fail"), ["channel optical fail"]);
-    assert_eq!(p.must("channel"), ["channel optical fail", "channel latency pass 30"], "strongest first, and neither promoted");
+    assert_eq!(
+        p.must("channel"),
+        ["channel optical fail", "channel latency pass 30"],
+        "strongest first, and neither promoted"
+    );
     assert_eq!(p.must("channel optical none"), ["channel optical none"]);
-    assert_eq!(p.must("channel"), ["channel latency pass 30"], "a cleared channel is unsupported again");
+    assert_eq!(
+        p.must("channel"),
+        ["channel latency pass 30"],
+        "a cleared channel is unsupported again"
+    );
 
     // the person's standing answer is declining, because every question a
     // client puts is whether to release something
@@ -108,13 +136,21 @@ fn a_participant_reads_its_identity_and_never_mints_one() {
     assert_eq!(p.must("me"), [format!("me {}", hex(&kh("alice")))]);
 
     let run = |identity: &std::path::Path| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_rhtnp")).arg(identity).stdin(std::process::Stdio::null()).output().expect("runs")
+        std::process::Command::new(env!("CARGO_BIN_EXE_rhtnp"))
+            .arg(identity)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .expect("runs")
     };
     // absent: a participant that generated one would run under an identity
     // nobody has met, and the person would not know
     let out = run(&dir.join("nothing.key"));
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("No such file"), "{:?}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("No such file"),
+        "{:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     // the wrong length, and readable beyond its owner: the same two rules
     // the daemon holds its own key to, for the same reason
@@ -145,7 +181,11 @@ fn a_ceremony_runs_to_a_record_between_four_processes() {
     // its own nominator, the participants sign over the disclosures and
     // the witnesses without them, and all four name one record.
     let txid = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
-    assert_eq!(txid.len(), 64, "a record is named by a 32-byte txid: {txid}");
+    assert_eq!(
+        txid.len(),
+        64,
+        "a record is named by a 32-byte txid: {txid}"
+    );
 }
 
 /// The one line beginning `prefix`, without it.
@@ -170,36 +210,74 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     // **alice has been configured as nothing and adopted by nobody.** Its
     // position is the self-anchor, which is a position like any other, and
     // is the whole of what it needs to be a patron.
-    assert_eq!(set.get("alice").must("where"), [format!("anchor {a}")], "one subnet, its own");
-    assert!(set.get("alice").must(&format!("where {a}"))[0].starts_with("position "), "and it knows where it sits in it");
-    assert_eq!(set.get("alice").must(&format!("where {b}")), ["position none"], "it sits in nobody else's");
+    assert_eq!(
+        set.get("alice").must("where"),
+        [format!("anchor {a}")],
+        "one subnet, its own"
+    );
+    assert!(
+        set.get("alice").must(&format!("where {a}"))[0].starts_with("position "),
+        "and it knows where it sits in it"
+    );
+    assert_eq!(
+        set.get("alice").must(&format!("where {b}")),
+        ["position none"],
+        "it sits in nobody else's"
+    );
 
     let pop = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
 
     // the patron proposes under its own anchor, both sign the same body,
     // and each takes the record it signed
     let back = line(set.get("bob").must("back-pointers"), "back-pointers ");
-    let body = line(set.get("alice").must(&format!("adopt {a} {b} {pop} 1 {back}")), "adoption ");
+    let body = line(
+        set.get("alice")
+            .must(&format!("adopt {a} {b} {pop} 1 {back}")),
+        "adoption ",
+    );
     let sig_b = line(set.get("bob").must(&format!("sign {body}")), "signed ");
     let sig_a = line(set.get("alice").must(&format!("sign {body}")), "signed ");
-    let envelope = line(set.get("alice").must(&format!("adoption-envelope {body} {b}:{sig_b},{a}:{sig_a}")), "envelope ");
-    let t_a = line(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
-    let t_b = line(set.get("bob").must(&format!("take-adoption {envelope}")), "adopted ");
+    let envelope = line(
+        set.get("alice")
+            .must(&format!("adoption-envelope {body} {b}:{sig_b},{a}:{sig_a}")),
+        "envelope ",
+    );
+    let t_a = line(
+        set.get("alice").must(&format!("take-adoption {envelope}")),
+        "adopted ",
+    );
+    let t_b = line(
+        set.get("bob").must(&format!("take-adoption {envelope}")),
+        "adopted ",
+    );
     assert_eq!(t_a, t_b, "one adoption, and both name it the same");
 
     // **and taking it is what tells the subordinate where it now sits.**
     // Nothing was configured on either side and nothing was granted: the
     // record says it.
     let anchors = set.get("bob").must("where");
-    assert!(anchors.contains(&format!("anchor {a}")), "bob is in alice's subnet now: {anchors:?}");
-    assert!(anchors.contains(&format!("anchor {b}")), "and still in its own");
+    assert!(
+        anchors.contains(&format!("anchor {a}")),
+        "bob is in alice's subnet now: {anchors:?}"
+    );
+    assert!(
+        anchors.contains(&format!("anchor {b}")),
+        "and still in its own"
+    );
     assert!(set.get("bob").must(&format!("where {a}"))[0].starts_with("position "));
 }
 
 /// One ceremony between alice and bob, witnessed by carol and w1, to the
 /// record both hold.  The steps are PRT-04's; what this returns is what an
 /// adoption is evidence of.
-fn ceremony(set: &mut Participants, cast: &[&str], one: &str, two: &str, wa: &str, wb: &str) -> String {
+fn ceremony(
+    set: &mut Participants,
+    cast: &[&str],
+    one: &str,
+    two: &str,
+    wa: &str,
+    wb: &str,
+) -> String {
     let (a, b) = (hex(&kh(one)), hex(&kh(two)));
     for n in [one, two] {
         set.get(n).must("channel latency pass 30");
@@ -207,8 +285,15 @@ fn ceremony(set: &mut Participants, cast: &[&str], one: &str, two: &str, wa: &st
     for n in cast {
         set.get(n).must("answer yes");
     }
-    let ia = line(set.get(one).must(&format!("begin {b} {} initiator", hex(&kh(wa)))), "intent ");
-    let ib = line(set.get(two).must(&format!("begin {a} {}", hex(&kh(wb)))), "intent ");
+    let ia = line(
+        set.get(one)
+            .must(&format!("begin {b} {} initiator", hex(&kh(wa)))),
+        "intent ",
+    );
+    let ib = line(
+        set.get(two).must(&format!("begin {a} {}", hex(&kh(wb)))),
+        "intent ",
+    );
     let ca = line(set.get(two).must(&format!("intent {a} {ia}")), "ceremony ");
     let cb = line(set.get(one).must(&format!("intent {b} {ib}")), "ceremony ");
     assert_eq!(ca, cb, "both devices name the ceremony the same thing");
@@ -220,35 +305,83 @@ fn ceremony(set: &mut Participants, cast: &[&str], one: &str, two: &str, wa: &st
     set.get(one).must(&format!("capture {kb}"));
     let ask_a = line(set.get(one).must("witness-ask"), "witness-ask ");
     let ask_b = line(set.get(two).must("witness-ask"), "witness-ask ");
-    let f_a = line(set.get(wa).must(&format!("take-witness-ask {ask_a}")), "witnessing ");
-    let f_b = line(set.get(wb).must(&format!("take-witness-ask {ask_b}")), "witnessing ");
+    let f_a = line(
+        set.get(wa).must(&format!("take-witness-ask {ask_a}")),
+        "witnessing ",
+    );
+    let f_b = line(
+        set.get(wb).must(&format!("take-witness-ask {ask_b}")),
+        "witnessing ",
+    );
     let witnesses = format!("{}:{a}:{f_a},{}:{b}:{f_b}", hex(&kh(wa)), hex(&kh(wb)));
     let theirs = line(set.get(two).must("gathered"), "gathered ");
     let made = set.get(one).must(&format!("propose {theirs} {witnesses}"));
     let proposal = line(made.clone(), "proposed ");
     let disclosures = line(made, "disclosures ");
-    let signers: Vec<String> = line(set.get(one).must(&format!("signers {proposal}")), "signers ").split(',').map(str::to_string).collect();
-    let named: Vec<&str> = signers.iter().map(|s| cast.iter().find(|n| hex(&kh(n)) == *s).copied().expect("a signer in the cast")).collect();
-    let back: Vec<String> = named.iter().map(|n| line(set.get(n).must("back-pointers"), "back-pointers ")).collect();
+    let signers: Vec<String> = line(
+        set.get(one).must(&format!("signers {proposal}")),
+        "signers ",
+    )
+    .split(',')
+    .map(str::to_string)
+    .collect();
+    let named: Vec<&str> = signers
+        .iter()
+        .map(|s| {
+            cast.iter()
+                .find(|n| hex(&kh(n)) == *s)
+                .copied()
+                .expect("a signer in the cast")
+        })
+        .collect();
+    let back: Vec<String> = named
+        .iter()
+        .map(|n| line(set.get(n).must("back-pointers"), "back-pointers "))
+        .collect();
     let back = back.join(";");
-    let body = line(set.get(one).must(&format!("body {proposal} {back}")), "body ");
+    let body = line(
+        set.get(one).must(&format!("body {proposal} {back}")),
+        "body ",
+    );
     let mut entries = Vec::new();
     for (n, k) in named.iter().zip(&signers) {
         let signed = if *n == one || *n == two {
-            line(set.get(n).must(&format!("review-and-sign {proposal} {disclosures} {back}")), "signed ")
+            line(
+                set.get(n)
+                    .must(&format!("review-and-sign {proposal} {disclosures} {back}")),
+                "signed ",
+            )
         } else {
-            line(set.get(n).must(&format!("witness-sign {proposal} {back}")), "signed ")
+            line(
+                set.get(n).must(&format!("witness-sign {proposal} {back}")),
+                "signed ",
+            )
         };
         entries.push(format!("{k}:{signed}"));
     }
-    let envelope = line(set.get(one).must(&format!("envelope {body} {}", entries.join(","))), "envelope ");
+    let envelope = line(
+        set.get(one)
+            .must(&format!("envelope {body} {}", entries.join(","))),
+        "envelope ",
+    );
     let mut txids = Vec::new();
     for n in &named {
-        let command = if *n == one || *n == two { format!("finalize {envelope} {disclosures}") } else { format!("finalize {envelope}") };
+        let command = if *n == one || *n == two {
+            format!("finalize {envelope} {disclosures}")
+        } else {
+            format!("finalize {envelope}")
+        };
         txids.push(line(set.get(n).must(&command), "finalized "));
     }
-    assert!(txids.windows(2).all(|w| w[0] == w[1]), "one record, and every signer names it the same: {txids:?}");
-    assert_eq!(txids.len(), 4, "two participants and two witnesses signed it");
+    assert!(
+        txids.windows(2).all(|w| w[0] == w[1]),
+        "one record, and every signer names it the same: {txids:?}"
+    );
+    assert_eq!(
+        txids.len(),
+        4,
+        "two participants and two witnesses signed it"
+    );
     txids.remove(0)
 }
 
@@ -283,11 +416,22 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
     // adoption made on it is what the node is offered.
     let (a, c) = (hex(&kh("alice")), hex(&kh("carol")));
     let back = line(set.get("carol").must("back-pointers"), "back-pointers ");
-    let body = line(set.get("alice").must(&format!("adopt {a} {c} {pop} 1 {back}")), "adoption ");
+    let body = line(
+        set.get("alice")
+            .must(&format!("adopt {a} {c} {pop} 1 {back}")),
+        "adoption ",
+    );
     let sig_c = line(set.get("carol").must(&format!("sign {body}")), "signed ");
     let sig_a = line(set.get("alice").must(&format!("sign {body}")), "signed ");
-    let envelope = line(set.get("alice").must(&format!("adoption-envelope {body} {c}:{sig_c},{a}:{sig_a}")), "envelope ");
-    let txid = line(set.get("alice").must(&format!("take-adoption {envelope}")), "adopted ");
+    let envelope = line(
+        set.get("alice")
+            .must(&format!("adoption-envelope {body} {c}:{sig_c},{a}:{sig_a}")),
+        "envelope ",
+    );
+    let txid = line(
+        set.get("alice").must(&format!("take-adoption {envelope}")),
+        "adopted ",
+    );
 
     // the polls below are bounded at thirty seconds for the reason the
     // daemon scenarios' dials are: the gate fences every long job at
@@ -308,7 +452,11 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(landed, "the adoption came back down to the other client");
-    assert_eq!(line(set.get("carol").must(&format!("distance {a}")), "distance "), "1", "and carol places its patron one edge away");
+    assert_eq!(
+        line(set.get("carol").must(&format!("distance {a}")), "distance "),
+        "1",
+        "and carol places its patron one edge away"
+    );
 
     // and it is in what the process wrote when it stopped, not in a view
     nodes.stop("bob");
@@ -318,5 +466,8 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
         .flatten()
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
-    assert!(names.contains(&txid), "the node holds the transaction its client made: {names:?}");
+    assert!(
+        names.contains(&txid),
+        "the node holds the transaction its client made: {names:?}"
+    );
 }

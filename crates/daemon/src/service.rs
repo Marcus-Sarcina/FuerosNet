@@ -69,19 +69,34 @@ pub const IDENTITY_BYTES: usize = 64;
 /// the rest of the host can read is not this node's alone, and the check
 /// costs nothing.
 pub fn read_identity(path: &Path) -> Result<SigningIdentity, Startup> {
-    let bytes = std::fs::read(path).map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+    let bytes =
+        std::fs::read(path).map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
     if bytes.len() != IDENTITY_BYTES {
-        return Err(Startup::Identity(format!("{} is {} bytes, not {IDENTITY_BYTES}", path.display(), bytes.len())));
+        return Err(Startup::Identity(format!(
+            "{} is {} bytes, not {IDENTITY_BYTES}",
+            path.display(),
+            bytes.len()
+        )));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(path).map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?.permissions().mode();
+        let mode = std::fs::metadata(path)
+            .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?
+            .permissions()
+            .mode();
         if mode & 0o077 != 0 {
-            return Err(Startup::Identity(format!("{} is readable beyond its owner (mode {:o})", path.display(), mode & 0o777)));
+            return Err(Startup::Identity(format!(
+                "{} is readable beyond its owner (mode {:o})",
+                path.display(),
+                mode & 0o777
+            )));
         }
     }
-    let (ed, pq): ([u8; 32], [u8; 32]) = (bytes[..32].try_into().unwrap(), bytes[32..].try_into().unwrap());
+    let (ed, pq): ([u8; 32], [u8; 32]) = (
+        bytes[..32].try_into().unwrap(),
+        bytes[32..].try_into().unwrap(),
+    );
     Ok(SigningIdentity::from_seeds(&ed, &pq))
 }
 
@@ -94,15 +109,18 @@ pub fn read_identity(path: &Path) -> Result<SigningIdentity, Startup> {
 /// checked against it. There is no fetch path for material a node lacks,
 /// which is why it is configuration and not discovery.
 pub fn read_peers(path: &Path) -> Result<Vec<Identity>, Startup> {
-    let text = std::fs::read_to_string(path).map_err(|e| Startup::Peers(format!("{}: {e}", path.display())))?;
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| Startup::Peers(format!("{}: {e}", path.display())))?;
     let mut out = Vec::new();
     for (i, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let bytes = hex_bytes(line).ok_or_else(|| Startup::Peers(format!("line {}: not hex", i + 1)))?;
-        let id = Identity::from_key_material(&bytes).ok_or_else(|| Startup::Peers(format!("line {}: not a KeyMaterial array", i + 1)))?;
+        let bytes =
+            hex_bytes(line).ok_or_else(|| Startup::Peers(format!("line {}: not hex", i + 1)))?;
+        let id = Identity::from_key_material(&bytes)
+            .ok_or_else(|| Startup::Peers(format!("line {}: not a KeyMaterial array", i + 1)))?;
         out.push(id);
     }
     Ok(out)
@@ -112,7 +130,9 @@ fn hex_bytes(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok())
+        .collect()
 }
 
 /// A running daemon: the node, and the state it must write back.
@@ -168,7 +188,8 @@ impl Service {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
             Err(e) => return Err(Startup::State(format!("{}: {e}", cfg.topology.display()))),
         };
-        std::fs::create_dir_all(&cfg.queue).map_err(|e| Startup::State(format!("{}: {e}", cfg.queue.display())))?;
+        std::fs::create_dir_all(&cfg.queue)
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.queue.display())))?;
         let queue = Arc::new(rhtn_node::queue::DirStore::new(&cfg.queue));
 
         let archive = rhtn_archive::chain::Archive::load(&cfg.archive, me.public.keyhash)
@@ -188,10 +209,14 @@ impl Service {
         // folds in what arrived since rather than replaying the history
         // [author, 2026-09-13]; a snapshot that cannot account for what the
         // store holds is discarded and the whole fold runs
-        let snap = std::fs::read(cfg.topology.join(DERIVED)).ok().and_then(|b| Snapshot::decode(&b));
+        let snap = std::fs::read(cfg.topology.join(DERIVED))
+            .ok()
+            .and_then(|b| Snapshot::decode(&b));
         match view.restore_materialised(snap.as_ref(), &known) {
             Restored::Replayed { replayed } if snap.is_some() => {
-                eprintln!("rhtnd: the derived state did not match the store; replayed {replayed} records");
+                eprintln!(
+                    "rhtnd: the derived state did not match the store; replayed {replayed} records"
+                );
             }
             _ => {}
         }
@@ -205,9 +230,16 @@ impl Service {
         let hosts_resources = match &cfg.resources {
             None => false,
             Some(path) => {
-                let (memory, fuel) = cfg.resource_limits.unwrap_or((Limits::default().memory, Limits::default().fuel));
-                let limits = Limits { memory, fuel, ..Limits::default() };
-                let bound = crate::hosting::apply(&mut view.resources, path, limits).map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                let (memory, fuel) = cfg
+                    .resource_limits
+                    .unwrap_or((Limits::default().memory, Limits::default().fuel));
+                let limits = Limits {
+                    memory,
+                    fuel,
+                    ..Limits::default()
+                };
+                let bound = crate::hosting::apply(&mut view.resources, path, limits)
+                    .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 bound > 0
             }
         };
@@ -218,7 +250,12 @@ impl Service {
         node_cfg.queue_cap = cfg.queue_cap;
         // the wall clock, so issuance, outage stamps and the ladder's
         // intervals read time that moves
-        node_cfg.clock = Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+        node_cfg.clock = Arc::new(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        });
         let (count, window) = cfg.request_allowance;
         let limits = RateLimit::new(count, Duration::from_secs(window));
         let anchors = AnchorTable::new(0, cfg.ingestion);
@@ -230,7 +267,11 @@ impl Service {
         // one for a frame missed while the session was already up.
         // Zero is an operator saying its links do not lose frames.
         if cfg.reconcile_secs > 0 {
-            rhtn_node::runtime::reconcile_every(node.view.clone(), node.adjacency.clone(), Duration::from_secs(cfg.reconcile_secs));
+            rhtn_node::runtime::reconcile_every(
+                node.view.clone(),
+                node.adjacency.clone(),
+                Duration::from_secs(cfg.reconcile_secs),
+            );
         }
 
         // upstream, where the configuration names one: a root attaches to
@@ -251,7 +292,14 @@ impl Service {
                 }
             }
         };
-        Ok(Service { node, prekeys: cfg.prekeys.clone(), topology: cfg.topology.clone(), archive: cfg.archive.clone(), hosts_resources, _upstream: upstream })
+        Ok(Service {
+            node,
+            prekeys: cfg.prekeys.clone(),
+            topology: cfg.topology.clone(),
+            archive: cfg.archive.clone(),
+            hosts_resources,
+            _upstream: upstream,
+        })
     }
 
     /// What this node's configuration exposes the identities below it to
@@ -262,7 +310,12 @@ impl Service {
         let view = self.node.view.lock().unwrap();
         let me = view.me();
         let subordinates = view.table.subordinates(&me).len();
-        crate::operator::ExposureView::new(subordinates, true, self.hosts_resources, view.serving_node.is_some())
+        crate::operator::ExposureView::new(
+            subordinates,
+            true,
+            self.hosts_resources,
+            view.serving_node.is_some(),
+        )
     }
 
     /// Routine maintenance: one-time keys whose window has passed are
@@ -326,7 +379,15 @@ impl Service {
 /// position a root holds, and what a subordinate carries until its
 /// adoption is stored (`wire-format.md` §2.3).
 fn position_of(me: &Keyhash) -> rhtn_archive::tx::Locator {
-    rhtn_archive::tx::Locator { anchor: *me, path: Vec::new(), nibbles: 0, seqno: rhtn_archive::tx::Seqno { series: 1, counter: 0 } }
+    rhtn_archive::tx::Locator {
+        anchor: *me,
+        path: Vec::new(),
+        nibbles: 0,
+        seqno: rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 0,
+        },
+    }
 }
 
 fn client_config(
@@ -335,7 +396,8 @@ fn client_config(
     addrs: &[std::net::SocketAddr],
     patron: &Keyhash,
 ) -> rhtn_transport::session::ClientConfig {
-    let book: std::collections::HashMap<[u8; 32], Vec<std::net::SocketAddr>> = std::collections::HashMap::from([(*patron, addrs.to_vec())]);
+    let book: std::collections::HashMap<[u8; 32], Vec<std::net::SocketAddr>> =
+        std::collections::HashMap::from([(*patron, addrs.to_vec())]);
     rhtn_transport::session::ClientConfig {
         identity: me,
         pins,

@@ -31,10 +31,20 @@ pub enum As<'a> {
 /// otherwise.  A corpus entry is hex and a capture is not, and telling
 /// them apart by looking costs nothing.
 pub fn read_blob(bytes: &[u8]) -> Vec<u8> {
-    let text: Vec<u8> = bytes.iter().copied().filter(|c| !c.is_ascii_whitespace()).collect();
-    if !text.is_empty() && text.len().is_multiple_of(2) && text.iter().all(|c| c.is_ascii_hexdigit()) {
+    let text: Vec<u8> = bytes
+        .iter()
+        .copied()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect();
+    if !text.is_empty()
+        && text.len().is_multiple_of(2)
+        && text.iter().all(|c| c.is_ascii_hexdigit())
+    {
         return (0..text.len() / 2)
-            .map(|i| u8::from_str_radix(std::str::from_utf8(&text[i * 2..i * 2 + 2]).unwrap(), 16).unwrap())
+            .map(|i| {
+                u8::from_str_radix(std::str::from_utf8(&text[i * 2..i * 2 + 2]).unwrap(), 16)
+                    .unwrap()
+            })
             .collect();
     }
     bytes.to_vec()
@@ -50,8 +60,17 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
         return match frame::parse_payload(stream, raw) {
             Err(Error(e)) => out + &format!("frame     refused: {e}\n"),
             Ok(f) => {
-                out.push_str(&format!("frame     type {} on the {} stream\n", f.frame_type, stream_name(stream)));
-                out.push_str(&format!("family    {}\n", f.family.map(|x| format!("{x:?}")).unwrap_or_else(|| "unknown, and skipped".into())));
+                out.push_str(&format!(
+                    "frame     type {} on the {} stream\n",
+                    f.frame_type,
+                    stream_name(stream)
+                ));
+                out.push_str(&format!(
+                    "family    {}\n",
+                    f.family
+                        .map(|x| format!("{x:?}"))
+                        .unwrap_or_else(|| "unknown, and skipped".into())
+                ));
                 out.push_str(&format!("body      {} bytes\n", f.body.len()));
                 out + &diagnostic(&f.body_item, &raw[f.body.clone()], f.body.start)
             }
@@ -65,14 +84,26 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
         out.push_str(&format!("kind      {kind}\n"));
         match kind {
             "envelope" => out.push_str(&envelope_lines(raw, ids)),
-            "presentation" => out.push_str(&format!("verdict   {}\n", verdict(verify::presentation(ids, raw)))),
+            "presentation" => out.push_str(&format!(
+                "verdict   {}\n",
+                verdict(verify::presentation(ids, raw))
+            )),
             k => {
-                out.push_str(&format!("schema    {}\n", said(schema::check_kind(raw, k, &item).map_err(|e| e.0.to_string()))));
+                out.push_str(&format!(
+                    "schema    {}\n",
+                    said(schema::check_kind(raw, k, &item).map_err(|e| e.0.to_string()))
+                ));
                 if is_signed_kind(k) {
-                    out.push_str(&format!("signature {}\n", signature(verify::record(ids, k, raw))));
+                    out.push_str(&format!(
+                        "signature {}\n",
+                        signature(verify::record(ids, k, raw))
+                    ));
                 } else if k == "Delegation" {
                     // hybrid, under the delegating identity (`wire-format.md` §8.2)
-                    out.push_str(&format!("signature {}\n", signature(verify::delegation(ids, raw).map(|_| ()))));
+                    out.push_str(&format!(
+                        "signature {}\n",
+                        signature(verify::delegation(ids, raw).map(|_| ()))
+                    ));
                 }
             }
         }
@@ -85,7 +116,14 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
 fn is_signed_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "CurrencyAttestation" | "CatalogEntry" | "AbuseReport" | "AnchorEntry" | "SubtreeAck" | "PrekeyBundle" | "EndpointRecord" | "SignedLocator"
+        "CurrencyAttestation"
+            | "CatalogEntry"
+            | "AbuseReport"
+            | "AnchorEntry"
+            | "SubtreeAck"
+            | "PrekeyBundle"
+            | "EndpointRecord"
+            | "SignedLocator"
     )
 }
 
@@ -95,15 +133,25 @@ fn envelope_lines<L: Lookup + ?Sized>(raw: &[u8], ids: &L) -> String {
         Err(e) => return format!("envelope  refused: {e}\n"),
         Ok(env) => {
             // the txid is over the body map and derived, never carried (§1)
-            out.push_str(&format!("txid      {}\n", hex(&cose::txid(&raw[env.body.clone()]))));
-            out.push_str(&format!("type      {} ({})\n", env.tx_type, tx_name(env.tx_type)));
+            out.push_str(&format!(
+                "txid      {}\n",
+                hex(&cose::txid(&raw[env.body.clone()]))
+            ));
+            out.push_str(&format!(
+                "type      {} ({})\n",
+                env.tx_type,
+                tx_name(env.tx_type)
+            ));
             out.push_str(&format!("signers   {}\n", env.signers.len()));
             for s in &env.signers {
                 out.push_str(&format!("  {}\n", hex(s)));
             }
         }
     }
-    out.push_str(&format!("verdict   {}\n", verdict(verify::envelope(ids, raw).map(|_| ()))));
+    out.push_str(&format!(
+        "verdict   {}\n",
+        verdict(verify::envelope(ids, raw).map(|_| ()))
+    ));
     out
 }
 
@@ -170,7 +218,10 @@ fn write_item(s: &mut String, item: &Item, raw: &[u8], base: usize, depth: usize
         Item::Neg(n) => s.push_str(&n.to_string()),
         Item::Bool(b) => s.push_str(if *b { "true" } else { "false" }),
         Item::Null => s.push_str("null"),
-        Item::Text(r) => s.push_str(&format!("{:?}", String::from_utf8_lossy(slice(raw, base, r)))),
+        Item::Text(r) => s.push_str(&format!(
+            "{:?}",
+            String::from_utf8_lossy(slice(raw, base, r))
+        )),
         Item::Bytes(r) => {
             let b = slice(raw, base, r);
             match b.len() {

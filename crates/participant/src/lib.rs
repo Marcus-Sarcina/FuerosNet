@@ -71,13 +71,27 @@ impl Instrument {
         // (`wire-format.md` §3.4).  The daemon learned this about its own
         // identity; nothing had asked it of a client, because nothing had
         // ever started one outside a test that passed every key in.
-        let (ed, pq): ([u8; 32], [u8; 32]) = (seeds[..32].try_into().expect("64 bytes"), seeds[32..].try_into().expect("64 bytes"));
-        let mut known = vec![rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq).public.key_material()];
+        let (ed, pq): ([u8; 32], [u8; 32]) = (
+            seeds[..32].try_into().expect("64 bytes"),
+            seeds[32..].try_into().expect("64 bytes"),
+        );
+        let mut known = vec![
+            rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq)
+                .public
+                .key_material(),
+        ];
         if let Some(p) = peers {
             known.extend(read_peers(p)?);
         }
         let shell = Arc::new(Terminal::default());
-        let p = platform(shell.clone(), shell.clone(), shell.clone(), shell.clone(), shell.clone(), shell.clone());
+        let p = platform(
+            shell.clone(),
+            shell.clone(),
+            shell.clone(),
+            shell.clone(),
+            shell.clone(),
+            shell.clone(),
+        );
         let client = Participant::start(seeds, known, p).map_err(|e| e.reason)?;
         Ok(Instrument { client, shell })
     }
@@ -118,8 +132,16 @@ impl Instrument {
                 let node = id(node)?;
                 let addrs: Vec<String> = addresses.split(',').map(str::to_string).collect();
                 let pop: Result<Vec<Vec<u8>>, String> = population.iter().map(|p| id(p)).collect();
-                let a = self.client.attach(node, addrs, pop?).map_err(|e| e.reason)?;
-                Ok(vec![format!("attached serving={} primary={} queued={}", hex(&a.serving), a.primary, a.queued)])
+                let a = self
+                    .client
+                    .attach(node, addrs, pop?)
+                    .map_err(|e| e.reason)?;
+                Ok(vec![format!(
+                    "attached serving={} primary={} queued={}",
+                    hex(&a.serving),
+                    a.primary,
+                    a.queued
+                )])
             }
 
             ["maintain"] => {
@@ -128,7 +150,9 @@ impl Instrument {
             }
 
             ["send", to, kind, body] => {
-                let k: u64 = kind.parse().map_err(|_| format!("`{kind}` is not a payload kind"))?;
+                let k: u64 = kind
+                    .parse()
+                    .map_err(|_| format!("`{kind}` is not a payload kind"))?;
                 let bytes = unhex(body).ok_or_else(|| format!("`{body}` is not hex"))?;
                 self.client.send(id(to)?, k, bytes).map_err(|e| e.reason)?;
                 Ok(vec!["sent".into()])
@@ -141,27 +165,57 @@ impl Instrument {
             ["wake", url, key, rest @ ..] => {
                 let lapses_at = match rest {
                     [] => None,
-                    [t] => Some(t.parse::<u64>().map_err(|_| format!("`{t}` is not a time"))?),
+                    [t] => Some(
+                        t.parse::<u64>()
+                            .map_err(|_| format!("`{t}` is not a time"))?,
+                    ),
                     _ => return Err("wake <url> <key-hex> [<lapses-at>]".into()),
                 };
                 let key = unhex(key).ok_or_else(|| format!("`{key}` is not hex"))?;
-                self.client.wake(Some(Wake { url: (*url).to_string(), key, lapses_at })).map_err(|e| e.reason)?;
+                self.client
+                    .wake(Some(Wake {
+                        url: (*url).to_string(),
+                        key,
+                        lapses_at,
+                    }))
+                    .map_err(|e| e.reason)?;
                 Ok(vec!["wake set".into()])
             }
 
             // what this client holds of its own neighbourhood
             ["horizon"] => {
                 let mut out = vec![format!("records {}", self.client.records())];
-                out.extend(
-                    self.client
-                        .places()
-                        .iter()
-                        .map(|p| format!("place {} anchor={} path={} nibbles={}", hex(&p.node), hex(&p.anchor), hex(&p.path), p.nibbles)),
-                );
+                out.extend(self.client.places().iter().map(|p| {
+                    format!(
+                        "place {} anchor={} path={} nibbles={}",
+                        hex(&p.node),
+                        hex(&p.anchor),
+                        hex(&p.path),
+                        p.nibbles
+                    )
+                }));
                 Ok(out)
             }
-            ["resolvable"] => Ok(vec![format!("resolvable {}", joined(&self.client.resolvable()))]),
-            ["reachable"] => Ok(self.client.reachable().iter().map(|(n, a)| format!("reachable {} at={}", hex(n), if a.is_empty() { "-".into() } else { a.join(",") })).collect()),
+            ["resolvable"] => Ok(vec![format!(
+                "resolvable {}",
+                joined(&self.client.resolvable())
+            )]),
+            ["reachable"] => Ok(self
+                .client
+                .reachable()
+                .iter()
+                .map(|(n, a)| {
+                    format!(
+                        "reachable {} at={}",
+                        hex(n),
+                        if a.is_empty() {
+                            "-".into()
+                        } else {
+                            a.join(",")
+                        }
+                    )
+                })
+                .collect()),
             ["distance", node] => Ok(vec![match self.client.distance(id(node)?) {
                 None => "distance none".into(),
                 Some(d) => format!("distance {d}"),
@@ -170,19 +224,32 @@ impl Instrument {
             ["prune"] => Ok(vec![format!("pruned {}", self.client.prune())]),
 
             ["events"] => self.events(0),
-            ["events", ms] => self.events(ms.parse::<u64>().map_err(|_| format!("`{ms}` is not a count of milliseconds"))?),
+            ["events", ms] => self.events(
+                ms.parse::<u64>()
+                    .map_err(|_| format!("`{ms}` is not a count of milliseconds"))?,
+            ),
 
             ["channel"] => Ok(self
                 .shell
                 .declarations()
                 .iter()
-                .map(|(c, o, m)| format!("channel {} {}{}", channel_name(*c), outcome_name(*o), m.map_or(String::new(), |m| format!(" {m}"))))
+                .map(|(c, o, m)| {
+                    format!(
+                        "channel {} {}{}",
+                        channel_name(*c),
+                        outcome_name(*o),
+                        m.map_or(String::new(), |m| format!(" {m}"))
+                    )
+                })
                 .collect()),
             ["channel", name, outcome, rest @ ..] => {
                 let c = channel_of(name)?;
                 let metres = match rest {
                     [] => None,
-                    [m] => Some(m.parse::<u64>().map_err(|_| format!("`{m}` is not a count of metres"))?),
+                    [m] => Some(
+                        m.parse::<u64>()
+                            .map_err(|_| format!("`{m}` is not a count of metres"))?,
+                    ),
                     _ => return Err("channel <name> <pass|fail|unavailable> [<metres>]".into()),
                 };
                 match *outcome {
@@ -192,7 +259,10 @@ impl Instrument {
                 Ok(vec![format!("channel {name} {outcome}")])
             }
 
-            ["answer"] => Ok(vec![format!("answer {}", if self.shell.answering() { "yes" } else { "no" })]),
+            ["answer"] => Ok(vec![format!(
+                "answer {}",
+                if self.shell.answering() { "yes" } else { "no" }
+            )]),
             ["answer", "yes"] => {
                 self.shell.answers(true);
                 Ok(vec!["answer yes".into()])
@@ -225,7 +295,9 @@ impl Instrument {
                     [n, "initiator"] => (carry_ids(n)?, true),
                     _ => return Err("begin <counterparty> [<nominee>,...] [initiator]".into()),
                 };
-                let i = c.begin(id(counterparty)?, nominees, initiator).map_err(|e| e.reason)?;
+                let i = c
+                    .begin(id(counterparty)?, nominees, initiator)
+                    .map_err(|e| e.reason)?;
                 Ok(vec![format!("intent {}", carry::pack_intent(&i))])
             }
             ["intent", from, blob] => {
@@ -233,90 +305,201 @@ impl Instrument {
                 let id = c.take_intent(id(from)?, i).map_err(|e| e.reason)?;
                 Ok(vec![format!("ceremony {}", hex(&id))])
             }
-            ["ceremony"] => Ok(vec![c.ceremony().map_or("ceremony none".into(), |i| format!("ceremony {}", hex(&i)))]),
+            ["ceremony"] => {
+                Ok(vec![c.ceremony().map_or("ceremony none".into(), |i| {
+                    format!("ceremony {}", hex(&i))
+                })])
+            }
 
             ["proximity"] => {
                 let a = c.proximity().map_err(|e| e.reason)?;
                 Ok(vec![format!("channels {}", carry::pack_channels(&a))])
             }
             ["take-channels", blob] => {
-                c.take_channels(carry::take_channels(blob)?).map_err(|e| e.reason)?;
+                c.take_channels(carry::take_channels(blob)?)
+                    .map_err(|e| e.reason)?;
                 Ok(vec!["channels taken".into()])
             }
 
-            ["capture-key"] => Ok(vec![format!("capture-key {}", hex(&c.capture_key().map_err(|e| e.reason)?))]),
+            ["capture-key"] => Ok(vec![format!(
+                "capture-key {}",
+                hex(&c.capture_key().map_err(|e| e.reason)?)
+            )]),
             ["capture", key] => {
                 c.capture(bytes(key)?).map_err(|e| e.reason)?;
                 Ok(vec!["captured".into()])
             }
 
-            ["verifiers"] => Ok(c.select_verifiers().map_err(|e| e.reason)?.iter().map(|s| format!("verifier {} basis={}", hex(&s.verifier), s.basis)).collect()),
-            ["query", verifier] => Ok(vec![format!("query {}", hex(&c.query_for(id(verifier)?).map_err(|e| e.reason)?))]),
-            ["consent", query] => Ok(vec![match c.consent(bytes(query)?).map_err(|e| e.reason)? {
-                None => "consent none".into(),
-                Some(s) => format!("consent {}", hex(&s)),
-            }]),
+            ["verifiers"] => Ok(c
+                .select_verifiers()
+                .map_err(|e| e.reason)?
+                .iter()
+                .map(|s| format!("verifier {} basis={}", hex(&s.verifier), s.basis))
+                .collect()),
+            ["query", verifier] => Ok(vec![format!(
+                "query {}",
+                hex(&c.query_for(id(verifier)?).map_err(|e| e.reason)?)
+            )]),
+            ["consent", query] => Ok(vec![
+                match c.consent(bytes(query)?).map_err(|e| e.reason)? {
+                    None => "consent none".into(),
+                    Some(s) => format!("consent {}", hex(&s)),
+                },
+            ]),
             ["request", query, consent, basis] => {
-                let b: u32 = basis.parse().map_err(|_| format!("`{basis}` is not a selection basis"))?;
-                Ok(vec![format!("request {}", hex(&c.request(bytes(query)?, bytes(consent)?, b).map_err(|e| e.reason)?))])
+                let b: u32 = basis
+                    .parse()
+                    .map_err(|_| format!("`{basis}` is not a selection basis"))?;
+                Ok(vec![format!(
+                    "request {}",
+                    hex(&c
+                        .request(bytes(query)?, bytes(consent)?, b)
+                        .map_err(|e| e.reason)?)
+                )])
             }
-            ["take-query", from, blob] => Ok(vec![answered(c.take_query(id(from)?, bytes(blob)?).map_err(|e| e.reason)?)]),
-            ["take-grant", from, blob] => Ok(vec![answered(c.take_grant(id(from)?, bytes(blob)?).map_err(|e| e.reason)?)]),
+            ["take-query", from, blob] => Ok(vec![answered(
+                c.take_query(id(from)?, bytes(blob)?)
+                    .map_err(|e| e.reason)?,
+            )]),
+            ["take-grant", from, blob] => Ok(vec![answered(
+                c.take_grant(id(from)?, bytes(blob)?)
+                    .map_err(|e| e.reason)?,
+            )]),
             ["take-response", blob] => {
                 c.take_response(bytes(blob)?).map_err(|e| e.reason)?;
                 Ok(vec!["response taken".into()])
             }
             ["gathered"] => Ok(vec![format!("gathered {}", joined(&c.gathered()))]),
-            ["responses"] => Ok(c.responses().iter().map(|r| format!("response verifier={} subject={} answer={:?}", hex(&r.verifier), hex(&r.subject), r.answer)).collect()),
+            ["responses"] => Ok(c
+                .responses()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "response verifier={} subject={} answer={:?}",
+                        hex(&r.verifier),
+                        hex(&r.subject),
+                        r.answer
+                    )
+                })
+                .collect()),
 
             ["nominees"] => {
                 let (mine, theirs) = c.nominees();
-                Ok(vec![format!("nominees mine={} theirs={}", joined(&mine), joined(&theirs))])
+                Ok(vec![format!(
+                    "nominees mine={} theirs={}",
+                    joined(&mine),
+                    joined(&theirs)
+                )])
             }
-            ["witness-ask"] => Ok(vec![format!("witness-ask {}", carry::pack_ask(&c.witness_ask().map_err(|e| e.reason)?))]),
-            ["take-witness-ask", blob] => Ok(vec![match c.take_witness_ask(carry::take_ask(blob)?) {
-                None => "declined".into(),
-                Some(flags) => format!("witnessing {flags}"),
-            }]),
+            ["witness-ask"] => Ok(vec![format!(
+                "witness-ask {}",
+                carry::pack_ask(&c.witness_ask().map_err(|e| e.reason)?)
+            )]),
+            ["take-witness-ask", blob] => {
+                Ok(vec![match c.take_witness_ask(carry::take_ask(blob)?) {
+                    None => "declined".into(),
+                    Some(flags) => format!("witnessing {flags}"),
+                }])
+            }
 
-            ["back-pointers"] => Ok(vec![format!("back-pointers {}", joined(&c.back_pointers()))]),
+            ["back-pointers"] => Ok(vec![format!(
+                "back-pointers {}",
+                joined(&c.back_pointers())
+            )]),
             ["propose", theirs, witnesses] => {
-                let theirs: Result<Vec<Vec<u8>>, String> = carry_list(theirs).iter().map(|x| bytes(x)).collect();
+                let theirs: Result<Vec<Vec<u8>>, String> =
+                    carry_list(theirs).iter().map(|x| bytes(x)).collect();
                 let w = carry::take_witnesses(witnesses)?;
                 let (p, set) = c.propose(theirs?, w).map_err(|e| e.reason)?;
-                Ok(vec![format!("proposed {}", carry::pack_proposed(&p)), format!("disclosures {}", carry::pack_revealed(&set))])
+                Ok(vec![
+                    format!("proposed {}", carry::pack_proposed(&p)),
+                    format!("disclosures {}", carry::pack_revealed(&set)),
+                ])
             }
-            ["signers", proposed] => Ok(vec![format!("signers {}", joined(&carry::take_proposed(proposed)?.signers()))]),
-            ["body", proposed, back] => Ok(vec![format!("body {}", hex(&c.body(carry::take_proposed(proposed)?, carry::take_back(back)?).map_err(|e| e.reason)?))]),
+            ["signers", proposed] => Ok(vec![format!(
+                "signers {}",
+                joined(&carry::take_proposed(proposed)?.signers())
+            )]),
+            ["body", proposed, back] => Ok(vec![format!(
+                "body {}",
+                hex(&c
+                    .body(carry::take_proposed(proposed)?, carry::take_back(back)?)
+                    .map_err(|e| e.reason)?)
+            )]),
             ["review-and-sign", proposed, set, back] => Ok(vec![format!(
                 "signed {}",
-                hex(&c.review_and_sign(carry::take_proposed(proposed)?, carry::take_revealed(set)?, carry::take_back(back)?).map_err(|e| e.reason)?)
+                hex(&c
+                    .review_and_sign(
+                        carry::take_proposed(proposed)?,
+                        carry::take_revealed(set)?,
+                        carry::take_back(back)?
+                    )
+                    .map_err(|e| e.reason)?)
             )]),
-            ["witness-sign", proposed, back] => {
-                Ok(vec![format!("signed {}", hex(&c.witness_sign(carry::take_proposed(proposed)?, carry::take_back(back)?).map_err(|e| e.reason)?))])
-            }
-            ["envelope", body, entries] => Ok(vec![format!("envelope {}", hex(&rhtn_ffi::client::presence_envelope(bytes(body)?, carry::take_entries(entries)?)))]),
+            ["witness-sign", proposed, back] => Ok(vec![format!(
+                "signed {}",
+                hex(&c
+                    .witness_sign(carry::take_proposed(proposed)?, carry::take_back(back)?)
+                    .map_err(|e| e.reason)?)
+            )]),
+            ["envelope", body, entries] => Ok(vec![format!(
+                "envelope {}",
+                hex(&rhtn_ffi::client::presence_envelope(
+                    bytes(body)?,
+                    carry::take_entries(entries)?
+                ))
+            )]),
 
             // the adoption, on the record the ceremony produced
-            ["where"] => Ok(c.anchors().iter().map(|a| format!("anchor {}", hex(a))).collect()),
+            ["where"] => Ok(c
+                .anchors()
+                .iter()
+                .map(|a| format!("anchor {}", hex(a)))
+                .collect()),
             ["where", anchor] => Ok(vec![match c.position_in(id(anchor)?) {
                 None => "position none".into(),
                 Some(p) => format!("position {}", hex(&p)),
             }]),
             ["adopt", anchor, node, presence, series, back] => {
-                let s: u32 = series.parse().map_err(|_| format!("`{series}` is not a series"))?;
-                let back: Result<Vec<Vec<u8>>, String> = carry_list(back).iter().map(|x| bytes(x)).collect();
-                Ok(vec![format!("adoption {}", hex(&c.propose_adoption(id(anchor)?, id(node)?, id(presence)?, s, back?).map_err(|e| e.reason)?))])
+                let s: u32 = series
+                    .parse()
+                    .map_err(|_| format!("`{series}` is not a series"))?;
+                let back: Result<Vec<Vec<u8>>, String> =
+                    carry_list(back).iter().map(|x| bytes(x)).collect();
+                Ok(vec![format!(
+                    "adoption {}",
+                    hex(&c
+                        .propose_adoption(id(anchor)?, id(node)?, id(presence)?, s, back?)
+                        .map_err(|e| e.reason)?)
+                )])
             }
             ["sign", body] => Ok(vec![format!("signed {}", hex(&c.sign_body(bytes(body)?)))]),
-            ["adoption-envelope", body, entries] => {
-                Ok(vec![format!("envelope {}", hex(&rhtn_ffi::client::adoption_envelope(bytes(body)?, carry::take_entries(entries)?)))])
-            }
-            ["take-adoption", envelope] => Ok(vec![format!("adopted {}", hex(&c.take_adoption(bytes(envelope)?).map_err(|e| e.reason)?))]),
-            ["finalize", envelope] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, None).map_err(|e| e.reason)?))]),
-            ["finalize", envelope, set] => Ok(vec![format!("finalized {}", hex(&c.finalize(bytes(envelope)?, Some(carry::take_revealed(set)?)).map_err(|e| e.reason)?))]),
+            ["adoption-envelope", body, entries] => Ok(vec![format!(
+                "envelope {}",
+                hex(&rhtn_ffi::client::adoption_envelope(
+                    bytes(body)?,
+                    carry::take_entries(entries)?
+                ))
+            )]),
+            ["take-adoption", envelope] => Ok(vec![format!(
+                "adopted {}",
+                hex(&c.take_adoption(bytes(envelope)?).map_err(|e| e.reason)?)
+            )]),
+            ["finalize", envelope] => Ok(vec![format!(
+                "finalized {}",
+                hex(&c.finalize(bytes(envelope)?, None).map_err(|e| e.reason)?)
+            )]),
+            ["finalize", envelope, set] => Ok(vec![format!(
+                "finalized {}",
+                hex(&c
+                    .finalize(bytes(envelope)?, Some(carry::take_revealed(set)?))
+                    .map_err(|e| e.reason)?)
+            )]),
 
-            _ => Err(format!("`{}` is not a command; `help` lists them", f.join(" "))),
+            _ => Err(format!(
+                "`{}` is not a command; `help` lists them",
+                f.join(" ")
+            )),
         }
     }
 
@@ -324,12 +507,32 @@ impl Instrument {
         let mut out = Vec::new();
         while let Some(e) = self.client.next_event(ms) {
             out.push(match e {
-                rhtn_ffi::net::Event::Payload { from, bytes } => format!("payload from={} bytes={}", hex(&from), hex(&bytes)),
-                rhtn_ffi::net::Event::ResponseCopy { from, query, refused } => {
-                    format!("response-copy from={} query={} refused={}", hex(&from), query.map_or("-".into(), |q| hex(&q)), refused.unwrap_or_else(|| "-".into()))
+                rhtn_ffi::net::Event::Payload { from, bytes } => {
+                    format!("payload from={} bytes={}", hex(&from), hex(&bytes))
                 }
-                rhtn_ffi::net::Event::Late { from, record, refused } => {
-                    format!("late from={} record={} refused={}", hex(&from), record.map_or("-".into(), |r| hex(&r)), refused.unwrap_or_else(|| "-".into()))
+                rhtn_ffi::net::Event::ResponseCopy {
+                    from,
+                    query,
+                    refused,
+                } => {
+                    format!(
+                        "response-copy from={} query={} refused={}",
+                        hex(&from),
+                        query.map_or("-".into(), |q| hex(&q)),
+                        refused.unwrap_or_else(|| "-".into())
+                    )
+                }
+                rhtn_ffi::net::Event::Late {
+                    from,
+                    record,
+                    refused,
+                } => {
+                    format!(
+                        "late from={} record={} refused={}",
+                        hex(&from),
+                        record.map_or("-".into(), |r| hex(&r)),
+                        refused.unwrap_or_else(|| "-".into())
+                    )
                 }
             });
             // one pass over what is already waiting: a second wait would
@@ -350,17 +553,26 @@ fn answered(a: Option<rhtn_ffi::client::Answered>) -> String {
             "answered query={} querier={} subject={}",
             hex(&a.query),
             hex(&a.to_querier),
-            a.to_subject.map_or("-".into(), |(k, b)| format!("{}:{}", hex(&k), hex(&b)))
+            a.to_subject
+                .map_or("-".into(), |(k, b)| format!("{}:{}", hex(&k), hex(&b)))
         ),
     }
 }
 
 fn joined(v: &[Vec<u8>]) -> String {
-    if v.is_empty() { "-".into() } else { v.iter().map(|x| hex(x)).collect::<Vec<_>>().join(",") }
+    if v.is_empty() {
+        "-".into()
+    } else {
+        v.iter().map(|x| hex(x)).collect::<Vec<_>>().join(",")
+    }
 }
 
 fn carry_list(s: &str) -> Vec<&str> {
-    if s == "-" { Vec::new() } else { s.split(',').collect() }
+    if s == "-" {
+        Vec::new()
+    } else {
+        s.split(',').collect()
+    }
 }
 
 fn carry_ids(s: &str) -> Result<Vec<Vec<u8>>, String> {
@@ -419,14 +631,25 @@ fn outcome_name(o: ChannelOutcome) -> &'static str {
 pub fn read_identity(path: &Path) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if bytes.len() != IDENTITY_BYTES {
-        return Err(format!("{} is {} bytes, not {IDENTITY_BYTES}", path.display(), bytes.len()));
+        return Err(format!(
+            "{} is {} bytes, not {IDENTITY_BYTES}",
+            path.display(),
+            bytes.len()
+        ));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.permissions().mode();
+        let mode = std::fs::metadata(path)
+            .map_err(|e| format!("{}: {e}", path.display()))?
+            .permissions()
+            .mode();
         if mode & 0o077 != 0 {
-            return Err(format!("{} is readable beyond its owner (mode {:o})", path.display(), mode & 0o777));
+            return Err(format!(
+                "{} is readable beyond its owner (mode {:o})",
+                path.display(),
+                mode & 0o777
+            ));
         }
     }
     Ok(bytes)

@@ -18,7 +18,13 @@ usage: rhtnd <configuration> [<peers>]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (cfg_path, peers_path) = match args.as_slice() {
-        [c] => (PathBuf::from(c), PathBuf::from(c).parent().unwrap_or(std::path::Path::new(".")).join("peers")),
+        [c] => (
+            PathBuf::from(c),
+            PathBuf::from(c)
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("peers"),
+        ),
         [c, p] => (PathBuf::from(c), PathBuf::from(p)),
         _ => {
             eprint!("{USAGE}");

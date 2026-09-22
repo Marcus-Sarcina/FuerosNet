@@ -70,7 +70,13 @@ pub trait Serving: Send + Sync {
     /// Carry `bytes` from `from` to `to`; whether anything took them.
     /// `device`: the recipient's device the ciphertext is for
     /// (`wire-format.md` §7.10 field 4).
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool>;
+    fn relay<'a>(
+        &'a self,
+        from: Keyhash,
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    ) -> Answer<'a, bool>;
     /// Register, refresh or withdraw where this node rings the caller
     /// (design §14.1.5).  No endpoint withdraws.
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool>;
@@ -98,7 +104,11 @@ pub struct LocalNode {
 
 impl LocalNode {
     pub fn new(node: Arc<LiveNode>, inboxes: Inboxes) -> Arc<LocalNode> {
-        Arc::new(LocalNode { node, inboxes, beyond: Mutex::new(None) })
+        Arc::new(LocalNode {
+            node,
+            inboxes,
+            beyond: Mutex::new(None),
+        })
     }
 
     /// Ask `other` for what this node cannot answer.
@@ -117,7 +127,13 @@ impl Serving for LocalNode {
     }
 
     fn holds(&self, subject: &Keyhash) -> bool {
-        self.node.view.lock().unwrap().prekeys.bundle(subject).is_some()
+        self.node
+            .view
+            .lock()
+            .unwrap()
+            .prekeys
+            .bundle(subject)
+            .is_some()
     }
 
     fn serves(&self, client: &Keyhash) -> bool {
@@ -145,7 +161,13 @@ impl Serving for LocalNode {
             let mut view = self.node.view.lock().unwrap();
             let ids = self.node.ids.lock().unwrap();
             matches!(
-                view.take_object(&self.node.adjacency, &from, rhtn_node::store::KIND_TRANSACTION, &bytes, &*ids),
+                view.take_object(
+                    &self.node.adjacency,
+                    &from,
+                    rhtn_node::store::KIND_TRANSACTION,
+                    &bytes,
+                    &*ids
+                ),
                 rhtn_node::store::Decision::Stored | rhtn_node::store::Decision::Duplicate
             )
         })
@@ -169,7 +191,13 @@ impl Serving for LocalNode {
         })
     }
 
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
+    fn relay<'a>(
+        &'a self,
+        from: Keyhash,
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    ) -> Answer<'a, bool> {
         Box::pin(async move {
             // hosted here: handed over, no queue between
             if self.inboxes.deliver(&to, from, bytes.clone()) {
@@ -194,7 +222,11 @@ impl Serving for LocalNode {
         Box::pin(async move {
             let mut view = self.node.view.lock().unwrap();
             match endpoint {
-                Some(e) => view.wake.register(client, Some(e.url), Some(e.key), e.lapses_at) != rhtn_node::wake::Registered::Refused,
+                Some(e) => {
+                    view.wake
+                        .register(client, Some(e.url), Some(e.key), e.lapses_at)
+                        != rhtn_node::wake::Registered::Refused
+                }
                 None => {
                     view.wake.forget(&client);
                     true

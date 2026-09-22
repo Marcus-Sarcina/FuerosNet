@@ -105,13 +105,33 @@ impl LightDirect {
     /// Bind at `addr`, behind `nat` on a harness, asking `stun` for the
     /// reflexive address where one is given.  What arrives from a peer
     /// goes to `inbound`.
-    pub fn bind(id: Arc<SigningIdentity>, pins: Pins, addr: SocketAddr, nat: Option<SocketAddr>, stun: Option<SocketAddr>, gate: Gate, inbound: Inbound) -> io::Result<LightDirect> {
+    pub fn bind(
+        id: Arc<SigningIdentity>,
+        pins: Pins,
+        addr: SocketAddr,
+        nat: Option<SocketAddr>,
+        stun: Option<SocketAddr>,
+        gate: Gate,
+        inbound: Inbound,
+    ) -> io::Result<LightDirect> {
         let socket = TraversalSocket::bind(addr, nat)?;
-        let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&id)).map_err(|e| io::Error::other(e.to_string()))?;
+        let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&id))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
         qcfg.transport_config(Arc::new(tls::transport_config()));
         let endpoint = endpoint(socket.clone(), Some(qcfg))?;
-        let light = LightDirect(Arc::new(Light { id, pins, socket, endpoint: endpoint.clone(), stun, gate, inbound, conns: Mutex::new(HashMap::new()), reachable: Reachable::default(), dial_timeout: Duration::from_secs(3) }));
+        let light = LightDirect(Arc::new(Light {
+            id,
+            pins,
+            socket,
+            endpoint: endpoint.clone(),
+            stun,
+            gate,
+            inbound,
+            conns: Mutex::new(HashMap::new()),
+            reachable: Reachable::default(),
+            dial_timeout: Duration::from_secs(3),
+        }));
         // what a peer opens toward this socket
         let accepting = light.clone();
         tokio::spawn(async move {
@@ -134,7 +154,8 @@ impl LightDirect {
     /// Hold `conn` under the peer it authenticates and read what it
     /// delivers until it closes.  An unpinned peer is closed unheld.
     fn hold(&self, conn: quinn::Connection) -> bool {
-        let Some(peer) = tls::peer_spki(&conn).and_then(|s| self.0.pins.keyhash_for_spki(&s)) else {
+        let Some(peer) = tls::peer_spki(&conn).and_then(|s| self.0.pins.keyhash_for_spki(&s))
+        else {
             conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unpinned");
             return false;
         };
@@ -157,7 +178,9 @@ impl LightDirect {
             }
             // gone: the path is down unless a newer connection replaced this one
             let mut c = l.0.conns.lock().unwrap();
-            if c.get(&peer).is_some_and(|h| h.stable_id() == conn.stable_id()) {
+            if c.get(&peer)
+                .is_some_and(|h| h.stable_id() == conn.stable_id())
+            {
                 c.remove(&peer);
                 l.0.reachable.set(peer, false);
             }
@@ -176,7 +199,12 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return None;
             }
-            Some(self.0.socket.gather(self.0.stun, Duration::from_secs(2)).await)
+            Some(
+                self.0
+                    .socket
+                    .gather(self.0.stun, Duration::from_secs(2))
+                    .await,
+            )
         })
     }
 
@@ -190,7 +218,16 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return false;
             }
-            match connect_direct(&self.0.endpoint, &self.0.id, &self.0.pins, &peer, &candidates, self.0.dial_timeout).await {
+            match connect_direct(
+                &self.0.endpoint,
+                &self.0.id,
+                &self.0.pins,
+                &peer,
+                &candidates,
+                self.0.dial_timeout,
+            )
+            .await
+            {
                 Some(conn) => self.hold(conn),
                 None => false,
             }
@@ -228,7 +265,11 @@ impl NodeDirect {
                 inbound(peer, bytes);
             }
         });
-        Arc::new(NodeDirect { node, pins, reachable: Reachable::default() })
+        Arc::new(NodeDirect {
+            node,
+            pins,
+            reachable: Reachable::default(),
+        })
     }
 }
 

@@ -6,13 +6,13 @@
 //! set is; healing is reconciliation, which the wire says is a replay of
 //! the same frames (`wire-format.md` §10.1.3).
 
-use rhtn_archive::record::Record;
 use rhtn_archive::Keyhash;
+use rhtn_archive::record::Record;
 use rhtn_crypto::Identity;
+use rhtn_node::Adjacency;
 use rhtn_node::propagation::{FRAME_TOPOLOGY_PUSH, decode_push};
 use rhtn_node::store::KIND_TRANSACTION;
 use rhtn_node::view::NodeView;
-use rhtn_node::Adjacency;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
@@ -32,7 +32,11 @@ impl Adjacency for Links {
         self.peers.clone()
     }
     fn send(&self, peer: &Keyhash, frame_type: u64, body: &[u8]) {
-        self.out.0.lock().unwrap().push((*peer, frame_type, body.to_vec()));
+        self.out
+            .0
+            .lock()
+            .unwrap()
+            .push((*peer, frame_type, body.to_vec()));
     }
     /// The mesh carries stream 0 between views and opens no request
     /// streams: the model it restates has none.
@@ -59,7 +63,12 @@ fn pair(a: &Keyhash, b: &Keyhash) -> (Keyhash, Keyhash) {
 impl Mesh {
     pub fn new(views: Vec<NodeView>, identities: Vec<Identity>) -> Mesh {
         let views = views.into_iter().map(|v| (v.me(), v)).collect();
-        Mesh { views, identities, severed: BTreeSet::new(), origin: BTreeMap::new() }
+        Mesh {
+            views,
+            identities,
+            severed: BTreeSet::new(),
+            origin: BTreeMap::new(),
+        }
     }
 
     pub fn nodes(&self) -> Vec<Keyhash> {
@@ -100,9 +109,16 @@ impl Mesh {
         for (holder, v) in &self.views {
             for rec in v.store.transactions() {
                 for subject in rhtn_node::store::subjects(rec) {
-                    let Some(sv) = self.views.get(&subject) else { continue };
+                    let Some(sv) = self.views.get(&subject) else {
+                        continue;
+                    };
                     if !sv.store.holds_txid(&rec.txid) {
-                        return Err(format!("{} holds {} which its subject {} does not", hex4(holder), hex4(&rec.txid), hex4(&subject)));
+                        return Err(format!(
+                            "{} holds {} which its subject {} does not",
+                            hex4(holder),
+                            hex4(&rec.txid),
+                            hex4(&subject)
+                        ));
                     }
                 }
             }
@@ -113,7 +129,10 @@ impl Mesh {
     /// Deliver one object to one node and nowhere else, as an injection
     /// would; what that node forwards is dropped.
     pub fn inject(&mut self, to: Keyhash, from: Keyhash, object: &[u8]) {
-        let links = Links { peers: Vec::new(), out: Outbox::default() };
+        let links = Links {
+            peers: Vec::new(),
+            out: Outbox::default(),
+        };
         let ids = self.identities.clone();
         if let Some(v) = self.views.get_mut(&to) {
             v.take_object(&links, &from, KIND_TRANSACTION, object, &ids);
@@ -128,7 +147,12 @@ impl Mesh {
             let truth = patrons_of(signed.iter(), me);
             let held = self.patrons_from_store(v, me);
             if truth != held {
-                return Err(format!("{}: signed {:?} but its own store implies {:?}", hex4(me), truth.iter().map(hex4).collect::<Vec<_>>(), held.iter().map(hex4).collect::<Vec<_>>()));
+                return Err(format!(
+                    "{}: signed {:?} but its own store implies {:?}",
+                    hex4(me),
+                    truth.iter().map(hex4).collect::<Vec<_>>(),
+                    held.iter().map(hex4).collect::<Vec<_>>()
+                ));
             }
         }
         Ok(())
@@ -151,7 +175,14 @@ impl Mesh {
             for u in &ns[1..] {
                 let theirs = self.view_patrons(u, c);
                 if theirs != first {
-                    return Err(format!("about {}: {} says {:?}, {} says {:?}", hex4(c), hex4(&ns[0]), first.iter().map(hex4).collect::<Vec<_>>(), hex4(u), theirs.iter().map(hex4).collect::<Vec<_>>()));
+                    return Err(format!(
+                        "about {}: {} says {:?}, {} says {:?}",
+                        hex4(c),
+                        hex4(&ns[0]),
+                        first.iter().map(hex4).collect::<Vec<_>>(),
+                        hex4(u),
+                        theirs.iter().map(hex4).collect::<Vec<_>>()
+                    ));
                 }
             }
         }
@@ -175,10 +206,19 @@ impl Mesh {
             if guard > 10_000 {
                 break;
             }
-            let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-            let links = Links { peers, out: Outbox::default() };
+            let peers: Vec<Keyhash> = self
+                .nodes()
+                .into_iter()
+                .filter(|n| *n != to && !self.is_severed(&to, n))
+                .collect();
+            let links = Links {
+                peers,
+                out: Outbox::default(),
+            };
             let ids = self.identities.clone();
-            let Some(v) = self.views.get_mut(&to) else { continue };
+            let Some(v) = self.views.get_mut(&to) else {
+                continue;
+            };
             v.take_object(&links, &sender, KIND_TRANSACTION, &bytes, &ids);
             for (peer, ft, body) in links.out.0.into_inner().unwrap() {
                 if ft != FRAME_TOPOLOGY_PUSH {
@@ -194,33 +234,59 @@ impl Mesh {
     /// Reconciliation: `holder` replays its whole store to `to`, and what
     /// `to` stores floods on from there (`wire-format.md` §10.1.3).
     pub fn reconcile(&mut self, holder: Keyhash, to: Keyhash) {
-        let objects: Vec<Vec<u8>> = self.views[&holder].store.objects().into_iter().filter(|(k, _)| *k == KIND_TRANSACTION).map(|(_, b)| b).collect();
+        let objects: Vec<Vec<u8>> = self.views[&holder]
+            .store
+            .objects()
+            .into_iter()
+            .filter(|(k, _)| *k == KIND_TRANSACTION)
+            .map(|(_, b)| b)
+            .collect();
         for object in objects {
-            let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-            let links = Links { peers, out: Outbox::default() };
+            let peers: Vec<Keyhash> = self
+                .nodes()
+                .into_iter()
+                .filter(|n| *n != to && !self.is_severed(&to, n))
+                .collect();
+            let links = Links {
+                peers,
+                out: Outbox::default(),
+            };
             let ids = self.identities.clone();
-            let Some(v) = self.views.get_mut(&to) else { continue };
+            let Some(v) = self.views.get_mut(&to) else {
+                continue;
+            };
             v.take_object(&links, &holder, KIND_TRANSACTION, &object, &ids);
             for (peer, ft, body) in links.out.0.into_inner().unwrap() {
                 if ft == FRAME_TOPOLOGY_PUSH
-                    && let Ok((_, obj)) = decode_push(&body) {
-                        self.flood_one(to, peer, &obj);
-                    }
+                    && let Ok((_, obj)) = decode_push(&body)
+                {
+                    self.flood_one(to, peer, &obj);
+                }
             }
         }
     }
 
     fn flood_one(&mut self, from: Keyhash, to: Keyhash, object: &[u8]) {
-        let peers: Vec<Keyhash> = self.nodes().into_iter().filter(|n| *n != to && !self.is_severed(&to, n)).collect();
-        let links = Links { peers, out: Outbox::default() };
+        let peers: Vec<Keyhash> = self
+            .nodes()
+            .into_iter()
+            .filter(|n| *n != to && !self.is_severed(&to, n))
+            .collect();
+        let links = Links {
+            peers,
+            out: Outbox::default(),
+        };
         let ids = self.identities.clone();
-        let Some(v) = self.views.get_mut(&to) else { return };
+        let Some(v) = self.views.get_mut(&to) else {
+            return;
+        };
         v.take_object(&links, &from, KIND_TRANSACTION, object, &ids);
         for (peer, ft, body) in links.out.0.into_inner().unwrap() {
             if ft == FRAME_TOPOLOGY_PUSH
-                && let Ok((_, obj)) = decode_push(&body) {
-                    self.flood_one(to, peer, &obj);
-                }
+                && let Ok((_, obj)) = decode_push(&body)
+            {
+                self.flood_one(to, peer, &obj);
+            }
         }
     }
 
@@ -254,7 +320,10 @@ fn hex4(k: &Keyhash) -> String {
 
 /// The patrons a set of records leaves open for `subject`, in effective-time
 /// order: adoptions open a binding, departures and disavowals close one.
-fn patrons_of<'a>(records: impl Iterator<Item = &'a Record>, subject: &Keyhash) -> BTreeSet<Keyhash> {
+fn patrons_of<'a>(
+    records: impl Iterator<Item = &'a Record>,
+    subject: &Keyhash,
+) -> BTreeSet<Keyhash> {
     let mut rs: Vec<&Record> = records.collect();
     rs.sort_by_key(|r| (r.effective, r.txid));
     let mut open: BTreeSet<Keyhash> = BTreeSet::new();

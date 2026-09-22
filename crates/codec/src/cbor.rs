@@ -72,7 +72,10 @@ pub struct Parser<'a> {
 }
 
 enum Frame {
-    Array { remaining: u64, items: Vec<Item> },
+    Array {
+        remaining: u64,
+        items: Vec<Item>,
+    },
     Map {
         remaining: u64,
         pairs: Vec<(Item, Item)>,
@@ -152,10 +155,15 @@ impl<'a> Parser<'a> {
                             let len = usize::try_from(n).map_err(|_| Error("length overrun"))?;
                             let end = q.checked_add(len).ok_or(Error("length overrun"))?;
                             if end > self.b.len() {
-                                return Err(Error(if mt == 2 { "bstr overrun" } else { "tstr overrun" }));
+                                return Err(Error(if mt == 2 {
+                                    "bstr overrun"
+                                } else {
+                                    "tstr overrun"
+                                }));
                             }
                             if mt == 3 {
-                                std::str::from_utf8(&self.b[q..end]).map_err(|_| Error("bad utf8"))?;
+                                std::str::from_utf8(&self.b[q..end])
+                                    .map_err(|_| Error("bad utf8"))?;
                                 (Some(Item::Text(q..end)), end)
                             } else {
                                 (Some(Item::Bytes(q..end)), end)
@@ -165,7 +173,10 @@ impl<'a> Parser<'a> {
                             if n == 0 {
                                 (Some(Item::Array(Vec::new())), q)
                             } else {
-                                stack.push(Frame::Array { remaining: n, items: Vec::new() });
+                                stack.push(Frame::Array {
+                                    remaining: n,
+                                    items: Vec::new(),
+                                });
                                 (None, q)
                             }
                         }
@@ -197,18 +208,27 @@ impl<'a> Parser<'a> {
                         items.push(item);
                         *remaining -= 1;
                         if *remaining == 0 {
-                            let Some(Frame::Array { items, .. }) = stack.pop() else { unreachable!() };
+                            let Some(Frame::Array { items, .. }) = stack.pop() else {
+                                unreachable!()
+                            };
                             done = Some(Item::Array(items));
                         }
                     }
-                    Some(Frame::Map { remaining, pairs, pending_key, prev_key, key_start }) => {
+                    Some(Frame::Map {
+                        remaining,
+                        pairs,
+                        pending_key,
+                        prev_key,
+                        key_start,
+                    }) => {
                         if pending_key.is_none() {
                             // `item` is a key; its bytes ran key_start..at
                             let key_bytes = *key_start..at;
                             if let Some(pr) = prev_key
-                                && self.b[key_bytes.clone()] <= self.b[pr.clone()] {
-                                    return Err(Error("map keys unsorted or duplicate"));
-                                }
+                                && self.b[key_bytes.clone()] <= self.b[pr.clone()]
+                            {
+                                return Err(Error("map keys unsorted or duplicate"));
+                            }
                             *prev_key = Some(key_bytes);
                             *pending_key = Some(item);
                         } else {
@@ -217,7 +237,9 @@ impl<'a> Parser<'a> {
                             *remaining -= 1;
                             *key_start = at;
                             if *remaining == 0 {
-                                let Some(Frame::Map { pairs, .. }) = stack.pop() else { unreachable!() };
+                                let Some(Frame::Map { pairs, .. }) = stack.pop() else {
+                                    unreachable!()
+                                };
                                 done = Some(Item::Map(pairs));
                             }
                         }
@@ -403,7 +425,8 @@ mod deep {
         // and through the frame layer, which moves the body rather than cloning it
         let mut payload = vec![0x82, 0x18, 0x63];
         payload.extend_from_slice(&deep);
-        let f = crate::frame::parse_payload(crate::frame::Stream::Control, &payload).expect("unknown type, deep body");
+        let f = crate::frame::parse_payload(crate::frame::Stream::Control, &payload)
+            .expect("unknown type, deep body");
         assert_eq!(f.frame_type, 99);
         drop(f);
     }

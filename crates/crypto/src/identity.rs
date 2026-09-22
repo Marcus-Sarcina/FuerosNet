@@ -38,7 +38,9 @@ impl Identity {
         cose::check_key_material(km).ok()?;
         let item = parse_all(km).ok()?;
         let Item::Array(a) = &item else { return None };
-        let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else { return None };
+        let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else {
+            return None;
+        };
         let bytes = |it: &Item| match it {
             Item::Bytes(r) => Some(&km[r.clone()]),
             _ => None,
@@ -56,12 +58,16 @@ impl Identity {
     }
 
     pub fn verify_ed(&self, sig: &[u8], tbs: &[u8]) -> bool {
-        let Ok(s) = EdSig::from_slice(sig) else { return false };
+        let Ok(s) = EdSig::from_slice(sig) else {
+            return false;
+        };
         self.ed.verify(tbs, &s).is_ok()
     }
 
     pub fn verify_pq(&self, sig: &[u8], tbs: &[u8]) -> bool {
-        let Ok(s) = ml_dsa::Signature::<MlDsa65>::try_from(sig) else { return false };
+        let Ok(s) = ml_dsa::Signature::<MlDsa65>::try_from(sig) else {
+            return false;
+        };
         self.pq.verify_with_context(tbs, &[], &s)
     }
 }
@@ -75,7 +81,11 @@ impl SigningIdentity {
         let pq_vk = ml_dsa::SigningKey::<MlDsa65>::from_seed(&seed).verifying_key();
         let pq_sk = ml_dsa::ExpandedSigningKey::<MlDsa65>::from_seed(&seed);
         let public = Identity::from_public(ed_sk.verifying_key(), pq_vk);
-        SigningIdentity { public, ed_sk, pq_sk }
+        SigningIdentity {
+            public,
+            ed_sk,
+            pq_sk,
+        }
     }
 
     /// The classical signing key, for a transport that presents it as a raw
@@ -113,9 +123,17 @@ impl SigningIdentity {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
         for alg in [cose::ALG_EDDSA, cose::ALG_ML_DSA_65] {
-            let prot = if named { cose::protected_header(alg, &self.public.keyhash) } else { cose::protected_alg(alg) };
+            let prot = if named {
+                cose::protected_header(alg, &self.public.keyhash)
+            } else {
+                cose::protected_alg(alg)
+            };
             let tbs = cose::sig_structure_sign(&prot, aad, payload);
-            let sig = if alg == cose::ALG_EDDSA { self.sign_ed(&tbs) } else { self.sign_pq(&tbs) };
+            let sig = if alg == cose::ALG_EDDSA {
+                self.sign_ed(&tbs)
+            } else {
+                self.sign_pq(&tbs)
+            };
             emit_array_head(&mut out, 3);
             emit_bstr(&mut out, &prot);
             emit_map_head(&mut out, 0);
@@ -137,7 +155,11 @@ impl SigningIdentity {
 
     fn sign1(&self, aad: &[u8], payload: &[u8], named: bool) -> Vec<u8> {
         use rhtn_codec::encode::*;
-        let prot = if named { cose::protected_header(cose::ALG_EDDSA, &self.public.keyhash) } else { cose::protected_alg(cose::ALG_EDDSA) };
+        let prot = if named {
+            cose::protected_header(cose::ALG_EDDSA, &self.public.keyhash)
+        } else {
+            cose::protected_alg(cose::ALG_EDDSA)
+        };
         let tbs = cose::sig_structure_sign1(&prot, aad, payload);
         let sig = self.sign_ed(&tbs);
         let mut out = Vec::new();

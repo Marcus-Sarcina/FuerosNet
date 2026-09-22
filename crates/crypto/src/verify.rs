@@ -19,7 +19,11 @@ pub enum Failure {
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Failure::MissingKey(k) => write!(f, "missing key for signer {}", k.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+            Failure::MissingKey(k) => write!(
+                f,
+                "missing key for signer {}",
+                k.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            ),
             Failure::Invalid(s) => f.write_str(s),
         }
     }
@@ -62,7 +66,9 @@ impl Lookup for Vec<Identity> {
 
 fn parts_sign1(slice: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
     let __a_item = parse_all(slice).ok()?;
-    let Item::Array(a) = &__a_item else { return None };
+    let Item::Array(a) = &__a_item else {
+        return None;
+    };
     if a.len() != 4 {
         return None;
     }
@@ -105,7 +111,9 @@ fn named_signer_alg(prot: &[u8], unprotected: &Item) -> Option<i64> {
 /// payload is nil, every signature being detached.  A container that
 /// departs from this is a second encoding of the object, and malformed.
 fn detached_sign_container(cs: &[Item]) -> bool {
-    matches!(&cs[0], Item::Bytes(r) if r.is_empty()) && matches!(&cs[1], Item::Map(u) if u.is_empty()) && matches!(cs[2], Item::Null)
+    matches!(&cs[0], Item::Bytes(r) if r.is_empty())
+        && matches!(&cs[1], Item::Map(u) if u.is_empty())
+        && matches!(cs[2], Item::Null)
 }
 
 /// Verify an embedded `COSE_Sign` block signed by one known party: the
@@ -115,7 +123,12 @@ fn detached_sign_container(cs: &[Item]) -> bool {
 /// §3.5), so an empty block, a lone entry, a duplicated algorithm or a
 /// reversed pair is malformed before any signature is checked; both
 /// entries must verify.
-fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &[u8]) -> Result<(), String> {
+fn verify_sign_block(
+    signer: &Identity,
+    block: &[u8],
+    aad_tag: &[u8],
+    payload: &[u8],
+) -> Result<(), String> {
     let __cs_item = parse_all(block).map_err(|e| format!("cose: {e}"))?;
     let Item::Array(cs) = &__cs_item else {
         return Err("cose not array".into());
@@ -126,13 +139,17 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
     if !detached_sign_container(cs) {
         return Err("cose container departs from the profile".into());
     }
-    let Item::Array(entries) = &cs[3] else { return Err("entries not array".into()) };
+    let Item::Array(entries) = &cs[3] else {
+        return Err("entries not array".into());
+    };
     if entries.len() != 2 {
         return Err("a hybrid signer contributes exactly two entries".into());
     }
     let mut got = [false, false];
     for (i, e) in entries.iter().enumerate() {
-        let Item::Array(ea) = e else { return Err("entry not array".into()) };
+        let Item::Array(ea) = e else {
+            return Err("entry not array".into());
+        };
         if ea.len() != 3 {
             return Err("entry arity".into());
         }
@@ -149,8 +166,18 @@ fn verify_sign_block(signer: &Identity, block: &[u8], aad_tag: &[u8], payload: &
         }
         let tbs = cose::sig_structure_sign(prot, aad_tag, payload);
         match alg {
-            cose::ALG_EDDSA => { if !signer.verify_ed(sig, &tbs) { return Err("ed25519 fails".into()); } got[0] = true; }
-            _ => { if !signer.verify_pq(sig, &tbs) { return Err("ml-dsa fails".into()); } got[1] = true; }
+            cose::ALG_EDDSA => {
+                if !signer.verify_ed(sig, &tbs) {
+                    return Err("ed25519 fails".into());
+                }
+                got[0] = true;
+            }
+            _ => {
+                if !signer.verify_pq(sig, &tbs) {
+                    return Err("ml-dsa fails".into());
+                }
+                got[1] = true;
+            }
         }
     }
     if got != [true, true] {
@@ -167,13 +194,18 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
     let Item::Map(rm) = &__rm_item else {
         return Err("response not map".into());
     };
-    let get_b = |k: u64| match map_get(rm, k) { Some(Item::Bytes(r)) => Some(resp[r.clone()].to_vec()), _ => None };
+    let get_b = |k: u64| match map_get(rm, k) {
+        Some(Item::Bytes(r)) => Some(resp[r.clone()].to_vec()),
+        _ => None,
+    };
     let subject = get_b(2).ok_or("subject")?;
     let verifier = get_b(1).ok_or("verifier")?;
     let qid = get_b(3).ok_or("query_id")?;
     let c_range = value_slice(resp, 7).ok_or("consent")?;
     let (cp, csig) = parts_sign1(&resp[c_range]).ok_or("consent shape")?;
-    let sid = ids.identity(&subject).ok_or_else(|| Failure::MissingKey(subject.clone()))?;
+    let sid = ids
+        .identity(&subject)
+        .ok_or_else(|| Failure::MissingKey(subject.clone()))?;
     if !sid.verify_ed(&csig, &cose::sig_structure_sign1(&cp, aad::CONSENT, &qid)) {
         return Err("consent fails".into());
     }
@@ -182,12 +214,19 @@ pub fn response<L: Lookup + ?Sized>(ids: &L, resp: &[u8], hybrid: bool) -> Resul
     let vslice = &resp[v_range];
     if hybrid {
         // the block must be by the named verifier alone
-        let vid = ids.identity(&verifier).ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
+        let vid = ids
+            .identity(&verifier)
+            .ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
         verify_sign_block(vid, vslice, aad::VERIFIER, &payload).map_err(Failure::Invalid)
     } else {
-        let vid = ids.identity(&verifier).ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
+        let vid = ids
+            .identity(&verifier)
+            .ok_or_else(|| Failure::MissingKey(verifier.clone()))?;
         let (vp, vsig) = parts_sign1(vslice).ok_or("field 9 shape")?;
-        if !vid.verify_ed(&vsig, &cose::sig_structure_sign1(&vp, aad::VERIFIER, &payload)) {
+        if !vid.verify_ed(
+            &vsig,
+            &cose::sig_structure_sign1(&vp, aad::VERIFIER, &payload),
+        ) {
             return Err("verifier signature fails".into());
         }
         Ok(())
@@ -204,17 +243,30 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
     // any signature: verify means structurally valid (§3.4), and this entry
     // point refuses what the record parser refuses
     let body_item = parse_all(body).map_err(|e| format!("body: {e}"))?;
-    rhtn_codec::schema::check_body_of_type(body, &body_item, env.tx_type).map_err(|e| format!("body: {e}"))?;
+    rhtn_codec::schema::check_body_of_type(body, &body_item, env.tx_type)
+        .map_err(|e| format!("body: {e}"))?;
     let mut seen = std::collections::BTreeMap::<Vec<u8>, [bool; 2]>::new();
     for e in &env.entries {
-        let id = ids.identity(&e.kid).ok_or_else(|| Failure::MissingKey(e.kid.clone()))?;
+        let id = ids
+            .identity(&e.kid)
+            .ok_or_else(|| Failure::MissingKey(e.kid.clone()))?;
         let prot = &b[e.protected.clone()];
         let sig = &b[e.signature.clone()];
         let tbs = cose::sig_structure_sign(prot, aad::ENVELOPE, body);
         let slot = seen.entry(e.kid.clone()).or_insert([false, false]);
         match e.alg {
-            cose::ALG_EDDSA => { if !id.verify_ed(sig, &tbs) { return Err("ed25519 fails".into()); } slot[0] = true; }
-            cose::ALG_ML_DSA_65 => { if !id.verify_pq(sig, &tbs) { return Err("ml-dsa fails".into()); } slot[1] = true; }
+            cose::ALG_EDDSA => {
+                if !id.verify_ed(sig, &tbs) {
+                    return Err("ed25519 fails".into());
+                }
+                slot[0] = true;
+            }
+            cose::ALG_ML_DSA_65 => {
+                if !id.verify_pq(sig, &tbs) {
+                    return Err("ml-dsa fails".into());
+                }
+                slot[1] = true;
+            }
             _ => return Err("unexpected alg".into()),
         }
     }
@@ -223,11 +275,12 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
         return Err("signer/alg coverage incomplete".into());
     }
     if env.tx_type == 5
-        && let Some(r5) = value_slice_at(b, env.body.start, 5) {
-            for rr in array_item_ranges(b, r5.start).ok_or("responses walk")? {
-                response(ids, &b[rr], false)?;
-            }
+        && let Some(r5) = value_slice_at(b, env.body.start, 5)
+    {
+        for rr in array_item_ranges(b, r5.start).ok_or("responses walk")? {
+            response(ids, &b[rr], false)?;
         }
+    }
     if env.tx_type == 1 {
         adoption_evidence(ids, body)?;
     }
@@ -242,10 +295,17 @@ pub fn envelope<L: Lookup + ?Sized>(ids: &L, b: &[u8]) -> Result<envelope::Envel
 /// patron runs this before its countersignature goes on the line.
 pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(), Failure> {
     let item = parse_all(body).map_err(|e| format!("body: {e}"))?;
-    let Item::Map(bm) = &item else { return Err("body not map".into()) };
-    let bs = |it: &Item| match it { Item::Bytes(r) => body[r.clone()].to_vec(), _ => Vec::new() };
+    let Item::Map(bm) = &item else {
+        return Err("body not map".into());
+    };
+    let bs = |it: &Item| match it {
+        Item::Bytes(r) => body[r.clone()].to_vec(),
+        _ => Vec::new(),
+    };
     if let Some(r6) = value_slice(body, 6) {
-        let prior = value_slice_at(body, r6.start, 1).map(|r| body[r.start + 2..r.end].to_vec()).ok_or("prior")?;
+        let prior = value_slice_at(body, r6.start, 1)
+            .map(|r| body[r.start + 2..r.end].to_vec())
+            .ok_or("prior")?;
         let r2 = value_slice_at(body, r6.start, 2).ok_or("recovery responses")?;
         for rr in array_item_ranges(body, r2.start).ok_or("recovery walk")? {
             response(ids, &body[rr], true)?;
@@ -258,13 +318,18 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
         emit_bstr(&mut stmt, &newk);
         emit_bstr(&mut stmt, &patron);
         let r3 = value_slice_at(body, r6.start, 3).ok_or("successor")?;
-        let pid = ids.identity(&prior).ok_or_else(|| Failure::MissingKey(prior.clone()))?;
-        verify_sign_block(pid, &body[r3], aad::SUCCESSOR, &stmt).map_err(|e| Failure::Invalid(format!("successor proof: {e}")))?;
+        let pid = ids
+            .identity(&prior)
+            .ok_or_else(|| Failure::MissingKey(prior.clone()))?;
+        verify_sign_block(pid, &body[r3], aad::SUCCESSOR, &stmt)
+            .map_err(|e| Failure::Invalid(format!("successor proof: {e}")))?;
     }
     // field 9: the former patron's transfer statement over
     // [node, former, new patron] (§4.1), by the party field 9.1 names
     if let Some(r9) = value_slice(body, 9) {
-        let former = value_slice_at(body, r9.start, 1).map(|r| body[r.start + 2..r.end].to_vec()).ok_or("former patron")?;
+        let former = value_slice_at(body, r9.start, 1)
+            .map(|r| body[r.start + 2..r.end].to_vec())
+            .ok_or("former patron")?;
         let node = bs(map_get(bm, 1).ok_or("node")?);
         let patron = bs(map_get(bm, 2).ok_or("patron")?);
         let mut stmt = Vec::new();
@@ -273,8 +338,11 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
         emit_bstr(&mut stmt, &former);
         emit_bstr(&mut stmt, &patron);
         let r2 = value_slice_at(body, r9.start, 2).ok_or("transfer block")?;
-        let fid = ids.identity(&former).ok_or_else(|| Failure::MissingKey(former.clone()))?;
-        verify_sign_block(fid, &body[r2], aad::TRANSFER, &stmt).map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
+        let fid = ids
+            .identity(&former)
+            .ok_or_else(|| Failure::MissingKey(former.clone()))?;
+        verify_sign_block(fid, &body[r2], aad::TRANSFER, &stmt)
+            .map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
     }
     Ok(())
 }
@@ -293,24 +361,44 @@ pub struct Delegation {
 
 pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation, Failure> {
     let item = parse_all(raw).map_err(|_| "cbor")?;
-    rhtn_codec::schema::check_kind(raw, "Delegation", &item).map_err(|e| Failure::Invalid(e.0.into()))?;
-    let Item::Map(m) = &item else { return Err("not map".into()) };
-    let b32 = |k: u64| -> Option<[u8; 32]> { match map_get(m, k) { Some(Item::Bytes(r)) => raw[r.clone()].try_into().ok(), _ => None } };
+    rhtn_codec::schema::check_kind(raw, "Delegation", &item)
+        .map_err(|e| Failure::Invalid(e.0.into()))?;
+    let Item::Map(m) = &item else {
+        return Err("not map".into());
+    };
+    let b32 = |k: u64| -> Option<[u8; 32]> {
+        match map_get(m, k) {
+            Some(Item::Bytes(r)) => raw[r.clone()].try_into().ok(),
+            _ => None,
+        }
+    };
     let key = b32(1).ok_or("field 1")?;
     let keyhash = b32(2).ok_or("field 2")?;
     let not_before = map_get(m, 3).and_then(as_uint).ok_or("field 3")?;
     let not_after = map_get(m, 4).and_then(as_uint).ok_or("field 4")?;
-    let id = ids.identity(&keyhash).ok_or_else(|| Failure::MissingKey(keyhash.to_vec()))?;
+    let id = ids
+        .identity(&keyhash)
+        .ok_or_else(|| Failure::MissingKey(keyhash.to_vec()))?;
     let payload = map_without_key(raw, 5).ok_or("payload")?;
     let r5 = value_slice(raw, 5).ok_or("signature")?;
-    verify_sign_block(id, &raw[r5], aad::DELEGATION, &payload).map_err(|e| Failure::Invalid(format!("delegation: {e}")))?;
-    Ok(Delegation { key, keyhash, not_before, not_after })
+    verify_sign_block(id, &raw[r5], aad::DELEGATION, &payload)
+        .map_err(|e| Failure::Invalid(format!("delegation: {e}")))?;
+    Ok(Delegation {
+        key,
+        keyhash,
+        not_before,
+        not_after,
+    })
 }
 
 /// A raw Ed25519 key, which is what a delegated transport key is.
 pub fn verify_ed_raw(key: &[u8; 32], sig: &[u8], tbs: &[u8]) -> bool {
-    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(key) else { return false };
-    let Ok(s) = ed25519_dalek::Signature::from_slice(sig) else { return false };
+    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(key) else {
+        return false;
+    };
+    let Ok(s) = ed25519_dalek::Signature::from_slice(sig) else {
+        return false;
+    };
     vk.verify_strict(tbs, &s).is_ok()
 }
 
@@ -326,9 +414,16 @@ pub fn verify_ed_raw(key: &[u8; 32], sig: &[u8], tbs: &[u8]) -> bool {
 pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(), Failure> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let __m_item = parse_all(raw).map_err(|_| "cbor")?;
-    let Item::Map(m) = &__m_item else { return Err("not map".into()) };
-    let signer = match map_get(m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
-    let id = ids.identity(&signer).ok_or_else(|| Failure::MissingKey(signer.clone()))?;
+    let Item::Map(m) = &__m_item else {
+        return Err("not map".into());
+    };
+    let signer = match map_get(m, sfield) {
+        Some(Item::Bytes(r)) => raw[r.clone()].to_vec(),
+        _ => return Err("signer field".into()),
+    };
+    let id = ids
+        .identity(&signer)
+        .ok_or_else(|| Failure::MissingKey(signer.clone()))?;
     // the stapled delegation sits outside the signature (§7.1 field 8)
     let stapled = if kind == "CurrencyAttestation" {
         match value_slice(raw, 8) {
@@ -344,31 +439,42 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     } else {
         None
     };
-    let Some(Item::Array(cs)) = map_get(m, slot) else { return Err("sig slot".into()) };
+    let Some(Item::Array(cs)) = map_get(m, slot) else {
+        return Err("sig slot".into());
+    };
     if cs.len() != 4 {
         return Err("sign1 arity".into());
     }
     if !matches!(cs[2], Item::Null) {
         return Err("sign1 payload not detached".into());
     }
-    let prot = match &cs[0] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("protected".into()) };
-    let sig = match &cs[3] { Item::Bytes(r) => raw[r.clone()].to_vec(), _ => return Err("sig".into()) };
+    let prot = match &cs[0] {
+        Item::Bytes(r) => raw[r.clone()].to_vec(),
+        _ => return Err("protected".into()),
+    };
+    let sig = match &cs[3] {
+        Item::Bytes(r) => raw[r.clone()].to_vec(),
+        _ => return Err("sig".into()),
+    };
     // classical only (§7): the declared algorithm is -8, or the object is
     // not one this profile signs
     if named_signer_alg(&prot, &cs[1]) != Some(cose::ALG_EDDSA) {
         return Err("a standalone signature carries a header beyond alg, or an algorithm other than the profile's".into());
     }
-    let payload = if stapled.is_some() || (kind == "CurrencyAttestation" && value_slice(raw, 8).is_some()) {
-        map_without_keys(raw, &[slot, 8]).ok_or("payload")?
-    } else {
-        map_without_key(raw, slot).ok_or("payload")?
-    };
+    let payload =
+        if stapled.is_some() || (kind == "CurrencyAttestation" && value_slice(raw, 8).is_some()) {
+            map_without_keys(raw, &[slot, 8]).ok_or("payload")?
+        } else {
+            map_without_key(raw, slot).ok_or("payload")?
+        };
     let tbs = cose::sig_structure_sign1(&prot, tag, &payload);
     if let Some(k) = stapled {
         // field 8 names the key field 7 was made under, and nothing else
         // verifies it (§7.1)
         if !verify_ed_raw(&k, &sig, &tbs) {
-            return Err("the signature does not verify under the key the stapled delegation names".into());
+            return Err(
+                "the signature does not verify under the key the stapled delegation names".into(),
+            );
         }
         return Ok(());
     }
@@ -396,7 +502,15 @@ fn map_without_keys(raw: &[u8], keys: &[u64]) -> Option<Vec<u8>> {
     Some(cur)
 }
 
-const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention", "p1.integrity", "p1.retention", "proximity"];
+const LABELS: [&str; 7] = [
+    "capture",
+    "location",
+    "p0.integrity",
+    "p0.retention",
+    "p1.integrity",
+    "p1.retention",
+    "proximity",
+];
 
 /// A partial presentation (§4.5.1): the embedded envelope verified wholesale,
 /// then the seven slots' digests recomputed over the exact received
@@ -418,7 +532,9 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Fail
     let ranges = array_item_ranges(pres, 0).ok_or("walk")?;
     let env_bytes = &pres[ranges[0].clone()];
     envelope(ids, env_bytes)?;
-    let Item::Array(slots) = &outer[1] else { return Err("slots not array".into()) };
+    let Item::Array(slots) = &outer[1] else {
+        return Err("slots not array".into());
+    };
     if slots.len() != 7 {
         return Err("slot count".into());
     }
@@ -436,11 +552,15 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Fail
                 if d.len() != 3 {
                     return Err("disclosure arity".into());
                 }
-                let Item::Bytes(salt) = &d[0] else { return Err("salt".into()) };
+                let Item::Bytes(salt) = &d[0] else {
+                    return Err("salt".into());
+                };
                 if salt.len() != 16 {
                     return Err("salt width".into());
                 }
-                let Item::Text(lab) = &d[1] else { return Err("label".into()) };
+                let Item::Text(lab) = &d[1] else {
+                    return Err("label".into());
+                };
                 if &pres[lab.clone()] != LABELS[i].as_bytes() {
                     return Err("label != slot position".into());
                 }

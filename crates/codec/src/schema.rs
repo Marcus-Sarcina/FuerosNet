@@ -91,47 +91,143 @@ pub enum Family {
 }
 
 use T::*;
-const ATTACH: Fields = &[(1, true, Keyhash), (2, false, CurrencyAttestation), (3, true, Capabilities), (4, false, Delegation)];
-const ATTACH_ACK: Fields = &[(1, true, Uint), (2, false, SiblingRefs), (3, true, Uint), (4, true, Uint), (5, true, Capabilities), (6, false, Delegation)];
+const ATTACH: Fields = &[
+    (1, true, Keyhash),
+    (2, false, CurrencyAttestation),
+    (3, true, Capabilities),
+    (4, false, Delegation),
+];
+const ATTACH_ACK: Fields = &[
+    (1, true, Uint),
+    (2, false, SiblingRefs),
+    (3, true, Uint),
+    (4, true, Uint),
+    (5, true, Capabilities),
+    (6, false, Delegation),
+];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
 const TOPOLOGY_PUSH: Fields = &[(1, true, Uint), (2, true, Bstr)];
-const TOPOLOGY_MEMO: Fields = &[(1, true, Keyhash), (2, true, Locator), (3, true, Uint), (4, true, Uint), (5, false, Keyhash)];
-const RESOLVE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Keyhash), (3, true, Path), (4, true, Nonce16)];
-const ARCHIVE_REQUEST: Fields = &[(1, true, Keyhash), (2, false, Txids), (3, true, Uint), (4, false, Uint), (5, true, Nonce16)];
-const PREKEY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Uint), (3, true, Nonce16), (4, false, Bytes32)];
+const TOPOLOGY_MEMO: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Locator),
+    (3, true, Uint),
+    (4, true, Uint),
+    (5, false, Keyhash),
+];
+const RESOLVE_REQUEST: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Keyhash),
+    (3, true, Path),
+    (4, true, Nonce16),
+];
+const ARCHIVE_REQUEST: Fields = &[
+    (1, true, Keyhash),
+    (2, false, Txids),
+    (3, true, Uint),
+    (4, false, Uint),
+    (5, true, Nonce16),
+];
+const PREKEY_REQUEST: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Uint),
+    (3, true, Nonce16),
+    (4, false, Bytes32),
+];
 const PREKEY_BATCH_REQUEST: Fields = &[(1, true, Keyhashes), (2, true, Nonce16)];
 const CATALOG_QUERY: Fields = &[(1, false, Tstr(64)), (2, true, Nonce16)];
 const RESOURCE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Bstr)];
-const RESOURCE_REGISTRATION: Fields = &[(1, true, CatalogEntry), (2, false, Scope), (3, true, Nonce16)];
+const RESOURCE_REGISTRATION: Fields = &[
+    (1, true, CatalogEntry),
+    (2, false, Scope),
+    (3, true, Nonce16),
+];
 // §7.10: what a client hands its serving node.  The bundle and the keys are
 // opaque here, as §7.8 makes them everywhere else.
 const PREKEY_PUBLICATION: Fields = &[(1, true, PrekeyBundle), (2, true, Nonce16)];
 const ONE_TIME_DEPOSIT: Fields = &[(1, true, OneTimeKeys), (2, true, Nonce16)];
-const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Bstr), (3, true, Nonce16), (4, true, Bytes32)];
-const WAKE_REGISTRATION: Fields = &[(1, true, Nonce16), (2, false, Tstr(2048)), (3, false, BstrMax(256)), (4, false, Uint)];
+const RELAY_SUBMISSION: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Bstr),
+    (3, true, Nonce16),
+    (4, true, Bytes32),
+];
+const WAKE_REGISTRATION: Fields = &[
+    (1, true, Nonce16),
+    (2, false, Tstr(2048)),
+    (3, false, BstrMax(256)),
+    (4, false, Uint),
+];
 const SUBMISSION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const CURRENCY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
-const RESOLVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false, ServingInfra), (4, false, Uint), (5, false, Referral)];
-const CATALOG_REPLY: Fields = &[(1, true, Nonce16), (2, true, CatalogEntries), (3, false, Tstr(64))];
+const RESOLVE_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, true, Uint),
+    (3, false, ServingInfra),
+    (4, false, Uint),
+    (5, false, Referral),
+];
+const CATALOG_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, true, CatalogEntries),
+    (3, false, Tstr(64)),
+];
 const RESOURCE_RESPONSE: Fields = &[(1, true, Uint), (2, false, Bstr)];
-const ARCHIVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, ArchiveEntries), (3, true, Bool), (4, false, Txids)];
-const PREKEY_REPLY: Fields = &[(1, true, Nonce16), (2, false, PrekeyBundles), (3, false, Bstr), (4, false, Uint)];
+const ARCHIVE_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, true, ArchiveEntries),
+    (3, true, Bool),
+    (4, false, Txids),
+];
+const PREKEY_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, false, PrekeyBundles),
+    (3, false, Bstr),
+    (4, false, Uint),
+];
 // §8.2: the transport key, the delegating keyhash, the window, and a hybrid
 // `COSE_Sign` over fields 1 to 4; a signed map, so extensions above 5 are
 // admitted by `check_map_signed`
-const DELEGATION: Fields = &[(1, true, Bytes32), (2, true, Keyhash), (3, true, Uint), (4, true, Uint), (5, true, Any)];
+const DELEGATION: Fields = &[
+    (1, true, Bytes32),
+    (2, true, Keyhash),
+    (3, true, Uint),
+    (4, true, Uint),
+    (5, true, Any),
+];
 pub const DELEGATION_WINDOW_SECONDS: u64 = 172_800;
-const CURRENCY_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false, CurrencyAttestation)];
+const CURRENCY_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, true, Uint),
+    (3, false, CurrencyAttestation),
+];
 const RESOURCE_REGISTRATION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const KEY_GRANT: Fields = &[(1, true, Bytes32), (2, true, Bytes32), (3, true, Bytes32)];
-const LATE_RESPONSE: Fields = &[(1, true, Bytes32), (2, true, Keyhash), (3, true, VerifierResponse)];
+const LATE_RESPONSE: Fields = &[
+    (1, true, Bytes32),
+    (2, true, Keyhash),
+    (3, true, VerifierResponse),
+];
 const LOCATOR: Fields = &[(1, true, Keyhash), (2, true, Path), (3, true, Seqno)];
 const PATH: Fields = &[(1, true, Bstr), (2, true, Uint)];
-const SIBLING_REF: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, false, KeyMaterial)];
+const SIBLING_REF: Fields = &[
+    (1, true, Keyhash),
+    (2, true, NetworkPoints),
+    (3, false, KeyMaterial),
+];
 const NETWORK_POINT: Fields = &[(1, true, Bstr), (2, false, Uint), (3, false, Uint)];
-const SERVING_INFRA: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Path), (4, false, KeyMaterial)];
-const REFERRAL: Fields = &[(1, true, Keyhash), (2, true, NetworkPoints), (3, true, Uint), (4, false, KeyMaterial)];
+const SERVING_INFRA: Fields = &[
+    (1, true, Keyhash),
+    (2, true, NetworkPoints),
+    (3, true, Path),
+    (4, false, KeyMaterial),
+];
+const REFERRAL: Fields = &[
+    (1, true, Keyhash),
+    (2, true, NetworkPoints),
+    (3, true, Uint),
+    (4, false, KeyMaterial),
+];
 
 pub fn fields(f: Family) -> Option<Fields> {
     use Family::*;
@@ -199,7 +295,9 @@ fn check_map_with(b: &[u8], at: usize, schema: Fields, signed: bool) -> Result<(
     let mut present: Vec<u64> = Vec::new();
     for (kr, vr) in entries {
         let (k, _) = p.item(kr.start)?;
-        let Item::Uint(key) = k else { return Err(Error("map key not uint")) };
+        let Item::Uint(key) = k else {
+            return Err(Error("map key not uint"));
+        };
         let Some((_, _, t)) = schema.iter().find(|(sk, _, _)| *sk == key) else {
             if signed {
                 continue;
@@ -221,7 +319,15 @@ fn check_map_with(b: &[u8], at: usize, schema: Fields, signed: bool) -> Result<(
 /// unprotected header, a nil payload, and signature bytes.
 pub fn sign1_shape(it: &Item) -> Result<(), Error> {
     match it {
-        Item::Array(a) if a.len() == 4 && matches!(a[0], Item::Bytes(_)) && matches!(&a[1], Item::Map(u) if u.is_empty()) && matches!(a[2], Item::Null) && matches!(a[3], Item::Bytes(_)) => Ok(()),
+        Item::Array(a)
+            if a.len() == 4
+                && matches!(a[0], Item::Bytes(_))
+                && matches!(&a[1], Item::Map(u) if u.is_empty())
+                && matches!(a[2], Item::Null)
+                && matches!(a[3], Item::Bytes(_)) =>
+        {
+            Ok(())
+        }
         _ => Err(Error("signature slot is not a COSE_Sign1")),
     }
 }
@@ -231,16 +337,22 @@ pub fn sign1_shape(it: &Item) -> Result<(), Error> {
 /// its unknown keys are extensions.
 fn network_point_at(b: &[u8], at: usize, signed: bool) -> Result<(), Error> {
     check_map_with(b, at, NETWORK_POINT, signed)?;
-    let (Item::Map(ref m), _) = (Parser { b }).item(at)? else { unreachable!() };
+    let (Item::Map(ref m), _) = (Parser { b }).item(at)? else {
+        unreachable!()
+    };
     if bs(b, map_get(m, 1).unwrap()).map(|s| s.len()) != Some(4) {
         return Err(Error("address width"));
     }
     if let Some(port) = map_get(m, 3).and_then(as_uint)
-        && (port == 0 || port > 65535 || port == 7431) {
-            return Err(Error("port invalid"));
-        }
+        && (port == 0 || port > 65535 || port == 7431)
+    {
+        return Err(Error("port invalid"));
+    }
     // four-byte ASNs, per RFC 6793 as §4.4 cites it
-    if map_get(m, 2).and_then(as_uint).is_some_and(|asn| asn > u32::MAX as u64) {
+    if map_get(m, 2)
+        .and_then(as_uint)
+        .is_some_and(|asn| asn > u32::MAX as u64)
+    {
         return Err(Error("ASN outside the u32 range"));
     }
     Ok(())
@@ -260,7 +372,11 @@ pub fn packed_path(packed: &[u8], nibbles: u64) -> Result<(), Error> {
         return Err(Error("path byte length is not ceil(nibbles / 2)"));
     }
     for i in 0..n {
-        let v = if i % 2 == 0 { packed[i / 2] >> 4 } else { packed[i / 2] & 0x0f };
+        let v = if i % 2 == 0 {
+            packed[i / 2] >> 4
+        } else {
+            packed[i / 2] & 0x0f
+        };
         if v > 9 {
             return Err(Error("path nibble over 9"));
         }
@@ -313,7 +429,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             _ => return Err(Error("bstr shape")),
         },
         Tstr(max) => match v {
-             Item::Text(ref r) if !r.is_empty() && r.len() <= max => {}
+            Item::Text(ref r) if !r.is_empty() && r.len() <= max => {}
             _ => return Err(Error("tstr shape")),
         },
         Any => {}
@@ -321,18 +437,26 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         Path => {
             check_map(b, at, PATH)?;
             let Item::Map(ref m) = v else { unreachable!() };
-            let n = map_get(m, 2).and_then(as_uint).ok_or(Error("path nibble count"))?;
-            let Some(packed) = map_get(m, 1).and_then(|it| bs(b, it)) else { return Err(Error("path not bstr")) };
+            let n = map_get(m, 2)
+                .and_then(as_uint)
+                .ok_or(Error("path nibble count"))?;
+            let Some(packed) = map_get(m, 1).and_then(|it| bs(b, it)) else {
+                return Err(Error("path not bstr"));
+            };
             packed_path(packed, n)?;
         }
         Capabilities => {
-             let Item::Map(ref m) = v else { return Err(Error("capabilities not map")) };
+            let Item::Map(ref m) = v else {
+                return Err(Error("capabilities not map"));
+            };
             if m.len() > CAPABILITIES_ENTRIES {
                 return Err(Error("over 64 capability entries"));
             }
             for (k, val) in m {
                 as_uint(k).ok_or(Error("capability id not uint"))?;
-                let Some(s) = bs(b, val) else { return Err(Error("capability value not bstr")) };
+                let Some(s) = bs(b, val) else {
+                    return Err(Error("capability value not bstr"));
+                };
                 if s.len() > CAPABILITIES_VALUE_BYTES {
                     return Err(Error("capability value over 1024"));
                 }
@@ -359,13 +483,15 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         ServingInfra => check_map(b, at, SERVING_INFRA)?,
         Referral => {
             check_map(b, at, REFERRAL)?;
-             let Item::Map(ref m) = v else { unreachable!() };
+            let Item::Map(ref m) = v else { unreachable!() };
             if map_get(m, 3).and_then(as_uint) == Some(0) {
                 return Err(Error("referral advances nothing"));
             }
         }
         OneTimeKeys => {
-            let Item::Array(ref a) = v else { return Err(Error("one-time keys not array")) };
+            let Item::Array(ref a) = v else {
+                return Err(Error("one-time keys not array"));
+            };
             if a.is_empty() || a.len() > 256 {
                 return Err(Error("a deposit is 1 to 256 keys"));
             }
@@ -384,19 +510,25 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             }
         }
         Envelopes => {
-             let Item::Array(ref a) = v else { return Err(Error("envelopes not array")) };
+            let Item::Array(ref a) = v else {
+                return Err(Error("envelopes not array"));
+            };
             if a.len() > ARCHIVE_SUBSET_REFS {
                 return Err(Error("archive reply over 256"));
             }
         }
         Keyhashes => {
-             let Item::Array(ref a) = v else { return Err(Error("population not array")) };
+            let Item::Array(ref a) = v else {
+                return Err(Error("population not array"));
+            };
             if a.len() < 2 || a.len() > 256 {
                 return Err(Error("population out of range"));
             }
             let mut prev: Option<&[u8]> = None;
             for k in a {
-                let Some(s) = bs(b, k) else { return Err(Error("population entry")) };
+                let Some(s) = bs(b, k) else {
+                    return Err(Error("population entry"));
+                };
                 if s.len() != 32 {
                     return Err(Error("keyhash width"));
                 }
@@ -410,7 +542,9 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         PrekeyBundle => nested("PrekeyBundle")?,
         Delegation => nested("Delegation")?,
         Txids => {
-            let Item::Array(ref a) = v else { return Err(Error("frontier not array")) };
+            let Item::Array(ref a) = v else {
+                return Err(Error("frontier not array"));
+            };
             if a.is_empty() || a.len() > ARCHIVE_SUBSET_REFS {
                 return Err(Error("frontier is one to 256 txids"));
             }
@@ -435,10 +569,14 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                         crate::envelope::parse(&b[r.clone()])?;
                     }
                     Item::Array(ref parts) => {
-                        if parts.len() != 2 || !matches!(parts[0], Item::Map(_)) || !matches!(&parts[1], Item::Array(s) if s.len() == 7) {
+                        if parts.len() != 2
+                            || !matches!(parts[0], Item::Map(_))
+                            || !matches!(&parts[1], Item::Array(s) if s.len() == 7)
+                        {
                             return Err(Error("presented record shape"));
                         }
-                        let inner = array_item_ranges(b, r.start).ok_or(Error("presentation walk"))?;
+                        let inner =
+                            array_item_ranges(b, r.start).ok_or(Error("presentation walk"))?;
                         crate::envelope::parse(&b[inner[0].clone()])?;
                     }
                     _ => return Err(Error("archive entry neither envelope nor presentation")),
@@ -472,8 +610,14 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
             check_kind(&b[at..end], "Delegation", &item)
         }
         Family::PrekeyRequestOrBatch => {
-             let (Item::Map(ref m), _) = p.item(at)? else { return Err(Error("not a map")) };
-            let schema = if matches!(map_get(m, 1), Some(Item::Array(_))) { PREKEY_BATCH_REQUEST } else { PREKEY_REQUEST };
+            let (Item::Map(ref m), _) = p.item(at)? else {
+                return Err(Error("not a map"));
+            };
+            let schema = if matches!(map_get(m, 1), Some(Item::Array(_))) {
+                PREKEY_BATCH_REQUEST
+            } else {
+                PREKEY_REQUEST
+            };
             check_map(b, at, schema)?;
             if schema.len() == 4 {
                 let mode = map_get(m, 2).and_then(as_uint).unwrap_or(0);
@@ -507,7 +651,9 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
         _ => {
             let schema = fields(f).unwrap();
             check_map(b, at, schema)?;
-             let (Item::Map(ref m), _) = p.item(at)? else { unreachable!() };
+            let (Item::Map(ref m), _) = p.item(at)? else {
+                unreachable!()
+            };
             let m = &m;
             match f {
                 Family::ArchiveRequest => {
@@ -570,13 +716,17 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     // absent with it: they describe an endpoint, and either
                     // without one is a shape with no meaning
                     // (`wire-format.md` §7.10)
-                    if map_get(m, 2).is_none() && (map_get(m, 3).is_some() || map_get(m, 4).is_some()) {
+                    if map_get(m, 2).is_none()
+                        && (map_get(m, 3).is_some() || map_get(m, 4).is_some())
+                    {
                         return Err(Error("a withdrawal carries no key and no lapse"));
                     }
                     // an endpoint the node cannot encrypt to is one it
                     // cannot post the body of a doorbell to
                     if map_get(m, 2).is_some() && map_get(m, 3).is_none() {
-                        return Err(Error("an endpoint without the key its body is encrypted to"));
+                        return Err(Error(
+                            "an endpoint without the key its body is encrypted to",
+                        ));
                     }
                 }
                 Family::SubmissionReply => {
@@ -653,8 +803,15 @@ pub fn extension_bounds(b: &[u8], map_at: usize, known: impl Fn(u64) -> bool) ->
 /// Extension bounds for the value at `key` of the map at `map_at`: the map
 /// itself, or every map in an array there.  §1.3 counts per map, so a
 /// nested map is bounded on its own.
-fn nested_extension_bounds(b: &[u8], map_at: usize, key: u64, known: &dyn Fn(u64) -> bool) -> Result<(), Error> {
-    let Some(r) = value_slice_at(b, map_at, key) else { return Ok(()) };
+fn nested_extension_bounds(
+    b: &[u8],
+    map_at: usize,
+    key: u64,
+    known: &dyn Fn(u64) -> bool,
+) -> Result<(), Error> {
+    let Some(r) = value_slice_at(b, map_at, key) else {
+        return Ok(());
+    };
     let p = Parser { b };
     match p.item(r.start)?.0 {
         Item::Map(_) => extension_bounds(b, r.start, known),
@@ -691,7 +848,9 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
     extension_bounds(b, 0, |k| (1..=top).contains(&k))?;
     match kind {
         // network points, and a locator, are maps of their own
-        "AnchorEntry" | "EndpointRecord" | "SignedLocator" => nested_extension_bounds(b, 0, 2, &|k| (1..=3).contains(&k)),
+        "AnchorEntry" | "EndpointRecord" | "SignedLocator" => {
+            nested_extension_bounds(b, 0, 2, &|k| (1..=3).contains(&k))
+        }
         _ => Ok(()),
     }
 }
@@ -703,9 +862,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
     // a standalone signed kind carries its signature slot, in COSE_Sign1's
     // shape (§7): a record without one is malformed, not unverified
     if let Some((slot, _, _)) = sign1_profile(kind)
-        && let Item::Map(m) = item {
-            sign1_shape(map_get(m, slot).ok_or(Error("signature slot required"))?)?;
-        }
+        && let Item::Map(m) = item
+    {
+        sign1_shape(map_get(m, slot).ok_or(Error("signature slot required"))?)?;
+    }
     match kind {
         "EndpointRecord" | "AnchorEntry" => {
             let r2 = value_slice(b, 2).ok_or(Error("field 2"))?;
@@ -719,7 +879,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "VerifierResponse" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             // fields 1, 2, 3 and 9 carry no `?` in the CDDL, and 9 is the
             // signature that authenticates the rest: a response reached
             // through a `LateResponse` or a presence body must not arrive
@@ -761,22 +923,29 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         }
         "Locator" => check_type(b, 0, Locator),
         "SignedLocator" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if bs(b, map_get(m, 1).ok_or(Error("subject"))?).map(|s| s.len()) != Some(32) {
                 return Err(Error("keyhash width"));
             }
             Ok(())
         }
         "NetworkPoint" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if let Some(port) = map_get(m, 3).and_then(as_uint)
-                && (port == 0 || port > 65535 || port == 7431) {
-                    return Err(Error("port invalid"));
-                }
+                && (port == 0 || port > 65535 || port == 7431)
+            {
+                return Err(Error("port invalid"));
+            }
             Ok(())
         }
         "LocationEvidence" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             let Item::Array(asserted) = map_get(m, 1).ok_or(Error("asserted"))? else {
                 return Err(Error("asserted not array"));
             };
@@ -784,23 +953,32 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("asserted over 4"));
             }
             for a in asserted {
-                let Item::Map(am) = a else { return Err(Error("assert map")) };
+                let Item::Map(am) = a else {
+                    return Err(Error("assert map"));
+                };
                 let Item::Text(g) = map_get(am, 2).ok_or(Error("geohash"))? else {
                     return Err(Error("geohash not tstr"));
                 };
                 let gh = &b[g.clone()];
-                if !(gh.len() == 3 || gh.len() == 4) || !gh.iter().all(|c| b"0123456789bcdefghjkmnpqrstuvwxyz".contains(c)) {
+                if !(gh.len() == 3 || gh.len() == 4)
+                    || !gh
+                        .iter()
+                        .all(|c| b"0123456789bcdefghjkmnpqrstuvwxyz".contains(c))
+                {
                     return Err(Error("geohash malformed"));
                 }
             }
             if let Some(Item::Array(cor)) = map_get(m, 2)
-                && cor.len() > CORROBORATIONS_PER_RECORD {
-                    return Err(Error("corroborations over 16"));
-                }
+                && cor.len() > CORROBORATIONS_PER_RECORD
+            {
+                return Err(Error("corroborations over 16"));
+            }
             Ok(())
         }
         "Proximity" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             let Item::Array(ch) = map_get(m, 1).ok_or(Error("channels"))? else {
                 return Err(Error("channels not array"));
             };
@@ -811,7 +989,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             // §1.2 rejects an unknown value in a known enumerated field
             // (`wire-format.md` §4.5)
             for c in ch {
-                let Item::Map(cm) = c else { return Err(Error("channel not map")) };
+                let Item::Map(cm) = c else {
+                    return Err(Error("channel not map"));
+                };
                 match map_get(cm, 1).and_then(as_uint) {
                     Some(1..=4) => {}
                     _ => return Err(Error("channel kind out of range")),
@@ -855,7 +1035,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         },
         "Capabilities" => check_type(b, 0, Capabilities),
         "CatalogEntry" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if b.len() > CATALOG_ENTRY_BYTES {
                 return Err(Error("entry over 2048"));
             }
@@ -887,7 +1069,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "CurrencyAttestation" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if map_get(m, 5).and_then(as_uint).ok_or(Error("role"))? > 3 {
                 return Err(Error("role out of range"));
             }
@@ -910,7 +1094,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         }
         "Delegation" => {
             check_map_signed(b, 0, DELEGATION)?;
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if bs(b, map_get(m, 1).ok_or(Error("field 1"))?).map(|s| s.len()) != Some(32) {
                 return Err(Error("transport key width"));
             }
@@ -923,16 +1109,25 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             // a hybrid COSE_Sign: the detached container and two entries,
             // one per algorithm; a classical-only delegation is malformed
-            let Some(Item::Array(cs)) = map_get(m, 5) else { return Err(Error("signature not COSE_Sign")) };
-            if cs.len() != 4 || !matches!(cs[0], Item::Bytes(_)) || !matches!(&cs[1], Item::Map(u) if u.is_empty()) || !matches!(cs[2], Item::Null) {
+            let Some(Item::Array(cs)) = map_get(m, 5) else {
+                return Err(Error("signature not COSE_Sign"));
+            };
+            if cs.len() != 4
+                || !matches!(cs[0], Item::Bytes(_))
+                || !matches!(&cs[1], Item::Map(u) if u.is_empty())
+                || !matches!(cs[2], Item::Null)
+            {
                 return Err(Error("COSE_Sign container departs from the profile"));
             }
-            let Item::Array(entries) = &cs[3] else { return Err(Error("signature entries not array")) };
+            let Item::Array(entries) = &cs[3] else {
+                return Err(Error("signature entries not array"));
+            };
             if entries.len() != 2 {
                 return Err(Error("a hybrid delegation carries one entry per algorithm"));
             }
             for e in entries {
-                if !matches!(e, Item::Array(ea) if ea.len() == 3 && matches!(ea[0], Item::Bytes(_)) && matches!(&ea[1], Item::Map(u) if u.is_empty()) && matches!(ea[2], Item::Bytes(_))) {
+                if !matches!(e, Item::Array(ea) if ea.len() == 3 && matches!(ea[0], Item::Bytes(_)) && matches!(&ea[1], Item::Map(u) if u.is_empty()) && matches!(ea[2], Item::Bytes(_)))
+                {
                     return Err(Error("signature entry shape"));
                 }
             }
@@ -946,11 +1141,14 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "PrekeyBatchRequest" => check_unsigned(Family::PrekeyRequestOrBatch, b, 0),
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
         "PrekeyBundle" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if let Some(Item::Bytes(r)) = map_get(m, 3)
-                && r.len() > PREKEY_BUNDLE_BLOB {
-                    return Err(Error("blob over 4KB"));
-                }
+                && r.len() > PREKEY_BUNDLE_BLOB
+            {
+                return Err(Error("blob over 4KB"));
+            }
             // field 5, the device, under the signature (§7.8)
             if bs(b, map_get(m, 5).ok_or(Error("device required"))?).map(|s| s.len()) != Some(32) {
                 return Err(Error("device key width"));
@@ -958,7 +1156,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "VerificationQuery" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             let qid = match map_get(m, 6) {
                 Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
                 _ => return Err(Error("no query_id")),
@@ -986,11 +1186,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 4096 => {}
                 _ => return Err(Error("fuzzed profile out of range")),
             }
-            map_get(m, 5).and_then(as_uint).ok_or(Error("template version required"))?;
+            map_get(m, 5)
+                .and_then(as_uint)
+                .ok_or(Error("template version required"))?;
             Ok(())
         }
         "Witness" => {
-            let Item::Map(m) = item else { return Err(Error("not map")) };
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
             if map_get(m, 4).is_some() || map_get(m, 5).is_some() {
                 return Err(Error("retired witness key"));
             }
@@ -1001,12 +1205,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         // §7.10): the submitter in front of the ciphertext, an array and
         // not a map
         "RelayedPayload" => match item {
-            Item::Array(a) if a.len() == 2 => {
-                match (&a[0], &a[1]) {
-                    (Item::Bytes(f), Item::Bytes(_)) if f.len() == 32 => Ok(()),
-                    _ => Err(Error("relayed payload shape")),
-                }
-            }
+            Item::Array(a) if a.len() == 2 => match (&a[0], &a[1]) {
+                (Item::Bytes(f), Item::Bytes(_)) if f.len() == 32 => Ok(()),
+                _ => Err(Error("relayed payload shape")),
+            },
             _ => Err(Error("relayed payload is a two-element array")),
         },
         _ => Ok(()),
@@ -1018,11 +1220,17 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
 /// envelope the type is named, and [`check_body_of_type`] takes it from
 /// there rather than guessing.
 pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
-    let Item::Map(m) = item else { return Err(Error("not map")) };
+    let Item::Map(m) = item else {
+        return Err(Error("not map"));
+    };
     let tx_type = match map_get(m, 3) {
         Some(Item::Map(_)) if matches!(map_get(m, 4), Some(Item::Map(_))) => 4,
         Some(Item::Map(_)) => 1,
-        Some(Item::Array(a)) if a.iter().all(|x| matches!(x, Item::Map(_))) && map_get(m, 6).is_some() => 5,
+        Some(Item::Array(a))
+            if a.iter().all(|x| matches!(x, Item::Map(_))) && map_get(m, 6).is_some() =>
+        {
+            5
+        }
         Some(Item::Array(_)) if matches!(map_get(m, 4), Some(Item::Array(_))) => 7,
         Some(Item::Array(_)) => 2,
         Some(Item::Uint(_)) => 3,
@@ -1033,11 +1241,16 @@ pub fn check_body(b: &[u8], item: &Item) -> Result<(), Error> {
 
 /// A `seqno` pair (§2.3): `[series, counter]`, two uints.
 fn seqno_of(it: Option<&Item>) -> Result<(u64, u64), Error> {
-    let Some(Item::Array(a)) = it else { return Err(Error("seqno not an array")) };
+    let Some(Item::Array(a)) = it else {
+        return Err(Error("seqno not an array"));
+    };
     if a.len() != 2 {
         return Err(Error("seqno arity"));
     }
-    let (series, counter) = (as_uint(&a[0]).ok_or(Error("seqno series"))?, as_uint(&a[1]).ok_or(Error("seqno counter"))?);
+    let (series, counter) = (
+        as_uint(&a[0]).ok_or(Error("seqno series"))?,
+        as_uint(&a[1]).ok_or(Error("seqno counter"))?,
+    );
     // both are U32 range (`wire-format.md` §2.3).  **Refused rather than
     // narrowed**: a value that does not fit is malformed, and truncating it
     // would leave two parties holding different beliefs about which series a
@@ -1060,15 +1273,21 @@ fn keyhash_at<'a>(b: &'a [u8], m: &[(Item, Item)], key: u64) -> Option<&'a [u8]>
 /// (§4): the fields the type requires in the shapes it gives them, and
 /// every consistency rule a validator checks from the object alone.
 pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Error> {
-    let Item::Map(m) = item else { return Err(Error("not map")) };
+    let Item::Map(m) = item else {
+        return Err(Error("not map"));
+    };
     let Item::Array(lists) = map_get(m, 0).ok_or(Error("key 0"))? else {
         return Err(Error("key0 not array"));
     };
     if lists.is_empty() {
-        return Err(Error("key 0 carries one list per signer, and there is a signer"));
+        return Err(Error(
+            "key 0 carries one list per signer, and there is a signer",
+        ));
     }
     for l in lists {
-        let Item::Array(hs) = l else { return Err(Error("list")) };
+        let Item::Array(hs) = l else {
+            return Err(Error("list"));
+        };
         if hs.is_empty() || hs.len() > MERGE_BACK_POINTERS_PER_SIGNER {
             return Err(Error("back-pointer bound"));
         }
@@ -1076,13 +1295,17 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
         // (§3.1): one logical merge, one encoding, one txid
         let mut prev: Option<&[u8]> = None;
         for h in hs {
-            let Item::Bytes(r) = h else { return Err(Error("back-pointer not a byte string")) };
+            let Item::Bytes(r) = h else {
+                return Err(Error("back-pointer not a byte string"));
+            };
             if r.len() != 32 {
                 return Err(Error("back-pointer width"));
             }
             let this = &b[r.clone()];
             if prev.is_some_and(|p| this <= p) {
-                return Err(Error("a merge list is sorted ascending and repeats nothing"));
+                return Err(Error(
+                    "a merge list is sorted ascending and repeats nothing",
+                ));
             }
             prev = Some(this);
         }
@@ -1101,21 +1324,32 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
     }
     match tx_type {
         1 => {
-            let Some(Item::Map(loc)) = map_get(m, 3) else { return Err(Error("adoption field 3 not a locator")) };
+            let Some(Item::Map(loc)) = map_get(m, 3) else {
+                return Err(Error("adoption field 3 not a locator"));
+            };
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
             // the locator's own shape, its packed path included (§2.1,
             // §2.3), its unknown keys the extensions a signed body keeps
             check_map_signed(b, r3.start, LOCATOR)?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
-            map_get(m, 4).and_then(as_uint).ok_or(Error("adoption timestamp uint"))?;
+            map_get(m, 4)
+                .and_then(as_uint)
+                .ok_or(Error("adoption timestamp uint"))?;
             if seqno_of(map_get(loc, 3))?.1 != 0 {
                 return Err(Error("adoption counter not 0"));
             }
             // exactly one evidence form (§4.1, design §6.1.1): a recovery's
             // own block, a presence record's txid, or a former patron's
             // statement; none, or more than one, is malformed
-            if [6u64, 8, 9].iter().filter(|k| map_get(m, **k).is_some()).count() != 1 {
-                return Err(Error("an adoption carries exactly one of fields 6, 8 and 9"));
+            if [6u64, 8, 9]
+                .iter()
+                .filter(|k| map_get(m, **k).is_some())
+                .count()
+                != 1
+            {
+                return Err(Error(
+                    "an adoption carries exactly one of fields 6, 8 and 9",
+                ));
             }
             nested_extension_bounds(b, 0, 6, &|k| (1..=3).contains(&k))?;
             nested_extension_bounds(b, 0, 9, &|k| (1..=2).contains(&k))?;
@@ -1148,15 +1382,26 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
         }
         2 => {
             seqno_of(map_get(m, 3))?;
-            map_get(m, 4).and_then(as_uint).ok_or(Error("departure timestamp uint"))?;
-            if map_get(m, 5).is_some() && map_get(m, 5).and_then(as_uint).ok_or(Error("reason code uint"))? > 63 {
+            map_get(m, 4)
+                .and_then(as_uint)
+                .ok_or(Error("departure timestamp uint"))?;
+            if map_get(m, 5).is_some()
+                && map_get(m, 5)
+                    .and_then(as_uint)
+                    .ok_or(Error("reason code uint"))?
+                    > 63
+            {
                 return Err(Error("departure reason code out of space"));
             }
             Ok(())
         }
         3 => {
-            map_get(m, 3).and_then(as_uint).ok_or(Error("disavowal timestamp uint"))?;
-            if map_get(m, 4).is_some() && map_get(m, 4).and_then(as_uint).ok_or(Error("code uint"))? > 63 {
+            map_get(m, 3)
+                .and_then(as_uint)
+                .ok_or(Error("disavowal timestamp uint"))?;
+            if map_get(m, 4).is_some()
+                && map_get(m, 4).and_then(as_uint).ok_or(Error("code uint"))? > 63
+            {
                 return Err(Error("disavowal code out of space"));
             }
             Ok(())
@@ -1170,11 +1415,14 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
             nested_extension_bounds(b, 0, 4, &|k| (1..=3).contains(&k))?;
-            map_get(m, 5).and_then(as_uint).ok_or(Error("peering timestamp uint"))?;
+            map_get(m, 5)
+                .and_then(as_uint)
+                .ok_or(Error("peering timestamp uint"))?;
             if let Some(Item::Array(audits)) = map_get(m, 7)
-                && audits.len() > PEERING_AUDIT_HISTORY {
-                    return Err(Error("audits over 8"));
-                }
+                && audits.len() > PEERING_AUDIT_HISTORY
+            {
+                return Err(Error("audits over 8"));
+            }
             // the proof of presence between the peers is required, and
             // unconditionally so (§4.4)
             if keyhash_at(b, m, 8).is_none() {
@@ -1188,7 +1436,9 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             if seqno_of(map_get(m, 4))?.1 != 0 {
                 return Err(Error("reissue new series counter not 0"));
             }
-            map_get(m, 5).and_then(as_uint).ok_or(Error("reissue timestamp uint"))?;
+            map_get(m, 5)
+                .and_then(as_uint)
+                .ok_or(Error("reissue timestamp uint"))?;
             Ok(())
         }
         _ => Err(Error("unknown transaction type")),
@@ -1245,11 +1495,17 @@ fn is_hybrid_sign(it: Option<&Item>) -> bool {
 /// response sits."
 fn check_response_signatures(x: &[(Item, Item)], in_recovery: bool) -> Result<(), Error> {
     if !is_sign1(map_get(x, 7)) {
-        return Err(Error("a response's consent signature is not a classical COSE_Sign1"));
+        return Err(Error(
+            "a response's consent signature is not a classical COSE_Sign1",
+        ));
     }
     match in_recovery {
-        false if !is_sign1(map_get(x, 9)) => Err(Error("a response's verifier signature is not a COSE_Sign1 in a presence record")),
-        true if !is_hybrid_sign(map_get(x, 9)) => Err(Error("a response's verifier signature is not a hybrid COSE_Sign inside a recovery")),
+        false if !is_sign1(map_get(x, 9)) => Err(Error(
+            "a response's verifier signature is not a COSE_Sign1 in a presence record",
+        )),
+        true if !is_hybrid_sign(map_get(x, 9)) => Err(Error(
+            "a response's verifier signature is not a hybrid COSE_Sign inside a recovery",
+        )),
         _ => Ok(()),
     }
 }
@@ -1263,7 +1519,9 @@ fn check_recovery(b: &[u8], m: &[(Item, Item)], rm: &[(Item, Item)]) -> Result<(
     if prior == node {
         return Err(Error("recovery prior key equals the new key"));
     }
-    let Some(Item::Array(resp)) = map_get(rm, 2) else { return Err(Error("recovery responses not array")) };
+    let Some(Item::Array(resp)) = map_get(rm, 2) else {
+        return Err(Error("recovery responses not array"));
+    };
     if resp.is_empty() {
         return Err(Error("a recovery carries at least one response"));
     }
@@ -1276,11 +1534,15 @@ fn check_recovery(b: &[u8], m: &[(Item, Item)], rm: &[(Item, Item)]) -> Result<(
     let mut prev: Option<&[u8]> = None;
     let mut matched = false;
     for r in resp {
-        let Item::Map(x) = r else { return Err(Error("response not map")) };
+        let Item::Map(x) = r else {
+            return Err(Error("response not map"));
+        };
         let verifier = keyhash_at(b, x, 1).ok_or(Error("response verifier"))?;
         let subject = keyhash_at(b, x, 2).ok_or(Error("response subject"))?;
         if subject != node {
-            return Err(Error("a response names a subject other than the adopted node"));
+            return Err(Error(
+                "a response names a subject other than the adopted node",
+            ));
         }
         if verifier == subject {
             return Err(Error("a response's verifier is its subject"));
@@ -1317,24 +1579,34 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         return Err(Error("retired body key 7"));
     }
     map_get(m, 8).ok_or(Error("presence field 8 required"))?;
-    let Some(Item::Array(parts)) = map_get(m, 3) else { return Err(Error("participants not array")) };
+    let Some(Item::Array(parts)) = map_get(m, 3) else {
+        return Err(Error("participants not array"));
+    };
     if parts.len() != 2 {
         return Err(Error("a presence record names two participants"));
     }
     let mut keys = Vec::new();
     for p in parts {
-        let Item::Map(pm) = p else { return Err(Error("participant not map")) };
+        let Item::Map(pm) = p else {
+            return Err(Error("participant not map"));
+        };
         keys.push(keyhash_at(b, pm, 1).ok_or(Error("participant keyhash"))?);
     }
     if keys[0] == keys[1] {
         return Err(Error("the two participant identities are one"));
     }
-    let sub = map_get(m, 6).and_then(as_uint).ok_or(Error("subtype uint"))?;
+    let sub = map_get(m, 6)
+        .and_then(as_uint)
+        .ok_or(Error("subtype uint"))?;
     if sub > 1 {
         return Err(Error("subtype out of range"));
     }
-    let s = map_get(m, 1).and_then(as_uint).ok_or(Error("started_at uint"))?;
-    let f = map_get(m, 2).and_then(as_uint).ok_or(Error("finalized_at uint"))?;
+    let s = map_get(m, 1)
+        .and_then(as_uint)
+        .ok_or(Error("started_at uint"))?;
+    let f = map_get(m, 2)
+        .and_then(as_uint)
+        .ok_or(Error("finalized_at uint"))?;
     if f < s || f - s > 86_400 {
         return Err(Error("finalization gap"));
     }
@@ -1346,12 +1618,17 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
             return Err(Error("a formation carries no witnesses and no responses"));
         }
         if lists.len() != 2 {
-            return Err(Error("a formation carries one back-pointer list per participant"));
+            return Err(Error(
+                "a formation carries one back-pointer list per participant",
+            ));
         }
         for (l, k) in lists.iter().zip(&keys) {
-            let Item::Array(hs) = l else { return Err(Error("list")) };
+            let Item::Array(hs) = l else {
+                return Err(Error("list"));
+            };
             let genesis = crate::cose::sha256(k);
-            let ok = hs.len() == 1 && matches!(&hs[0], Item::Bytes(r) if b[r.clone()] == genesis[..]);
+            let ok =
+                hs.len() == 1 && matches!(&hs[0], Item::Bytes(r) if b[r.clone()] == genesis[..]);
             if !ok {
                 return Err(Error("a formation's back-pointers are the genesis value"));
             }
@@ -1360,13 +1637,17 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
     }
     // a normal record carries witnesses, one to sixteen, and at least one
     // attesting that the protocol ran and both were responsive
-    let Some(Item::Array(ws)) = map_get(m, 4) else { return Err(Error("a normal record carries witnesses")) };
+    let Some(Item::Array(ws)) = map_get(m, 4) else {
+        return Err(Error("a normal record carries witnesses"));
+    };
     if ws.is_empty() || ws.len() > WITNESSES_PER_RECORD {
         return Err(Error("witnesses out of 1..=16"));
     }
     let mut affirmative = false;
     for w in ws {
-        let Item::Map(wm) = w else { return Err(Error("witness not map")) };
+        let Item::Map(wm) = w else {
+            return Err(Error("witness not map"));
+        };
         if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
             return Err(Error("retired witness key"));
         }
@@ -1400,7 +1681,9 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         // its absence here was an asymmetry rather than a decision.
         let mut prev: Option<(&[u8], &[u8])> = None;
         for r in resp {
-            let Item::Map(x) = r else { return Err(Error("response not map")) };
+            let Item::Map(x) = r else {
+                return Err(Error("response not map"));
+            };
             check_kind(b, "VerifierResponse", r)?;
             let verifier = keyhash_at(b, x, 1).ok_or(Error("response verifier"))?;
             let subject = keyhash_at(b, x, 2).ok_or(Error("response subject"))?;
@@ -1411,7 +1694,9 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
                 return Err(Error("a response's verifier is its subject"));
             }
             if prev.is_some_and(|p| (verifier, subject) <= p) {
-                return Err(Error("responses unsorted, or one verifier twice for one subject"));
+                return Err(Error(
+                    "responses unsorted, or one verifier twice for one subject",
+                ));
             }
             check_response_signatures(x, false)?;
             prev = Some((verifier, subject));

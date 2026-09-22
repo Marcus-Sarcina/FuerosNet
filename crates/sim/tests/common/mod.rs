@@ -3,15 +3,17 @@
 
 #![allow(dead_code)]
 
-use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_transport::session::*;
 use rhtn_transport::tls::{self, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-pub const NAMES: [&str; 9] = ["alice", "bob", "carol", "alice2", "w1", "w2", "c1", "c2", "witness"];
+pub const NAMES: [&str; 9] = [
+    "alice", "bob", "carol", "alice2", "w1", "w2", "c1", "c2", "witness",
+];
 
 /// The tests that count seconds on a wall clock run one at a time, so a
 /// loaded machine does not turn a bound into a flake.
@@ -77,29 +79,48 @@ pub fn client_ep() -> quinn::Endpoint {
 /// A `SiblingRef` for `name` at `addr`, carrying its key material so a
 /// client that has never contacted it can authenticate it (§8.2).
 pub fn sibling_ref(name: &str, addr: SocketAddr) -> SiblingRef {
-    let std::net::IpAddr::V4(v4) = addr.ip() else { panic!("v4") };
+    let std::net::IpAddr::V4(v4) = addr.ip() else {
+        panic!("v4")
+    };
     SiblingRef {
         keyhash: kh(name),
-        endpoints: vec![NetworkPoint { ip: v4.octets(), asn: None, port: Some(addr.port() as u64) }],
+        endpoints: vec![NetworkPoint {
+            ip: v4.octets(),
+            asn: None,
+            port: Some(addr.port() as u64),
+        }],
         key_material: Some(id(name).public.key_material()),
     }
 }
 
 /// Note an address for a keyhash in the client's own address book.
 pub fn know(cfg: &ClientConfig, name: &str, addr: SocketAddr) {
-    cfg.addresses.lock().unwrap().entry(kh(name)).or_default().push(addr);
+    cfg.addresses
+        .lock()
+        .unwrap()
+        .entry(kh(name))
+        .or_default()
+        .push(addr);
 }
 
 /// A filter that drops every heartbeat, so a node can fall silent on the
 /// detector's path while still sending everything else.
 pub fn drop_heartbeats() -> OutboundFilter {
-    Arc::new(|frame_type, bytes| if frame_type == FRAME_HEARTBEAT { None } else { Some(bytes.to_vec()) })
+    Arc::new(|frame_type, bytes| {
+        if frame_type == FRAME_HEARTBEAT {
+            None
+        } else {
+            Some(bytes.to_vec())
+        }
+    })
 }
 
 /// Every delivery that arrives within `ms`.
 pub async fn drain(s: &mut Session, ms: u64) -> Vec<Vec<u8>> {
     let mut got = Vec::new();
-    while let Ok(Some(b)) = tokio::time::timeout(std::time::Duration::from_millis(ms), s.deliveries.recv()).await {
+    while let Ok(Some(b)) =
+        tokio::time::timeout(std::time::Duration::from_millis(ms), s.deliveries.recv()).await
+    {
         got.push(b);
     }
     got
@@ -136,7 +157,14 @@ impl Default for Signers {
 
 impl Signers {
     pub fn new() -> Signers {
-        Signers { archives: NAMES.iter().map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n)))).collect(), store: BTreeMap::new(), clock: SIM_EPOCH }
+        Signers {
+            archives: NAMES
+                .iter()
+                .map(|n| (kh(n), rhtn_archive::chain::Archive::new(kh(n))))
+                .collect(),
+            store: BTreeMap::new(),
+            clock: SIM_EPOCH,
+        }
     }
     fn tick(&mut self) -> u64 {
         self.clock += 3600;
@@ -154,7 +182,11 @@ impl Signers {
         let refs: Vec<&SigningIdentity> = sids.iter().collect();
         let rec = Record::parse(&envelope(tx_type, body, &refs)).expect("well-formed");
         for s in signers {
-            self.archives.get_mut(&kh(s)).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&kh(s))
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         self.store.insert(rec.txid, rec.bytes.clone());
         rec
@@ -177,7 +209,11 @@ impl Signers {
         let t = self.tick();
         let back = vec![self.back(a), self.back(b), self.back("witness")];
         let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
-        let w = Witness { keyhash: kh("witness"), nominated_by: kh(a), flags: 3 };
+        let w = Witness {
+            keyhash: kh("witness"),
+            nominated_by: kh(a),
+            flags: 3,
+        };
         let body = presence_record_body(&back, [&kh(a), &kh(b)], &[w], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
@@ -185,7 +221,14 @@ impl Signers {
     /// A recovery adoption (`wire-format.md` §4.1): `new` claims `old`'s
     /// history under `patron`, placed at `(anchor, path, series)`, with
     /// `verifier`, a prior counterparty, recognising the holder.
-    pub fn recover(&mut self, old: &str, new: &str, patron: &str, verifier: &str, place: (&str, &[u8], u32)) -> Record {
+    pub fn recover(
+        &mut self,
+        old: &str,
+        new: &str,
+        patron: &str,
+        verifier: &str,
+        place: (&str, &[u8], u32),
+    ) -> Record {
         let (anchor, path, series) = place;
         let t = self.tick();
         let qid = rhtn_codec::cose::sha256(format!("recover:{old}:{new}:{t}").as_bytes());
@@ -196,7 +239,12 @@ impl Signers {
         let a = Adoption {
             node: kh(new),
             patron: kh(patron),
-            locator: Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series, counter: 0 } },
+            locator: Locator {
+                anchor: kh(anchor),
+                path: p.bytes,
+                nibbles: p.nibbles,
+                seqno: Seqno { series, counter: 0 },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Recovery(block),
@@ -208,7 +256,14 @@ impl Signers {
 
     /// An adoption of `node` under `patron` at `path` in the subnet
     /// `anchor` names, on a fresh presence record.
-    pub fn adopt(&mut self, node: &str, patron: &str, anchor: &str, path: &[u8], series: u32) -> Record {
+    pub fn adopt(
+        &mut self,
+        node: &str,
+        patron: &str,
+        anchor: &str,
+        path: &[u8],
+        series: u32,
+    ) -> Record {
         let pop = self.meet(patron, node);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
@@ -216,7 +271,12 @@ impl Signers {
         let a = Adoption {
             node: kh(node),
             patron: kh(patron),
-            locator: Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series, counter: 0 } },
+            locator: Locator {
+                anchor: kh(anchor),
+                path: p.bytes,
+                nibbles: p.nibbles,
+                seqno: Seqno { series, counter: 0 },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop.txid),
@@ -234,15 +294,33 @@ pub fn table_of(me: &str, s: &Signers, records: &[&Record], infra: &[&str]) -> T
         t.mark_infra(kh(n));
     }
     for r in records {
-        t.apply(r, &ids(), &s.store, None).unwrap_or_else(|e| panic!("apply: {e:?}"));
+        t.apply(r, &ids(), &s.store, None)
+            .unwrap_or_else(|e| panic!("apply: {e:?}"));
     }
     t
 }
 
 /// A node view for `me` at `path` under `anchor`.
-pub fn view_of(me: &str, table: Table, anchor: &str, path: &[u8], now: u64) -> rhtn_node::view::NodeView {
+pub fn view_of(
+    me: &str,
+    table: Table,
+    anchor: &str,
+    path: &[u8],
+    now: u64,
+) -> rhtn_node::view::NodeView {
     let p = rhtn_node::resolution::Path::from_indices(path);
-    let mut v = rhtn_node::view::NodeView::new(Arc::new(id(me)), Locator { anchor: kh(anchor), path: p.bytes, nibbles: p.nibbles, seqno: Seqno { series: 1, counter: 0 } });
+    let mut v = rhtn_node::view::NodeView::new(
+        Arc::new(id(me)),
+        Locator {
+            anchor: kh(anchor),
+            path: p.bytes,
+            nibbles: p.nibbles,
+            seqno: Seqno {
+                series: 1,
+                counter: 0,
+            },
+        },
+    );
     v.table = table;
     v.set_now(now);
     v

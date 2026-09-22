@@ -20,9 +20,32 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     let mut n = view("bob", table, "alice", &[0]);
     n.set_now(w.clock + 1);
     let fab = Fabric::with(&[kh("alice"), kh("carol")]);
-    let er = endpoint_record(&id("carol"), &[point(3, 7003)], Seqno { series: 2, counter: 4 });
-    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_TRANSACTION, &a_x.bytes), &ids()), Decision::Stored);
-    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &er), &ids()), Decision::Stored);
+    let er = endpoint_record(
+        &id("carol"),
+        &[point(3, 7003)],
+        Seqno {
+            series: 2,
+            counter: 4,
+        },
+    );
+    assert_eq!(
+        n.receive_push(
+            &*fab,
+            &kh("alice"),
+            &encode_push(KIND_TRANSACTION, &a_x.bytes),
+            &ids()
+        ),
+        Decision::Stored
+    );
+    assert_eq!(
+        n.receive_push(
+            &*fab,
+            &kh("alice"),
+            &encode_push(KIND_ENDPOINT_RECORD, &er),
+            &ids()
+        ),
+        Decision::Stored
+    );
     n.store.keep_presence(pop.txid, pop.bytes.clone());
     n.store.prove_series(kh("carol"), 2);
     let forwarded = fab.count(FRAME_TOPOLOGY_PUSH);
@@ -38,14 +61,39 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     assert_eq!(loaded.presence(&pop.txid), Some(&pop.bytes));
     assert!(loaded.series_proved(&kh("carol"), 2));
     assert_eq!(loaded.objects().len(), n.store.objects().len());
-    let mut again = view("bob", table_with(kh("bob"), &w, &[&a_n, &a_s], &["alice", "bob", "carol"]), "alice", &[0]);
+    let mut again = view(
+        "bob",
+        table_with(kh("bob"), &w, &[&a_n, &a_s], &["alice", "bob", "carol"]),
+        "alice",
+        &[0],
+    );
     again.store = loaded;
     // the objects come round again on another session: duplicates, and no
     // second forwarding wave
     let fab2 = Fabric::with(&[kh("alice"), kh("carol")]);
-    assert_eq!(again.receive_push(&*fab2, &kh("carol"), &encode_push(KIND_TRANSACTION, &a_x.bytes), &ids()), Decision::Duplicate);
-    assert_eq!(again.receive_push(&*fab2, &kh("carol"), &encode_push(KIND_ENDPOINT_RECORD, &er), &ids()), Decision::Duplicate);
-    assert_eq!(fab2.count(FRAME_TOPOLOGY_PUSH), 0, "a node that kept its store replays nothing");
+    assert_eq!(
+        again.receive_push(
+            &*fab2,
+            &kh("carol"),
+            &encode_push(KIND_TRANSACTION, &a_x.bytes),
+            &ids()
+        ),
+        Decision::Duplicate
+    );
+    assert_eq!(
+        again.receive_push(
+            &*fab2,
+            &kh("carol"),
+            &encode_push(KIND_ENDPOINT_RECORD, &er),
+            &ids()
+        ),
+        Decision::Duplicate
+    );
+    assert_eq!(
+        fab2.count(FRAME_TOPOLOGY_PUSH),
+        0,
+        "a node that kept its store replays nothing"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -58,21 +106,49 @@ fn a_retired_endpoint_record_does_not_return_from_disk() {
     let table = table_with(kh("bob"), &w, &[&a_n, &a_s], &["alice", "bob", "carol"]);
     let mut n = view("bob", table, "alice", &[0]);
     let fab = Fabric::with(&[kh("alice"), kh("carol")]);
-    let sq = Seqno { series: 2, counter: 4 };
+    let sq = Seqno {
+        series: 2,
+        counter: 4,
+    };
     let first = endpoint_record(&id("carol"), &[point(3, 7003)], sq);
     let second = endpoint_record(&id("carol"), &[point(3, 7004)], sq);
-    assert_eq!(n.receive_push(&*fab, &kh("alice"), &encode_push(KIND_ENDPOINT_RECORD, &first), &ids()), Decision::Stored);
+    assert_eq!(
+        n.receive_push(
+            &*fab,
+            &kh("alice"),
+            &encode_push(KIND_ENDPOINT_RECORD, &first),
+            &ids()
+        ),
+        Decision::Stored
+    );
     let dir = std::env::temp_dir().join(format!("rhtn-store-conflict-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     n.store.save(&dir).unwrap();
     // the same number with different signed contents: the pair is malformed
     // and neither is current
-    assert!(matches!(n.receive_push(&*fab, &kh("carol"), &encode_push(KIND_ENDPOINT_RECORD, &second), &ids()), Decision::Conflict { .. }));
+    assert!(matches!(
+        n.receive_push(
+            &*fab,
+            &kh("carol"),
+            &encode_push(KIND_ENDPOINT_RECORD, &second),
+            &ids()
+        ),
+        Decision::Conflict { .. }
+    ));
     assert!(n.store.endpoint(&kh("carol")).is_none());
     n.store.save(&dir).unwrap();
     let loaded = TopologyStore::load(&dir).unwrap();
     assert!(loaded.conflicted(&kh("carol"), sq), "the marker persists");
-    assert!(loaded.endpoint(&kh("carol")).is_none(), "and the retired record does not return");
-    assert!(loaded.objects().iter().all(|(k, b)| *k != KIND_ENDPOINT_RECORD || *b != first), "nor is it replayed");
+    assert!(
+        loaded.endpoint(&kh("carol")).is_none(),
+        "and the retired record does not return"
+    );
+    assert!(
+        loaded
+            .objects()
+            .iter()
+            .all(|(k, b)| *k != KIND_ENDPOINT_RECORD || *b != first),
+        "nor is it replayed"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

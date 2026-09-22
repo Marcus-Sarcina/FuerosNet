@@ -67,7 +67,10 @@ impl KemSecret {
     }
 
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<[u8; 32], String> {
-        let ss = self.0.decapsulate_slice(ciphertext).map_err(|_| "ciphertext length")?;
+        let ss = self
+            .0
+            .decapsulate_slice(ciphertext)
+            .map_err(|_| "ciphertext length")?;
         Ok(ss.into())
     }
 }
@@ -82,8 +85,10 @@ impl KemPublic {
     /// Encapsulate to this key with the given randomness: the ciphertext to
     /// send and the shared secret.
     pub fn encapsulate(&self, m: [u8; 32]) -> Result<(Vec<u8>, [u8; 32]), String> {
-        let key = ml_kem::Key::<EncapsulationKey<MlKem768>>::try_from(self.0.as_slice()).map_err(|_| "encapsulation key length")?;
-        let ek = EncapsulationKey::<MlKem768>::new(&key).map_err(|_| "encapsulation key invalid")?;
+        let key = ml_kem::Key::<EncapsulationKey<MlKem768>>::try_from(self.0.as_slice())
+            .map_err(|_| "encapsulation key length")?;
+        let ek =
+            EncapsulationKey::<MlKem768>::new(&key).map_err(|_| "encapsulation key invalid")?;
         let (ct, ss) = ek.encapsulate_deterministic(&B32::from(m));
         Ok((ct.to_vec(), ss.into()))
     }
@@ -112,7 +117,12 @@ pub struct Initiated {
 /// DH3 = DH(EK_A, SPK_B), DH4 = DH(EK_A, OPK_B) where served, SS from
 /// PQOPK_B where served and PQSPK_B otherwise, and SK = KDF(DH1 ‖ DH2 ‖
 /// DH3 ‖ [DH4] ‖ SS).  `kem_m` is the encapsulation's randomness.
-pub fn initiate(ik_a: &DhSecret, ek_a: &DhSecret, their: &TheirBundle, kem_m: [u8; 32]) -> Result<Initiated, String> {
+pub fn initiate(
+    ik_a: &DhSecret,
+    ek_a: &DhSecret,
+    their: &TheirBundle,
+    kem_m: [u8; 32],
+) -> Result<Initiated, String> {
     let mut km = Vec::with_capacity(5 * 32);
     km.extend_from_slice(&ik_a.agree(their.spk));
     km.extend_from_slice(&ek_a.agree(their.ik));
@@ -122,7 +132,11 @@ pub fn initiate(ik_a: &DhSecret, ek_a: &DhSecret, their: &TheirBundle, kem_m: [u
     }
     let (ct, ss) = their.pqopk.unwrap_or(their.pqspk).encapsulate(kem_m)?;
     km.extend_from_slice(&ss);
-    Ok(Initiated { sk: kdf(&km), ek: ek_a.public(), kem_ciphertext: ct })
+    Ok(Initiated {
+        sk: kdf(&km),
+        ek: ek_a.public(),
+        kem_ciphertext: ct,
+    })
 }
 
 /// The responder's keys the initial message names.
@@ -135,7 +149,12 @@ pub struct Responder<'a> {
 }
 
 /// The responder's side of the same computation.
-pub fn respond(me: &Responder, ik_a: &DhPublic, ek_a: &DhPublic, kem_ciphertext: &[u8]) -> Result<[u8; 32], String> {
+pub fn respond(
+    me: &Responder,
+    ik_a: &DhPublic,
+    ek_a: &DhPublic,
+    kem_ciphertext: &[u8],
+) -> Result<[u8; 32], String> {
     let mut km = Vec::with_capacity(5 * 32);
     km.extend_from_slice(&me.spk.agree(ik_a));
     km.extend_from_slice(&me.ik.agree(ek_a));
@@ -164,11 +183,14 @@ pub fn kdf(km: &[u8]) -> [u8; 32] {
     ikm.extend_from_slice(km);
     let hk = Hkdf::<Sha256>::new(Some(&[0u8; 32]), &ikm);
     let mut out = [0u8; 32];
-    hk.expand(INFO, &mut out).expect("32 bytes is within HKDF's bound");
+    hk.expand(INFO, &mut out)
+        .expect("32 bytes is within HKDF's bound");
     out
 }
 
 /// HKDF-SHA-256 for the ratchet's chains: `salt`, `ikm`, `info`, `out`.
 pub fn hkdf_sha256(salt: &[u8], ikm: &[u8], info: &[u8], out: &mut [u8]) {
-    Hkdf::<Sha256>::new(Some(salt), ikm).expand(info, out).expect("within HKDF's bound");
+    Hkdf::<Sha256>::new(Some(salt), ikm)
+        .expand(info, out)
+        .expect("within HKDF's bound");
 }

@@ -9,15 +9,18 @@ use rhtn_codec::envelope;
 use rhtn_codec::frame::{self, Stream};
 use rhtn_codec::schema::{self, Family};
 use rhtn_crypto::identity::testkit::test_identity;
-use rhtn_crypto::{verify, Identity};
+use rhtn_crypto::{Identity, verify};
 
 pub const NAMES: [&str; 25] = [
-    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11",
-    "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5",
+    "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10",
+    "w11", "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5",
 ];
 
 pub fn corpus() -> serde_json::Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test-vectors/corpus.json"
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -39,7 +42,10 @@ impl verify::Lookup for Held {
         self.ids.iter().find(|i| i.keyhash == keyhash)
     }
     fn delegated_key(&self, keyhash: &[u8]) -> Option<[u8; 32]> {
-        self.delegations.iter().find(|d| d.keyhash == keyhash).map(|d| d.key)
+        self.delegations
+            .iter()
+            .find(|d| d.keyhash == keyhash)
+            .map(|d| d.key)
     }
 }
 
@@ -48,7 +54,10 @@ pub fn held() -> Held {
     let mut delegations = Vec::new();
     for f in fixtures() {
         if f.kind == "Delegation" && f.outcome == "accept" {
-            delegations.push(verify::delegation(ids.as_slice(), &f.bytes).unwrap_or_else(|e| panic!("{}: {e}", f.id)));
+            delegations.push(
+                verify::delegation(ids.as_slice(), &f.bytes)
+                    .unwrap_or_else(|e| panic!("{}: {e}", f.id)),
+            );
         }
     }
     Held { ids, delegations }
@@ -82,7 +91,10 @@ pub fn fixtures() -> Vec<Fixture> {
 }
 
 pub fn fixture(id: &str) -> Fixture {
-    fixtures().into_iter().find(|f| f.id == id).unwrap_or_else(|| panic!("no fixture {id}"))
+    fixtures()
+        .into_iter()
+        .find(|f| f.id == id)
+        .unwrap_or_else(|| panic!("no fixture {id}"))
 }
 
 /// The reply family a corpus reply entry belongs to, as the corpus states
@@ -136,7 +148,9 @@ pub fn decode(ids: &[Identity], id: &str, kind: &str, bytes: &[u8]) -> Result<()
             parse_all(bytes).map_err(|e| e.0)?;
             schema::check_unsigned(reply_family(id), bytes, 0).map_err(|e| e.0.into())
         }
-        "envelope" => verify::envelope(ids, bytes).map(|_| ()).map_err(|e| e.to_string()),
+        "envelope" => verify::envelope(ids, bytes)
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
         "presentation" => verify::presentation(ids, bytes).map_err(|e| e.to_string()),
         "body" => {
             let item = parse_all(bytes).map_err(|e| e.0)?;
@@ -144,7 +158,11 @@ pub fn decode(ids: &[Identity], id: &str, kind: &str, bytes: &[u8]) -> Result<()
         }
         "e2e-payload" => {
             parse_all(bytes).map_err(|e| e.0)?;
-            let fam = if id == "P-e2e-02" { Family::LateResponse } else { Family::KeyGrant };
+            let fam = if id == "P-e2e-02" {
+                Family::LateResponse
+            } else {
+                Family::KeyGrant
+            };
             schema::check_unsigned(fam, bytes, 0).map_err(|e| e.0.into())
         }
         k => {

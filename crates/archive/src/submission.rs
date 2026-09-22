@@ -10,7 +10,6 @@ use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
 
-
 /// Request types 9 to 12 (`wire-format.md` §7.10, §9.2's table).
 pub const REQUEST_PREKEY_PUBLICATION: u64 = 9;
 pub const REQUEST_ONE_TIME_DEPOSIT: u64 = 10;
@@ -86,9 +85,14 @@ impl PrekeyPublication {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyPublication, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let bundle = value_slice(b, 1).ok_or("field 1")?;
-        Ok(PrekeyPublication { bundle: b[bundle].to_vec(), nonce: nonce_at(b, m, 2)? })
+        Ok(PrekeyPublication {
+            bundle: b[bundle].to_vec(),
+            nonce: nonce_at(b, m, 2)?,
+        })
     }
 }
 
@@ -109,15 +113,24 @@ impl OneTimeDeposit {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::OneTimeDeposit, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
-        let Some(Item::Array(a)) = map_get(m, 1) else { return Err("field 1".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        let Some(Item::Array(a)) = map_get(m, 1) else {
+            return Err("field 1".into());
+        };
         // each key's content, not the item that carries it
         let mut keys = Vec::with_capacity(a.len());
         for k in a {
-            let Item::Bytes(r) = k else { return Err("a one-time key is a byte string".into()) };
+            let Item::Bytes(r) = k else {
+                return Err("a one-time key is a byte string".into());
+            };
             keys.push(b[r.clone()].to_vec());
         }
-        Ok(OneTimeDeposit { keys, nonce: nonce_at(b, m, 2)? })
+        Ok(OneTimeDeposit {
+            keys,
+            nonce: nonce_at(b, m, 2)?,
+        })
     }
 }
 
@@ -139,10 +152,17 @@ impl RelaySubmission {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::RelaySubmission, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let recipient: Keyhash = bytes_at(b, m, 1)?.try_into().map_err(|_| "recipient")?;
         let device: [u8; 32] = bytes_at(b, m, 4)?.try_into().map_err(|_| "device")?;
-        Ok(RelaySubmission { recipient, ciphertext: bytes_at(b, m, 2)?, nonce: nonce_at(b, m, 3)?, device })
+        Ok(RelaySubmission {
+            recipient,
+            ciphertext: bytes_at(b, m, 2)?,
+            nonce: nonce_at(b, m, 3)?,
+            device,
+        })
     }
 }
 
@@ -162,14 +182,24 @@ impl WakeRegistration {
     /// Register or refresh `endpoint`, or withdraw where there is none.
     pub fn of(nonce: [u8; 16], endpoint: Option<WakeEndpoint>) -> WakeRegistration {
         match endpoint {
-            Some(e) => WakeRegistration { nonce, endpoint: Some(e.url), key: Some(e.key), lapses_at: e.lapses_at },
+            Some(e) => WakeRegistration {
+                nonce,
+                endpoint: Some(e.url),
+                key: Some(e.key),
+                lapses_at: e.lapses_at,
+            },
             None => WakeRegistration::withdrawal(nonce),
         }
     }
 
     /// Withdraw whatever endpoint the node holds.
     pub fn withdrawal(nonce: [u8; 16]) -> WakeRegistration {
-        WakeRegistration { nonce, endpoint: None, key: None, lapses_at: None }
+        WakeRegistration {
+            nonce,
+            endpoint: None,
+            key: None,
+            lapses_at: None,
+        }
     }
 
     pub fn withdraws(&self) -> bool {
@@ -177,7 +207,10 @@ impl WakeRegistration {
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        let n = 1 + self.endpoint.is_some() as usize + self.key.is_some() as usize + self.lapses_at.is_some() as usize;
+        let n = 1
+            + self.endpoint.is_some() as usize
+            + self.key.is_some() as usize
+            + self.lapses_at.is_some() as usize;
         let mut out = Vec::new();
         emit_map_head(&mut out, n);
         emit_uint(&mut out, 1);
@@ -200,9 +233,13 @@ impl WakeRegistration {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::WakeRegistration, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let endpoint = match map_get(m, 2) {
-            Some(Item::Text(r)) => Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "endpoint not utf-8")?),
+            Some(Item::Text(r)) => {
+                Some(String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "endpoint not utf-8")?)
+            }
             _ => None,
         };
         let key = map_get(m, 3).and_then(|_| bytes_at(b, m, 3).ok());
@@ -210,13 +247,21 @@ impl WakeRegistration {
         // the decoder above has already refused the shapes where they do
         // not (`wire-format.md` §7.10)
         let lapses_at = map_get(m, 4).and_then(as_uint);
-        Ok(WakeRegistration { nonce: nonce_at(b, m, 1)?, endpoint, key, lapses_at })
+        Ok(WakeRegistration {
+            nonce: nonce_at(b, m, 1)?,
+            endpoint,
+            key,
+            lapses_at,
+        })
     }
 }
 
 impl SubmissionReply {
     pub fn accepted(nonce: [u8; 16]) -> SubmissionReply {
-        SubmissionReply { nonce, code: SUBMISSION_ACCEPTED }
+        SubmissionReply {
+            nonce,
+            code: SUBMISSION_ACCEPTED,
+        }
     }
 
     pub fn code(nonce: [u8; 16], code: u64) -> SubmissionReply {
@@ -236,8 +281,13 @@ impl SubmissionReply {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::SubmissionReply, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
-        Ok(SubmissionReply { nonce: nonce_at(b, m, 1)?, code: map_get(m, 2).and_then(as_uint).ok_or("code")? })
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        Ok(SubmissionReply {
+            nonce: nonce_at(b, m, 1)?,
+            code: map_get(m, 2).and_then(as_uint).ok_or("code")?,
+        })
     }
 }
 
@@ -249,7 +299,9 @@ fn bytes_at(b: &[u8], m: &[(Item, Item)], key: u64) -> Result<Vec<u8>, String> {
 }
 
 fn nonce_at(b: &[u8], m: &[(Item, Item)], key: u64) -> Result<[u8; 16], String> {
-    bytes_at(b, m, key)?.try_into().map_err(|_| format!("field {key} is not a 16-byte nonce"))
+    bytes_at(b, m, key)?
+        .try_into()
+        .map_err(|_| format!("field {key} is not a 16-byte nonce"))
 }
 
 /// What a node delivers for a submission (`wire-format.md` §7.10): the
@@ -268,7 +320,11 @@ pub fn relayed(from: Keyhash, ciphertext: &[u8]) -> Vec<u8> {
 /// Split what `relayed` composed; nothing where the bytes are not that.
 pub fn unrelayed(b: &[u8]) -> Option<(Keyhash, Vec<u8>)> {
     let item = parse_all(b).ok()?;
-    let Item::Array(parts) = &item else { return None };
-    let [Item::Bytes(f), Item::Bytes(p)] = parts.as_slice() else { return None };
+    let Item::Array(parts) = &item else {
+        return None;
+    };
+    let [Item::Bytes(f), Item::Bytes(p)] = parts.as_slice() else {
+        return None;
+    };
     Some((b[f.clone()].try_into().ok()?, b[p.clone()].to_vec()))
 }

@@ -155,13 +155,25 @@ impl NodeView {
     /// falling back to any patron where no binding records its anchor.
     pub fn patron_in(&self, anchor: &Keyhash) -> Option<Keyhash> {
         let me = self.me();
-        let open: Vec<_> = self.table.bindings().iter().filter(|b| b.node == me && b.open()).collect();
-        open.iter().find(|b| b.anchor.as_ref() == Some(anchor)).or_else(|| open.first()).map(|b| b.patron)
+        let open: Vec<_> = self
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.node == me && b.open())
+            .collect();
+        open.iter()
+            .find(|b| b.anchor.as_ref() == Some(anchor))
+            .or_else(|| open.first())
+            .map(|b| b.patron)
     }
 
     /// This node's own position in the subnet `anchor` names.
     pub fn position_in(&self, anchor: &Keyhash) -> Option<&Locator> {
-        if self.position.anchor == *anchor { Some(&self.position) } else { self.positions.get(anchor) }
+        if self.position.anchor == *anchor {
+            Some(&self.position)
+        } else {
+            self.positions.get(anchor)
+        }
     }
 
     /// Every anchor this node has a position under.
@@ -190,11 +202,20 @@ impl NodeView {
 
     /// Record a subordinate in a slot, as this node's own row.
     pub fn set_slot(&mut self, slot: u64, occupant: Option<Keyhash>, timestamp: u64) {
-        self.slots.insert(slot, Slot { occupant, timestamp });
+        self.slots.insert(
+            slot,
+            Slot {
+                occupant,
+                timestamp,
+            },
+        );
     }
 
     pub fn slot_of(&self, occupant: &Keyhash) -> Option<u64> {
-        self.slots.iter().find(|(_, s)| s.occupant.as_ref() == Some(occupant)).map(|(k, _)| *k)
+        self.slots
+            .iter()
+            .find(|(_, s)| s.occupant.as_ref() == Some(occupant))
+            .map(|(k, _)| *k)
     }
 
     /// The child index an adoption under this node assigns: the last nibble
@@ -206,7 +227,11 @@ impl NodeView {
         }
         let i = (loc.nibbles - 1) as usize;
         let byte = *loc.path.get(i / 2)?;
-        Some(if i.is_multiple_of(2) { (byte >> 4) as u64 } else { (byte & 0x0f) as u64 })
+        Some(if i.is_multiple_of(2) {
+            (byte >> 4) as u64
+        } else {
+            (byte & 0x0f) as u64
+        })
     }
 }
 

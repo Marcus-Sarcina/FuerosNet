@@ -23,7 +23,9 @@ pub use common::{NAMES, corpus, held, identities};
 /// and the corpus entry that named it panicked in the tests that used the
 /// other copy.
 fn reply_family(e: &serde_json::Value) -> Family {
-    let name = e["family"].as_str().unwrap_or_else(|| panic!("{}: no reply family stated", e["id"]));
+    let name = e["family"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{}: no reply family stated", e["id"]));
     match common::family_by_name(name) {
         Some(f) => f,
         None => panic!("{}: unknown reply family {name}", e["id"]),
@@ -63,7 +65,10 @@ fn every_bytes_entry_agrees_with_its_expectation() {
         let layer = expect["layer"].as_str().unwrap_or("");
         // a shape fixture the corpus marks as carrying a stale signature is
         // checked structurally; every other signed fixture verifies
-        let stale = expect["reason"].as_str().unwrap_or("").contains("signature stale");
+        let stale = expect["reason"]
+            .as_str()
+            .unwrap_or("")
+            .contains("signature stale");
         let raw = hex::decode(e["hex"].as_str().unwrap()).unwrap();
 
         let verdict: Result<(), String> = if kind == "frame" {
@@ -76,7 +81,9 @@ fn every_bytes_entry_agrees_with_its_expectation() {
             }
         } else if kind == "reply" {
             let fam = reply_family(e);
-            let r = parse_all(&raw).map_err(|e| e.0).and_then(|_| schema::check_unsigned(fam, &raw, 0).map_err(|e| e.0));
+            let r = parse_all(&raw)
+                .map_err(|e| e.0)
+                .and_then(|_| schema::check_unsigned(fam, &raw, 0).map_err(|e| e.0));
             match (outcome, r) {
                 ("accept", Ok(())) => Ok(()),
                 ("accept", Err(err)) => Err(format!("reply must be accepted but: {err}")),
@@ -91,10 +98,17 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 ("reject", Ok(_)) if layer == "cbor" => Err("cbor-layer reject parsed".into()),
                 (_, Err(err)) => Err(format!("must parse but: {err}")),
                 ("accept", Ok(item)) => match kind {
-                    "Delegation" => verify::delegation(&ids, &raw).map(|_| ()).map_err(|e| e.to_string()),
-                    "envelope" => verify::envelope(&ids, &raw).map(|_| ()).map_err(|e| e.to_string()),
+                    "Delegation" => verify::delegation(&ids, &raw)
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
+                    "envelope" => verify::envelope(&ids, &raw)
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
                     "presentation" => verify::presentation(&ids, &raw).map_err(|e| e.to_string()),
-                    k if verified_record_kind(k) && !stale => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
+                    k if verified_record_kind(k) && !stale => match (
+                        schema::check_kind(&raw, k, &item),
+                        verify::record(&ids, k, &raw),
+                    ) {
                         (Err(e2), _) => Err(e2.0.into()),
                         (Ok(()), Ok(())) => Ok(()),
                         (Ok(()), Err(e2)) => Err(e2.to_string()),
@@ -109,7 +123,9 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 },
                 ("reject", Ok(item)) => {
                     let schema_ok = schema::check_kind(&raw, kind, &item).is_ok();
-                    let sig_fails = (verified_record_kind(kind) && !stale && verify::record(&ids, kind, &raw).is_err())
+                    let sig_fails = (verified_record_kind(kind)
+                        && !stale
+                        && verify::record(&ids, kind, &raw).is_err())
                         || (kind == "Delegation" && verify::delegation(&ids, &raw).is_err());
                     if !schema_ok || sig_fails {
                         Ok(())
@@ -137,23 +153,41 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 let q = &p[triple[0].clone()];
                 let r6 = value_slice(q, 6).unwrap();
                 normal_qid = q[r6.start + 2..r6.end].to_vec();
-                assert_eq!(cose::sha256(&map_without_key(q, 6).unwrap()).to_vec(), normal_qid, "frame-13 query_id");
+                assert_eq!(
+                    cose::sha256(&map_without_key(q, 6).unwrap()).to_vec(),
+                    normal_qid,
+                    "frame-13 query_id"
+                );
                 let c = &p[triple[1].clone()];
                 let __ca_item = parse_all(c).unwrap();
-                let Item::Array(ca) = &__ca_item else { panic!() };
-                let gp = |it: &Item| match it { Item::Bytes(r) => c[r.clone()].to_vec(), _ => Vec::new() };
+                let Item::Array(ca) = &__ca_item else {
+                    panic!()
+                };
+                let gp = |it: &Item| match it {
+                    Item::Bytes(r) => c[r.clone()].to_vec(),
+                    _ => Vec::new(),
+                };
                 let alice = test_identity("alice").public;
-                assert!(alice.verify_ed(&gp(&ca[3]), &cose::sig_structure_sign1(&gp(&ca[0]), aad::CONSENT, &normal_qid)), "frame-13 consent");
+                assert!(
+                    alice.verify_ed(
+                        &gp(&ca[3]),
+                        &cose::sig_structure_sign1(&gp(&ca[0]), aad::CONSENT, &normal_qid)
+                    ),
+                    "frame-13 consent"
+                );
             }
             "P-frame-06" => {
                 let p = &raw[4..];
                 let __fa_item = parse_all(p).unwrap();
-                let Item::Array(fa) = &__fa_item else { panic!() };
+                let Item::Array(fa) = &__fa_item else {
+                    panic!()
+                };
                 if let Item::Map(fm) = &fa[1]
-                    && let Some(Item::Bytes(pr)) = map_get(fm, 2) {
-                        push_payload = p[pr.clone()].to_vec();
-                        verify::envelope(&ids, &push_payload).expect("inner envelope");
-                    }
+                    && let Some(Item::Bytes(pr)) = map_get(fm, 2)
+                {
+                    push_payload = p[pr.clone()].to_vec();
+                    verify::envelope(&ids, &push_payload).expect("inner envelope");
+                }
             }
             "P-e2e-01" => keygrant = raw.clone(),
             _ => {}
@@ -163,30 +197,73 @@ fn every_bytes_entry_agrees_with_its_expectation() {
             Err(msg) => failures.push(format!("{id}: {msg}")),
         }
     }
-    assert_eq!(push_payload, adopt_min, "TopologyPush payload is P-adopt-min");
+    assert_eq!(
+        push_payload, adopt_min,
+        "TopologyPush payload is P-adopt-min"
+    );
     let __kg_item = parse_all(&keygrant).unwrap();
     let Item::Map(kg) = &__kg_item else { panic!() };
-    let gb = |k: u64| match map_get(kg, k) { Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(), _ => Vec::new() };
+    let gb = |k: u64| match map_get(kg, k) {
+        Some(Item::Bytes(r)) => keygrant[r.clone()].to_vec(),
+        _ => Vec::new(),
+    };
     assert_eq!(gb(1), pc1_txid, "KeyGrant names the prior record");
     assert_eq!(gb(2), normal_qid, "KeyGrant names the current query");
-    assert!(failures.is_empty(), "{} failures:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} failures:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     eprintln!("corpus: {pass} entries agree");
-    assert!(pass >= 149, "expected at least the runner's 149 agreements, got {pass}");
+    assert!(
+        pass >= 149,
+        "expected at least the runner's 149 agreements, got {pass}"
+    );
 }
 
 /// Standalone records whose fixtures carry live signatures, verified as
 /// such; a shape fixture that says its signature is stale by design is the
 /// one exception, taken per fixture.
 fn verified_record_kind(kind: &str) -> bool {
-    matches!(kind, "CurrencyAttestation" | "CatalogEntry" | "AbuseReport" | "AnchorEntry" | "SubtreeAck" | "PrekeyBundle" | "EndpointRecord" | "SignedLocator")
+    matches!(
+        kind,
+        "CurrencyAttestation"
+            | "CatalogEntry"
+            | "AbuseReport"
+            | "AnchorEntry"
+            | "SubtreeAck"
+            | "PrekeyBundle"
+            | "EndpointRecord"
+            | "SignedLocator"
+    )
 }
 
 fn implemented_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "VerifierResponse" | "Locator" | "NetworkPoint" | "LocationEvidence" | "Proximity" | "Scope" | "Capabilities"
-            | "CatalogEntry" | "CurrencyAttestation" | "ResolveReply" | "ResourceResponse" | "ArchiveRequest"
-            | "PrekeyBundle" | "PrekeyBatchRequest" | "Witness" | "body" | "SignedLocator" | "VerificationQuery"
-            | "CatalogReply" | "RelayedPayload" | "Delegation" | "ArchiveReply" | "PrekeyReply"
+        "VerifierResponse"
+            | "Locator"
+            | "NetworkPoint"
+            | "LocationEvidence"
+            | "Proximity"
+            | "Scope"
+            | "Capabilities"
+            | "CatalogEntry"
+            | "CurrencyAttestation"
+            | "ResolveReply"
+            | "ResourceResponse"
+            | "ArchiveRequest"
+            | "PrekeyBundle"
+            | "PrekeyBatchRequest"
+            | "Witness"
+            | "body"
+            | "SignedLocator"
+            | "VerificationQuery"
+            | "CatalogReply"
+            | "RelayedPayload"
+            | "Delegation"
+            | "ArchiveReply"
+            | "PrekeyReply"
     )
 }

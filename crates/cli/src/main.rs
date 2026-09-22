@@ -74,13 +74,17 @@ fn do_inspect(rest: &[&str]) -> Result<String, String> {
         None => {
             use std::io::Read;
             let mut buf = Vec::new();
-            std::io::stdin().read_to_end(&mut buf).map_err(|e| e.to_string())?;
+            std::io::stdin()
+                .read_to_end(&mut buf)
+                .map_err(|e| e.to_string())?;
             buf
         }
     };
     let bytes = inspect::read_blob(&raw);
     let what = match (kind, frame) {
-        (Some(_), Some(_)) => return Err("--kind and --frame say two different things about one blob".into()),
+        (Some(_), Some(_)) => {
+            return Err("--kind and --frame say two different things about one blob".into());
+        }
         (Some(k), None) => inspect::As::Kind(k),
         (None, Some("control")) => inspect::As::Frame(Stream::Control),
         (None, Some("request")) => inspect::As::Frame(Stream::Request),
@@ -104,7 +108,12 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
         ["test", name] => {
             let [ed, pq] = keys::test_seeds(name);
             let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq).public;
-            Ok(format!("{}seeds     {} {}\n", keys::public_lines(&id), inspect::hex(&ed), inspect::hex(&pq)))
+            Ok(format!(
+                "{}seeds     {} {}\n",
+                keys::public_lines(&id),
+                inspect::hex(&ed),
+                inspect::hex(&pq)
+            ))
         }
         _ => Err("keys mint <file> | keys show <file> | keys test <name>".into()),
     }
@@ -116,28 +125,46 @@ fn do_probe(rest: &[&str]) -> Result<String, String> {
     while let Some(p) = flag(&mut args, "--peer") {
         let (_, material) = p.split_once(':').ok_or("--peer is <keyhash>:<material>")?;
         let bytes = hex_bytes(material).ok_or("--peer material is not hex")?;
-        peers.push(rhtn_crypto::Identity::from_key_material(&bytes).ok_or("--peer material is not a KeyMaterial array")?);
+        peers.push(
+            rhtn_crypto::Identity::from_key_material(&bytes)
+                .ok_or("--peer material is not a KeyMaterial array")?,
+        );
     }
     let [identity, target, addr, rest @ ..] = args.as_slice() else {
         return Err("probe <identity> <node-keyhash> <address> <ask> [...]".into());
     };
     let ask = match rest {
         ["resolve", subject, anchor, path @ ..] => {
-            let nibbles: Vec<u8> = path.first().map(|p| p.bytes().map(|c| c - b'0').collect()).unwrap_or_default();
+            let nibbles: Vec<u8> = path
+                .first()
+                .map(|p| p.bytes().map(|c| c - b'0').collect())
+                .unwrap_or_default();
             let p = rhtn_node::resolution::Path::from_indices(&nibbles);
-            probe::Ask::Resolve { subject: keyhash(subject)?, anchor: keyhash(anchor)?, path: p.bytes, nibbles: p.nibbles }
+            probe::Ask::Resolve {
+                subject: keyhash(subject)?,
+                anchor: keyhash(anchor)?,
+                path: p.bytes,
+                nibbles: p.nibbles,
+            }
         }
         ["archive", subject, max @ ..] => probe::Ask::Archive {
             subject: keyhash(subject)?,
             max_records: max.first().and_then(|m| m.parse().ok()).unwrap_or(16),
         },
-        ["catalog", service @ ..] => probe::Ask::Catalog { service_type: service.first().map(|s| s.to_string()) },
+        ["catalog", service @ ..] => probe::Ask::Catalog {
+            service_type: service.first().map(|s| s.to_string()),
+        },
         _ => return Err("the ask is resolve, archive or catalog".into()),
     };
     let target = keyhash(target)?;
-    let addr: std::net::SocketAddr = addr.parse().map_err(|_| format!("{addr} is not an address and port"))?;
+    let addr: std::net::SocketAddr = addr
+        .parse()
+        .map_err(|_| format!("{addr} is not an address and port"))?;
     let me = read_identity(identity)?;
-    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|e| e.to_string())?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
     rt.block_on(async move {
         let (session, _ep) = probe::attached(me, &peers, target, addr).await?;
         probe::ask(&session, &ask, rhtn_transport::tls::random_bytes::<16>()).await
@@ -147,21 +174,32 @@ fn do_probe(rest: &[&str]) -> Result<String, String> {
 fn read_identity(path: &str) -> Result<rhtn_crypto::SigningIdentity, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     if bytes.len() != keys::IDENTITY_BYTES {
-        return Err(format!("{path} is {} bytes, not {}", bytes.len(), keys::IDENTITY_BYTES));
+        return Err(format!(
+            "{path} is {} bytes, not {}",
+            bytes.len(),
+            keys::IDENTITY_BYTES
+        ));
     }
-    let (ed, pq): ([u8; 32], [u8; 32]) = (bytes[..32].try_into().unwrap(), bytes[32..].try_into().unwrap());
+    let (ed, pq): ([u8; 32], [u8; 32]) = (
+        bytes[..32].try_into().unwrap(),
+        bytes[32..].try_into().unwrap(),
+    );
     Ok(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq))
 }
 
 fn keyhash(s: &str) -> Result<[u8; 32], String> {
-    hex_bytes(s).and_then(|b| b.try_into().ok()).ok_or_else(|| format!("{s} is not a 64-digit hex keyhash"))
+    hex_bytes(s)
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| format!("{s} is not a 64-digit hex keyhash"))
 }
 
 fn hex_bytes(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok())
+        .collect()
 }
 
 /// The identities this tool verifies against: those given with `--peer`

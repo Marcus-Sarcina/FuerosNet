@@ -99,25 +99,55 @@ impl CatalogService {
     /// name the peer as owner and verify under it, and the keyhash must not
     /// be served under another owner.  The reply bytes; `None` where the
     /// body is not a registration, which resets the stream.
-    pub fn register<L: Lookup + ?Sized>(&mut self, ids: &L, peer: &Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+    pub fn register<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        peer: &Keyhash,
+        body: &[u8],
+    ) -> Option<Vec<u8>> {
         let reg = ResourceRegistration::decode(body).ok()?;
-        let refused = RegistrationReply { nonce: reg.nonce, code: REGISTRATION_REFUSED }.encode();
-        let Ok(entry) = CatalogEntry::parse(&reg.entry) else { return Some(refused) };
+        let refused = RegistrationReply {
+            nonce: reg.nonce,
+            code: REGISTRATION_REFUSED,
+        }
+        .encode();
+        let Ok(entry) = CatalogEntry::parse(&reg.entry) else {
+            return Some(refused);
+        };
         if entry.owner != *peer || entry.verify(ids).is_err() {
             return Some(refused);
         }
         if let Some(held) = self.entries.get(&entry.resource)
-            && held.owner != entry.owner {
-                return Some(refused);
-            }
+            && held.owner != entry.owner
+        {
+            return Some(refused);
+        }
         // the requested scope is honoured as asked; absent, the existing
         // rule stands, and on a first registration that is `self`
         let discover = match reg.scope {
             Some(s) => s,
-            None => self.entries.get(&entry.resource).map(|h| h.discover.clone()).unwrap_or(Scope::Own),
+            None => self
+                .entries
+                .get(&entry.resource)
+                .map(|h| h.discover.clone())
+                .unwrap_or(Scope::Own),
         };
-        self.entries.insert(entry.resource, Held { owner: entry.owner, bytes: reg.entry.clone(), service_type: entry.service_type, discover });
-        Some(RegistrationReply { nonce: reg.nonce, code: REGISTRATION_RECORDED }.encode())
+        self.entries.insert(
+            entry.resource,
+            Held {
+                owner: entry.owner,
+                bytes: reg.entry.clone(),
+                service_type: entry.service_type,
+                discover,
+            },
+        );
+        Some(
+            RegistrationReply {
+                nonce: reg.nonce,
+                code: REGISTRATION_RECORDED,
+            }
+            .encode(),
+        )
     }
 
     pub fn held(&self, resource: &Keyhash) -> Option<&Held> {
@@ -133,8 +163,21 @@ impl CatalogService {
     }
 
     /// The entries `asker` may see, in the total order, whole.
-    fn visible(&self, asker: &Keyhash, filter: Option<&str>, eval: &dyn ScopeEval) -> Vec<(Keyhash, &Held)> {
-        let mut v: Vec<(Keyhash, &Held)> = self.entries.iter().filter(|(_, h)| filter.is_none_or(|t| h.service_type == t) && eval.admits(&h.discover, &h.owner, asker)).map(|(r, h)| (*r, h)).collect();
+    fn visible(
+        &self,
+        asker: &Keyhash,
+        filter: Option<&str>,
+        eval: &dyn ScopeEval,
+    ) -> Vec<(Keyhash, &Held)> {
+        let mut v: Vec<(Keyhash, &Held)> = self
+            .entries
+            .iter()
+            .filter(|(_, h)| {
+                filter.is_none_or(|t| h.service_type == t)
+                    && eval.admits(&h.discover, &h.owner, asker)
+            })
+            .map(|(r, h)| (*r, h))
+            .collect();
         v.sort_by_key(|(r, h)| (*r, h.owner));
         v
     }
@@ -149,20 +192,41 @@ impl CatalogService {
             return None;
         }
         let visible = self.visible(asker, q.service_type.as_deref(), eval);
-        let entries: Vec<Vec<u8>> = visible.iter().take(CATALOG_REPLY_ENTRIES).map(|(_, h)| h.bytes.clone()).collect();
-        let continuation = visible.get(CATALOG_REPLY_ENTRIES).map(|(_, h)| h.service_type.clone());
-        Some(CatalogReply { nonce: q.nonce, entries, continuation }.encode())
+        let entries: Vec<Vec<u8>> = visible
+            .iter()
+            .take(CATALOG_REPLY_ENTRIES)
+            .map(|(_, h)| h.bytes.clone())
+            .collect();
+        let continuation = visible
+            .get(CATALOG_REPLY_ENTRIES)
+            .map(|(_, h)| h.service_type.clone());
+        Some(
+            CatalogReply {
+                nonce: q.nonce,
+                entries,
+                continuation,
+            }
+            .encode(),
+        )
     }
 
     /// Take a report from a resource this node hosts for an owner: it must
     /// be signed by the resource it names.  Stored for that resource's
     /// owner; nothing carries it further.
-    pub fn take_report<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<Keyhash, String> {
+    pub fn take_report<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Result<Keyhash, String> {
         let r = AbuseReport::parse(bytes)?;
         if r.verify(ids).is_err() {
             return Err("not signed by the resource it names".into());
         }
-        let owner = self.entries.get(&r.resource).map(|h| h.owner).ok_or("no owner known for the resource")?;
+        let owner = self
+            .entries
+            .get(&r.resource)
+            .map(|h| h.owner)
+            .ok_or("no owner known for the resource")?;
         self.reports.entry(owner).or_default().push(bytes.to_vec());
         Ok(owner)
     }

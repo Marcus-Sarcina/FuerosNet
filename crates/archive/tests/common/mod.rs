@@ -37,10 +37,18 @@ impl Fetch for World {
 
 impl World {
     pub fn new(names: &[&str]) -> Self {
-        let mut w = World { ids: BTreeMap::new(), archives: BTreeMap::new(), store: BTreeMap::new(), clock: 1_800_000_000, slots: BTreeMap::new(), next_slot: BTreeMap::new() };
+        let mut w = World {
+            ids: BTreeMap::new(),
+            archives: BTreeMap::new(),
+            store: BTreeMap::new(),
+            clock: 1_800_000_000,
+            slots: BTreeMap::new(),
+            next_slot: BTreeMap::new(),
+        };
         for n in names.iter().chain(["witness"].iter()) {
             let id = test_identity(n);
-            w.archives.insert(id.public.keyhash, Archive::new(id.public.keyhash));
+            w.archives
+                .insert(id.public.keyhash, Archive::new(id.public.keyhash));
             w.ids.insert(n.to_string(), id);
         }
         w
@@ -59,7 +67,10 @@ impl World {
         }
         let next = self.next_slot.entry(patron.to_string()).or_default();
         let i = *next;
-        assert!(i < 10, "patron {patron} has no free slot: design §3.1 gives ten");
+        assert!(
+            i < 10,
+            "patron {patron} has no free slot: design §3.1 gives ten"
+        );
         *next += 1;
         self.slots.insert(key, i);
         i
@@ -67,13 +78,25 @@ impl World {
 
     /// An adoption placing `node` in a slot of the caller's choosing, for
     /// the tests that need a patron to get it wrong.
-    pub fn adopt_in_slot(&mut self, node: &str, patron: &str, pop: Txid, series: u32, slot: u8) -> Record {
+    pub fn adopt_in_slot(
+        &mut self,
+        node: &str,
+        patron: &str,
+        pop: Txid,
+        series: u32,
+        slot: u8,
+    ) -> Record {
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
         let a = Adoption {
             node: self.kh(node),
             patron: self.kh(patron),
-            locator: Locator { anchor: self.kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } },
+            locator: Locator {
+                anchor: self.kh(patron),
+                path: vec![0x10 | slot],
+                nibbles: 2,
+                seqno: Seqno { series, counter: 0 },
+            },
             timestamp: t,
             key_material: None,
             evidence: Evidence::Presence(pop),
@@ -87,7 +110,12 @@ impl World {
     /// `node`.
     fn locator_for(&mut self, node: &str, patron: &str, series: u32) -> Locator {
         let slot = self.slot_for(node, patron);
-        Locator { anchor: self.kh(patron), path: vec![0x10 | slot], nibbles: 2, seqno: Seqno { series, counter: 0 } }
+        Locator {
+            anchor: self.kh(patron),
+            path: vec![0x10 | slot],
+            nibbles: 2,
+            seqno: Seqno { series, counter: 0 },
+        }
     }
 
     pub fn kh(&self, n: &str) -> Keyhash {
@@ -126,7 +154,11 @@ impl World {
         let rec = Record::parse(&env).expect("well-formed");
         for s in signers {
             let k = self.kh(s);
-            self.archives.get_mut(&k).unwrap().append(rec.clone()).expect("appends");
+            self.archives
+                .get_mut(&k)
+                .unwrap()
+                .append(rec.clone())
+                .expect("appends");
         }
         self.store.insert(rec.txid, env);
         rec
@@ -158,7 +190,11 @@ impl World {
         let back = vec![self.back(a), self.back(b), self.back("witness")];
         let (ka, kb) = (self.kh(a), self.kh(b));
         let root = rhtn_codec::cose::sha256(format!("meeting:{a}:{b}:{t}").as_bytes());
-        let w = Witness { keyhash: self.kh("witness"), nominated_by: ka, flags: 3 };
+        let w = Witness {
+            keyhash: self.kh("witness"),
+            nominated_by: ka,
+            flags: 3,
+        };
         let body = presence_record_body(&back, [&ka, &kb], &[w], t, t + 600, &root);
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
@@ -169,7 +205,14 @@ impl World {
         self.adopt_with(node, patron, Evidence::Presence(pop), series, None)
     }
 
-    pub fn adopt_with(&mut self, node: &str, patron: &str, evidence: Evidence, series: u32, presented_head: Option<Txid>) -> Record {
+    pub fn adopt_with(
+        &mut self,
+        node: &str,
+        patron: &str,
+        evidence: Evidence,
+        series: u32,
+        presented_head: Option<Txid>,
+    ) -> Record {
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
         let locator = self.locator_for(node, patron, series);
@@ -230,9 +273,23 @@ impl World {
     /// archive: the append path enforces §3.3's monotonicity itself, so a
     /// record that breaks it can only be built beside the archive, which is
     /// how one reaches a holder in a presentation.
-    pub fn loose_reissue_at(&mut self, node: &str, patron: &str, leaving: Seqno, new_series: u32, t: u64) -> Record {
+    pub fn loose_reissue_at(
+        &mut self,
+        node: &str,
+        patron: &str,
+        leaving: Seqno,
+        new_series: u32,
+        t: u64,
+    ) -> Record {
         let (bn, bp) = (self.back(node), self.back(patron));
-        let body = reissue_body([&bn, &bp], &self.kh(node), &self.kh(patron), leaving, new_series, t);
+        let body = reissue_body(
+            [&bn, &bp],
+            &self.kh(node),
+            &self.kh(patron),
+            leaving,
+            new_series,
+            t,
+        );
         let env = envelope(TYPE_REISSUE, &body, &[&self.ids[node], &self.ids[patron]]);
         let rec = Record::parse(&env).expect("well-formed");
         self.store.insert(rec.txid, env);
@@ -242,13 +299,27 @@ impl World {
     pub fn reissue(&mut self, node: &str, patron: &str, leaving: Seqno, new_series: u32) -> Record {
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
-        let body = reissue_body([&bn, &bp], &self.kh(node), &self.kh(patron), leaving, new_series, t);
+        let body = reissue_body(
+            [&bn, &bp],
+            &self.kh(node),
+            &self.kh(patron),
+            leaving,
+            new_series,
+            t,
+        );
         self.commit(TYPE_REISSUE, &body, &[node, patron])
     }
 
     /// A departure body signed and stored WITHOUT touching any archive, for
     /// records a test wants to hand to a verifier by itself.
-    pub fn loose_departure(&mut self, node: &str, patron: &str, back: &[Txid], seqno: Seqno, t: u64) -> Record {
+    pub fn loose_departure(
+        &mut self,
+        node: &str,
+        patron: &str,
+        back: &[Txid],
+        seqno: Seqno,
+        t: u64,
+    ) -> Record {
         let body = departure_body(back, &self.kh(node), &self.kh(patron), seqno, t, None);
         let env = envelope(TYPE_DEPARTURE, &body, &[&self.ids[node]]);
         let rec = Record::parse(&env).expect("well-formed");

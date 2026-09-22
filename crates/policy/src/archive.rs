@@ -29,7 +29,12 @@ pub struct ArchiveStanding {
 /// under `policy`.  Only the intersection with identities the evidence
 /// names is weighed (design §16.1: "A patron following it weighs the
 /// intersection and nothing else").
-pub fn evaluate_archive(policy: &dyn Policy<Keyhash>, ev: &Evidence<Keyhash>, subject: &Keyhash, records: &[Record]) -> ArchiveStanding {
+pub fn evaluate_archive(
+    policy: &dyn Policy<Keyhash>,
+    ev: &Evidence<Keyhash>,
+    subject: &Keyhash,
+    records: &[Record],
+) -> ArchiveStanding {
     let mut known = ev.known();
     known.remove(subject);
     let trust = initial_trust(&known, subject, records);
@@ -43,6 +48,9 @@ pub fn evaluate_archive(policy: &dyn Policy<Keyhash>, ev: &Evidence<Keyhash>, su
             counted.insert(*t);
         }
     }
-    out.ignored = records.iter().filter(|r| !counted.contains(&r.txid)).count();
+    out.ignored = records
+        .iter()
+        .filter(|r| !counted.contains(&r.txid))
+        .count();
     out
 }

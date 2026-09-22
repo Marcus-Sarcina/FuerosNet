@@ -5,7 +5,10 @@
 use std::process::Command;
 
 fn corpus() -> serde_json::Value {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test-vectors/corpus.json"
+    );
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 
@@ -20,7 +23,11 @@ fn run(args: &[&str], stdin: &str) -> (bool, String, String) {
         .expect("rhtn runs");
     c.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
     let out = c.wait_with_output().unwrap();
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
 }
 
 // acceptance: DMN-05
@@ -58,11 +65,22 @@ fn every_corpus_object_decodes_and_prints_from_the_binary() {
             _ if kind == "frame" => printed += 1,
             // an unverifiable object is neither: this tool holds no keys
             _ if out.contains("unverifiable") => printed += 1,
-            _ => disagreed.push(format!("{id} ({kind}, {outcome}): {}", out.lines().take(4).collect::<Vec<_>>().join(" | "))),
+            _ => disagreed.push(format!(
+                "{id} ({kind}, {outcome}): {}",
+                out.lines().take(4).collect::<Vec<_>>().join(" | ")
+            )),
         }
     }
-    assert!(disagreed.is_empty(), "{} entries disagreed:\n{}", disagreed.len(), disagreed.join("\n"));
-    assert!(printed + refused >= 149, "every bytes entry is accounted for: {printed} printed, {refused} refused");
+    assert!(
+        disagreed.is_empty(),
+        "{} entries disagreed:\n{}",
+        disagreed.len(),
+        disagreed.join("\n")
+    );
+    assert!(
+        printed + refused >= 149,
+        "every bytes entry is accounted for: {printed} printed, {refused} refused"
+    );
 }
 
 #[test]

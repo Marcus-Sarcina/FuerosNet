@@ -34,7 +34,11 @@ pub struct AttachedNode {
 
 impl AttachedNode {
     pub fn new(node: Keyhash, session: Current, nonce: Nonces) -> Arc<AttachedNode> {
-        Arc::new(AttachedNode { node, session, nonce })
+        Arc::new(AttachedNode {
+            node,
+            session,
+            nonce,
+        })
     }
 
     /// One request on the current session, or nothing where there is none.
@@ -47,7 +51,10 @@ impl AttachedNode {
     /// "the node did not take it"; which one it was is the reply's code,
     /// and a caller that needs to tell them apart asks for the reply.
     async fn submit(&self, request_type: u64, nonce: [u8; 16], body: Vec<u8>) -> bool {
-        matches!(self.reply(request_type, nonce, body).await, Some(SUBMISSION_ACCEPTED))
+        matches!(
+            self.reply(request_type, nonce, body).await,
+            Some(SUBMISSION_ACCEPTED)
+        )
     }
 
     /// The code the node answered with, where it answered at all and the
@@ -83,7 +90,11 @@ impl Serving for AttachedNode {
     fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
         Box::pin(async move {
             let nonce = (self.nonce)();
-            let body = PrekeyPublication { bundle: bytes.to_vec(), nonce }.encode();
+            let body = PrekeyPublication {
+                bundle: bytes.to_vec(),
+                nonce,
+            }
+            .encode();
             self.submit(REQUEST_PREKEY_PUBLICATION, nonce, body).await
         })
     }
@@ -108,10 +119,22 @@ impl Serving for AttachedNode {
         Box::pin(async move { self.ask(REQUEST_PREKEY, body.to_vec()).await })
     }
 
-    fn relay<'a>(&'a self, _from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
+    fn relay<'a>(
+        &'a self,
+        _from: Keyhash,
+        to: Keyhash,
+        bytes: Vec<u8>,
+        device: [u8; 32],
+    ) -> Answer<'a, bool> {
         Box::pin(async move {
             let nonce = (self.nonce)();
-            let body = RelaySubmission { recipient: to, ciphertext: bytes, nonce, device }.encode();
+            let body = RelaySubmission {
+                recipient: to,
+                ciphertext: bytes,
+                nonce,
+                device,
+            }
+            .encode();
             self.submit(REQUEST_RELAY, nonce, body).await
         })
     }
@@ -122,8 +145,13 @@ impl Serving for AttachedNode {
     /// frame left.
     fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool> {
         Box::pin(async move {
-            let Some(s) = (self.session)() else { return false };
-            s.send_control(FRAME_TOPOLOGY_PUSH, &rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &bytes))
+            let Some(s) = (self.session)() else {
+                return false;
+            };
+            s.send_control(
+                FRAME_TOPOLOGY_PUSH,
+                &rhtn_node::propagation::encode_push(rhtn_node::store::KIND_TRANSACTION, &bytes),
+            )
         })
     }
 
@@ -147,7 +175,10 @@ impl Serving for AttachedNode {
 /// **What is propagated wins.** Everything the client holds here is a copy
 /// of what came down this channel, so an ingest never asks whether the
 /// local copy disagreed.
-pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(u64, Vec<u8>)>) -> tokio::task::JoinHandle<()> {
+pub fn follow(
+    handle: Handle,
+    mut frames: tokio::sync::mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some((frame_type, body)) = frames.recv().await {
             // stream 0 carries memos too, and a memo is a node's routing
@@ -155,7 +186,9 @@ pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(
             if frame_type != FRAME_TOPOLOGY_PUSH {
                 continue;
             }
-            let Ok((kind, object)) = rhtn_node::propagation::decode_push(&body) else { continue };
+            let Ok((kind, object)) = rhtn_node::propagation::decode_push(&body) else {
+                continue;
+            };
             // **both kinds matter to a client.** The transactions are the
             // shape of its neighbourhood; the endpoint records are the
             // addresses in it, and §7.6 has only infra nodes publish one,
@@ -167,7 +200,9 @@ pub fn follow(handle: Handle, mut frames: tokio::sync::mpsc::UnboundedReceiver<(
                     let known = c.known.clone();
                     match kind {
                         rhtn_node::store::KIND_TRANSACTION => c.horizon.ingest(&object, &known),
-                        rhtn_node::store::KIND_ENDPOINT_RECORD => c.horizon.ingest_endpoint(&object, &known),
+                        rhtn_node::store::KIND_ENDPOINT_RECORD => {
+                            c.horizon.ingest_endpoint(&object, &known)
+                        }
                         _ => rhtn_client::horizon::Took::Refused,
                     };
                 })
@@ -187,7 +222,10 @@ pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
 /// an attribution, which the material the message opens under decides.
 /// Bytes that are not that shape are dropped, since nothing can be done
 /// with a message whose sender is unknown.
-pub fn collect(inbound: Inbound, mut deliveries: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>) -> tokio::task::JoinHandle<()> {
+pub fn collect(
+    inbound: Inbound,
+    mut deliveries: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(bytes) = deliveries.recv().await {
             if let Some((from, payload)) = rhtn_archive::submission::unrelayed(&bytes) {

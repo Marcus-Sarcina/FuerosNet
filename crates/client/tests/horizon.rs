@@ -13,20 +13,36 @@ use rhtn_client::horizon::{Horizon, Took, Woke};
 /// The transaction identifiers a horizon holds, in the order a fold takes
 /// them.
 fn sorted_txids(h: &Horizon) -> Vec<[u8; 32]> {
-    let mut at: Vec<(u64, [u8; 32])> = h.stored().filter_map(|(_, b)| Record::parse(b).ok().map(|r| (r.effective, r.txid))).collect();
+    let mut at: Vec<(u64, [u8; 32])> = h
+        .stored()
+        .filter_map(|(_, b)| Record::parse(b).ok().map(|r| (r.effective, r.txid)))
+        .collect();
     at.sort();
     at.into_iter().map(|(_, t)| t).collect()
 }
 
 /// `node` adopted under `patron` at `path` below `anchor`, into `series`.
-fn adopt_at(w: &mut World, node: &str, patron: &str, anchor: &str, path: Vec<u8>, nibbles: u64, series: u32) -> Record {
+fn adopt_at(
+    w: &mut World,
+    node: &str,
+    patron: &str,
+    anchor: &str,
+    path: Vec<u8>,
+    nibbles: u64,
+    series: u32,
+) -> Record {
     let pop = w.meet(node, patron);
     let t = w.tick();
     let (bn, bp) = (w.back(node), w.back(patron));
     let a = Adoption {
         node: kh(node),
         patron: kh(patron),
-        locator: Locator { anchor: kh(anchor), path, nibbles, seqno: Seqno { series, counter: 0 } },
+        locator: Locator {
+            anchor: kh(anchor),
+            path,
+            nibbles,
+            seqno: Seqno { series, counter: 0 },
+        },
         timestamp: t,
         key_material: None,
         evidence: Evidence::Presence(pop.txid),
@@ -71,17 +87,38 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
     for n in ["bob", "carol", "w1", "w2"] {
         assert!(!h.places_of(&kh(n)).is_empty(), "{n} is placed");
     }
-    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 2)), "a subordinate, from its own record");
-    assert_eq!(h.place_in(&kh("bob"), &kh("bob")).map(|p| (p.anchor, p.nibbles)), Some((kh("bob"), 0)), "the anchor, at the empty path");
-    assert!(h.locators_of(&kh("bob")).is_empty(), "and with no locator, since no record carried one for it");
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("bob"))
+            .map(|p| (p.anchor, p.nibbles)),
+        Some((kh("bob"), 2)),
+        "a subordinate, from its own record"
+    );
+    assert_eq!(
+        h.place_in(&kh("bob"), &kh("bob"))
+            .map(|p| (p.anchor, p.nibbles)),
+        Some((kh("bob"), 0)),
+        "the anchor, at the empty path"
+    );
+    assert!(
+        h.locators_of(&kh("bob")).is_empty(),
+        "and with no locator, since no record carried one for it"
+    );
 
     // and the distance is the number of adoption or sibling edges
     assert_eq!(h.distance(&kh("alice")), Some(0), "itself");
     assert_eq!(h.distance(&kh("bob")), Some(1), "the patron");
     assert_eq!(h.distance(&kh("w1")), Some(1), "a subordinate");
-    assert_eq!(h.distance(&kh("carol")), Some(1), "a sibling under the same patron");
+    assert_eq!(
+        h.distance(&kh("carol")),
+        Some(1),
+        "a sibling under the same patron"
+    );
     assert_eq!(h.distance(&kh("w2")), Some(2), "a nephew");
-    assert_eq!(h.distance(&kh("w3")), None, "three edges: outside the horizon");
+    assert_eq!(
+        h.distance(&kh("w3")),
+        None,
+        "three edges: outside the horizon"
+    );
     assert_eq!(h.distance(&kh("w4")), None, "a party in no record at all");
 
     // membership and distance are the same walk, so they cannot disagree
@@ -95,7 +132,10 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
     // placed — the bound is not something a caller has to remember to
     // apply
     let mut h = h;
-    assert!(h.places_of(&kh("w3")).is_empty(), "outside the walk, so not placed");
+    assert!(
+        h.places_of(&kh("w3")).is_empty(),
+        "outside the walk, so not placed"
+    );
     assert!(h.locators_of(&kh("w3")).is_empty(), "nor located");
     assert!(!h.resolvable().contains(&kh("w3")), "nor listed");
 
@@ -113,11 +153,18 @@ fn a_client_places_every_node_in_its_horizon_and_says_how_far_away_it_is() {
 #[test]
 fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
     let mut w = World::new();
-    let first = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let first = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
     let mut h = fed("alice", &first);
     let held = h.records();
     let snap = h.materialise();
-    assert_eq!(snap.folded, rhtn_archive::topology::fold_digest(sorted_txids(&h).iter()), "the watermark names what went in");
+    assert_eq!(
+        snap.folded,
+        rhtn_archive::topology::fold_digest(sorted_txids(&h).iter()),
+        "the watermark names what went in"
+    );
 
     // more arrives, and a wake with the earlier copy folds in only that
     let later = adopt(&mut w, "w1", "alice", vec![0x11], 2);
@@ -128,8 +175,16 @@ fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
     for (_, b) in h.stored() {
         waking.restore_record(b.clone());
     }
-    assert_eq!(waking.wake(Some(&snap), &ids()), Woke::Extended { folded }, "only what arrived since");
-    assert_eq!(waking.resolvable(), after_ingest, "and it lands where the ingest did");
+    assert_eq!(
+        waking.wake(Some(&snap), &ids()),
+        Woke::Extended { folded },
+        "only what arrived since"
+    );
+    assert_eq!(
+        waking.resolvable(),
+        after_ingest,
+        "and it lands where the ingest did"
+    );
 
     // the copy that is current folds nothing
     let current = h.materialise();
@@ -143,16 +198,35 @@ fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
     // and every copy that cannot account for what is held is discarded
     // whole, landing on what a replay from nothing gives
     let all = h.records();
-    let damaged = Snapshot { table: b"not a table".to_vec(), ..current.clone() };
-    let overclaiming = Snapshot { folded: [9; 32], ..current.clone() };
+    let damaged = Snapshot {
+        table: b"not a table".to_vec(),
+        ..current.clone()
+    };
+    let overclaiming = Snapshot {
+        folded: [9; 32],
+        ..current.clone()
+    };
     let someone_elses = fed("carol", &first).materialise();
-    for (label, s) in [("damaged", Some(damaged)), ("a digest over other records", Some(overclaiming)), ("another client's", Some(someone_elses)), ("none", None)] {
+    for (label, s) in [
+        ("damaged", Some(damaged)),
+        ("a digest over other records", Some(overclaiming)),
+        ("another client's", Some(someone_elses)),
+        ("none", None),
+    ] {
         let mut v = fed("alice", &[]);
         for (_, b) in h.stored() {
             v.restore_record(b.clone());
         }
-        assert_eq!(v.wake(s.as_ref(), &ids()), Woke::Replayed { replayed: all }, "{label}");
-        assert_eq!(v.resolvable(), after_ingest, "{label}: the same answer a replay gives");
+        assert_eq!(
+            v.wake(s.as_ref(), &ids()),
+            Woke::Replayed { replayed: all },
+            "{label}"
+        );
+        assert_eq!(
+            v.resolvable(),
+            after_ingest,
+            "{label}: the same answer a replay gives"
+        );
     }
 }
 
@@ -160,12 +234,18 @@ fn a_wake_folds_what_arrived_since_and_discards_a_copy_it_cannot_account_for() {
 #[test]
 fn what_the_patron_propagates_replaces_what_the_client_held() {
     let mut w = World::new();
-    let mut recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let mut recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
     recs.push(adopt(&mut w, "w1", "carol", vec![0x21], 2));
     let mut h = fed("alice", &recs);
     // both of w1's records name bob's subnet, so this is one place
     // moving and not two places held
-    let first = h.locator_in(&kh("w1"), &kh("bob")).cloned().expect("placed");
+    let first = h
+        .locator_in(&kh("w1"), &kh("bob"))
+        .cloned()
+        .expect("placed");
     assert_eq!((first.nibbles, first.path.clone()), (2, vec![0x21]));
 
     // w1 leaves carol and is adopted by alice, deeper and on a new series:
@@ -173,18 +253,44 @@ fn what_the_patron_propagates_replaces_what_the_client_held() {
     let departure = {
         let t = w.tick();
         let bn = w.back("w1");
-        let body = departure_body(&bn, &kh("w1"), &kh("carol"), Seqno { series: 1, counter: 0 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("w1"),
+            &kh("carol"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["w1"])
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
-    assert!(!h.table.subordinates(&kh("carol")).contains(&kh("w1")), "the ended binding is gone");
+    assert!(
+        !h.table.subordinates(&kh("carol")).contains(&kh("w1")),
+        "the ended binding is gone"
+    );
 
     let moved = adopt_at(&mut w, "w1", "alice", "bob", vec![0x11], 2, 2);
     assert_eq!(h.ingest(&moved.bytes, &ids()), Took::Applied);
-    let now = h.locator_in(&kh("w1"), &kh("bob")).cloned().expect("still placed");
-    assert_eq!((now.nibbles, now.path.clone(), now.seqno.series), (2, vec![0x11], 2), "the later locator, not the earlier");
-    assert_ne!((now.path, now.seqno.series), (first.path, first.seqno.series));
-    assert!(h.table.subordinates(&kh("alice")).contains(&kh("w1")), "and the binding the propagation made");
+    let now = h
+        .locator_in(&kh("w1"), &kh("bob"))
+        .cloned()
+        .expect("still placed");
+    assert_eq!(
+        (now.nibbles, now.path.clone(), now.seqno.series),
+        (2, vec![0x11], 2),
+        "the later locator, not the earlier"
+    );
+    assert_ne!(
+        (now.path, now.seqno.series),
+        (first.path, first.seqno.series)
+    );
+    assert!(
+        h.table.subordinates(&kh("alice")).contains(&kh("w1")),
+        "and the binding the propagation made"
+    );
 
     // propagation repeats, and a repeat is not news
     assert_eq!(h.ingest(&moved.bytes, &ids()), Took::Duplicate);
@@ -213,9 +319,18 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
         assert!(swapped.restore_record(r.bytes.clone()));
     }
     let woke = swapped.wake(Some(&snap), &ids());
-    assert!(matches!(woke, Woke::Replayed { .. }), "a fold taken from other records is not reused: {woke:?}");
+    assert!(
+        matches!(woke, Woke::Replayed { .. }),
+        "a fold taken from other records is not reused: {woke:?}"
+    );
     // and what it lands on is what the records it holds actually say
-    assert_eq!(swapped.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x30]), "the record held, not the one folded");
+    assert_eq!(
+        swapped
+            .place_in(&kh("w1"), &kh("bob"))
+            .map(|p| p.path.clone()),
+        Some(vec![0x30]),
+        "the record held, not the one folded"
+    );
 
     // the honest case still folds nothing
     let mut same = fed("alice", &[]);
@@ -223,26 +338,49 @@ fn a_stale_fold_is_not_reused_over_a_record_set_it_was_not_taken_from() {
         assert!(same.restore_record(r.bytes.clone()));
     }
     assert_eq!(same.wake(Some(&snap), &ids()), Woke::Current);
-    assert_eq!(same.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x20]));
+    assert_eq!(
+        same.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()),
+        Some(vec![0x20])
+    );
 }
 
 // acceptance: TOP-26
 #[test]
 fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
     let mut w = World::new();
-    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
     let mut h = fed("alice", &recs);
-    assert!(!h.places_of(&kh("carol")).is_empty(), "control: a sibling is inside");
+    assert!(
+        !h.places_of(&kh("carol")).is_empty(),
+        "control: a sibling is inside"
+    );
 
     // carol departs, which takes it out of the walk
     let departure = {
         let t = w.tick();
         let bn = w.back("carol");
-        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("carol"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["carol"])
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
-    assert_eq!(h.distance(&kh("carol")), None, "control: outside the walk now");
+    assert_eq!(
+        h.distance(&kh("carol")),
+        None,
+        "control: outside the walk now"
+    );
     assert!(h.places_of(&kh("carol")).is_empty(), "and not placed");
 
     // **a replay lands on the same view.**  The records that placed carol
@@ -251,9 +389,15 @@ fn a_replay_does_not_resurrect_a_party_that_left_the_horizon() {
     // the current bound rather than from the record stream
     h.prune();
     assert!(matches!(h.wake(None, &ids()), Woke::Replayed { .. }));
-    assert!(h.places_of(&kh("carol")).is_empty(), "a replay does not resurrect it");
+    assert!(
+        h.places_of(&kh("carol")).is_empty(),
+        "a replay does not resurrect it"
+    );
     assert!(!h.resolvable().contains(&kh("carol")));
-    assert!(!h.places_of(&kh("bob")).is_empty(), "and the patron is still there");
+    assert!(
+        !h.places_of(&kh("bob")).is_empty(),
+        "and the patron is still there"
+    );
 }
 
 // acceptance: TOP-27
@@ -263,7 +407,10 @@ fn a_party_in_two_subnets_is_placed_in_both_and_neither_replaces_the_other() {
     // `wire-format.md` §2.3 keeps one series per patron relationship, so
     // these are two lines rather than one superseding the other
     let mut w = World::new();
-    let mut recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "w1", "alice", vec![0x11], 2)];
+    let mut recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "w1", "alice", vec![0x11], 2),
+    ];
     recs.push(adopt_at(&mut w, "w1", "carol", "carol", vec![0x30], 1, 2));
     let h = fed("alice", &recs);
 
@@ -273,32 +420,76 @@ fn a_party_in_two_subnets_is_placed_in_both_and_neither_replaces_the_other() {
     // qualify.
     let both = h.places_of(&kh("w1"));
     assert_eq!(both.len(), 2, "two subnets, two places: {both:?}");
-    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x11], 2)), "under alice, in bob's subnet");
-    assert_eq!(h.place_in(&kh("w1"), &kh("carol")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x30], 1)), "under carol, in carol's");
-    assert_eq!(h.place_in(&kh("w1"), &kh("alice")), None, "and in no subnet it was not placed in");
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("bob"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x11], 2)),
+        "under alice, in bob's subnet"
+    );
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("carol"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x30], 1)),
+        "under carol, in carol's"
+    );
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("alice")),
+        None,
+        "and in no subnet it was not placed in"
+    );
 
-    let series: Vec<u32> = h.locators_of(&kh("w1")).iter().map(|l| l.seqno.series).collect();
+    let series: Vec<u32> = h
+        .locators_of(&kh("w1"))
+        .iter()
+        .map(|l| l.seqno.series)
+        .collect();
     assert_eq!(series.len(), 2, "one locator per line");
     assert_ne!(series[0], series[1], "each line carries its own series");
 
     // it is one party for everything counted by party: listed once, and
     // forgotten once
-    assert_eq!(h.resolvable().iter().filter(|k| **k == kh("w1")).count(), 1, "one party, however many subnets");
+    assert_eq!(
+        h.resolvable().iter().filter(|k| **k == kh("w1")).count(),
+        1,
+        "one party, however many subnets"
+    );
     let carried = h.materialise();
     let mut waking = Horizon::new(kh("alice"));
     for (_, b) in h.stored() {
         waking.restore_record(b.clone());
     }
-    assert_eq!(waking.wake(Some(&carried), &ids()), Woke::Current, "the snapshot accounts for what is held");
-    assert_eq!(waking.places_of(&kh("w1")).len(), 2, "and both places come back out of it");
-    assert_eq!(waking.place_in(&kh("w1"), &kh("carol")).map(|p| p.path.clone()), Some(vec![0x30]));
+    assert_eq!(
+        waking.wake(Some(&carried), &ids()),
+        Woke::Current,
+        "the snapshot accounts for what is held"
+    );
+    assert_eq!(
+        waking.places_of(&kh("w1")).len(),
+        2,
+        "and both places come back out of it"
+    );
+    assert_eq!(
+        waking
+            .place_in(&kh("w1"), &kh("carol"))
+            .map(|p| p.path.clone()),
+        Some(vec![0x30])
+    );
 }
 
 /// An endpoint record for `name`, as only an infra node publishes
 /// (`wire-format.md` §7.6).
-fn endpoints(name: &str, port: u16, series: u32, counter: u32) -> (Vec<u8>, rhtn_transport::session::NetworkPoint) {
+fn endpoints(
+    name: &str,
+    port: u16,
+    series: u32,
+    counter: u32,
+) -> (Vec<u8>, rhtn_transport::session::NetworkPoint) {
     let point = rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(port as u64));
-    let bytes = rhtn_node::resolution::endpoint_record(&common::id(name), std::slice::from_ref(&point), Seqno { series, counter });
+    let bytes = rhtn_node::resolution::endpoint_record(
+        &common::id(name),
+        std::slice::from_ref(&point),
+        Seqno { series, counter },
+    );
     (bytes, point)
 }
 
@@ -306,33 +497,66 @@ fn endpoints(name: &str, port: u16, series: u32, counter: u32) -> (Vec<u8>, rhtn
 #[test]
 fn a_client_holds_the_addresses_of_the_infrastructure_in_its_horizon() {
     let mut w = World::new();
-    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1), adopt(&mut w, "w3", "w2", vec![0x21, 0x10], 3)];
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w3", "w2", vec![0x21, 0x10], 3),
+    ];
     let mut h = fed("alice", &recs);
 
     // **nothing says who is infrastructure until a record does.** §7.6 has
     // only infra nodes publish one, and a light client's endpoints arrive
     // when it attaches and are nobody else's to hold, so holding a record
     // is the whole of the evidence.
-    assert!(!h.table.is_infra(&kh("bob")), "the patron has published nothing yet");
-    assert!(h.reachable_infra().is_empty(), "so this client can reach nobody without asking");
+    assert!(
+        !h.table.is_infra(&kh("bob")),
+        "the patron has published nothing yet"
+    );
+    assert!(
+        h.reachable_infra().is_empty(),
+        "so this client can reach nobody without asking"
+    );
 
     let (rec, point) = endpoints("bob", 7001, 1, 1);
     assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Applied);
-    assert!(h.table.is_infra(&kh("bob")), "and holding it is what says so");
-    assert_eq!(h.endpoints_of(&kh("bob")), vec![point.encode_bytes()], "with where it answers");
-    assert_eq!(h.reachable_infra().len(), 1, "one party this client can reach on its own");
+    assert!(
+        h.table.is_infra(&kh("bob")),
+        "and holding it is what says so"
+    );
+    assert_eq!(
+        h.endpoints_of(&kh("bob")),
+        vec![point.encode_bytes()],
+        "with where it answers"
+    );
+    assert_eq!(
+        h.reachable_infra().len(),
+        1,
+        "one party this client can reach on its own"
+    );
 
     // a later counter in the same line replaces; an older one does not
     let (moved, elsewhere) = endpoints("bob", 7002, 1, 2);
     assert_eq!(h.ingest_endpoint(&moved, &ids()), Took::Applied);
-    assert_eq!(h.endpoints_of(&kh("bob")), vec![elsewhere.encode_bytes()], "the later record, not the earlier");
-    assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Duplicate, "and the earlier one is not news");
+    assert_eq!(
+        h.endpoints_of(&kh("bob")),
+        vec![elsewhere.encode_bytes()],
+        "the later record, not the earlier"
+    );
+    assert_eq!(
+        h.ingest_endpoint(&rec, &ids()),
+        Took::Duplicate,
+        "and the earlier one is not news"
+    );
 
     // **bounded by the horizon, like everything else here.** w3 sits three
     // edges out: an address for a party this client cannot place is an
     // address it has no use for.
     let (far, _) = endpoints("w3", 7003, 1, 1);
-    assert_eq!(h.ingest_endpoint(&far, &ids()), Took::Refused, "outside the walk");
+    assert_eq!(
+        h.ingest_endpoint(&far, &ids()),
+        Took::Refused,
+        "outside the walk"
+    );
     assert!(h.endpoints_of(&kh("w3")).is_empty());
 
     // and a prune takes the addresses with the places
@@ -342,12 +566,26 @@ fn a_client_holds_the_addresses_of_the_infrastructure_in_its_horizon() {
     let departure = {
         let t = w.tick();
         let bn = w.back("carol");
-        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("carol"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["carol"])
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
     h.prune();
-    assert_eq!(h.reachable_infra().len(), 1, "the party that left took its address with it");
+    assert_eq!(
+        h.reachable_infra().len(),
+        1,
+        "the party that left took its address with it"
+    );
 }
 
 // acceptance: MET-09
@@ -366,19 +604,51 @@ fn a_client_weighs_trust_distance_from_its_own_copy_and_asks_nobody() {
     // adoption or sibling edge away, which is where a client's own
     // evidence is densest
     let ring: std::collections::BTreeSet<_> = h.adjacent().into_iter().collect();
-    assert_eq!(ring, [kh("bob"), kh("carol")].into_iter().collect(), "the patron and the sibling");
-    assert!(!ring.contains(&kh("w2")), "and not the nephew, two edges out");
+    assert_eq!(
+        ring,
+        [kh("bob"), kh("carol")].into_iter().collect(),
+        "the patron and the sibling"
+    );
+    assert!(
+        !ring.contains(&kh("w2")),
+        "and not the nephew, two edges out"
+    );
     assert!(!ring.contains(&kh("alice")), "nor itself");
 
     // and the evidence the policy sees is that copy, folded: one edge per
     // open binding, with nobody asked
-    let mut c = rhtn_client::ceremony::Client::new(common::id("alice"), common::ids(), Default::default(), harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 7, 0).0);
+    let mut c = rhtn_client::ceremony::Client::new(
+        common::id("alice"),
+        common::ids(),
+        Default::default(),
+        harness::device(
+            vec![],
+            std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
+            7,
+            0,
+        )
+        .0,
+    );
     c.horizon = h;
     let ev = c.evidence();
-    assert_eq!(ev.adoptions.len(), 3, "one edge per open binding in the copy: {:?}", ev.adoptions);
-    assert!(ev.adoptions.contains(&(kh("bob"), kh("alice"))), "including its own");
-    assert!(ev.horizon().contains(&kh("w2")), "and the metric's own walk reaches the nephew");
-    assert!(c.standing(&kh("carol")).is_finite(), "and a score comes out of it rather than a question");
+    assert_eq!(
+        ev.adoptions.len(),
+        3,
+        "one edge per open binding in the copy: {:?}",
+        ev.adoptions
+    );
+    assert!(
+        ev.adoptions.contains(&(kh("bob"), kh("alice"))),
+        "including its own"
+    );
+    assert!(
+        ev.horizon().contains(&kh("w2")),
+        "and the metric's own walk reaches the nephew"
+    );
+    assert!(
+        c.standing(&kh("carol")).is_finite(),
+        "and a score comes out of it rather than a question"
+    );
 }
 
 /// A departure moves an address; it does not only close an edge.
@@ -397,39 +667,96 @@ fn a_departure_re_anchors_the_departed_party_on_itself_and_shortens_what_sat_ben
         adopt(&mut w, "w2", "w1", vec![0x12, 0x30], 3),
     ];
     let mut h = fed("w1", &recs);
-    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x12], 2)), "two hops under bob");
-    assert_eq!(h.place_in(&kh("w2"), &kh("bob")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x12, 0x30], 3)), "and a generation below that");
-    assert!(h.locator_in(&kh("w1"), &kh("bob")).is_some(), "and a propagated locator saying so");
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("bob"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x12], 2)),
+        "two hops under bob"
+    );
+    assert_eq!(
+        h.place_in(&kh("w2"), &kh("bob"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x12, 0x30], 3)),
+        "and a generation below that"
+    );
+    assert!(
+        h.locator_in(&kh("w1"), &kh("bob")).is_some(),
+        "and a propagated locator saying so"
+    );
 
     let departure = {
         let t = w.tick();
         let bn = w.back("alice");
-        let body = departure_body(&bn, &kh("alice"), &kh("bob"), Seqno { series: 1, counter: 0 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("alice"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["alice"])
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
 
     // alice is her own anchor at the empty path, which is what a root is
-    assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((Vec::new(), 0)));
+    assert_eq!(
+        h.place_in(&kh("alice"), &kh("alice"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((Vec::new(), 0))
+    );
     // and w1 is one hop under alice, the prefix that reached alice removed
-    assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("alice"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x20], 1))
+    );
     // **every generation, not just the first.** The subtree is moved by
     // the prefix it shares, so nothing enumerates depth and nothing can
     // miss a level of it
-    assert_eq!(h.place_in(&kh("w2"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x23], 2)));
+    assert_eq!(
+        h.place_in(&kh("w2"), &kh("alice"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x23], 2))
+    );
     // nothing is left at the place any of them departed
-    assert_eq!(h.place_in(&kh("w1"), &kh("bob")), None, "w1 is not in bob's subnet");
-    assert_eq!(h.place_in(&kh("w2"), &kh("bob")), None, "nor is the generation below it");
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("bob")),
+        None,
+        "w1 is not in bob's subnet"
+    );
+    assert_eq!(
+        h.place_in(&kh("w2"), &kh("bob")),
+        None,
+        "nor is the generation below it"
+    );
     assert_eq!(h.place_in(&kh("alice"), &kh("bob")), None, "nor is alice");
-    assert!(h.locator_in(&kh("w1"), &kh("bob")).is_none(), "and no locator claims a subnet it left");
+    assert!(
+        h.locator_in(&kh("w1"), &kh("bob")).is_none(),
+        "and no locator claims a subnet it left"
+    );
 
     // a replay reaches the same map: the fold and the incremental view
     // agree by construction, endings included
     let woke = h.wake(None, &ids());
     assert!(matches!(woke, Woke::Replayed { .. }), "{woke:?}");
-    assert_eq!(h.place_in(&kh("alice"), &kh("alice")).map(|p| p.nibbles), Some(0));
-    assert_eq!(h.place_in(&kh("w1"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x20], 1)));
-    assert_eq!(h.place_in(&kh("w2"), &kh("alice")).map(|p| (p.path.clone(), p.nibbles)), Some((vec![0x23], 2)));
+    assert_eq!(
+        h.place_in(&kh("alice"), &kh("alice")).map(|p| p.nibbles),
+        Some(0)
+    );
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("alice"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x20], 1))
+    );
+    assert_eq!(
+        h.place_in(&kh("w2"), &kh("alice"))
+            .map(|p| (p.path.clone(), p.nibbles)),
+        Some((vec![0x23], 2))
+    );
 }
 
 /// The negative: a party still holding a patron in that subnet is not a
@@ -451,14 +778,38 @@ fn an_ending_that_leaves_a_patron_standing_moves_no_address() {
     let departure = {
         let t = w.tick();
         let bn = w.back("w1");
-        let body = departure_body(&bn, &kh("w1"), &kh("alice"), Seqno { series: 1, counter: 0 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("w1"),
+            &kh("alice"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["w1"])
     };
     assert_eq!(h.ingest(&departure.bytes, &ids()), Took::Applied);
-    assert!(!h.table.subordinates(&kh("alice")).contains(&kh("w1")), "the named binding ended");
-    assert!(h.table.subordinates(&kh("carol")).contains(&kh("w1")), "and the other one did not");
-    assert_eq!(h.place_in(&kh("w1"), &kh("w1")), None, "w1 is nobody's root while carol holds it");
-    assert_eq!(h.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()), Some(vec![0x22]), "and it is still in bob's subnet");
+    assert!(
+        !h.table.subordinates(&kh("alice")).contains(&kh("w1")),
+        "the named binding ended"
+    );
+    assert!(
+        h.table.subordinates(&kh("carol")).contains(&kh("w1")),
+        "and the other one did not"
+    );
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("w1")),
+        None,
+        "w1 is nobody's root while carol holds it"
+    );
+    assert_eq!(
+        h.place_in(&kh("w1"), &kh("bob")).map(|p| p.path.clone()),
+        Some(vec![0x22]),
+        "and it is still in bob's subnet"
+    );
 }
 
 /// A contested exit: the departure and the with-prejudice disavowal
@@ -479,7 +830,17 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     let departure = {
         let t = w.tick();
         let bn = w.back("carol");
-        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 1 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("carol"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+            t,
+            None,
+        );
         w.commit(TYPE_DEPARTURE, &body, &["carol"])
     };
     let disavowal = |w: &mut World, code: u64| {
@@ -495,7 +856,12 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     let d1 = disavowal(&mut w, 1);
     assert_eq!(plain.ingest(&departure.bytes, &ids()), Took::Applied);
     assert_eq!(plain.ingest(&d1.bytes, &ids()), Took::Applied);
-    assert!(!client_for("alice", plain).evidence().blacklisted(&kh("carol")), "an unbanded code is not a determination about the party");
+    assert!(
+        !client_for("alice", plain)
+            .evidence()
+            .blacklisted(&kh("carol")),
+        "an unbanded code is not a determination about the party"
+    );
 
     // the same pair, banded: code 33 is with prejudice, and the member
     // takes the patron's reading without weighing the departure against it
@@ -511,7 +877,17 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     let dep2 = {
         let t = w2.tick();
         let bn = w2.back("carol");
-        let body = departure_body(&bn, &kh("carol"), &kh("bob"), Seqno { series: 1, counter: 1 }, t, None);
+        let body = departure_body(
+            &bn,
+            &kh("carol"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+            t,
+            None,
+        );
         w2.commit(TYPE_DEPARTURE, &body, &["carol"])
     };
     let d33 = {
@@ -525,10 +901,21 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     assert_eq!(banded.ingest(&dep2.bytes, &ids()), Took::Applied);
     assert_eq!(banded.ingest(&d33.bytes, &ids()), Took::Applied);
     let c = client_for("alice", banded);
-    assert!(c.evidence().blacklisted(&kh("carol")), "the patron's determination, taken at face value");
+    assert!(
+        c.evidence().blacklisted(&kh("carol")),
+        "the patron's determination, taken at face value"
+    );
     assert_eq!(c.standing(&kh("carol")), 0.0, "and it scores nothing");
-    assert!(!c.evaluate(&[kh("carol"), kh("bob")]).admitted.contains(&kh("carol")), "nor is it admitted to anything");
-    assert!(c.standing(&kh("bob")) >= 0.0, "the patron is not touched by its own determination");
+    assert!(
+        !c.evaluate(&[kh("carol"), kh("bob")])
+            .admitted
+            .contains(&kh("carol")),
+        "nor is it admitted to anything"
+    );
+    assert!(
+        c.standing(&kh("bob")) >= 0.0,
+        "the patron is not touched by its own determination"
+    );
 
     // **the allocation, the admission and the usable total agree.** A
     // denied party left in the allocation would take capacity an eligible
@@ -537,19 +924,43 @@ fn a_with_prejudice_disavowal_is_taken_at_face_value_whichever_object_arrived_fi
     let only_denied = c.evaluate(&[kh("carol")]);
     assert_eq!(only_denied.individual, vec![(kh("carol"), 0.0)]);
     assert!(only_denied.admitted.is_empty());
-    assert_eq!(only_denied.joint, 0.0, "a set of one denied candidate can use nothing at once");
+    assert_eq!(
+        only_denied.joint, 0.0,
+        "a set of one denied candidate can use nothing at once"
+    );
 
     // and a mixed set gives the eligible party what it would have had
     // alone: the denied one consumes none of the cut
     let mixed = c.evaluate(&[kh("carol"), kh("bob")]);
     let alone = c.evaluate(&[kh("bob")]);
-    assert_eq!(mixed.joint, alone.joint, "the denied candidate starves nobody");
-    assert_eq!(mixed.individual.iter().find(|(k, _)| *k == kh("bob")).map(|(_, s)| *s), alone.individual.first().map(|(_, s)| *s));
+    assert_eq!(
+        mixed.joint, alone.joint,
+        "the denied candidate starves nobody"
+    );
+    assert_eq!(
+        mixed
+            .individual
+            .iter()
+            .find(|(k, _)| *k == kh("bob"))
+            .map(|(_, s)| *s),
+        alone.individual.first().map(|(_, s)| *s)
+    );
 }
 
 /// A client wrapped round a horizon, for the trust folds.
 fn client_for(name: &str, h: Horizon) -> rhtn_client::ceremony::Client {
-    let mut c = rhtn_client::ceremony::Client::new(common::id(name), common::ids(), Default::default(), harness::device(vec![], std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)), 7, 0).0);
+    let mut c = rhtn_client::ceremony::Client::new(
+        common::id(name),
+        common::ids(),
+        Default::default(),
+        harness::device(
+            vec![],
+            std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
+            7,
+            0,
+        )
+        .0,
+    );
     c.horizon = h;
     c
 }
@@ -561,14 +972,21 @@ fn client_for(name: &str, h: Horizon) -> rhtn_client::ceremony::Client {
 #[test]
 fn an_equivocating_pair_leaves_neither_endpoint_current_and_an_unproved_series_is_not_taken() {
     let mut w = World::new();
-    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
     let mut h = fed("alice", &recs);
 
     // one signed line, taken; its exact duplicate is inert
     let (first, point) = endpoints("bob", 7001, 1, 1);
     assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Applied);
     assert_eq!(h.endpoints_of(&kh("bob")), vec![point.encode_bytes()]);
-    assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Duplicate, "the same bytes at the same number");
+    assert_eq!(
+        h.ingest_endpoint(&first, &ids()),
+        Took::Duplicate,
+        "the same bytes at the same number"
+    );
 
     // **equal seqno, different signed contents**: the pair is malformed
     // and neither is current.  Which arrived first is an accident of the
@@ -576,9 +994,19 @@ fn an_equivocating_pair_leaves_neither_endpoint_current_and_an_unproved_series_i
     // view
     let (other, _) = endpoints("bob", 7002, 1, 1);
     assert_eq!(h.ingest_endpoint(&other, &ids()), Took::Conflict);
-    assert!(h.endpoints_of(&kh("bob")).is_empty(), "neither content is current");
-    assert!(h.reachable_infra().iter().all(|(n, _)| *n != kh("bob")), "and bob is not reachable on either");
-    assert_eq!(h.ingest_endpoint(&first, &ids()), Took::Duplicate, "the retired pair takes nothing further");
+    assert!(
+        h.endpoints_of(&kh("bob")).is_empty(),
+        "neither content is current"
+    );
+    assert!(
+        h.reachable_infra().iter().all(|(n, _)| *n != kh("bob")),
+        "and bob is not reachable on either"
+    );
+    assert_eq!(
+        h.ingest_endpoint(&first, &ids()),
+        Took::Duplicate,
+        "the retired pair takes nothing further"
+    );
 
     // a greater counter in the same line repairs it: the line is the
     // subject's to repair
@@ -590,10 +1018,18 @@ fn an_equivocating_pair_leaves_neither_endpoint_current_and_an_unproved_series_i
     // adopted in series 1, so that series is proved by the binding; 99 is
     // proved by nothing this client holds
     let (proved, carol_at) = endpoints("carol", 7010, 1, 1);
-    assert_eq!(h.ingest_endpoint(&proved, &ids()), Took::Applied, "the series the relationship is in");
+    assert_eq!(
+        h.ingest_endpoint(&proved, &ids()),
+        Took::Applied,
+        "the series the relationship is in"
+    );
     let (unproved, _) = endpoints("carol", 7011, 99, 1);
     assert_eq!(h.ingest_endpoint(&unproved, &ids()), Took::Unproved);
-    assert_eq!(h.endpoints_of(&kh("carol")), vec![carol_at.encode_bytes()], "and its address is not mixed in");
+    assert_eq!(
+        h.endpoints_of(&kh("carol")),
+        vec![carol_at.encode_bytes()],
+        "and its address is not mixed in"
+    );
 }
 
 /// A restored horizon keeps what it needs to route (`light-client-requirements.md`
@@ -603,7 +1039,10 @@ fn an_equivocating_pair_leaves_neither_endpoint_current_and_an_unproved_series_i
 #[test]
 fn a_restored_horizon_still_holds_the_addresses_it_was_keeping_to_route_around_a_dark_patron() {
     let mut w = World::new();
-    let recs = vec![adopt(&mut w, "alice", "bob", vec![0x10], 1), adopt(&mut w, "carol", "bob", vec![0x20], 1)];
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+    ];
     let mut h = fed("alice", &recs);
     let (rec, point) = endpoints("bob", 7001, 1, 1);
     assert_eq!(h.ingest_endpoint(&rec, &ids()), Took::Applied);
@@ -618,11 +1057,23 @@ fn a_restored_horizon_still_holds_the_addresses_it_was_keeping_to_route_around_a
     for r in &recs {
         assert!(fresh.restore_record(r.bytes.clone()));
     }
-    assert_eq!(fresh.wake(Some(&snap), &ids()), Woke::Current, "the snapshot accounts for what is held");
-    assert_eq!(fresh.endpoints_of(&kh("bob")), vec![point.encode_bytes()], "and the patron is still reachable");
+    assert_eq!(
+        fresh.wake(Some(&snap), &ids()),
+        Woke::Current,
+        "the snapshot accounts for what is held"
+    );
+    assert_eq!(
+        fresh.endpoints_of(&kh("bob")),
+        vec![point.encode_bytes()],
+        "and the patron is still reachable"
+    );
     assert_eq!(fresh.reachable_infra().len(), 1);
     // the retirement came with them: a conflicting record already ruled
     // out is not admitted by a restored copy
-    assert_eq!(fresh.ingest_endpoint(&a, &ids()), Took::Duplicate, "the retired pair stays retired");
+    assert_eq!(
+        fresh.ingest_endpoint(&a, &ids()),
+        Took::Duplicate,
+        "the retired pair stays retired"
+    );
     assert!(fresh.endpoints_of(&kh("carol")).is_empty());
 }

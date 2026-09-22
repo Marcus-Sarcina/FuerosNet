@@ -31,16 +31,29 @@ impl Rng {
 
 #[test]
 fn mutate_until_the_budget_runs_out() {
-    let Some(secs) = std::env::var("RHTN_FUZZ_SECONDS").ok().and_then(|s| s.parse::<u64>().ok()) else {
+    let Some(secs) = std::env::var("RHTN_FUZZ_SECONDS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+    else {
         eprintln!("fuzz: RHTN_FUZZ_SECONDS unset, skipping");
         return;
     };
-    let seed = std::env::var("RHTN_FUZZ_SEED").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or_else(|| {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64 | 1
-    });
+    let seed = std::env::var("RHTN_FUZZ_SEED")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+                | 1
+        });
     eprintln!("fuzz: seed {seed:#x}, budget {secs}s");
     let ids = identities();
-    let set: Vec<Fixture> = fixtures().into_iter().filter(|f| f.outcome == "accept").collect();
+    let set: Vec<Fixture> = fixtures()
+        .into_iter()
+        .filter(|f| f.outcome == "accept")
+        .collect();
     let mut rng = Rng(seed);
     let deadline = Instant::now() + Duration::from_secs(secs);
     let (mut n, mut valid) = (0u64, 0u64);
@@ -50,10 +63,24 @@ fn mutate_until_the_budget_runs_out() {
         // several stacked edits per input, so shapes drift further than DEC-02's single edit
         for _ in 0..1 + rng.below(4) {
             match rng.below(5) {
-                0 => { let p = rng.below(v.len()); v[p] = rng.next() as u8; }
-                1 => { let p = rng.below(v.len() + 1); v.insert(p, rng.next() as u8); }
-                2 => { if v.len() > 1 { let p = rng.below(v.len()); v.remove(p); } }
-                3 => { let p = rng.below(v.len()); v[p] ^= 1 << rng.below(8); }
+                0 => {
+                    let p = rng.below(v.len());
+                    v[p] = rng.next() as u8;
+                }
+                1 => {
+                    let p = rng.below(v.len() + 1);
+                    v.insert(p, rng.next() as u8);
+                }
+                2 => {
+                    if v.len() > 1 {
+                        let p = rng.below(v.len());
+                        v.remove(p);
+                    }
+                }
+                3 => {
+                    let p = rng.below(v.len());
+                    v[p] ^= 1 << rng.below(8);
+                }
                 _ => {
                     let other = &set[rng.below(set.len())].bytes;
                     let len = 1 + rng.below(64.min(other.len()));
@@ -66,11 +93,18 @@ fn mutate_until_the_budget_runs_out() {
         }
         let t0 = Instant::now();
         let verdict = decode(&ids, &f.id, &f.kind, &v);
-        assert!(t0.elapsed() < Duration::from_secs(1), "seed {seed:#x}: input {n} exceeded one second");
+        assert!(
+            t0.elapsed() < Duration::from_secs(1),
+            "seed {seed:#x}: input {n} exceeded one second"
+        );
         if verdict.is_ok() {
             let span = canonical_span(&f.kind, &v);
             let item = parse_all(span).expect("valid means parsed");
-            assert_eq!(reencode(&item, span), span, "seed {seed:#x}: input {n} valid but not round-tripping");
+            assert_eq!(
+                reencode(&item, span),
+                span,
+                "seed {seed:#x}: input {n} valid but not round-tripping"
+            );
             valid += 1;
         }
         n += 1;

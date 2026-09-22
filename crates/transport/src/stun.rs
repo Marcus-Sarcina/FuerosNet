@@ -22,7 +22,10 @@ pub const HEADER_BYTES: usize = 20;
 /// Whether a datagram is a STUN message: the two high bits zero, the magic
 /// cookie in place, and the length field consistent with the datagram.
 pub fn is_stun(b: &[u8]) -> bool {
-    b.len() >= HEADER_BYTES && b[0] & 0xC0 == 0 && u32::from_be_bytes([b[4], b[5], b[6], b[7]]) == MAGIC_COOKIE && u16::from_be_bytes([b[2], b[3]]) as usize + HEADER_BYTES == b.len()
+    b.len() >= HEADER_BYTES
+        && b[0] & 0xC0 == 0
+        && u32::from_be_bytes([b[4], b[5], b[6], b[7]]) == MAGIC_COOKIE
+        && u16::from_be_bytes([b[2], b[3]]) as usize + HEADER_BYTES == b.len()
 }
 
 /// A Binding message's kind, from its message type.
@@ -37,7 +40,11 @@ fn crc32(data: &[u8]) -> u32 {
     for &b in data {
         crc ^= b as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -142,7 +149,9 @@ pub fn parse(b: &[u8]) -> Option<Parsed> {
                 }
                 let port = u16::from_be_bytes([v[2], v[3]]) ^ (MAGIC_COOKIE >> 16) as u16;
                 let ip = match v[1] {
-                    1 if v.len() == 8 => IpAddr::V4((u32::from_be_bytes([v[4], v[5], v[6], v[7]]) ^ MAGIC_COOKIE).into()),
+                    1 if v.len() == 8 => IpAddr::V4(
+                        (u32::from_be_bytes([v[4], v[5], v[6], v[7]]) ^ MAGIC_COOKIE).into(),
+                    ),
                     2 if v.len() == 20 => {
                         let mut key = MAGIC_COOKIE.to_be_bytes().to_vec();
                         key.extend_from_slice(&txid);

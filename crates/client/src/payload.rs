@@ -36,7 +36,11 @@ pub struct PayloadConfig {
 
 impl Default for PayloadConfig {
     fn default() -> Self {
-        PayloadConfig { pool_target: 20, replenish_below: 5, signed_prekey_interval_s: 7 * 86_400 }
+        PayloadConfig {
+            pool_target: 20,
+            replenish_below: 5,
+            signed_prekey_interval_s: 7 * 86_400,
+        }
     }
 }
 
@@ -83,12 +87,29 @@ pub struct PayloadKeys {
 
 impl PayloadKeys {
     pub fn generate(fresh: Fresh, now: u64) -> Self {
-        PayloadKeys { ik: DhSecret::from_seed(seed32(fresh)), spk_id: 1, spk: DhSecret::from_seed(seed32(fresh)), spk_since: now, pqspk_id: 1, pqspk: KemSecret::from_seed(seed64(fresh)), retired: BTreeMap::new(), one_time: BTreeMap::new(), next_id: 1, published_at: None }
+        PayloadKeys {
+            ik: DhSecret::from_seed(seed32(fresh)),
+            spk_id: 1,
+            spk: DhSecret::from_seed(seed32(fresh)),
+            spk_since: now,
+            pqspk_id: 1,
+            pqspk: KemSecret::from_seed(seed64(fresh)),
+            retired: BTreeMap::new(),
+            one_time: BTreeMap::new(),
+            next_id: 1,
+            published_at: None,
+        }
     }
 
     /// The reusable material as the bundle's blob carries it.
     pub fn blob(&self) -> Blob {
-        Blob { ik: self.ik.public(), spk_id: self.spk_id, spk: self.spk.public(), pqspk_id: self.pqspk_id, pqspk: self.pqspk.public() }
+        Blob {
+            ik: self.ik.public(),
+            spk_id: self.spk_id,
+            spk: self.spk.public(),
+            pqspk_id: self.pqspk_id,
+            pqspk: self.pqspk.public(),
+        }
     }
 
     /// The signed bundle to publish (`wire-format.md` §7.8).
@@ -96,7 +117,13 @@ impl PayloadKeys {
         self.published_at = Some(now);
         // this client holds the seed, so its device is named by the
         // identity's classical key (`wire-format.md` §7.8)
-        PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now, id.public.ed.as_bytes())
+        PrekeyBundle::build(
+            id,
+            CONSTRUCTION_PQXDH,
+            &self.blob().encode(),
+            now,
+            id.public.ed.as_bytes(),
+        )
     }
 
     /// Mint `n` one-time pairs and return their public halves, as uploaded.
@@ -105,8 +132,19 @@ impl PayloadKeys {
         for _ in 0..n {
             let id = self.next_id;
             self.next_id += 1;
-            let pair = OneTimePair { id, dh: DhSecret::from_seed(seed32(fresh)), kem: KemSecret::from_seed(seed64(fresh)) };
-            out.push(OneTimeKey { id, dh: pair.dh.public(), kem: pair.kem.public() }.encode());
+            let pair = OneTimePair {
+                id,
+                dh: DhSecret::from_seed(seed32(fresh)),
+                kem: KemSecret::from_seed(seed64(fresh)),
+            };
+            out.push(
+                OneTimeKey {
+                    id,
+                    dh: pair.dh.public(),
+                    kem: pair.kem.public(),
+                }
+                .encode(),
+            );
             self.one_time.insert(id, pair);
         }
         out
@@ -132,7 +170,10 @@ impl PayloadKeys {
     /// Rotate the signed prekeys: fresh keys under fresh ids, the old ones
     /// retired but still answering sessions opened against them.
     pub fn rotate_signed_prekey(&mut self, now: u64, fresh: Fresh) {
-        let old = (std::mem::replace(&mut self.spk, DhSecret::from_seed(seed32(fresh))), std::mem::replace(&mut self.pqspk, KemSecret::from_seed(seed64(fresh))));
+        let old = (
+            std::mem::replace(&mut self.spk, DhSecret::from_seed(seed32(fresh))),
+            std::mem::replace(&mut self.pqspk, KemSecret::from_seed(seed64(fresh))),
+        );
         self.retired.insert(self.spk_id, old);
         self.spk_id += 1;
         self.pqspk_id += 1;
@@ -179,18 +220,30 @@ impl Blob {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("blob not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("blob not a map".into());
+        };
         let k32 = |k: u64| -> Result<DhPublic, String> {
             match map_get(m, k) {
-                Some(Item::Bytes(r)) if r.len() == 32 => Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())),
+                Some(Item::Bytes(r)) if r.len() == 32 => {
+                    Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()))
+                }
                 _ => Err(format!("blob field {k}")),
             }
         };
         let pqspk = match map_get(m, 5) {
-            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => KemPublic(b[r.clone()].to_vec()),
+            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => {
+                KemPublic(b[r.clone()].to_vec())
+            }
             _ => return Err("blob field 5".into()),
         };
-        Ok(Blob { ik: k32(1)?, spk_id: map_get(m, 2).and_then(as_uint).ok_or("blob field 2")? as u32, spk: k32(3)?, pqspk_id: map_get(m, 4).and_then(as_uint).ok_or("blob field 4")? as u32, pqspk })
+        Ok(Blob {
+            ik: k32(1)?,
+            spk_id: map_get(m, 2).and_then(as_uint).ok_or("blob field 2")? as u32,
+            spk: k32(3)?,
+            pqspk_id: map_get(m, 4).and_then(as_uint).ok_or("blob field 4")? as u32,
+            pqspk,
+        })
     }
 }
 
@@ -217,16 +270,28 @@ impl OneTimeKey {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("one-time key not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("one-time key not a map".into());
+        };
         let dh = match map_get(m, 2) {
-            Some(Item::Bytes(r)) if r.len() == 32 => DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()),
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())
+            }
             _ => return Err("one-time key field 2".into()),
         };
         let kem = match map_get(m, 3) {
-            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => KemPublic(b[r.clone()].to_vec()),
+            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => {
+                KemPublic(b[r.clone()].to_vec())
+            }
             _ => return Err("one-time key field 3".into()),
         };
-        Ok(OneTimeKey { id: map_get(m, 1).and_then(as_uint).ok_or("one-time key field 1")? as u32, dh, kem })
+        Ok(OneTimeKey {
+            id: map_get(m, 1)
+                .and_then(as_uint)
+                .ok_or("one-time key field 1")? as u32,
+            dh,
+            kem,
+        })
     }
 }
 
@@ -252,7 +317,12 @@ pub fn read_bundle<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Prefetch
     if b.construction != CONSTRUCTION_PQXDH {
         return Err("not PQXDH".into());
     }
-    Ok(Prefetched { subject: b.subject, published_at: b.published_at, blob: Blob::decode(&b.blob)?, device: b.device })
+    Ok(Prefetched {
+        subject: b.subject,
+        published_at: b.published_at,
+        blob: Blob::decode(&b.blob)?,
+        device: b.device,
+    })
 }
 
 /// The batch request for a population, in ascending order and without
@@ -267,7 +337,13 @@ pub fn batch_request(population: &[Keyhash], nonce: [u8; 16]) -> Vec<u8> {
 /// The one-time key request for one subject: sent only when a session is
 /// being opened.
 pub fn one_time_request(subject: Keyhash, device: [u8; 32], nonce: [u8; 16]) -> Vec<u8> {
-    PrekeyRequest::One { subject, one_time: true, nonce, device: Some(device) }.encode()
+    PrekeyRequest::One {
+        subject,
+        one_time: true,
+        nonce,
+        device: Some(device),
+    }
+    .encode()
 }
 
 // --------------------------------------------------------- the channel
@@ -370,10 +446,14 @@ impl InitialMessage {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("initial message not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("initial message not a map".into());
+        };
         let k32 = |k: u64| -> Result<DhPublic, String> {
             match map_get(m, k) {
-                Some(Item::Bytes(r)) if r.len() == 32 => Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())),
+                Some(Item::Bytes(r)) if r.len() == 32 => {
+                    Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()))
+                }
                 _ => Err(format!("initial message field {k}")),
             }
         };
@@ -412,7 +492,10 @@ impl std::fmt::Display for PayloadError {
         match self {
             PayloadError::NoSession => write!(f, "no session with that peer"),
             PayloadError::NoBundle => write!(f, "no bundle for that peer"),
-            PayloadError::NotTheSender => write!(f, "the initial message's identity key is not the named sender's"),
+            PayloadError::NotTheSender => write!(
+                f,
+                "the initial message's identity key is not the named sender's"
+            ),
             PayloadError::Malformed(s) => write!(f, "malformed: {s}"),
             PayloadError::Crypto(s) => write!(f, "{s}"),
         }
@@ -430,15 +513,43 @@ pub struct Sessions {
 impl Sessions {
     /// Open a session to `to` on its bundle and, where served, a one-time
     /// key, and encrypt the first plaintext: the channel's initial message.
-    pub fn open(&mut self, keys: &PayloadKeys, to: Keyhash, their: &Prefetched, one_time: Option<&OneTimeKey>, fresh: Fresh, plaintext: &[u8]) -> Result<Vec<u8>, PayloadError> {
+    pub fn open(
+        &mut self,
+        keys: &PayloadKeys,
+        to: Keyhash,
+        their: &Prefetched,
+        one_time: Option<&OneTimeKey>,
+        fresh: Fresh,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, PayloadError> {
         let ek = DhSecret::from_seed(seed32(fresh));
-        let bundle = TheirBundle { ik: &their.blob.ik, spk: &their.blob.spk, pqspk: &their.blob.pqspk, opk: one_time.map(|o| &o.dh), pqopk: one_time.map(|o| &o.kem) };
-        let init = pqxdh::initiate(&keys.ik, &ek, &bundle, seed32(fresh)).map_err(PayloadError::Crypto)?;
+        let bundle = TheirBundle {
+            ik: &their.blob.ik,
+            spk: &their.blob.spk,
+            pqspk: &their.blob.pqspk,
+            opk: one_time.map(|o| &o.dh),
+            pqopk: one_time.map(|o| &o.kem),
+        };
+        let init =
+            pqxdh::initiate(&keys.ik, &ek, &bundle, seed32(fresh)).map_err(PayloadError::Crypto)?;
         let ad = pqxdh::associated_data(&keys.ik.public(), &their.blob.ik);
-        let mut r = Ratchet::initiator(init.sk, their.blob.spk, DhSecret::from_seed(seed32(fresh)), ad);
+        let mut r = Ratchet::initiator(
+            init.sk,
+            their.blob.spk,
+            DhSecret::from_seed(seed32(fresh)),
+            ad,
+        );
         let first = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
         self.ratchets.insert(to, r);
-        let msg = InitialMessage { ik: keys.ik.public(), ek: init.ek, kem_ciphertext: init.kem_ciphertext, spk_id: their.blob.spk_id, pqspk_id: their.blob.pqspk_id, opk_id: one_time.map(|o| o.id), first };
+        let msg = InitialMessage {
+            ik: keys.ik.public(),
+            ek: init.ek,
+            kem_ciphertext: init.kem_ciphertext,
+            spk_id: their.blob.spk_id,
+            pqspk_id: their.blob.pqspk_id,
+            opk_id: one_time.map(|o| o.id),
+            first,
+        };
         Ok(channel(CHANNEL_INITIAL, &msg.encode()))
     }
 
@@ -456,7 +567,13 @@ impl Sessions {
     /// Read what arrived on the channel from `from`: an initial message
     /// opens a session on this client's prekeys, consuming the one-time
     /// pair it names; a message decrypts on the session held.
-    pub fn receive(&mut self, keys: &mut PayloadKeys, from: Keyhash, bytes: &[u8], fresh: Fresh) -> Result<Vec<u8>, PayloadError> {
+    pub fn receive(
+        &mut self,
+        keys: &mut PayloadKeys,
+        from: Keyhash,
+        bytes: &[u8],
+        fresh: Fresh,
+    ) -> Result<Vec<u8>, PayloadError> {
         let (tag, inner) = unchannel(bytes).map_err(PayloadError::Malformed)?;
         let mut next = |out: &mut [u8; 32]| fresh(out);
         match tag {
@@ -469,22 +586,42 @@ impl Sessions {
                 // it decrypts to, and the transport authenticating a relay
                 // hop says nothing about who wrote this.  Held under no
                 // binding, it cannot be attributed and is not opened.
-                let bound = self.prefetched.get(&from).ok_or(PayloadError::NoBundle)?.blob.ik;
+                let bound = self
+                    .prefetched
+                    .get(&from)
+                    .ok_or(PayloadError::NoBundle)?
+                    .blob
+                    .ik;
                 if bound != m.ik {
                     return Err(PayloadError::NotTheSender);
                 }
-                let (spk, pqspk) = keys.signed_prekeys(m.spk_id).ok_or(PayloadError::Crypto("unknown signed prekey".into()))?;
+                let (spk, pqspk) = keys
+                    .signed_prekeys(m.spk_id)
+                    .ok_or(PayloadError::Crypto("unknown signed prekey".into()))?;
                 let (spk, pqspk) = (spk.clone(), pqspk.clone());
                 // Used now, spent later: the pair opens the message and is
                 // removed once that message authenticates.  Removing it
                 // first lets one corrupted copy destroy the key the real
                 // message needs, and PQXDH deletes it after decryption.
                 let one_time = match m.opk_id {
-                    Some(id) => Some(keys.one_time(id).ok_or(PayloadError::Crypto("one-time key already used or unknown".into()))?.clone()),
+                    Some(id) => Some(
+                        keys.one_time(id)
+                            .ok_or(PayloadError::Crypto(
+                                "one-time key already used or unknown".into(),
+                            ))?
+                            .clone(),
+                    ),
                     None => None,
                 };
-                let me = pqxdh::Responder { ik: &keys.ik, spk: &spk, pqspk: &pqspk, opk: one_time.as_ref().map(|o| &o.dh), pqopk: one_time.as_ref().map(|o| &o.kem) };
-                let sk = pqxdh::respond(&me, &m.ik, &m.ek, &m.kem_ciphertext).map_err(PayloadError::Crypto)?;
+                let me = pqxdh::Responder {
+                    ik: &keys.ik,
+                    spk: &spk,
+                    pqspk: &pqspk,
+                    opk: one_time.as_ref().map(|o| &o.dh),
+                    pqopk: one_time.as_ref().map(|o| &o.kem),
+                };
+                let sk = pqxdh::respond(&me, &m.ik, &m.ek, &m.kem_ciphertext)
+                    .map_err(PayloadError::Crypto)?;
                 let ad = pqxdh::associated_data(&m.ik, &keys.ik.public());
                 let mut r = Ratchet::responder(sk, spk, ad);
                 let mut seed = || {
@@ -492,7 +629,9 @@ impl Sessions {
                     next(&mut s);
                     s
                 };
-                let pt = r.decrypt(&m.first, &mut seed).map_err(PayloadError::Crypto)?;
+                let pt = r
+                    .decrypt(&m.first, &mut seed)
+                    .map_err(PayloadError::Crypto)?;
                 // authenticated: the key is spent and the session committed
                 if let Some(o) = &one_time {
                     keys.take_one_time(o.id);
@@ -501,7 +640,10 @@ impl Sessions {
                 Ok(pt)
             }
             CHANNEL_MESSAGE => {
-                let r = self.ratchets.get_mut(&from).ok_or(PayloadError::NoSession)?;
+                let r = self
+                    .ratchets
+                    .get_mut(&from)
+                    .ok_or(PayloadError::NoSession)?;
                 let mut seed = || {
                     let mut s = [0u8; 32];
                     next(&mut s);
@@ -535,6 +677,15 @@ pub struct PayloadState {
 
 impl PayloadState {
     pub fn new(cfg: PayloadConfig, fresh: Fresh, now: u64) -> Self {
-        PayloadState { keys: PayloadKeys::generate(fresh, now), cfg, sessions: Sessions::default(), serving: None, pending: BTreeMap::new(), outstanding: BTreeMap::new(), pool_reported: 0, wanted: BTreeSet::new() }
+        PayloadState {
+            keys: PayloadKeys::generate(fresh, now),
+            cfg,
+            sessions: Sessions::default(),
+            serving: None,
+            pending: BTreeMap::new(),
+            outstanding: BTreeMap::new(),
+            pool_reported: 0,
+            wanted: BTreeSet::new(),
+        }
     }
 }

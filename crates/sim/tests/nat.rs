@@ -11,7 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn server_config(name: &str) -> quinn::ServerConfig {
-    let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&test_identity(name))).unwrap();
+    let crypto =
+        quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&test_identity(name)))
+            .unwrap();
     quinn::ServerConfig::with_crypto(Arc::new(crypto))
 }
 
@@ -24,14 +26,23 @@ async fn stun_server() -> (Arc<TraversalSocket>, SocketAddr, quinn::Endpoint) {
 }
 
 #[tokio::test]
-async fn behind_an_endpoint_independent_nat_the_reflexive_address_is_one_mapping_for_every_destination() {
-    let nat = Nat::start(Mapping::EndpointIndependent, Filtering::AddressDependent).await.unwrap();
+async fn behind_an_endpoint_independent_nat_the_reflexive_address_is_one_mapping_for_every_destination()
+ {
+    let nat = Nat::start(Mapping::EndpointIndependent, Filtering::AddressDependent)
+        .await
+        .unwrap();
     let (_s1, stun1, _e1) = stun_server().await;
     let (_s2, stun2, _e2) = stun_server().await;
     let client = TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), Some(nat.inside)).unwrap();
     let _ep = endpoint(client.clone(), None).unwrap();
-    let a = client.reflexive(stun1, Duration::from_secs(2)).await.unwrap();
-    let b = client.reflexive(stun2, Duration::from_secs(2)).await.unwrap();
+    let a = client
+        .reflexive(stun1, Duration::from_secs(2))
+        .await
+        .unwrap();
+    let b = client
+        .reflexive(stun2, Duration::from_secs(2))
+        .await
+        .unwrap();
     assert_eq!(a, b, "the same external port whichever server asks");
     assert_ne!(a, client.addr().unwrap(), "and not the inside address");
     assert_eq!(nat.mappings().len(), 1);
@@ -40,14 +51,28 @@ async fn behind_an_endpoint_independent_nat_the_reflexive_address_is_one_mapping
 
 #[tokio::test]
 async fn behind_an_address_and_port_dependent_nat_each_destination_sees_a_different_mapping() {
-    let nat = Nat::start(Mapping::AddressAndPortDependent, Filtering::AddressAndPortDependent).await.unwrap();
+    let nat = Nat::start(
+        Mapping::AddressAndPortDependent,
+        Filtering::AddressAndPortDependent,
+    )
+    .await
+    .unwrap();
     let (_s1, stun1, _e1) = stun_server().await;
     let (_s2, stun2, _e2) = stun_server().await;
     let client = TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), Some(nat.inside)).unwrap();
     let _ep = endpoint(client.clone(), None).unwrap();
-    let a = client.reflexive(stun1, Duration::from_secs(2)).await.unwrap();
-    let b = client.reflexive(stun2, Duration::from_secs(2)).await.unwrap();
-    assert_ne!(a, b, "what one server reports is not what another would reach");
+    let a = client
+        .reflexive(stun1, Duration::from_secs(2))
+        .await
+        .unwrap();
+    let b = client
+        .reflexive(stun2, Duration::from_secs(2))
+        .await
+        .unwrap();
+    assert_ne!(
+        a, b,
+        "what one server reports is not what another would reach"
+    );
     assert_eq!(nat.mappings().len(), 2);
 }
 
@@ -55,7 +80,10 @@ async fn behind_an_address_and_port_dependent_nat_each_destination_sees_a_differ
 /// reflexive address from the STUN server, dial each other's reflexive
 /// address at once; whether either handshake completes.
 async fn punch(mapping: Mapping, filtering: Filtering) -> bool {
-    let (nat_a, nat_b) = (Nat::start(mapping, filtering).await.unwrap(), Nat::start(mapping, filtering).await.unwrap());
+    let (nat_a, nat_b) = (
+        Nat::start(mapping, filtering).await.unwrap(),
+        Nat::start(mapping, filtering).await.unwrap(),
+    );
     let (_s, stun, _e) = stun_server().await;
     let (ida, idb) = (test_identity("alice"), test_identity("bob"));
     let sa = TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), Some(nat_a.inside)).unwrap();
@@ -80,16 +108,29 @@ async fn punch(mapping: Mapping, filtering: Filtering) -> bool {
     let dial_a = tls::dial(&ea, &ida, &pins, &idb.public.keyhash, rb).unwrap();
     let dial_b = tls::dial(&eb, &idb, &pins, &ida.public.keyhash, ra).unwrap();
     let t = Duration::from_millis(1500);
-    let (a, b) = tokio::join!(tokio::time::timeout(t, dial_a), tokio::time::timeout(t, dial_b));
+    let (a, b) = tokio::join!(
+        tokio::time::timeout(t, dial_a),
+        tokio::time::timeout(t, dial_b)
+    );
     matches!(a, Ok(Ok(_))) || matches!(b, Ok(Ok(_)))
 }
 
 #[tokio::test]
 async fn hole_punching_succeeds_through_endpoint_independent_nats() {
-    assert!(punch(Mapping::EndpointIndependent, Filtering::AddressDependent).await, "the reflexive addresses are reachable and each side's first packet opens the other's filter");
+    assert!(
+        punch(Mapping::EndpointIndependent, Filtering::AddressDependent).await,
+        "the reflexive addresses are reachable and each side's first packet opens the other's filter"
+    );
 }
 
 #[tokio::test]
 async fn hole_punching_fails_through_address_and_port_dependent_nats() {
-    assert!(!punch(Mapping::AddressAndPortDependent, Filtering::AddressAndPortDependent).await, "the mapping the STUN server saw is not the one a peer reaches");
+    assert!(
+        !punch(
+            Mapping::AddressAndPortDependent,
+            Filtering::AddressAndPortDependent
+        )
+        .await,
+        "the mapping the STUN server saw is not the one a peer reaches"
+    );
 }

@@ -54,7 +54,9 @@
 //! thing an operator may want to write down.
 
 use rhtn_archive::Keyhash;
-use rhtn_node::resources::{Binding, Gateway, MAX_ROLES, Manifest, RESERVED_ROLES, Row, instantiate};
+use rhtn_node::resources::{
+    Binding, Gateway, MAX_ROLES, Manifest, RESERVED_ROLES, Row, instantiate,
+};
 use rhtn_resources::{Hosted, Limits, Sandbox};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -82,11 +84,18 @@ impl std::fmt::Display for Refused {
 impl std::error::Error for Refused {}
 
 fn at(line: usize, what: impl Into<String>) -> Refused {
-    Refused { line, what: what.into() }
+    Refused {
+        line,
+        what: what.into(),
+    }
 }
 
 fn keyhash(s: &str) -> Option<Keyhash> {
-    if s.len() != 64 || !s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+    if s.len() != 64
+        || !s
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    {
         return None;
     }
     let mut out = [0u8; 32];
@@ -135,8 +144,20 @@ struct GrantEntry {
 /// them rather than some of them: a half-applied configuration is one the
 /// operator did not write, and `service.rs` reports rather than repairs.
 pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize, Refused> {
-    let text = std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
-    let file: File = toml::from_str(&text).map_err(|e| at(e.span().map_or(0, |s| text[..s.start.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1), e.to_string()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+    let file: File = toml::from_str(&text).map_err(|e| {
+        at(
+            e.span().map_or(0, |s| {
+                text[..s.start.min(text.len())]
+                    .bytes()
+                    .filter(|b| *b == b'\n')
+                    .count()
+                    + 1
+            }),
+            e.to_string(),
+        )
+    })?;
 
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
     let mut grants: Vec<(Keyhash, Keyhash, Row)> = Vec::new();
@@ -144,24 +165,39 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
 
     for h in &file.host {
         let named = |what: &str| format!("{}: {what}", h.manifest.display());
-        let res = keyhash(&h.resource).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", h.resource)))?;
-        let owner = keyhash(&h.owner).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", h.owner)))?;
+        let res = keyhash(&h.resource).ok_or_else(|| {
+            at(
+                0,
+                format!("`{}` is not 64 lower-case hex digits", h.resource),
+            )
+        })?;
+        let owner = keyhash(&h.owner)
+            .ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", h.owner)))?;
         if hosts.iter().any(|(r, _)| *r == res) {
             return Err(at(0, format!("`{}` is hosted twice", h.resource)));
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
         let package = instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
-        let bytes = std::fs::read(&component).map_err(|e| at(0, format!("{}: {e}", component.display())))?;
-        let sandbox = Sandbox::admit(&bytes, limits).map_err(|e| at(0, format!("{}: {e}", component.display())))?;
+        let bytes = std::fs::read(&component)
+            .map_err(|e| at(0, format!("{}: {e}", component.display())))?;
+        let sandbox = Sandbox::admit(&bytes, limits)
+            .map_err(|e| at(0, format!("{}: {e}", component.display())))?;
         let mut declared: Vec<String> = manifest.imports.clone();
         declared.sort();
         declared.dedup();
         if sandbox.reaches() != declared {
-            return Err(at(0, named(&format!("the manifest declares {declared:?} and the component reaches {:?}", sandbox.reaches()))));
+            return Err(at(
+                0,
+                named(&format!(
+                    "the manifest declares {declared:?} and the component reaches {:?}",
+                    sandbox.reaches()
+                )),
+            ));
         }
 
         for g in &h.grant {
-            let member = keyhash(&g.member).ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", g.member)))?;
+            let member = keyhash(&g.member)
+                .ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", g.member)))?;
             grants.push((res, member, row_of(&g.roles, &package.roles)?));
         }
 
@@ -169,7 +205,15 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
             let row = row_of(&h.standing, &package.roles)?;
             standing.push((res, row));
         }
-        hosts.push((res, Binding { owner, authority: h.authority.clone(), backend: Some(Arc::new(Hosted::new(sandbox))), declared_roles: package.roles }));
+        hosts.push((
+            res,
+            Binding {
+                owner,
+                authority: h.authority.clone(),
+                backend: Some(Arc::new(Hosted::new(sandbox))),
+                declared_roles: package.roles,
+            },
+        ));
     }
 
     let bound = hosts.len();
@@ -177,10 +221,14 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
         gateway.bind(res, binding);
     }
     for (res, member, row) in grants {
-        gateway.set_row(res, member, row).map_err(|e| at(0, format!("{e:?}")))?;
+        gateway
+            .set_row(res, member, row)
+            .map_err(|e| at(0, format!("{e:?}")))?;
     }
     for (res, row) in standing {
-        gateway.stand(res, row).map_err(|e| at(0, format!("{e:?}")))?;
+        gateway
+            .stand(res, row)
+            .map_err(|e| at(0, format!("{e:?}")))?;
     }
     Ok(bound)
 }
@@ -200,7 +248,12 @@ fn row_of(named: &[String], declared: &BTreeSet<String>) -> Result<Row, Refused>
             continue;
         }
         if RESERVED_ROLES.contains(&r.as_str()) {
-            return Err(at(0, format!("`{r}` is reserved for the node's own evaluation and is not an application role")));
+            return Err(at(
+                0,
+                format!(
+                    "`{r}` is reserved for the node's own evaluation and is not an application role"
+                ),
+            ));
         }
         if !declared.contains(r) {
             return Err(at(0, format!("`{r}` is not a role that package declared")));
@@ -208,9 +261,18 @@ fn row_of(named: &[String], declared: &BTreeSet<String>) -> Result<Row, Refused>
         application.insert(r.clone());
     }
     if application.len() > MAX_ROLES {
-        return Err(at(0, format!("{} roles is wider than a credential header carries", application.len())));
+        return Err(at(
+            0,
+            format!(
+                "{} roles is wider than a credential header carries",
+                application.len()
+            ),
+        ));
     }
-    Ok(Row { roles: application, connect })
+    Ok(Row {
+        roles: application,
+        connect,
+    })
 }
 
 /// Read a package's manifest, and where its component sits.
@@ -226,20 +288,40 @@ fn read_manifest(path: &Path) -> Result<(Manifest, std::path::PathBuf), String> 
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (k, v) = line.split_once('=').ok_or_else(|| format!("manifest line {}: not `key = value`", i + 1))?;
+        let (k, v) = line
+            .split_once('=')
+            .ok_or_else(|| format!("manifest line {}: not `key = value`", i + 1))?;
         let (k, v) = (k.trim().to_string(), v.trim().to_string());
         if !["roles", "imports", "component"].contains(&k.as_str()) {
-            return Err(format!("manifest line {}: `{k}` is not a manifest key", i + 1));
+            return Err(format!(
+                "manifest line {}: `{k}` is not a manifest key",
+                i + 1
+            ));
         }
         if seen.iter().any(|(x, _, _)| *x == k) {
             return Err(format!("manifest line {}: `{k}` was already set", i + 1));
         }
         seen.push((k, v, i + 1));
     }
-    let take = |key: &str| seen.iter().find(|(k, _, _)| k == key).map(|(_, v, _)| v.clone());
-    let list = |key: &str| take(key).unwrap_or_default().split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect::<Vec<_>>();
+    let take = |key: &str| {
+        seen.iter()
+            .find(|(k, _, _)| k == key)
+            .map(|(_, v, _)| v.clone())
+    };
+    let list = |key: &str| {
+        take(key)
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
     let component = take("component").ok_or("manifest: `component` is not set")?;
-    let manifest = Manifest { roles: list("roles").into_iter().collect(), imports: list("imports") };
+    let manifest = Manifest {
+        roles: list("roles").into_iter().collect(),
+        imports: list("imports"),
+    };
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it
     let dir = path.parent().unwrap_or(Path::new("."));

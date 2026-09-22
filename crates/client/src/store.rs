@@ -11,10 +11,10 @@
 //! seeds, its records and the late responses beside them, and never a
 //! plaintext likeness or a released key.
 
+use crate::record::DisclosureSet;
 use crate::{Keyhash, Txid};
 use aws_lc_rs::aead::{AES_256_GCM, Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
-use crate::record::DisclosureSet;
 use std::collections::BTreeMap;
 
 /// The AEAD a store seals under: a parameter (design §22.2).
@@ -37,7 +37,10 @@ impl Default for SealParams {
     /// The reference client's defaults: AES-256-GCM and a 32-byte template,
     /// chosen values with nothing behind them yet (design §22.2).
     fn default() -> Self {
-        SealParams { aead: Aead::Aes256Gcm, template_len: 32 }
+        SealParams {
+            aead: Aead::Aes256Gcm,
+            template_len: 32,
+        }
     }
 }
 
@@ -90,7 +93,13 @@ pub enum OpenFailure {
 
 const SEAL_AAD_TAG: &[u8] = b"rhtn/1:sealed-capture";
 
-fn aad_of(subject: &Keyhash, holder: &Keyhash, ceremony_id: &[u8; 32], modality: u64, template_version: u64) -> Vec<u8> {
+fn aad_of(
+    subject: &Keyhash,
+    holder: &Keyhash,
+    ceremony_id: &[u8; 32],
+    modality: u64,
+    template_version: u64,
+) -> Vec<u8> {
     let mut aad = Vec::with_capacity(SEAL_AAD_TAG.len() + 96 + 16);
     aad.extend_from_slice(SEAL_AAD_TAG);
     aad.extend_from_slice(subject);
@@ -112,8 +121,19 @@ fn key_of(aead: Aead, key: &[u8; 32]) -> LessSafeKey {
 /// Seal `capture` under `key`: the template, which must be exactly the
 /// parameters' length, then each frame as its instant and its
 /// length-prefixed bytes, under a fresh nonce.
-pub fn seal(p: &SealParams, key: &[u8; 32], subject: Keyhash, holder: Keyhash, ceremony_id: [u8; 32], capture: &Capture) -> SealedCapture {
-    assert_eq!(capture.template.len(), p.template_len, "the template has the modality version's fixed length");
+pub fn seal(
+    p: &SealParams,
+    key: &[u8; 32],
+    subject: Keyhash,
+    holder: Keyhash,
+    ceremony_id: [u8; 32],
+    capture: &Capture,
+) -> SealedCapture {
+    assert_eq!(
+        capture.template.len(),
+        p.template_len,
+        "the template has the modality version's fixed length"
+    );
     let mut plain = Vec::new();
     plain.extend_from_slice(&capture.template);
     for f in &capture.frames {
@@ -122,21 +142,59 @@ pub fn seal(p: &SealParams, key: &[u8; 32], subject: Keyhash, holder: Keyhash, c
         plain.extend_from_slice(&f.bytes);
     }
     let mut nonce = [0u8; 12];
-    SystemRandom::new().fill(&mut nonce).expect("the system's random source");
-    let aad = aad_of(&subject, &holder, &ceremony_id, capture.modality, capture.template_version);
-    key_of(p.aead, key).seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from(&aad), &mut plain).expect("sealing cannot fail");
-    SealedCapture { subject, holder, ceremony_id, modality: capture.modality, template_version: capture.template_version, nonce, ciphertext: plain }
+    SystemRandom::new()
+        .fill(&mut nonce)
+        .expect("the system's random source");
+    let aad = aad_of(
+        &subject,
+        &holder,
+        &ceremony_id,
+        capture.modality,
+        capture.template_version,
+    );
+    key_of(p.aead, key)
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::from(&aad),
+            &mut plain,
+        )
+        .expect("sealing cannot fail");
+    SealedCapture {
+        subject,
+        holder,
+        ceremony_id,
+        modality: capture.modality,
+        template_version: capture.template_version,
+        nonce,
+        ciphertext: plain,
+    }
 }
 
 /// Open a sealed capture under `key`.  Anything short of an authenticated,
 /// well-framed capture is a decryption failure.
-pub fn open(p: &SealParams, key: &[u8; 32], sealed: &SealedCapture) -> Result<Capture, OpenFailure> {
+pub fn open(
+    p: &SealParams,
+    key: &[u8; 32],
+    sealed: &SealedCapture,
+) -> Result<Capture, OpenFailure> {
     if sealed.ciphertext.len() < 16 {
         return Err(OpenFailure::Truncated);
     }
     let mut buf = sealed.ciphertext.clone();
-    let aad = aad_of(&sealed.subject, &sealed.holder, &sealed.ceremony_id, sealed.modality, sealed.template_version);
-    let plain = key_of(p.aead, key).open_in_place(Nonce::assume_unique_for_key(sealed.nonce), Aad::from(&aad), &mut buf).map_err(|_| OpenFailure::Unauthenticated)?;
+    let aad = aad_of(
+        &sealed.subject,
+        &sealed.holder,
+        &sealed.ceremony_id,
+        sealed.modality,
+        sealed.template_version,
+    );
+    let plain = key_of(p.aead, key)
+        .open_in_place(
+            Nonce::assume_unique_for_key(sealed.nonce),
+            Aad::from(&aad),
+            &mut buf,
+        )
+        .map_err(|_| OpenFailure::Unauthenticated)?;
     if plain.len() < p.template_len {
         return Err(OpenFailure::Framing);
     }
@@ -153,10 +211,18 @@ pub fn open(p: &SealParams, key: &[u8; 32], sealed: &SealedCapture) -> Result<Ca
         if plain.len() - at < n {
             return Err(OpenFailure::Framing);
         }
-        frames.push(Frame { at_ms, bytes: plain[at..at + n].to_vec() });
+        frames.push(Frame {
+            at_ms,
+            bytes: plain[at..at + n].to_vec(),
+        });
         at += n;
     }
-    Ok(Capture { modality: sealed.modality, template_version: sealed.template_version, template, frames })
+    Ok(Capture {
+        modality: sealed.modality,
+        template_version: sealed.template_version,
+        template,
+        frames,
+    })
 }
 
 /// A subject's own seed for one of its records (design §7.5.2, §7.5.2.9):
@@ -201,7 +267,9 @@ impl ClientStore {
     /// test asks to show that no key and no plaintext frame is at rest.
     pub fn holds_bytes(&self, needle: &[u8]) -> bool {
         let find = |hay: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
-        self.sealed.values().any(|s| find(&s.ciphertext) || find(&s.nonce))
+        self.sealed
+            .values()
+            .any(|s| find(&s.ciphertext) || find(&s.nonce))
             || self.seeds.values().any(|s| find(&s.seed))
             || self.records.values().any(|r| find(r))
             || self.late.values().flatten().any(|l| find(l))
@@ -210,7 +278,9 @@ impl ClientStore {
     /// Whether this client's own presence records name `k` as a
     /// participant: what refutes a claimed `met` (`wire-format.md` §5.6).
     pub fn has_met(&self, k: &Keyhash) -> bool {
-        self.records.values().any(|r| rhtn_archive::record::Record::parse(r).is_ok_and(|rec| rec.participants().contains(k)))
+        self.records.values().any(|r| {
+            rhtn_archive::record::Record::parse(r).is_ok_and(|rec| rec.participants().contains(k))
+        })
     }
 
     /// Discard a record and everything kept beside it (`wire-format.md`
@@ -247,12 +317,37 @@ impl ClientStore {
 /// ciphertext becomes unopenable without anyone deleting anything.
 impl ClientStore {
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
-        write_once(&dir.join("records"), self.records.iter().map(|(t, b)| (*t, b.clone())), false)?;
-        write_once(&dir.join("sealed"), self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))), false)?;
-        write_once(&dir.join("seeds"), self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))), true)?;
-        rewrite(&dir.join("late"), self.late.iter().map(|(t, v)| (*t, encode_blobs(v))))?;
-        rewrite(&dir.join("unattached"), self.unattached_late.iter().map(|(t, v)| (*t, encode_keys(v))))?;
-        rewrite(&dir.join("disclosures"), self.disclosures.iter().map(|(t, d)| (*t, encode_disclosures(d))))?;
+        write_once(
+            &dir.join("records"),
+            self.records.iter().map(|(t, b)| (*t, b.clone())),
+            false,
+        )?;
+        write_once(
+            &dir.join("sealed"),
+            self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))),
+            false,
+        )?;
+        write_once(
+            &dir.join("seeds"),
+            self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))),
+            true,
+        )?;
+        rewrite(
+            &dir.join("late"),
+            self.late.iter().map(|(t, v)| (*t, encode_blobs(v))),
+        )?;
+        rewrite(
+            &dir.join("unattached"),
+            self.unattached_late
+                .iter()
+                .map(|(t, v)| (*t, encode_keys(v))),
+        )?;
+        rewrite(
+            &dir.join("disclosures"),
+            self.disclosures
+                .iter()
+                .map(|(t, d)| (*t, encode_disclosures(d))),
+        )?;
         Ok(())
     }
 
@@ -264,11 +359,30 @@ impl ClientStore {
         let mut out = Vec::new();
         emit_array_head(&mut out, 6);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
-        keyed(&mut out, self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))));
-        keyed(&mut out, self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))));
-        keyed(&mut out, self.late.iter().map(|(t, v)| (*t, encode_blobs(v))));
-        keyed(&mut out, self.unattached_late.iter().map(|(t, v)| (*t, encode_keys(v))));
-        keyed(&mut out, self.disclosures.iter().map(|(t, d)| (*t, encode_disclosures(d))));
+        keyed(
+            &mut out,
+            self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))),
+        );
+        keyed(
+            &mut out,
+            self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))),
+        );
+        keyed(
+            &mut out,
+            self.late.iter().map(|(t, v)| (*t, encode_blobs(v))),
+        );
+        keyed(
+            &mut out,
+            self.unattached_late
+                .iter()
+                .map(|(t, v)| (*t, encode_keys(v))),
+        );
+        keyed(
+            &mut out,
+            self.disclosures
+                .iter()
+                .map(|(t, d)| (*t, encode_disclosures(d))),
+        );
         out
     }
 
@@ -277,7 +391,9 @@ impl ClientStore {
     /// restore must not perform.
     pub fn decode(b: &[u8]) -> Option<ClientStore> {
         let item = rhtn_codec::cbor::parse_all(b).ok()?;
-        let rhtn_codec::cbor::Item::Array(f) = &item else { return None };
+        let rhtn_codec::cbor::Item::Array(f) = &item else {
+            return None;
+        };
         if f.len() != 6 {
             return None;
         }
@@ -358,7 +474,11 @@ fn unhex(s: &str) -> Option<Txid> {
 }
 
 /// Written once and left alone: a file already there is the same bytes.
-fn write_once(root: &std::path::Path, items: impl Iterator<Item = (Txid, Vec<u8>)>, private: bool) -> std::io::Result<()> {
+fn write_once(
+    root: &std::path::Path,
+    items: impl Iterator<Item = (Txid, Vec<u8>)>,
+    private: bool,
+) -> std::io::Result<()> {
     std::fs::create_dir_all(root)?;
     for (t, bytes) in items {
         let p = root.join(hex_of(&t));
@@ -374,7 +494,10 @@ fn write_once(root: &std::path::Path, items: impl Iterator<Item = (Txid, Vec<u8>
 }
 
 /// Rewritten each time, because what it holds grows against its record.
-fn rewrite(root: &std::path::Path, items: impl Iterator<Item = (Txid, Vec<u8>)>) -> std::io::Result<()> {
+fn rewrite(
+    root: &std::path::Path,
+    items: impl Iterator<Item = (Txid, Vec<u8>)>,
+) -> std::io::Result<()> {
     std::fs::create_dir_all(root)?;
     for (t, bytes) in items {
         std::fs::write(root.join(hex_of(&t)), &bytes)?;
@@ -395,7 +518,9 @@ fn restrict(_: &std::path::Path) -> std::io::Result<()> {
 
 fn read_dir_of(root: &std::path::Path) -> std::io::Result<Vec<(Txid, Vec<u8>)>> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(root) else { return Ok(out) };
+    let Ok(rd) = std::fs::read_dir(root) else {
+        return Ok(out);
+    };
     for e in rd.flatten() {
         if let Some(t) = unhex(&e.file_name().to_string_lossy()) {
             out.push((t, std::fs::read(e.path())?));
@@ -448,7 +573,12 @@ fn encode_seed(s: &OwnSeed) -> Vec<u8> {
 
 fn decode_seed(b: &[u8]) -> Option<OwnSeed> {
     let a = array_of(b, 4)?;
-    Some(OwnSeed { seed: kh_at(b, &a[0])?, counterparty: kh_at(b, &a[1])?, ceremony_id: kh_at(b, &a[2])?, finalized_at: uint_at(&a[3])? })
+    Some(OwnSeed {
+        seed: kh_at(b, &a[0])?,
+        counterparty: kh_at(b, &a[1])?,
+        ceremony_id: kh_at(b, &a[2])?,
+        finalized_at: uint_at(&a[3])?,
+    })
 }
 
 fn encode_blobs(v: &[Vec<u8>]) -> Vec<u8> {
@@ -463,7 +593,9 @@ fn encode_blobs(v: &[Vec<u8>]) -> Vec<u8> {
 
 fn decode_blobs(b: &[u8]) -> Option<Vec<Vec<u8>>> {
     let item = rhtn_codec::cbor::parse_all(b).ok()?;
-    let rhtn_codec::cbor::Item::Array(a) = &item else { return None };
+    let rhtn_codec::cbor::Item::Array(a) = &item else {
+        return None;
+    };
     a.iter().map(|x| bytes_at(b, x)).collect()
 }
 
@@ -472,7 +604,10 @@ fn encode_keys(v: &[Keyhash]) -> Vec<u8> {
 }
 
 fn decode_keys(b: &[u8]) -> Option<Vec<Keyhash>> {
-    decode_blobs(b)?.into_iter().map(|v| v.try_into().ok()).collect()
+    decode_blobs(b)?
+        .into_iter()
+        .map(|v| v.try_into().ok())
+        .collect()
 }
 
 fn encode_disclosures(d: &DisclosureSet) -> Vec<u8> {
@@ -496,7 +631,9 @@ fn decode_disclosures(b: &[u8]) -> Option<DisclosureSet> {
     let a = array_of(b, 7)?;
     let mut out: Vec<crate::record::Disclosure> = Vec::with_capacity(7);
     for (i, item) in a.iter().enumerate() {
-        let rhtn_codec::cbor::Item::Array(f) = item else { return None };
+        let rhtn_codec::cbor::Item::Array(f) = item else {
+            return None;
+        };
         if f.len() != 2 {
             return None;
         }
@@ -511,7 +648,9 @@ fn decode_disclosures(b: &[u8]) -> Option<DisclosureSet> {
 
 fn array_of(b: &[u8], n: usize) -> Option<Vec<rhtn_codec::cbor::Item>> {
     let item = rhtn_codec::cbor::parse_all(b).ok()?;
-    let rhtn_codec::cbor::Item::Array(a) = &item else { return None };
+    let rhtn_codec::cbor::Item::Array(a) = &item else {
+        return None;
+    };
     (a.len() == n).then(|| a.clone())
 }
 
@@ -546,10 +685,14 @@ fn keyed(out: &mut Vec<u8>, items: impl ExactSizeIterator<Item = (Txid, Vec<u8>)
 }
 
 fn unkeyed(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<Vec<(Txid, Vec<u8>)>> {
-    let rhtn_codec::cbor::Item::Array(a) = it else { return None };
+    let rhtn_codec::cbor::Item::Array(a) = it else {
+        return None;
+    };
     a.iter()
         .map(|x| {
-            let rhtn_codec::cbor::Item::Array(p) = x else { return None };
+            let rhtn_codec::cbor::Item::Array(p) = x else {
+                return None;
+            };
             match p.as_slice() {
                 [t, v] => Some((kh_at(b, t)?, bytes_at(b, v)?)),
                 _ => None,

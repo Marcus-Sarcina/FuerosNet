@@ -24,15 +24,25 @@ use crate::terminal::{hex, unhex};
 
 /// A list, or `-` where it is empty.
 fn list(parts: Vec<String>) -> String {
-    if parts.is_empty() { "-".into() } else { parts.join(",") }
+    if parts.is_empty() {
+        "-".into()
+    } else {
+        parts.join(",")
+    }
 }
 
 fn unlist(s: &str) -> Vec<&str> {
-    if s == "-" { Vec::new() } else { s.split(',').collect() }
+    if s == "-" {
+        Vec::new()
+    } else {
+        s.split(',').collect()
+    }
 }
 
 fn field<'a>(f: &[&'a str], i: usize, what: &str) -> Result<&'a str, String> {
-    f.get(i).copied().ok_or_else(|| format!("{what} is missing field {}", i + 1))
+    f.get(i)
+        .copied()
+        .ok_or_else(|| format!("{what} is missing field {}", i + 1))
 }
 
 fn num(s: &str, what: &str) -> Result<u64, String> {
@@ -112,7 +122,18 @@ fn outcome_of(s: &str) -> Result<ChannelOutcome, String> {
 }
 
 pub fn pack_channels(a: &[Achieved]) -> String {
-    list(a.iter().map(|x| format!("{}:{}:{}", channel_name(x.channel), outcome_name(x.outcome), x.resolution_m.map_or("-".into(), |m| m.to_string()))).collect())
+    list(
+        a.iter()
+            .map(|x| {
+                format!(
+                    "{}:{}:{}",
+                    channel_name(x.channel),
+                    outcome_name(x.outcome),
+                    x.resolution_m.map_or("-".into(), |m| m.to_string())
+                )
+            })
+            .collect(),
+    )
 }
 
 pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
@@ -135,7 +156,13 @@ pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
 // ------------------------------------------------------- witness ask
 
 pub fn pack_ask(a: &WitnessAsk) -> String {
-    format!("{}|{}|{}|{}", hex(&a.ceremony), list(a.participants.iter().map(|p| hex(p)).collect()), a.started_at, pack_channels(&a.channels))
+    format!(
+        "{}|{}|{}|{}",
+        hex(&a.ceremony),
+        list(a.participants.iter().map(|p| hex(p)).collect()),
+        a.started_at,
+        pack_channels(&a.channels)
+    )
 }
 
 pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
@@ -156,7 +183,12 @@ pub fn pack_proposed(p: &Proposed) -> String {
         p.started_at,
         p.finalized_at,
         list(p.participants.iter().map(|x| hex(x)).collect()),
-        list(p.witnesses.iter().map(|w| format!("{}:{}:{}", hex(&w.witness), hex(&w.nominated_by), w.flags)).collect()),
+        list(
+            p.witnesses
+                .iter()
+                .map(|w| format!("{}:{}:{}", hex(&w.witness), hex(&w.nominated_by), w.flags))
+                .collect()
+        ),
         list(p.responses.iter().map(|r| hex(r)).collect()),
         hex(&p.root)
     )
@@ -194,7 +226,11 @@ pub fn take_proposed(s: &str) -> Result<Proposed, String> {
 // ------------------------------------------------------- disclosures
 
 pub fn pack_revealed(set: &[Revealed]) -> String {
-    list(set.iter().map(|r| format!("{}:{}:{}", r.label, hex(&r.salt), hex(&r.value))).collect())
+    list(
+        set.iter()
+            .map(|r| format!("{}:{}:{}", r.label, hex(&r.salt), hex(&r.value)))
+            .collect(),
+    )
 }
 
 pub fn take_revealed(s: &str) -> Result<Vec<Revealed>, String> {
@@ -218,14 +254,19 @@ pub fn pack_back(back: &[Vec<Vec<u8>>]) -> String {
     if back.is_empty() {
         return "-".into();
     }
-    back.iter().map(|one| list(one.iter().map(|t| hex(t)).collect())).collect::<Vec<_>>().join(";")
+    back.iter()
+        .map(|one| list(one.iter().map(|t| hex(t)).collect()))
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 pub fn take_back(s: &str) -> Result<Vec<Vec<Vec<u8>>>, String> {
     if s == "-" {
         return Ok(Vec::new());
     }
-    s.split(';').map(|one| ids(one, "a transaction id")).collect()
+    s.split(';')
+        .map(|one| ids(one, "a transaction id"))
+        .collect()
 }
 
 /// One signer and what it signed.
@@ -237,7 +278,10 @@ pub fn take_entries(s: &str) -> Result<Vec<Entry>, String> {
         .iter()
         .map(|one| {
             let p: Vec<&str> = one.split(':').collect();
-            Ok((bytes(field(&p, 0, "an entry")?, "a signer")?, bytes(field(&p, 1, "an entry")?, "a signature")?))
+            Ok((
+                bytes(field(&p, 0, "an entry")?, "a signer")?,
+                bytes(field(&p, 1, "an entry")?, "a signature")?,
+            ))
         })
         .collect()
 }

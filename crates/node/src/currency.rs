@@ -55,13 +55,19 @@ impl CurrencyRequest {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CurrencyRequest, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let subject = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?
+            }
             _ => return Err("field 1".into()),
         };
         let nonce = match map_get(m, 2) {
-            Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+            Some(Item::Bytes(r)) if r.len() == 16 => {
+                <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+            }
             _ => return Err("field 2".into()),
         };
         Ok(CurrencyRequest { subject, nonce })
@@ -81,7 +87,9 @@ pub enum CurrencyReply {
 impl CurrencyReply {
     pub fn nonce(&self) -> [u8; 16] {
         match self {
-            CurrencyReply::Attestation { nonce, .. } | CurrencyReply::CannotIssue { nonce } => *nonce,
+            CurrencyReply::Attestation { nonce, .. } | CurrencyReply::CannotIssue { nonce } => {
+                *nonce
+            }
         }
     }
     pub fn encode(&self) -> Vec<u8> {
@@ -110,15 +118,22 @@ impl CurrencyReply {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CurrencyReply, b, 0).map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let nonce = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 16 => <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?,
+            Some(Item::Bytes(r)) if r.len() == 16 => {
+                <[u8; 16]>::try_from(&b[r.clone()]).map_err(|_| "nonce")?
+            }
             _ => return Err("field 1".into()),
         };
         match map_get(m, 2).and_then(as_uint).ok_or("field 2")? {
             REPLY_ATTESTATION => {
                 let r3 = value_slice(b, 3).ok_or("field 3")?;
-                Ok(CurrencyReply::Attestation { nonce, bytes: b[r3].to_vec() })
+                Ok(CurrencyReply::Attestation {
+                    nonce,
+                    bytes: b[r3].to_vec(),
+                })
             }
             REPLY_CANNOT_ISSUE => Ok(CurrencyReply::CannotIssue { nonce }),
             _ => Err("unknown reply code".into()),
@@ -160,7 +175,11 @@ pub enum Gate {
 /// a party holding authenticated supersession evidence serves nothing under
 /// the superseded key.  Fail-open is for ignorance, never for knowledge.
 pub fn gate(superseded: bool) -> Gate {
-    if superseded { Gate::Refuse("the binding is verified superseded") } else { Gate::Proceed }
+    if superseded {
+        Gate::Refuse("the binding is verified superseded")
+    } else {
+        Gate::Proceed
+    }
 }
 
 /// Read a staple against `now`, the relying party's own clock, and against
@@ -168,7 +187,13 @@ pub fn gate(superseded: bool) -> Gate {
 /// the subject's patrons as this party knows them, from its table or from
 /// the introduction's locator (design §12.6.5, §9.0.2), and `placed` says
 /// whether an issuer stands on the rung the attestation claims.
-pub fn staple_state(att: Option<&Attestation>, subject: &Keyhash, now: u64, patrons: &BTreeSet<Keyhash>, placed: &dyn Fn(&Keyhash, u64) -> Option<bool>) -> Staple {
+pub fn staple_state(
+    att: Option<&Attestation>,
+    subject: &Keyhash,
+    now: u64,
+    patrons: &BTreeSet<Keyhash>,
+    placed: &dyn Fn(&Keyhash, u64) -> Option<bool>,
+) -> Staple {
     let Some(a) = att else { return Staple::Absent };
     if a.subject != *subject {
         return Staple::WrongSubject;
@@ -179,7 +204,11 @@ pub fn staple_state(att: Option<&Attestation>, subject: &Keyhash, now: u64, patr
         None if patrons.is_empty() => return Staple::UnknownIssuer,
         None => return Staple::WrongIssuer,
     }
-    if a.expires_at <= now { Staple::Expired } else { Staple::Current }
+    if a.expires_at <= now {
+        Staple::Expired
+    } else {
+        Staple::Current
+    }
 }
 
 /// Whom this node will issue for, and on what rung.
@@ -245,7 +274,12 @@ impl CurrencyState {
 
 impl Default for CurrencyState {
     fn default() -> Self {
-        CurrencyState { lifetime: DEFAULT_LIFETIME_SECONDS, unreachable: BTreeMap::new(), sibling_after: DEFAULT_LIFETIME_SECONDS, grandpatron_after: 2 * 86_400 }
+        CurrencyState {
+            lifetime: DEFAULT_LIFETIME_SECONDS,
+            unreachable: BTreeMap::new(),
+            sibling_after: DEFAULT_LIFETIME_SECONDS,
+            grandpatron_after: 2 * 86_400,
+        }
     }
 }
 
@@ -303,8 +337,12 @@ impl NodeView {
         }
         Some(match role {
             ROLE_PATRON => patrons.contains(issuer),
-            ROLE_SIBLING => patrons.iter().any(|p| self.table.siblings(p).contains(issuer)),
-            ROLE_GRANDPATRON => patrons.iter().any(|p| self.table.patrons(p).contains(issuer)),
+            ROLE_SIBLING => patrons
+                .iter()
+                .any(|p| self.table.siblings(p).contains(issuer)),
+            ROLE_GRANDPATRON => patrons
+                .iter()
+                .any(|p| self.table.patrons(p).contains(issuer)),
             _ => false,
         })
     }
@@ -324,13 +362,20 @@ impl NodeView {
         let unreachable_patron = patrons.iter().find(|p| cur.unreachable.contains_key(*p))?;
         let outage = cur.dark_for(unreachable_patron, self.now()).unwrap_or(0);
         if self.table.siblings(unreachable_patron).contains(&me) {
-            return if outage >= cur.sibling_after { Some(Rung::Sibling) } else { None };
+            return if outage >= cur.sibling_after {
+                Some(Rung::Sibling)
+            } else {
+                None
+            };
         }
         // the grandpatron, once the patron and every sibling have been dark
         // for days
         if self.table.patrons(unreachable_patron).contains(&me) && outage >= cur.grandpatron_after {
             let siblings = self.table.siblings(unreachable_patron);
-            if siblings.iter().all(|s| cur.dark_for(s, self.now()).is_some_and(|d| d >= cur.grandpatron_after)) {
+            if siblings.iter().all(|s| {
+                cur.dark_for(s, self.now())
+                    .is_some_and(|d| d >= cur.grandpatron_after)
+            }) {
                 return Some(Rung::Grandpatron);
             }
         }
@@ -345,13 +390,23 @@ impl NodeView {
     pub fn issue_currency(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
         let rung = self.rung_for(cur, subject)?;
         let current = self.table.current_key(subject);
-        Some(currency_attestation(&self.identity, subject, &current, self.now(), self.now() + cur.lifetime, rung.role()))
+        Some(currency_attestation(
+            &self.identity,
+            subject,
+            &current,
+            self.now(),
+            self.now() + cur.lifetime,
+            rung.role(),
+        ))
     }
 
     /// Answer a currency request.  Nothing about it is retained.
     pub fn answer_currency(&self, cur: &CurrencyState, req: &CurrencyRequest) -> CurrencyReply {
         match self.issue_currency(cur, &req.subject) {
-            Some(bytes) => CurrencyReply::Attestation { nonce: req.nonce, bytes },
+            Some(bytes) => CurrencyReply::Attestation {
+                nonce: req.nonce,
+                bytes,
+            },
             None => CurrencyReply::CannotIssue { nonce: req.nonce },
         }
     }
@@ -359,8 +414,16 @@ impl NodeView {
     /// Verify an attestation and read it against this node's own clock and
     /// topology.  `patrons` may add what an introduction's locator says the
     /// subject's patron is, where the table holds nothing.
-    pub fn read_staple<L: Lookup + ?Sized>(&self, ids: &L, bytes: &[u8], subject: &Keyhash, patrons: &[Keyhash]) -> (Option<Attestation>, Staple) {
-        let Ok(a) = rhtn_archive::currency::parse_attestation(ids, bytes) else { return (None, Staple::Absent) };
+    pub fn read_staple<L: Lookup + ?Sized>(
+        &self,
+        ids: &L,
+        bytes: &[u8],
+        subject: &Keyhash,
+        patrons: &[Keyhash],
+    ) -> (Option<Attestation>, Staple) {
+        let Ok(a) = rhtn_archive::currency::parse_attestation(ids, bytes) else {
+            return (None, Staple::Absent);
+        };
         let mut known = self.table.patrons(&self.table.current_key(subject));
         known.extend(patrons.iter().copied());
         let placed = |issuer: &Keyhash, role: u64| -> Option<bool> {
@@ -375,7 +438,12 @@ impl NodeView {
     }
 
     /// The staple this node holds for `subject`, read now.
-    pub fn staple_for<L: Lookup + ?Sized>(&self, ids: &L, subject: &Keyhash, patrons: &[Keyhash]) -> Staple {
+    pub fn staple_for<L: Lookup + ?Sized>(
+        &self,
+        ids: &L,
+        subject: &Keyhash,
+        patrons: &[Keyhash],
+    ) -> Staple {
         match self.staples.get(subject) {
             Some(bytes) => self.read_staple(ids, bytes, subject, patrons).1,
             None => Staple::Absent,
@@ -384,7 +452,13 @@ impl NodeView {
 
     /// Take a staple handed over with an introduction, keeping it only
     /// where it verifies and names the subject.
-    pub fn take_staple<L: Lookup + ?Sized>(&mut self, ids: &L, subject: &Keyhash, bytes: &[u8], patrons: &[Keyhash]) -> Staple {
+    pub fn take_staple<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        subject: &Keyhash,
+        bytes: &[u8],
+        patrons: &[Keyhash],
+    ) -> Staple {
         let (att, state) = self.read_staple(ids, bytes, subject, patrons);
         if att.is_some() && state != Staple::WrongSubject {
             self.staples.insert(*subject, bytes.to_vec());
@@ -397,7 +471,14 @@ impl NodeView {
     /// fallback query, sent to the introducer first where one is known, so
     /// the patron learns nothing it did not know.  Nothing waits on the
     /// answer; a party holding supersession evidence refuses instead.
-    pub fn require_currency<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, subject: &Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>) -> Requirement {
+    pub fn require_currency<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+        subject: &Keyhash,
+        introducer: Option<Keyhash>,
+        patron: Option<Keyhash>,
+    ) -> Requirement {
         if self.is_superseded(subject) {
             return Requirement::Settled(gate(true));
         }
@@ -417,10 +498,27 @@ impl NodeView {
     /// Ask about `subject`: the introducer first, then the patron, on a
     /// bidirectional request stream (`wire-format.md` §7.1, §9.2) of a
     /// session that can carry one.  The ask is held by nonce for its reply.
-    pub fn ask_currency(&mut self, adj: &dyn Adjacency, subject: Keyhash, introducer: Option<Keyhash>, patron: Option<Keyhash>, nonce: [u8; 16]) -> Option<CurrencyAsk> {
-        let mut ask = CurrencyAsk { subject, nonce, introducer, patron, asked: Vec::new() };
+    pub fn ask_currency(
+        &mut self,
+        adj: &dyn Adjacency,
+        subject: Keyhash,
+        introducer: Option<Keyhash>,
+        patron: Option<Keyhash>,
+        nonce: [u8; 16],
+    ) -> Option<CurrencyAsk> {
+        let mut ask = CurrencyAsk {
+            subject,
+            nonce,
+            introducer,
+            patron,
+            asked: Vec::new(),
+        };
         let request = CurrencyRequest { subject, nonce }.encode();
-        let to = introducer.into_iter().chain(patron).filter(|p| adj.has_session(p)).find(|p| adj.request(p, crate::resolution::REQUEST_CURRENCY, &request))?;
+        let to = introducer
+            .into_iter()
+            .chain(patron)
+            .filter(|p| adj.has_session(p))
+            .find(|p| adj.request(p, crate::resolution::REQUEST_CURRENCY, &request))?;
         ask.asked.push(to);
         self.asks.insert(nonce, ask.clone());
         Some(ask)
@@ -429,7 +527,12 @@ impl NodeView {
     /// Take a reply that came back on a request stream: the ask it names is
     /// settled, or moved to the patron and held again.  A reply naming no
     /// outstanding ask concludes nothing.
-    pub fn take_currency_reply<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, bytes: &[u8]) -> Option<AskStep> {
+    pub fn take_currency_reply<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Option<AskStep> {
         let reply = CurrencyReply::decode(bytes).ok()?;
         let mut ask = self.asks.remove(&reply.nonce())?;
         let step = self.on_currency_reply(adj, ids, &mut ask, &reply);
@@ -442,7 +545,13 @@ impl NodeView {
     /// Take the reply to an outstanding ask.  Code 1 from the introducer
     /// moves the question to the patron; code 1 from the patron exhausts
     /// it, and the caller concludes nothing.
-    pub fn on_currency_reply<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L, ask: &mut CurrencyAsk, reply: &CurrencyReply) -> AskStep {
+    pub fn on_currency_reply<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+        ask: &mut CurrencyAsk,
+        reply: &CurrencyReply,
+    ) -> AskStep {
         if reply.nonce() != ask.nonce {
             return AskStep::WrongNonce;
         }
@@ -455,8 +564,16 @@ impl NodeView {
                 }
             }
             CurrencyReply::CannotIssue { .. } => {
-                let request = CurrencyRequest { subject: ask.subject, nonce: ask.nonce }.encode();
-                let next = ask.patron.filter(|p| !ask.asked.contains(p) && adj.has_session(p) && adj.request(p, crate::resolution::REQUEST_CURRENCY, &request));
+                let request = CurrencyRequest {
+                    subject: ask.subject,
+                    nonce: ask.nonce,
+                }
+                .encode();
+                let next = ask.patron.filter(|p| {
+                    !ask.asked.contains(p)
+                        && adj.has_session(p)
+                        && adj.request(p, crate::resolution::REQUEST_CURRENCY, &request)
+                });
                 match next {
                     Some(p) => {
                         ask.asked.push(p);
@@ -477,20 +594,41 @@ impl NodeView {
     /// the subject's to supply (`wire-format.md` §3.1, §3.4); the child
     /// index is the lowest free slot under this node's position, and the
     /// slot is written when the signed adoption is applied.
-    pub fn propose_adoption(&self, subject: &Keyhash, evidence: rhtn_archive::tx::Evidence, series: u32, subject_back: &[rhtn_archive::Txid]) -> Result<Vec<u8>, Gate> {
+    pub fn propose_adoption(
+        &self,
+        subject: &Keyhash,
+        evidence: rhtn_archive::tx::Evidence,
+        series: u32,
+        subject_back: &[rhtn_archive::Txid],
+    ) -> Result<Vec<u8>, Gate> {
         match gate(self.is_superseded(subject)) {
             Gate::Proceed => {}
             refusal => return Err(refusal),
         }
-        let slot = (0..10u8).find(|i| self.slots.get(&(*i as u64)).is_none_or(|s| s.occupant.is_none())).ok_or(Gate::Refuse("no free slot"))?;
-        let mut indices = crate::resolution::Path { bytes: self.position.path.clone(), nibbles: self.position.nibbles }.indices();
+        let slot = (0..10u8)
+            .find(|i| {
+                self.slots
+                    .get(&(*i as u64))
+                    .is_none_or(|s| s.occupant.is_none())
+            })
+            .ok_or(Gate::Refuse("no free slot"))?;
+        let mut indices = crate::resolution::Path {
+            bytes: self.position.path.clone(),
+            nibbles: self.position.nibbles,
+        }
+        .indices();
         indices.push(slot);
         let path = crate::resolution::Path::from_indices(&indices);
         let back_self = self.archive.next_back_pointers();
         let a = rhtn_archive::tx::Adoption {
             node: *subject,
             patron: self.me(),
-            locator: rhtn_archive::tx::Locator { anchor: self.anchor(), path: path.bytes, nibbles: path.nibbles, seqno: rhtn_archive::tx::Seqno { series, counter: 0 } },
+            locator: rhtn_archive::tx::Locator {
+                anchor: self.anchor(),
+                path: path.bytes,
+                nibbles: path.nibbles,
+                seqno: rhtn_archive::tx::Seqno { series, counter: 0 },
+            },
             timestamp: self.now(),
             key_material: None,
             evidence,
@@ -505,7 +643,10 @@ impl NodeView {
     /// adoption and every reissue since, on the asker's stream and nowhere
     /// else.  Presented, never propagated.
     pub fn present_chain(&self, patron: &Keyhash) -> Vec<Vec<u8>> {
-        self.archive.chain_for(patron).map(|c| c.bytes()).unwrap_or_default()
+        self.archive
+            .chain_for(patron)
+            .map(|c| c.bytes())
+            .unwrap_or_default()
     }
 
     /// Countersign a proposed adoption body with this node's key, given the
@@ -516,7 +657,12 @@ impl NodeView {
     /// (`wire-format.md` §4.1): a successor statement or a transfer
     /// statement lifted from another adoption names another key, and is
     /// countersigned by nobody here.
-    pub fn countersign_adoption<L: Lookup + ?Sized>(&mut self, body: &[u8], subject_signer: &rhtn_crypto::SigningIdentity, ids: &L) -> Option<rhtn_archive::record::Record> {
+    pub fn countersign_adoption<L: Lookup + ?Sized>(
+        &mut self,
+        body: &[u8],
+        subject_signer: &rhtn_crypto::SigningIdentity,
+        ids: &L,
+    ) -> Option<rhtn_archive::record::Record> {
         let item = parse_all(body).ok()?;
         schema::check_body_of_type(body, &item, rhtn_archive::tx::TYPE_ADOPTION).ok()?;
         let Item::Map(m) = &item else { return None };
@@ -528,7 +674,11 @@ impl NodeView {
             return None;
         }
         rhtn_crypto::verify::adoption_evidence(ids, body).ok()?;
-        let env = rhtn_archive::tx::envelope(rhtn_archive::tx::TYPE_ADOPTION, body, &[subject_signer, &self.identity]);
+        let env = rhtn_archive::tx::envelope(
+            rhtn_archive::tx::TYPE_ADOPTION,
+            body,
+            &[subject_signer, &self.identity],
+        );
         let rec = rhtn_archive::record::Record::parse(&env).ok()?;
         self.archive.append(rec.clone()).ok()?;
         Some(rec)

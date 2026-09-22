@@ -7,8 +7,8 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::net::UdpSocket;
 
 /// What one direction does to the datagrams crossing it.
@@ -43,13 +43,24 @@ impl Direction {
         self.capturing.store(on, Ordering::SeqCst);
     }
     pub fn captured(&self) -> Vec<Vec<u8>> {
-        self.captured.lock().unwrap().iter().map(|(_, d)| d.clone()).collect()
+        self.captured
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, d)| d.clone())
+            .collect()
     }
 
     /// The datagrams captured before `at`: what an attacker recording the
     /// path held at that instant.
     pub fn captured_before(&self, at: tokio::time::Instant) -> Vec<Vec<u8>> {
-        self.captured.lock().unwrap().iter().filter(|(t, _)| *t < at).map(|(_, d)| d.clone()).collect()
+        self.captured
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(t, _)| *t < at)
+            .map(|(_, d)| d.clone())
+            .collect()
     }
     pub fn clear_captured(&self) {
         self.captured.lock().unwrap().clear();
@@ -64,7 +75,10 @@ impl Direction {
     /// Decide one datagram: `None` drops it, `Some(delay)` passes it.
     fn admit(&self, datagram: &[u8]) -> Option<u64> {
         if self.capturing.load(Ordering::SeqCst) {
-            self.captured.lock().unwrap().push((tokio::time::Instant::now(), datagram.to_vec()));
+            self.captured
+                .lock()
+                .unwrap()
+                .push((tokio::time::Instant::now(), datagram.to_vec()));
         }
         if self.blackhole.load(Ordering::SeqCst) {
             self.dropped.fetch_add(1, Ordering::SeqCst);
@@ -148,7 +162,13 @@ impl Path {
                 }
             }
         });
-        Ok(Path { addr, to_server, to_client, target, task })
+        Ok(Path {
+            addr,
+            to_server,
+            to_client,
+            target,
+            task,
+        })
     }
 
     /// Blackhole both directions: the two parties can send and neither

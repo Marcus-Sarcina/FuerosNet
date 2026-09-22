@@ -22,7 +22,9 @@ pub struct FlowGraph<N: Ord + Clone> {
 
 impl<N: Ord + Clone> Default for FlowGraph<N> {
     fn default() -> Self {
-        FlowGraph { cap: BTreeMap::new() }
+        FlowGraph {
+            cap: BTreeMap::new(),
+        }
     }
 }
 
@@ -47,7 +49,10 @@ impl<N: Ord + Clone + Debug> FlowGraph<N> {
         self.add_node(u.clone());
         self.add_node(v.clone());
         let existing = self.cap[&u].get(&v).copied().unwrap_or(0);
-        assert!(existing == 0 || existing == c, "{u:?} -> {v:?} offered two capacities, {existing} and {c}: one pair carries one edge (design §16.2.1)");
+        assert!(
+            existing == 0 || existing == c,
+            "{u:?} -> {v:?} offered two capacities, {existing} and {c}: one pair carries one edge (design §16.2.1)"
+        );
         self.cap.get_mut(&u).unwrap().insert(v.clone(), c);
     }
 
@@ -79,12 +84,19 @@ impl<N: Ord + Clone + Debug> FlowGraph<N> {
 
     /// The positive-capacity edges out of `u`.
     pub fn edges_from(&self, u: &N) -> impl Iterator<Item = (&N, u64)> {
-        self.cap.get(u).into_iter().flat_map(|m| m.iter().filter(|(_, c)| **c > 0).map(|(v, c)| (v, *c)))
+        self.cap
+            .get(u)
+            .into_iter()
+            .flat_map(|m| m.iter().filter(|(_, c)| **c > 0).map(|(v, c)| (v, *c)))
     }
 
     /// The undirected adjacency over positive-capacity edges.
     pub fn adjacency(&self) -> BTreeMap<N, BTreeSet<N>> {
-        let mut acq: BTreeMap<N, BTreeSet<N>> = self.cap.keys().map(|u| (u.clone(), BTreeSet::new())).collect();
+        let mut acq: BTreeMap<N, BTreeSet<N>> = self
+            .cap
+            .keys()
+            .map(|u| (u.clone(), BTreeSet::new()))
+            .collect();
         for (u, nbrs) in &self.cap {
             for (v, c) in nbrs {
                 if *c > 0 {
@@ -98,7 +110,12 @@ impl<N: Ord + Clone + Debug> FlowGraph<N> {
 
     /// The dense network of this graph, and each node's index in it.
     pub fn network(&self) -> (Network, BTreeMap<N, usize>) {
-        let index: BTreeMap<N, usize> = self.cap.keys().enumerate().map(|(i, n)| (n.clone(), i)).collect();
+        let index: BTreeMap<N, usize> = self
+            .cap
+            .keys()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), i))
+            .collect();
         let mut net = Network::new(index.len());
         for (u, nbrs) in &self.cap {
             for (v, c) in nbrs {
@@ -133,7 +150,11 @@ pub struct Network {
 
 impl Network {
     pub fn new(vertices: usize) -> Self {
-        Network { to: Vec::new(), cap: Vec::new(), adj: vec![Vec::new(); vertices] }
+        Network {
+            to: Vec::new(),
+            cap: Vec::new(),
+            adj: vec![Vec::new(); vertices],
+        }
     }
 
     pub fn add_vertex(&mut self) -> usize {

@@ -1,11 +1,11 @@
 //! Peering, the direct payload path, and sibling replication (design §3.4,
 //! §6.3, §12.6.3, §12.7.5; `wire-format.md` §4.4).
 
+use crate::Keyhash;
 use crate::currency::{Gate, gate};
 use crate::resolution::NetworkPoint;
 use crate::store::subjects;
 use crate::view::NodeView;
-use crate::Keyhash;
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::{self, TYPE_PEERING};
 use rhtn_codec::cbor::*;
@@ -59,7 +59,16 @@ impl Peering {
 /// its own claim; nothing validates it against the address, and design
 /// §17.3 says nothing can.
 #[allow(clippy::too_many_arguments)]
-pub fn peering_body(back: [&[[u8; 32]]; 2], a: &Keyhash, b: &Keyhash, a_point: &NetworkPoint, b_point: &NetworkPoint, timestamp: u64, commitment: Option<u64>, pop: &[u8; 32]) -> Vec<u8> {
+pub fn peering_body(
+    back: [&[[u8; 32]]; 2],
+    a: &Keyhash,
+    b: &Keyhash,
+    a_point: &NetworkPoint,
+    b_point: &NetworkPoint,
+    timestamp: u64,
+    commitment: Option<u64>,
+    pop: &[u8; 32],
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 7 + commitment.is_some() as usize);
     tx::emit_back_pointers(&mut out, &[back[0].to_vec(), back[1].to_vec()]);
@@ -127,7 +136,11 @@ impl NodeView {
     /// from held topology (design §12.7.5).
     pub fn peers_of(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
         let mut out = BTreeSet::new();
-        for rec in self.store.transactions().filter(|r| r.tx_type == TYPE_PEERING) {
+        for rec in self
+            .store
+            .transactions()
+            .filter(|r| r.tx_type == TYPE_PEERING)
+        {
             let ends = subjects(rec);
             if ends.contains(node) {
                 out.extend(ends.into_iter().filter(|e| e != node));
@@ -145,7 +158,11 @@ impl NodeView {
 
     /// The peering records this node holds, parsed.
     pub fn peerings(&self) -> Vec<Peering> {
-        self.store.transactions().filter(|r| r.tx_type == TYPE_PEERING).filter_map(|r| Peering::from_record(r).ok()).collect()
+        self.store
+            .transactions()
+            .filter(|r| r.tx_type == TYPE_PEERING)
+            .filter_map(|r| Peering::from_record(r).ok())
+            .collect()
     }
 
     /// The body of a peering this node proposes to `other`.  No staple
@@ -153,15 +170,34 @@ impl NodeView {
     /// that knows its own key superseded proposes nothing, which is
     /// knowledge.  The counterparty's network point is its own claim and
     /// the presence record is a real one between the two.
-    pub fn propose_peering(&self, other: &Keyhash, other_point: &NetworkPoint, pop: &[u8; 32], other_back: &[[u8; 32]]) -> Result<Vec<u8>, Gate> {
+    pub fn propose_peering(
+        &self,
+        other: &Keyhash,
+        other_point: &NetworkPoint,
+        pop: &[u8; 32],
+        other_back: &[[u8; 32]],
+    ) -> Result<Vec<u8>, Gate> {
         match gate(self.is_superseded(&self.me())) {
             Gate::Proceed => {}
             refusal => return Err(refusal),
         }
         let me = self.me();
         let back_me = self.archive.next_back_pointers();
-        let mine = self.own_endpoints().first().cloned().ok_or(Gate::Refuse("no published endpoint of our own"))?;
-        Ok(peering_body([&back_me, other_back], &me, other, &mine, other_point, self.now(), Some(1 << 20), pop))
+        let mine = self
+            .own_endpoints()
+            .first()
+            .cloned()
+            .ok_or(Gate::Refuse("no published endpoint of our own"))?;
+        Ok(peering_body(
+            [&back_me, other_back],
+            &me,
+            other,
+            &mine,
+            other_point,
+            self.now(),
+            Some(1 << 20),
+            pop,
+        ))
     }
 
     /// Which path payload takes to `peer`.  The check is the whole of it:
@@ -174,7 +210,11 @@ impl NodeView {
             PathOverride::None => {}
         }
         let me = self.me();
-        if self.table.horizon(&me, 2).contains(peer) { PayloadPath::Direct } else { PayloadPath::Relayed }
+        if self.table.horizon(&me, 2).contains(peer) {
+            PayloadPath::Direct
+        } else {
+            PayloadPath::Relayed
+        }
     }
 
     /// The replication set a serving node pushes to its clients: its own
@@ -196,7 +236,11 @@ impl NodeView {
     /// topology store and the trust-bearing history in it.  Nothing here
     /// reads the queue.
     pub fn replication_payload(&self) -> Vec<Replicated> {
-        self.store.objects().into_iter().map(|(kind, object)| Replicated::Topology { kind, object }).collect()
+        self.store
+            .objects()
+            .into_iter()
+            .map(|(kind, object)| Replicated::Topology { kind, object })
+            .collect()
     }
 
     /// Whether a move to `new_patron` lies inside the old patron's
@@ -204,7 +248,9 @@ impl NodeView {
     /// node's history and no archive presentation is needed
     /// (`wire-format.md` §4.2.1, design §6.2.3).  Derivable, not declared.
     pub fn inside_replication_horizon(&self, old_patron: &Keyhash, new_patron: &Keyhash) -> bool {
-        new_patron == old_patron || self.table.siblings(old_patron).contains(new_patron) || self.table.patrons(old_patron).contains(new_patron)
+        new_patron == old_patron
+            || self.table.siblings(old_patron).contains(new_patron)
+            || self.table.patrons(old_patron).contains(new_patron)
     }
 }
 
@@ -230,7 +276,14 @@ impl NodeView {
     /// Send payload to `peer`.  The path decision is the whole of design
     /// §12.6.3's check, taken against this node's own store; where it is
     /// relayed, this node's serving node is the first carrier.
-    pub fn send_payload(&self, peer: &Keyhash, over: PathOverride, online: bool, sink: &dyn PayloadSink, bytes: &[u8]) -> Delivery {
+    pub fn send_payload(
+        &self,
+        peer: &Keyhash,
+        over: PathOverride,
+        online: bool,
+        sink: &dyn PayloadSink,
+        bytes: &[u8],
+    ) -> Delivery {
         if !online {
             // the recipient's serving node holds ciphertext until reconnect
             let at = self.table.serving_node(peer).unwrap_or(*peer);

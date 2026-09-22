@@ -27,7 +27,12 @@ pub struct PrekeyConfig {
 
 impl Default for PrekeyConfig {
     fn default() -> Self {
-        PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, per_deposit: 256, pool: 1024 }
+        PrekeyConfig {
+            one_time_per_requester_per_subject: 4,
+            window_s: 3600,
+            per_deposit: 256,
+            pool: 1024,
+        }
     }
 }
 
@@ -59,12 +64,19 @@ pub struct PrekeyService {
 
 impl PrekeyService {
     pub fn new(cfg: PrekeyConfig) -> Self {
-        PrekeyService { cfg, ..Default::default() }
+        PrekeyService {
+            cfg,
+            ..Default::default()
+        }
     }
 
     /// Hold a bundle a client publishes: it must verify under the subject
     /// it names, and nothing of its blob is read.
-    pub fn publish<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<Keyhash, String> {
+    pub fn publish<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Result<Keyhash, String> {
         let b = PrekeyBundle::parse(bytes)?;
         if b.verify(ids).is_err() {
             return Err("bundle signature fails".into());
@@ -74,7 +86,9 @@ impl PrekeyService {
         // a pool whose bundle is missing is a subject a restart drops
         if let Some(dir) = &self.dir {
             let d = dir.join("prekeys").join(hex(&b.subject));
-            std::fs::create_dir_all(&d).and_then(|_| std::fs::write(d.join("bundle"), bytes)).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(&d)
+                .and_then(|_| std::fs::write(d.join("bundle"), bytes))
+                .map_err(|e| e.to_string())?;
         }
         self.bundles.insert(b.subject, bytes.to_vec());
         Ok(b.subject)
@@ -98,7 +112,10 @@ impl PrekeyService {
             self.seq += 1;
             if let Some(dir) = &self.dir {
                 let d = dir.join("prekeys").join(hex(&subject));
-                if std::fs::create_dir_all(&d).and_then(|_| std::fs::write(d.join(&name), &k)).is_err() {
+                if std::fs::create_dir_all(&d)
+                    .and_then(|_| std::fs::write(d.join(&name), &k))
+                    .is_err()
+                {
                     for (n, _) in &written {
                         self.forget(&subject, n);
                     }
@@ -129,10 +146,19 @@ impl PrekeyService {
         match PrekeyRequest::decode(body).ok()? {
             // the device named is not yet consulted: one bundle per subject
             // is held until the pools are per device (`wire-format.md` §7.8)
-            PrekeyRequest::One { subject, one_time, nonce, device: _ } => Some(self.answer_one(requester, &subject, one_time, nonce, now).encode()),
+            PrekeyRequest::One {
+                subject,
+                one_time,
+                nonce,
+                device: _,
+            } => Some(
+                self.answer_one(requester, &subject, one_time, nonce, now)
+                    .encode(),
+            ),
             PrekeyRequest::Batch { subjects, nonce } => {
                 // a sweep: reusable material only, whatever the pools hold
-                let replies: Vec<PrekeyReply> = subjects.iter().map(|s| self.reusable(s, nonce)).collect();
+                let replies: Vec<PrekeyReply> =
+                    subjects.iter().map(|s| self.reusable(s, nonce)).collect();
                 Some(encode_batch_reply(&replies))
             }
         }
@@ -140,19 +166,39 @@ impl PrekeyService {
 
     fn reusable(&self, subject: &Keyhash, nonce: [u8; 16]) -> PrekeyReply {
         match self.bundles.get(subject) {
-            Some(b) => PrekeyReply { nonce, bundles: vec![b.clone()], one_time: None, code: None },
-            None => PrekeyReply { nonce, bundles: Vec::new(), one_time: None, code: Some(FAIL_UNKNOWN_SUBJECT) },
+            Some(b) => PrekeyReply {
+                nonce,
+                bundles: vec![b.clone()],
+                one_time: None,
+                code: None,
+            },
+            None => PrekeyReply {
+                nonce,
+                bundles: Vec::new(),
+                one_time: None,
+                code: Some(FAIL_UNKNOWN_SUBJECT),
+            },
         }
     }
 
-    fn answer_one(&mut self, requester: &Keyhash, subject: &Keyhash, one_time: bool, nonce: [u8; 16], now: u64) -> PrekeyReply {
+    fn answer_one(
+        &mut self,
+        requester: &Keyhash,
+        subject: &Keyhash,
+        one_time: bool,
+        nonce: [u8; 16],
+        now: u64,
+    ) -> PrekeyReply {
         let mut reply = self.reusable(subject, nonce);
         if reply.bundles.is_empty() || !one_time {
             return reply;
         }
         // the allowance: within it a key is consumed; over it the reusable
         // material is served and nothing is spent
-        let e = self.issued.entry((*requester, *subject)).or_insert((now, 0));
+        let e = self
+            .issued
+            .entry((*requester, *subject))
+            .or_insert((now, 0));
         if now.saturating_sub(e.0) >= self.cfg.window_s {
             *e = (now, 0);
         }
@@ -165,10 +211,16 @@ impl PrekeyService {
             // not served at all, since serving it would leave it able to
             // come back
             if !self.forget(subject, &name) {
-                self.pools.entry(*subject).or_default().push_front((name, key));
+                self.pools
+                    .entry(*subject)
+                    .or_default()
+                    .push_front((name, key));
                 return reply;
             }
-            let e = self.issued.entry((*requester, *subject)).or_insert((now, 0));
+            let e = self
+                .issued
+                .entry((*requester, *subject))
+                .or_insert((now, 0));
             e.1 += 1;
             reply.one_time = Some(key);
             // **The counter is not written anywhere**
@@ -210,7 +262,8 @@ impl PrekeyService {
     /// Drop rate-limit windows that have closed.
     pub fn expire(&mut self, now: u64) {
         let w = self.cfg.window_s;
-        self.issued.retain(|_, (opened, _)| now.saturating_sub(*opened) < w);
+        self.issued
+            .retain(|_, (opened, _)| now.saturating_sub(*opened) < w);
     }
 
     /// Make the directory match what is held: write what is missing and
@@ -230,7 +283,13 @@ impl PrekeyService {
             let d = root.join(hex(subject));
             std::fs::create_dir_all(&d)?;
             std::fs::write(d.join("bundle"), bundle)?;
-            let held: std::collections::BTreeSet<&str> = self.pools.get(subject).into_iter().flatten().map(|(n, _)| n.as_str()).collect();
+            let held: std::collections::BTreeSet<&str> = self
+                .pools
+                .get(subject)
+                .into_iter()
+                .flatten()
+                .map(|(n, _)| n.as_str())
+                .collect();
             for (name, k) in self.pools.get(subject).into_iter().flatten() {
                 if !d.join(name).exists() {
                     std::fs::write(d.join(name), k)?;
@@ -295,19 +354,26 @@ impl PrekeyService {
         if legacy.is_file() {
             std::fs::remove_file(&legacy)?;
         }
-        let Ok(rd) = std::fs::read_dir(&root) else { return Ok(s) };
+        let Ok(rd) = std::fs::read_dir(&root) else {
+            return Ok(s);
+        };
         for e in rd.flatten() {
-            let Ok(bundle) = std::fs::read(e.path().join("bundle")) else { continue };
-            let Ok(b) = PrekeyBundle::parse(&bundle) else { continue };
+            let Ok(bundle) = std::fs::read(e.path().join("bundle")) else {
+                continue;
+            };
+            let Ok(b) = PrekeyBundle::parse(&bundle) else {
+                continue;
+            };
             s.bundles.insert(b.subject, bundle);
             let mut keys: Vec<(String, Vec<u8>)> = Vec::new();
             if let Ok(inner) = std::fs::read_dir(e.path()) {
                 for f in inner.flatten() {
                     let name = f.file_name().to_string_lossy().to_string();
                     if name.starts_with("otk-")
-                        && let Ok(k) = std::fs::read(f.path()) {
-                            keys.push((name, k));
-                        }
+                        && let Ok(k) = std::fs::read(f.path())
+                    {
+                        keys.push((name, k));
+                    }
                 }
             }
             keys.sort();
@@ -315,7 +381,10 @@ impl PrekeyService {
             // counter resumes past the highest so a new key never takes a
             // name a served one had
             for (name, _) in &keys {
-                if let Some(n) = name.strip_prefix("otk-").and_then(|n| n.parse::<u64>().ok()) {
+                if let Some(n) = name
+                    .strip_prefix("otk-")
+                    .and_then(|n| n.parse::<u64>().ok())
+                {
                     s.seq = s.seq.max(n + 1);
                 }
             }

@@ -9,8 +9,20 @@ use rhtn_node::prekeys::*;
 use std::collections::BTreeSet;
 
 fn fixture(id: &str) -> Vec<u8> {
-    let c: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json")).unwrap()).unwrap();
-    let e = c["entries"].as_array().unwrap().iter().find(|e| e["id"] == id).unwrap();
+    let c: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test-vectors/corpus.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let e = c["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap();
     hex::decode(e["hex"].as_str().unwrap()).unwrap()
 }
 
@@ -18,25 +30,57 @@ fn bundle_for(name: &str, blob: &[u8], at: u64) -> Vec<u8> {
     PrekeyBundle::build(&id(name), CONSTRUCTION_PQXDH, blob, at, &[0u8; 32])
 }
 
-fn one_time_reply(svc: &mut PrekeyService, requester: &str, subject: &str, n: u8, now: u64) -> PrekeyReply {
-    let req = PrekeyRequest::One { subject: kh(subject), one_time: true, nonce: [n; 16], device: Some([0u8; 32]) }.encode();
+fn one_time_reply(
+    svc: &mut PrekeyService,
+    requester: &str,
+    subject: &str,
+    n: u8,
+    now: u64,
+) -> PrekeyReply {
+    let req = PrekeyRequest::One {
+        subject: kh(subject),
+        one_time: true,
+        nonce: [n; 16],
+        device: Some([0u8; 32]),
+    }
+    .encode();
     PrekeyReply::decode(&svc.answer(&kh(requester), &req, now).expect("a reply")).unwrap()
 }
 
 fn stocked(subject: &str, n: usize) -> PrekeyService {
-    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, ..Default::default() });
-    svc.publish(&ids(), &bundle_for(subject, b"reusable material", 1_800_000_000)).unwrap();
-    assert!(svc.stock(kh(subject), (0..n).map(|i| format!("otk-{i}").into_bytes()).collect()), "the pool takes the deposit");
+    let mut svc = PrekeyService::new(PrekeyConfig {
+        one_time_per_requester_per_subject: 4,
+        window_s: 3600,
+        ..Default::default()
+    });
+    svc.publish(
+        &ids(),
+        &bundle_for(subject, b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        svc.stock(
+            kh(subject),
+            (0..n).map(|i| format!("otk-{i}").into_bytes()).collect()
+        ),
+        "the pool takes the deposit"
+    );
     svc
 }
 
 #[test]
 fn the_corpus_prekey_objects_read_here() {
     let b = PrekeyBundle::parse(&fixture("P-prekey")).unwrap();
-    assert_eq!((b.subject, b.construction), (kh("alice"), CONSTRUCTION_PQXDH));
+    assert_eq!(
+        (b.subject, b.construction),
+        (kh("alice"), CONSTRUCTION_PQXDH)
+    );
     assert_eq!(b.verify(&ids()), Ok(()));
     let wrong = PrekeyBundle::parse(&fixture("N-wrong-signer-prekey")).unwrap();
-    assert!(wrong.verify(&ids()).is_err(), "signed by a key the bundle does not name");
+    assert!(
+        wrong.verify(&ids()).is_err(),
+        "signed by a key the bundle does not name"
+    );
     let f11 = fixture("P-frame-11");
     let f12 = fixture("P-frame-12");
     let body = |f: &[u8]| {
@@ -47,7 +91,9 @@ fn the_corpus_prekey_objects_read_here() {
     let one = PrekeyRequest::decode(&body(&f11)).unwrap();
     assert!(matches!(one, PrekeyRequest::One { one_time: true, .. }));
     let batch = PrekeyRequest::decode(&body(&f12)).unwrap();
-    let PrekeyRequest::Batch { subjects, .. } = &batch else { panic!() };
+    let PrekeyRequest::Batch { subjects, .. } = &batch else {
+        panic!()
+    };
     assert_eq!(subjects.len(), 2);
     assert!(subjects[0] < subjects[1]);
     assert_eq!(one.encode(), body(&f11));
@@ -56,7 +102,10 @@ fn the_corpus_prekey_objects_read_here() {
     assert!(!r5.bundles.is_empty() && r5.one_time.is_some() && r5.code.is_none());
     assert_eq!(r5.encode(), fixture("P-reply-05"));
     let r6 = PrekeyReply::decode(&fixture("P-reply-06")).unwrap();
-    assert_eq!((r6.bundles.is_empty(), r6.code), (true, Some(FAIL_UNKNOWN_SUBJECT)));
+    assert_eq!(
+        (r6.bundles.is_empty(), r6.code),
+        (true, Some(FAIL_UNKNOWN_SUBJECT))
+    );
     assert_eq!(r6.encode(), fixture("P-reply-06"));
 }
 
@@ -75,7 +124,10 @@ fn a_one_time_key_is_served_once_and_never_again() {
     assert!(served.insert(c.one_time.unwrap()), "never served again");
     assert_eq!(svc.pool_size(&kh("alice")), 0);
     let d = one_time_reply(&mut svc, "w2", "alice", 4, 0);
-    assert!(d.one_time.is_none() && !d.bundles.is_empty(), "none remain: reusable material alone");
+    assert!(
+        d.one_time.is_none() && !d.bundles.is_empty(),
+        "none remain: reusable material alone"
+    );
 }
 
 // acceptance: PAY-04
@@ -83,18 +135,32 @@ fn a_one_time_key_is_served_once_and_never_again() {
 fn reusable_material_is_served_freely_and_consumes_nothing() {
     let mut svc = stocked("alice", 3);
     for (who, n) in [("bob", 1u8), ("carol", 2)] {
-        let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [n; 16], device: None }.encode();
+        let req = PrekeyRequest::One {
+            subject: kh("alice"),
+            one_time: false,
+            nonce: [n; 16],
+            device: None,
+        }
+        .encode();
         let r = PrekeyReply::decode(&svc.answer(&kh(who), &req, 0).unwrap()).unwrap();
-        assert_eq!(r.bundles.first().map(|b| b.as_slice()), svc.bundle(&kh("alice")).map(|b| b.as_slice()));
+        assert_eq!(
+            r.bundles.first().map(|b| b.as_slice()),
+            svc.bundle(&kh("alice")).map(|b| b.as_slice())
+        );
         assert!(r.one_time.is_none(), "no field 3");
         assert_eq!(r.nonce, [n; 16]);
     }
     assert_eq!(svc.pool_size(&kh("alice")), 3, "the pool is unchanged");
     // and a sweep the same, for every subject named, in order
-    svc.publish(&ids(), &bundle_for("carol", b"carol's", 1_800_000_000)).unwrap();
+    svc.publish(&ids(), &bundle_for("carol", b"carol's", 1_800_000_000))
+        .unwrap();
     let mut subjects = vec![kh("alice"), kh("carol"), kh("w9")];
     subjects.sort();
-    let req = PrekeyRequest::Batch { subjects: subjects.clone(), nonce: [7; 16] }.encode();
+    let req = PrekeyRequest::Batch {
+        subjects: subjects.clone(),
+        nonce: [7; 16],
+    }
+    .encode();
     let replies = decode_batch_reply(&svc.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
     assert_eq!(replies.len(), 3);
     for (r, s) in replies.iter().zip(&subjects) {
@@ -103,7 +169,12 @@ fn reusable_material_is_served_freely_and_consumes_nothing() {
         if *s == kh("w9") {
             assert_eq!(r.code, Some(FAIL_UNKNOWN_SUBJECT));
         } else {
-            assert_eq!(PrekeyBundle::parse(r.bundles.first().unwrap()).unwrap().subject, *s);
+            assert_eq!(
+                PrekeyBundle::parse(r.bundles.first().unwrap())
+                    .unwrap()
+                    .subject,
+                *s
+            );
         }
     }
     assert_eq!(svc.pool_size(&kh("alice")), 3);
@@ -112,23 +183,55 @@ fn reusable_material_is_served_freely_and_consumes_nothing() {
 // acceptance: PAY-05
 #[test]
 fn one_time_issuance_is_limited_per_requester_per_subject() {
-    let mut svc = PrekeyService::new(PrekeyConfig { one_time_per_requester_per_subject: 2, window_s: 3600, ..Default::default() });
+    let mut svc = PrekeyService::new(PrekeyConfig {
+        one_time_per_requester_per_subject: 2,
+        window_s: 3600,
+        ..Default::default()
+    });
     for s in ["alice", "carol"] {
-        svc.publish(&ids(), &bundle_for(s, b"m", 1_800_000_000)).unwrap();
-        assert!(svc.stock(kh(s), (0..5).map(|i| vec![i]).collect()), "the pool takes the deposit");
+        svc.publish(&ids(), &bundle_for(s, b"m", 1_800_000_000))
+            .unwrap();
+        assert!(
+            svc.stock(kh(s), (0..5).map(|i| vec![i]).collect()),
+            "the pool takes the deposit"
+        );
     }
     // L = 2: the first two carry keys, the third is served no one-time key
-    assert!(one_time_reply(&mut svc, "bob", "alice", 1, 100).one_time.is_some());
-    assert!(one_time_reply(&mut svc, "bob", "alice", 2, 101).one_time.is_some());
+    assert!(
+        one_time_reply(&mut svc, "bob", "alice", 1, 100)
+            .one_time
+            .is_some()
+    );
+    assert!(
+        one_time_reply(&mut svc, "bob", "alice", 2, 101)
+            .one_time
+            .is_some()
+    );
     let excess = one_time_reply(&mut svc, "bob", "alice", 3, 102);
     assert!(excess.one_time.is_none() && !excess.bundles.is_empty());
-    assert_eq!(svc.pool_size(&kh("alice")), 3, "nothing spent on the excess");
+    assert_eq!(
+        svc.pool_size(&kh("alice")),
+        3,
+        "nothing spent on the excess"
+    );
     // another subject: its own allowance
-    assert!(one_time_reply(&mut svc, "bob", "carol", 4, 103).one_time.is_some());
+    assert!(
+        one_time_reply(&mut svc, "bob", "carol", 4, 103)
+            .one_time
+            .is_some()
+    );
     // another requester: its own allowance for alice
-    assert!(one_time_reply(&mut svc, "w1", "alice", 5, 104).one_time.is_some());
+    assert!(
+        one_time_reply(&mut svc, "w1", "alice", 5, 104)
+            .one_time
+            .is_some()
+    );
     // the window passes: the allowance is back
-    assert!(one_time_reply(&mut svc, "bob", "alice", 6, 100 + 3600).one_time.is_some());
+    assert!(
+        one_time_reply(&mut svc, "bob", "alice", 6, 100 + 3600)
+            .one_time
+            .is_some()
+    );
 }
 
 // acceptance: PAY-06
@@ -139,10 +242,17 @@ fn the_subject_is_told_when_its_pool_is_exhausted() {
     one_time_reply(&mut svc, "bob", "alice", 1, 0);
     assert!(svc.take_exhausted().is_empty(), "one left");
     one_time_reply(&mut svc, "carol", "alice", 2, 0);
-    assert_eq!(svc.take_exhausted(), vec![kh("alice")], "the last key served: the subject is told");
+    assert_eq!(
+        svc.take_exhausted(),
+        vec![kh("alice")],
+        "the last key served: the subject is told"
+    );
     assert!(svc.take_exhausted().is_empty(), "told once");
     // the subject replenishes, and the next drain tells again
-    assert!(svc.stock(kh("alice"), vec![b"fresh".to_vec()]), "the pool takes the deposit");
+    assert!(
+        svc.stock(kh("alice"), vec![b"fresh".to_vec()]),
+        "the pool takes the deposit"
+    );
     one_time_reply(&mut svc, "w1", "alice", 3, 0);
     assert_eq!(svc.take_exhausted(), vec![kh("alice")]);
 }
@@ -151,12 +261,21 @@ fn the_subject_is_told_when_its_pool_is_exhausted() {
 #[test]
 fn nothing_persisted_says_who_asked_for_whose_bundle() {
     let mut svc = stocked("alice", 3);
-    svc.publish(&ids(), &bundle_for("carol", b"c", 1_800_000_000)).unwrap();
+    svc.publish(&ids(), &bundle_for("carol", b"c", 1_800_000_000))
+        .unwrap();
     one_time_reply(&mut svc, "bob", "alice", 1, 0);
     one_time_reply(&mut svc, "w1", "carol", 2, 0);
     let mut subjects = vec![kh("alice"), kh("carol")];
     subjects.sort();
-    svc.answer(&kh("w2"), &PrekeyRequest::Batch { subjects, nonce: [3; 16] }.encode(), 0);
+    svc.answer(
+        &kh("w2"),
+        &PrekeyRequest::Batch {
+            subjects,
+            nonce: [3; 16],
+        }
+        .encode(),
+        0,
+    );
     let dir = std::env::temp_dir().join(format!("rhtn-prekeys-{}", std::process::id()));
     svc.save(&dir).unwrap();
     // every byte on disk: no requester keyhash, in hex or raw
@@ -172,7 +291,10 @@ fn nothing_persisted_says_who_asked_for_whose_bundle() {
         let raw = kh(who);
         let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
         assert!(!all.windows(32).any(|w| w == raw), "{who} named raw");
-        assert!(!all.windows(hex.len()).any(|w| w == hex.as_bytes()), "{who} named in hex");
+        assert!(
+            !all.windows(hex.len()).any(|w| w == hex.as_bytes()),
+            "{who} named in hex"
+        );
     }
     // and a reload serves the same bundles and the keys not yet served
     let back = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
@@ -204,11 +326,27 @@ fn a_bundle_is_stored_and_served_without_its_blob_being_read() {
     let mut svc = PrekeyService::default();
     let arbitrary: Vec<u8> = (0..200u32).map(|i| (i * 7 % 251) as u8).collect();
     let bundle = bundle_for("alice", &arbitrary, 1_800_000_000);
-    svc.publish(&ids(), &bundle).expect("stored whatever the blob is");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [1; 16], device: None }.encode();
+    svc.publish(&ids(), &bundle)
+        .expect("stored whatever the blob is");
+    let req = PrekeyRequest::One {
+        subject: kh("alice"),
+        one_time: false,
+        nonce: [1; 16],
+        device: None,
+    }
+    .encode();
     let r = PrekeyReply::decode(&svc.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
-    assert_eq!(r.bundles.first().map(|b| b.as_slice()), Some(bundle.as_slice()), "served unchanged");
-    assert_eq!(PrekeyBundle::parse(r.bundles.first().unwrap()).unwrap().blob, arbitrary);
+    assert_eq!(
+        r.bundles.first().map(|b| b.as_slice()),
+        Some(bundle.as_slice()),
+        "served unchanged"
+    );
+    assert_eq!(
+        PrekeyBundle::parse(r.bundles.first().unwrap())
+            .unwrap()
+            .blob,
+        arbitrary
+    );
     // what is checked is the signature, not the contents: a bundle signed by another key is not held
     let forged = PrekeyBundle::build(&id("carol"), CONSTRUCTION_PQXDH, b"x", 1, &[0u8; 32]);
     let mut renamed = forged.clone();
@@ -227,10 +365,23 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     let key = {
         // a service kept at the directory, holding one key
         let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
-        s.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-        assert!(s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]), "the pool takes the deposit");
+        s.publish(
+            &ids(),
+            &bundle_for("alice", b"reusable material", 1_800_000_000),
+        )
+        .unwrap();
+        assert!(
+            s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]),
+            "the pool takes the deposit"
+        );
         assert_eq!(s.pool_size(&kh("alice")), 1);
-        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [1; 16], device: Some([0u8; 32]) }.encode();
+        let req = PrekeyRequest::One {
+            subject: kh("alice"),
+            one_time: true,
+            nonce: [1; 16],
+            device: Some([0u8; 32]),
+        }
+        .encode();
         let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
         let key = r.one_time.expect("served");
         assert_eq!(s.pool_size(&kh("alice")), 0, "gone from memory");
@@ -239,18 +390,52 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     };
     // started again from the bytes on disk alone
     let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
-    assert_eq!(s.pool_size(&kh("alice")), 0, "the served key did not come back");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [2; 16], device: Some([0u8; 32]) }.encode();
+    assert_eq!(
+        s.pool_size(&kh("alice")),
+        0,
+        "the served key did not come back"
+    );
+    let req = PrekeyRequest::One {
+        subject: kh("alice"),
+        one_time: true,
+        nonce: [2; 16],
+        device: Some([0u8; 32]),
+    }
+    .encode();
     let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
-    assert!(!r.bundles.is_empty(), "the reusable material is still served");
-    assert!(r.one_time.is_none(), "and no one-time key is served a second time");
+    assert!(
+        !r.bundles.is_empty(),
+        "the reusable material is still served"
+    );
+    assert!(
+        r.one_time.is_none(),
+        "and no one-time key is served a second time"
+    );
     assert_ne!(r.one_time.as_deref(), Some(&key[..]));
     // a service with no directory keeps its pool in memory as before
     let mut m = PrekeyService::new(PrekeyConfig::default());
-    m.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    assert!(m.stock(kh("alice"), vec![b"in memory".to_vec()]), "the pool takes the deposit");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [3; 16], device: Some([0u8; 32]) }.encode();
-    assert!(PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap()).unwrap().one_time.is_some());
+    m.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        m.stock(kh("alice"), vec![b"in memory".to_vec()]),
+        "the pool takes the deposit"
+    );
+    let req = PrekeyRequest::One {
+        subject: kh("alice"),
+        one_time: true,
+        nonce: [3; 16],
+        device: Some([0u8; 32]),
+    }
+    .encode();
+    assert!(
+        PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap())
+            .unwrap()
+            .one_time
+            .is_some()
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -263,8 +448,15 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     // a detached service: loaded from the directory, not bound to it, so
     // serving a key touches memory alone
     let mut svc = PrekeyService::new(PrekeyConfig::default());
-    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    assert!(svc.stock(kh("alice"), vec![b"the only one-time key".to_vec()]), "the pool takes the deposit");
+    svc.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        svc.stock(kh("alice"), vec![b"the only one-time key".to_vec()]),
+        "the pool takes the deposit"
+    );
     svc.save(&dir).unwrap();
     let mut svc = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
     assert_eq!(svc.pool_size(&kh("alice")), 1, "the snapshot round-trips");
@@ -274,9 +466,16 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     // the save that follows makes the directory match what is held
     svc.save(&dir).unwrap();
     let mut again = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
-    assert_eq!(again.pool_size(&kh("alice")), 0, "the served key did not survive the snapshot");
+    assert_eq!(
+        again.pool_size(&kh("alice")),
+        0,
+        "the served key did not survive the snapshot"
+    );
     let r = one_time_reply(&mut again, "bob", "alice", 2, 0);
-    assert!(!r.bundles.is_empty(), "the reusable material is still served");
+    assert!(
+        !r.bundles.is_empty(),
+        "the reusable material is still served"
+    );
     assert!(r.one_time.is_none(), "and no key a second time");
     // **the allowance is memory alone, and a restart opens a fresh window**
     // (`infra-client-requirements.md` §6): persisting it would mean keeping
@@ -286,22 +485,78 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let dir2 = std::env::temp_dir().join(format!("rhtn-allow-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir2);
     std::fs::create_dir_all(&dir2).unwrap();
-    let mut kept = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
-    kept.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    assert!(kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]), "the pool takes the deposit");
-    assert!(one_time_reply(&mut kept, "bob", "alice", 4, 0).one_time.is_some(), "the one bob is allowed");
-    assert!(one_time_reply(&mut kept, "bob", "alice", 5, 0).one_time.is_none(), "and no more in this window");
+    let mut kept = PrekeyService::at(
+        &dir2,
+        PrekeyConfig {
+            one_time_per_requester_per_subject: 1,
+            window_s: 3600,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    kept.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        kept.stock(kh("alice"), vec![b"first".to_vec(), b"second".to_vec()]),
+        "the pool takes the deposit"
+    );
+    assert!(
+        one_time_reply(&mut kept, "bob", "alice", 4, 0)
+            .one_time
+            .is_some(),
+        "the one bob is allowed"
+    );
+    assert!(
+        one_time_reply(&mut kept, "bob", "alice", 5, 0)
+            .one_time
+            .is_none(),
+        "and no more in this window"
+    );
     drop(kept);
-    let mut after = PrekeyService::at(&dir2, PrekeyConfig { one_time_per_requester_per_subject: 1, window_s: 3600, ..Default::default() }).unwrap();
-    assert_eq!(after.pool_size(&kh("alice")), 1, "one key left, the other spent: the budget survives");
-    assert!(one_time_reply(&mut after, "bob", "alice", 6, 0).one_time.is_some(), "the window is fresh, and the last key goes");
-    assert_eq!(after.pool_size(&kh("alice")), 0, "which is where the pool, not the counter, is the bound");
-    assert!(one_time_reply(&mut after, "carol", "alice", 7, 0).one_time.is_none(), "nothing left for anyone, whatever their allowance");
+    let mut after = PrekeyService::at(
+        &dir2,
+        PrekeyConfig {
+            one_time_per_requester_per_subject: 1,
+            window_s: 3600,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        after.pool_size(&kh("alice")),
+        1,
+        "one key left, the other spent: the budget survives"
+    );
+    assert!(
+        one_time_reply(&mut after, "bob", "alice", 6, 0)
+            .one_time
+            .is_some(),
+        "the window is fresh, and the last key goes"
+    );
+    assert_eq!(
+        after.pool_size(&kh("alice")),
+        0,
+        "which is where the pool, not the counter, is the bound"
+    );
+    assert!(
+        one_time_reply(&mut after, "carol", "alice", 7, 0)
+            .one_time
+            .is_none(),
+        "nothing left for anyone, whatever their allowance"
+    );
     let _ = std::fs::remove_dir_all(&dir2);
     // a subject the service no longer holds a bundle for goes with it
     let empty = PrekeyService::new(PrekeyConfig::default());
     empty.save(&dir).unwrap();
-    assert!(PrekeyService::load(&dir, PrekeyConfig::default()).unwrap().subjects().is_empty());
+    assert!(
+        PrekeyService::load(&dir, PrekeyConfig::default())
+            .unwrap()
+            .subjects()
+            .is_empty()
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -312,9 +567,24 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
 fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-privacy-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let mut svc = PrekeyService::at(&dir, PrekeyConfig { one_time_per_requester_per_subject: 4, window_s: 3600, ..Default::default() }).unwrap();
-    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    assert!(svc.stock(kh("alice"), (0..3).map(|i| vec![i]).collect()), "the pool takes the deposit");
+    let mut svc = PrekeyService::at(
+        &dir,
+        PrekeyConfig {
+            one_time_per_requester_per_subject: 4,
+            window_s: 3600,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    svc.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        svc.stock(kh("alice"), (0..3).map(|i| vec![i]).collect()),
+        "the pool takes the deposit"
+    );
 
     // bob asks for a one-time key of alice's, and gets one
     let r = one_time_reply(&mut svc, "bob", "alice", 1, 1_800_000_000);
@@ -337,9 +607,14 @@ fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
             let body = std::fs::read(&path).unwrap_or_default();
             let text = String::from_utf8_lossy(&body).to_string();
             let hexed = |k: &[u8; 32]| k.iter().map(|b| format!("{b:02x}")).collect::<String>();
-            assert!(!text.contains(&hexed(&bob)), "{} names the requester", path.display());
             assert!(
-                !body.windows(32).any(|w| w == bob) || path.file_name().is_some_and(|n| n == "bundle"),
+                !text.contains(&hexed(&bob)),
+                "{} names the requester",
+                path.display()
+            );
+            assert!(
+                !body.windows(32).any(|w| w == bob)
+                    || path.file_name().is_some_and(|n| n == "bundle"),
                 "{} carries the requester's keyhash",
                 path.display()
             );
@@ -347,20 +622,37 @@ fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
             checked += 1;
         }
     }
-    assert!(checked > 0, "the service wrote something, so the sweep looked at something");
+    assert!(
+        checked > 0,
+        "the service wrote something, so the sweep looked at something"
+    );
 
     // the allowance still binds inside its window, in memory
     for n in 2..=4u8 {
-        assert!(one_time_reply(&mut svc, "bob", "alice", n, 1_800_000_000).one_time.is_some() || svc.pool_size(&kh("alice")) == 0);
+        assert!(
+            one_time_reply(&mut svc, "bob", "alice", n, 1_800_000_000)
+                .one_time
+                .is_some()
+                || svc.pool_size(&kh("alice")) == 0
+        );
     }
-    assert!(one_time_reply(&mut svc, "bob", "alice", 9, 1_800_000_000).one_time.is_none(), "over the allowance, or out of keys");
+    assert!(
+        one_time_reply(&mut svc, "bob", "alice", 9, 1_800_000_000)
+            .one_time
+            .is_none(),
+        "over the allowance, or out of keys"
+    );
 
     // and a restart opens a fresh window, which costs the rate and not the
     // budget: the keys already served are gone
     let left = svc.pool_size(&kh("alice"));
     svc.save(&dir).expect("writes back");
     let after = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
-    assert_eq!(after.pool_size(&kh("alice")), left, "a restart refills nobody's pool");
+    assert_eq!(
+        after.pool_size(&kh("alice")),
+        left,
+        "a restart refills nobody's pool"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -371,23 +663,51 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-unwritable-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut svc = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
-    svc.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
-    assert!(svc.stock(kh("alice"), vec![b"before".to_vec()]), "a writable pool takes a deposit");
+    svc.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_000),
+    )
+    .unwrap();
+    assert!(
+        svc.stock(kh("alice"), vec![b"before".to_vec()]),
+        "a writable pool takes a deposit"
+    );
 
     // the subject's directory stops accepting new files, which is the
     // deterministic form of a node that cannot store what it was handed
-    let subject = dir.join("prekeys").join(kh("alice").iter().map(|b| format!("{b:02x}")).collect::<String>());
+    let subject = dir.join("prekeys").join(
+        kh("alice")
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>(),
+    );
     std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o500)).unwrap();
     let held = svc.pool_size(&kh("alice"));
 
-    assert!(!svc.stock(kh("alice"), vec![b"one".to_vec(), b"two".to_vec()]), "the node could not take them");
-    assert_eq!(svc.pool_size(&kh("alice")), held, "and holds none of them, not even the first");
+    assert!(
+        !svc.stock(kh("alice"), vec![b"one".to_vec(), b"two".to_vec()]),
+        "the node could not take them"
+    );
+    assert_eq!(
+        svc.pool_size(&kh("alice")),
+        held,
+        "and holds none of them, not even the first"
+    );
 
     // what the deposit did write before failing is gone, so the pool and
     // the answer agree
     std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let names: Vec<String> = std::fs::read_dir(&subject).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("otk-")).collect();
-    assert_eq!(names.len(), held, "no half-written key outlived the refusal");
+    let names: Vec<String> = std::fs::read_dir(&subject)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.starts_with("otk-"))
+        .collect();
+    assert_eq!(
+        names.len(),
+        held,
+        "no half-written key outlived the refusal"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -403,7 +723,11 @@ fn an_upgrade_removes_the_requester_subject_log_an_earlier_version_left_behind()
     let _ = std::fs::remove_dir_all(&dir);
     let root = dir.join("prekeys");
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("issued"), "requester subject window count\nalice bob 1800000000 3\n").unwrap();
+    std::fs::write(
+        root.join("issued"),
+        "requester subject window count\nalice bob 1800000000 3\n",
+    )
+    .unwrap();
     // an operator's own file under the same root is not this function's
     // to delete on suspicion
     std::fs::write(root.join("operator-notes"), "keep me").unwrap();

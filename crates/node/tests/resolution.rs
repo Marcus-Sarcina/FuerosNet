@@ -7,8 +7,8 @@ mod common;
 use common::*;
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_node::resolution::*;
-use rhtn_node::store::KIND_ENDPOINT_RECORD;
 use rhtn_node::resolution::{Carried, ClientResolution};
+use rhtn_node::store::KIND_ENDPOINT_RECORD;
 use rhtn_node::view::NodeView;
 use std::sync::Arc;
 
@@ -40,17 +40,51 @@ fn tree() -> Tree {
     c.attached.insert(kh("carol"));
 
     // C publishes its endpoint record; it reaches A by the topology class
-    let c_record = endpoint_record(&id("bob"), &[point(1, 7001)], Seqno { series: 1, counter: 3 });
+    let c_record = endpoint_record(
+        &id("bob"),
+        &[point(1, 7001)],
+        Seqno {
+            series: 1,
+            counter: 3,
+        },
+    );
     let afab = Fabric::with(&[kh("bob")]);
     let cfab = Fabric::with(&[kh("alice"), kh("carol")]);
     a.take_object(&*afab, &kh("bob"), KIND_ENDPOINT_RECORD, &c_record, &ids());
     // and each publishes its own, so a serving answer can carry endpoints
-    let a_record = endpoint_record(&id("alice"), &[point(1, 7000)], Seqno { series: 1, counter: 1 });
+    let a_record = endpoint_record(
+        &id("alice"),
+        &[point(1, 7000)],
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
     a.take_object(&*afab, &kh("bob"), KIND_ENDPOINT_RECORD, &a_record, &ids());
-    c.take_object(&*cfab, &kh("alice"), KIND_ENDPOINT_RECORD, &c_record, &ids());
-    let a_entry = anchor_entry(&id("alice"), &[point(1, 7000)], 200, Seqno { series: 1, counter: 1 });
+    c.take_object(
+        &*cfab,
+        &kh("alice"),
+        KIND_ENDPOINT_RECORD,
+        &c_record,
+        &ids(),
+    );
+    let a_entry = anchor_entry(
+        &id("alice"),
+        &[point(1, 7000)],
+        200,
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
     afab.clear();
-    Tree { a, c, afab, a_entry, c_record }
+    Tree {
+        a,
+        c,
+        afab,
+        a_entry,
+        c_record,
+    }
 }
 
 /// The path from A to X: index 1 into C, then index 2 into X.
@@ -61,9 +95,22 @@ fn path_to_x() -> Path {
 /// A node publishes its own endpoint record before it can answer as a
 /// serving node (`wire-format.md` §7.6).
 fn publish(v: &mut NodeView, name: &str, port: u16) {
-    let record = endpoint_record(&id(name), &[point(9, port)], Seqno { series: 1, counter: 1 });
+    let record = endpoint_record(
+        &id(name),
+        &[point(9, port)],
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
     let me = kh(name);
-    v.take_object(&*Fabric::with(&[]), &me, KIND_ENDPOINT_RECORD, &record, &ids());
+    v.take_object(
+        &*Fabric::with(&[]),
+        &me,
+        KIND_ENDPOINT_RECORD,
+        &record,
+        &ids(),
+    );
 }
 
 /// A lookup that records every identity it is asked for, so a test can see
@@ -87,16 +134,34 @@ fn a_gossiped_anchor_is_a_starting_point_and_is_never_pinned() {
     // the requester holds the entry and no key material for A
     let mut anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
     let entry = AnchorEntry::parse(&t.a_entry).unwrap();
-    let unpinned = Recorder { pins: ids().into_iter().filter(|i| i.keyhash != kh("alice")).collect(), asked: Default::default() };
-    assert!(entry.signature_checks(&unpinned).is_none(), "nothing lets the recipient check it on receipt");
+    let unpinned = Recorder {
+        pins: ids()
+            .into_iter()
+            .filter(|i| i.keyhash != kh("alice"))
+            .collect(),
+        asked: Default::default(),
+    };
+    assert!(
+        entry.signature_checks(&unpinned).is_none(),
+        "nothing lets the recipient check it on receipt"
+    );
     unpinned.asked.borrow_mut().clear();
     assert!(anchors.offer(entry, &unpinned));
-    assert!(unpinned.asked.borrow().is_empty(), "a gossip table asks for no key on ingestion");
-    let mut r = Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(1)).unwrap();
+    assert!(
+        unpinned.asked.borrow().is_empty(),
+        "a gossip table asks for no key on ingestion"
+    );
+    let mut r =
+        Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(1)).unwrap();
     assert_eq!(r.next_hop().0, kh("alice"));
-    assert_eq!(r.next_hop().1[0].socket().port(), 7000, "an endpoint taken from the entry");
+    assert_eq!(
+        r.next_hop().1[0].socket().port(),
+        7000,
+        "an endpoint taken from the entry"
+    );
     // A refers onward
-    let reply = t.a.answer_resolution(&ResolveRequest::decode(&r.request.encode()).unwrap());
+    let reply =
+        t.a.answer_resolution(&ResolveRequest::decode(&r.request.encode()).unwrap());
     match r.take(&reply) {
         Step::Continue(rf) => assert_eq!(rf.next, kh("bob")),
         other => panic!("{other:?}"),
@@ -110,10 +175,17 @@ fn a_gossiped_anchor_is_a_starting_point_and_is_never_pinned() {
         }
         other => panic!("{other:?}"),
     }
-    assert!(r.arrived.is_some(), "the resolution completes at the serving node");
+    assert!(
+        r.arrived.is_some(),
+        "the resolution completes at the serving node"
+    );
     // at no point did the requester reach for A's key: nothing in beginning,
     // following the referral or arriving asked the lookup for anyone
-    assert!(unpinned.asked.borrow().is_empty(), "no pin for A was created or sought: {:?}", unpinned.asked.borrow().len());
+    assert!(
+        unpinned.asked.borrow().is_empty(),
+        "no pin for A was created or sought: {:?}",
+        unpinned.asked.borrow().len()
+    );
     assert!(unpinned.pins.iter().all(|i| i.keyhash != kh("alice")));
 }
 
@@ -122,10 +194,32 @@ fn a_gossiped_anchor_is_a_starting_point_and_is_never_pinned() {
 fn anchor_entries_below_the_nodes_own_threshold_are_not_retained() {
     let n = 50u64;
     let mut anchors = AnchorTable::new(n, Ingestion::UnverifiedGossip);
-    let r1 = anchor_entry(&id("w6"), &[point(1, 7010)], n - 1, Seqno { series: 1, counter: 1 });
-    let r2 = anchor_entry(&id("w7"), &[point(1, 7011)], n, Seqno { series: 1, counter: 1 });
-    assert!(!anchors.offer(AnchorEntry::parse(&r1).unwrap(), &ids()), "below n");
-    assert!(anchors.offer(AnchorEntry::parse(&r2).unwrap(), &ids()), "at n");
+    let r1 = anchor_entry(
+        &id("w6"),
+        &[point(1, 7010)],
+        n - 1,
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    let r2 = anchor_entry(
+        &id("w7"),
+        &[point(1, 7011)],
+        n,
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert!(
+        !anchors.offer(AnchorEntry::parse(&r1).unwrap(), &ids()),
+        "below n"
+    );
+    assert!(
+        anchors.offer(AnchorEntry::parse(&r2).unwrap(), &ids()),
+        "at n"
+    );
     assert!(anchors.get(&kh("w7")).is_some());
     assert!(anchors.get(&kh("w6")).is_none());
     assert_eq!(
@@ -139,20 +233,52 @@ fn anchor_entries_below_the_nodes_own_threshold_are_not_retained() {
 #[test]
 fn a_locator_whose_anchor_is_absent_sends_no_request() {
     let anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
-    let err = Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(3)).unwrap_err();
-    assert_eq!(err, NotResolvable::AnchorAbsent(kh("alice")), "a caller-side condition, not a wire failure");
+    let err =
+        Resolution::begin(&anchors, kh("carol"), kh("alice"), path_to_x(), nonce(3)).unwrap_err();
+    assert_eq!(
+        err,
+        NotResolvable::AnchorAbsent(kh("alice")),
+        "a caller-side condition, not a wire failure"
+    );
     // and through the node's own entry point nothing goes on any session
     let mut w = World::new();
     let n = view("w8", table_with(kh("w8"), &w, &[], &["w8"]), "w8", &[]);
     let _ = w.tick();
     let fab = Fabric::with(&[kh("alice"), kh("bob")]);
-    assert_eq!(n.resolve(&*fab, &anchors, kh("carol"), kh("alice"), path_to_x(), nonce(3)).unwrap_err(), NotResolvable::AnchorAbsent(kh("alice")));
-    assert_eq!(fab.frames().len(), 0, "no ResolveRequest is emitted on any connection");
+    assert_eq!(
+        n.resolve(
+            &*fab,
+            &anchors,
+            kh("carol"),
+            kh("alice"),
+            path_to_x(),
+            nonce(3)
+        )
+        .unwrap_err(),
+        NotResolvable::AnchorAbsent(kh("alice"))
+    );
+    assert_eq!(
+        fab.frames().len(),
+        0,
+        "no ResolveRequest is emitted on any connection"
+    );
 }
 
 fn fixture(id: &str) -> Vec<u8> {
-    let c: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test-vectors/corpus.json")).unwrap()).unwrap();
-    let e = c["entries"].as_array().unwrap().iter().find(|e| e["id"] == id).unwrap();
+    let c: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test-vectors/corpus.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let e = c["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap();
     hex::decode(e["hex"].as_str().unwrap()).unwrap()
 }
 
@@ -161,8 +287,23 @@ fn fixture(id: &str) -> Vec<u8> {
 /// against the bytes the vectors document.
 fn v12() -> Vec<u8> {
     let documented = "a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201412702020382051864038443a10127a0f658405a7e4a1e7fed8b75c3703dbb7fdbf134f2f200d3e48a949e466a96fff45a0730d30aee8ab60f5483d063fbd5b19d58269d9f358f56bc7a726ebeb4aab60b0903";
-    let built = signed_locator(&id("alice"), &Locator { anchor: kh("bob"), path: vec![0x27], nibbles: 2, seqno: Seqno { series: 5, counter: 100 } });
-    assert_eq!(hex::encode(&built), documented, "the rebuilt partner is the documented one");
+    let built = signed_locator(
+        &id("alice"),
+        &Locator {
+            anchor: kh("bob"),
+            path: vec![0x27],
+            nibbles: 2,
+            seqno: Seqno {
+                series: 5,
+                counter: 100,
+            },
+        },
+    );
+    assert_eq!(
+        hex::encode(&built),
+        documented,
+        "the rebuilt partner is the documented one"
+    );
     built
 }
 
@@ -173,11 +314,29 @@ fn a_same_series_counter_jump_supersedes() {
     let base = fixture("P-signedlocator");
     let jump = fixture("P-signedlocator-jump");
     assert_eq!(store.offer(&base, &ids()), LocatorOutcome::Installed);
-    assert_eq!(SignedLocator::parse(&base).unwrap().locator.seqno, Seqno { series: 5, counter: 42 });
+    assert_eq!(
+        SignedLocator::parse(&base).unwrap().locator.seqno,
+        Seqno {
+            series: 5,
+            counter: 42
+        }
+    );
     assert_eq!(store.offer(&jump, &ids()), LocatorOutcome::Replaced);
-    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!("{:?}", store.reach(&kh("alice"))) };
-    assert_eq!(loc.seqno, Seqno { series: 5, counter: 100 });
-    assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, jump, "the [5, 42] locator is no longer current");
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else {
+        panic!("{:?}", store.reach(&kh("alice")))
+    };
+    assert_eq!(
+        loc.seqno,
+        Seqno {
+            series: 5,
+            counter: 100
+        }
+    );
+    assert_eq!(
+        store.in_series(&kh("alice"), 5).unwrap().bytes,
+        jump,
+        "the [5, 42] locator is no longer current"
+    );
 }
 
 // acceptance: RES-05
@@ -188,10 +347,17 @@ fn equal_seqnos_with_different_paths_leave_neither_current() {
     assert_eq!(store.offer(&jump, &ids()), LocatorOutcome::Installed);
     let partner = v12();
     assert_ne!(partner, jump);
-    assert_eq!(SignedLocator::parse(&partner).unwrap().locator.seqno, SignedLocator::parse(&jump).unwrap().locator.seqno);
+    assert_eq!(
+        SignedLocator::parse(&partner).unwrap().locator.seqno,
+        SignedLocator::parse(&jump).unwrap().locator.seqno
+    );
     assert_eq!(store.offer(&partner, &ids()), LocatorOutcome::Conflict);
     assert!(store.all(&kh("alice")).is_empty(), "neither is current");
-    assert_eq!(store.reach(&kh("alice")), Reach::MustReResolve, "a re-resolution rather than a dial to either path");
+    assert_eq!(
+        store.reach(&kh("alice")),
+        Reach::MustReResolve,
+        "a re-resolution rather than a dial to either path"
+    );
 }
 
 // acceptance: RES-06
@@ -200,14 +366,34 @@ fn two_series_do_not_rank_and_the_holder_says_so() {
     let mut store = LocatorStore::new();
     let jump = fixture("P-signedlocator-jump");
     store.offer(&jump, &ids());
-    let other = signed_locator(&id("alice"), &Locator { anchor: kh("bob"), path: vec![0x91], nibbles: 2, seqno: Seqno { series: 9, counter: 3 } });
+    let other = signed_locator(
+        &id("alice"),
+        &Locator {
+            anchor: kh("bob"),
+            path: vec![0x91],
+            nibbles: 2,
+            seqno: Seqno {
+                series: 9,
+                counter: 3,
+            },
+        },
+    );
     assert_eq!(store.offer(&other, &ids()), LocatorOutcome::Incomparable);
-    assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, jump, "the [5, 100] locator is not marked stale");
-    assert!(store.in_series(&kh("alice"), 9).is_some(), "and the newcomer is not installed as fresher");
+    assert_eq!(
+        store.in_series(&kh("alice"), 5).unwrap().bytes,
+        jump,
+        "the [5, 100] locator is not marked stale"
+    );
+    assert!(
+        store.in_series(&kh("alice"), 9).is_some(),
+        "and the newcomer is not installed as fresher"
+    );
     assert_eq!(store.reach(&kh("alice")), Reach::Indeterminate);
     // a §4.6 chain for one series is what resolves it
     store.prove_series(kh("alice"), 9);
-    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!() };
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else {
+        panic!()
+    };
     assert_eq!(loc.seqno.series, 9);
 }
 
@@ -223,33 +409,95 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     assert!(lanchors.is_empty(), "L holds none");
     // X sits beneath another anchor, W (w7), that S holds an entry for
     let x_path = Path::from_indices(&[4, 1]);
-    let (mut lr, carried) = l.resolve(&*lfab, &lanchors, kh("w5"), kh("w7"), x_path.clone(), nonce(7)).unwrap();
+    let (mut lr, carried) = l
+        .resolve(
+            &*lfab,
+            &lanchors,
+            kh("w5"),
+            kh("w7"),
+            x_path.clone(),
+            nonce(7),
+        )
+        .unwrap();
     assert_eq!(carried, Carried::Delegated(kh("bob")));
     let sent: Vec<_> = lfab.requests();
     assert_eq!(sent.len(), 1, "L's only request");
-    assert!(lfab.frames().is_empty(), "on a request stream, nothing on stream 0");
+    assert!(
+        lfab.frames().is_empty(),
+        "on a request stream, nothing on stream 0"
+    );
     assert_eq!(sent[0].to, kh("bob"), "on its session with S");
     assert_eq!(sent[0].frame_type, REQUEST_RESOLVE);
     let at_s = ResolveRequest::decode(&sent[0].body).unwrap();
-    assert!(lfab.requests_to(&kh("w7"), REQUEST_RESOLVE).is_empty(), "L opens no connection to W");
+    assert!(
+        lfab.requests_to(&kh("w7"), REQUEST_RESOLVE).is_empty(),
+        "L opens no connection to W"
+    );
     // S takes L's request and resolves on L's behalf from its own table
     let mut anchors = AnchorTable::new(0, Ingestion::UnverifiedGossip);
-    anchors.offer(AnchorEntry::parse(&anchor_entry(&id("w7"), &[point(7, 7007)], 50, Seqno { series: 1, counter: 1 })).unwrap(), &ids());
-    let ClientResolution::Proxied(mut r) = t.c.resolve_for_client(&anchors, &at_s).unwrap() else { panic!("S is not on W's path") };
-    assert_eq!(r.next_hop().0, kh("w7"), "S sends a ResolveRequest to an endpoint of W");
+    anchors.offer(
+        AnchorEntry::parse(&anchor_entry(
+            &id("w7"),
+            &[point(7, 7007)],
+            50,
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+        ))
+        .unwrap(),
+        &ids(),
+    );
+    let ClientResolution::Proxied(mut r) = t.c.resolve_for_client(&anchors, &at_s).unwrap() else {
+        panic!("S is not on W's path")
+    };
+    assert_eq!(
+        r.next_hop().0,
+        kh("w7"),
+        "S sends a ResolveRequest to an endpoint of W"
+    );
     assert_eq!(r.request.nonce, nonce(7), "under the client's nonce");
     // W refers to its adopted infra child w6, which serves X
     let mut other = World::new();
     let (a_w6, _) = other.adopt("w6", "w7", 1);
     let (a_x, _) = other.adopt("w5", "w6", 2);
-    let mut w7 = view("w7", table_with(kh("w7"), &other, &[&a_w6, &a_x], &["w7", "w6"]), "w7", &[]);
+    let mut w7 = view(
+        "w7",
+        table_with(kh("w7"), &other, &[&a_w6, &a_x], &["w7", "w6"]),
+        "w7",
+        &[],
+    );
     publish(&mut w7, "w7", 7107);
     w7.set_slot(4, Some(kh("w6")), 1);
-    let w6_record = endpoint_record(&id("w6"), &[point(6, 7006)], Seqno { series: 1, counter: 1 });
-    assert_eq!(w7.take_object(&*Fabric::with(&[]), &kh("w6"), KIND_ENDPOINT_RECORD, &w6_record, &ids()), rhtn_node::store::Decision::Stored);
+    let w6_record = endpoint_record(
+        &id("w6"),
+        &[point(6, 7006)],
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(
+        w7.take_object(
+            &*Fabric::with(&[]),
+            &kh("w6"),
+            KIND_ENDPOINT_RECORD,
+            &w6_record,
+            &ids()
+        ),
+        rhtn_node::store::Decision::Stored
+    );
     let reply = w7.answer_resolution(&r.request);
-    assert!(matches!(r.take(&reply), Step::Continue(_)), "S follows the referral: {reply:?}");
-    let mut w6 = view("w6", table_with(kh("w6"), &other, &[&a_w6, &a_x], &["w7", "w6"]), "w7", &[4]);
+    assert!(
+        matches!(r.take(&reply), Step::Continue(_)),
+        "S follows the referral: {reply:?}"
+    );
+    let mut w6 = view(
+        "w6",
+        table_with(kh("w6"), &other, &[&a_w6, &a_x], &["w7", "w6"]),
+        "w7",
+        &[4],
+    );
     publish(&mut w6, "w6", 7106);
     w6.set_slot(1, Some(kh("w5")), 1);
     w6.attached.insert(kh("w5"));
@@ -266,7 +514,6 @@ fn a_light_clients_resolution_goes_through_its_serving_node() {
     }
 }
 
-
 // acceptance: RES-08
 #[test]
 fn a_client_two_levels_down_is_answered_with_the_residual_suffix() {
@@ -279,14 +526,34 @@ fn a_client_two_levels_down_is_answered_with_the_residual_suffix() {
     s.set_slot(3, Some(kh("bob")), w.clock);
     s.attached.insert(kh("carol"));
     assert!(!s.table.is_infra(&kh("bob")), "P is a light client");
-    assert_eq!(s.table.serving_node(&kh("carol")), Some(kh("alice")), "L attaches to S at depth two");
+    assert_eq!(
+        s.table.serving_node(&kh("carol")),
+        Some(kh("alice")),
+        "L attaches to S at depth two"
+    );
     let sfab = Fabric::with(&[kh("carol")]);
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Path::from_indices(&[3, 4]).bytes, nibbles: 2, nonce: nonce(8) };
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: Path::from_indices(&[3, 4]).bytes,
+        nibbles: 2,
+        nonce: nonce(8),
+    };
     let reply = s.answer_resolution(&req);
-    let ResolveReply::Serving { serving, .. } = &reply else { panic!("{reply:?}") };
+    let ResolveReply::Serving { serving, .. } = &reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(serving.node, kh("alice"), "field 1 is S");
-    assert_eq!(serving.residual.indices(), vec![3, 4], "the non-empty suffix identifying L beneath S");
-    assert_eq!(sfab.request_count(REQUEST_RESOLVE), 0, "no request is forwarded to P");
+    assert_eq!(
+        serving.residual.indices(),
+        vec![3, 4],
+        "the non-empty suffix identifying L beneath S"
+    );
+    assert_eq!(
+        sfab.request_count(REQUEST_RESOLVE),
+        0,
+        "no request is forwarded to P"
+    );
 }
 
 // acceptance: RES-09
@@ -303,11 +570,22 @@ fn a_roots_self_anchored_locator_resolves_to_an_empty_residual() {
     let mut r = view("bob", table, "bob", &[]);
     publish(&mut r, "bob", 7101);
     r.set_slot(0, Some(kh("carol")), w.clock);
-    let req = ResolveRequest { subject: kh("bob"), anchor: kh("bob"), path: sl.locator.path.clone(), nibbles: 0, nonce: nonce(9) };
+    let req = ResolveRequest {
+        subject: kh("bob"),
+        anchor: kh("bob"),
+        path: sl.locator.path.clone(),
+        nibbles: 0,
+        nonce: nonce(9),
+    };
     let reply = r.answer_resolution(&req);
-    let ResolveReply::Serving { serving, .. } = &reply else { panic!("{reply:?}") };
+    let ResolveReply::Serving { serving, .. } = &reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(serving.node, kh("bob"));
-    assert!(serving.residual.is_empty(), "R itself is the addressed party");
+    assert!(
+        serving.residual.is_empty(),
+        "R itself is the addressed party"
+    );
 }
 
 // acceptance: RES-10
@@ -315,16 +593,40 @@ fn a_roots_self_anchored_locator_resolves_to_an_empty_residual() {
 fn a_referral_comes_from_the_childs_endpoint_record_before_any_contact() {
     let t = tree();
     // S (alice) holds C's record by topology push, no key material for C
-    let unpinned: Vec<_> = ids().into_iter().filter(|i| i.keyhash != kh("bob")).collect();
+    let unpinned: Vec<_> = ids()
+        .into_iter()
+        .filter(|i| i.keyhash != kh("bob"))
+        .collect();
     let er = rhtn_node::store::EndpointRecord::parse(&t.c_record).unwrap();
-    assert!(er.signature_checks(&unpinned).is_none(), "S cannot check it yet");
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: path_to_x().bytes, nibbles: 2, nonce: nonce(10) };
+    assert!(
+        er.signature_checks(&unpinned).is_none(),
+        "S cannot check it yet"
+    );
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: path_to_x().bytes,
+        nibbles: 2,
+        nonce: nonce(10),
+    };
     let reply = t.a.answer_resolution(&req);
-    let ResolveReply::Referral { referral, .. } = &reply else { panic!("{reply:?}") };
+    let ResolveReply::Referral { referral, .. } = &reply else {
+        panic!("{reply:?}")
+    };
     assert_eq!(referral.next, kh("bob"));
-    assert_eq!(referral.endpoints, er.endpoints.iter().map(|p| NetworkPoint::decode_bytes(p).unwrap()).collect::<Vec<_>>());
+    assert_eq!(
+        referral.endpoints,
+        er.endpoints
+            .iter()
+            .map(|p| NetworkPoint::decode_bytes(p).unwrap())
+            .collect::<Vec<_>>()
+    );
     assert!(referral.advances >= 1);
-    assert_eq!(t.afab.frames().len(), 0, "S opens no connection to C before replying");
+    assert_eq!(
+        t.afab.frames().len(),
+        0,
+        "S opens no connection to C before replying"
+    );
 }
 
 // acceptance: RES-11
@@ -337,7 +639,12 @@ fn a_referral_that_advances_nothing_is_rejected() {
     let mut r = Resolution::begin(&anchors, kh("w5"), kh("alice"), three, nonce(11)).unwrap();
     let bad = ResolveReply::Referral {
         nonce: nonce(11),
-        referral: Referral { next: kh("w9"), endpoints: vec![point(1, 7099)], advances: 0, key_material: None },
+        referral: Referral {
+            next: kh("w9"),
+            endpoints: vec![point(1, 7099)],
+            advances: 0,
+            key_material: None,
+        },
     };
     let before = r.hops.clone();
     match r.take(&bad) {
@@ -348,7 +655,12 @@ fn a_referral_that_advances_nothing_is_rejected() {
     // and one advancing past the path's end is malformed too
     let past = ResolveReply::Referral {
         nonce: nonce(11),
-        referral: Referral { next: kh("w9"), endpoints: vec![point(1, 7099)], advances: 4, key_material: None },
+        referral: Referral {
+            next: kh("w9"),
+            endpoints: vec![point(1, 7099)],
+            advances: 4,
+            key_material: None,
+        },
     };
     assert!(matches!(r.take(&past), Step::Malformed(_)));
     assert_eq!(r.hops, before);
@@ -360,14 +672,36 @@ fn a_departed_child_is_removed_and_its_path_fails_rather_than_redirecting() {
     let mut t = tree();
     // C departs from A and is adopted by an unrelated patron
     let dep = t.w_depart();
-    assert_eq!(t.a.child_at(1), Some(kh("bob")), "the child table holds C at index 1");
-    let d = t.a.take_object(&*t.afab, &kh("bob"), rhtn_node::store::KIND_TRANSACTION, &dep, &ids());
+    assert_eq!(
+        t.a.child_at(1),
+        Some(kh("bob")),
+        "the child table holds C at index 1"
+    );
+    let d = t.a.take_object(
+        &*t.afab,
+        &kh("bob"),
+        rhtn_node::store::KIND_TRANSACTION,
+        &dep,
+        &ids(),
+    );
     assert_eq!(d, rhtn_node::store::Decision::Stored);
-    assert!(!t.a.table.subordinates(&kh("alice")).contains(&kh("bob")), "C has left the subtree");
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: path_to_x().bytes, nibbles: 2, nonce: nonce(14) };
+    assert!(
+        !t.a.table.subordinates(&kh("alice")).contains(&kh("bob")),
+        "C has left the subtree"
+    );
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: path_to_x().bytes,
+        nibbles: 2,
+        nonce: nonce(14),
+    };
     let reply = t.a.answer_resolution(&req);
     match &reply {
-        ResolveReply::Failure { code, .. } => assert!(*code == FAIL_NO_SUCH_CHILD || *code == FAIL_NOT_AUTHORITATIVE, "code {code}"),
+        ResolveReply::Failure { code, .. } => assert!(
+            *code == FAIL_NO_SUCH_CHILD || *code == FAIL_NOT_AUTHORITATIVE,
+            "code {code}"
+        ),
         other => panic!("no referral is returned: {other:?}"),
     }
     assert_eq!(t.a.child_at(1), None, "S's child table no longer lists C");
@@ -378,7 +712,15 @@ impl Tree {
     fn w_depart(&mut self) -> Vec<u8> {
         let mut w = World::new();
         w.adopt("bob", "alice", 1);
-        w.depart("bob", "alice", Seqno { series: 1, counter: 1 }).bytes
+        w.depart(
+            "bob",
+            "alice",
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+        )
+        .bytes
     }
 }
 
@@ -388,21 +730,53 @@ fn a_greater_counter_replaces_the_endpoint_list_reordering_included() {
     let mut t = tree();
     let e1 = point(1, 7001);
     let e2 = point(2, 7002);
-    let first = endpoint_record(&id("bob"), &[e1.clone(), e2.clone()], Seqno { series: 1, counter: 4 });
-    let second = endpoint_record(&id("bob"), &[e2.clone(), e1.clone()], Seqno { series: 1, counter: 5 });
+    let first = endpoint_record(
+        &id("bob"),
+        &[e1.clone(), e2.clone()],
+        Seqno {
+            series: 1,
+            counter: 4,
+        },
+    );
+    let second = endpoint_record(
+        &id("bob"),
+        &[e2.clone(), e1.clone()],
+        Seqno {
+            series: 1,
+            counter: 5,
+        },
+    );
     assert_ne!(first, second, "reordering alone is a change");
     t.a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &first, &ids());
     t.a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &second, &ids());
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: path_to_x().bytes, nibbles: 2, nonce: nonce(15) };
-    let ResolveReply::Referral { referral, .. } = t.a.answer_resolution(&req) else { panic!() };
-    assert_eq!(referral.endpoints, vec![e2, e1], "in the new record's order");
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: path_to_x().bytes,
+        nibbles: 2,
+        nonce: nonce(15),
+    };
+    let ResolveReply::Referral { referral, .. } = t.a.answer_resolution(&req) else {
+        panic!()
+    };
+    assert_eq!(
+        referral.endpoints,
+        vec![e2, e1],
+        "in the new record's order"
+    );
 }
 
 // acceptance: RES-16
 #[test]
 fn answering_a_resolution_keeps_no_record_of_who_asked_about_whom() {
     let t = tree();
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: path_to_x().bytes, nibbles: 2, nonce: nonce(16) };
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: path_to_x().bytes,
+        nibbles: 2,
+        nonce: nonce(16),
+    };
     let before = state_digest(&t.a);
     let reply = t.a.answer_resolution(&req);
     assert!(matches!(reply, ResolveReply::Referral { .. }));
@@ -411,9 +785,15 @@ fn answering_a_resolution_keeps_no_record_of_who_asked_about_whom() {
     // the request names the subject and never the querier, so no pairing is
     // even representable in what was received
     let encoded = req.encode();
-    assert!(!encoded.windows(32).any(|w| w == kh("w5")), "the querier is not named in the request");
+    assert!(
+        !encoded.windows(32).any(|w| w == kh("w5")),
+        "the querier is not named in the request"
+    );
     // and nothing retained carries the nonce
-    assert!(!after.windows(16).any(|w| w == req.nonce), "no request nonce survives the answer");
+    assert!(
+        !after.windows(16).any(|w| w == req.nonce),
+        "no request nonce survives the answer"
+    );
 }
 
 /// Everything the node holds, flattened: the store's objects, its slots and
@@ -440,7 +820,6 @@ fn state_digest(v: &NodeView) -> Vec<u8> {
     out
 }
 
-
 /// Not a catalogue entry: a node with no published endpoint record cannot be
 /// reached past a resolution, and says so rather than emitting a serving
 /// answer the schema rejects.
@@ -448,31 +827,90 @@ fn state_digest(v: &NodeView) -> Vec<u8> {
 fn a_node_with_no_published_endpoints_reports_itself_unavailable() {
     let mut w = World::new();
     let (a_sub, _) = w.adopt("carol", "bob", 1);
-    let mut r = view("bob", table_with(kh("bob"), &w, &[&a_sub], &["bob"]), "bob", &[]);
+    let mut r = view(
+        "bob",
+        table_with(kh("bob"), &w, &[&a_sub], &["bob"]),
+        "bob",
+        &[],
+    );
     r.set_slot(0, Some(kh("carol")), w.clock);
-    let req = ResolveRequest { subject: kh("bob"), anchor: kh("bob"), path: Vec::new(), nibbles: 0, nonce: nonce(17) };
-    assert_eq!(r.answer_resolution(&req), ResolveReply::Failure { nonce: nonce(17), code: FAIL_UNAVAILABLE }, "retry elsewhere, not a malformed reply");
+    let req = ResolveRequest {
+        subject: kh("bob"),
+        anchor: kh("bob"),
+        path: Vec::new(),
+        nibbles: 0,
+        nonce: nonce(17),
+    };
+    assert_eq!(
+        r.answer_resolution(&req),
+        ResolveReply::Failure {
+            nonce: nonce(17),
+            code: FAIL_UNAVAILABLE
+        },
+        "retry elsewhere, not a malformed reply"
+    );
     assert!(ResolveReply::decode(&r.answer_resolution(&req).encode()).is_ok());
     publish(&mut r, "bob", 7102);
-    assert!(matches!(r.answer_resolution(&req), ResolveReply::Serving { .. }));
+    assert!(matches!(
+        r.answer_resolution(&req),
+        ResolveReply::Serving { .. }
+    ));
 }
 
 // acceptance: DEC-23
 #[test]
 fn a_resolve_request_with_a_malformed_path_is_refused_before_any_path_operation() {
     // the request as an attacker would send it: one nibble claimed, no bytes
-    let req = ResolveRequest { subject: kh("carol"), anchor: kh("alice"), path: Vec::new(), nibbles: 1, nonce: nonce(23) };
+    let req = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: Vec::new(),
+        nibbles: 1,
+        nonce: nonce(23),
+    };
     let e = ResolveRequest::decode(&req.encode()).unwrap_err();
     assert!(e.contains("byte length"), "{e}");
     // the same path, met by any other route, indexes nothing past its bytes
-    assert_eq!(Path { bytes: Vec::new(), nibbles: 1 }.indices(), vec![0]);
-    assert_eq!(Path { bytes: vec![0x12], nibbles: 5 }.indices(), vec![1, 2, 0, 0, 0]);
+    assert_eq!(
+        Path {
+            bytes: Vec::new(),
+            nibbles: 1
+        }
+        .indices(),
+        vec![0]
+    );
+    assert_eq!(
+        Path {
+            bytes: vec![0x12],
+            nibbles: 5
+        }
+        .indices(),
+        vec![1, 2, 0, 0, 0]
+    );
     // the archive's locator decoder holds the same line
     let mut loc = Vec::new();
-    Locator { anchor: kh("alice"), path: vec![0x1f], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } }.emit(&mut loc);
+    Locator {
+        anchor: kh("alice"),
+        path: vec![0x1f],
+        nibbles: 1,
+        seqno: Seqno {
+            series: 1,
+            counter: 0,
+        },
+    }
+    .emit(&mut loc);
     assert!(Locator::decode(&loc).unwrap_err().contains("pad nibble"));
     let mut good = Vec::new();
-    Locator { anchor: kh("alice"), path: vec![0x10], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } }.emit(&mut good);
+    Locator {
+        anchor: kh("alice"),
+        path: vec![0x10],
+        nibbles: 1,
+        seqno: Seqno {
+            series: 1,
+            counter: 0,
+        },
+    }
+    .emit(&mut good);
     assert!(Locator::decode(&good).is_ok());
 }
 
@@ -488,28 +926,64 @@ fn own_endpoint_publication_replays_or_advances_per_relationship_line() {
     let held = c.store.endpoint(&me).unwrap().clone();
     assert_eq!(held.seqno.counter, 3);
     // unchanged: the held bytes, and no number spent on either side
-    assert_eq!(c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a)).unwrap(), held.bytes);
+    assert_eq!(
+        c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a))
+            .unwrap(),
+        held.bytes
+    );
     assert_eq!(c.position.seqno.counter, 0);
     // changed: one past what is held, which the position advances with,
     // and the store takes as newer
-    let second = c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&b)).unwrap();
+    let second = c
+        .publish_own_endpoints(&kh("alice"), std::slice::from_ref(&b))
+        .unwrap();
     assert_eq!(c.position.seqno.counter, 4);
-    assert_eq!(c.take_object(&*t.afab, &me, KIND_ENDPOINT_RECORD, &second, &ids()), rhtn_node::store::Decision::Stored);
+    assert_eq!(
+        c.take_object(&*t.afab, &me, KIND_ENDPOINT_RECORD, &second, &ids()),
+        rhtn_node::store::Decision::Stored
+    );
     assert_eq!(c.store.endpoint(&me).unwrap().seqno.counter, 4);
     // and the position's own counter counts too, where it is ahead
     c.position.seqno.counter = 9;
-    let third = c.publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a)).unwrap();
-    assert_eq!(rhtn_node::store::EndpointRecord::parse(&third).unwrap().seqno.counter, 10);
+    let third = c
+        .publish_own_endpoints(&kh("alice"), std::slice::from_ref(&a))
+        .unwrap();
+    assert_eq!(
+        rhtn_node::store::EndpointRecord::parse(&third)
+            .unwrap()
+            .seqno
+            .counter,
+        10
+    );
     assert_eq!(c.position.seqno.counter, 10);
     // a second relationship line publishes its own record on its own series
-    c.positions.insert(kh("w1"), Locator { anchor: kh("w1"), path: vec![0x30], nibbles: 1, seqno: Seqno { series: 7, counter: 0 } });
-    let other = c.publish_own_endpoints(&kh("w1"), std::slice::from_ref(&b)).unwrap();
+    c.positions.insert(
+        kh("w1"),
+        Locator {
+            anchor: kh("w1"),
+            path: vec![0x30],
+            nibbles: 1,
+            seqno: Seqno {
+                series: 7,
+                counter: 0,
+            },
+        },
+    );
+    let other = c
+        .publish_own_endpoints(&kh("w1"), std::slice::from_ref(&b))
+        .unwrap();
     let er = rhtn_node::store::EndpointRecord::parse(&other).unwrap();
     assert_eq!((er.seqno.series, er.seqno.counter), (7, 1));
     assert_eq!(c.positions[&kh("w1")].seqno.counter, 1);
-    assert_eq!(c.position.seqno.counter, 10, "the primary line is untouched");
+    assert_eq!(
+        c.position.seqno.counter, 10,
+        "the primary line is untouched"
+    );
     // no position in a subnet: nothing to publish there
-    assert!(c.publish_own_endpoints(&kh("carol"), std::slice::from_ref(&b)).is_none());
+    assert!(
+        c.publish_own_endpoints(&kh("carol"), std::slice::from_ref(&b))
+            .is_none()
+    );
 }
 
 // acceptance: RES-18
@@ -517,32 +991,93 @@ fn own_endpoint_publication_replays_or_advances_per_relationship_line() {
 fn a_self_signed_record_without_a_signature_or_with_a_failing_one_is_malformed_under_a_held_key() {
     let t = tree();
     let mut a = t.a;
-    let good = endpoint_record(&id("bob"), &[point(1, 7101)], Seqno { series: 1, counter: 9 });
+    let good = endpoint_record(
+        &id("bob"),
+        &[point(1, 7101)],
+        Seqno {
+            series: 1,
+            counter: 9,
+        },
+    );
     let without = rhtn_codec::cbor::map_without_key(&good, 4).unwrap();
     let mut failing = good.clone();
     *failing.last_mut().unwrap() ^= 1;
-    let no_bob: Vec<_> = ids().into_iter().filter(|i| i.keyhash != kh("bob")).collect();
+    let no_bob: Vec<_> = ids()
+        .into_iter()
+        .filter(|i| i.keyhash != kh("bob"))
+        .collect();
     // no signature slot: malformed whoever holds the key
-    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &without, &ids()), rhtn_node::store::Decision::Malformed(_)));
-    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &without, &no_bob), rhtn_node::store::Decision::Malformed(_)));
+    assert!(matches!(
+        a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &without, &ids()),
+        rhtn_node::store::Decision::Malformed(_)
+    ));
+    assert!(matches!(
+        a.take_object(
+            &*t.afab,
+            &kh("bob"),
+            KIND_ENDPOINT_RECORD,
+            &without,
+            &no_bob
+        ),
+        rhtn_node::store::Decision::Malformed(_)
+    ));
     // a failing signature under a held key: malformed, never gossip
-    assert!(matches!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &failing, &ids()), rhtn_node::store::Decision::Malformed(_)));
-    assert!(a.store.endpoint(&kh("bob")).is_none_or(|e| e.seqno.counter < 9), "nothing at counter 9 entered");
+    assert!(matches!(
+        a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &failing, &ids()),
+        rhtn_node::store::Decision::Malformed(_)
+    ));
+    assert!(
+        a.store
+            .endpoint(&kh("bob"))
+            .is_none_or(|e| e.seqno.counter < 9),
+        "nothing at counter 9 entered"
+    );
     // the same record where the key is not held: gossip, checked at contact
-    assert_eq!(a.take_object(&*t.afab, &kh("bob"), KIND_ENDPOINT_RECORD, &failing, &no_bob), rhtn_node::store::Decision::Stored);
+    assert_eq!(
+        a.take_object(
+            &*t.afab,
+            &kh("bob"),
+            KIND_ENDPOINT_RECORD,
+            &failing,
+            &no_bob
+        ),
+        rhtn_node::store::Decision::Stored
+    );
     // the anchor entry holds the same line
-    let entry = anchor_entry(&id("bob"), &[point(1, 7101)], 3, Seqno { series: 1, counter: 9 });
-    assert!(AnchorEntry::parse(&rhtn_codec::cbor::map_without_key(&entry, 5).unwrap()).is_err(), "no signature slot");
+    let entry = anchor_entry(
+        &id("bob"),
+        &[point(1, 7101)],
+        3,
+        Seqno {
+            series: 1,
+            counter: 9,
+        },
+    );
+    assert!(
+        AnchorEntry::parse(&rhtn_codec::cbor::map_without_key(&entry, 5).unwrap()).is_err(),
+        "no signature slot"
+    );
     let mut bad_entry = entry.clone();
     *bad_entry.last_mut().unwrap() ^= 1;
     let mut strict = AnchorTable::new(0, Ingestion::VerifiedOnAcceptance);
-    assert!(!strict.offer(AnchorEntry::parse(&bad_entry).unwrap(), &ids()), "a failing signature under a held key is refused");
+    assert!(
+        !strict.offer(AnchorEntry::parse(&bad_entry).unwrap(), &ids()),
+        "a failing signature under a held key is refused"
+    );
     assert!(strict.offer(AnchorEntry::parse(&entry).unwrap(), &ids()));
 }
 
 /// A locator for alice under bob at `seqno`.
 fn alice_at(series: u32, counter: u32) -> Vec<u8> {
-    signed_locator(&id("alice"), &Locator { anchor: kh("bob"), path: vec![0x91], nibbles: 2, seqno: Seqno { series, counter } })
+    signed_locator(
+        &id("alice"),
+        &Locator {
+            anchor: kh("bob"),
+            path: vec![0x91],
+            nibbles: 2,
+            seqno: Seqno { series, counter },
+        },
+    )
 }
 
 // acceptance: REC-09
@@ -550,22 +1085,57 @@ fn alice_at(series: u32, counter: u32) -> Vec<u8> {
 fn a_chain_holder_rejects_records_in_an_abandoned_series_whatever_their_counter() {
     let mut w = World::new();
     let (a, _) = w.adopt("alice", "bob", 1);
-    let r = w.reissue("alice", "bob", Seqno { series: 1, counter: 5 }, 2);
-    let chain = rhtn_archive::series::SeriesChain::from_records(&[a.bytes.clone(), r.bytes.clone()], &ids()).unwrap();
+    let r = w.reissue(
+        "alice",
+        "bob",
+        Seqno {
+            series: 1,
+            counter: 5,
+        },
+        2,
+    );
+    let chain = rhtn_archive::series::SeriesChain::from_records(
+        &[a.bytes.clone(), r.bytes.clone()],
+        &ids(),
+    )
+    .unwrap();
     let mut store = LocatorStore::new();
     // H held a locator in s1 before the chain arrived
-    assert_eq!(store.offer(&alice_at(1, 3), &ids()), LocatorOutcome::Installed);
+    assert_eq!(
+        store.offer(&alice_at(1, 3), &ids()),
+        LocatorOutcome::Installed
+    );
     store.take_chain(&chain);
-    assert!(store.in_series(&kh("alice"), 1).is_none(), "the abandoned line is dropped with the chain");
+    assert!(
+        store.in_series(&kh("alice"), 1).is_none(),
+        "the abandoned line is dropped with the chain"
+    );
     // a validly signed locator in s1 above every s1 record H holds: rejected
-    assert_eq!(store.offer(&alice_at(1, 4_000_000_000), &ids()), LocatorOutcome::Abandoned);
+    assert_eq!(
+        store.offer(&alice_at(1, 4_000_000_000), &ids()),
+        LocatorOutcome::Abandoned
+    );
     assert!(store.in_series(&kh("alice"), 1).is_none());
     // a locator in s2 at counter 1: installed, and it is what H dials
-    assert_eq!(store.offer(&alice_at(2, 1), &ids()), LocatorOutcome::Installed);
-    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!("{:?}", store.reach(&kh("alice"))) };
-    assert_eq!(loc.seqno, Seqno { series: 2, counter: 1 });
+    assert_eq!(
+        store.offer(&alice_at(2, 1), &ids()),
+        LocatorOutcome::Installed
+    );
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else {
+        panic!("{:?}", store.reach(&kh("alice")))
+    };
+    assert_eq!(
+        loc.seqno,
+        Seqno {
+            series: 2,
+            counter: 1
+        }
+    );
     // and s1 stays closed, seal or no seal
-    assert_eq!(store.offer(&alice_at(1, u32::MAX), &ids()), LocatorOutcome::Abandoned);
+    assert_eq!(
+        store.offer(&alice_at(1, u32::MAX), &ids()),
+        LocatorOutcome::Abandoned
+    );
     assert!(store.abandoned(&kh("alice"), 1));
 }
 
@@ -573,18 +1143,29 @@ fn a_chain_holder_rejects_records_in_an_abandoned_series_whatever_their_counter(
 #[test]
 fn a_thiefs_seal_freezes_a_chainless_holders_entry_and_nothing_moves_it_afterwards() {
     let mut store = LocatorStore::new();
-    assert_eq!(store.offer(&alice_at(5, 5), &ids()), LocatorOutcome::Installed);
+    assert_eq!(
+        store.offer(&alice_at(5, 5), &ids()),
+        LocatorOutcome::Installed
+    );
     // the thief, holding alice's key, seals series 5 and reaches H first
     let thief = alice_at(5, u32::MAX);
     assert_eq!(store.offer(&thief, &ids()), LocatorOutcome::Replaced);
     // alice's own counter-6 locator arrives later: rejected
-    assert_eq!(store.offer(&alice_at(5, 6), &ids()), LocatorOutcome::IgnoredStale);
+    assert_eq!(
+        store.offer(&alice_at(5, 6), &ids()),
+        LocatorOutcome::IgnoredStale
+    );
     assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);
-    let Reach::Dial(loc) = store.reach(&kh("alice")) else { panic!() };
+    let Reach::Dial(loc) = store.reach(&kh("alice")) else {
+        panic!()
+    };
     assert_eq!(loc.seqno.counter, u32::MAX, "H dials the frozen entry");
     // no further record in s changes the entry
     for c in [7, 1_000_000, u32::MAX - 1] {
-        assert_eq!(store.offer(&alice_at(5, c), &ids()), LocatorOutcome::IgnoredStale);
+        assert_eq!(
+            store.offer(&alice_at(5, c), &ids()),
+            LocatorOutcome::IgnoredStale
+        );
     }
     assert_eq!(store.offer(&thief, &ids()), LocatorOutcome::Replay);
     assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);

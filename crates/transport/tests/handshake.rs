@@ -31,14 +31,30 @@ async fn trn_05_negotiates_rhtn_1_and_mutual_raw_public_keys() {
     let sep = tls::server_endpoint(&server, loopback()).unwrap();
     let cep = tls::client_endpoint(loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let (s, c) = tokio::join!(accept_once(&sep), async { tls::dial(&cep, &client, &pins, &server.public.keyhash, addr).unwrap().await });
-    let (s, c) = (s.expect("server side completes"), c.expect("client side completes"));
+    let (s, c) = tokio::join!(accept_once(&sep), async {
+        tls::dial(&cep, &client, &pins, &server.public.keyhash, addr)
+            .unwrap()
+            .await
+    });
+    let (s, c) = (
+        s.expect("server side completes"),
+        c.expect("client side completes"),
+    );
     assert_eq!(tls::negotiated_alpn(&c).as_deref(), Some(tls::ALPN));
     assert_eq!(tls::negotiated_alpn(&s).as_deref(), Some(tls::ALPN));
     // the server authenticated the client's classical component, mutually
-    assert_eq!(tls::peer_spki(&s).unwrap(), tls::spki_der(&client.public.ed));
-    assert_eq!(tls::peer_spki(&c).unwrap(), tls::spki_der(&server.public.ed));
-    assert_eq!(pins.keyhash_for_spki(&tls::peer_spki(&c).unwrap()), Some(server.public.keyhash));
+    assert_eq!(
+        tls::peer_spki(&s).unwrap(),
+        tls::spki_der(&client.public.ed)
+    );
+    assert_eq!(
+        tls::peer_spki(&c).unwrap(),
+        tls::spki_der(&server.public.ed)
+    );
+    assert_eq!(
+        pins.keyhash_for_spki(&tls::peer_spki(&c).unwrap()),
+        Some(server.public.keyhash)
+    );
 }
 
 // acceptance: TRN-01
@@ -49,16 +65,31 @@ async fn trn_01_offers_only_x25519mlkem768() {
     let pins = Pins::new();
     pins.pin_identity(&server.public);
     // a test peer that accepts only classical groups completes nothing with the profile's client
-    let sep = tls::server_endpoint_with(tls::server_config_with(&server, vec![kx_group::X25519, kx_group::SECP256R1]), loopback()).unwrap();
+    let sep = tls::server_endpoint_with(
+        tls::server_config_with(&server, vec![kx_group::X25519, kx_group::SECP256R1]),
+        loopback(),
+    )
+    .unwrap();
     let cep = tls::client_endpoint(loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let (s, c) = tokio::join!(accept_once(&sep), async { tls::dial(&cep, &client, &pins, &server.public.keyhash, addr).unwrap().await });
-    assert!(c.is_err(), "the profile's client must not complete a handshake on a classical group");
+    let (s, c) = tokio::join!(accept_once(&sep), async {
+        tls::dial(&cep, &client, &pins, &server.public.keyhash, addr)
+            .unwrap()
+            .await
+    });
+    assert!(
+        c.is_err(),
+        "the profile's client must not complete a handshake on a classical group"
+    );
     assert!(s.is_err());
     // and with the profile's group on both sides the handshake completes
     let sep = tls::server_endpoint(&server, loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let (s, c) = tokio::join!(accept_once(&sep), async { tls::dial(&cep, &client, &pins, &server.public.keyhash, addr).unwrap().await });
+    let (s, c) = tokio::join!(accept_once(&sep), async {
+        tls::dial(&cep, &client, &pins, &server.public.keyhash, addr)
+            .unwrap()
+            .await
+    });
     assert!(s.is_ok() && c.is_ok());
 }
 
@@ -70,9 +101,18 @@ async fn trn_02_completes_no_handshake_with_a_classical_only_client() {
     let sep = tls::server_endpoint(&server, loopback()).unwrap();
     let cep = tls::client_endpoint(loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let classical = tls::client_config_with(&client, &server.public.ed.to_bytes(), vec![kx_group::X25519, kx_group::SECP256R1]);
-    let (s, c) = tokio::join!(accept_once(&sep), async { tls::dial_with(&cep, classical, addr).unwrap().await });
-    assert!(c.is_err(), "a client offering only X25519 and secp256r1 must be refused");
+    let classical = tls::client_config_with(
+        &client,
+        &server.public.ed.to_bytes(),
+        vec![kx_group::X25519, kx_group::SECP256R1],
+    );
+    let (s, c) = tokio::join!(accept_once(&sep), async {
+        tls::dial_with(&cep, classical, addr).unwrap().await
+    });
+    assert!(
+        c.is_err(),
+        "a client offering only X25519 and secp256r1 must be refused"
+    );
     assert!(s.is_err(), "no session is established on the serving node");
 }
 
@@ -88,9 +128,22 @@ async fn trn_03_abandons_the_dial_when_the_raw_key_is_not_the_pinned_member() {
     let sep = tls::server_endpoint(&carol, loopback()).unwrap();
     let cep = tls::client_endpoint(loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let (s, c) = tokio::join!(accept_once(&sep), async { tls::dial(&cep, &client, &pins, &bob.public.keyhash, addr).unwrap().await });
-    assert!(c.is_err(), "a valid Ed25519 key that is not the pinned member must fail the handshake");
-    assert!(s.is_err(), "the server side never reaches a completed connection either");
+    let (s, c) = tokio::join!(accept_once(&sep), async {
+        tls::dial(&cep, &client, &pins, &bob.public.keyhash, addr)
+            .unwrap()
+            .await
+    });
+    assert!(
+        c.is_err(),
+        "a valid Ed25519 key that is not the pinned member must fail the handshake"
+    );
+    assert!(
+        s.is_err(),
+        "the server side never reaches a completed connection either"
+    );
     // no pin at all is refused before dialling
-    assert_eq!(tls::dial(&cep, &client, &Pins::new(), &bob.public.keyhash, addr).err(), Some(tls::DialError::NotPinned));
+    assert_eq!(
+        tls::dial(&cep, &client, &Pins::new(), &bob.public.keyhash, addr).err(),
+        Some(tls::DialError::NotPinned)
+    );
 }

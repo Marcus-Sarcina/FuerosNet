@@ -67,7 +67,9 @@ pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
 
 pub fn decode_push(body: &[u8]) -> Result<(u64, Vec<u8>), String> {
     let item = parse_all(body).map_err(|e| e.0)?;
-    let Item::Map(m) = &item else { return Err("push not a map".into()) };
+    let Item::Map(m) = &item else {
+        return Err("push not a map".into());
+    };
     if m.len() != 2 {
         return Err("push carries a field beyond the body-kind tag".into());
     }
@@ -114,9 +116,12 @@ impl Memo {
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
-        rhtn_codec::schema::check_unsigned(rhtn_codec::schema::Family::TopologyMemo, b, 0).map_err(|e| e.0)?;
+        rhtn_codec::schema::check_unsigned(rhtn_codec::schema::Family::TopologyMemo, b, 0)
+            .map_err(|e| e.0)?;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("memo not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("memo not a map".into());
+        };
         let kh = |k: u64| match map_get(m, k) {
             Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).ok(),
             _ => None,
@@ -139,32 +144,51 @@ pub enum MemoOutcome {
     /// Not this subnet's: neither applied to a table nor passed on (§10.2).
     ForeignSubnet,
     /// Applied where a table is kept, and forwarded rootward.
-    Forwarded { to: Keyhash },
+    Forwarded {
+        to: Keyhash,
+    },
     /// Forwarded rootward, and sent down the branch holding the other slot
     /// this node's table shows the occupant in (§10.2.4).
-    ForwardedAndDescended { to: Keyhash, down: Keyhash },
+    ForwardedAndDescended {
+        to: Keyhash,
+        down: Keyhash,
+    },
     /// Applied where a table is kept; this node is the root.
     StoppedAtRoot,
     /// This node is the root, and the memo went down the other branch.
-    StoppedAtRootAndDescended { down: Keyhash },
+    StoppedAtRootAndDescended {
+        down: Keyhash,
+    },
     /// This node holds that slot at or after the memo's timestamp.
     AlreadyPassed,
     /// Field 1 is this node and its own row confirms the memo: a cycle.
-    CycleConfirmed { disavowed: Keyhash },
+    CycleConfirmed {
+        disavowed: Keyhash,
+    },
     /// Field 1 is this node and its own row does not confirm the memo.
     Unconfirmed,
     /// Field 1 is an attached client and the memo came from below that
     /// client: the hit is handed to the client at contact, and the records
     /// that answer it are theirs (§10.2).
-    ForAttachedClient { client: Keyhash },
+    ForAttachedClient {
+        client: Keyhash,
+    },
     /// The occupant sits in one of this node's own slots and the memo
     /// places it under another patron: this node is the patron who has not
     /// just spoken, its own records decide, and nothing compels it to act
     /// (§10.2.4).  `forwarded` says where the memo went on rootward.
-    HeldElsewhere { patron: Keyhash, slot: u64, timestamp: u64, mine: u64, forwarded: Option<Keyhash> },
+    HeldElsewhere {
+        patron: Keyhash,
+        slot: u64,
+        timestamp: u64,
+        mine: u64,
+        forwarded: Option<Keyhash>,
+    },
     /// A downward memo, passed on toward the patron whose slot it did not
     /// name; this node's table was updated on the way past.
-    Descended { to: Keyhash },
+    Descended {
+        to: Keyhash,
+    },
     /// A downward memo this node can take no further: no table, no other
     /// slot, or no session down that branch.
     DescentEnded,
@@ -178,7 +202,13 @@ impl NodeView {
     /// Originate a push for an object this node is a party to: it enters
     /// this node's own store first, so an echo of it is a duplicate and dies,
     /// and goes to every adjacency (`wire-format.md` §10.1).
-    pub fn originate_push<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, kind: u64, object: &[u8], ids: &L) -> Decision {
+    pub fn originate_push<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        kind: u64,
+        object: &[u8],
+        ids: &L,
+    ) -> Decision {
         let me = self.me();
         self.take_object(adj, &me, kind, object, ids)
     }
@@ -198,12 +228,21 @@ impl NodeView {
         }
         want.remove(&me);
         // adjacency is the sessions the node has anyway
-        adj.peers().into_iter().filter(|p| want.contains(p)).collect()
+        adj.peers()
+            .into_iter()
+            .filter(|p| want.contains(p))
+            .collect()
     }
 
     /// Receive a `TopologyPush` on the session from `from`, decide against
     /// this node's own view, and forward what it stored.
-    pub fn receive_push<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8], ids: &L) -> Decision {
+    pub fn receive_push<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        from: &Keyhash,
+        body: &[u8],
+        ids: &L,
+    ) -> Decision {
         let (kind, object) = match decode_push(body) {
             Ok(v) => v,
             Err(e) => return Decision::Malformed(e),
@@ -212,7 +251,14 @@ impl NodeView {
     }
 
     /// The same decision for an object already unwrapped.
-    pub fn take_object<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, from: &Keyhash, kind: u64, object: &[u8], ids: &L) -> Decision {
+    pub fn take_object<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        from: &Keyhash,
+        kind: u64,
+        object: &[u8],
+        ids: &L,
+    ) -> Decision {
         // the storage question is answered against this node's own view,
         // taken now rather than when the object was sent (§10.1.1)
         let me = self.me();
@@ -291,7 +337,10 @@ impl NodeView {
     fn apply_stored<L: Lookup + ?Sized>(&mut self, object: &[u8], ids: &L) -> Option<u64> {
         let rec = Record::parse(object).ok()?;
         let me = self.me();
-        let Ok(outcome) = self.table.apply_with(&rec, ids, &self.store, None, Evaluation::Deferred) else {
+        let Ok(outcome) = self
+            .table
+            .apply_with(&rec, ids, &self.store, None, Evaluation::Deferred)
+        else {
             return None;
         };
         // **a recognised recovery ends the superseded key's relationship**
@@ -312,7 +361,12 @@ impl NodeView {
                 // the row follows the settled binding, not the transaction:
                 // an adoption whose binding a held departure has already
                 // ended leaves the row empty, dated by that ending
-                let binding = self.table.bindings().iter().find(|b| b.adoption == rec.txid).cloned();
+                let binding = self
+                    .table
+                    .bindings()
+                    .iter()
+                    .find(|b| b.adoption == rec.txid)
+                    .cloned();
                 match binding.as_ref().and_then(|b| b.end.as_ref()) {
                     None => self.set_slot(slot, Some(node), rec.time),
                     // This adoption's own binding has ended, and a later
@@ -320,7 +374,10 @@ impl NodeView {
                     // a row a live one supports, whichever record arrives
                     // last (`wire-format.md` §4.2, §2.3).
                     Some((_, ended_at, _)) => {
-                        let free = self.slots.get(&slot).is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node));
+                        let free = self
+                            .slots
+                            .get(&slot)
+                            .is_none_or(|s| s.occupant.is_none() || s.occupant == Some(node));
                         if free && !self.still_bound(&node) {
                             self.relationship_ended(slot, &node, *ended_at);
                         }
@@ -359,7 +416,11 @@ impl NodeView {
             .table
             .bindings()
             .iter()
-            .find(|b| b.node == node && b.patron == me && b.end.as_ref().is_some_and(|(t, _, _)| *t == rec.txid))
+            .find(|b| {
+                b.node == node
+                    && b.patron == me
+                    && b.end.as_ref().is_some_and(|(t, _, _)| *t == rec.txid)
+            })
             .and_then(|b| b.end.as_ref().map(|(_, a, _)| *a))
             .unwrap_or(rec.time);
         if !self.still_bound(&node) {
@@ -406,7 +467,10 @@ impl NodeView {
     /// ended, are both history arriving late.
     fn still_bound(&self, node: &Keyhash) -> bool {
         let me = self.me();
-        self.table.bindings().iter().any(|b| b.node == *node && b.patron == me && b.open())
+        self.table
+            .bindings()
+            .iter()
+            .any(|b| b.node == *node && b.patron == me && b.open())
     }
 
     /// Rebuild the derived view from the topology store, forwarding
@@ -425,14 +489,21 @@ impl NodeView {
     /// is sent: this is the same fold `take_object` does after it has
     /// decided to store, without the forward that follows storing.
     pub fn rebuild_from_store<L: Lookup + ?Sized>(&mut self, ids: &L) -> Rebuilt {
-        let mut records: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
-        records.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
+        let mut records: Vec<Vec<u8>> =
+            self.store.transactions().map(|r| r.bytes.clone()).collect();
+        records.sort_by_key(|b| {
+            Record::parse(b)
+                .map(|r| (r.effective, r.txid))
+                .unwrap_or_default()
+        });
         for bytes in &records {
             self.apply_stored(bytes, ids);
         }
         self.mark_infrastructure();
         self.adopt_own_position();
-        Rebuilt { records: records.len() }
+        Rebuilt {
+            records: records.len(),
+        }
     }
 
     /// Mark this node, and every node this store holds an endpoint record
@@ -475,7 +546,10 @@ impl NodeView {
             .filter(|b| b.node == me && b.open())
             .filter_map(|b| {
                 let mut loc = self.store.transaction(&b.adoption)?.locator()?;
-                loc.seqno = rhtn_archive::tx::Seqno { series: b.series, counter: loc.seqno.counter };
+                loc.seqno = rhtn_archive::tx::Seqno {
+                    series: b.series,
+                    counter: loc.seqno.counter,
+                };
                 Some(loc)
             })
             .collect();
@@ -494,7 +568,10 @@ impl NodeView {
         // advances because the position changed and a holder's cached copy
         // of the old one is now stale (§2.3).
         if self.positions.is_empty() && self.position.anchor != me {
-            let seqno = rhtn_archive::tx::Seqno { series: self.position.seqno.series, counter: self.position.seqno.counter.saturating_add(1) };
+            let seqno = rhtn_archive::tx::Seqno {
+                series: self.position.seqno.series,
+                counter: self.position.seqno.counter.saturating_add(1),
+            };
             self.position = Locator::root(me, seqno);
         }
     }
@@ -502,23 +579,39 @@ impl NodeView {
     /// Take the reply to a repair, back on its request stream: the
     /// resolution it names steps, a referral is followed where a session
     /// with the next hop exists, and an arrival or a failure ends it.
-    pub fn take_resolve_reply(&mut self, adj: &dyn Adjacency, bytes: &[u8]) -> Option<crate::resolution::Step> {
+    pub fn take_resolve_reply(
+        &mut self,
+        adj: &dyn Adjacency,
+        bytes: &[u8],
+    ) -> Option<crate::resolution::Step> {
         let reply = crate::resolution::ResolveReply::decode(bytes).ok()?;
         let mut r = self.repairs.remove(&reply.nonce())?;
         let step = r.take(&reply);
         if let crate::resolution::Step::Continue(referral) = &step
             && adj.has_session(&referral.next)
-            && adj.request(&referral.next, crate::resolution::REQUEST_RESOLVE, &r.request.encode()) {
-                self.repairs.insert(r.request.nonce, r);
-            }
+            && adj.request(
+                &referral.next,
+                crate::resolution::REQUEST_RESOLVE,
+                &r.request.encode(),
+            )
+        {
+            self.repairs.insert(r.request.nonce, r);
+        }
         Some(step)
     }
 
     /// Re-offer everything whose prerequisite has since arrived
     /// (`wire-format.md` §10.1.1's *hold it, fetch the key*).
-    pub fn release_pending<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L) -> Vec<Decision> {
+    pub fn release_pending<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+    ) -> Vec<Decision> {
         let ready = self.store.release_pending(ids);
-        ready.iter().map(|p| self.take_object(adj, &p.from.clone(), p.kind, &p.bytes.clone(), ids)).collect()
+        ready
+            .iter()
+            .map(|p| self.take_object(adj, &p.from.clone(), p.kind, &p.bytes.clone(), ids))
+            .collect()
     }
 
     /// Replay this node's store to `to` as `TopologyPush` frames: that is
@@ -533,7 +626,11 @@ impl NodeView {
     /// re-resolves the subject from the locator it holds for that subject,
     /// with a fresh random nonce (`wire-format.md` §7.7.3).  Holding no
     /// locator, it has nothing to resolve from and sends nothing.
-    fn re_resolve(&mut self, adj: &dyn Adjacency, subject: &Keyhash) -> Option<crate::resolution::ResolveRequest> {
+    fn re_resolve(
+        &mut self,
+        adj: &dyn Adjacency,
+        subject: &Keyhash,
+    ) -> Option<crate::resolution::ResolveRequest> {
         let held = self.locators.all(subject);
         let loc = held.first()?.locator.clone();
         let req = crate::resolution::ResolveRequest {
@@ -547,11 +644,23 @@ impl NodeView {
         // anchor, where a session that can carry a request exists; the
         // request goes on a bidirectional stream (§9.2) and is held for
         // its reply
-        let target = self.serving_node.or(Some(loc.anchor)).filter(|t| adj.has_session(t))?;
+        let target = self
+            .serving_node
+            .or(Some(loc.anchor))
+            .filter(|t| adj.has_session(t))?;
         if !adj.request(&target, crate::resolution::REQUEST_RESOLVE, &req.encode()) {
             return None;
         }
-        self.repairs.insert(req.nonce, crate::resolution::Resolution { request: req.clone(), consumed: 0, hops: vec![target], endpoints: Vec::new(), arrived: None });
+        self.repairs.insert(
+            req.nonce,
+            crate::resolution::Resolution {
+                request: req.clone(),
+                consumed: 0,
+                hops: vec![target],
+                endpoints: Vec::new(),
+                arrived: None,
+            },
+        );
         Some(req)
     }
 
@@ -560,7 +669,13 @@ impl NodeView {
     /// The memo this node originates for a change to one of its own slots.
     pub fn memo_for_slot(&self, slot: u64) -> Option<Memo> {
         let s = self.slots.get(&slot)?;
-        Some(Memo { patron: self.me(), position: self.position.clone(), slot, timestamp: s.timestamp, occupant: s.occupant })
+        Some(Memo {
+            patron: self.me(),
+            position: self.position.clone(),
+            slot,
+            timestamp: s.timestamp,
+            occupant: s.occupant,
+        })
     }
 
     /// Send a memo rootward in its own subnet: to this node's patron there
@@ -573,7 +688,11 @@ impl NodeView {
         // to send to and nothing to decide.  No separate root check, and
         // none to keep in step with this one.
         let patron = self.patron_in(&memo.position.anchor)?;
-        let to = if adj.has_session(&patron) { patron } else { self.serving_node? };
+        let to = if adj.has_session(&patron) {
+            patron
+        } else {
+            self.serving_node?
+        };
         adj.send(&to, FRAME_TOPOLOGY_MEMO, &memo.encode());
         Some(to)
     }
@@ -589,7 +708,12 @@ impl NodeView {
     /// a downward memo on its way to the patron who has not just spoken
     /// (`wire-format.md` §10.2, §10.2.1, §10.2.4).  Direction is implied by
     /// where it came from, never by a field.
-    pub fn receive_memo(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8]) -> MemoOutcome {
+    pub fn receive_memo(
+        &mut self,
+        adj: &dyn Adjacency,
+        from: &Keyhash,
+        body: &[u8],
+    ) -> MemoOutcome {
         let memo = match Memo::decode(body) {
             Ok(m) => m,
             Err(e) => return MemoOutcome::Malformed(e),
@@ -610,12 +734,18 @@ impl NodeView {
         // that answer it are the client's, not this node's.  The client's
         // own memo on its way up arrives from the client itself, or from a
         // party outside its subtree, and travels on.
-        if self.attached.contains(&memo.patron) && *from != memo.patron && self.table.downline_contains(&memo.patron, from) {
-            return MemoOutcome::ForAttachedClient { client: memo.patron };
+        if self.attached.contains(&memo.patron)
+            && *from != memo.patron
+            && self.table.downline_contains(&memo.patron, from)
+        {
+            return MemoOutcome::ForAttachedClient {
+                client: memo.patron,
+            };
         }
         // from the patron, or the serving node standing in for it, the memo
         // is descending
-        let from_above = self.patron_in(&memo.position.anchor) == Some(*from) || (self.serving_node == Some(*from) && !self.table.downline_contains(&me, from));
+        let from_above = self.patron_in(&memo.position.anchor) == Some(*from)
+            || (self.serving_node == Some(*from) && !self.table.downline_contains(&me, from));
         if from_above {
             return self.receive_downward(adj, &memo, body);
         }
@@ -623,14 +753,21 @@ impl NodeView {
         // forward it (§10.2)
         let key = (memo.patron, memo.slot);
         if let Some(held) = self.memo_table.get(&key)
-            && held.timestamp >= memo.timestamp {
-                return MemoOutcome::AlreadyPassed;
-            }
+            && held.timestamp >= memo.timestamp
+        {
+            return MemoOutcome::AlreadyPassed;
+        }
         // the re-parenting check needs a table (§10.2.1): the same occupant
         // already held in another slot of this subtree
-        let other = if self.keeps_memo_table { self.other_slot_of(&memo) } else { None };
+        let other = if self.keeps_memo_table {
+            self.other_slot_of(&memo)
+        } else {
+            None
+        };
         self.note_memo(&memo);
-        let down = other.and_then(|(p, _)| self.hop_toward(&p)).filter(|c| adj.has_session(c));
+        let down = other
+            .and_then(|(p, _)| self.hop_toward(&p))
+            .filter(|c| adj.has_session(c));
         if let Some(c) = &down {
             adj.send(c, FRAME_TOPOLOGY_MEMO, body);
         }
@@ -638,13 +775,23 @@ impl NodeView {
         // the occupant in one of this node's own slots, placed under another
         // patron: this node's own records decide, and the memo travels on
         if let Some(mine) = memo.occupant.and_then(|o| self.slot_of(&o)) {
-            return MemoOutcome::HeldElsewhere { patron: memo.patron, slot: memo.slot, timestamp: memo.timestamp, mine, forwarded: up };
+            return MemoOutcome::HeldElsewhere {
+                patron: memo.patron,
+                slot: memo.slot,
+                timestamp: memo.timestamp,
+                mine,
+                forwarded: up,
+            };
         }
         match (up, down) {
             (Some(to), Some(down)) => MemoOutcome::ForwardedAndDescended { to, down },
             (Some(to), None) => MemoOutcome::Forwarded { to },
-            (None, Some(down)) if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRootAndDescended { down },
-            (None, None) if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRoot,
+            (None, Some(down)) if self.patron_in(&memo.position.anchor).is_none() => {
+                MemoOutcome::StoppedAtRootAndDescended { down }
+            }
+            (None, None) if self.patron_in(&memo.position.anchor).is_none() => {
+                MemoOutcome::StoppedAtRoot
+            }
             (None, _) => MemoOutcome::Unroutable,
         }
     }
@@ -653,8 +800,15 @@ impl NodeView {
     /// kept: the table, not the update history (§10.2.2).
     fn note_memo(&mut self, memo: &Memo) {
         if self.keeps_memo_table {
-            self.memo_table.insert((memo.patron, memo.slot), Slot { occupant: memo.occupant, timestamp: memo.timestamp });
-            self.memo_positions.insert(memo.patron, memo.position.clone());
+            self.memo_table.insert(
+                (memo.patron, memo.slot),
+                Slot {
+                    occupant: memo.occupant,
+                    timestamp: memo.timestamp,
+                },
+            );
+            self.memo_positions
+                .insert(memo.patron, memo.position.clone());
         }
     }
 
@@ -663,7 +817,10 @@ impl NodeView {
     /// re-parenting question (§10.2.2).
     fn other_slot_of(&self, memo: &Memo) -> Option<(Keyhash, u64)> {
         let o = memo.occupant?;
-        self.memo_table.iter().find(|((p, s), row)| row.occupant == Some(o) && (*p, *s) != (memo.patron, memo.slot)).map(|((p, s), _)| (*p, *s))
+        self.memo_table
+            .iter()
+            .find(|((p, s), row)| row.occupant == Some(o) && (*p, *s) != (memo.patron, memo.slot))
+            .map(|((p, s), _)| (*p, *s))
     }
 
     /// This node's subordinate on the way down to `patron`, by anchor and
@@ -671,8 +828,16 @@ impl NodeView {
     /// that patron's position after this node's own.
     fn hop_toward(&self, patron: &Keyhash) -> Option<Keyhash> {
         let pos = self.memo_positions.get(patron)?;
-        let mine = Path { bytes: self.position.path.clone(), nibbles: self.position.nibbles }.indices();
-        let theirs = Path { bytes: pos.path.clone(), nibbles: pos.nibbles }.indices();
+        let mine = Path {
+            bytes: self.position.path.clone(),
+            nibbles: self.position.nibbles,
+        }
+        .indices();
+        let theirs = Path {
+            bytes: pos.path.clone(),
+            nibbles: pos.nibbles,
+        }
+        .indices();
         if theirs.len() <= mine.len() || theirs[..mine.len()] != mine[..] {
             return None;
         }
@@ -684,10 +849,20 @@ impl NodeView {
     /// memo did not name.  At that patron it stops: its own records say
     /// whether it still holds the subordinate, and nothing compels it.
     fn receive_downward(&mut self, adj: &dyn Adjacency, memo: &Memo, body: &[u8]) -> MemoOutcome {
-        let other = if self.keeps_memo_table { self.other_slot_of(memo) } else { None };
+        let other = if self.keeps_memo_table {
+            self.other_slot_of(memo)
+        } else {
+            None
+        };
         self.note_memo(memo);
         if let Some(mine) = memo.occupant.and_then(|o| self.slot_of(&o)) {
-            return MemoOutcome::HeldElsewhere { patron: memo.patron, slot: memo.slot, timestamp: memo.timestamp, mine, forwarded: None };
+            return MemoOutcome::HeldElsewhere {
+                patron: memo.patron,
+                slot: memo.slot,
+                timestamp: memo.timestamp,
+                mine,
+                forwarded: None,
+            };
         }
         match other.and_then(|(p, _)| self.hop_toward(&p)) {
             Some(c) if adj.has_session(&c) => {
@@ -713,7 +888,9 @@ impl NodeView {
         // disavow the direct subordinate that forwarded the memo, reason
         // code 5, without prejudice (§10.2.4); the disavowal enters this
         // node's own store and table, empties the slot, and floods
-        let Some(dis) = self.disavow(from, Some(5)) else { return MemoOutcome::Unconfirmed };
+        let Some(dis) = self.disavow(from, Some(5)) else {
+            return MemoOutcome::Unconfirmed;
+        };
         let ids: Vec<rhtn_crypto::Identity> = vec![self.identity.public.clone()];
         self.originate_push(adj, KIND_TRANSACTION, &dis.bytes, &ids);
         if let Some(slot) = self.slot_of(from) {
@@ -747,7 +924,11 @@ impl NodeView {
     /// this node's own subordinates occupy, and the watermark that says
     /// which store this was derived from.
     pub fn materialise(&self) -> Snapshot {
-        let mut at: Vec<(u64, Txid)> = self.store.transactions().map(|r| (r.effective, r.txid)).collect();
+        let mut at: Vec<(u64, Txid)> = self
+            .store
+            .transactions()
+            .map(|r| (r.effective, r.txid))
+            .collect();
         at.sort();
         let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut table = self.table.materialise();
@@ -770,7 +951,11 @@ impl NodeView {
         emit_bstr(&mut out, &table);
         emit_bstr(&mut out, &slots);
         table = out;
-        Snapshot { folded, high: at.last().copied(), table }
+        Snapshot {
+            folded,
+            high: at.last().copied(),
+            table,
+        }
     }
 
     /// Bring the derived view up to the store, replaying only what the
@@ -783,13 +968,30 @@ impl NodeView {
     /// node — fails that count and the whole fold runs.  **The failure is
     /// slow, never wrong**, which is the property that lets this be a
     /// cache at all.
-    pub fn restore_materialised<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Restored {
+    pub fn restore_materialised<L: Lookup + ?Sized>(
+        &mut self,
+        snap: Option<&Snapshot>,
+        ids: &L,
+    ) -> Restored {
         let mut all: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
-        all.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default());
+        all.sort_by_key(|b| {
+            Record::parse(b)
+                .map(|r| (r.effective, r.txid))
+                .unwrap_or_default()
+        });
         let usable = snap.and_then(|s| {
-            let later = unfolded(s, &all, |b| Record::parse(b).map(|r| (r.effective, r.txid)).unwrap_or_default())?;
+            let later = unfolded(s, &all, |b| {
+                Record::parse(b)
+                    .map(|r| (r.effective, r.txid))
+                    .unwrap_or_default()
+            })?;
             self.take_snapshot(s)?;
-            Some(later.into_iter().map(|i| all[i].clone()).collect::<Vec<_>>())
+            Some(
+                later
+                    .into_iter()
+                    .map(|i| all[i].clone())
+                    .collect::<Vec<_>>(),
+            )
         });
         match usable {
             Some(later) => {
@@ -801,7 +1003,13 @@ impl NodeView {
                 // watermark over transactions says nothing about them
                 self.mark_infrastructure();
                 self.adopt_own_position();
-                if later.is_empty() { Restored::Current } else { Restored::Extended { folded: later.len() } }
+                if later.is_empty() {
+                    Restored::Current
+                } else {
+                    Restored::Extended {
+                        folded: later.len(),
+                    }
+                }
             }
             None => {
                 let n = self.rebuild_from_store(ids).records;
@@ -816,8 +1024,12 @@ impl NodeView {
     /// take a decision that was not made now.
     fn take_snapshot(&mut self, snap: &Snapshot) -> Option<()> {
         let item = parse_all(&snap.table).ok()?;
-        let Item::Array(parts) = &item else { return None };
-        let [Item::Bytes(t), Item::Bytes(s)] = parts.as_slice() else { return None };
+        let Item::Array(parts) = &item else {
+            return None;
+        };
+        let [Item::Bytes(t), Item::Bytes(s)] = parts.as_slice() else {
+            return None;
+        };
         let mut table = Table::from_materialised(&snap.table[t.clone()])?;
         let slots = read_slots(&snap.table[s.clone()])?;
         // **whose derived view this is, is this node's own answer and never
@@ -845,9 +1057,17 @@ fn read_slots(b: &[u8]) -> Option<BTreeMap<u64, Slot>> {
     for (k, v) in m {
         let Item::Uint(n) = k else { return None };
         let Item::Array(f) = v else { return None };
-        let [Item::Bytes(o), Item::Uint(t)] = f.as_slice() else { return None };
+        let [Item::Bytes(o), Item::Uint(t)] = f.as_slice() else {
+            return None;
+        };
         let occ = &b[o.clone()];
-        out.insert(*n, Slot { occupant: (!occ.is_empty()).then(|| occ.try_into().ok()).flatten(), timestamp: *t });
+        out.insert(
+            *n,
+            Slot {
+                occupant: (!occ.is_empty()).then(|| occ.try_into().ok()).flatten(),
+                timestamp: *t,
+            },
+        );
     }
     Some(out)
 }

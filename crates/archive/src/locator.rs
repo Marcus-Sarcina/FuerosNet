@@ -21,14 +21,22 @@ impl SignedLocator {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "SignedLocator", &item).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
         let subject: Keyhash = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subject")?
+            }
             _ => return Err("field 1".into()),
         };
         let r2 = value_slice(b, 2).ok_or("field 2")?;
         let locator = Locator::decode(&b[r2])?;
-        Ok(SignedLocator { subject, locator, bytes: b.to_vec() })
+        Ok(SignedLocator {
+            subject,
+            locator,
+            bytes: b.to_vec(),
+        })
     }
 
     /// Signed by the subject; a bare `Locator` presented alone is rejected.
@@ -63,6 +71,14 @@ pub const COUNTER_MAX: u32 = u32::MAX;
 /// counter.  Unilateral, needing no patron; final for everyone who takes
 /// it, the subject included.
 pub fn seal(identity: &rhtn_crypto::SigningIdentity, position: &Locator, series: u32) -> Vec<u8> {
-    let sealed = Locator { anchor: position.anchor, path: position.path.clone(), nibbles: position.nibbles, seqno: crate::tx::Seqno { series, counter: COUNTER_MAX } };
+    let sealed = Locator {
+        anchor: position.anchor,
+        path: position.path.clone(),
+        nibbles: position.nibbles,
+        seqno: crate::tx::Seqno {
+            series,
+            counter: COUNTER_MAX,
+        },
+    };
     signed_locator(identity, &sealed)
 }

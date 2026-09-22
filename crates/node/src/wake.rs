@@ -57,7 +57,11 @@ pub struct WakeRegister {
 
 impl WakeRegister {
     pub fn new() -> Self {
-        WakeRegister { max_url: 2048, max_key: 256, ..Default::default() }
+        WakeRegister {
+            max_url: 2048,
+            max_key: 256,
+            ..Default::default()
+        }
     }
 
     /// Keep the register under `dir`, and read back whatever is there.
@@ -66,8 +70,12 @@ impl WakeRegister {
         let d = dir.join("wake");
         if let Ok(rd) = std::fs::read_dir(&d) {
             for e in rd.flatten() {
-                let Some(who) = unhex(&e.file_name().to_string_lossy()) else { continue };
-                let Ok(text) = std::fs::read_to_string(e.path()) else { continue };
+                let Some(who) = unhex(&e.file_name().to_string_lossy()) else {
+                    continue;
+                };
+                let Ok(text) = std::fs::read_to_string(e.path()) else {
+                    continue;
+                };
                 if let Some(ep) = parse(&text) {
                     self.endpoints.insert(who, ep);
                 }
@@ -86,19 +94,33 @@ impl WakeRegister {
 
     /// Take what `client` registered.  No URL withdraws: opting out is as
     /// sayable as opting in (design §14.1.5).
-    pub fn register(&mut self, client: Keyhash, url: Option<String>, key: Option<Vec<u8>>, lapses_at: Option<u64>) -> Registered {
+    pub fn register(
+        &mut self,
+        client: Keyhash,
+        url: Option<String>,
+        key: Option<Vec<u8>>,
+        lapses_at: Option<u64>,
+    ) -> Registered {
         let Some(url) = url else {
             self.forget(&client);
             return Registered::Withdrawn;
         };
         let key = key.unwrap_or_default();
-        if url.is_empty() || url.len() > self.max_url || key.is_empty() || key.len() > self.max_key {
+        if url.is_empty() || url.len() > self.max_url || key.is_empty() || key.len() > self.max_key
+        {
             return Registered::Refused;
         }
-        let ep = Endpoint { url, key, lapses_at };
+        let ep = Endpoint {
+            url,
+            key,
+            lapses_at,
+        };
         if let Some(dir) = &self.dir {
             let d = dir.join("wake");
-            if std::fs::create_dir_all(&d).and_then(|_| std::fs::write(d.join(hex(&client)), render(&ep))).is_err() {
+            if std::fs::create_dir_all(&d)
+                .and_then(|_| std::fs::write(d.join(hex(&client)), render(&ep)))
+                .is_err()
+            {
                 return Registered::Refused;
             }
         }
@@ -136,7 +158,9 @@ fn render(e: &Endpoint) -> String {
 fn parse(text: &str) -> Option<Endpoint> {
     let (mut url, mut key, mut lapses) = (None, None, None);
     for line in text.lines() {
-        let Some((k, v)) = line.split_once(" = ") else { continue };
+        let Some((k, v)) = line.split_once(" = ") else {
+            continue;
+        };
         match k {
             "url" => url = Some(v.to_string()),
             "key" => key = unhex_bytes(v),
@@ -144,7 +168,11 @@ fn parse(text: &str) -> Option<Endpoint> {
             _ => {}
         }
     }
-    Some(Endpoint { url: url?, key: key?, lapses_at: lapses })
+    Some(Endpoint {
+        url: url?,
+        key: key?,
+        lapses_at: lapses,
+    })
 }
 
 fn hex(k: &Keyhash) -> String {
@@ -159,7 +187,9 @@ fn unhex_bytes(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok())
+        .collect()
 }
 
 fn unhex(s: &str) -> Option<Keyhash> {

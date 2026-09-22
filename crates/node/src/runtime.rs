@@ -9,8 +9,11 @@
 //! upstream to its own patron or serving node.
 
 use crate::currency::{CurrencyRequest, CurrencyState};
-use crate::resolution::{AnchorTable, ClientResolution, NetworkPoint, REQUEST_RESOLVE, ResolveReply, ResolveRequest, Resolution, Step};
 use crate::propagation::decode_push;
+use crate::resolution::{
+    AnchorTable, ClientResolution, NetworkPoint, REQUEST_RESOLVE, Resolution, ResolveReply,
+    ResolveRequest, Step,
+};
 use crate::store::{Decision, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
 use crate::view::NodeView;
 use crate::{Adjacency, Keyhash};
@@ -18,7 +21,10 @@ use rhtn_archive::record::Record;
 use rhtn_archive::topology::Supersession;
 use rhtn_codec::schema::Family;
 use rhtn_crypto::Identity;
-use rhtn_transport::session::{AttachOutcome, ClientConfig, ControlHandler, Node, NodeConfig, RequestHandler, Session, fresh_attach};
+use rhtn_transport::session::{
+    AttachOutcome, ClientConfig, ControlHandler, Node, NodeConfig, RequestHandler, Session,
+    fresh_attach,
+};
 use rhtn_transport::tls;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -42,7 +48,13 @@ pub type ReplyHandler = Arc<dyn Fn(Keyhash, u64, Vec<u8>) + Send + Sync>;
 
 /// Send one request on `conn` and hand the reply to `hook`, off the caller's
 /// thread.  No reply, or no hook, and the request concludes nothing.
-fn request_and_reply(conn: quinn::Connection, peer: Keyhash, request_type: u64, body: &[u8], hook: Arc<Mutex<Option<ReplyHandler>>>) {
+fn request_and_reply(
+    conn: quinn::Connection,
+    peer: Keyhash,
+    request_type: u64,
+    body: &[u8],
+    hook: Arc<Mutex<Option<ReplyHandler>>>,
+) {
     let body = body.to_vec();
     tokio::spawn(async move {
         if let Ok(reply) = rhtn_transport::session::request_on(&conn, request_type, &body).await {
@@ -66,7 +78,13 @@ pub struct LiveAdjacency {
 
 impl Adjacency for LiveAdjacency {
     fn peers(&self) -> Vec<Keyhash> {
-        let mut out: Vec<Keyhash> = self.node.lock().unwrap().as_ref().map(|n| n.sessions()).unwrap_or_default();
+        let mut out: Vec<Keyhash> = self
+            .node
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|n| n.sessions())
+            .unwrap_or_default();
         out.extend(self.upstream.lock().unwrap().keys().copied());
         out
     }
@@ -84,7 +102,15 @@ impl Adjacency for LiveAdjacency {
     /// stream, so a party attached below cannot be asked [author,
     /// 2026-09-11].
     fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
-        let Some(conn) = self.upstream.lock().unwrap().get(peer).map(|u| u.conn.clone()) else { return false };
+        let Some(conn) = self
+            .upstream
+            .lock()
+            .unwrap()
+            .get(peer)
+            .map(|u| u.conn.clone())
+        else {
+            return false;
+        };
         request_and_reply(conn, *peer, request_type, body, self.on_reply.clone());
         true
     }
@@ -95,12 +121,21 @@ impl Adjacency for LiveAdjacency {
 /// or reissue ends the old credential's sessions and queue at the transport
 /// as it does in the table.  Anything but a verified transaction of those
 /// two kinds carries nothing.
-fn carry_supersession(node: &Arc<Mutex<Option<Arc<Node>>>>, ids: &[Identity], kind: u64, object: &[u8]) {
+fn carry_supersession(
+    node: &Arc<Mutex<Option<Arc<Node>>>>,
+    ids: &[Identity],
+    kind: u64,
+    object: &[u8],
+) {
     if kind != KIND_TRANSACTION {
         return;
     }
-    let Ok(rec) = Record::parse(object) else { return };
-    let Ok(sup) = Supersession::from_record(&rec, ids) else { return };
+    let Ok(rec) = Record::parse(object) else {
+        return;
+    };
+    let Ok(sup) = Supersession::from_record(&rec, ids) else {
+        return;
+    };
     if let Some(n) = node.lock().unwrap().as_ref() {
         n.supersede(sup);
     }
@@ -126,7 +161,9 @@ impl Adjacency for SessionAdjacency {
         }
     }
     fn request(&self, peer: &Keyhash, request_type: u64, body: &[u8]) -> bool {
-        let Some(conn) = self.conn.clone().filter(|_| *peer == self.peer) else { return false };
+        let Some(conn) = self.conn.clone().filter(|_| *peer == self.peer) else {
+            return false;
+        };
         request_and_reply(conn, *peer, request_type, body, self.on_reply.clone());
         true
     }
@@ -134,7 +171,11 @@ impl Adjacency for SessionAdjacency {
 
 /// The reply path into a view: a currency reply settles the ask it answers,
 /// a resolve reply steps the repair it answers.
-fn reply_handler(view: Arc<Mutex<NodeView>>, ids: Arc<Mutex<Vec<Identity>>>, adj: Arc<dyn Adjacency + Send + Sync>) -> ReplyHandler {
+fn reply_handler(
+    view: Arc<Mutex<NodeView>>,
+    ids: Arc<Mutex<Vec<Identity>>>,
+    adj: Arc<dyn Adjacency + Send + Sync>,
+) -> ReplyHandler {
     Arc::new(move |_peer, request_type, bytes| {
         let mut v = view.lock().unwrap();
         let i = ids.lock().unwrap();
@@ -161,7 +202,11 @@ pub struct RateLimit {
 
 impl RateLimit {
     pub fn new(per_window: u32, window: Duration) -> Self {
-        RateLimit { per_window, window, buckets: Mutex::new(HashMap::new()) }
+        RateLimit {
+            per_window,
+            window,
+            buckets: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Whether one more request from `peer` is within its allowance now.
@@ -189,7 +234,14 @@ pub type DirectInbox = mpsc::UnboundedReceiver<(Keyhash, Vec<u8>)>;
 /// for its own key, or a light client beside its serving node.  Given the
 /// authenticated requester and a type-4 body, the signed response for the
 /// stream, or nothing, which fails the stream (`wire-format.md` §9.2).
-pub type LocalVerifier = Arc<dyn Fn(Keyhash, Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>> + Send + Sync>;
+pub type LocalVerifier = Arc<
+    dyn Fn(
+            Keyhash,
+            Vec<u8>,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// The state of the direct path to one peer (design §14.1.1): held, or
 /// failed and not retried until the next path opening.
@@ -239,12 +291,29 @@ pub struct LiveNode {
 impl LiveNode {
     /// Start a node on loopback.  The hooks are installed on `cfg` before
     /// the transport node is built, so the first session already carries.
-    pub fn start(cfg: NodeConfig, view: NodeView, ids: Vec<Identity>, anchors: AnchorTable) -> Arc<LiveNode> {
-        Self::start_with(cfg, view, ids, anchors, RateLimit::new(120, Duration::from_secs(60)))
+    pub fn start(
+        cfg: NodeConfig,
+        view: NodeView,
+        ids: Vec<Identity>,
+        anchors: AnchorTable,
+    ) -> Arc<LiveNode> {
+        Self::start_with(
+            cfg,
+            view,
+            ids,
+            anchors,
+            RateLimit::new(120, Duration::from_secs(60)),
+        )
     }
 
     /// `start`, with the request allowance the operator chose.
-    pub fn start_with(mut cfg: NodeConfig, mut view: NodeView, ids: Vec<Identity>, anchors: AnchorTable, limits: RateLimit) -> Arc<LiveNode> {
+    pub fn start_with(
+        mut cfg: NodeConfig,
+        mut view: NodeView,
+        ids: Vec<Identity>,
+        anchors: AnchorTable,
+        limits: RateLimit,
+    ) -> Arc<LiveNode> {
         let limits = Arc::new(limits);
         // one clock for the node: the configuration's, read by every
         // decision the view takes from here on
@@ -254,9 +323,17 @@ impl LiveNode {
         let anchors = Arc::new(Mutex::new(anchors));
         let ids = Arc::new(Mutex::new(ids));
         let slot: Arc<Mutex<Option<Arc<Node>>>> = Arc::default();
-        let adjacency = LiveAdjacency { node: slot.clone(), upstream: Arc::default(), on_reply: Arc::default() };
+        let adjacency = LiveAdjacency {
+            node: slot.clone(),
+            upstream: Arc::default(),
+            on_reply: Arc::default(),
+        };
         // replies to this node's own requests come back into the view
-        *adjacency.on_reply.lock().unwrap() = Some(reply_handler(view.clone(), ids.clone(), Arc::new(adjacency.clone())));
+        *adjacency.on_reply.lock().unwrap() = Some(reply_handler(
+            view.clone(),
+            ids.clone(),
+            Arc::new(adjacency.clone()),
+        ));
 
         // stream 0: topology frames into the forwarding rule and the memo
         let (v, i, a, s) = (view.clone(), ids.clone(), adjacency.clone(), slot.clone());
@@ -266,9 +343,10 @@ impl LiveNode {
             match ft {
                 5 => {
                     if view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored
-                        && let Ok((kind, object)) = decode_push(&body) {
-                            carry_supersession(&s, &ids, kind, &object);
-                        }
+                        && let Ok((kind, object)) = decode_push(&body)
+                    {
+                        carry_supersession(&s, &ids, kind, &object);
+                    }
                 }
                 6 => {
                     view.receive_memo(&a, &peer, &body);
@@ -338,8 +416,16 @@ impl LiveNode {
                 .siblings(&me)
                 .into_iter()
                 .filter_map(|k| {
-                    let mut endpoints: Vec<NetworkPoint> =
-                        v.store.endpoint(&k).map(|e| e.endpoints.iter().filter_map(|p| NetworkPoint::decode_bytes(p).ok()).collect()).unwrap_or_default();
+                    let mut endpoints: Vec<NetworkPoint> = v
+                        .store
+                        .endpoint(&k)
+                        .map(|e| {
+                            e.endpoints
+                                .iter()
+                                .filter_map(|p| NetworkPoint::decode_bytes(p).ok())
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     endpoints.truncate(8);
                     if endpoints.is_empty() {
                         return None;
@@ -347,14 +433,22 @@ impl LiveNode {
                     Some(rhtn_transport::session::SiblingRef {
                         keyhash: k,
                         endpoints,
-                        key_material: known.iter().find(|i| i.keyhash == k).map(rhtn_crypto::Identity::key_material),
+                        key_material: known
+                            .iter()
+                            .find(|i| i.keyhash == k)
+                            .map(rhtn_crypto::Identity::key_material),
                     })
                 })
                 .collect()
         });
 
         // request streams: resolution and currency, answered from the view
-        let (v, c, an, s) = (view.clone(), currency.clone(), anchors.clone(), slot.clone());
+        let (v, c, an, s) = (
+            view.clone(),
+            currency.clone(),
+            anchors.clone(),
+            slot.clone(),
+        );
         let identity = cfg.identity.clone();
         // the detector's verdicts on the sessions this node serves feed the
         // ladder, stamped with the node's own clock (design §12.6.5.1), and
@@ -377,17 +471,31 @@ impl LiveNode {
         // §9.2), so this socket never asks STUN of anyone.  It takes an
         // ephemeral port on the same interface the node serves, so a host
         // with several does not dial out of one it was not given.
-        let outward = cfg.listen.map(|a| std::net::SocketAddr::new(a.ip(), 0)).unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
-        let client_socket = rhtn_transport::traversal::TraversalSocket::bind(outward, cfg.nat).expect("client socket");
-        let client_ep = rhtn_transport::traversal::endpoint(client_socket, None).expect("client endpoint");
+        let outward = cfg
+            .listen
+            .map(|a| std::net::SocketAddr::new(a.ip(), 0))
+            .unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
+        let client_socket = rhtn_transport::traversal::TraversalSocket::bind(outward, cfg.nat)
+            .expect("client socket");
+        let client_ep =
+            rhtn_transport::traversal::endpoint(client_socket, None).expect("client endpoint");
         let dial_ep = client_ep.clone();
         let lim = limits.clone();
         let ids_for_requests = ids.clone();
         let verifier: Arc<Mutex<Option<LocalVerifier>>> = Arc::default();
         let hosted_verifier = verifier.clone();
         let on_request: RequestHandler = Arc::new(move |peer, family, body| {
-            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) =
-                (v.clone(), c.clone(), an.clone(), s.clone(), identity.clone(), dial_ep.clone(), lim.clone(), ids_for_requests.clone(), hosted_verifier.clone());
+            let (v, c, an, s, identity, dial_ep, lim, ids_for_requests, hosted_verifier) = (
+                v.clone(),
+                c.clone(),
+                an.clone(),
+                s.clone(),
+                identity.clone(),
+                dial_ep.clone(),
+                lim.clone(),
+                ids_for_requests.clone(),
+                hosted_verifier.clone(),
+            );
             Box::pin(async move {
                 // over the requester's allowance the stream fails, and nothing
                 // about the request is kept
@@ -428,7 +536,10 @@ impl LiveNode {
                     Family::CatalogQuery => {
                         let view = v.lock().unwrap();
                         let me = view.me();
-                        let scopes = crate::catalog::TableScopes { table: &view.table, me };
+                        let scopes = crate::catalog::TableScopes {
+                            table: &view.table,
+                            me,
+                        };
                         view.catalog.answer(&peer, &body, &scopes)
                     }
                     Family::ResourceRegistration => {
@@ -469,18 +580,29 @@ impl LiveNode {
                     }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;
-                        let started = v.lock().unwrap().resolve_for_client(&an.lock().unwrap(), &req);
+                        let started = v
+                            .lock()
+                            .unwrap()
+                            .resolve_for_client(&an.lock().unwrap(), &req);
                         match started {
                             Ok(ClientResolution::Answered(reply)) => Some(reply.encode()),
                             Ok(ClientResolution::Proxied(r)) => {
                                 let node = s.lock().unwrap().clone()?;
-                                let (r, last) = drive(r, &dial_ep, &identity, &node, Duration::from_secs(3)).await;
+                                let (r, last) =
+                                    drive(r, &dial_ep, &identity, &node, Duration::from_secs(3))
+                                        .await;
                                 let reply = v.lock().unwrap().reply_for_client(&r, last.as_ref());
                                 Some(reply.encode())
                             }
                             // no anchor to start from: the client is told this
                             // node is not authoritative and cannot refer
-                            Err(_) => Some(ResolveReply::Failure { nonce: req.nonce, code: crate::resolution::FAIL_NOT_AUTHORITATIVE }.encode()),
+                            Err(_) => Some(
+                                ResolveReply::Failure {
+                                    nonce: req.nonce,
+                                    code: crate::resolution::FAIL_NOT_AUTHORITATIVE,
+                                }
+                                .encode(),
+                            ),
                         }
                     }
                     _ => None,
@@ -504,12 +626,17 @@ impl LiveNode {
         // Binding Requests at the address it serves on, which the operator
         // chooses (`infra-client-requirements.md` §7)
         let served = cfg.listen.unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
-        let traversal = rhtn_transport::traversal::TraversalSocket::bind(served, cfg.nat).expect("traversal socket");
+        let traversal = rhtn_transport::traversal::TraversalSocket::bind(served, cfg.nat)
+            .expect("traversal socket");
         let endpoint = {
-            let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&cfg.identity)).expect("quinn accepts the profile");
+            let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(
+                &cfg.identity,
+            ))
+            .expect("quinn accepts the profile");
             let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
             qcfg.transport_config(Arc::new(tls::transport_config()));
-            rhtn_transport::traversal::endpoint(traversal.clone(), Some(qcfg)).expect("server endpoint")
+            rhtn_transport::traversal::endpoint(traversal.clone(), Some(qcfg))
+                .expect("server endpoint")
         };
         let addr = traversal.addr().expect("bound");
         // an infra node publishes its own endpoint record per relationship
@@ -522,7 +649,8 @@ impl LiveNode {
             let me = v.me();
             let i = ids.lock().unwrap();
             for anchor in v.anchors() {
-                if let Some(record) = v.publish_own_endpoints(&anchor, std::slice::from_ref(&point)) {
+                if let Some(record) = v.publish_own_endpoints(&anchor, std::slice::from_ref(&point))
+                {
                     v.take_object(&adjacency, &me, KIND_ENDPOINT_RECORD, &record, &*i);
                 }
             }
@@ -540,7 +668,24 @@ impl LiveNode {
             }
         }
         tokio::spawn(node.clone().serve(endpoint.clone()));
-        Arc::new(LiveNode { node, view, currency, anchors, ids, adjacency, endpoint, addr, client_ep, dial_timeout: Duration::from_secs(3), limits, traversal, upstream_addr: Mutex::new(None), direct: Mutex::new(HashMap::new()), direct_deliveries: Mutex::new(Some(drx)), verifier })
+        Arc::new(LiveNode {
+            node,
+            view,
+            currency,
+            anchors,
+            ids,
+            adjacency,
+            endpoint,
+            addr,
+            client_ep,
+            dial_timeout: Duration::from_secs(3),
+            limits,
+            traversal,
+            upstream_addr: Mutex::new(None),
+            direct: Mutex::new(HashMap::new()),
+            direct_deliveries: Mutex::new(Some(drx)),
+            verifier,
+        })
     }
 
     pub fn me(&self) -> Keyhash {
@@ -566,15 +711,29 @@ impl LiveNode {
         match fresh_attach(&cfg, &self.client_ep, serving, false).await {
             AttachOutcome::Attached(mut session) => {
                 *self.upstream_addr.lock().unwrap() = Some(session.conn.remote_address());
-                self.adjacency.upstream.lock().unwrap().insert(serving, UpstreamSession { outbound: session.outbound.clone(), conn: session.conn.clone() });
+                self.adjacency.upstream.lock().unwrap().insert(
+                    serving,
+                    UpstreamSession {
+                        outbound: session.outbound.clone(),
+                        conn: session.conn.clone(),
+                    },
+                );
                 // the same reconciliation from the attaching side: the
                 // patron accepted a session and holds nothing this node
                 // has, including the endpoint record that says this node
                 // is infrastructure (`wire-format.md` §7.6, §10.1.3)
-                self.view.lock().unwrap().replay_to(&self.adjacency, &serving);
+                self.view
+                    .lock()
+                    .unwrap()
+                    .replay_to(&self.adjacency, &serving);
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
-                let (v, i, a, s) = (self.view.clone(), self.ids.clone(), self.adjacency.clone(), self.adjacency.node.clone());
+                let (v, i, a, s) = (
+                    self.view.clone(),
+                    self.ids.clone(),
+                    self.adjacency.clone(),
+                    self.adjacency.node.clone(),
+                );
                 tokio::spawn(async move {
                     while let Some((ft, body)) = frames.recv().await {
                         let mut view = v.lock().unwrap();
@@ -582,9 +741,10 @@ impl LiveNode {
                         match ft {
                             5 => {
                                 if view.receive_push(&a, &serving, &body, &*ids) == Decision::Stored
-                                    && let Ok((kind, object)) = decode_push(&body) {
-                                        carry_supersession(&s, &ids, kind, &object);
-                                    }
+                                    && let Ok((kind, object)) = decode_push(&body)
+                                {
+                                    carry_supersession(&s, &ids, kind, &object);
+                                }
                             }
                             6 => {
                                 view.receive_memo(&a, &serving, &body);
@@ -611,8 +771,15 @@ impl LiveNode {
     /// design §12.6.3's decision says the path may be direct, which is
     /// inside the horizon absent an override; outside it nothing is
     /// gathered, nothing exchanged and nothing dialled.
-    pub async fn prepare_direct(&self, peer: &Keyhash) -> Option<Vec<rhtn_transport::traversal::Candidate>> {
-        let path = self.view.lock().unwrap().payload_path(peer, crate::peering::PathOverride::None);
+    pub async fn prepare_direct(
+        &self,
+        peer: &Keyhash,
+    ) -> Option<Vec<rhtn_transport::traversal::Candidate>> {
+        let path = self
+            .view
+            .lock()
+            .unwrap()
+            .payload_path(peer, crate::peering::PathOverride::None);
         match path {
             crate::peering::PayloadPath::Direct => Some(self.gather().await),
             crate::peering::PayloadPath::Relayed => None,
@@ -623,7 +790,12 @@ impl LiveNode {
     /// dialled at once, the first handshake under the pinned key kept.
     /// Whether it opened; a failure is remembered and not retried until
     /// the next opening.
-    pub async fn open_direct(&self, peer: Keyhash, pins: &rhtn_transport::tls::Pins, candidates: &[rhtn_transport::traversal::Candidate]) -> bool {
+    pub async fn open_direct(
+        &self,
+        peer: Keyhash,
+        pins: &rhtn_transport::tls::Pins,
+        candidates: &[rhtn_transport::traversal::Candidate],
+    ) -> bool {
         // The decision is this node's own (design §12.6.3).  Candidates
         // arrive from the peer, and a peer willing to connect is not
         // permission to connect to it, so the same question `prepare_direct`
@@ -633,7 +805,15 @@ impl LiveNode {
             return false;
         }
         let me = self.node.cfg.identity.clone();
-        let conn = rhtn_transport::traversal::connect_direct(&self.endpoint, &me, pins, &peer, candidates, self.dial_timeout).await;
+        let conn = rhtn_transport::traversal::connect_direct(
+            &self.endpoint,
+            &me,
+            pins,
+            &peer,
+            candidates,
+            self.dial_timeout,
+        )
+        .await;
         let mut d = self.direct.lock().unwrap();
         match conn {
             Some(c) => {
@@ -673,22 +853,32 @@ impl LiveNode {
 
     /// Payload arriving on the direct path, once: the receiver.
     pub fn take_direct_deliveries(&self) -> DirectInbox {
-        self.direct_deliveries.lock().unwrap().take().expect("taken once")
+        self.direct_deliveries
+            .lock()
+            .unwrap()
+            .take()
+            .expect("taken once")
     }
 
     /// Send live payload to `peer`: on the direct path where it is held,
     /// and otherwise through `relay`, which hands the bytes to the serving
     /// node.  A direct path that failed is not retried here; a send never
     /// waits on one.
-    pub async fn send_payload_live(&self, peer: Keyhash, bytes: Vec<u8>, relay: &dyn Fn(Vec<u8>)) -> LiveDelivery {
+    pub async fn send_payload_live(
+        &self,
+        peer: Keyhash,
+        bytes: Vec<u8>,
+        relay: &dyn Fn(Vec<u8>),
+    ) -> LiveDelivery {
         let conn = match self.direct.lock().unwrap().get(&peer) {
             Some(DirectState::Connected(c)) => Some(c.clone()),
             _ => None,
         };
         if let Some(c) = conn
-            && rhtn_transport::session::deliver(&c, bytes.clone()).await {
-                return LiveDelivery::Direct;
-            }
+            && rhtn_transport::session::deliver(&c, bytes.clone()).await
+        {
+            return LiveDelivery::Direct;
+        }
         relay(bytes);
         LiveDelivery::Relayed
     }
@@ -697,7 +887,11 @@ impl LiveNode {
     /// reissue it stores ends the old credential's service at once.
     pub fn originate(&self, kind: u64, object: &[u8]) -> Decision {
         let ids = self.ids.lock().unwrap();
-        let decision = self.view.lock().unwrap().originate_push(&self.adjacency, kind, object, &*ids);
+        let decision =
+            self.view
+                .lock()
+                .unwrap()
+                .originate_push(&self.adjacency, kind, object, &*ids);
         if decision == Decision::Stored {
             carry_supersession(&self.adjacency.node, &ids, kind, object);
         }
@@ -721,7 +915,13 @@ impl LiveNode {
 /// until a serving answer or a failure.  A session is what a party opens
 /// with any node it needs to request from (design §14.1.2); the hop's
 /// answer says where this node stands, and nothing is served on it.
-async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::SigningIdentity>, node: &Node, per_endpoint: Duration) -> (Resolution, Option<ResolveReply>) {
+async fn drive(
+    mut r: Resolution,
+    ep: &quinn::Endpoint,
+    me: &Arc<rhtn_crypto::SigningIdentity>,
+    node: &Node,
+    per_endpoint: Duration,
+) -> (Resolution, Option<ResolveReply>) {
     let cfg = ClientConfig {
         identity: me.clone(),
         pins: node.cfg.pins.clone(),
@@ -739,10 +939,18 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
     for _ in 0..16 {
         let (hop, endpoints) = r.next_hop();
         let addrs: Vec<SocketAddr> = endpoints.iter().map(|e| e.socket()).collect();
-        let AttachOutcome::Attached(session) = rhtn_transport::session::attach_any(&cfg, ep, hop, &addrs, false).await else { break };
-        let Ok(bytes) = session.request(REQUEST_RESOLVE, &r.request.encode()).await else { break };
+        let AttachOutcome::Attached(session) =
+            rhtn_transport::session::attach_any(&cfg, ep, hop, &addrs, false).await
+        else {
+            break;
+        };
+        let Ok(bytes) = session.request(REQUEST_RESOLVE, &r.request.encode()).await else {
+            break;
+        };
         session.conn.close(0u32.into(), b"resolved");
-        let Ok(reply) = ResolveReply::decode(&bytes) else { break };
+        let Ok(reply) = ResolveReply::decode(&bytes) else {
+            break;
+        };
         let step = r.take(&reply);
         last = Some(reply);
         match step {
@@ -772,7 +980,11 @@ async fn drive(mut r: Resolution, ep: &quinn::Endpoint, me: &Arc<rhtn_crypto::Si
 /// **The interval is the operator's** (design §21.1's posture for every
 /// such number), which is why this is started by the daemon from its
 /// configuration rather than fixed here.
-pub fn reconcile_every(view: Arc<Mutex<NodeView>>, adjacency: impl Adjacency + Clone + Send + 'static, interval: std::time::Duration) -> tokio::task::JoinHandle<()> {
+pub fn reconcile_every(
+    view: Arc<Mutex<NodeView>>,
+    adjacency: impl Adjacency + Clone + Send + 'static,
+    interval: std::time::Duration,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(interval).await;
@@ -797,14 +1009,38 @@ pub fn reconcile_every(view: Arc<Mutex<NodeView>>, adjacency: impl Adjacency + C
 /// Drain the frames a client session delivers into a light client's own
 /// view, so the client keeps its horizon (`wire-format.md` §10.1.1: a
 /// client's floods enter and leave through the node that serves it).
-pub fn pump_client(session: &mut Session, serving: Keyhash, view: Arc<Mutex<NodeView>>, ids: Arc<Mutex<Vec<Identity>>>) -> SessionAdjacency {
+pub fn pump_client(
+    session: &mut Session,
+    serving: Keyhash,
+    view: Arc<Mutex<NodeView>>,
+    ids: Arc<Mutex<Vec<Identity>>>,
+) -> SessionAdjacency {
     let (_, dummy) = mpsc::unbounded_channel();
     let mut frames = std::mem::replace(&mut session.frames, dummy);
     let on_reply: Arc<Mutex<Option<ReplyHandler>>> = Arc::default();
-    let adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
-    let pump_adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
-    let reply_adj = SessionAdjacency { peer: serving, outbound: session.outbound.clone(), conn: Some(session.conn.clone()), on_reply: on_reply.clone() };
-    *on_reply.lock().unwrap() = Some(reply_handler(view.clone(), ids.clone(), Arc::new(reply_adj)));
+    let adj = SessionAdjacency {
+        peer: serving,
+        outbound: session.outbound.clone(),
+        conn: Some(session.conn.clone()),
+        on_reply: on_reply.clone(),
+    };
+    let pump_adj = SessionAdjacency {
+        peer: serving,
+        outbound: session.outbound.clone(),
+        conn: Some(session.conn.clone()),
+        on_reply: on_reply.clone(),
+    };
+    let reply_adj = SessionAdjacency {
+        peer: serving,
+        outbound: session.outbound.clone(),
+        conn: Some(session.conn.clone()),
+        on_reply: on_reply.clone(),
+    };
+    *on_reply.lock().unwrap() = Some(reply_handler(
+        view.clone(),
+        ids.clone(),
+        Arc::new(reply_adj),
+    ));
     tokio::spawn(async move {
         while let Some((ft, body)) = frames.recv().await {
             let mut v = view.lock().unwrap();
@@ -832,5 +1068,6 @@ pub fn pump_client(session: &mut Session, serving: Keyhash, view: Arc<Mutex<Node
 /// it, nor to accept what it opens.
 fn permits_direct(view: &Arc<Mutex<NodeView>>, peer: &Keyhash) -> bool {
     let view = view.lock().unwrap();
-    view.payload_path(peer, crate::peering::PathOverride::None) == crate::peering::PayloadPath::Direct
+    view.payload_path(peer, crate::peering::PathOverride::None)
+        == crate::peering::PayloadPath::Direct
 }

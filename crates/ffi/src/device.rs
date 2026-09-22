@@ -117,7 +117,11 @@ impl dev::Proximity for ProximityIn {
         let result = self.0.run(c, peer.to_vec()).result();
         // the channel asked for is the channel reported: a shell that
         // answered about another would silently move what was measured
-        dev::ChannelOutcome { kind, result, resolution_m: self.0.resolution_m(c) }
+        dev::ChannelOutcome {
+            kind,
+            result,
+            resolution_m: self.0.resolution_m(c),
+        }
     }
 }
 
@@ -127,7 +131,10 @@ impl dev::Camera for CameraIn {
     fn capture(&self, prompt: dev::Prompt) -> dev::RawFrame {
         // metadata is empty because none crosses: there is nothing to
         // strip that was not already left on the platform's side
-        dev::RawFrame { pixels: self.0.capture(Ask::of(prompt)), metadata: Default::default() }
+        dev::RawFrame {
+            pixels: self.0.capture(Ask::of(prompt)),
+            metadata: Default::default(),
+        }
     }
 }
 
@@ -149,7 +156,13 @@ impl dev::Random for RandomIn {
         // asked for exactly what is wanted, and short measure is refused
         // rather than padded: a seed completed with zeroes is not random
         let got = self.0.fill(out.len() as u32);
-        assert_eq!(got.len(), out.len(), "the platform's randomness returned {} bytes of {}", got.len(), out.len());
+        assert_eq!(
+            got.len(),
+            out.len(),
+            "the platform's randomness returned {} bytes of {}",
+            got.len(),
+            out.len()
+        );
         out.copy_from_slice(&got);
     }
 }

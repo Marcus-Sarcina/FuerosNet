@@ -67,7 +67,12 @@ pub struct Locator {
 impl Locator {
     /// A root's self-anchored locator: empty path, the given seqno.
     pub fn root(anchor: Keyhash, seqno: Seqno) -> Self {
-        Locator { anchor, path: Vec::new(), nibbles: 0, seqno }
+        Locator {
+            anchor,
+            path: Vec::new(),
+            nibbles: 0,
+            seqno,
+        }
     }
 
     /// Which of the patron's ten slots this position occupies: the path's
@@ -78,7 +83,11 @@ impl Locator {
     pub fn slot(&self) -> Option<u8> {
         let i = self.nibbles.checked_sub(1)?;
         let byte = *self.path.get(usize::try_from(i / 2).ok()?)?;
-        Some(if i.is_multiple_of(2) { byte >> 4 } else { byte & 0x0f })
+        Some(if i.is_multiple_of(2) {
+            byte >> 4
+        } else {
+            byte & 0x0f
+        })
     }
     pub fn emit(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 3);
@@ -100,12 +109,18 @@ impl Locator {
     pub fn decode(b: &[u8]) -> Result<Locator, String> {
         use rhtn_codec::cbor::*;
         let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else { return Err("locator not a map".into()) };
+        let Item::Map(m) = &item else {
+            return Err("locator not a map".into());
+        };
         let anchor: Keyhash = match map_get(m, 1) {
-            Some(Item::Bytes(r)) if r.len() == 32 => <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "anchor width")?,
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "anchor width")?
+            }
             _ => return Err("locator field 1".into()),
         };
-        let Some(Item::Map(pm)) = map_get(m, 2) else { return Err("locator field 2".into()) };
+        let Some(Item::Map(pm)) = map_get(m, 2) else {
+            return Err("locator field 2".into());
+        };
         let path = match map_get(pm, 1) {
             Some(Item::Bytes(r)) => b[r.clone()].to_vec(),
             _ => return Err("path field 1".into()),
@@ -114,17 +129,25 @@ impl Locator {
         // the packed-path invariant (`wire-format.md` §2.1), at this
         // decoding boundary as at the schema's
         rhtn_codec::schema::packed_path(&path, nibbles).map_err(|e| e.0)?;
-        let Some(Item::Array(sq)) = map_get(m, 3) else { return Err("locator field 3".into()) };
+        let Some(Item::Array(sq)) = map_get(m, 3) else {
+            return Err("locator field 3".into());
+        };
         // both members are U32 range (`wire-format.md` §2.3).  **Refused
         // rather than narrowed**: narrowing would have two parties holding
         // different beliefs about which series a node is on, with nothing
         // raised on either side
-        let narrow = |v: u64| u32::try_from(v).map_err(|_| "seqno outside the u32 range".to_string());
+        let narrow =
+            |v: u64| u32::try_from(v).map_err(|_| "seqno outside the u32 range".to_string());
         let seqno = Seqno {
             series: narrow(as_uint(sq.first().ok_or("series")?).ok_or("series")?)?,
             counter: narrow(as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")?)?,
         };
-        Ok(Locator { anchor, path, nibbles, seqno })
+        Ok(Locator {
+            anchor,
+            path,
+            nibbles,
+            seqno,
+        })
     }
 }
 
@@ -241,7 +264,12 @@ pub fn sign_block(signer: &SigningIdentity, tag: &[u8], payload: &[u8]) -> Vec<u
 /// the subject's consent over the query id, `result = 0` (match), and the
 /// verifier's hybrid signature over the map minus field 9; field 8 names the
 /// prior key whose holder the verifier recognised.
-pub fn recovery_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32], prior: &Keyhash) -> Vec<u8> {
+pub fn recovery_response(
+    verifier: &SigningIdentity,
+    subject: &SigningIdentity,
+    qid: &[u8; 32],
+    prior: &Keyhash,
+) -> Vec<u8> {
     let consent = subject.sign1_ed_unnamed(aad::CONSENT, qid);
     recovery_response_with_consent(verifier, &subject.public.keyhash, qid, &consent, prior)
 }
@@ -249,7 +277,13 @@ pub fn recovery_response(verifier: &SigningIdentity, subject: &SigningIdentity, 
 /// The same response with the subject's consent supplied, as a verifier
 /// issues it: the subject's client signed the consent, the verifier signs
 /// the rest.
-pub fn recovery_response_with_consent(verifier: &SigningIdentity, subject: &Keyhash, qid: &[u8; 32], consent: &[u8], prior: &Keyhash) -> Vec<u8> {
+pub fn recovery_response_with_consent(
+    verifier: &SigningIdentity,
+    subject: &Keyhash,
+    qid: &[u8; 32],
+    consent: &[u8],
+    prior: &Keyhash,
+) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 8);
     emit_uint(&mut payload, 1);
@@ -290,7 +324,11 @@ pub fn recovery_response_with_consent(verifier: &SigningIdentity, subject: &Keyh
 /// every embedded signature would cost ≈ 211 KB against ≈ 4 KB; these are
 /// evidence inside a hybrid-signed body, so substituting one breaks the
 /// envelope signature and their authenticity is protected transitively.
-pub fn verifier_response(verifier: &SigningIdentity, subject: &SigningIdentity, qid: &[u8; 32]) -> Vec<u8> {
+pub fn verifier_response(
+    verifier: &SigningIdentity,
+    subject: &SigningIdentity,
+    qid: &[u8; 32],
+) -> Vec<u8> {
     let consent = subject.sign1_ed_unnamed(aad::CONSENT, qid);
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 7);
@@ -324,7 +362,12 @@ pub fn verifier_response(verifier: &SigningIdentity, subject: &SigningIdentity, 
 /// A `Recovery` block (`wire-format.md` §4.1): the prior key, the verifier
 /// responses sorted by verifier keyhash, and the old key's successor
 /// statement over `[prior, new, patron]`.
-pub fn recovery_block(old: &SigningIdentity, new_key: &Keyhash, patron: &Keyhash, mut responses: Vec<Vec<u8>>) -> Vec<u8> {
+pub fn recovery_block(
+    old: &SigningIdentity,
+    new_key: &Keyhash,
+    patron: &Keyhash,
+    mut responses: Vec<Vec<u8>>,
+) -> Vec<u8> {
     responses.sort_by_key(|r| rhtn_codec::cbor::value_slice(r, 1).map(|s| r[s.clone()].to_vec()));
     let mut stmt = Vec::new();
     emit_array_head(&mut stmt, 3);
@@ -348,7 +391,14 @@ pub fn recovery_block(old: &SigningIdentity, new_key: &Keyhash, patron: &Keyhash
 
 /// A departure body (`wire-format.md` §4.2): the node leaving `patron` at
 /// `seqno`, optionally with a reason code.
-pub fn departure_body(back: &[Txid], node: &Keyhash, patron: &Keyhash, seqno: Seqno, timestamp: u64, reason: Option<u64>) -> Vec<u8> {
+pub fn departure_body(
+    back: &[Txid],
+    node: &Keyhash,
+    patron: &Keyhash,
+    seqno: Seqno,
+    timestamp: u64,
+    reason: Option<u64>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 5 + reason.is_some() as usize);
     emit_back_pointers(&mut out, &[back.to_vec()]);
@@ -369,7 +419,13 @@ pub fn departure_body(back: &[Txid], node: &Keyhash, patron: &Keyhash, seqno: Se
 
 /// A disavowal body (`wire-format.md` §4.3): `patron` ending `node`'s slot,
 /// with the reason code in the 64-value banded space.
-pub fn disavowal_body(back: &[Txid], patron: &Keyhash, node: &Keyhash, timestamp: u64, code: Option<u64>) -> Vec<u8> {
+pub fn disavowal_body(
+    back: &[Txid],
+    patron: &Keyhash,
+    node: &Keyhash,
+    timestamp: u64,
+    code: Option<u64>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 4 + code.is_some() as usize);
     emit_back_pointers(&mut out, &[back.to_vec()]);
@@ -388,7 +444,14 @@ pub fn disavowal_body(back: &[Txid], patron: &Keyhash, node: &Keyhash, timestamp
 
 /// A series reissue body (`wire-format.md` §4.6): the series left at the
 /// counter it reached, and the new series at counter 0.
-pub fn reissue_body(back: [&[Txid]; 2], node: &Keyhash, patron: &Keyhash, leaving: Seqno, new_series: u32, timestamp: u64) -> Vec<u8> {
+pub fn reissue_body(
+    back: [&[Txid]; 2],
+    node: &Keyhash,
+    patron: &Keyhash,
+    leaving: Seqno,
+    new_series: u32,
+    timestamp: u64,
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 6);
     emit_back_pointers(&mut out, &[back[0].to_vec(), back[1].to_vec()]);
@@ -399,7 +462,11 @@ pub fn reissue_body(back: [&[Txid]; 2], node: &Keyhash, patron: &Keyhash, leavin
     emit_uint(&mut out, 3);
     leaving.emit(&mut out);
     emit_uint(&mut out, 4);
-    Seqno { series: new_series, counter: 0 }.emit(&mut out);
+    Seqno {
+        series: new_series,
+        counter: 0,
+    }
+    .emit(&mut out);
     emit_uint(&mut out, 5);
     emit_uint(&mut out, timestamp);
     out
@@ -419,7 +486,14 @@ pub struct Witness {
 /// two participants, the witnesses in field 4, no responses, and the
 /// disclosure root.  Key 0 carries one list per signer, the participants
 /// first and then the witnesses in field 4's order.
-pub fn presence_record_body(back: &[Vec<Txid>], participants: [&Keyhash; 2], witnesses: &[Witness], started_at: u64, finalized_at: u64, root: &[u8; 32]) -> Vec<u8> {
+pub fn presence_record_body(
+    back: &[Vec<Txid>],
+    participants: [&Keyhash; 2],
+    witnesses: &[Witness],
+    started_at: u64,
+    finalized_at: u64,
+    root: &[u8; 32],
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 7);
     emit_back_pointers(&mut out, back);
@@ -455,7 +529,13 @@ pub fn presence_record_body(back: &[Vec<Txid>], participants: [&Keyhash; 2], wit
 /// A formation presence record body (`wire-format.md` §4.5, design §13.2):
 /// subtype 1, no witnesses, no responses, the two participants in field 3's
 /// order and the disclosure root the client computed.
-pub fn formation_body(back: [&[Txid]; 2], participants: [&Keyhash; 2], started_at: u64, finalized_at: u64, root: &[u8; 32]) -> Vec<u8> {
+pub fn formation_body(
+    back: [&[Txid]; 2],
+    participants: [&Keyhash; 2],
+    started_at: u64,
+    finalized_at: u64,
+    root: &[u8; 32],
+) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 6);
     emit_back_pointers(&mut out, &[back[0].to_vec(), back[1].to_vec()]);
@@ -481,7 +561,10 @@ pub fn formation_body(back: [&[Txid]; 2], participants: [&Keyhash; 2], started_a
 /// type, the body, and a `COSE_Sign` whose entries sort by `kid` then
 /// classical before post-quantum.
 pub fn envelope(tx_type: u64, body: &[u8], signers: &[&SigningIdentity]) -> Vec<u8> {
-    let entries: Vec<(Keyhash, Vec<u8>)> = signers.iter().map(|s| (s.public.keyhash, s.sign_entries(aad::ENVELOPE, body))).collect();
+    let entries: Vec<(Keyhash, Vec<u8>)> = signers
+        .iter()
+        .map(|s| (s.public.keyhash, s.sign_entries(aad::ENVELOPE, body)))
+        .collect();
     envelope_from_entries(tx_type, body, &entries)
 }
 
@@ -514,7 +597,12 @@ pub fn envelope_from_entries(tx_type: u64, body: &[u8], entries: &[(Keyhash, Vec
 
 /// A `SubtreeAck` (`wire-format.md` §7.5): the grandpatron's classical
 /// signature over fields 1-4 with `external_aad = "rhtn/1:subtree-ack"`.
-pub fn subtree_ack(grandpatron: &SigningIdentity, adoption: &Txid, node: &Keyhash, timestamp: u64) -> Vec<u8> {
+pub fn subtree_ack(
+    grandpatron: &SigningIdentity,
+    adoption: &Txid,
+    node: &Keyhash,
+    timestamp: u64,
+) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 4);
     emit_uint(&mut payload, 1);
@@ -536,7 +624,14 @@ pub fn subtree_ack(grandpatron: &SigningIdentity, adoption: &Txid, node: &Keyhas
 
 /// A currency attestation (`wire-format.md` §7.1) by `issuer` about
 /// `subject`, naming `current` as its current key.
-pub fn currency_attestation(issuer: &SigningIdentity, subject: &Keyhash, current: &Keyhash, issued_at: u64, expires_at: u64, role: u64) -> Vec<u8> {
+pub fn currency_attestation(
+    issuer: &SigningIdentity,
+    subject: &Keyhash,
+    current: &Keyhash,
+    issued_at: u64,
+    expires_at: u64,
+    role: u64,
+) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 6);
     emit_uint(&mut payload, 1);

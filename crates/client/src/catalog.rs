@@ -58,12 +58,21 @@ impl Sweep {
         self.asked.insert(filter.clone());
         self.queries += 1;
         self.outstanding = Some(nonce);
-        CatalogQuery { service_type: filter, nonce }
+        CatalogQuery {
+            service_type: filter,
+            nonce,
+        }
     }
 
     /// Take a reply into `portion`: entries verified under their owners,
     /// and the continuation followed at most once per type.
-    pub fn take<L: Lookup + ?Sized>(&mut self, ids: &L, portion: &mut Portion, reply: &CatalogReply, full_page: usize) -> Step {
+    pub fn take<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        portion: &mut Portion,
+        reply: &CatalogReply,
+        full_page: usize,
+    ) -> Step {
         // checked before anything is read out of it: an entry from an
         // unattributable reply is an entry from nowhere
         if self.outstanding.is_some_and(|n| n != reply.nonce) {
@@ -72,13 +81,16 @@ impl Sweep {
         self.outstanding = None;
         for bytes in &reply.entries {
             if let Ok(e) = CatalogEntry::parse(bytes)
-                && e.verify(ids).is_ok() {
-                    portion.entries.insert(e.resource, bytes.clone());
-                }
+                && e.verify(ids).is_ok()
+            {
+                portion.entries.insert(e.resource, bytes.clone());
+            }
         }
         match &reply.continuation {
             None => Step::Done,
-            Some(t) if self.asked.contains(&Some(t.clone())) && reply.entries.len() >= full_page => {
+            Some(t)
+                if self.asked.contains(&Some(t.clone())) && reply.entries.len() >= full_page =>
+            {
                 portion.truncated = true;
                 Step::Truncated
             }
@@ -100,7 +112,15 @@ impl View {
 
     /// Every entry in the view, with the node that served it.
     pub fn entries(&self) -> Vec<(Keyhash, CatalogEntry)> {
-        self.portions.iter().flat_map(|(n, p)| p.entries.values().filter_map(|b| CatalogEntry::parse(b).ok()).map(|e| (*n, e))).collect()
+        self.portions
+            .iter()
+            .flat_map(|(n, p)| {
+                p.entries
+                    .values()
+                    .filter_map(|b| CatalogEntry::parse(b).ok())
+                    .map(|e| (*n, e))
+            })
+            .collect()
     }
 }
 
@@ -112,9 +132,13 @@ pub const KNOWN_DATA_PRACTICES: [u64; 4] = [0, 1, 2, 3];
 /// client does not recognise.
 pub fn surface_declaration(entry: &CatalogEntry, notifier: &dyn Notifier) {
     if let Some(d) = entry.data_practice
-        && !KNOWN_DATA_PRACTICES.contains(&d) {
-            notifier.notify(Notice::UnrecognisedDeclaration { resource: entry.resource, value: d });
-        }
+        && !KNOWN_DATA_PRACTICES.contains(&d)
+    {
+        notifier.notify(Notice::UnrecognisedDeclaration {
+            resource: entry.resource,
+            value: d,
+        });
+    }
 }
 
 /// Why a brokered service is not routed to.
@@ -136,9 +160,15 @@ pub struct Route {
 /// signed entry's endpoint.
 pub fn route_brokered(entry: &CatalogEntry, presented: &[u8]) -> Result<Route, Refusal> {
     if entry.endpoint != presented {
-        return Err(Refusal::EndpointDiffers { signed: entry.endpoint.clone(), presented: presented.to_vec() });
+        return Err(Refusal::EndpointDiffers {
+            signed: entry.endpoint.clone(),
+            presented: presented.to_vec(),
+        });
     }
-    Ok(Route { endpoint: entry.endpoint.clone(), owner: entry.owner })
+    Ok(Route {
+        endpoint: entry.endpoint.clone(),
+        owner: entry.owner,
+    })
 }
 
 /// The page as the node served it: what the person is shown, entry by
@@ -150,5 +180,16 @@ pub struct Shown {
 }
 
 pub fn page<L: Lookup + ?Sized>(ids: &L, served: &[(Vec<u8>, Vec<String>)]) -> Vec<Shown> {
-    served.iter().filter_map(|(b, roles)| CatalogEntry::parse(b).ok().filter(|e| e.verify(ids).is_ok()).map(|entry| Shown { entry, roles: roles.clone() })).collect()
+    served
+        .iter()
+        .filter_map(|(b, roles)| {
+            CatalogEntry::parse(b)
+                .ok()
+                .filter(|e| e.verify(ids).is_ok())
+                .map(|entry| Shown {
+                    entry,
+                    roles: roles.clone(),
+                })
+        })
+        .collect()
 }

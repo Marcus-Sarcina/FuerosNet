@@ -29,7 +29,10 @@ pub struct SubjectConfig {
 
 impl Default for SubjectConfig {
     fn default() -> Self {
-        SubjectConfig { per_requester_limit: 10, retention_seconds: 2 * YEAR_SECONDS }
+        SubjectConfig {
+            per_requester_limit: 10,
+            retention_seconds: 2 * YEAR_SECONDS,
+        }
     }
 }
 
@@ -57,13 +60,22 @@ pub struct SubjectState {
 
 impl SubjectState {
     pub fn new(cfg: SubjectConfig) -> Self {
-        SubjectState { cfg, window: None, consented: BTreeMap::new(), responses: BTreeMap::new() }
+        SubjectState {
+            cfg,
+            window: None,
+            consented: BTreeMap::new(),
+            responses: BTreeMap::new(),
+        }
     }
 
     /// A ceremony about this subject begins: its pre-commitment fixes the
     /// window queries must bind to.
     pub fn open_window(&mut self, ceremony_id: [u8; 32]) {
-        self.window = Some(Window { ceremony_id, profile_digest: None, counters: BTreeMap::new() });
+        self.window = Some(Window {
+            ceremony_id,
+            profile_digest: None,
+            counters: BTreeMap::new(),
+        });
     }
 
     /// The ceremony window closes: the counters go with it, and nothing of
@@ -97,7 +109,12 @@ impl SubjectState {
     /// only about this subject, only under the ceremony's one profile, and
     /// only within the requester's allowance.  The query is surfaced to the
     /// person as it arrives, and an excess is refused visibly.
-    pub fn consent_to(&mut self, me: &SigningIdentity, q: &VerificationQuery, notifier: &dyn Notifier) -> Option<Vec<u8>> {
+    pub fn consent_to(
+        &mut self,
+        me: &SigningIdentity,
+        q: &VerificationQuery,
+        notifier: &dyn Notifier,
+    ) -> Option<Vec<u8>> {
         if q.subject != me.public.keyhash {
             return None;
         }
@@ -114,13 +131,17 @@ impl SubjectState {
         }
         let count = w.counters.entry(q.querier).or_insert(0);
         if *count >= limit {
-            notifier.notify(Notice::ProbingRefused { requester: q.querier });
+            notifier.notify(Notice::ProbingRefused {
+                requester: q.querier,
+            });
             return None;
         }
         *count += 1;
         let qid = q.query_id();
         self.consented.entry(q.ceremony_id).or_default().insert(qid);
-        notifier.notify(Notice::QuerySurfaced { verifier: q.verifier });
+        notifier.notify(Notice::QuerySurfaced {
+            verifier: q.verifier,
+        });
         Some(consent(me, &qid))
     }
 
@@ -129,19 +150,38 @@ impl SubjectState {
     /// meaning within the retention horizon, by default (design §7.5.2.8).
     /// `None` where the verifier holds nothing eligible, which is a
     /// deliberate act and reads as unavailability.
-    pub fn grant_for(&self, me: &SigningIdentity, store: &ClientStore, verifier: &Keyhash, query_id: [u8; 32], now: u64) -> Option<KeyGrant> {
+    pub fn grant_for(
+        &self,
+        me: &SigningIdentity,
+        store: &ClientStore,
+        verifier: &Keyhash,
+        query_id: [u8; 32],
+        now: u64,
+    ) -> Option<KeyGrant> {
         let (record, seed) = store
             .seeds
             .iter()
-            .filter(|(_, s)| s.counterparty == *verifier && now.saturating_sub(s.finalized_at) < self.cfg.retention_seconds)
+            .filter(|(_, s)| {
+                s.counterparty == *verifier
+                    && now.saturating_sub(s.finalized_at) < self.cfg.retention_seconds
+            })
             .max_by_key(|(_, s)| s.finalized_at)?;
-        Some(KeyGrant { record: *record, query_id, key: capture_key(&seed.seed, &me.public.keyhash, verifier, &seed.ceremony_id) })
+        Some(KeyGrant {
+            record: *record,
+            query_id,
+            key: capture_key(&seed.seed, &me.public.keyhash, verifier, &seed.ceremony_id),
+        })
     }
 
     /// Take the copy of a response a verifier delivers about this subject
     /// (`wire-format.md` §5.6): verified under the verifier, about this
     /// subject, answering a query it consented to.  Held by query id.
-    pub fn take_response_copy<L: Lookup + ?Sized>(&mut self, me: &SigningIdentity, ids: &L, bytes: &[u8]) -> Result<[u8; 32], String> {
+    pub fn take_response_copy<L: Lookup + ?Sized>(
+        &mut self,
+        me: &SigningIdentity,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Result<[u8; 32], String> {
         let r = Response::read(bytes)?;
         if r.subject != me.public.keyhash {
             return Err("not about this subject".into());
@@ -168,8 +208,20 @@ impl SubjectState {
 
 /// The eligible captures a verifier holds of `me`, most recent first: what
 /// a subject choosing to grant against an older one picks from.
-pub fn eligible_captures(store: &ClientStore, verifier: &Keyhash, retention_seconds: u64, now: u64) -> Vec<Txid> {
-    let mut v: Vec<(u64, Txid)> = store.seeds.iter().filter(|(_, s)| s.counterparty == *verifier && now.saturating_sub(s.finalized_at) < retention_seconds).map(|(t, s)| (s.finalized_at, *t)).collect();
+pub fn eligible_captures(
+    store: &ClientStore,
+    verifier: &Keyhash,
+    retention_seconds: u64,
+    now: u64,
+) -> Vec<Txid> {
+    let mut v: Vec<(u64, Txid)> = store
+        .seeds
+        .iter()
+        .filter(|(_, s)| {
+            s.counterparty == *verifier && now.saturating_sub(s.finalized_at) < retention_seconds
+        })
+        .map(|(t, s)| (s.finalized_at, *t))
+        .collect();
     v.sort_by(|a, b| b.cmp(a));
     v.into_iter().map(|(_, t)| t).collect()
 }

@@ -52,7 +52,10 @@ impl Verifiers {
     /// copy, and brings the grants that answer back here.
     pub fn host(self: &Arc<Self>, handle: Handle, courier: Arc<Courier>) {
         courier.report_grants_to(self.clone());
-        self.hosted.lock().unwrap().insert(handle.me(), Hosted { handle, courier });
+        self.hosted
+            .lock()
+            .unwrap()
+            .insert(handle.me(), Hosted { handle, courier });
     }
 
     /// Answer `node`'s request type 4 from here.
@@ -70,7 +73,12 @@ impl Verifiers {
     /// nothing, which fails it.
     pub async fn answer(self: Arc<Self>, peer: Keyhash, body: Vec<u8>) -> Option<Vec<u8>> {
         let req = QueryRequest::decode(&body).ok()?;
-        let hosted = self.hosted.lock().unwrap().get(&req.query.verifier).cloned()?;
+        let hosted = self
+            .hosted
+            .lock()
+            .unwrap()
+            .get(&req.query.verifier)
+            .cloned()?;
         let qid = req.query.query_id();
         // Field 2 names the authenticated requester (`wire-format.md`
         // §5.6), and the check happens before this request touches state

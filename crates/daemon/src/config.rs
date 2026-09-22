@@ -125,14 +125,21 @@ impl std::fmt::Display for Invalid {
 impl std::error::Error for Invalid {}
 
 fn at(line: usize, what: impl Into<String>) -> Invalid {
-    Invalid { line, what: what.into() }
+    Invalid {
+        line,
+        what: what.into(),
+    }
 }
 
 /// 32 bytes from 64 hex digits, lower case only: an upper-case or
 /// short-form keyhash is a different string and is refused rather than
 /// normalised.
 fn keyhash(s: &str) -> Option<Keyhash> {
-    if s.len() != 64 || !s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+    if s.len() != 64
+        || !s
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    {
         return None;
     }
     let mut out = [0u8; 32];
@@ -193,7 +200,8 @@ struct Limits {
 impl Config {
     /// Read a configuration from `path`.
     pub fn read(path: &Path) -> Result<Config, Invalid> {
-        let text = std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+        let text =
+            std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
         Config::parse(&text)
     }
 
@@ -204,11 +212,19 @@ impl Config {
     pub fn parse(text: &str) -> Result<Config, Invalid> {
         let f: File = toml::from_str(text).map_err(|e| shape(text, &e))?;
 
-        let listen: SocketAddr = f.listen.get_ref().parse().map_err(|_| at(line_at(text, &f.listen), "`listen` is not an address and port"))?;
+        let listen: SocketAddr = f.listen.get_ref().parse().map_err(|_| {
+            at(
+                line_at(text, &f.listen),
+                "`listen` is not an address and port",
+            )
+        })?;
 
         let heartbeat_secs = *f.heartbeat.get_ref();
         if !(1..=3600).contains(&heartbeat_secs) {
-            return Err(at(line_at(text, &f.heartbeat), "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)"));
+            return Err(at(
+                line_at(text, &f.heartbeat),
+                "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)",
+            ));
         }
 
         // 15 minutes absent a setting: often enough that a missed frame
@@ -218,18 +234,31 @@ impl Config {
         let reconcile_secs = match &f.reconcile {
             None => 900,
             Some(r) if (0..=86_400).contains(r.get_ref()) => *r.get_ref(),
-            Some(r) => return Err(at(line_at(text, r), "`reconcile` is 0 to 86400 seconds, 0 to turn the replay off (`wire-format.md` §10.1.3)")),
+            Some(r) => {
+                return Err(at(
+                    line_at(text, r),
+                    "`reconcile` is 0 to 86400 seconds, 0 to turn the replay off (`wire-format.md` §10.1.3)",
+                ));
+            }
         };
 
         let ingestion = match f.ingestion.get_ref().as_str() {
             "verified-on-acceptance" => Ingestion::VerifiedOnAcceptance,
             "unverified-gossip" => Ingestion::UnverifiedGossip,
-            _ => return Err(at(line_at(text, &f.ingestion), "`ingestion` is `verified-on-acceptance` or `unverified-gossip`")),
+            _ => {
+                return Err(at(
+                    line_at(text, &f.ingestion),
+                    "`ingestion` is `verified-on-acceptance` or `unverified-gossip`",
+                ));
+            }
         };
 
         let a = f.allowance.get_ref();
         if a.requests == 0 || a.seconds == 0 {
-            return Err(at(line_at(text, &f.allowance), "an `allowance` of zero admits nothing and serves nobody"));
+            return Err(at(
+                line_at(text, &f.allowance),
+                "an `allowance` of zero admits nothing and serves nobody",
+            ));
         }
         let request_allowance = (a.requests, a.seconds);
 
@@ -237,9 +266,17 @@ impl Config {
             None => None,
             Some(u) => {
                 let n = line_at(text, u);
-                let key = keyhash(&u.get_ref().node).ok_or_else(|| at(n, "`upstream.node` is not 64 lower-case hex digits"))?;
-                let addrs: Result<Vec<SocketAddr>, Invalid> =
-                    u.get_ref().addresses.iter().map(|a| a.parse::<SocketAddr>().map_err(|_| at(n, format!("`{a}` is not an address and port")))).collect();
+                let key = keyhash(&u.get_ref().node)
+                    .ok_or_else(|| at(n, "`upstream.node` is not 64 lower-case hex digits"))?;
+                let addrs: Result<Vec<SocketAddr>, Invalid> = u
+                    .get_ref()
+                    .addresses
+                    .iter()
+                    .map(|a| {
+                        a.parse::<SocketAddr>()
+                            .map_err(|_| at(n, format!("`{a}` is not an address and port")))
+                    })
+                    .collect();
                 let addrs = addrs?;
                 if addrs.is_empty() {
                     return Err(at(n, "`upstream` names no address"));
@@ -253,7 +290,10 @@ impl Config {
             Some(l) => {
                 let (memory, fuel) = (l.get_ref().memory, l.get_ref().fuel);
                 if memory == 0 || fuel == 0 {
-                    return Err(at(line_at(text, l), "a `resource-limits` of zero admits a package and then runs none of it"));
+                    return Err(at(
+                        line_at(text, l),
+                        "a `resource-limits` of zero admits a package and then runs none of it",
+                    ));
                 }
                 Some((memory, fuel))
             }
@@ -301,5 +341,9 @@ fn line_at<T>(text: &str, s: &Spanned<T>) -> usize {
 
 /// The 1-based line a byte offset falls on.
 fn line_of(text: &str, at: usize) -> usize {
-    text[..at.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1
+    text[..at.min(text.len())]
+        .bytes()
+        .filter(|b| *b == b'\n')
+        .count()
+        + 1
 }

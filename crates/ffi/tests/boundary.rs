@@ -3,9 +3,9 @@
 //! of its own behind them, and every answer a value.
 
 use rhtn_ffi::client::{Intent, Participant};
+use rhtn_ffi::device::*;
 use rhtn_ffi::net::{Event, Wake};
 use rhtn_ffi::types::KIND_APPLICATION;
-use rhtn_ffi::device::*;
 use rhtn_ffi::types::*;
 use std::sync::{Arc, Mutex};
 
@@ -55,7 +55,14 @@ impl Clock for Shell {
 impl Random for Shell {
     fn fill(&self, n: u32) -> Vec<u8> {
         // a platform that returns short measure is refused, not padded
-        vec![9u8; if self.short { (n as usize).saturating_sub(1) } else { n as usize }]
+        vec![
+            9u8;
+            if self.short {
+                (n as usize).saturating_sub(1)
+            } else {
+                n as usize
+            }
+        ]
     }
 }
 
@@ -84,26 +91,45 @@ fn platform_of(shell: Arc<Shell>) -> Platform {
 }
 
 fn seeds(name: &str) -> Vec<u8> {
-    let mut b = rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes()).to_vec();
-    b.extend_from_slice(&rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes()));
+    let mut b =
+        rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes())
+            .to_vec();
+    b.extend_from_slice(&rhtn_codec::cose::sha256(
+        format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes(),
+    ));
     b
 }
 
 fn material(name: &str) -> Vec<u8> {
-    rhtn_crypto::identity::testkit::test_identity(name).public.key_material()
+    rhtn_crypto::identity::testkit::test_identity(name)
+        .public
+        .key_material()
 }
 
 fn id(name: &str) -> Vec<u8> {
-    rhtn_crypto::identity::testkit::test_identity(name).public.keyhash.to_vec()
+    rhtn_crypto::identity::testkit::test_identity(name)
+        .public
+        .keyhash
+        .to_vec()
 }
 
 // acceptance: DMN-10
 #[test]
 fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
-    let shell = Arc::new(Shell { has: vec![Channel::Nfc, Channel::Uwb], ..Default::default() });
-    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"].iter().map(|n| material(n)).collect();
+    let shell = Arc::new(Shell {
+        has: vec![Channel::Nfc, Channel::Uwb],
+        ..Default::default()
+    });
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
+        .iter()
+        .map(|n| material(n))
+        .collect();
     let p = Participant::start(seeds("alice"), known, platform_of(shell.clone())).expect("starts");
-    assert_eq!(p.me(), id("alice"), "the identity it was given, derived on its own thread");
+    assert_eq!(
+        p.me(),
+        id("alice"),
+        "the identity it was given, derived on its own thread"
+    );
 
     // the ceremony opens: the intent crosses as fields, since no document
     // fixes an encoding for what two present devices tell each other
@@ -111,31 +137,62 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
     assert_eq!(i.contribution.len(), 16);
     assert_eq!(i.nominees, vec![id("carol")]);
     assert!(i.initiator);
-    assert_eq!(i.started_at, 1_800_000_000, "the platform's clock, in seconds");
+    assert_eq!(
+        i.started_at, 1_800_000_000,
+        "the platform's clock, in seconds"
+    );
 
     // the hardware is asked through the boundary, strongest first, and
     // nothing is promoted: the channel that failed is reported failed
-    let bob = Participant::start(seeds("bob"), ["alice", "bob", "carol"].iter().map(|n| material(n)).collect(), platform_of(Arc::new(Shell { has: vec![Channel::Nfc, Channel::Uwb], ..Default::default() }))).unwrap();
-    let theirs = bob.begin(id("alice"), vec![id("carol")], false).expect("begins");
-    p.take_intent(id("bob"), theirs).expect("takes the counterparty's intent");
+    let bob = Participant::start(
+        seeds("bob"),
+        ["alice", "bob", "carol"]
+            .iter()
+            .map(|n| material(n))
+            .collect(),
+        platform_of(Arc::new(Shell {
+            has: vec![Channel::Nfc, Channel::Uwb],
+            ..Default::default()
+        })),
+    )
+    .unwrap();
+    let theirs = bob
+        .begin(id("alice"), vec![id("carol")], false)
+        .expect("begins");
+    p.take_intent(id("bob"), theirs)
+        .expect("takes the counterparty's intent");
     let achieved = p.proximity().expect("runs the channels");
-    assert_eq!(achieved.iter().map(|a| a.channel).collect::<Vec<_>>(), vec![Channel::Uwb, Channel::Nfc], "strongest first");
+    assert_eq!(
+        achieved.iter().map(|a| a.channel).collect::<Vec<_>>(),
+        vec![Channel::Uwb, Channel::Nfc],
+        "strongest first"
+    );
     assert_eq!(achieved[0].outcome, ChannelOutcome::Fail);
-    assert_eq!(achieved[0].resolution_m, Some(2), "what the hardware measured");
+    assert_eq!(
+        achieved[0].resolution_m,
+        Some(2),
+        "what the hardware measured"
+    );
     assert_eq!(achieved[1].outcome, ChannelOutcome::Pass);
 
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
     let e = p.begin(vec![1, 2, 3], vec![], true).unwrap_err();
     assert!(e.reason.contains("32 bytes"), "{e}");
-    let Err(e) = Participant::start(vec![0; 10], vec![], platform_of(shell)) else { panic!("ten bytes is not an identity") };
+    let Err(e) = Participant::start(vec![0; 10], vec![], platform_of(shell)) else {
+        panic!("ten bytes is not an identity")
+    };
     assert!(e.reason.contains("64 bytes of seed"), "{e}");
 }
 
 // acceptance: DMN-10
 #[test]
 fn randomness_of_short_measure_is_refused_and_the_shell_is_told() {
-    let shell = Arc::new(Shell { has: vec![Channel::Nfc], short: true, ..Default::default() });
+    let shell = Arc::new(Shell {
+        has: vec![Channel::Nfc],
+        short: true,
+        ..Default::default()
+    });
     let known: Vec<Vec<u8>> = ["alice"].iter().map(|n| material(n)).collect();
     // the client seeds its payload material as it starts, so a platform
     // giving short measure is caught there: a seed completed with zeroes
@@ -172,12 +229,25 @@ fn serving_with(name: &str, tweak: impl FnOnce(&mut NodeConfig)) -> Arc<LiveNode
     let p = Path::from_indices(&[]);
     let view = NodeView::new(
         me.clone(),
-        rhtn_archive::tx::Locator { anchor: me.public.keyhash, path: p.bytes, nibbles: p.nibbles, seqno: rhtn_archive::tx::Seqno { series: 1, counter: 0 } },
+        rhtn_archive::tx::Locator {
+            anchor: me.public.keyhash,
+            path: p.bytes,
+            nibbles: p.nibbles,
+            seqno: rhtn_archive::tx::Seqno {
+                series: 1,
+                counter: 0,
+            },
+        },
     );
     let mut cfg = NodeConfig::defaults(me, pins, 30);
     cfg.log = Log::recording();
     tweak(&mut cfg);
-    LiveNode::start(cfg, view, known, AnchorTable::new(0, Ingestion::UnverifiedGossip))
+    LiveNode::start(
+        cfg,
+        view,
+        known,
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    )
 }
 
 /// A serving node on loopback that pins the parties this test uses.
@@ -192,11 +262,24 @@ fn serving(name: &str) -> Arc<LiveNode> {
     let p = Path::from_indices(&[]);
     let view = NodeView::new(
         me.clone(),
-        rhtn_archive::tx::Locator { anchor: me.public.keyhash, path: p.bytes, nibbles: p.nibbles, seqno: rhtn_archive::tx::Seqno { series: 1, counter: 0 } },
+        rhtn_archive::tx::Locator {
+            anchor: me.public.keyhash,
+            path: p.bytes,
+            nibbles: p.nibbles,
+            seqno: rhtn_archive::tx::Seqno {
+                series: 1,
+                counter: 0,
+            },
+        },
     );
     let mut cfg = NodeConfig::defaults(me, pins, 30);
     cfg.log = Log::recording();
-    LiveNode::start(cfg, view, known, AnchorTable::new(0, Ingestion::UnverifiedGossip))
+    LiveNode::start(
+        cfg,
+        view,
+        known,
+        AnchorTable::new(0, Ingestion::UnverifiedGossip),
+    )
 }
 
 // acceptance: DMN-13
@@ -204,13 +287,26 @@ fn serving(name: &str) -> Arc<LiveNode> {
 async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     let node = serving("bob");
     let addr = node.addr.to_string();
-    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"].iter().map(|n| material(n)).collect();
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
+        .iter()
+        .map(|n| material(n))
+        .collect();
 
     // a shell calls from its own thread, which is what a shell is
     let p = Arc::new(
         tokio::task::spawn_blocking({
             let known = known.clone();
-            move || Participant::start(seeds("alice"), known, platform_of(Arc::new(Shell { has: vec![Channel::Nfc], ..Default::default() }))).expect("starts")
+            move || {
+                Participant::start(
+                    seeds("alice"),
+                    known,
+                    platform_of(Arc::new(Shell {
+                        has: vec![Channel::Nfc],
+                        ..Default::default()
+                    })),
+                )
+                .expect("starts")
+            }
         })
         .await
         .unwrap(),
@@ -221,7 +317,10 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     // back is what a screen shows
     let a = {
         let (q, addr) = (p.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")])).await.unwrap().expect("attaches")
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")]))
+            .await
+            .unwrap()
+            .expect("attaches")
     };
     assert_eq!(a.serving, id("bob"));
     assert!(a.primary, "the patron itself, not a sibling");
@@ -232,8 +331,14 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     // shell carried for it
     {
         let view = node.view.lock().unwrap();
-        assert!(view.prekeys.bundle(&sid("alice").public.keyhash).is_some(), "the bundle went over the wire from the kernel");
-        assert!(view.prekeys.pool_size(&sid("alice").public.keyhash) > 0, "and the one-time pool with it");
+        assert!(
+            view.prekeys.bundle(&sid("alice").public.keyhash).is_some(),
+            "the bundle went over the wire from the kernel"
+        );
+        assert!(
+            view.prekeys.pool_size(&sid("alice").public.keyhash) > 0,
+            "and the one-time pool with it"
+        );
     }
 
     // where to be rung is the user's choice, handed over and withdrawn
@@ -242,14 +347,37 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     let alice = sid("alice").public.keyhash;
     {
         let q = p.clone();
-        tokio::task::spawn_blocking(move || q.wake(Some(Wake { url: "https://push.example/rhtn/a3f9".into(), key: vec![7; 32], lapses_at: None }))).await.unwrap().expect("registers");
+        tokio::task::spawn_blocking(move || {
+            q.wake(Some(Wake {
+                url: "https://push.example/rhtn/a3f9".into(),
+                key: vec![7; 32],
+                lapses_at: None,
+            }))
+        })
+        .await
+        .unwrap()
+        .expect("registers");
     }
-    assert_eq!(node.view.lock().unwrap().wake.get(&alice).map(|e| e.url.clone()), Some("https://push.example/rhtn/a3f9".to_string()));
+    assert_eq!(
+        node.view
+            .lock()
+            .unwrap()
+            .wake
+            .get(&alice)
+            .map(|e| e.url.clone()),
+        Some("https://push.example/rhtn/a3f9".to_string())
+    );
     {
         let q = p.clone();
-        tokio::task::spawn_blocking(move || q.wake(None)).await.unwrap().expect("withdraws");
+        tokio::task::spawn_blocking(move || q.wake(None))
+            .await
+            .unwrap()
+            .expect("withdraws");
     }
-    assert!(node.view.lock().unwrap().wake.get(&alice).is_none(), "a withdrawal is as sayable as a registration");
+    assert!(
+        node.view.lock().unwrap().wake.get(&alice).is_none(),
+        "a withdrawal is as sayable as a registration"
+    );
 
     // payload reaches another client of the same node, through the kernel
     // on both sides: carol attaches so its bundle is published, alice
@@ -258,66 +386,118 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     let carol_side = Arc::new(
         tokio::task::spawn_blocking({
             let known = known.clone();
-            move || Participant::start(seeds("carol"), known, platform_of(Arc::new(Shell::default()))).expect("starts")
+            move || {
+                Participant::start(
+                    seeds("carol"),
+                    known,
+                    platform_of(Arc::new(Shell::default())),
+                )
+                .expect("starts")
+            }
         })
         .await
         .unwrap(),
     );
     {
         let (q, addr) = (carol_side.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![])).await.unwrap().expect("carol attaches");
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![]))
+            .await
+            .unwrap()
+            .expect("carol attaches");
     }
     // alice sweeps again, since the first sweep ran before carol published
     {
         let (q, addr) = (p.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")])).await.unwrap().expect("alice attaches again");
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")]))
+            .await
+            .unwrap()
+            .expect("alice attaches again");
     }
     // and carol sweeps alice, since carol attached before alice's second
     // publication and a recipient attributes an initial message only under
     // the binding it holds
     {
         let (q, addr) = (carol_side.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("alice")])).await.unwrap().expect("carol sweeps");
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("alice")]))
+            .await
+            .unwrap()
+            .expect("carol sweeps");
     }
     {
         let q = p.clone();
-        tokio::task::spawn_blocking(move || q.send(id("carol"), KIND_APPLICATION, b"for carol".to_vec())).await.unwrap().expect("sent");
+        tokio::task::spawn_blocking(move || {
+            q.send(id("carol"), KIND_APPLICATION, b"for carol".to_vec())
+        })
+        .await
+        .unwrap()
+        .expect("sent");
     }
     let got = {
         let q = carol_side.clone();
-        tokio::task::spawn_blocking(move || q.next_event(5000)).await.unwrap()
+        tokio::task::spawn_blocking(move || q.next_event(5000))
+            .await
+            .unwrap()
     };
-    assert_eq!(got, Some(Event::Payload { from: id("alice"), bytes: b"for carol".to_vec() }), "decrypted here, and the ciphertext never left");
+    assert_eq!(
+        got,
+        Some(Event::Payload {
+            from: id("alice"),
+            bytes: b"for carol".to_vec()
+        }),
+        "decrypted here, and the ciphertext never left"
+    );
     let _ = carol;
 
     // maintenance is a conversation with a node, and refused where there
     // is none
     {
         let q = p.clone();
-        tokio::task::spawn_blocking(move || q.maintain()).await.unwrap().expect("maintains");
+        tokio::task::spawn_blocking(move || q.maintain())
+            .await
+            .unwrap()
+            .expect("maintains");
     }
     let bare = tokio::task::spawn_blocking({
         let known = known.clone();
-        move || Participant::start(seeds("bob"), known, platform_of(Arc::new(Shell::default()))).expect("starts")
+        move || {
+            Participant::start(seeds("bob"), known, platform_of(Arc::new(Shell::default())))
+                .expect("starts")
+        }
     })
     .await
     .unwrap();
-    let e = tokio::task::spawn_blocking(move || bare.maintain()).await.unwrap().unwrap_err();
+    let e = tokio::task::spawn_blocking(move || bare.maintain())
+        .await
+        .unwrap()
+        .unwrap_err();
     assert!(e.reason.contains("no serving node is attached"), "{e}");
 
     // an address that is not one is a refusal carrying its reason, and an
     // attach with none is refused before anything is dialled
     let q = p.clone();
-    let e = tokio::task::spawn_blocking(move || q.attach(id("bob"), vec!["not an address".into()], vec![])).await.unwrap().unwrap_err();
+    let e = tokio::task::spawn_blocking(move || {
+        q.attach(id("bob"), vec!["not an address".into()], vec![])
+    })
+    .await
+    .unwrap()
+    .unwrap_err();
     assert!(e.reason.contains("is not an address"), "{e}");
     let q = p.clone();
-    let e = tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![], vec![])).await.unwrap().unwrap_err();
+    let e = tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![], vec![]))
+        .await
+        .unwrap()
+        .unwrap_err();
     assert!(e.reason.contains("at least one address"), "{e}");
 
     // nothing arrived for this client, and asking says so rather than
     // blocking forever
     let q = p.clone();
-    assert!(tokio::task::spawn_blocking(move || q.next_event(200)).await.unwrap().is_none());
+    assert!(
+        tokio::task::spawn_blocking(move || q.next_event(200))
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 // acceptance: DMN-15
@@ -327,12 +507,22 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
     // newest and tells the sender (design §14.1.6)
     let node = serving_with("bob", |c| c.queue_cap = Some(0));
     let addr = node.addr.to_string();
-    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"].iter().map(|n| material(n)).collect();
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
+        .iter()
+        .map(|n| material(n))
+        .collect();
 
     let carol = Arc::new(
         tokio::task::spawn_blocking({
             let known = known.clone();
-            move || Participant::start(seeds("carol"), known, platform_of(Arc::new(Shell::default()))).expect("starts")
+            move || {
+                Participant::start(
+                    seeds("carol"),
+                    known,
+                    platform_of(Arc::new(Shell::default())),
+                )
+                .expect("starts")
+            }
         })
         .await
         .unwrap(),
@@ -340,7 +530,17 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
     let alice = Arc::new(
         tokio::task::spawn_blocking({
             let known = known.clone();
-            move || Participant::start(seeds("alice"), known, platform_of(Arc::new(Shell { has: vec![Channel::Nfc], ..Default::default() }))).expect("starts")
+            move || {
+                Participant::start(
+                    seeds("alice"),
+                    known,
+                    platform_of(Arc::new(Shell {
+                        has: vec![Channel::Nfc],
+                        ..Default::default()
+                    })),
+                )
+                .expect("starts")
+            }
         })
         .await
         .unwrap(),
@@ -348,20 +548,43 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
     // carol publishes so alice can address it, and alice sweeps carol
     {
         let (q, a) = (carol.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![])).await.unwrap().expect("carol attaches");
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![]))
+            .await
+            .unwrap()
+            .expect("carol attaches");
     }
     {
         let (q, a) = (alice.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![id("carol")])).await.unwrap().expect("alice attaches");
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![id("carol")]))
+            .await
+            .unwrap()
+            .expect("alice attaches");
     }
-    assert!(node.view.lock().unwrap().prekeys.bundle(&sid("carol").public.keyhash).is_some(), "control: the recipient's material is known");
+    assert!(
+        node.view
+            .lock()
+            .unwrap()
+            .prekeys
+            .bundle(&sid("carol").public.keyhash)
+            .is_some(),
+        "control: the recipient's material is known"
+    );
 
     let before = node.node.queued(&sid("carol").public.keyhash);
     let q = alice.clone();
-    let e = tokio::task::spawn_blocking(move || q.send(id("carol"), KIND_APPLICATION, b"for carol".to_vec()))
-        .await
-        .unwrap()
-        .expect_err("the node refused it, and the application is told");
-    assert!(e.reason.contains("unsent"), "the reason says the work was not done: {e}");
-    assert_eq!(node.node.queued(&sid("carol").public.keyhash), before, "and nothing was queued");
+    let e = tokio::task::spawn_blocking(move || {
+        q.send(id("carol"), KIND_APPLICATION, b"for carol".to_vec())
+    })
+    .await
+    .unwrap()
+    .expect_err("the node refused it, and the application is told");
+    assert!(
+        e.reason.contains("unsent"),
+        "the reason says the work was not done: {e}"
+    );
+    assert_eq!(
+        node.node.queued(&sid("carol").public.keyhash),
+        before,
+        "and nothing was queued"
+    );
 }

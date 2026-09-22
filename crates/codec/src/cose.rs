@@ -100,11 +100,15 @@ pub const ML_DSA_65_PUBLIC_BYTES: usize = 1952;
 pub fn check_key_material(km: &[u8]) -> Result<(), crate::cbor::Error> {
     use crate::cbor::{Error, Item, parse_all};
     let item = parse_all(km)?;
-    let Item::Array(a) = &item else { return Err(Error("key material not an array")) };
+    let Item::Array(a) = &item else {
+        return Err(Error("key material not an array"));
+    };
     if a.len() != 2 {
         return Err(Error("key material is exactly two keys"));
     }
-    let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else { return Err(Error("a key is not a map")) };
+    let (Item::Map(c), Item::Map(q)) = (&a[0], &a[1]) else {
+        return Err(Error("a key is not a map"));
+    };
     let width = |it: &Item| match it {
         Item::Bytes(r) => Some(r.len()),
         _ => None,
@@ -115,15 +119,22 @@ pub fn check_key_material(km: &[u8]) -> Result<(), crate::cbor::Error> {
         && matches!(&c[2].0, Item::Neg(-2))
         && width(&c[2].1) == Some(32);
     if !classical {
-        return Err(Error("the classical key is not Ed25519 with exactly kty, crv and x"));
+        return Err(Error(
+            "the classical key is not Ed25519 with exactly kty, crv and x",
+        ));
     }
     let post_quantum = q.len() == 3
         && matches!((&q[0].0, &q[0].1), (Item::Uint(1), Item::Uint(7)))
-        && matches!((&q[1].0, &q[1].1), (Item::Uint(3), Item::Neg(ALG_ML_DSA_65)))
+        && matches!(
+            (&q[1].0, &q[1].1),
+            (Item::Uint(3), Item::Neg(ALG_ML_DSA_65))
+        )
         && matches!(&q[2].0, Item::Neg(-1))
         && width(&q[2].1) == Some(ML_DSA_65_PUBLIC_BYTES);
     if !post_quantum {
-        return Err(Error("the post-quantum key is not ML-DSA-65 with exactly kty, alg and pub"));
+        return Err(Error(
+            "the post-quantum key is not ML-DSA-65 with exactly kty, alg and pub",
+        ));
     }
     Ok(())
 }

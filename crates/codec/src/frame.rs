@@ -110,7 +110,13 @@ pub fn parse_outer(stream: Stream, p: &[u8]) -> Result<Frame, Error> {
     if family.is_none() && stream == Stream::Request {
         return Err(Error("unknown request type"));
     }
-    Ok(Frame { stream, frame_type, family, body, body_item })
+    Ok(Frame {
+        stream,
+        frame_type,
+        family,
+        body,
+        body_item,
+    })
 }
 
 /// Parse a complete frame including its length prefix.

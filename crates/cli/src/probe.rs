@@ -15,10 +15,10 @@
 //! There is no unauthenticated mode to add, the transport having none
 //! (`wire-format.md` §9.1).
 
+use rhtn_archive::Keyhash;
 use rhtn_archive::catalog::{CatalogQuery, CatalogReply, REQUEST_CATALOG_QUERY};
 use rhtn_archive::chain::{ArchiveReply, ArchiveRequest, REQUEST_ARCHIVE};
 use rhtn_archive::record::Record;
-use rhtn_archive::Keyhash;
 use rhtn_crypto::{Identity, SigningIdentity};
 use rhtn_node::resolution::{REQUEST_RESOLVE, ResolveReply, ResolveRequest};
 use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, Session, attach};
@@ -32,7 +32,12 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub enum Ask {
     /// Where a subject is, from an anchor and a path (`wire-format.md` §7.7).
-    Resolve { subject: Keyhash, anchor: Keyhash, path: Vec<u8>, nibbles: u64 },
+    Resolve {
+        subject: Keyhash,
+        anchor: Keyhash,
+        path: Vec<u8>,
+        nibbles: u64,
+    },
     /// A subject's archive, newest first where no head is named (§7.9).
     Archive { subject: Keyhash, max_records: u64 },
     /// What a node's catalog answers this asker (§6.4).
@@ -40,7 +45,12 @@ pub enum Ask {
 }
 
 /// Attach to `target` at `addr` as `me`, pinning everyone in `known`.
-pub async fn attached(me: SigningIdentity, known: &[Identity], target: Keyhash, addr: SocketAddr) -> Result<(Session, quinn::Endpoint), String> {
+pub async fn attached(
+    me: SigningIdentity,
+    known: &[Identity],
+    target: Keyhash,
+    addr: SocketAddr,
+) -> Result<(Session, quinn::Endpoint), String> {
     let pins = Pins::new();
     pins.pin_identity(&me.public);
     for id in known {
@@ -53,7 +63,10 @@ pub async fn attached(me: SigningIdentity, known: &[Identity], target: Keyhash, 
         attestation: None,
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
-        addresses: Arc::new(Mutex::new(std::collections::HashMap::from([(target, vec![addr])]))),
+        addresses: Arc::new(Mutex::new(std::collections::HashMap::from([(
+            target,
+            vec![addr],
+        )]))),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_secs(5),
         on_reachability: None,
@@ -77,7 +90,9 @@ fn linked(records: &[Record], subject: &Keyhash) -> Result<(), String> {
     for (i, pair) in records.windows(2).enumerate() {
         let (newer, older) = (&pair[0], &pair[1]);
         let Some(back) = newer.back_pointers_of(subject) else {
-            return Err(format!("record {i} carries no back-pointers for the subject, so the batch is not its chain"));
+            return Err(format!(
+                "record {i} carries no back-pointers for the subject, so the batch is not its chain"
+            ));
         };
         if !back.contains(&older.txid) {
             return Err(format!(
@@ -95,19 +110,47 @@ fn linked(records: &[Record], subject: &Keyhash) -> Result<(), String> {
 /// hidden: its code is what the caller came for.
 pub async fn ask(session: &Session, ask: &Ask, nonce: [u8; 16]) -> Result<String, String> {
     match ask {
-        Ask::Resolve { subject, anchor, path, nibbles } => {
-            let req = ResolveRequest { subject: *subject, anchor: *anchor, path: path.clone(), nibbles: *nibbles, nonce };
+        Ask::Resolve {
+            subject,
+            anchor,
+            path,
+            nibbles,
+        } => {
+            let req = ResolveRequest {
+                subject: *subject,
+                anchor: *anchor,
+                path: path.clone(),
+                nibbles: *nibbles,
+                nonce,
+            };
             let bytes = session.request(REQUEST_RESOLVE, &req.encode()).await?;
-            let reply = ResolveReply::decode(&bytes).map_err(|e| format!("the reply does not decode: {e}"))?;
+            let reply = ResolveReply::decode(&bytes)
+                .map_err(|e| format!("the reply does not decode: {e}"))?;
             Ok(format!("{reply:#?}\n"))
         }
-        Ask::Archive { subject, max_records } => {
-            let req = ArchiveRequest { subject: *subject, frontier: Vec::new(), max_records: *max_records, stop_before: None, nonce };
+        Ask::Archive {
+            subject,
+            max_records,
+        } => {
+            let req = ArchiveRequest {
+                subject: *subject,
+                frontier: Vec::new(),
+                max_records: *max_records,
+                stop_before: None,
+                nonce,
+            };
             let bytes = session.request(REQUEST_ARCHIVE, &req.encode()).await?;
-            let reply = ArchiveReply::decode(&bytes).map_err(|e| format!("the reply does not decode: {e}"))?;
-            let mut out = format!("records   {}\nmore      {}\n", reply.records.len(), reply.more);
-            let parsed: Result<Vec<Record>, String> = reply.records.iter().map(|r| Record::parse(r)).collect();
-            let parsed = parsed.map_err(|e| format!("a record in the batch does not parse: {e}"))?;
+            let reply = ArchiveReply::decode(&bytes)
+                .map_err(|e| format!("the reply does not decode: {e}"))?;
+            let mut out = format!(
+                "records   {}\nmore      {}\n",
+                reply.records.len(),
+                reply.more
+            );
+            let parsed: Result<Vec<Record>, String> =
+                reply.records.iter().map(|r| Record::parse(r)).collect();
+            let parsed =
+                parsed.map_err(|e| format!("a record in the batch does not parse: {e}"))?;
             for r in &parsed {
                 out.push_str(&format!("  {}\n", crate::inspect::hex(&r.txid)));
             }
@@ -122,9 +165,15 @@ pub async fn ask(session: &Session, ask: &Ask, nonce: [u8; 16]) -> Result<String
             Ok(out)
         }
         Ask::Catalog { service_type } => {
-            let req = CatalogQuery { service_type: service_type.clone(), nonce };
-            let bytes = session.request(REQUEST_CATALOG_QUERY, &req.encode()).await?;
-            let reply = CatalogReply::decode(&bytes).map_err(|e| format!("the reply does not decode: {e}"))?;
+            let req = CatalogQuery {
+                service_type: service_type.clone(),
+                nonce,
+            };
+            let bytes = session
+                .request(REQUEST_CATALOG_QUERY, &req.encode())
+                .await?;
+            let reply = CatalogReply::decode(&bytes)
+                .map_err(|e| format!("the reply does not decode: {e}"))?;
             let mut out = format!("entries   {}\n", reply.entries.len());
             if let Some(c) = &reply.continuation {
                 out.push_str(&format!("more of   {c}\n"));
