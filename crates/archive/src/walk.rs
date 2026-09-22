@@ -176,15 +176,17 @@ impl BatchVerdict {
     }
 }
 
-/// Verify one reply (`wire-format.md` §7.9): the first record matches the
-/// requested head, and every later record is one an earlier record's
-/// back-pointers name.  Reachability, not sequence, is what a merge needs
-/// (`wire-format.md` §3.1).
-pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested_head: Option<&Txid>, reply: &ArchiveReply, ids: &L) -> BatchVerdict {
+/// Verify one reply (`wire-format.md` §7.9): every returned record is named
+/// by the requested frontier or by a back-pointer of another record in the
+/// batch, and every back-pointer naming nothing in the batch appears in
+/// the reply's frontier.  Reachability, not sequence, is what a merge
+/// needs (`wire-format.md` §3.1).  An empty `requested` is the recovery
+/// case: the first record is the holder's claim of newest, unmatched.
+pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested: &[Txid], reply: &ArchiveReply, ids: &L) -> BatchVerdict {
     let g = genesis(subject);
     let mut verified: Vec<Record> = Vec::new();
     let mut signatures = Vec::new();
-    let mut expected: BTreeSet<Txid> = BTreeSet::new();
+    let mut expected: BTreeSet<Txid> = requested.iter().copied().collect();
     let mut named_by: BTreeMap<Txid, Vec<usize>> = BTreeMap::new();
     let mut checkpoint_names: BTreeMap<Txid, Txid> = BTreeMap::new();
     let mut end = None;
@@ -200,14 +202,8 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested_head: Optio
             end = Some(BatchEnd::Mismatch { index: i, why: "not signed by the subject".into() });
             break;
         };
-        if i == 0 {
-            if let Some(h) = requested_head
-                && rec.txid != *h {
-                    end = Some(BatchEnd::Mismatch { index: 0, why: "first record is not the requested head".into() });
-                    break;
-                }
-        } else if !expected.contains(&rec.txid) {
-            end = Some(BatchEnd::Mismatch { index: i, why: "not named by any preceding record's back-pointers".into() });
+        if !(i == 0 && requested.is_empty()) && !expected.contains(&rec.txid) {
+            end = Some(BatchEnd::Mismatch { index: i, why: "named neither by the requested frontier nor by another record's back-pointers".into() });
             break;
         }
         if let Some(js) = named_by.get(&rec.txid)
@@ -228,6 +224,14 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested_head: Optio
         signatures.push((rec.txid, rec.check_signatures(ids)));
         verified.push(rec);
     }
+    // when more remain, the reply's frontier is exactly what was named and
+    // not returned (§7.9)
+    if end.is_none() && reply.more {
+        let named: BTreeSet<Txid> = reply.frontier.iter().copied().collect();
+        if named != expected {
+            end = Some(BatchEnd::Mismatch { index: reply.records.len(), why: "the frontier does not name what was left unreturned".into() });
+        }
+    }
     let end = end.unwrap_or_else(|| {
         if expected.is_empty() {
             BatchEnd::Genesis
@@ -237,7 +241,7 @@ pub fn verify_batch<L: Lookup + ?Sized>(subject: &Keyhash, requested_head: Optio
             BatchEnd::Unfetched { continue_from: verified.last().map(|r| r.txid).unwrap_or(g), missing: expected.iter().copied().collect() }
         }
     });
-    BatchVerdict { verified, signatures, end, head_verified: requested_head.is_some() }
+    BatchVerdict { verified, signatures, end, head_verified: !requested.is_empty() }
 }
 
 /// The result of fetching a whole chain batch by batch: what a requester
@@ -260,19 +264,19 @@ pub struct FetchOutcome {
 /// the oldest record returned until the holder reports no more.
 pub fn fetch_chain<L: Lookup + ?Sized>(subject: &Keyhash, head: Option<Txid>, max_records: u64, ids: &L, mut serve: impl FnMut(&crate::chain::ArchiveRequest) -> ArchiveReply) -> FetchOutcome {
     let mut records: Vec<Txid> = Vec::new();
-    let mut next_head = head;
+    let mut next: Vec<Txid> = head.into_iter().collect();
     let mut newest = None;
     let mut end;
     let mut first = true;
     loop {
         let nonce = rhtn_codec::cose::sha256(&records.len().to_be_bytes())[..16].try_into().unwrap();
-        let req = crate::chain::ArchiveRequest { subject: *subject, head: next_head, max_records, stop_before: None, nonce };
+        let req = crate::chain::ArchiveRequest { subject: *subject, frontier: next.clone(), max_records, stop_before: None, nonce };
         let reply = serve(&req);
         if reply.nonce != nonce {
             end = BatchEnd::Mismatch { index: 0, why: "nonce not echoed".into() };
             break;
         }
-        let v = verify_batch(subject, next_head.as_ref(), &reply, ids);
+        let v = verify_batch(subject, &next, &reply, ids);
         if first {
             newest = v.verified.first().map(|r| r.txid);
             first = false;
@@ -284,12 +288,12 @@ pub fn fetch_chain<L: Lookup + ?Sized>(subject: &Keyhash, head: Option<Txid>, ma
         }
         end = v.end.clone();
         match &v.end {
-            BatchEnd::Unfetched { continue_from, .. } if reply.more || reply.continue_from.is_some() => {
-                let cont = reply.continue_from.unwrap_or(*continue_from);
-                if Some(cont) == next_head {
+            BatchEnd::Unfetched { continue_from, .. } if reply.more => {
+                let cont: Vec<Txid> = if reply.frontier.is_empty() { vec![*continue_from] } else { reply.frontier.clone() };
+                if cont == next {
                     break; // no progress: the holder repeats itself
                 }
-                next_head = Some(cont);
+                next = cont;
             }
             _ => break,
         }

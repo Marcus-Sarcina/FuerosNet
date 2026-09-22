@@ -53,6 +53,7 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Control, 4) => SiblingUpdate,
         (Stream::Control, 5) => TopologyPush,
         (Stream::Control, 6) => TopologyMemo,
+        (Stream::Control, 7) => Delegation,
         (Stream::Request, 1) => ResolveRequest,
         (Stream::Request, 2) => ArchiveRequest,
         (Stream::Request, 3) => PrekeyRequestOrBatch,

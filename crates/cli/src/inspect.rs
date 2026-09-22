@@ -70,6 +70,9 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
                 out.push_str(&format!("schema    {}\n", said(schema::check_kind(raw, k, &item).map_err(|e| e.0.to_string()))));
                 if is_signed_kind(k) {
                     out.push_str(&format!("signature {}\n", signature(verify::record(ids, k, raw))));
+                } else if k == "Delegation" {
+                    // hybrid, under the delegating identity (`wire-format.md` §8.2)
+                    out.push_str(&format!("signature {}\n", signature(verify::delegation(ids, raw).map(|_| ()))));
                 }
             }
         }

@@ -148,4 +148,6 @@ pub mod aad {
     pub const SUBTREE_ACK: &[u8] = b"rhtn/1:subtree-ack";
     pub const SUCCESSOR: &[u8] = b"rhtn/1:successor";
     pub const TRANSFER: &[u8] = b"rhtn/1:transfer";
+    /// The fourteenth: a transport delegation (`wire-format.md` §8.2).
+    pub const DELEGATION: &[u8] = b"rhtn/1:delegation";
 }

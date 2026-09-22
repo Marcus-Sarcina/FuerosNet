@@ -19,8 +19,11 @@ pub const REQUEST_ARCHIVE: u64 = 2;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveRequest {
     pub subject: Keyhash,
-    /// Absent: the holder's newest record — the recovery case.
-    pub head: Option<Txid>,
+    /// The frontier to walk back from: one txid for an unmerged chain,
+    /// several where a merge left more than one branch unreturned
+    /// (`wire-format.md` §7.9).  Empty: the holder's newest record, the
+    /// recovery case.
+    pub frontier: Vec<Txid>,
     pub max_records: u64,
     pub stop_before: Option<u64>,
     pub nonce: [u8; 16],
@@ -29,12 +32,15 @@ pub struct ArchiveRequest {
 impl ArchiveRequest {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3 + self.head.is_some() as usize + self.stop_before.is_some() as usize);
+        emit_map_head(&mut out, 3 + !self.frontier.is_empty() as usize + self.stop_before.is_some() as usize);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.subject);
-        if let Some(h) = &self.head {
+        if !self.frontier.is_empty() {
             emit_uint(&mut out, 2);
-            emit_bstr(&mut out, h);
+            emit_array_head(&mut out, self.frontier.len());
+            for h in &self.frontier {
+                emit_bstr(&mut out, h);
+            }
         }
         emit_uint(&mut out, 3);
         emit_uint(&mut out, self.max_records);
@@ -55,7 +61,7 @@ impl ArchiveRequest {
         let bytes = |k: u64| match map_get(m, k) { Some(Item::Bytes(r)) => Some(b[r.clone()].to_vec()), _ => None };
         Ok(ArchiveRequest {
             subject: bytes(1).and_then(|v| v.try_into().ok()).ok_or("subject")?,
-            head: bytes(2).and_then(|v| v.try_into().ok()),
+            frontier: txids_at(b, 2)?,
             max_records: map_get(m, 3).and_then(as_uint).ok_or("max")?,
             stop_before: map_get(m, 4).and_then(as_uint),
             nonce: bytes(5).and_then(|v| v.try_into().ok()).ok_or("nonce")?,
@@ -69,14 +75,25 @@ pub struct ArchiveReply {
     pub nonce: [u8; 16],
     pub records: Vec<Vec<u8>>,
     pub more: bool,
-    /// The oldest record returned, to continue from.
-    pub continue_from: Option<Txid>,
+    /// The frontier: every back-pointer this batch named and did not
+    /// return, present iff `more` (`wire-format.md` §7.9).
+    pub frontier: Vec<Txid>,
+}
+
+/// Field `k` as an array of txids, empty where absent.
+fn txids_at(b: &[u8], k: u64) -> Result<Vec<Txid>, String> {
+    let Some(r) = value_slice(b, k) else { return Ok(Vec::new()) };
+    array_item_ranges(b, r.start)
+        .ok_or("frontier walk")?
+        .into_iter()
+        .map(|ir| b[ir.start + 2..ir.end].try_into().map_err(|_| "txid".to_string()))
+        .collect()
 }
 
 impl ArchiveReply {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3 + self.continue_from.is_some() as usize);
+        emit_map_head(&mut out, 3 + (self.more && !self.frontier.is_empty()) as usize);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.nonce);
         emit_uint(&mut out, 2);
@@ -86,9 +103,12 @@ impl ArchiveReply {
         }
         emit_uint(&mut out, 3);
         emit_bool(&mut out, self.more);
-        if let Some(c) = &self.continue_from {
+        if self.more && !self.frontier.is_empty() {
             emit_uint(&mut out, 4);
-            emit_bstr(&mut out, c);
+            emit_array_head(&mut out, self.frontier.len());
+            for c in &self.frontier {
+                emit_bstr(&mut out, c);
+            }
         }
         out
     }
@@ -102,8 +122,8 @@ impl ArchiveReply {
         let r2 = value_slice(b, 2).ok_or("records")?;
         let records = array_item_ranges(b, r2.start).ok_or("records walk")?.into_iter().map(|r| b[r].to_vec()).collect();
         let more = matches!(map_get(m, 3), Some(Item::Bool(true)));
-        let continue_from = match map_get(m, 4) { Some(Item::Bytes(r)) => b[r.clone()].to_vec().try_into().ok(), _ => None };
-        Ok(ArchiveReply { nonce, records, more, continue_from })
+        let frontier = txids_at(b, 4)?;
+        Ok(ArchiveReply { nonce, records, more, frontier })
     }
 }
 
@@ -285,11 +305,12 @@ impl Archive {
         Some(chain)
     }
 
-    /// Records reachable backward from `head`, head first, every record
-    /// before any of its predecessors (a reverse topological order).
-    fn walk_from(&self, head: &Txid) -> Vec<Txid> {
+    /// Records reachable backward from `heads`, every record before any of
+    /// its predecessors (a reverse topological order over the union of the
+    /// walks, which is what a frontier past a merge asks for).
+    fn walk_from(&self, heads: &[Txid]) -> Vec<Txid> {
         let mut reach = BTreeSet::new();
-        let mut stack = vec![*head];
+        let mut stack: Vec<Txid> = heads.to_vec();
         while let Some(t) = stack.pop() {
             if !reach.insert(t) {
                 continue;
@@ -310,8 +331,14 @@ impl Archive {
                 }
             }
         }
+        // every head with nothing in the reach pointing back to it starts
+        // ready, newest first; a head another head points back to is
+        // released when its namer is out
         let mut ready: VecDeque<Txid> = VecDeque::new();
-        ready.push_back(*head);
+        let mut starts: Vec<Txid> = heads.iter().copied().filter(|h| indeg.get(h) == Some(&0)).collect();
+        starts.sort_by_key(|h| std::cmp::Reverse(self.records[h].effective));
+        starts.dedup();
+        ready.extend(starts);
         let mut out = Vec::new();
         while let Some(t) = ready.pop_front() {
             out.push(t);
@@ -334,19 +361,20 @@ impl Archive {
         self.heads.iter().max_by_key(|h| self.records[*h].effective).copied()
     }
 
-    /// Answer an archive request (`wire-format.md` §7.9): head first, at
-    /// most `max_records`, `continue_from` the oldest returned when more
-    /// remain.  A head this archive does not hold gets an empty batch.
+    /// Answer an archive request (`wire-format.md` §7.9): every record
+    /// before any it points back to, at most `max_records`, and when more
+    /// remain the frontier, every back-pointer named and not returned.  A
+    /// frontier this archive does not hold gets an empty batch.
     pub fn serve(&self, req: &ArchiveRequest) -> ArchiveReply {
-        let empty = ArchiveReply { nonce: req.nonce, records: Vec::new(), more: false, continue_from: None };
+        let empty = ArchiveReply { nonce: req.nonce, records: Vec::new(), more: false, frontier: Vec::new() };
         if req.subject != self.key || !(1..=256).contains(&req.max_records) {
             return empty;
         }
-        let Some(head) = req.head.or_else(|| self.newest()) else { return empty };
-        if !self.records.contains_key(&head) {
+        let heads: Vec<Txid> = if req.frontier.is_empty() { self.newest().into_iter().collect() } else { req.frontier.clone() };
+        if heads.is_empty() || heads.iter().any(|h| !self.records.contains_key(h)) {
             return empty;
         }
-        let order = self.walk_from(&head);
+        let order = self.walk_from(&heads);
         let mut records = Vec::new();
         let mut last = None;
         let mut stopped = false;
@@ -362,8 +390,23 @@ impl Archive {
             records.push(r.bytes.clone());
             last = Some(*t);
         }
+        let _ = last;
         let more = !stopped && records.len() < order.len();
-        ArchiveReply { nonce: req.nonce, records, more, continue_from: if more { last } else { None } }
+        // the frontier: what the returned records point back to and this
+        // batch did not return, genesis aside
+        let returned: BTreeSet<Txid> = order.iter().take(records.len()).copied().collect();
+        let g = genesis(&self.key);
+        let mut frontier: Vec<Txid> = Vec::new();
+        if more {
+            for t in &returned {
+                for p in self.records[t].back_pointers_of(&self.key).unwrap_or(&[]) {
+                    if *p != g && !returned.contains(p) && !frontier.contains(p) {
+                        frontier.push(*p);
+                    }
+                }
+            }
+        }
+        ArchiveReply { nonce: req.nonce, records, more, frontier }
     }
 
     // ---------------------------------------------------------------- evidence
@@ -387,7 +430,7 @@ impl Archive {
         if cp.effective.saturating_add(WINDOW_SECONDS) > now {
             return Err("inside the 730-day window".into());
         }
-        let before: Vec<Txid> = self.walk_from(at).into_iter().skip(1).collect();
+        let before: Vec<Txid> = self.walk_from(&[*at]).into_iter().skip(1).collect();
         let n = before.len();
         for t in &before {
             self.records.remove(t);

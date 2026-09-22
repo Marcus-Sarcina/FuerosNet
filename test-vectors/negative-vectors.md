@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `7862d27bb2bcb5c24fbb3f658dc0017d0d6a934cd342535df77d6a61759024b6` · network-design.md `bc59e9b2528a5e78c794d3bc777643a802dd948fb22af26fa2437c8df647c754`
+**Pinned**: wire-format.md `5240fe999e32fbf8153b1ae0813031f0b1e3ddc039d6d0975e8d23a1999f5c2c` · network-design.md `e3822764defcc4dc3e6e855d749ee6e7fbe86427b494e11715045f3b1d2fbb0b`
 
 ## The result model is structured, not a single status
 
@@ -194,6 +194,23 @@ decoder's rather than a node's policy:
 | T34 | A `PrekeyPublication` whose field 1 is a byte string wrapping the bundle rather than the bundle map | §7.10 declares field 1 as `PrekeyBundle`, the object §7.8 defines, spliced in as `PrekeyReply` field 2 splices it. The wrapping round-trips against itself and fails against every conformant peer |
 | T35 | An `OneTimeDeposit` whose field 1 is an empty array, or carries more than 256 entries, or holds an entry that is not a byte string | §7.10's `[ 1*256 bstr ]` |
 | T36 | A `SubmissionReply` whose field 2 is outside 0–2 | §7.10: accepted, refused, over a bound, and §1's unknown-enum rule on a closed enumeration |
+| T40 | A `RelaySubmission` without field 4 | §7.10 [2026-09-22]: a session is with a device, and the node cannot tell from the ciphertext which; the recipient device is required |
+| T41 | A `PrekeyRequest` with field 2 = 1 and field 4 absent | §7.8 [2026-09-22]: a one-time key is consumed from one device's pool, so the device is required when one is asked for |
+| T42 | A `PrekeyReply` whose field 2 carries nine bundles | §7.8: at most eight, a chosen ceiling beside design §23.3's count of about three |
+| T43 | An `ArchiveRequest` whose field 2 is an empty array | §7.9 [2026-09-17]: the frontier is `[ + txid ]`; absent means the holder's newest record, empty means nothing |
+| T44 | An `ArchiveReply` with field 4 present and field 3 false | §7.9: the frontier is present iff more remain |
+
+### Transport delegation (§8.2)
+
+The credential an instance presents in place of a seed; a decoder's checks
+before any receiver's clock or pin is consulted:
+
+| # | Input | Violation |
+|---|---|---|
+| T45 | A `Delegation` whose field 4 is not exactly 172,800 seconds after field 3 | §8.2 [author, 2026-09-21]: the window is exactly 48 hours, and a window an issuer could lengthen would put the seed back on the box under another name |
+| T46 | A `Delegation` whose field 5 carries one signature entry | §8.2: hybrid because the delegating identity is; a classical-only delegation is malformed |
+| T47 | A `Delegation` whose field 5 verifies under an identity other than field 2 | §8.2: the delegating identity signs; the wrong-signer analogue in `records.md` |
+| T48 | A `CurrencyAttestation` whose field 8 names a key other than the one that signed field 7 | §7.1 [2026-09-22]: a verifier checks field 7 against the key field 8 names |
 
 ### `CatalogEntry` field widths (§6.1)
 
@@ -264,6 +281,10 @@ admits and another refuses propagates rather than stopping where it arrived:
 | D18 | A bounded unknown extension whose value is a tagged item, float, or any other deterministic CBOR item outside the schemas' types | §1 [author, 2026-09-01]: **opaque encoded slices, preserved and never interpreted** — uninterpretable state kept for a reader that may understand it later. An implementation reconstructing extensions through a typed model drops what it cannot type, and fails here |
 | D19 | A `Proximity` disclosure carrying the same channel kind twice — failed, then retried and passing | §4.5 [2026-09-02]: a kind may repeat; a retried channel is two measurements, both evidence. A validator imposing one-entry-per-kind rejects a valid record (`P-channel-retry`) |
 | D21 | The recovery adoption (`transactions.md`), which carries **neither** field 8 nor field 9 | Its evidence is field 6 (design §6.1.1): a recovery's presence half is embedded, not referenced. A decoder demanding field 8 on every adoption rejects every recovery |
+| D22 | A `CurrencyAttestation` whose field 2 differs from field 1 (`P-currency-successor`) | §7.1 [author, 2026-09-18]: field 2 is what the issuer vouches is live, a rotation-or-fork signal, never a redirect; a decoder that required equality would remove fork detection from the currency path (CUR-20) |
+| D23 | A `CurrencyAttestation` signed under the issuer's identity with no field 8 (`records.md`) | §7.1: field 8 is present iff the signature is under a delegated key; an issuer holding its seed carries none |
+| D24 | An `Attach` with field 4 absent, or an `AttachAck` with field 6 absent | §8.2: the seed-holding device presents its identity's classical member and owes no delegation |
+| D25 | An `ArchiveReply` whose field 2 holds an array beside maps (`P-archive-reply-presented`) | §7.9: a presence record arrives presented; a map is an envelope and an array a presentation, no discriminator |
 | D20 | An adoption carrying a valid field 9 `Transfer` and **no** field 8 (`transactions.md`) | design §6.1.1: the countersignature is a required alternative, not a lesser one. A decoder that demands a presence record on every adoption rejects every lateral and vertical shift (§6.2.3) |
 
 ## Resolved: the seed sentence is a writer commitment

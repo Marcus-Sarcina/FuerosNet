@@ -15,6 +15,10 @@ pub struct Attestation {
     pub expires_at: u64,
     pub role: u64,
     pub issuer: Keyhash,
+    /// Field 8, the issuer's delegation naming the key field 7 was made
+    /// under, where the issuer signed under a delegated key
+    /// (`wire-format.md` §7.1); verified with the signature.
+    pub delegation: Option<Vec<u8>>,
     pub bytes: Vec<u8>,
 }
 
@@ -40,6 +44,7 @@ pub fn parse_attestation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<At
         expires_at: map_get(m, 4).and_then(as_uint).ok_or("expires_at")?,
         role: map_get(m, 5).and_then(as_uint).ok_or("role")?,
         issuer: kh(bytes, m, 6).ok_or("issuer")?,
+        delegation: value_slice(bytes, 8).map(|r| bytes[r].to_vec()),
         bytes: bytes.to_vec(),
     })
 }

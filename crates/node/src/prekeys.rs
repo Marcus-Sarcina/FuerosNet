@@ -127,7 +127,9 @@ impl PrekeyService {
     /// nothing where the body is not a request.
     pub fn answer(&mut self, requester: &Keyhash, body: &[u8], now: u64) -> Option<Vec<u8>> {
         match PrekeyRequest::decode(body).ok()? {
-            PrekeyRequest::One { subject, one_time, nonce } => Some(self.answer_one(requester, &subject, one_time, nonce, now).encode()),
+            // the device named is not yet consulted: one bundle per subject
+            // is held until the pools are per device (`wire-format.md` §7.8)
+            PrekeyRequest::One { subject, one_time, nonce, device: _ } => Some(self.answer_one(requester, &subject, one_time, nonce, now).encode()),
             PrekeyRequest::Batch { subjects, nonce } => {
                 // a sweep: reusable material only, whatever the pools hold
                 let replies: Vec<PrekeyReply> = subjects.iter().map(|s| self.reusable(s, nonce)).collect();
@@ -138,14 +140,14 @@ impl PrekeyService {
 
     fn reusable(&self, subject: &Keyhash, nonce: [u8; 16]) -> PrekeyReply {
         match self.bundles.get(subject) {
-            Some(b) => PrekeyReply { nonce, bundle: Some(b.clone()), one_time: None, code: None },
-            None => PrekeyReply { nonce, bundle: None, one_time: None, code: Some(FAIL_UNKNOWN_SUBJECT) },
+            Some(b) => PrekeyReply { nonce, bundles: vec![b.clone()], one_time: None, code: None },
+            None => PrekeyReply { nonce, bundles: Vec::new(), one_time: None, code: Some(FAIL_UNKNOWN_SUBJECT) },
         }
     }
 
     fn answer_one(&mut self, requester: &Keyhash, subject: &Keyhash, one_time: bool, nonce: [u8; 16], now: u64) -> PrekeyReply {
         let mut reply = self.reusable(subject, nonce);
-        if reply.bundle.is_none() || !one_time {
+        if reply.bundles.is_empty() || !one_time {
             return reply;
         }
         // the allowance: within it a key is consumed; over it the reusable

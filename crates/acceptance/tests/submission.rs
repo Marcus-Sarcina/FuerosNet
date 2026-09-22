@@ -2,25 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// A publication and a deposit from an attached client are held and served
-///
-/// Spec: wire-format.md §7.10; wire-format.md §7.8
-/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.10): "It cannot publish its own prekey bundle, stock its own one-time pool, hold its own mail, or be woken by a service it is not connected to."
-/// Rule (wire-format.md §7.8): "The bundle is opaque to this protocol"
-///
-/// Given: Client S is attached to node N over a session and N holds nothing for S.
-/// When: S sends a type-9 publication of its own bundle and a type-10 deposit of k one-time keys.
-/// Then: Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte among S's bundles and, when the fetch names S's device, one of the deposited keys.
-///
-/// Interpretation: Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands.
-#[test]
-#[ignore = "acceptance SUB-02: owed at milestone after-5"]
-fn sub_02_a_publication_and_a_deposit_from_an_attached_cli() {
-    todo!("SUB-02: A publication and a deposit from an attached client are held and served")
-}
-
 /// Refuse a publication whose device is not the key the session presented
 ///
 /// Spec: wire-format.md §7.10

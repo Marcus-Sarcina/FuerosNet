@@ -47,7 +47,7 @@ async fn d02_served_one_time_key_must_not_return_from_the_last_daemon_snapshot()
     let l=layout("prekeys");
     let (subject,requester)=(test_identity("alice"),test_identity("carol"));
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
-    let bundle=PrekeyBundle::build(&subject,1,b"opaque subject material",100);
+    let bundle=PrekeyBundle::build(&subject,1,b"opaque subject material",100, &[0u8; 32]);
     let otk=b"one-time opaque key".to_vec();
     {
         let mut view=service.node.view.lock().unwrap();
@@ -55,7 +55,7 @@ async fn d02_served_one_time_key_must_not_return_from_the_last_daemon_snapshot()
         assert!(view.prekeys.stock(subject.public.keyhash,vec![otk.clone()]));
     }
     service.persist().unwrap();
-    let request=PrekeyRequest::One { subject:subject.public.keyhash,one_time:true,nonce:[7;16] }.encode();
+    let request=PrekeyRequest::One { subject:subject.public.keyhash,one_time:true,nonce:[7;16],device: Some([0u8; 32]) }.encode();
     {
         let mut view=service.node.view.lock().unwrap();
         let reply=PrekeyReply::decode(&view.prekeys.answer(&requester.public.keyhash,&request,101).unwrap()).unwrap();
@@ -134,9 +134,9 @@ async fn s05_daemon_persist_must_succeed_after_one_time_key_issuance() {
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
     {
         let mut v=service.node.view.lock().unwrap();
-        v.prekeys.publish(&vec![subject.public.clone()],&PrekeyBundle::build(&subject,1,b"opaque",100)).unwrap();
+        v.prekeys.publish(&vec![subject.public.clone()],&PrekeyBundle::build(&subject,1,b"opaque",100, &[0u8; 32])).unwrap();
         assert!(v.prekeys.stock(subject.public.keyhash,vec![vec![7]]));
-        let req=PrekeyRequest::One {subject:subject.public.keyhash,one_time:true,nonce:[1;16]}.encode();
+        let req=PrekeyRequest::One {subject:subject.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
         assert_eq!(PrekeyReply::decode(&v.prekeys.answer(&requester.public.keyhash,&req,101).unwrap()).unwrap().one_time,Some(vec![7]));
     }
     let saved=service.persist();service.node.endpoint.close(0u32.into(),b"done");

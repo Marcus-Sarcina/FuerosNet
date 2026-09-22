@@ -195,17 +195,17 @@ impl Courier {
                             }
                         }
                     }
-                    Msg::Payload { to, bytes } => {
+                    Msg::Payload { to, bytes, device } => {
                         // a delivery short of complete leaves the message
                         // with the sender, and the relay carries it (design
                         // §14.1.1)
-                        if !me.direct.deliver(to, bytes.clone()).await && !me.serving.relay(me.me(), to, bytes.clone()).await {
-                            out.refused.push(Msg::Payload { to, bytes });
+                        if !me.direct.deliver(to, bytes.clone()).await && !me.serving.relay(me.me(), to, bytes.clone(), device).await {
+                            out.refused.push(Msg::Payload { to, bytes, device });
                         }
                     }
-                    Msg::Relay { to, bytes } => {
-                        if !me.serving.relay(me.me(), to, bytes.clone()).await {
-                            out.refused.push(Msg::Relay { to, bytes });
+                    Msg::Relay { to, bytes, device } => {
+                        if !me.serving.relay(me.me(), to, bytes.clone(), device).await {
+                            out.refused.push(Msg::Relay { to, bytes, device });
                         }
                     }
                     // **a client originates and does not forward.** The
@@ -221,7 +221,10 @@ impl Courier {
                     }
                     Msg::Transport(b) => {
                         let node = me.serving.me();
-                        if !me.serving.relay(me.me(), node, b.clone()).await {
+                        // the serving node's own device is the transport key it
+                        // presented, which the courier does not yet hold: an
+                        // all-zero device until the queue is per device (QUE-21)
+                        if !me.serving.relay(me.me(), node, b.clone(), [0; 32]).await {
                             out.refused.push(Msg::Transport(b));
                         }
                     }

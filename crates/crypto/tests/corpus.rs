@@ -13,7 +13,7 @@ use rhtn_crypto::verify;
 
 mod common;
 
-pub use common::{NAMES, corpus, identities};
+pub use common::{NAMES, corpus, held, identities};
 
 /// The reply family a corpus reply entry belongs to, as the corpus states
 /// it on the entry.
@@ -43,7 +43,7 @@ fn parse_frame(raw: &[u8]) -> Result<frame::Frame, Error> {
 fn every_bytes_entry_agrees_with_its_expectation() {
     let corpus = corpus();
     assert_eq!(corpus["format"], "rhtn-test-corpus/1");
-    let ids = identities();
+    let ids = held();
     let mut pass = 0u32;
     let mut failures: Vec<String> = Vec::new();
     let mut adopt_min: Vec<u8> = Vec::new();
@@ -91,6 +91,7 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 ("reject", Ok(_)) if layer == "cbor" => Err("cbor-layer reject parsed".into()),
                 (_, Err(err)) => Err(format!("must parse but: {err}")),
                 ("accept", Ok(item)) => match kind {
+                    "Delegation" => verify::delegation(&ids, &raw).map(|_| ()).map_err(|e| e.to_string()),
                     "envelope" => verify::envelope(&ids, &raw).map(|_| ()).map_err(|e| e.to_string()),
                     "presentation" => verify::presentation(&ids, &raw).map_err(|e| e.to_string()),
                     k if verified_record_kind(k) && !stale => match (schema::check_kind(&raw, k, &item), verify::record(&ids, k, &raw)) {
@@ -108,7 +109,8 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                 },
                 ("reject", Ok(item)) => {
                     let schema_ok = schema::check_kind(&raw, kind, &item).is_ok();
-                    let sig_fails = verified_record_kind(kind) && !stale && verify::record(&ids, kind, &raw).is_err();
+                    let sig_fails = (verified_record_kind(kind) && !stale && verify::record(&ids, kind, &raw).is_err())
+                        || (kind == "Delegation" && verify::delegation(&ids, &raw).is_err());
                     if !schema_ok || sig_fails {
                         Ok(())
                     } else if implemented_kind(kind) || verified_record_kind(kind) {
@@ -185,6 +187,6 @@ fn implemented_kind(kind: &str) -> bool {
         "VerifierResponse" | "Locator" | "NetworkPoint" | "LocationEvidence" | "Proximity" | "Scope" | "Capabilities"
             | "CatalogEntry" | "CurrencyAttestation" | "ResolveReply" | "ResourceResponse" | "ArchiveRequest"
             | "PrekeyBundle" | "PrekeyBatchRequest" | "Witness" | "body" | "SignedLocator" | "VerificationQuery"
-            | "CatalogReply" | "RelayedPayload"
+            | "CatalogReply" | "RelayedPayload" | "Delegation" | "ArchiveReply" | "PrekeyReply"
     )
 }

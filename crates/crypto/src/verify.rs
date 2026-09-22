@@ -40,6 +40,13 @@ impl From<String> for Failure {
 /// Resolve a keyhash to a pinned identity.
 pub trait Lookup {
     fn identity(&self, keyhash: &[u8]) -> Option<&Identity>;
+    /// The transport key a delegation this holder keeps names for
+    /// `keyhash` (`wire-format.md` §8.2, §10.1): what a subtree
+    /// acknowledgement or an attestation without a stapled delegation is
+    /// verified under.  None where nothing is held, which is the default.
+    fn delegated_key(&self, _keyhash: &[u8]) -> Option<[u8; 32]> {
+        None
+    }
 }
 
 impl Lookup for [Identity] {
@@ -272,14 +279,71 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
     Ok(())
 }
 
+/// A transport delegation (`wire-format.md` §8.2), verified hybrid under
+/// the identity field 2 names: the key it names, that identity, and the
+/// window.  A receiver then checks the key against what the handshake
+/// presented, and the window against its clock; neither is done here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Delegation {
+    pub key: [u8; 32],
+    pub keyhash: [u8; 32],
+    pub not_before: u64,
+    pub not_after: u64,
+}
+
+pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation, Failure> {
+    let item = parse_all(raw).map_err(|_| "cbor")?;
+    rhtn_codec::schema::check_kind(raw, "Delegation", &item).map_err(|e| Failure::Invalid(e.0.into()))?;
+    let Item::Map(m) = &item else { return Err("not map".into()) };
+    let b32 = |k: u64| -> Option<[u8; 32]> { match map_get(m, k) { Some(Item::Bytes(r)) => raw[r.clone()].try_into().ok(), _ => None } };
+    let key = b32(1).ok_or("field 1")?;
+    let keyhash = b32(2).ok_or("field 2")?;
+    let not_before = map_get(m, 3).and_then(as_uint).ok_or("field 3")?;
+    let not_after = map_get(m, 4).and_then(as_uint).ok_or("field 4")?;
+    let id = ids.identity(&keyhash).ok_or_else(|| Failure::MissingKey(keyhash.to_vec()))?;
+    let payload = map_without_key(raw, 5).ok_or("payload")?;
+    let r5 = value_slice(raw, 5).ok_or("signature")?;
+    verify_sign_block(id, &raw[r5], aad::DELEGATION, &payload).map_err(|e| Failure::Invalid(format!("delegation: {e}")))?;
+    Ok(Delegation { key, keyhash, not_before, not_after })
+}
+
+/// A raw Ed25519 key, which is what a delegated transport key is.
+pub fn verify_ed_raw(key: &[u8; 32], sig: &[u8], tbs: &[u8]) -> bool {
+    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(key) else { return false };
+    let Ok(s) = ed25519_dalek::Signature::from_slice(sig) else { return false };
+    vk.verify_strict(tbs, &s).is_ok()
+}
+
 /// A standalone `COSE_Sign1` record under its named signer: the signature
 /// slot, role tag and signer field per kind (§7).
+///
+/// **Which key.** The identity's classical member, as before; or, for a
+/// subtree acknowledgement and a currency attestation, the transport key
+/// the identity delegated (`wire-format.md` §7.5, §7.1): a delegation the
+/// attestation staples as field 8, verified here under the issuer and
+/// required to name the issuer, or one the holder keeps and answers
+/// through [`Lookup::delegated_key`].
 pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(), Failure> {
     let (slot, tag, sfield) = rhtn_codec::schema::sign1_profile(kind).ok_or("no profile")?;
     let __m_item = parse_all(raw).map_err(|_| "cbor")?;
     let Item::Map(m) = &__m_item else { return Err("not map".into()) };
     let signer = match map_get(m, sfield) { Some(Item::Bytes(r)) => raw[r.clone()].to_vec(), _ => return Err("signer field".into()) };
     let id = ids.identity(&signer).ok_or_else(|| Failure::MissingKey(signer.clone()))?;
+    // the stapled delegation sits outside the signature (§7.1 field 8)
+    let stapled = if kind == "CurrencyAttestation" {
+        match value_slice(raw, 8) {
+            Some(r8) => {
+                let d = delegation(ids, &raw[r8])?;
+                if d.keyhash != signer.as_slice() {
+                    return Err("a stapled delegation is not the issuer's".into());
+                }
+                Some(d.key)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let Some(Item::Array(cs)) = map_get(m, slot) else { return Err("sig slot".into()) };
     if cs.len() != 4 {
         return Err("sign1 arity".into());
@@ -294,11 +358,42 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     if named_signer_alg(&prot, &cs[1]) != Some(cose::ALG_EDDSA) {
         return Err("a standalone signature carries a header beyond alg, or an algorithm other than the profile's".into());
     }
-    let payload = map_without_key(raw, slot).ok_or("payload")?;
-    if !id.verify_ed(&sig, &cose::sig_structure_sign1(&prot, tag, &payload)) {
-        return Err("the standalone signature does not verify under the key the object names".into());
+    let payload = if stapled.is_some() || (kind == "CurrencyAttestation" && value_slice(raw, 8).is_some()) {
+        map_without_keys(raw, &[slot, 8]).ok_or("payload")?
+    } else {
+        map_without_key(raw, slot).ok_or("payload")?
+    };
+    let tbs = cose::sig_structure_sign1(&prot, tag, &payload);
+    if let Some(k) = stapled {
+        // field 8 names the key field 7 was made under, and nothing else
+        // verifies it (§7.1)
+        if !verify_ed_raw(&k, &sig, &tbs) {
+            return Err("the signature does not verify under the key the stapled delegation names".into());
+        }
+        return Ok(());
     }
-    Ok(())
+    if id.verify_ed(&sig, &tbs) {
+        return Ok(());
+    }
+    if matches!(kind, "SubtreeAck" | "CurrencyAttestation")
+        && let Some(k) = ids.delegated_key(&signer)
+        && verify_ed_raw(&k, &sig, &tbs)
+    {
+        return Ok(());
+    }
+    Err("the standalone signature does not verify under the key the object names".into())
+}
+
+/// The map without several keys, for a payload that excludes more than
+/// the signature slot.
+fn map_without_keys(raw: &[u8], keys: &[u64]) -> Option<Vec<u8>> {
+    let mut cur = raw.to_vec();
+    for k in keys {
+        if value_slice(&cur, *k).is_some() {
+            cur = map_without_key(&cur, *k)?;
+        }
+    }
+    Some(cur)
 }
 
 const LABELS: [&str; 7] = ["capture", "location", "p0.integrity", "p0.retention", "p1.integrity", "p1.retention", "proximity"];

@@ -1,6 +1,6 @@
 # Test identities
 
-Generated against `wire-format.md` `7862d27bb2bcb5c2…`, `network-design.md` `bc59e9b2528a5e78…` and `light-client-requirements.md` `04db8a2d8066cebe…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `5240fe999e32fbf8…`, `network-design.md` `e3822764defcc4dc…` and `light-client-requirements.md` `4ab4927a4ff0f0cf…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
@@ -52,6 +52,24 @@ so the entries appear as 1, −1, −2. The post-quantum `COSE_Key` is
 | c3 | verifier candidate | `5d59e2dbc3871d0b3f36b9615c168cf2f7b470ea5cdb6b2c15fdd59ed9b7c473` | `a4ef070f484a0facc0fbea53a7119d0b0aaf52071c1e892093f6bd71cb53ac8b` |
 | c4 | verifier candidate | `3c38a9069d16508e52a661762537488502894f931844fdf186eee0df7cfeb600` | `4384a2cc10f2d505660a16118457e9aeddee94389abd9c4d0dffb610ef0342a2` |
 | c5 | verifier candidate | `5b801d2f689d09a5ed820155bb97e827c6869ea589842dce0678e185ca7cb7ac` | `f2d688318409d89353636efb04014ae130f282e207d4d7f9146a3316125790ea` |
+
+## Transport keys
+
+A device that holds a delegation and no seed presents a raw Ed25519 key in
+the handshake, named by a `Delegation` its identity signed (`wire-format.md`
+§8.2), and that key is also what names the device (`wire-format.md` §7.8). It
+has no keyhash and no post-quantum half. Seed recipe:
+`seed = SHA-256("rhtn-test-vectors:<name>:transport-seed")`, public key per
+RFC 8032.
+
+| Key | Held by | Raw public key |
+|---|---|---|
+| bob-instance | bob's infra instance, delegated by bob | `4e7155a88168080a59a432222b860ad2e5de5c4d16f50dd97e7c6f81ff87a792` |
+| carol-instance | carol's infra instance, delegated by carol | `874deac6d71fb6d081611b1194f3276692c78d437609521560d6a8fca164f4e8` |
+| alice-desktop | alice's desktop, a delegated device with prekeys of its own | `2ecba3992728f3bba8a1c8c5b74a7272e5ec070bd6e9da170855653b3db60c0b` |
+
+The seed-holding device presents its identity's classical key and needs no
+delegation; as a device (`wire-format.md` §7.8) it is named by that key.
 
 ## Worked example: alice
 

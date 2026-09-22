@@ -40,6 +40,15 @@ pub enum T {
     CatalogEntry,
     Scope,
     VerifierResponse,
+    /// A transport delegation (`wire-format.md` §8.2), a signed map.
+    Delegation,
+    /// A frontier: one or more txids (`wire-format.md` §7.9).
+    Txids,
+    /// Archive entries: an envelope map or a presentation array each
+    /// (`wire-format.md` §7.9).
+    ArchiveEntries,
+    /// One bundle per device, at most eight (`wire-format.md` §7.8).
+    PrekeyBundles,
 }
 
 /// One schema: (key, required, type).
@@ -76,18 +85,21 @@ pub enum Family {
     ResourceRegistrationReply,
     KeyGrant,
     LateResponse,
+    /// Control frame 7: a delegated peer's first frame on a connection that
+    /// opens no session (`wire-format.md` §8.0, §8.2).
+    Delegation,
 }
 
 use T::*;
-const ATTACH: Fields = &[(1, true, Keyhash), (2, false, CurrencyAttestation), (3, true, Capabilities)];
-const ATTACH_ACK: Fields = &[(1, true, Uint), (2, false, SiblingRefs), (3, true, Uint), (4, true, Uint), (5, true, Capabilities)];
+const ATTACH: Fields = &[(1, true, Keyhash), (2, false, CurrencyAttestation), (3, true, Capabilities), (4, false, Delegation)];
+const ATTACH_ACK: Fields = &[(1, true, Uint), (2, false, SiblingRefs), (3, true, Uint), (4, true, Uint), (5, true, Capabilities), (6, false, Delegation)];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
 const TOPOLOGY_PUSH: Fields = &[(1, true, Uint), (2, true, Bstr)];
 const TOPOLOGY_MEMO: Fields = &[(1, true, Keyhash), (2, true, Locator), (3, true, Uint), (4, true, Uint), (5, false, Keyhash)];
 const RESOLVE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Keyhash), (3, true, Path), (4, true, Nonce16)];
-const ARCHIVE_REQUEST: Fields = &[(1, true, Keyhash), (2, false, Bytes32), (3, true, Uint), (4, false, Uint), (5, true, Nonce16)];
-const PREKEY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Uint), (3, true, Nonce16)];
+const ARCHIVE_REQUEST: Fields = &[(1, true, Keyhash), (2, false, Txids), (3, true, Uint), (4, false, Uint), (5, true, Nonce16)];
+const PREKEY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Uint), (3, true, Nonce16), (4, false, Bytes32)];
 const PREKEY_BATCH_REQUEST: Fields = &[(1, true, Keyhashes), (2, true, Nonce16)];
 const CATALOG_QUERY: Fields = &[(1, false, Tstr(64)), (2, true, Nonce16)];
 const RESOURCE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Bstr)];
@@ -96,15 +108,20 @@ const RESOURCE_REGISTRATION: Fields = &[(1, true, CatalogEntry), (2, false, Scop
 // opaque here, as §7.8 makes them everywhere else.
 const PREKEY_PUBLICATION: Fields = &[(1, true, PrekeyBundle), (2, true, Nonce16)];
 const ONE_TIME_DEPOSIT: Fields = &[(1, true, OneTimeKeys), (2, true, Nonce16)];
-const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Bstr), (3, true, Nonce16)];
+const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Bstr), (3, true, Nonce16), (4, true, Bytes32)];
 const WAKE_REGISTRATION: Fields = &[(1, true, Nonce16), (2, false, Tstr(2048)), (3, false, BstrMax(256)), (4, false, Uint)];
 const SUBMISSION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const CURRENCY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
 const RESOLVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false, ServingInfra), (4, false, Uint), (5, false, Referral)];
 const CATALOG_REPLY: Fields = &[(1, true, Nonce16), (2, true, CatalogEntries), (3, false, Tstr(64))];
 const RESOURCE_RESPONSE: Fields = &[(1, true, Uint), (2, false, Bstr)];
-const ARCHIVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, Envelopes), (3, true, Bool), (4, false, Bytes32)];
-const PREKEY_REPLY: Fields = &[(1, true, Nonce16), (2, false, PrekeyBundle), (3, false, Bstr), (4, false, Uint)];
+const ARCHIVE_REPLY: Fields = &[(1, true, Nonce16), (2, true, ArchiveEntries), (3, true, Bool), (4, false, Txids)];
+const PREKEY_REPLY: Fields = &[(1, true, Nonce16), (2, false, PrekeyBundles), (3, false, Bstr), (4, false, Uint)];
+// §8.2: the transport key, the delegating keyhash, the window, and a hybrid
+// `COSE_Sign` over fields 1 to 4; a signed map, so extensions above 5 are
+// admitted by `check_map_signed`
+const DELEGATION: Fields = &[(1, true, Bytes32), (2, true, Keyhash), (3, true, Uint), (4, true, Uint), (5, true, Any)];
+pub const DELEGATION_WINDOW_SECONDS: u64 = 172_800;
 const CURRENCY_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint), (3, false, CurrencyAttestation)];
 const RESOURCE_REGISTRATION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const KEY_GRANT: Fields = &[(1, true, Bytes32), (2, true, Bytes32), (3, true, Bytes32)];
@@ -145,6 +162,7 @@ pub fn fields(f: Family) -> Option<Fields> {
         ResourceRegistrationReply => RESOURCE_REGISTRATION_REPLY,
         KeyGrant => KEY_GRANT,
         LateResponse => LATE_RESPONSE,
+        Delegation => DELEGATION,
         PrekeyRequestOrBatch | VerifierQuery => return None,
     })
 }
@@ -390,6 +408,53 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         }
         CurrencyAttestation => nested("CurrencyAttestation")?,
         PrekeyBundle => nested("PrekeyBundle")?,
+        Delegation => nested("Delegation")?,
+        Txids => {
+            let Item::Array(ref a) = v else { return Err(Error("frontier not array")) };
+            if a.is_empty() || a.len() > ARCHIVE_SUBSET_REFS {
+                return Err(Error("frontier is one to 256 txids"));
+            }
+            for k in a {
+                if bs(b, k).map(|s| s.len()) != Some(32) {
+                    return Err(Error("txid width"));
+                }
+            }
+        }
+        ArchiveEntries => {
+            // a map is an envelope and an array a presentation, an
+            // envelope beside seven disclosure slots (`wire-format.md` §7.9,
+            // §4.5.1); the signatures are the verifier's business
+            let entries = array_item_ranges(b, at).ok_or(Error("archive entries not array"))?;
+            if entries.len() > ARCHIVE_SUBSET_REFS {
+                return Err(Error("archive reply over 256"));
+            }
+            for r in entries {
+                let (it, _) = p.item(r.start)?;
+                match it {
+                    Item::Map(_) => {
+                        crate::envelope::parse(&b[r.clone()])?;
+                    }
+                    Item::Array(ref parts) => {
+                        if parts.len() != 2 || !matches!(parts[0], Item::Map(_)) || !matches!(&parts[1], Item::Array(s) if s.len() == 7) {
+                            return Err(Error("presented record shape"));
+                        }
+                        let inner = array_item_ranges(b, r.start).ok_or(Error("presentation walk"))?;
+                        crate::envelope::parse(&b[inner[0].clone()])?;
+                    }
+                    _ => return Err(Error("archive entry neither envelope nor presentation")),
+                }
+            }
+        }
+        PrekeyBundles => {
+            let bundles = array_item_ranges(b, at).ok_or(Error("bundles not array"))?;
+            if bundles.is_empty() || bundles.len() > PREKEY_BUNDLES_PER_REPLY {
+                return Err(Error("one to eight bundles"));
+            }
+            for r in bundles {
+                let s = &b[r.clone()];
+                check_kind(s, "PrekeyBundle", &parse_all(s)?)?;
+            }
+        }
         CatalogEntry => nested("CatalogEntry")?,
         Scope => nested("Scope")?,
         VerifierResponse => nested("VerifierResponse")?,
@@ -401,12 +466,25 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
 pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
     let p = Parser { b };
     match f {
+        // a control frame carrying a signed object: checked as the object
+        Family::Delegation => {
+            let (item, end) = p.item(at)?;
+            check_kind(&b[at..end], "Delegation", &item)
+        }
         Family::PrekeyRequestOrBatch => {
              let (Item::Map(ref m), _) = p.item(at)? else { return Err(Error("not a map")) };
             let schema = if matches!(map_get(m, 1), Some(Item::Array(_))) { PREKEY_BATCH_REQUEST } else { PREKEY_REQUEST };
             check_map(b, at, schema)?;
-            if schema.len() == 3 && map_get(m, 2).and_then(as_uint).unwrap_or(0) > 1 {
-                return Err(Error("prekey request mode"));
+            if schema.len() == 4 {
+                let mode = map_get(m, 2).and_then(as_uint).unwrap_or(0);
+                if mode > 1 {
+                    return Err(Error("prekey request mode"));
+                }
+                // a one-time key is consumed from one device's pool, so the
+                // device is required when one is asked for (§7.8 field 4)
+                if mode == 1 && map_get(m, 4).is_none() {
+                    return Err(Error("a one-time key request names its device"));
+                }
             }
             Ok(())
         }
@@ -473,6 +551,12 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                         return Err(Error("code out of range"));
                     }
                 }
+                Family::ArchiveReply => {
+                    // the frontier is present iff more remain (§7.9)
+                    if matches!(map_get(m, 3), Some(Item::Bool(true))) != map_get(m, 4).is_some() {
+                        return Err(Error("frontier present iff more remain"));
+                    }
+                }
                 Family::PrekeyReply => {
                     if map_get(m, 2).is_some() == map_get(m, 4).is_some() {
                         return Err(Error("bundle and failure code are alternatives"));
@@ -535,7 +619,7 @@ pub fn sign1_profile(kind: &str) -> Option<(u64, &'static [u8], u64)> {
         "AbuseReport" => (5, aad::ABUSE, 1),
         "AnchorEntry" => (5, aad::ANCHOR, 1),
         "SubtreeAck" => (5, aad::SUBTREE_ACK, 2),
-        "PrekeyBundle" => (5, aad::PREKEY, 1),
+        "PrekeyBundle" => (6, aad::PREKEY, 1),
         "EndpointRecord" => (4, aad::ENDPOINTS, 1),
         "SignedLocator" => (3, aad::LOCATOR, 1),
         _ => return None,
@@ -594,8 +678,9 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         return Ok(());
     }
     let top: Option<u64> = match kind {
-        "CurrencyAttestation" => Some(7),
-        "AnchorEntry" | "SubtreeAck" | "PrekeyBundle" | "AbuseReport" | "Witness" => Some(5),
+        "CurrencyAttestation" => Some(8),
+        "PrekeyBundle" => Some(6),
+        "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
         "KeyGrant" | "SignedLocator" | "LateResponse" | "Locator" | "NetworkPoint" => Some(3),
@@ -807,11 +892,57 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("role out of range"));
             }
             map_get(m, 6).ok_or(Error("issuer required"))?;
+            // field 8, the stapled delegation (§7.1): well-formed, and
+            // delegated by the issuer field 6 names; that it names the key
+            // field 7 was made under is the verifier's check
+            if let Some(r8) = value_slice(b, 8) {
+                let d = &b[r8.clone()];
+                check_kind(d, "Delegation", &parse_all(d)?)?;
+                let di = parse_all(d)?;
+                let Item::Map(dm) = &di else { unreachable!() };
+                let by = map_get(dm, 2).and_then(|it| bs(d, it)).map(|s| s.to_vec());
+                let issuer = map_get(m, 6).and_then(|it| bs(b, it)).map(|s| s.to_vec());
+                if by != issuer {
+                    return Err(Error("a stapled delegation is the issuer's"));
+                }
+            }
+            Ok(())
+        }
+        "Delegation" => {
+            check_map_signed(b, 0, DELEGATION)?;
+            let Item::Map(m) = item else { return Err(Error("not map")) };
+            if bs(b, map_get(m, 1).ok_or(Error("field 1"))?).map(|s| s.len()) != Some(32) {
+                return Err(Error("transport key width"));
+            }
+            let nb = map_get(m, 3).and_then(as_uint).ok_or(Error("not_before"))?;
+            let na = map_get(m, 4).and_then(as_uint).ok_or(Error("not_after"))?;
+            // exactly 48 hours: a window an issuer could lengthen would put
+            // the seed back on the box under another name (§8.2)
+            if na.checked_sub(nb) != Some(DELEGATION_WINDOW_SECONDS) {
+                return Err(Error("a delegation's window is exactly 172,800 seconds"));
+            }
+            // a hybrid COSE_Sign: the detached container and two entries,
+            // one per algorithm; a classical-only delegation is malformed
+            let Some(Item::Array(cs)) = map_get(m, 5) else { return Err(Error("signature not COSE_Sign")) };
+            if cs.len() != 4 || !matches!(cs[0], Item::Bytes(_)) || !matches!(&cs[1], Item::Map(u) if u.is_empty()) || !matches!(cs[2], Item::Null) {
+                return Err(Error("COSE_Sign container departs from the profile"));
+            }
+            let Item::Array(entries) = &cs[3] else { return Err(Error("signature entries not array")) };
+            if entries.len() != 2 {
+                return Err(Error("a hybrid delegation carries one entry per algorithm"));
+            }
+            for e in entries {
+                if !matches!(e, Item::Array(ea) if ea.len() == 3 && matches!(ea[0], Item::Bytes(_)) && matches!(&ea[1], Item::Map(u) if u.is_empty()) && matches!(ea[2], Item::Bytes(_))) {
+                    return Err(Error("signature entry shape"));
+                }
+            }
             Ok(())
         }
         "ResolveReply" => check_unsigned(Family::ResolveReply, b, 0),
         "ResourceResponse" => check_unsigned(Family::ResourceResponse, b, 0),
         "ArchiveRequest" => check_unsigned(Family::ArchiveRequest, b, 0),
+        "ArchiveReply" => check_unsigned(Family::ArchiveReply, b, 0),
+        "PrekeyReply" => check_unsigned(Family::PrekeyReply, b, 0),
         "PrekeyBatchRequest" => check_unsigned(Family::PrekeyRequestOrBatch, b, 0),
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
         "PrekeyBundle" => {
@@ -820,6 +951,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 && r.len() > PREKEY_BUNDLE_BLOB {
                     return Err(Error("blob over 4KB"));
                 }
+            // field 5, the device, under the signature (§7.8)
+            if bs(b, map_get(m, 5).ok_or(Error("device required"))?).map(|s| s.len()) != Some(32) {
+                return Err(Error("device key width"));
+            }
             Ok(())
         }
         "VerificationQuery" => {

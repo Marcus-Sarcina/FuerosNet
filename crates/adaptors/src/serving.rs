@@ -68,7 +68,9 @@ pub trait Serving: Send + Sync {
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool>;
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// Carry `bytes` from `from` to `to`; whether anything took them.
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> Answer<'a, bool>;
+    /// `device`: the recipient's device the ciphertext is for
+    /// (`wire-format.md` §7.10 field 4).
+    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool>;
     /// Register, refresh or withdraw where this node rings the caller
     /// (design §14.1.5).  No endpoint withdraws.
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool>;
@@ -167,7 +169,7 @@ impl Serving for LocalNode {
         })
     }
 
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> Answer<'a, bool> {
+    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
         Box::pin(async move {
             // hosted here: handed over, no queue between
             if self.inboxes.deliver(&to, from, bytes.clone()) {
@@ -182,7 +184,7 @@ impl Serving for LocalNode {
             // a recipient the node beyond serves goes there; anyone else waits
             // here for a session (design §14.1.6)
             match self.beyond() {
-                Some(b) if b.serves(&to) => b.relay(from, to, bytes).await,
+                Some(b) if b.serves(&to) => b.relay(from, to, bytes, device).await,
                 _ => self.node.node.enqueue(to, framed(from, &bytes)).is_ok(),
             }
         })

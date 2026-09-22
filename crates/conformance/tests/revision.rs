@@ -67,7 +67,7 @@ fn s01_failed_prekey_deposit_must_not_be_acknowledged_as_accepted() {
     std::fs::create_dir_all(&dir).unwrap();
     let a=test_identity("alice");let b=Arc::new(test_identity("bob"));let mut v=view(b);
     v.prekeys=PrekeyService::at(&dir,PrekeyConfig::default()).unwrap();
-    v.prekeys.publish(&vec![a.public.clone()],&PrekeyBundle::build(&a,1,b"opaque",100)).unwrap();
+    v.prekeys.publish(&vec![a.public.clone()],&PrekeyBundle::build(&a,1,b"opaque",100, &[0u8; 32])).unwrap();
     std::fs::rename(dir.join("prekeys"),dir.join("saved-prekeys")).unwrap();
     std::fs::write(dir.join("prekeys"),b"directory unavailable").unwrap();
     let req=OneTimeDeposit {keys:vec![vec![7]],nonce:[1;16]};
@@ -96,9 +96,9 @@ fn s04_prekey_issuance_must_not_persist_requester_subject_metadata() {
     let dir=std::env::temp_dir().join(format!("rhtn-review-issuance-{}",std::process::id()));
     let (s,r)=(test_identity("alice"),test_identity("carol"));
     let mut pool=PrekeyService::at(&dir,PrekeyConfig::default()).unwrap();
-    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100)).unwrap();
+    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100, &[0u8; 32])).unwrap();
     assert!(pool.stock(s.public.keyhash,vec![vec![7]]));
-    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16]}.encode();
+    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
     assert_eq!(PrekeyReply::decode(&pool.answer(&r.public.keyhash,&req,101).unwrap()).unwrap().one_time,Some(vec![7]));
     pool.expire(4000);
     let text=std::fs::read_to_string(dir.join("prekeys/issued")).unwrap_or_default();

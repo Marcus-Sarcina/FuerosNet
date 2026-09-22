@@ -10597,3 +10597,68 @@ requirement can be quoted, the comment's own words. `check.py` 395 of 455, 0
 flags, stubs in sync; the stub crate builds and lints. Not entered: the
 verifier's leg from a serving node to a client attached over the wire, which no
 document states and so nothing can quote.
+
+## The corpus across the whole delta, landed with the code (2026-09-22)
+
+Milestone A step 3. The pin had stood at `b00fe29` (09-13) on all three
+documents; twenty wire commits lay between. The generator: `TransportKey` and
+three keys under the seed recipe `rhtn-test-vectors:<name>:transport-seed`;
+`delegation()` hybrid over fields 1–4 under `rhtn/1:delegation`, with
+wrong-signer, window ± 1 and classical-only variants; `sign1_slot_extra` for
+the staple's field 8; the attestation and acknowledgement under the instances'
+delegated keys, the attestation's identity-signed form kept; the bundle's device
+at field 5 and signature at 6, a desktop's bundle; the request's field 4, the
+reply's array, eight and nine; the relay submission's device; the archive
+frontier forms, a presented entry, a two-txid frontier, the frontier-without-more
+and empty-frontier negatives; the delegated attach, the instance's
+acknowledgement and frame 7, appended after the request families so no earlier
+fixture's positional id moves; `messages.md` split by caption, not by index.
+`verify.py`: the transport keys re-derived and checked against `keys.md`, the
+delegated contexts verified under the delegated key and refused under the
+identity's, the stapled delegation and the known-answer delegation verified
+hybrid, the frames' positions by type. 214 → 238 entries; 62 → 100 checks; ALL
+CHECKS PASS. Regenerated under `--accept-spec-change`, the audit of the
+hand-authored files being nine negative rows (T40–T48), four must-accepts
+(D22–D25) and the README's table.
+
+**The Rust side.** `rhtn-codec`: `Delegation` as a kind, a control frame
+(type 7) and a field of `Attach` and `AttachAck`; `Txids`, `ArchiveEntries` (an
+envelope map or a presentation array), `PrekeyBundles` (at most eight);
+`PrekeyRequest` field 4 required with a one-time key; `RelaySubmission` field 4;
+the attestation's field 8 checked well-formed and the issuer's; the bundle's
+signature at 6; `ArchiveReply`'s frontier iff more; `ArchiveReply` and
+`PrekeyReply` as kinds. `rhtn-crypto`: `verify::delegation` hybrid under the
+delegating identity; `Lookup::delegated_key`, default none; `record` verifies an
+attestation under the key its stapled delegation names and an acknowledgement
+under a held delegation, the identity's key first. `rhtn-archive`: the request
+and reply carry frontiers, `serve` computes a reply's frontier and walks from
+several heads in one reverse-topological order, `verify_batch` checks
+reachability from the requested frontier and that a reply's frontier names
+exactly what was left unreturned; the bundle, request and reply carry the
+device; the submission carries it; the attestation carries its delegation.
+`rhtn-client`: publishes under its classical key as its device, asks a one-time
+key for the device whose bundle it holds, addresses a relay to it, and takes a
+reply's bundles. `rhtn-adaptors`, `rhtn-node`, `rhtn-cli`: the plumbing.
+
+**Verified.** The corpus test in `rhtn-crypto` holds delegations from the
+accepted `Delegation` fixtures and verifies the acknowledgement through them.
+Workspace: 531 passed and 17 failed on the first run, the seventeen being three
+causes — tests asking for a one-time key with no device, which the decoder now
+refuses; two reply negatives registered under the generic `reply` kind, which
+the CLI cannot check without the family, so re-registered under `PrekeyReply`
+and `ArchiveReply` and those kinds added to `check_kind`; and the unknown-key
+sweep treating frame 7 as unsigned. Rerun of the seven crates touched: 368
+passed, 0 failed; the remaining nine crates 180 passed, 0 failed. `crates/check.sh`
+failed once on DMN-17's daemon scenario, *carol attaches: dial timed out* after
+127 s under the full run's load, and passed the scenario alone twice in nine
+seconds and the whole gate on the next run: a flake to watch, not a defect.
+**CODE GATE PASSES.** Eight unmarked tests re-marked, ARC-09 gaining the
+frontier-without-more run and PAY-01 the device assertion: 403 of 455, 0 flags,
+stubs in sync. `refcheck` 2,296 / 0; `modelrefcheck` 1,264 / 0; stalecheck at
+baseline.
+
+**Plumbed and not done, each already an owed entry.** The node holds one
+bundle per subject and ignores the device a request names (PAY-20, SUB-12);
+the queue is per recipient, not per device (QUE-05, QUE-21); the courier's relay
+to the serving node itself carries an all-zero device, the node's own transport
+key not yet reaching it (QUE-21).

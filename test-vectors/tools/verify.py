@@ -152,6 +152,21 @@ check(all(stated.get(n) == KH[n] for n in NAMES),
       f'keyhashes: all {len(NAMES)} re-derived from seeds'
       + (' (ML-DSA cross-checked against pyca)' if PYCA_MLDSA else ' (dilithium-py only)'))
 BY = {KH[n]: n for n in NAMES}
+# transport keys (wire §8.2): raw Ed25519, no keyhash, re-derived from the seed recipe
+TKNAMES = ['bob-instance', 'carol-instance', 'alice-desktop']
+TKPUB = {}
+for n in TKNAMES:
+    TKPUB[n] = Ed25519PrivateKey.from_private_bytes(H(f'rhtn-test-vectors:{n}:transport-seed'.encode())) \
+        .public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+stated_tk = dict(re.findall(r'\| ([a-z]+-[a-z]+) \| [^|]+ \| `([0-9a-f]{64})` \|', keys_md))
+check(all(stated_tk.get(n) == TKPUB[n].hex() for n in TKNAMES),
+      f'transport keys: all {len(TKNAMES)} re-derived from seeds')
+
+def verify_raw(pub, sig, tbs):
+    try:
+        Ed25519PublicKey.from_public_bytes(pub).verify(sig, tbs); return True
+    except Exception:
+        return False
 
 def verify_sig(name, alg, sig, tbs):
     if alg == -8:
@@ -487,30 +502,80 @@ check(okx == 2 and len(xfer[2][3]) == 2,
       'transfer statement: hybrid COSE_Sign by the FORMER patron over [node, former, new]')
 
 # ------------------------------------------- remaining signed contexts (bars 8/10)
-CTX = [  # (caption, sig_slot, aad, signer-field or fixed name, wrong-signer name)
-    ('Currency attestation', 7, b'rhtn/1:currency', 6, 'carol'),
-    ('Catalog entry', 8, b'rhtn/1:catalog', 2, 'carol'),
-    ('Abuse report', 5, b'rhtn/1:abuse', 1, 'carol'),
-    ('Anchor table entry', 5, b'rhtn/1:anchor', 1, 'carol'),
-    ('Subtree acknowledgement', 5, b'rhtn/1:subtree-ack', 2, 'bob'),
-    ('Prekey bundle', 5, b'rhtn/1:prekey', 1, 'carol'),
+CTX = [  # (caption, sig_slot, aad, signer-field or fixed name, wrong-signer name, delegated key or None)
+    ('Currency attestation', 7, b'rhtn/1:currency', 6, 'carol', 'bob-instance'),
+    ('Catalog entry', 8, b'rhtn/1:catalog', 2, 'carol', None),
+    ('Abuse report', 5, b'rhtn/1:abuse', 1, 'carol', None),
+    ('Anchor table entry', 5, b'rhtn/1:anchor', 1, 'carol', None),
+    ('Subtree acknowledgement', 5, b'rhtn/1:subtree-ack', 2, 'bob', 'carol-instance'),
+    ('Prekey bundle', 6, b'rhtn/1:prekey', 1, 'carol', None),
 ]
 csect = rc[rc.index('## The remaining signed contexts'):]
 ok_pos = ok_wrong = ok_cross = 0
 tags = [c[2] for c in CTX]
-for i, (cap, slot, aad, sfield, wrong) in enumerate(CTX):
+def payload_without(obj, slot, extra=()):
+    return enc({k: v for k, v in obj.items() if k != slot and k not in extra})
+for i, (cap, slot, aad, sfield, wrong, dkey) in enumerate(CTX):
     seg = csect[csect.index('**' + cap + '**'):]
     hexes = re.findall(r'```\n([0-9a-f\n]+?)```', seg)[:2]
-    obj, prot, sig, tbs = sign1_object(hexes[0], aad, slot)
+    # a currency attestation's field 8 sits outside the signature (§7.1)
+    extra = (8,) if cap == 'Currency attestation' else ()
+    b = bytes.fromhex(hexes[0].replace('\n', ''))
+    obj = canonical(b); assert obj is not None
+    prot = bytes.fromhex(obj[slot][0]); sig = bytes.fromhex(obj[slot][3])
+    tbs = sig_sign1(prot, aad, payload_without(obj, slot, extra))
     name = BY[obj[sfield]]
-    ok_pos += verify_sig(name, -8, sig, tbs)
+    if dkey is None:
+        ok_pos += verify_sig(name, -8, sig, tbs)
+    else:
+        # signed under the node's DELEGATED key (§7.5, §7.1): the identity's own
+        # key must NOT verify it, the delegated key must
+        ok_pos += (not verify_sig(name, -8, sig, tbs)) and verify_raw(TKPUB[dkey], sig, tbs)
     # cross-context: the same signature under the NEXT context's tag must fail
-    payload = enc({k: v for k, v in obj.items() if k != slot})
+    payload = payload_without(obj, slot, extra)
     other = tags[(i + 1) % len(tags)]
-    ok_cross += not verify_sig(name, -8, sig, sig_sign1(prot, other, payload))
-    wobj, wprot, wsig, wtbs = sign1_object(hexes[1], aad, slot)
+    ok_cross += not (verify_sig(name, -8, sig, sig_sign1(prot, other, payload))
+                     or (dkey and verify_raw(TKPUB[dkey], sig, sig_sign1(prot, other, payload))))
+    wb = bytes.fromhex(hexes[1].replace('\n', ''))
+    wobj = canonical(wb); wprot = bytes.fromhex(wobj[slot][0]); wsig = bytes.fromhex(wobj[slot][3])
+    wtbs = sig_sign1(wprot, aad, payload_without(wobj, slot, extra))
     ok_wrong += (not verify_sig(BY[wobj[sfield]], -8, wsig, wtbs)) and \
+                (dkey is None or not verify_raw(TKPUB[dkey], wsig, wtbs)) and \
                 verify_sig(wrong, -8, wsig, wtbs)
+# the stapled delegation (§7.1 field 8) verifies under the issuer and names the signing key
+cur_seg = csect[csect.index('**Currency attestation**'):]
+cur_obj = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```', cur_seg)[0].replace('\n', '')))
+def verify_delegation(d, expect_signer):
+    """§8.2: hybrid COSE_Sign over fields 1-4 under rhtn/1:delegation; window exactly 48 h."""
+    payload = enc({k: v for k, v in d.items() if k != 5})
+    entries = d[5][3]
+    ok = len(entries) == 2 and d[4] - d[3] == 172_800
+    for ent in entries:
+        prot = bytes.fromhex(ent[0]); sig = bytes.fromhex(ent[2])
+        alg = canonical(prot)[1]
+        tbs = hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:delegation') + bs(payload)
+        ok = ok and verify_sig(expect_signer, alg, sig, tbs)
+    return ok
+check(verify_delegation(cur_obj[8], 'bob') and cur_obj[8][2] == KH['bob'] and cur_obj[8][1] == TKPUB['bob-instance'].hex(),
+      'currency: the stapled delegation is bob\'s, names bob-instance, and verifies hybrid')
+cur_id = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```', cur_seg)[2].replace('\n', '')))
+check(8 not in cur_id and verify_sig('bob', -8, bytes.fromhex(cur_id[7][3]),
+                                     sig_sign1(bytes.fromhex(cur_id[7][0]), b'rhtn/1:currency', payload_without(cur_id, 7))),
+      'currency: the identity-signed form carries no field 8 and verifies under bob')
+# the transport delegation known answer and its wrong-signer analogue
+dseg = csect[csect.index('**Transport delegation**'):]
+dhex = re.findall(r'```\n([0-9a-f\n]+?)```', dseg)[:2]
+dobj = canonical(bytes.fromhex(dhex[0].replace('\n', '')))
+dwrong = canonical(bytes.fromhex(dhex[1].replace('\n', '')))
+check(verify_delegation(dobj, 'bob') and dobj[2] == KH['bob'] and dobj[1] == TKPUB['bob-instance'].hex(),
+      'delegation: hybrid, both entries verify under bob, naming bob-instance, window 172,800 s')
+check(not verify_delegation(dwrong, 'bob') and verify_delegation(dwrong, 'carol') and dwrong[2] == KH['bob'],
+      'delegation wrong-signer: valid under carol, never under the bob it names')
+dpay = enc({k: v for k, v in dobj.items() if k != 5})
+dent = dobj[5][3][0]
+check(not verify_sig('bob', -8, bytes.fromhex(dent[2]),
+                     hd(4, 5) + ts('Signature') + bs(b'') + bs(bytes.fromhex(dent[0])) + bs(b'rhtn/1:currency') + bs(dpay)),
+      'delegation cross-context: the classical entry fails under another tag')
 check(ok_pos == 6, 'signed contexts: all six known-answer signatures verify under the named signer')
 check(ok_wrong == 6, 'wrong-signer analogues: valid under the wrong key, never under the named one')
 check(ok_cross == 6, 'cross-context substitution: every signature fails under another context tag')
@@ -541,7 +606,7 @@ e2e = section_blocks('End-to-end payloads')
 check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
       'messages: every fixture block belongs to a named section')
 
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -586,7 +651,9 @@ lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
 check(verify_sig(BY[lr[1]], -8, bytes.fromhex(lr[9][3]),
                  sig_sign1(bytes.fromhex(lr[9][0]), b'rhtn/1:verifier', lp)),
       'LateResponse: the embedded verifier signature verifies')
-push_body = frame_objs[5][1]
+# positions by type, since control frames were appended after the request families (2026-09-22)
+QUERY_AT = len(control) + [i for i, f in enumerate(EXPECT_FRAMES[len(control):]) if f == 4][0]
+push_body = frame_objs[EXPECT_FRAMES.index(5)][1]
 adopt_env_hex = re.search(r'#### Envelope bytes — final, all four signatures real.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 check(push_body[2] == adopt_env_hex.group(1).replace('\n', ''),
       'TopologyPush carries the first adoption envelope byte-for-byte')
@@ -595,7 +662,7 @@ check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],
       'ServingInfra: KeyMaterial hashes to the named keyhash')
 check(len(re.findall(r'\| TR\d+ ', ms)) == 24, 'messages: twenty-four session traces')
-qc = frame_objs[12][1]
+qc = frame_objs[QUERY_AT][1]
 check(H(enc({k: qc[0][k] for k in (1, 2, 3, 4, 5, 7)})).hex() == qc[0][6],
       'request-4 query frame: embedded query_id recomputes (fields 1-5 and 7)')
 check(len(qc) == 3 and qc[2] in (0, 1, 2, 3),
@@ -673,7 +740,7 @@ _kg = canonical(bytes.fromhex(byid['P-e2e-01']['hex']))
 check(_kg[3] == _k, 'the KeyGrant carries the derived capture key')
 _pc1 = canonical(bytes.fromhex(byid['P-alice-c1-record']['hex']))
 check(_kg[1] == H(enc(_pc1[3])).hex(), 'the KeyGrant names the PRIOR alice-c1 record, never the record under assembly')
-check(_kg[2] == frame_objs[12][1][0][6], 'the KeyGrant binds the prior capture to the CURRENT query')
+check(_kg[2] == frame_objs[QUERY_AT][1][0][6], 'the KeyGrant binds the prior capture to the CURRENT query')
 tr2 = byid['TR2']['expect']
 check(tr2['actions'] == ['never_process_as_early_data']
       and sorted(tr2.get('one_of', [])) == ['defer_until_handshake', 'reject'],

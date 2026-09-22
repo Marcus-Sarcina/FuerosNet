@@ -30,7 +30,7 @@ impl Serving for ServingStub {
     fn publish<'a>(&'a self,_:&'a [u8])->Answer<'a,bool> { Box::pin(async {false}) }
     fn stock<'a>(&'a self,_:Keyhash,_:Vec<Vec<u8>>)->Answer<'a,bool> { Box::pin(async {false}) }
     fn prekey<'a>(&'a self,_:Keyhash,_:&'a [u8])->Answer<'a,Option<Vec<u8>>> { Box::pin(async {None}) }
-    fn relay<'a>(&'a self,_:Keyhash,_:Keyhash,_:Vec<u8>)->Answer<'a,bool> { Box::pin(async {false}) }
+    fn relay<'a>(&'a self,_:Keyhash,_:Keyhash,_:Vec<u8>,_:[u8;32])->Answer<'a,bool> { Box::pin(async {false}) }
     fn wake<'a>(&'a self,_:Keyhash,_:Option<rhtn_archive::submission::WakeEndpoint>)->Answer<'a,bool> { Box::pin(async {false}) }
 }
 

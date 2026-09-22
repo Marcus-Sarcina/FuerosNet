@@ -2,62 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Serve an archive fetch in batches that continue from the previous reply's frontier
-///
-/// Spec: wire-format.md §7.9; light-client-requirements.md §2
-/// Milestone: 3.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.9): "Paginate by re-requesting with field 2 set to the previous reply's field 4."
-/// Rule (wire-format.md §7.9): "every record returned before any record it points back"
-///
-/// Given: Subject S holding an unbroken chain of R records rooted at genesis and serving its own archive; the requester asks for max_records m, 1 to 256, with R greater than m so that more than one batch is needed.
-/// When: A requester sends ArchiveRequest {1: S, 2: S's head, 3: m, 5: nonce}, then re-requests with field 2 set to each reply's field 4 until a reply's field 3 is false.
-/// Then: Every reply's field 1 equals its request's nonce. Every record in a reply is named by the request's frontier or by a back-pointer of another record in that reply, and every back-pointer naming nothing in the reply appears in its field 4; field 4 is present iff field 3 is true. Re-requesting with field 2 set to the previous reply's field 4 continues the walk, and the union of all replies reaches genesis.
-///
-/// Interpretation: Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9; the live test that held it asserts the superseded head-first sequence and is unmarked until the code lands.
-#[test]
-#[ignore = "acceptance ARC-08: owed at milestone 3"]
-fn arc_08_serve_an_archive_fetch_in_batches_that_continue() {
-    todo!("ARC-08: Serve an archive fetch in batches that continue from the previous reply's frontier")
-}
-
-/// Reject an archive batch that is not reachable from the requested frontier
-///
-/// Spec: wire-format.md §7.9; light-client-requirements.md §2
-/// Milestone: 3.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.9): "The requester verifies the structure itself, and order is no part of it. Every returned record must be named either by the requested frontier or by a back-pointer of another record in the batch"
-///
-/// Given: A holder answering for subject S, and a requester asking with field 2 set to S's head.
-/// When: The holder returns a batch in which one middle record has been replaced by another record of S that the preceding record's back-pointer does not name; in a second run the batch's first record is not the requested head.
-/// Then: In the first run the requester reports the batch as failing structure verification at the first record named neither by the requested frontier nor by another record's back-pointers, and the records from that point on are not reported as verified. In the second run it fails at record one. A batch whose unreturned back-pointers are absent from field 4 fails the same way.
-///
-/// Interpretation: Re-derived 2026-09-21: reachability, not order. The live test that held it is unmarked until the code lands.
-#[test]
-#[ignore = "acceptance ARC-09: owed at milestone 3"]
-fn arc_09_reject_an_archive_batch_that_is_not_reachable_fr() {
-    todo!("ARC-09: Reject an archive batch that is not reachable from the requested frontier")
-}
-
-/// Mark an archive restored without a requested head as internally verified but not verified-complete
-///
-/// Spec: wire-format.md §7.9; light-client-requirements.md §2
-/// Milestone: 3.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.9): "Where field 2 was absent, there is no requested frontier to match: the chain still verifies internally, but its newestness is the holder's claim and nothing the requester holds can check it"
-/// Rule (light-client-requirements.md §2): "never present a restored archive as verified-complete"
-///
-/// Given: A client for S that has lost its archive and holds no head; a holder serving S's chain from a record the holder claims as newest.
-/// When: The client sends ArchiveRequest with field 2 absent and fetches the chain to its end.
-/// Then: The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a frontier-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.
-///
-/// Interpretation: Re-derived 2026-09-21 to the frontier form; the live test that held it is unmarked until the code lands.
-#[test]
-#[ignore = "acceptance ARC-11: owed at milestone 3"]
-fn arc_11_mark_an_archive_restored_without_a_requested_hea() {
-    todo!("ARC-11: Mark an archive restored without a requested head as internally verified but not verified-complete")
-}
-
 /// Carry the operator's provider credential in the backup envelope and never in the archive
 ///
 /// Spec: light-client-requirements.md §2

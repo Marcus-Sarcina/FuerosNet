@@ -2,6 +2,9 @@
 //! malformed, not merely unusual; none is derived from a capacity study.
 
 pub const ARCHIVE_SUBSET_REFS: usize = 256;
+/// Bundles per `PrekeyReply`, one per device (`wire-format.md` §7.8): a chosen
+/// ceiling beside design §23.3's count of about three.
+pub const PREKEY_BUNDLES_PER_REPLY: usize = 8;
 pub const VERIFIER_RESPONSES_PER_RECOVERY: usize = 32;
 pub const WITNESSES_PER_RECORD: usize = 16;
 pub const PATH_NIBBLES: u64 = 24;

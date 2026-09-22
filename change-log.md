@@ -10280,7 +10280,20 @@ product obligations of 09-16; `wire-format.md` §8.2 states in prose what its
 schema comment said, that a classical-only delegation is malformed, so the rule
 can be quoted.
 
+**The draft vectors cross the whole delta, and the code follows them.** The
+corpus had been pinned at the documents of 2026-09-13; every wire change since,
+the delegation, the frontier, the device, the staple's field 8 and the currency
+prose, is now carried: three synthetic transport keys under a stated seed recipe,
+a known-answer delegation with its wrong-signer analogue, the attestation and
+acknowledgement signed under an instance's delegated key, a bundle per device,
+frontiers past a merge and a presented archive entry, and the negative classes
+each rule states. 214 → 238 entries, the independent harness at 100 checks, and
+`rhtn-codec`, `rhtn-crypto`, `rhtn-archive`, `rhtn-node`, `rhtn-client`,
+`rhtn-adaptors` and `rhtn-cli` parse and emit the shapes so that every crate
+reading the corpus stays green. The behaviour above the shapes, a bundle and a
+queue per device, is owed as entered.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
-the staleness sweep reports its baseline; 1,233 citations across `models/` and the
-workspace resolve; check.py 395 of 455 implemented, 0 flags, stubs in sync; the
-workspace lints clean and the crates whose tests were unmarked pass.
+the staleness sweep reports its baseline; 1,264 citations across `models/` and the
+workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the
+test-vector pins are current on all three documents.

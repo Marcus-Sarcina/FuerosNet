@@ -62,9 +62,9 @@ impl Serving for Counting {
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.prekey(from, body)
     }
-    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> Answer<'a, bool> {
+    fn relay<'a>(&'a self, from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
         self.relays.fetch_add(1, Ordering::SeqCst);
-        self.inner.relay(from, to, bytes)
+        self.inner.relay(from, to, bytes, device)
     }
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
         self.inner.wake(client, endpoint)

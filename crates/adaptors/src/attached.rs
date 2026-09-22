@@ -108,10 +108,10 @@ impl Serving for AttachedNode {
         Box::pin(async move { self.ask(REQUEST_PREKEY, body.to_vec()).await })
     }
 
-    fn relay<'a>(&'a self, _from: Keyhash, to: Keyhash, bytes: Vec<u8>) -> Answer<'a, bool> {
+    fn relay<'a>(&'a self, _from: Keyhash, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Answer<'a, bool> {
         Box::pin(async move {
             let nonce = (self.nonce)();
-            let body = RelaySubmission { recipient: to, ciphertext: bytes, nonce }.encode();
+            let body = RelaySubmission { recipient: to, ciphertext: bytes, nonce, device }.encode();
             self.submit(REQUEST_RELAY, nonce, body).await
         })
     }

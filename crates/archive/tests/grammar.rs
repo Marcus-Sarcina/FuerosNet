@@ -16,7 +16,7 @@ use rhtn_codec::encode::*;
 use rhtn_crypto::identity::testkit::test_identity;
 
 fn bundle(name: &str) -> Vec<u8> {
-    PrekeyBundle::build(&test_identity(name), 1, b"reusable material", 1_800_000_000)
+    PrekeyBundle::build(&test_identity(name), 1, b"reusable material", 1_800_000_000, &[0u8; 32])
 }
 
 // acceptance: DEC-28

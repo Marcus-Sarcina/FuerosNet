@@ -451,7 +451,7 @@ async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() 
     let s = Service::start(&cfg, &l.peers).await.expect("starts");
     {
         let mut view = s.node.view.lock().unwrap();
-        let bundle = rhtn_archive::prekey::PrekeyBundle::build(&test_identity("carol"), rhtn_archive::prekey::CONSTRUCTION_PQXDH, b"reusable material", 1_800_000_000);
+        let bundle = rhtn_archive::prekey::PrekeyBundle::build(&test_identity("carol"), rhtn_archive::prekey::CONSTRUCTION_PQXDH, b"reusable material", 1_800_000_000, &[0u8; 32]);
         view.prekeys.publish(&ids(), &bundle).expect("published");
         assert!(view.prekeys.stock(kh("carol"), vec![b"the only one-time key".to_vec()]), "stocked");
     }
@@ -462,7 +462,7 @@ async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() 
     let served = {
         let mut view = s.node.view.lock().unwrap();
         let now = view.now();
-        let req = rhtn_archive::prekey::PrekeyRequest::One { subject: kh("carol"), one_time: true, nonce: [1; 16] }.encode();
+        let req = rhtn_archive::prekey::PrekeyRequest::One { subject: kh("carol"), one_time: true, nonce: [1; 16], device: Some([0u8; 32]) }.encode();
         let reply = view.prekeys.answer(&kh("witness"), &req, now).expect("answered");
         rhtn_archive::prekey::PrekeyReply::decode(&reply).unwrap().one_time.is_some()
     };

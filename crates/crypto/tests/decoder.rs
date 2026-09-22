@@ -186,6 +186,11 @@ fn dec_08_unknown_key_on_every_unsigned_message_is_rejected() {
         // the top-level map: a frame's is the body inside [type, body]
         let map_at = if f.kind == "frame" {
             let parts = array_item_ranges(&span, 0).unwrap();
+            // control frame 7 carries a Delegation, a signed object whose
+            // unknown keys are extensions (`wire-format.md` §8.2, §1)
+            if matches!((Parser { b: &span }).item(parts[0].start), Ok((Item::Uint(7), _))) && f.id.contains("frame") {
+                continue;
+            }
             parts[1].start
         } else {
             0

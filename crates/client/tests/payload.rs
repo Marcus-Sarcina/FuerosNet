@@ -128,8 +128,8 @@ impl Net {
                         self.carry(subject, restock);
                     }
                 }
-                Msg::Payload { to, bytes } => {
-                    self.log.push((name(&from), name(&to), Msg::Payload { to, bytes: bytes.clone() }));
+                Msg::Payload { to, bytes, .. } => {
+                    self.log.push((name(&from), name(&to), Msg::Payload { to, bytes: bytes.clone(), device: [0; 32] }));
                     let d = self.s.h.client(&to).receive_payload(from, &bytes).expect("decrypts at the recipient");
                     self.delivered.push((from, to, describe(&d)));
                     // **what arriving caused goes out too**: a client
@@ -138,10 +138,10 @@ impl Net {
                     let back = self.s.h.client(&to).outbox();
                     self.carry(to, back);
                 }
-                Msg::Relay { to, bytes } => {
+                Msg::Relay { to, bytes, .. } => {
                     // my serving node hands it to the recipient's, which queues it
                     let dest = self.node_of(&to);
-                    self.log.push((node.to_string(), dest.to_string(), Msg::Relay { to, bytes: bytes.clone() }));
+                    self.log.push((node.to_string(), dest.to_string(), Msg::Relay { to, bytes: bytes.clone(), device: [0; 32] }));
                     self.nodes.get_mut(dest).unwrap().queues.entry(to).or_default().push_back((from, bytes));
                 }
                 Msg::Transport(_) => {}
@@ -182,7 +182,7 @@ impl Net {
     }
 }
 
-// owed: PAY-01 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: PAY-01
 #[test]
 fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -190,7 +190,10 @@ fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     let node = &n.nodes["w1"];
     let b = PrekeyBundle::parse(node.prekeys.bundle(&kh("alice")).expect("N holds a bundle for S")).unwrap();
     assert_eq!((b.subject, b.construction), (kh("alice"), 1), "field 2 equal to 1");
-    assert_eq!(b.verify(&ids()), Ok(()), "a signature by S under the prekey tag over fields 1 to 4");
+    assert_eq!(b.verify(&ids()), Ok(()), "a signature by S under the prekey tag over fields 1 to 5");
+    // field 5: the device, the seed-holding device's classical key, which is
+    // the key S's session presented (`wire-format.md` §7.8)
+    assert_eq!(b.device, *rhtn_crypto::identity::testkit::test_identity("alice").public.ed.as_bytes(), "field 5 equal to the key S's session presented");
     assert!(node.prekeys.pool_size(&kh("alice")) > 0, "a non-empty one-time pool");
     assert_eq!(node.prekeys.pool_size(&kh("alice")), n.s.client("alice").payload.cfg.pool_target);
     // the blob reads as this construction's material
@@ -208,7 +211,7 @@ fn the_pool_is_replenished_before_exhaustion_and_the_signed_prekey_rotated_on_it
     let first_bundle = n.nodes["w1"].prekeys.bundle(&kh("alice")).unwrap().clone();
     // requesters draw: the node reports the pool as it shrinks
     for (who, nonce) in [("bob", 1u8), ("carol", 2), ("w2", 3)] {
-        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [nonce; 16] }.encode();
+        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [nonce; 16], device: Some([0u8; 32]) }.encode();
         let r = PrekeyReply::decode(&n.nodes.get_mut("w1").unwrap().prekeys.answer(&kh(who), &req, 0).unwrap()).unwrap();
         assert!(r.one_time.is_some());
         let left = n.nodes["w1"].prekeys.pool_size(&kh("alice"));
@@ -302,7 +305,7 @@ fn the_asynchronous_construction_is_used_leaf_to_leaf_only() {
     assert!(n.delivered[0].2.contains("to a leaf"));
 }
 
-// owed: PAY-12 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: PAY-12
 #[test]
 fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -316,7 +319,7 @@ fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
         if left == 0 {
             break;
         }
-        let req = PrekeyRequest::One { subject: kh("bob"), one_time: true, nonce: [drained; 16] }.encode();
+        let req = PrekeyRequest::One { subject: kh("bob"), one_time: true, nonce: [drained; 16], device: Some([0u8; 32]) }.encode();
         let now = n.now();
         let requester = kh(&format!("w{}", 2 + drained % 2));
         let reply = n.nodes.get_mut("w1").unwrap().prekeys.answer(&requester, &req, now + drained as u64 * 4000).unwrap();
@@ -330,7 +333,7 @@ fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
     let (_, _, reply) = n.log.iter().find(|(f, t, m)| f == "w1" && t == "alice" && matches!(m, Msg::PrekeyReply(_))).unwrap();
     let Msg::PrekeyReply(rb) = reply else { unreachable!() };
     let r = PrekeyReply::decode(rb).unwrap();
-    assert!(r.bundle.is_some() && r.one_time.is_none(), "field 2 and no field 3");
+    assert!(!r.bundles.is_empty() && r.one_time.is_none(), "field 2 and no field 3");
     assert_eq!(n.delivered.len(), 1, "S still opens the session and delivers");
     assert!(n.delivered[0].2.contains("without a one-time key"));
     assert!(n.s.client("bob").payload.sessions.has_session(&kh("alice")));
@@ -511,7 +514,7 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
 
     // **an attestation delivery carries the nonce the evaluator generated**
     // (design §15): one that does not is visibly unsolicited
-    let forged = rhtn_archive::chain::ArchiveReply { nonce: [0xcd; 16], records: vec![], more: false, continue_from: None };
+    let forged = rhtn_archive::chain::ArchiveReply { nonce: [0xcd; 16], records: vec![], more: false, frontier: Vec::new() };
     let msgs = n.s.client("alice").send_payload(kh("carol"), KIND_ARCHIVE_REPLY, &forged.encode()).expect("sent");
     n.carry(kh("alice"), msgs);
     let took = n.delivered.iter().find(|(_, _, d)| d.starts_with("Fetched")).expect("carol saw it");
@@ -522,7 +525,7 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
     let msgs = n.s.client("carol").fetch_archive(kh("alice"), Some(pop), 8).expect("asks");
     n.carry(kh("carol"), msgs);
     n.delivered.clear();
-    let mut req = rhtn_archive::chain::ArchiveRequest { subject: kh("bob"), head: Some(pop), max_records: 8, stop_before: None, nonce: [3; 16] };
+    let mut req = rhtn_archive::chain::ArchiveRequest { subject: kh("bob"), frontier: vec![pop], max_records: 8, stop_before: None, nonce: [3; 16] };
     req.subject = kh("bob");
     let msgs = n.s.client("carol").send_payload(kh("alice"), KIND_ARCHIVE_REQUEST, &req.encode()).expect("asks alice about bob");
     n.carry(kh("carol"), msgs);

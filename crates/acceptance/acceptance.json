@@ -230,7 +230,7 @@
     "when": "A requester sends ArchiveRequest {1: S, 2: S's head, 3: m, 5: nonce}, then re-requests with field 2 set to each reply's field 4 until a reply's field 3 is false.",
     "then": "Every reply's field 1 equals its request's nonce. Every record in a reply is named by the request's frontier or by a back-pointer of another record in that reply, and every back-pointer naming nothing in the reply appears in its field 4; field 4 is present iff field 3 is true. Re-requesting with field 2 set to the previous reply's field 4 continues the walk, and the union of all replies reaches genesis.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9; the live test that held it asserts the superseded head-first sequence and is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9."
   },
   {
     "id": "ARC-09",
@@ -253,7 +253,7 @@
     "when": "The holder returns a batch in which one middle record has been replaced by another record of S that the preceding record's back-pointer does not name; in a second run the batch's first record is not the requested head.",
     "then": "In the first run the requester reports the batch as failing structure verification at the first record named neither by the requested frontier nor by another record's back-pointers, and the records from that point on are not reported as verified. In the second run it fails at record one. A batch whose unreturned back-pointers are absent from field 4 fails the same way.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-21: reachability, not order. The live test that held it is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-21: reachability, not order."
   },
   {
     "id": "ARC-10",
@@ -303,7 +303,7 @@
     "when": "The client sends ArchiveRequest with field 2 absent and fetches the chain to its end.",
     "then": "The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a frontier-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-21 to the frontier form; the live test that held it is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-21 to the frontier form."
   },
   {
     "id": "ARC-12",
@@ -2480,7 +2480,7 @@
     "when": "S completes its attach.",
     "then": "N holds a PrekeyBundle for S with field 2 equal to 1, field 5 equal to the key S's session presented, and a signature by S under the prekey tag over fields 1 to 5, and a non-empty one-time pool for that device of S.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
   },
   {
     "id": "PAY-02",
@@ -2565,7 +2565,7 @@
     "when": "Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.",
     "then": "Both replies carry S's bundles in field 2, one per device N holds for S, neither carries field 3, and every pool is unchanged.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
   },
   {
     "id": "PAY-05",
@@ -2769,7 +2769,7 @@
     "when": "S requests a one-time key for T and then sends its first message.",
     "then": "The PrekeyReply carries T's bundle for the device named in field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
   },
   {
     "id": "PAY-13",
@@ -9037,7 +9037,7 @@
     "when": "The requester takes each reply.",
     "then": "The connected batch is reported with its records, and says that newestness is the holder's claim because no frontier was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence. The live test that held it is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence."
   },
   {
     "id": "DMN-10",
@@ -9118,7 +9118,7 @@
     "when": "S sends a type-9 publication of its own bundle and a type-10 deposit of k one-time keys.",
     "then": "Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte among S's bundles and, when the fetch names S's device, one of the deposited keys.",
     "oracle": "behaviour",
-    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
   },
   {
     "id": "SUB-03",

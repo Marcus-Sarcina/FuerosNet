@@ -1,23 +1,23 @@
 {
  "specs": {
-  "wire-format.md": "7862d27bb2bcb5c24fbb3f658dc0017d0d6a934cd342535df77d6a61759024b6",
-  "network-design.md": "bc59e9b2528a5e78c794d3bc777643a802dd948fb22af26fa2437c8df647c754",
-  "light-client-requirements.md": "04db8a2d8066cebecca8e905087da9cc837eb0a6998185b953982c8541451393"
+  "wire-format.md": "5240fe999e32fbf8153b1ae0813031f0b1e3ddc039d6d0975e8d23a1999f5c2c",
+  "network-design.md": "e3822764defcc4dc3e6e855d749ee6e7fbe86427b494e11715045f3b1d2fbb0b",
+  "light-client-requirements.md": "4ab4927a4ff0f0cff96a2cd6df96fe9e6db00c96152cb26bf2d638e4832ca002"
  },
- "generator": "83323b0f302c99112806ef467e97fdaee6aa2e88493edce8ed9df01ed4f23c1a",
- "verifier": "3bbad26792fa75a2bd20bf2e33bc992ef82de6ffbb762c874a8efc8255b86235",
+ "generator": "b8bc0ae4dd4c8411b1bef9ba6799cc57b6e35f987a45926f0d83773f597f565a",
+ "verifier": "34d28e976bcc2d919076ccc4bd41c67c91416192924361dfe4299c863eb661bb",
  "deps": {
   "dilithium-py": "1.4.0",
-  "cryptography": "50.0.1"
+  "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "8731fa952f99b505bb3876012dfef859b52197f82dd8c9d2f69d2662a671084a",
-  "primitives.md": "d1b2bf0bc186cb212e8b964df1396db2a83e8c3be135c198fd77af94db20789d",
-  "transactions.md": "76e5b6e0c86321adeea07dc8bc9c5e9d1301bb2099abffae5c286c87aab7c2b0",
-  "records.md": "1c21f197083981ddd8bc69fe3b1d88ac1ccb28d628c9b5d9de7aa5c6c6a3eced",
-  "verifier-selection.md": "47433a2e6f1d253020dc478f35e2d15c97400afe669258b614397dea26407a19",
-  "messages.md": "1fcca07e494bd4d2539dbe814c02df0b85f9193e38f82505635a50e6a4f1ee01",
-  "README.md": "3e51a0a88bed6bf880115fc67634d89b75a41ffb4da115f1b368e2b6a58664cc",
-  "negative-vectors.md": "34d0270911c357cc1ce4671f224b026280ad1aa437512398d7a4cadeaea1f50b"
+  "keys.md": "01559c3ad472de84e4b172948eafe38ece791f1e8c3839351b0ac2e2ecdb4a36",
+  "primitives.md": "5379ee197628234b14aff2c351ded0a22a3410dfc664f3e152bbfb400f1d0326",
+  "transactions.md": "f23d72a2572363d580712fa75bb3a57cc64b7aff21943de97a8b3509509a6607",
+  "records.md": "da8b1c0e49bc6bea95d3545b0bf40f8d4e6a82e09879dd1d1d58e565b57f550a",
+  "verifier-selection.md": "38497fac4d87b68d7733dde9bd6e4018c00841e55123cbca1038ec6a191f39a0",
+  "messages.md": "78ee6c9a0934cf0fd3b34944117e4b95ca008141440c642a20debe33924f8177",
+  "README.md": "2310fae03c932f9a36991270a131c4cce175fb7d65df9a93058dc6132a6f32d9",
+  "negative-vectors.md": "e1887f556955a13f41ba79e4f6c090abdb18c97e935a1309873f0cdcf7003692"
  }
 }

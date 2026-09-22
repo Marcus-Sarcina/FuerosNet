@@ -102,7 +102,7 @@ pub async fn ask(session: &Session, ask: &Ask, nonce: [u8; 16]) -> Result<String
             Ok(format!("{reply:#?}\n"))
         }
         Ask::Archive { subject, max_records } => {
-            let req = ArchiveRequest { subject: *subject, head: None, max_records: *max_records, stop_before: None, nonce };
+            let req = ArchiveRequest { subject: *subject, frontier: Vec::new(), max_records: *max_records, stop_before: None, nonce };
             let bytes = session.request(REQUEST_ARCHIVE, &req.encode()).await?;
             let reply = ArchiveReply::decode(&bytes).map_err(|e| format!("the reply does not decode: {e}"))?;
             let mut out = format!("records   {}\nmore      {}\n", reply.records.len(), reply.more);

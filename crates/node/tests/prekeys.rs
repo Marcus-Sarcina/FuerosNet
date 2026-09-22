@@ -15,11 +15,11 @@ fn fixture(id: &str) -> Vec<u8> {
 }
 
 fn bundle_for(name: &str, blob: &[u8], at: u64) -> Vec<u8> {
-    PrekeyBundle::build(&id(name), CONSTRUCTION_PQXDH, blob, at)
+    PrekeyBundle::build(&id(name), CONSTRUCTION_PQXDH, blob, at, &[0u8; 32])
 }
 
 fn one_time_reply(svc: &mut PrekeyService, requester: &str, subject: &str, n: u8, now: u64) -> PrekeyReply {
-    let req = PrekeyRequest::One { subject: kh(subject), one_time: true, nonce: [n; 16] }.encode();
+    let req = PrekeyRequest::One { subject: kh(subject), one_time: true, nonce: [n; 16], device: Some([0u8; 32]) }.encode();
     PrekeyReply::decode(&svc.answer(&kh(requester), &req, now).expect("a reply")).unwrap()
 }
 
@@ -53,10 +53,10 @@ fn the_corpus_prekey_objects_read_here() {
     assert_eq!(one.encode(), body(&f11));
     assert_eq!(batch.encode(), body(&f12));
     let r5 = PrekeyReply::decode(&fixture("P-reply-05")).unwrap();
-    assert!(r5.bundle.is_some() && r5.one_time.is_some() && r5.code.is_none());
+    assert!(!r5.bundles.is_empty() && r5.one_time.is_some() && r5.code.is_none());
     assert_eq!(r5.encode(), fixture("P-reply-05"));
     let r6 = PrekeyReply::decode(&fixture("P-reply-06")).unwrap();
-    assert_eq!((r6.bundle.is_none(), r6.code), (true, Some(FAIL_UNKNOWN_SUBJECT)));
+    assert_eq!((r6.bundles.is_empty(), r6.code), (true, Some(FAIL_UNKNOWN_SUBJECT)));
     assert_eq!(r6.encode(), fixture("P-reply-06"));
 }
 
@@ -75,17 +75,17 @@ fn a_one_time_key_is_served_once_and_never_again() {
     assert!(served.insert(c.one_time.unwrap()), "never served again");
     assert_eq!(svc.pool_size(&kh("alice")), 0);
     let d = one_time_reply(&mut svc, "w2", "alice", 4, 0);
-    assert!(d.one_time.is_none() && d.bundle.is_some(), "none remain: reusable material alone");
+    assert!(d.one_time.is_none() && !d.bundles.is_empty(), "none remain: reusable material alone");
 }
 
-// owed: PAY-04 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: PAY-04
 #[test]
 fn reusable_material_is_served_freely_and_consumes_nothing() {
     let mut svc = stocked("alice", 3);
     for (who, n) in [("bob", 1u8), ("carol", 2)] {
-        let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [n; 16] }.encode();
+        let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [n; 16], device: None }.encode();
         let r = PrekeyReply::decode(&svc.answer(&kh(who), &req, 0).unwrap()).unwrap();
-        assert_eq!(r.bundle.as_deref(), svc.bundle(&kh("alice")).map(|b| b.as_slice()));
+        assert_eq!(r.bundles.first().map(|b| b.as_slice()), svc.bundle(&kh("alice")).map(|b| b.as_slice()));
         assert!(r.one_time.is_none(), "no field 3");
         assert_eq!(r.nonce, [n; 16]);
     }
@@ -103,7 +103,7 @@ fn reusable_material_is_served_freely_and_consumes_nothing() {
         if *s == kh("w9") {
             assert_eq!(r.code, Some(FAIL_UNKNOWN_SUBJECT));
         } else {
-            assert_eq!(PrekeyBundle::parse(r.bundle.as_ref().unwrap()).unwrap().subject, *s);
+            assert_eq!(PrekeyBundle::parse(r.bundles.first().unwrap()).unwrap().subject, *s);
         }
     }
     assert_eq!(svc.pool_size(&kh("alice")), 3);
@@ -121,7 +121,7 @@ fn one_time_issuance_is_limited_per_requester_per_subject() {
     assert!(one_time_reply(&mut svc, "bob", "alice", 1, 100).one_time.is_some());
     assert!(one_time_reply(&mut svc, "bob", "alice", 2, 101).one_time.is_some());
     let excess = one_time_reply(&mut svc, "bob", "alice", 3, 102);
-    assert!(excess.one_time.is_none() && excess.bundle.is_some());
+    assert!(excess.one_time.is_none() && !excess.bundles.is_empty());
     assert_eq!(svc.pool_size(&kh("alice")), 3, "nothing spent on the excess");
     // another subject: its own allowance
     assert!(one_time_reply(&mut svc, "bob", "carol", 4, 103).one_time.is_some());
@@ -205,12 +205,12 @@ fn a_bundle_is_stored_and_served_without_its_blob_being_read() {
     let arbitrary: Vec<u8> = (0..200u32).map(|i| (i * 7 % 251) as u8).collect();
     let bundle = bundle_for("alice", &arbitrary, 1_800_000_000);
     svc.publish(&ids(), &bundle).expect("stored whatever the blob is");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [1; 16] }.encode();
+    let req = PrekeyRequest::One { subject: kh("alice"), one_time: false, nonce: [1; 16], device: None }.encode();
     let r = PrekeyReply::decode(&svc.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
-    assert_eq!(r.bundle.as_deref(), Some(bundle.as_slice()), "served unchanged");
-    assert_eq!(PrekeyBundle::parse(r.bundle.as_ref().unwrap()).unwrap().blob, arbitrary);
+    assert_eq!(r.bundles.first().map(|b| b.as_slice()), Some(bundle.as_slice()), "served unchanged");
+    assert_eq!(PrekeyBundle::parse(r.bundles.first().unwrap()).unwrap().blob, arbitrary);
     // what is checked is the signature, not the contents: a bundle signed by another key is not held
-    let forged = PrekeyBundle::build(&id("carol"), CONSTRUCTION_PQXDH, b"x", 1);
+    let forged = PrekeyBundle::build(&id("carol"), CONSTRUCTION_PQXDH, b"x", 1, &[0u8; 32]);
     let mut renamed = forged.clone();
     let pos = renamed.windows(32).position(|w| w == kh("carol")).unwrap();
     renamed[pos..pos + 32].copy_from_slice(&kh("alice"));
@@ -230,7 +230,7 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
         s.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
         assert!(s.stock(kh("alice"), vec![b"the only one-time key".to_vec()]), "the pool takes the deposit");
         assert_eq!(s.pool_size(&kh("alice")), 1);
-        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [1; 16] }.encode();
+        let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [1; 16], device: Some([0u8; 32]) }.encode();
         let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
         let key = r.one_time.expect("served");
         assert_eq!(s.pool_size(&kh("alice")), 0, "gone from memory");
@@ -240,16 +240,16 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     // started again from the bytes on disk alone
     let mut s = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
     assert_eq!(s.pool_size(&kh("alice")), 0, "the served key did not come back");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [2; 16] }.encode();
+    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [2; 16], device: Some([0u8; 32]) }.encode();
     let r = PrekeyReply::decode(&s.answer(&kh("bob"), &req, 0).unwrap()).unwrap();
-    assert!(r.bundle.is_some(), "the reusable material is still served");
+    assert!(!r.bundles.is_empty(), "the reusable material is still served");
     assert!(r.one_time.is_none(), "and no one-time key is served a second time");
     assert_ne!(r.one_time.as_deref(), Some(&key[..]));
     // a service with no directory keeps its pool in memory as before
     let mut m = PrekeyService::new(PrekeyConfig::default());
     m.publish(&ids(), &bundle_for("alice", b"reusable material", 1_800_000_000)).unwrap();
     assert!(m.stock(kh("alice"), vec![b"in memory".to_vec()]), "the pool takes the deposit");
-    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [3; 16] }.encode();
+    let req = PrekeyRequest::One { subject: kh("alice"), one_time: true, nonce: [3; 16], device: Some([0u8; 32]) }.encode();
     assert!(PrekeyReply::decode(&m.answer(&kh("bob"), &req, 0).unwrap()).unwrap().one_time.is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -276,7 +276,7 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let mut again = PrekeyService::load(&dir, PrekeyConfig::default()).unwrap();
     assert_eq!(again.pool_size(&kh("alice")), 0, "the served key did not survive the snapshot");
     let r = one_time_reply(&mut again, "bob", "alice", 2, 0);
-    assert!(r.bundle.is_some(), "the reusable material is still served");
+    assert!(!r.bundles.is_empty(), "the reusable material is still served");
     assert!(r.one_time.is_none(), "and no key a second time");
     // **the allowance is memory alone, and a restart opens a fresh window**
     // (`infra-client-requirements.md` §6): persisting it would mean keeping

@@ -38,6 +38,10 @@ pub struct RelaySubmission {
     pub recipient: Keyhash,
     pub ciphertext: Vec<u8>,
     pub nonce: [u8; 16],
+    /// The recipient's device this ciphertext is for (`wire-format.md`
+    /// §7.10 field 4): a session is with a device, and the node cannot
+    /// tell from the ciphertext.
+    pub device: [u8; 32],
 }
 
 /// A client registering, refreshing or withdrawing a wake endpoint
@@ -120,13 +124,15 @@ impl OneTimeDeposit {
 impl RelaySubmission {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3);
+        emit_map_head(&mut out, 4);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.recipient);
         emit_uint(&mut out, 2);
         emit_bstr(&mut out, &self.ciphertext);
         emit_uint(&mut out, 3);
         emit_bstr(&mut out, &self.nonce);
+        emit_uint(&mut out, 4);
+        emit_bstr(&mut out, &self.device);
         out
     }
 
@@ -135,7 +141,8 @@ impl RelaySubmission {
         schema::check_unsigned(Family::RelaySubmission, b, 0).map_err(|e| e.0)?;
         let Item::Map(m) = &item else { return Err("not a map".into()) };
         let recipient: Keyhash = bytes_at(b, m, 1)?.try_into().map_err(|_| "recipient")?;
-        Ok(RelaySubmission { recipient, ciphertext: bytes_at(b, m, 2)?, nonce: nonce_at(b, m, 3)? })
+        let device: [u8; 32] = bytes_at(b, m, 4)?.try_into().map_err(|_| "device")?;
+        Ok(RelaySubmission { recipient, ciphertext: bytes_at(b, m, 2)?, nonce: nonce_at(b, m, 3)?, device })
     }
 }
 

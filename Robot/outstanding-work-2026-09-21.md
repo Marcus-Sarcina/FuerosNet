@@ -269,7 +269,26 @@ pairs for each newly named class.
 
 ---
 
-## 3. Test vectors: the pin is stale on all three documents
+## 3. Test vectors: the pin is stale on all three documents — **done 2026-09-22**
+
+Regenerated once for the whole delta from `b00fe29` (09-13) and landed with
+the code that makes the corpus green. The generator gained three transport
+keys (`bob-instance`, `carol-instance`, `alice-desktop`, seed recipe in
+`keys.md`), the hybrid delegation with its wrong-signer analogue and the
+fourteenth known answer, the currency attestation and acknowledgement signed
+under an instance's delegated key with the staple's field 8, the prekey
+bundle's device and signature at 6 with a desktop's bundle beside the phone's,
+the frontier form of the archive request and reply with a presented entry and
+a two-txid frontier, `Attach` field 4, `AttachAck` field 6 and frame 7
+appended after the request families so every earlier fixture keeps its id,
+the relay submission's device, and the negative classes: 214 → 238 entries.
+`verify.py` re-derives the transport keys, verifies the delegation hybrid and
+the two delegated contexts, and reads the frames by section: 62 → 100 checks,
+ALL CHECKS PASS. The hand-authored audit: nine rows in `negative-vectors.md`
+(T40–T48), four must-accepts (D22–D25), the README's rows. The pin carries the
+three documents, the generator and the harness. Below is what section 3 asked
+for.
+
 
 `spec-pins.json` pins `wire-format.md` `7862d2…`, `network-design.md` `bc59e9…`
 and `light-client-requirements.md` `04db8a…`; the current hashes are `5fd2a0…`,
@@ -775,7 +794,18 @@ land on their own.
    both mechanisms; `--accept-spec-change`; `verify.py` green; then
    `rhtn-codec` and `rhtn-crypto` until `corpus.rs` is green. One commit. Write
    the Rust from the specification and not from `generate.py`: the corpus
-   test is evidence only while the two readings are independent.
+   test is evidence only while the two readings are independent. **Done
+   2026-09-22**, and it reached further than the codec: the shapes are
+   parsed and emitted by `rhtn-archive`, `rhtn-node`, `rhtn-client`,
+   `rhtn-adaptors` and `rhtn-cli` as well, since every one of them reads
+   the corpus and the tree stays coherent at every commit. Eight of the
+   unmarked tests now hold their entries (ARC-08, ARC-09, ARC-11, DMN-09,
+   PAY-01, PAY-04, PAY-12, SUB-02): 403 of 455. Three things are plumbed
+   and not yet done, each an owed entry: one bundle per subject at the
+   node where a bundle per device is owed (PAY-20, SUB-12), the queue per
+   recipient where a queue per device is owed (QUE-05, QUE-21), and the
+   courier's relay to the serving node itself carrying an all-zero device
+   until the node's own device reaches it (QUE-21).
 4. **The gate** (section 6): the freshness check, so step 3 cannot go stale
    silently again; the format step; `cargo-deny`.
 5. **Behavioural code per mechanism**, each against its entries: archive,

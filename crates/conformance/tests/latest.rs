@@ -9,11 +9,11 @@ fn r11_snapshot_save_must_remove_consumed_one_time_keys() {
     let dir=std::env::temp_dir().join(format!("rhtn-review-snapshot-{}",std::process::id()));
     let (s,r)=(test_identity("alice"),test_identity("bob"));
     let mut pool=PrekeyService::new(PrekeyConfig::default());
-    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100)).unwrap();
+    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100, &[0u8; 32])).unwrap();
     assert!(pool.stock(s.public.keyhash,vec![vec![7]]));
     pool.save(&dir).unwrap();
     let mut pool=PrekeyService::load(&dir,PrekeyConfig::default()).unwrap();
-    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16]}.encode();
+    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
     let reply=PrekeyReply::decode(&pool.answer(&r.public.keyhash,&req,101).unwrap()).unwrap();
     assert_eq!(reply.one_time,Some(vec![7]),"control: the key was issued");
     assert_eq!(pool.pool_size(&s.public.keyhash),0);
@@ -43,7 +43,7 @@ async fn c01_archive_probe_must_reject_a_disconnected_batch() {
     cfg.on_request=Some(Arc::new(move |_,_,body| {
         let req=ArchiveRequest::decode(&body).unwrap();
         let records=if req.nonce==[1;16] {vec![good.clone(),first.clone()]} else {vec![second.clone(),first.clone()]};
-        Box::pin(async move {Some(ArchiveReply {nonce:req.nonce,records,more:false,continue_from:None}.encode())})
+        Box::pin(async move {Some(ArchiveReply {nonce:req.nonce,records,more:false,frontier:Vec::new()}.encode())})
     }));
     let ep=tls::server_endpoint(&cfg.identity,"127.0.0.1:0".parse().unwrap()).unwrap();let addr=ep.local_addr().unwrap();
     let task=tokio::spawn(Node::new(cfg).serve(ep.clone()));

@@ -94,7 +94,9 @@ impl PayloadKeys {
     /// The signed bundle to publish (`wire-format.md` §7.8).
     pub fn bundle(&mut self, id: &SigningIdentity, now: u64) -> Vec<u8> {
         self.published_at = Some(now);
-        PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now)
+        // this client holds the seed, so its device is named by the
+        // identity's classical key (`wire-format.md` §7.8)
+        PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now, id.public.ed.as_bytes())
     }
 
     /// Mint `n` one-time pairs and return their public halves, as uploaded.
@@ -235,6 +237,9 @@ pub struct Prefetched {
     pub subject: Keyhash,
     pub published_at: u64,
     pub blob: Blob,
+    /// The device this material belongs to (`wire-format.md` §7.8): what a
+    /// one-time key is asked for and a relay submission is addressed to.
+    pub device: [u8; 32],
 }
 
 /// Read a bundle a serving node handed over: signed by the subject it
@@ -247,7 +252,7 @@ pub fn read_bundle<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Prefetch
     if b.construction != CONSTRUCTION_PQXDH {
         return Err("not PQXDH".into());
     }
-    Ok(Prefetched { subject: b.subject, published_at: b.published_at, blob: Blob::decode(&b.blob)? })
+    Ok(Prefetched { subject: b.subject, published_at: b.published_at, blob: Blob::decode(&b.blob)?, device: b.device })
 }
 
 /// The batch request for a population, in ascending order and without
@@ -261,8 +266,8 @@ pub fn batch_request(population: &[Keyhash], nonce: [u8; 16]) -> Vec<u8> {
 
 /// The one-time key request for one subject: sent only when a session is
 /// being opened.
-pub fn one_time_request(subject: Keyhash, nonce: [u8; 16]) -> Vec<u8> {
-    PrekeyRequest::One { subject, one_time: true, nonce }.encode()
+pub fn one_time_request(subject: Keyhash, device: [u8; 32], nonce: [u8; 16]) -> Vec<u8> {
+    PrekeyRequest::One { subject, one_time: true, nonce, device: Some(device) }.encode()
 }
 
 // --------------------------------------------------------- the channel

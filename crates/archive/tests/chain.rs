@@ -196,7 +196,7 @@ fn long_chain(n: usize) -> World {
     w
 }
 
-// owed: ARC-08 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: ARC-08
 #[test]
 fn serving_paginates_head_first_and_continues_from_the_oldest() {
     let w = long_chain(11);
@@ -204,11 +204,11 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
     let head = w.head("bob");
     let m = 4;
     let mut all: Vec<Txid> = Vec::new();
-    let mut next = Some(head);
+    let mut next = vec![head];
     let mut replies = 0;
     loop {
         let nonce = [replies as u8; 16];
-        let req = ArchiveRequest { subject: bob, head: next, max_records: m, stop_before: None, nonce };
+        let req = ArchiveRequest { subject: bob, frontier: next.clone(), max_records: m, stop_before: None, nonce };
         let reply = w.archive("bob").serve(&req);
         assert_eq!(reply.nonce, nonce);
         let recs: Vec<Record> = reply.records.iter().map(|b| Record::parse(b).unwrap()).collect();
@@ -225,10 +225,11 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
         }
         replies += 1;
         if reply.more {
-            assert_eq!(reply.continue_from, Some(recs.last().unwrap().txid), "continue from the oldest returned");
-            next = reply.continue_from;
+            // the frontier: what the oldest returned record points back to
+            assert_eq!(reply.frontier, recs.last().unwrap().back_pointers_of(&bob).unwrap().to_vec(), "the frontier names what was left unreturned");
+            next = reply.frontier.clone();
         } else {
-            assert_eq!(reply.continue_from, None);
+            assert!(reply.frontier.is_empty());
             break;
         }
     }
@@ -238,30 +239,39 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
     assert_eq!(wk.txids(), all);
 }
 
-// owed: ARC-09 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: ARC-09
 #[test]
 fn a_batch_that_does_not_chain_fails_at_the_first_mismatch() {
     let w = long_chain(6);
     let bob = w.kh("bob");
     let head = w.head("bob");
-    let req = ArchiveRequest { subject: bob, head: Some(head), max_records: 6, stop_before: None, nonce: [1; 16] };
+    let req = ArchiveRequest { subject: bob, frontier: vec![head], max_records: 6, stop_before: None, nonce: [1; 16] };
     let honest = w.archive("bob").serve(&req);
     assert_eq!(honest.records.len(), 6);
     // run 1: the middle record replaced by another record of S the preceding one does not name
     let mut bad = honest.clone();
     bad.records[2] = honest.records[4].clone();
-    let v = walk::verify_batch(&bob, Some(&head), &bad, &w.lookup());
+    let v = walk::verify_batch(&bob, &[head], &bad, &w.lookup());
     assert!(matches!(v.end, BatchEnd::Mismatch { index: 2, .. }), "{:?}", v.end);
     assert_eq!(v.verified.len(), 2, "records from the mismatch on are not a verified prefix");
     // run 2: the first record is not the requested head
     let mut bad2 = honest.clone();
     bad2.records.remove(0);
-    let v2 = walk::verify_batch(&bob, Some(&head), &bad2, &w.lookup());
+    let v2 = walk::verify_batch(&bob, &[head], &bad2, &w.lookup());
     assert!(matches!(v2.end, BatchEnd::Mismatch { index: 0, .. }));
     assert!(v2.verified.is_empty());
     // and the honest batch verifies to genesis
-    let ok = walk::verify_batch(&bob, Some(&head), &honest, &w.lookup());
+    let ok = walk::verify_batch(&bob, &[head], &honest, &w.lookup());
     assert_eq!(ok.end, BatchEnd::Genesis);
+    // run 3: more remain, and the frontier does not name what was left
+    // unreturned (§7.9: every back-pointer naming nothing in the batch
+    // appears in field 4)
+    let mut bad3 = honest.clone();
+    bad3.records.truncate(3);
+    bad3.more = true;
+    bad3.frontier = Vec::new();
+    let v3 = walk::verify_batch(&bob, &[head], &bad3, &w.lookup());
+    assert!(matches!(v3.end, BatchEnd::Mismatch { index: 3, .. }), "{:?}", v3.end);
 }
 
 // acceptance: ARC-10
@@ -270,15 +280,17 @@ fn a_short_reply_is_not_a_short_archive() {
     let w = long_chain(8);
     let bob = w.kh("bob");
     let head = w.head("bob");
-    let req = ArchiveRequest { subject: bob, head: Some(head), max_records: 8, stop_before: None, nonce: [2; 16] };
+    let req = ArchiveRequest { subject: bob, frontier: vec![head], max_records: 8, stop_before: None, nonce: [2; 16] };
     let full = w.archive("bob").serve(&req);
     for more in [true, false] {
         let mut short = full.clone();
         short.records.truncate(3); // k < m, oldest names a record not in the batch
         short.more = more;
-        short.continue_from = None;
-        let v = walk::verify_batch(&bob, Some(&head), &short, &w.lookup());
-        let oldest = Record::parse(&short.records[2]).unwrap().txid;
+        let oldest_rec = Record::parse(&short.records[2]).unwrap();
+        // when more remain the reply's frontier names what was left unreturned
+        short.frontier = if more { oldest_rec.back_pointers_of(&bob).unwrap().to_vec() } else { Vec::new() };
+        let v = walk::verify_batch(&bob, &[head], &short, &w.lookup());
+        let oldest = oldest_rec.txid;
         match &v.end {
             BatchEnd::Unfetched { continue_from, missing } => {
                 assert_eq!(*continue_from, oldest, "the next request names the oldest returned record");
@@ -299,7 +311,7 @@ fn a_short_reply_is_not_a_short_archive() {
     }
 }
 
-// owed: ARC-11 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: ARC-11
 #[test]
 fn a_restore_without_a_head_is_internally_verified_not_complete() {
     let w = long_chain(7);

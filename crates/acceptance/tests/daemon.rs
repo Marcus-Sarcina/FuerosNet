@@ -2,25 +2,6 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
-/// Verify an archive batch's own links before reporting it, and say that newestness is not among them
-///
-/// Spec: wire-format.md §7.9
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.9): "**The requester verifies the structure itself, and order is no part of it.** Every returned record must be named either by the requested frontier or by a back-pointer of another record in the batch"
-/// Rule (wire-format.md §7.9): "**A holder cannot be trusted to have walked correctly**"
-///
-/// Given: A node answering an archive fetch, serving first a connected two-record batch and then two individually valid records that both point at genesis.
-/// When: The requester takes each reply.
-/// Then: The connected batch is reported with its records, and says that newestness is the holder's claim because no frontier was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.
-///
-/// Interpretation: Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence. The live test that held it is unmarked until the code lands.
-#[test]
-#[ignore = "acceptance DMN-09: owed at milestone after-5"]
-fn dmn_09_verify_an_archive_batch_s_own_links_before_repor() {
-    todo!("DMN-09: Verify an archive batch's own links before reporting it, and say that newestness is not among them")
-}
-
 /// Mint the transport keypair on the instance, and serve a whole run of contiguous credentials over its one public key
 ///
 /// Spec: infra-client-requirements.md §7; wire-format.md §8.2

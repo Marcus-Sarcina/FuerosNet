@@ -158,9 +158,13 @@ pub enum Msg {
     /// The serving node's word that the pool ran dry.
     PoolExhausted,
     /// Bytes on the end-to-end channel, on the direct path to `to`.
-    Payload { to: Keyhash, bytes: Vec<u8> },
+    /// `device`: the recipient's device, carried so a failed direct path
+    /// can fall back to the relay (`wire-format.md` §7.10 field 4).
+    Payload { to: Keyhash, bytes: Vec<u8>, device: [u8; 32] },
     /// The same bytes handed to the serving node to relay to `to`.
-    Relay { to: Keyhash, bytes: Vec<u8> },
+    /// `device` is the recipient's device the ciphertext is for
+    /// (`wire-format.md` §7.10 field 4).
+    Relay { to: Keyhash, bytes: Vec<u8>, device: [u8; 32] },
     /// Application traffic to the serving node itself: it rides the
     /// transport session and needs no construction.
     Transport(Vec<u8>),
@@ -1074,7 +1078,7 @@ impl Client {
             // is asked for singly, reusable material only
             1 => {
                 let nonce = self.nonce();
-                vec![Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce }.encode())]
+                vec![Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject: others[0], one_time: false, nonce, device: None }.encode())]
             }
             _ => vec![Msg::PrekeyRequest(payload::batch_request(&others, self.nonce()))],
         }
@@ -1133,7 +1137,7 @@ impl Client {
     /// nonce the evaluator generated).
     pub fn fetch_archive(&mut self, subject: Keyhash, head: Option<Txid>, max: u64) -> Result<Vec<Msg>, PayloadError> {
         let nonce = self.nonce();
-        let req = rhtn_archive::chain::ArchiveRequest { subject, head, max_records: max, stop_before: None, nonce };
+        let req = rhtn_archive::chain::ArchiveRequest { subject, frontier: head.into_iter().collect(), max_records: max, stop_before: None, nonce };
         self.fetching.insert(subject, (nonce, head));
         self.send_payload(subject, payload::KIND_ARCHIVE_REQUEST, &req.encode())
     }
@@ -1217,7 +1221,7 @@ impl Client {
         // theirs: reusable material only, one request each
         for subject in std::mem::take(&mut self.payload.wanted) {
             let nonce = self.nonce();
-            out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject, one_time: false, nonce }.encode()));
+            out.push(Msg::PrekeyRequest(rhtn_archive::prekey::PrekeyRequest::One { subject, one_time: false, nonce, device: None }.encode()));
         }
         out
     }
@@ -1260,11 +1264,23 @@ impl Client {
         }
         let nonce = self.nonce();
         self.payload.outstanding.insert(nonce, to);
-        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(to, nonce))])
+        // a one-time key is one device's: the device whose reusable material
+        // this client holds, or the recipient's seed-holding device where
+        // none was swept (`wire-format.md` §7.8 field 4)
+        let device = self.device_of(&to).ok_or(PayloadError::NoBundle)?;
+        Ok(vec![Msg::PrekeyRequest(payload::one_time_request(to, device, nonce))])
+    }
+
+    /// The recipient's device a session with `to` is with: the device its
+    /// prefetched bundle names, else the classical key of the identity
+    /// held for it, which names the seed-holding device.
+    fn device_of(&self, to: &Keyhash) -> Option<[u8; 32]> {
+        self.payload.sessions.prefetched.get(to).map(|p| p.device).or_else(|| self.known.iter().find(|i| i.keyhash == *to).map(|i| *i.ed.as_bytes()))
     }
 
     fn route(&self, to: Keyhash, bytes: Vec<u8>) -> Msg {
-        if self.device.direct.reachable(&to) { Msg::Payload { to, bytes } } else { Msg::Relay { to, bytes } }
+        let device = self.device_of(&to).unwrap_or([0; 32]);
+        if self.device.direct.reachable(&to) { Msg::Payload { to, bytes, device } } else { Msg::Relay { to, bytes, device } }
     }
 
     /// A reply from the serving node: a sweep's bundles are kept; a
@@ -1274,25 +1290,29 @@ impl Client {
     pub fn take_prekey_reply(&mut self, bytes: &[u8]) -> Result<Vec<Msg>, String> {
         if let Ok(replies) = decode_batch_reply(bytes) {
             for r in replies {
-                if let Some(b) = r.bundle
-                    && let Ok(p) = payload::read_bundle(&self.known, &b) {
+                // one bundle per device (`wire-format.md` §7.8); one device
+                // per subject is kept here until sessions are per device
+                for b in &r.bundles {
+                    if let Ok(p) = payload::read_bundle(&self.known, b) {
                         self.payload.sessions.prefetched.insert(p.subject, p);
                     }
+                }
             }
             return Ok(Vec::new());
         }
         let r = PrekeyReply::decode(bytes)?;
         let Some(to) = self.payload.outstanding.remove(&r.nonce) else {
-            // a reusable-only reply: the bundle is kept, and nothing opens
-            if let Some(b) = r.bundle
-                && let Ok(p) = payload::read_bundle(&self.known, &b) {
+            // a reusable-only reply: the bundles are kept, and nothing opens
+            for b in &r.bundles {
+                if let Ok(p) = payload::read_bundle(&self.known, b) {
                     self.payload.sessions.prefetched.insert(p.subject, p);
                 }
+            }
             return Ok(Vec::new());
         };
-        let their = match r.bundle {
+        let their = match r.bundles.first() {
             Some(b) => {
-                let p = payload::read_bundle(&self.known, &b)?;
+                let p = payload::read_bundle(&self.known, b)?;
                 if p.subject != to {
                     return Err("bundle for another subject".into());
                 }

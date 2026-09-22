@@ -25,6 +25,35 @@ pub fn identities() -> Vec<Identity> {
     NAMES.iter().map(|n| test_identity(n).public).collect()
 }
 
+/// What a holder keeps: the identities, and the delegations the corpus
+/// carries as accepted `Delegation` fixtures, held against their
+/// delegating keyhash (`wire-format.md` §10.1).  A subtree acknowledgement
+/// signed under an instance's delegated key verifies through this.
+pub struct Held {
+    pub ids: Vec<Identity>,
+    pub delegations: Vec<verify::Delegation>,
+}
+
+impl verify::Lookup for Held {
+    fn identity(&self, keyhash: &[u8]) -> Option<&Identity> {
+        self.ids.iter().find(|i| i.keyhash == keyhash)
+    }
+    fn delegated_key(&self, keyhash: &[u8]) -> Option<[u8; 32]> {
+        self.delegations.iter().find(|d| d.keyhash == keyhash).map(|d| d.key)
+    }
+}
+
+pub fn held() -> Held {
+    let ids = identities();
+    let mut delegations = Vec::new();
+    for f in fixtures() {
+        if f.kind == "Delegation" && f.outcome == "accept" {
+            delegations.push(verify::delegation(ids.as_slice(), &f.bytes).unwrap_or_else(|e| panic!("{}: {e}", f.id)));
+        }
+    }
+    Held { ids, delegations }
+}
+
 pub struct Fixture {
     pub id: String,
     pub kind: String,

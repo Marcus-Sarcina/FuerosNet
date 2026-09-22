@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `7862d27bb2bcb5c24fbb3f658dc0017d0d6a934cd342535df77d6a61759024b6` · network-design.md `bc59e9b2528a5e78c794d3bc777643a802dd948fb22af26fa2437c8df647c754`
+**Pinned**: wire-format.md `5240fe999e32fbf8153b1ae0813031f0b1e3ddc039d6d0975e8d23a1999f5c2c` · network-design.md `e3822764defcc4dc3e6e855d749ee6e7fbe86427b494e11715045f3b1d2fbb0b`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -42,10 +42,10 @@ vector. This file and `negative-vectors.md` are authored by hand.
 
 | File | Contents |
 |---|---|
-| `keys.md` | The synthetic test identities — **both components real**: Ed25519 and ML-DSA-65 keypairs from stated seeds, `KeyMaterial` encodings, keyhashes |
+| `keys.md` | The synthetic test identities — **both components real**: Ed25519 and ML-DSA-65 keypairs from stated seeds, `KeyMaterial` encodings, keyhashes — and, since 2026-09-22, three **transport keys** (raw Ed25519, no keyhash) for two instances and a delegated desktop |
 | `primitives.md` | Deterministic CBOR atoms, seqno, path, Locator, two complete `SignedLocator` signatures — the second a must-accept same-series counter jump — and genesis back-pointers |
 | `transactions.md` | **Positive body vectors** (body + txid) for the six archive transaction types including peering, a formation-subtype presence record — now a **fully integrated object**: real §4.5.1 disclosure root, its type-5 envelope, and three verified presentations — and adversarial variants: signer-order/kid-order divergence, a two-head merge, must-accept disavowal-code and smaller-series-reissue cases, and an unknown-extension adoption with its envelope. **Envelope vectors exist for two shapes**: the adoption (two signers, four entries) and the departure (one signer, two entries); the other types have bodies only |
-| `records.md` | One known-answer signature per **signing** context — complete 2026-09-02, each with its wrong-signer analogue |
+| `records.md` | One known-answer signature per **signing** context — complete 2026-09-02, each with its wrong-signer analogue; since 2026-09-22 the fourteenth, the hybrid **transport delegation**, and the currency attestation and subtree acknowledgement signed under an instance's delegated key, the attestation carrying its delegation as field 8 |
 | `messages.md` | The unsigned message families (bar 9): every framed message's positive encoding, replies and transient payloads, and the session-trace table |
 | `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
 | *(the Rust corpus runner)* | Retired 2026-09-22 [author]. Its parser grew into `rhtn-codec`, and `crates/crypto/tests/corpus.rs` now carries every corpus entry through the workspace's own decoder and RustCrypto `ml-dsa`, against the generator's dilithium-py signatures: the cross-implementation check the runner made, without a second decoder to keep in step with the wire |
@@ -256,7 +256,8 @@ negatives (T9–T12). Still open:
    domain-separation tag has a known-answer signature — currency, catalog,
    abuse, anchor, subtree-ack and prekey in `records.md`; successor, verifier
    and consent in `transactions.md`; locator, endpoints and envelope already
-   present — and the **cross-context substitution family is live** (S24): the
+   present; the fourteenth, `rhtn/1:delegation`, added 2026-09-22 with the
+   delegation itself — and the **cross-context substitution family is live** (S24): the
    harness verifies every `records.md` signature fails under a neighbouring
    tag, the check that catches two real paths sharing a hard-coded AAD while
    S12's artificial empty-AAD case still passes.

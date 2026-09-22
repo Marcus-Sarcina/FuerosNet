@@ -60,7 +60,7 @@ async fn attach_light(name: &str, node: &Arc<LiveNode>) -> Light {
 }
 
 fn bundle(name: &str) -> Vec<u8> {
-    PrekeyBundle::build(&id(name), CONSTRUCTION_PQXDH, b"reusable material", 1_800_000_000)
+    PrekeyBundle::build(&id(name), CONSTRUCTION_PQXDH, b"reusable material", 1_800_000_000, &[0u8; 32])
 }
 
 fn keys(n: usize) -> Vec<Vec<u8>> {
@@ -91,7 +91,7 @@ async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
     assert!(node.view.lock().unwrap().prekeys.bundle(&carol.me).is_some(), "carol's is held");
 }
 
-// owed: SUB-02 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: SUB-02
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     let node = node_with("bob", |_, _| {});
@@ -109,9 +109,9 @@ async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     // a fetch by a different client returns what carol published, byte for
     // byte, and one of the keys it deposited
     let alice = attach_light("alice", &node).await;
-    let req = PrekeyRequest::One { subject: carol.me, one_time: true, nonce: [1; 16] }.encode();
+    let req = PrekeyRequest::One { subject: carol.me, one_time: true, nonce: [1; 16], device: Some([0u8; 32]) }.encode();
     let reply = PrekeyReply::decode(&alice.session.request(REQUEST_PREKEY, &req).await.expect("answered")).unwrap();
-    assert_eq!(reply.bundle.as_deref(), Some(bundle("carol").as_slice()));
+    assert_eq!(reply.bundles.first().map(|b| b.as_slice()), Some(bundle("carol").as_slice()));
     let served = reply.one_time.expect("a one-time key");
     assert!(keys(3).contains(&served), "served {served:?}, deposited {:?}", keys(3));
     assert_eq!(node.view.lock().unwrap().prekeys.pool_size(&carol.me), 2, "one spent, two left");
@@ -146,7 +146,7 @@ async fn a_relay_submission_is_answered_on_taking_and_collected_later() {
     let carol = attach_light("carol", &node).await;
     // w1 has never connected: the answer cannot be about delivery
     let n = [7u8; 16];
-    let body = RelaySubmission { recipient: kh("w1"), ciphertext: b"sealed".to_vec(), nonce: n }.encode();
+    let body = RelaySubmission { recipient: kh("w1"), ciphertext: b"sealed".to_vec(), nonce: n, device: [0; 32] }.encode();
     assert_eq!(code(&carol, REQUEST_RELAY, n, body).await, Some(SUBMISSION_ACCEPTED));
     assert_eq!(node.node.queued(&kh("w1")), 1, "taken, and waiting");
     // w1 attaches and collects it, with carol named in front, unchanged
@@ -163,13 +163,13 @@ async fn a_relay_for_a_keyhash_the_node_holds_no_record_of_is_refused() {
     let node = node_with("bob", |c, _| c.serves = Arc::new(|k| *k != kh("w2")));
     let carol = attach_light("carol", &node).await;
     let unknown = [1u8; 16];
-    let body = RelaySubmission { recipient: kh("w2"), ciphertext: b"sealed".to_vec(), nonce: unknown }.encode();
+    let body = RelaySubmission { recipient: kh("w2"), ciphertext: b"sealed".to_vec(), nonce: unknown, device: [0; 32] }.encode();
     assert_eq!(code(&carol, REQUEST_RELAY, unknown, body).await, Some(SUBMISSION_REFUSED));
     assert_eq!(node.node.queued(&kh("w2")), 0, "nothing queued for a stranger");
     // w1 is served and merely absent: a different answer, and the message
     // waits (design §14.1.2)
     let offline = [2u8; 16];
-    let body = RelaySubmission { recipient: kh("w1"), ciphertext: b"sealed".to_vec(), nonce: offline }.encode();
+    let body = RelaySubmission { recipient: kh("w1"), ciphertext: b"sealed".to_vec(), nonce: offline, device: [0; 32] }.encode();
     assert_eq!(code(&carol, REQUEST_RELAY, offline, body).await, Some(SUBMISSION_ACCEPTED));
     assert_eq!(node.node.queued(&kh("w1")), 1);
 }
@@ -220,7 +220,7 @@ async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
     let sent: Vec<(u64, [u8; 16], Vec<u8>)> = vec![
         (REQUEST_PREKEY_PUBLICATION, [1; 16], PrekeyPublication { bundle: bundle("carol"), nonce: [1; 16] }.encode()),
         (REQUEST_ONE_TIME_DEPOSIT, [2; 16], OneTimeDeposit { keys: keys(9), nonce: [2; 16] }.encode()),
-        (REQUEST_RELAY, [3; 16], RelaySubmission { recipient: kh("w2"), ciphertext: b"x".to_vec(), nonce: [3; 16] }.encode()),
+        (REQUEST_RELAY, [3; 16], RelaySubmission { recipient: kh("w2"), ciphertext: b"x".to_vec(), nonce: [3; 16], device: [0; 32] }.encode()),
         (REQUEST_WAKE, [4; 16], WakeRegistration::of([4; 16], Some(WakeEndpoint { url: "https://push.example/x".into(), key: vec![1; 32], lapses_at: None })).encode()),
     ];
     let mut codes = Vec::new();
