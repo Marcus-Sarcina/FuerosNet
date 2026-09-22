@@ -196,7 +196,7 @@ fn long_chain(n: usize) -> World {
     w
 }
 
-// acceptance: ARC-08
+// owed: ARC-08 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn serving_paginates_head_first_and_continues_from_the_oldest() {
     let w = long_chain(11);
@@ -238,7 +238,7 @@ fn serving_paginates_head_first_and_continues_from_the_oldest() {
     assert_eq!(wk.txids(), all);
 }
 
-// acceptance: ARC-09
+// owed: ARC-09 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn a_batch_that_does_not_chain_fails_at_the_first_mismatch() {
     let w = long_chain(6);
@@ -299,7 +299,7 @@ fn a_short_reply_is_not_a_short_archive() {
     }
 }
 
-// acceptance: ARC-11
+// owed: ARC-11 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn a_restore_without_a_head_is_internally_verified_not_complete() {
     let w = long_chain(7);

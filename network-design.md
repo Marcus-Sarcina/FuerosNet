@@ -5185,7 +5185,9 @@ infrastructure, which §12.6.3 declines for both cost and privacy reasons.
 have — relaying payload *is* what a TURN server does. What changes is that the
 relay becomes the **fallback**: ICE checks candidate pairs in priority order,
 preferring a direct path where one works and using the serving node where none
-does.
+does. That order is RFC 8445's and this profile defers to it [author,
+2026-09-22]: an implementation checks pairs as the RFC schedules them rather
+than dialling every candidate at once and keeping the first to complete.
 
 **Feature capabilities are separate from the handshake and deliberately
 non-fatal** (`wire-format.md` §8.1): parameters set limits rather than gating a
@@ -5433,8 +5435,10 @@ hygiene; against every party above the hypervisor — the operator, a thief, a
 later compromise of the node; it is the real bound C5 relies on, and both
 statements are true at once.
 
-**Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time.**
-Anything richer is C5's ingredient list.
+**Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival
+time.** Anything richer is C5's ingredient list. The queue is per device
+[author, 2026-09-22]: a session is with a device (§14.2.4), a ciphertext is
+readable by one, and the submission names it (`wire-format.md` §7.10).
 
 **Operator logging is a commitment, not a rule.** §1.1 returns *no enforcement
 available*, so a MUST would be a wish. §15's process-and-discard extends to queue
@@ -5622,6 +5626,13 @@ would drain every pool continuously — and, worse, **make exhaustion the normal
 state.** Exhaustion is currently a usable signal that someone is draining a pool
 deliberately; under blanket prefetch of one-time keys an attacker would be
 indistinguishable from ordinary traffic.
+
+**A session is opened with a device, and an identity with several devices has a
+bundle per device** [author, 2026-09-22]. The ratchet advances on the device
+that receives, so material shared between two devices would part them at the
+first message; each device holds its own, signed by the identity on the ceremony
+device (§23.3), and an initiator opens one session against each device's bundle
+and sends to each.
 
 So: **reusable material prefetched for the whole org; a one-time key requested only
 when actually opening a session.** The cost is that a session opened from prefetched
@@ -6752,7 +6763,8 @@ several at once, not one per acquisition.
   with it can go on being *the node*: serving that subtree, seeing what a serving
   node sees — until the credential lapses or its operator supersedes it (§12.6.5).
   It cannot sign as that operator, and it cannot reach a session it was never on the
-  path for.
+  path for. It can issue what the node issues under the credential, acknowledgements
+  and attestations (`wire-format.md` §8.2), each dying with its window.
 
   **And impersonation is a different class of operation from collection**, so
   the position is not that this adversary is stopped; it is that **what the
@@ -6807,7 +6819,8 @@ several at once, not one per acquisition.
   timestamp at the first table-holding hop; this one is not. **Bounded on three
   sides**: the injector must sit at or below one of the detector's direct
   subordinates, the edge severed is the one that handed the memo over, and the
-  disavowal is reason code 5 with re-adoption available. **Accepted rather than
+  removal (`wire-format.md` §10.2.4) is no disavowal and leaves re-adoption
+  available. **Accepted rather than
   closed**: a freshness nonce would put a second clock on an unsigned object, and the
   three bounds hold without one.
 
@@ -6863,19 +6876,23 @@ several at once, not one per acquisition.
   price of the selected-set machinery deliberately retired on 2026-09-01;
   declined.
 - **A stolen infra operator's device is stolen infrastructure authority**
-  [author, 2026-09-03]. §23.3 makes the instance and the phone one seed, and
-  §18.1 read that in the instance direction; this is the other: the phone
-  satisfies every unattended signing context the instance does —
-  countersignatures, `SubtreeAck`, currency issuance, disavowal, peering,
-  topology origination — with no compromise of the host at all. The answer is
+  [author, 2026-09-03]. §23.3 made the instance and the phone one seed when this
+  was written, and §18.1 read that in the instance direction; since the instance
+  holds a delegated credential instead (§23.3), this is the phone direction
+  alone: the phone holds the key behind every context that advances an archive —
+  countersignatures, disavowal, peering, topology origination — with no
+  compromise of the host at all. The answer is
   the same rotation, via the patron-countersigned reissue the thief cannot
   make, and the asymmetry inside the window is worth stating: thief-issued
   currency dies with the staple lifetime (§12.6.5, hours), while a thief-signed
   disavowal is durable evidence (§6.2.2). Dividing the key's roles would divide
   the two thefts; both sit on the one key the ceremony device holds (§23.3,
-  Appendix B.1), which makes them one, and this entry prices that. §23.3 does
-  divide one role off — an instance authenticates its transport under a delegated
-  key rather than this one, and that is not a division these two thefts feel.
+  Appendix B.1), which makes them one, and this entry prices that. §23.3 divides
+  two roles off: an instance authenticates its transport and signs the
+  acknowledgements and attestations it emits unattended under a delegated key
+  (`wire-format.md` §8.2), so a stolen instance satisfies those two contexts for
+  the credential's window and no durable one, which is §18.1's residual and not
+  this entry's.
 - **A stolen device becomes a biometric collector when a counterparty next meets
   someone.** Its sealed captures of past counterparties stay ciphertext, and §7.5.2's
   seed release is per query and direct to each selected verifier; there is no standing
@@ -7982,7 +7999,9 @@ on, running different software in a different network role. **It does not hold
 their seed.** An instance mostly runs on infrastructure its operator does not
 physically control, so it carries a credential its operator's client delegates to
 it for a window, and the key that signs as them stays on the device that performs
-ceremonies. **So this section is not an edge case for people who
+ceremonies. What the instance emits unattended, a subtree acknowledgement and a
+currency attestation, it signs under that credential (`wire-format.md` §8.2); what
+advances an archive it never signs [author, 2026-09-21]. **So this section is not an edge case for people who
 own two phones**: it is the ordinary condition of everyone in §3.3's tier. *(Three prevention shapes — a single
 primary device, a head-check before signing, published per-device key bindings —
 are superseded; Appendix B.1.)*
@@ -8013,8 +8032,19 @@ captures and caches go where the storage is**, §13.7.1's envelope being what ma
 anywhere safe to put them, and a personal computer is the obvious place: a phone
 is lost, broken and stolen, and neither the transaction record nor the captures
 should go with it. Such a device holds ciphertext under a passphrase rather than a
-seal under a platform's key storage — **a cold store rather than a live client**,
+seal under a platform's key storage — **a cold store for the archive and the
+captures rather than a live client for them**,
 which is why it needs no enclave to be safe (P33).
+
+**A delegated device is nevertheless a payload endpoint of its own**
+[author, 2026-09-22]. A desktop's anticipated use is duplex interaction with
+resources, and resource types used chiefly from a desktop are expected once the
+network serves as a team's intranet, so a device that could hold no session
+would forfeit the case it exists for. Each device therefore generates its own
+payload key material, the ceremony device signs the public halves as it signs
+the transport credential, and the device publishes them under its own
+delegation; an identity with several devices has a prekey bundle per device
+(§14.2.4), and a session is with a device, never with an identity.
 
 ### 23.4 Test vectors, and what a test suite would add
 

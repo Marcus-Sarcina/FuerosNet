@@ -1,5 +1,7 @@
 //! What a client tells the person, and when (`light-client-requirements.md`
-//! §1.1, §1.4, §1.5; design §7.4.1, §19.6).  The form of a notice is not
+//! §1.1, §1.4, §1.5; design §7.4.1, §19.6).  A witness and a verifier are
+//! told nothing: neither role is a person acting, and design §19.6 owes
+//! them no warning.  The form of a notice is not
 //! specified; what is specified is that it is raised, and at which moment,
 //! so the client raises each through one hook a test can watch.
 
@@ -31,12 +33,12 @@ pub enum Notice {
     PayloadUnattributable { from: Keyhash },
 }
 
-/// The capacity a party is told in.
+/// The capacity a party is told in.  Only a participant is told (design
+/// §19.6): the variant set is the obligation's, and a witness or verifier
+/// role would be a notice the design withdrew.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Participant,
-    Witness,
-    Verifier,
 }
 
 /// Where notices go.  A running client shows them to its operator; a

@@ -1311,6 +1311,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rhtn-conformance-review"
+version = "0.0.0"
+dependencies = [
+ "rhtn-adaptors",
+ "rhtn-archive",
+ "rhtn-cli",
+ "rhtn-client",
+ "rhtn-codec",
+ "rhtn-crypto",
+ "rhtn-daemon",
+ "rhtn-ffi",
+ "rhtn-node",
+ "rhtn-policy",
+ "rhtn-transport",
+ "tokio",
+]
+
+[[package]]
 name = "rhtn-crypto"
 version = "0.1.0"
 dependencies = [

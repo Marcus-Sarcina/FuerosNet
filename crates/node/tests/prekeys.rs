@@ -78,7 +78,7 @@ fn a_one_time_key_is_served_once_and_never_again() {
     assert!(d.one_time.is_none() && d.bundle.is_some(), "none remain: reusable material alone");
 }
 
-// acceptance: PAY-04
+// owed: PAY-04 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn reusable_material_is_served_freely_and_consumes_nothing() {
     let mut svc = stocked("alice", 3);

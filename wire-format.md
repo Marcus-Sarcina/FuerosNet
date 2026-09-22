@@ -717,7 +717,8 @@ separate question answered by §7.7's resolution and the receiver's own view. An
 returning one boolean for both is answering a question nobody asked.
 
 **A back-pointer whose record is unavailable is not a failure.** Verifying a chain
-means each *presented* record's back-pointers match the record following it; an
+means each *presented* record is named by the requested frontier or by another
+presented record's back-pointers (§7.9); an
 unfetchable predecessor means the chain is **incomplete**, which is a fact for the
 caller to weigh, not a malformed transaction (design §10).
 
@@ -1285,7 +1286,7 @@ about the node:
 | 2 | Pruned for space — inadequate room at the node's current position |
 | 3 | Merge trim, the node held membership in both of two merging subnets and must keep one |
 | 4 | Incompatible subnet membership, the node belongs to a subnet the patron deems incompatible |
-| 5 | Cycle repair — the patron relation formed a cycle and this edge was cut to break it (§10.2) |
+| 5 | Withdrawn [author, 2026-09-21]: cycle repair is a removal without a transaction (§10.2.4), not a disavowal. The number is not reused |
 | 6–30 | Unassigned |
 | 31 | Other, without prejudice |
 
@@ -2518,11 +2519,24 @@ CurrencyAttestation = {
   7: COSE_Sign1        ; BY THE ISSUER over canonical CBOR of fields 1-6;
                        ; external_aad = "rhtn/1:currency". Classical only: an
                        ; attestation's relevance expires with it (~10 h), well
-                       ; inside design §5.1's post-quantum horizon.
+                       ; inside design §5.1's post-quantum horizon. The key is
+                       ; the issuer's node's delegated key (§8.2): issuance is
+                       ; unattended and the instance holds no seed (design §23.3)
+                       ; [author, 2026-09-21]
+  8: ? Delegation      ; the issuer's delegation naming the key field 7 was
+                       ;   made under (§8.2). PRESENT iff field 7 is under a
+                       ;   delegated key, which is every instance's case; ABSENT
+                       ;   where the issuer signed under its own identity.
+                       ;   Outside the signature. The staple carries it because
+                       ;   its relying party sits beyond the issuer's horizon by
+                       ;   construction (design §12.6.5) and holds no flooded
+                       ;   delegation for it (§10.1) [author, 2026-09-21]
 }
 ```
 
-Signed by the issuer.
+Signed by the issuer. A verifier checks field 7 against the key field 8 names,
+and field 8 against the issuer's own key material; an attestation whose field 8
+names a key other than the one that signed field 7 is malformed.
 
 **Field 2 is what the issuer vouches is live, not an authority to select a key**
 [author, 2026-09-18]. The attestation confirms currency; it is not the
@@ -2758,9 +2772,19 @@ SubtreeAck = {
   5: COSE_Sign1        ; BY THE GRANDPATRON over fields 1-4;
                        ; external_aad = "rhtn/1:subtree-ack".
                        ; Classical only: it lapses with the relationship it
-                       ; describes, well inside design §5.1's horizon
+                       ; describes, well inside design §5.1's horizon. The key
+                       ; is the grandpatron's node's delegated key (§8.2), the
+                       ; instance holding no seed (design §23.3)
+                       ; [author, 2026-09-21]
 }
 ```
+
+**Signed under the node's delegated key** [author, 2026-09-21]. The
+acknowledgement is topology state and not a person's act, so the key that
+authenticates the node signs it. A receiver checks field 5 against the key the
+grandpatron's current delegation names, which it holds from the topology class
+(§10.1); one holding no delegation for that keyhash defers, as §10.1.1 has it
+defer for any signer whose key it lacks.
 
 **It attests membership of a subtree, not identity.** The adoption's own signatures
 carry identity. A verifier that treats a `SubtreeAck` as evidence about who someone
@@ -3037,22 +3061,37 @@ means a PQXDH revision does not force a wire change here.
 **The bundle is split, because its two halves have opposite properties.**
 
 ```
+device = bstr .size 32 ; the raw public key a device presents in a handshake
+                       ;   (§9.1): its delegated transport key (§8.2), or the
+                       ;   identity's classical component for the device that
+                       ;   holds the seed. A device is named by nothing else
+                       ;   [author, 2026-09-22]
+
 PrekeyBundle = {
   1: keyhash,          ; subject
   2: uint,             ; construction identifier — 1 = PQXDH
   3: bstr,             ; opaque REUSABLE material: signed prekey and PQ signed
                        ; prekey, per the named construction. Reusable by design
   4: timestamp,        ; published_at
-  5: COSE_Sign1        ; BY THE SUBJECT over fields 1-4;
+  5: device,           ; the device whose material this is. Under the
+                       ;   signature, so a bundle cannot be re-attributed to
+                       ;   another device of the same subject
+  6: COSE_Sign1        ; BY THE SUBJECT over fields 1-5;
                        ; external_aad = "rhtn/1:prekey".
                        ; Classical only — relevance expires on replacement, so
-                       ; §7.1's horizon does not apply
+                       ; §7.1's horizon does not apply. The subject's identity
+                       ; key signs, on the ceremony device, over material the
+                       ; device generated (design §23.3)
 }
 
 PrekeyRequest = {
   1: keyhash,          ; subject whose material is wanted
   2: uint,             ; 0 = reusable only | 1 = reusable plus a one-time key
-  3: bstr .size 16     ; nonce
+  3: bstr .size 16,    ; nonce
+  4: ? device          ; the device wanted. ABSENT with field 2 = 0 means every
+                       ;   device's reusable material; REQUIRED with field 2 =
+                       ;   1, a one-time key being consumed from one device's
+                       ;   pool
 }
 
 PrekeyBatchRequest = {
@@ -3062,12 +3101,31 @@ PrekeyBatchRequest = {
 
 PrekeyReply = {
   1: bstr .size 16,    ; echoes the request nonce
-  2: ? PrekeyBundle,
-  3: ? bstr,           ; a one-time prekey, iff requested and available
+  2: ? [ 1*8 PrekeyBundle ],
+                       ; one per device the node holds for the subject, or the
+                       ;   one device the request named. Eight is a chosen
+                       ;   ceiling (§1.3): design §23.3 holds the count near
+                       ;   three by construction
+  3: ? bstr,           ; a one-time prekey of the device named, iff requested
+                       ;   and available
   4: ? uint            ; failure code when field 2 absent:
                        ;   0 unknown subject | 1 refused
 }
 ```
+
+**A subject with several devices has a bundle per device, and a session is with
+a device** [author, 2026-09-22]. Each device generates its own material and the
+identity signs it on the ceremony device (design §23.3 and design §14.2.4); the ratchet
+advances on the device that receives, so material shared between devices would
+part them at the first message. A reply therefore carries every device's bundle,
+an initiator opens one session against each and sends to each, and a one-time
+pool is a device's. **A device is named by the key it presents** — the delegated
+transport key, or the seed-holding device's classical component — because that key
+is what a delegation already binds and what a serving node already keys a session
+by, and because a root's several devices have nothing else to be named by
+[author, 2026-09-22]. A consequence stated rather than hidden: **a prekey fetch
+reveals how many devices a subject has**, which a reply carrying one bundle did
+not.
 
 **Only the one-time key is consumed on serving.** The reusable material may be
 returned any number of times to anyone. A one-time key is returned once and
@@ -3188,12 +3246,14 @@ something, so none may be processed in early data.
 
 ```
 PrekeyPublication = {          ; type 9
-  1: PrekeyBundle,             ; §7.8's bundle, signed by its subject
+  1: PrekeyBundle,             ; §7.8's bundle, signed by its subject, naming
+                               ;   the device publishing it
   2: bstr .size 16,            ; nonce, echoed in the reply
 }
 
 OneTimeDeposit = {             ; type 10
-  1: [ 1*256 bstr ],           ; one-time keys, opaque (§7.8)
+  1: [ 1*256 bstr ],           ; one-time keys, opaque (§7.8), into the pool of
+                               ;   the device on this session
   2: bstr .size 16,            ; nonce
 }
 
@@ -3201,6 +3261,10 @@ RelaySubmission = {            ; type 11
   1: keyhash,                  ; the recipient
   2: bstr,                     ; the ciphertext, which this node cannot read
   3: bstr .size 16,            ; nonce
+  4: device                    ; the recipient's device this ciphertext is for
+                               ;   (§7.8): a session is with a device, and the
+                               ;   node cannot tell from the ciphertext
+                               ;   [author, 2026-09-22]
 }
 
 WakeRegistration = {           ; type 12
@@ -3229,7 +3293,11 @@ endpoint nothing can be sent to.
 bundle names its subject and is signed by it (§7.8); a client publishing
 another party's bundle would be choosing the material its peers open sessions
 against. The node refuses a publication whose subject is not the authenticated
-requester.
+requester, **and one whose device is not the key this session presented**
+[author, 2026-09-22]: a device publishes its own bundle, stocks its own pool and
+registers its own wake endpoint, each on the session it holds, so none of the
+three carries a device field and the node attributes each to the device on the
+session.
 
 **A deposit is bounded by the array limits like everything else** (§1.3), and a
 node applies its own storage bound on top: the pool is space it lends.
@@ -3300,6 +3368,7 @@ through the very ceiling that exists to bound the receiver's buffer.
 | 4 | `SiblingUpdate` |
 | 5 | `TopologyPush` (§10.1) |
 | 6 | `TopologyMemo` (§10.2) |
+| 7 | `Delegation` (§8.2): a delegated peer's first frame on a connection that opens no session [author, 2026-09-21] |
 
 **Topology framing belongs on stream 0 and not on a bidirectional stream.** Both are unsolicited pushes with no reply, so neither is a request; and
 the extension posture decides it. An unknown control frame is **skipped** and the
@@ -3496,16 +3565,24 @@ AttachAck = {
 Delegation = {
   1: bstr,             ; the transport key this delegation names: the 32-byte
                        ;   raw public key the handshake presented (§9.1). Not an
-                       ;   identity — it has no keyhash and signs nothing beyond
-                       ;   the handshake it appears in
+                       ;   identity: it has no keyhash, and what it signs is the
+                       ;   handshake and the topology state a node emits
+                       ;   unattended, a subtree acknowledgement (§7.5) and a
+                       ;   currency attestation (§7.1), never a transaction that
+                       ;   advances an archive, which is a person's act under the
+                       ;   identity key (design §23.3) [author, 2026-09-21]
   2: keyhash,          ; the delegating identity. Who the holder speaks as on
                        ;   this connection, and the keyhash the receiver already
                        ;   holds a pin for
-  3: timestamp,        ; not_before
-  4: timestamp,        ; not_after. 48 HOURS after field 3 [author, 2026-09-16].
-                       ;   The window is the whole of this credential's
-                       ;   revocation story — no list to consult, no responder to
-                       ;   ask, which is deliberate (design §12.6.5)
+  3: timestamp,        ; not_before, seconds since the Unix epoch (§1)
+  4: timestamp,        ; not_after. EXACTLY 48 HOURS after field 3: 172,800
+                       ;   seconds, and a decoder refuses any other difference
+                       ;   as malformed [author, 2026-09-16, 2026-09-21]. The
+                       ;   window is the whole of this credential's revocation
+                       ;   story — no list to consult, no responder to ask,
+                       ;   which is deliberate (design §12.6.5) — and a window
+                       ;   an issuer could lengthen would put the seed back on
+                       ;   the box under another name
   5: COSE_Sign        ; HYBRID, over fields 1 to 4, external_aad
                        ;   `rhtn/1:delegation`. Hybrid because the delegating
                        ;   identity is (§1.3), and a classical-only delegation
@@ -3514,6 +3591,13 @@ Delegation = {
 }
 ```
 
+**An attach speaks for a device, and a subject's several devices attach as
+several sessions** [author, 2026-09-22]. The key the handshake presented names
+the device (§7.8's `device`), whether the delegated key or the seed-holding
+device's own; a node serving a subject holds one session, one queue, one pool and
+one bundle per device, and its mailbox delivers to the device a ciphertext names
+(§7.10, design §14.1.6).
+
 **A receiver checks field 1 against the key the handshake actually presented and
 refuses the session if they differ.** That check is the whole of what makes a
 delegation non-transferable: it is public, it travels on every handshake, and an
@@ -3521,10 +3605,54 @@ actor replaying a captured one cannot complete a handshake under the key it
 names. A receiver also checks the window against its own clock and checks that
 field 2 is the keyhash it meant to reach.
 
+**The clock check carries a leeway, and the leeway is the receiver's**
+[author, 2026-09-21]. A receiver accepts a delegation whose window contains its
+own clock within a leeway either side, `not_before - leeway <= now <=
+not_after + leeway`, to absorb latency and the difference between two clocks;
+the leeway is configurable on the receiving side with a default of 10 seconds,
+and a receiver expecting high-latency links, HF radio being the example, relaxes
+it. A connection refused on the window is retried by the dialler, since the
+peer may have rolled over to its next credential between the two checks.
+Credentials in a run are contiguous, each `not_before` equal to the previous
+`not_after`, so at a boundary the leeway is what lets either be presented.
+
+**One transport key serves a whole run.** The instance mints its own keypair and
+sends the public half to its operator's client, which signs every credential of
+the run over it; the private half never leaves the instance, which is the
+OpenSSH shape and the reason only a public key crosses the provisioning
+channel [author, 2026-09-21]. The credentials rotate; the key does not until the
+instance is re-provisioned, and the instance is trusted with it for the run,
+which is what makes a receiver's cache against the transport key good for the
+run's length.
+
 **A verified delegation is cached against its transport key.** It is hybrid and
 so costs 3,373 bytes (§1.3), and it arrives on every handshake of a window that
 is measured in months, so a receiver that re-verifies per connection pays that
 repeatedly for an answer that cannot have changed.
+
+**The delegation is also a topology-class object** [author, 2026-09-21]. An
+instance pushes each credential as it comes into force, under §10.1's
+forwarding rule, so every node in its horizon holds the key its
+acknowledgements are signed under without having handshaken with it. A holder
+keeps one delegation per delegating keyhash, the newest by field 3, and drops
+the rest: it is current state, never a history of which keys a node has used.
+Where the verifier sits outside the horizon, the object carries the delegation
+itself (§7.1 field 8).
+
+**A delegated peer presents its delegation before anything else on every
+connection** [author, 2026-09-21], so that §9.1's bind does not depend on a
+session being opened. A dialler outside the instance's horizon holds its
+`KeyMaterial` from a referral and no delegation, and a request-only connection
+carries no attach; the delegation therefore comes first, from the peer itself.
+Present encoding: on a session, `Attach` field 4 and `AttachAck` field 6; on a
+connection that opens no session, control frame type 7 (§8.0) as the first frame
+on stream 0, sent by a delegated server before it answers any request stream and
+by a delegated client before it opens one. A dialler whose pinned check fails and
+who holds no delegation for the keyhash reads that frame before sending anything,
+and refuses the connection if the first frame is anything else; a server binds a
+delegated client's requests to the keyhash it claims only after the frame. A peer
+whose presented key is the pinned classical member owes no frame, and one it
+sends is skipped like any control frame.
 
 ```
 SiblingRef = {
@@ -3736,9 +3864,12 @@ issue or validate chains.
 and an identity here is a *pair* (§2.2): the classical component of its own
 identity, or a delegated transport key that identity signed for a window (§8.2).
 The dialling party checks that key against the keyhash it intended to reach, and
-either check binds it: the key is the classical member of the `KeyMaterial`
-pinned for that keyhash, or the attach that follows carries that keyhash's
-delegation naming it. A session on which neither holds is refused. **The
+any of three binds it: the key is the classical member of the `KeyMaterial`
+pinned for that keyhash; a delegation from that keyhash naming it is already held
+from the topology class (§10.1); or the peer presents that delegation first on
+the connection (§8.2), in the attach where there is one and as a control frame
+where there is not [author, 2026-09-21]. A connection on which none holds is
+refused, whether or not it would have opened a session. **The
 post-quantum component authenticates nothing at the transport layer, and does
 not need to.** design §5.1's rule is that an object may use the classical
 component alone where its relevance expires before the post-quantum horizon, and
@@ -3750,7 +3881,10 @@ same way, and **MUST bind the identity for which session state and queued data a
 requested to the identity the transport-authenticated key speaks as, rejecting
 any mismatch.** Present encoding: `Attach` field 1 names an identity whose
 classical member is the connection-authenticated key, or `Attach` field 4
-carries that identity's delegation naming it (§8.2). `Attach` is unsigned, so
+carries that identity's delegation naming it (§8.2); on a connection that opens
+no session, the client's delegation frame precedes its first request, and a
+request that attributes its sender by identity, a verifier query's field 2, is
+attributed only after it. `Attach` is unsigned, so
 without that check any party could claim any keyhash and receive another node's
 queued messages.
 
@@ -3870,14 +4004,14 @@ protocol.**
 **Frame:** `TopologyPush`, control frame type 5 on stream 0 (§8.0), carrying the
 object byte-for-byte with a **body-kind tag and nothing else.** The class is not
 uniform — most topology objects are signed transactions with an envelope, and an
-`EndpointRecord` (§7.6) is a standalone signed map with neither, so a receiver needs
-one discriminator to know which parser to use. **That is the only wrapper field
+`EndpointRecord` (§7.6) or a `Delegation` (§8.2) is a standalone signed map with
+neither, so a receiver needs one discriminator to know which parser to use. **That is the only wrapper field
 permitted.** Anything further would be sender-supplied state every receiver must
 trust, which §7.7.3 rejected for resolution and rejects here for the same reason.
 
 **Who may push.** A node pushes topology it is a party to: its own adoptions and
 departures, disavowals of its own subordinates, its own peerings, its own endpoint
-record. **Within the horizon this is a trusted push**, in the narrow sense that the
+record, its own delegation as each credential comes into force (§8.2). **Within the horizon this is a trusted push**, in the narrow sense that the
 pusher is the party whose position the object describes and the object is signed by
 that party. It is not an assertion about anyone else's topology.
 
@@ -3915,7 +4049,8 @@ gap rather than as an error.
 **The subject is the node whose position the transaction changes**: the adopted or
 departing node, the disavowed subordinate, the node whose series a reissue
 starts (§4.6, field 1 — the patron countersigns but it is the node's line that
-changes) [2026-09-02], and — for a peering, which has two —
+changes) [2026-09-02], the delegating keyhash of a `Delegation` (§8.2, field 2),
+and — for a peering, which has two —
 either endpoint, so the transaction is in range if either is. Reading the
 *issuer* as the subject would put a patron's adoption of a distant node in range of
 everyone near the patron, which is not whose neighbourhood changed.
@@ -3927,7 +4062,10 @@ neighbour cared to send. A transaction whose signer's key material the node lack
 storage and propagation when it verifies. **An `EndpointRecord` is the exception the
 design already states** — self-signed by a party the receiver may hold no key for,
 and accepted as gossip precisely so that reaching the address is what confirms it
-(§7.6).
+(§7.6). **A `Delegation` is stored when its hybrid signature verifies under the
+delegating keyhash's material and replaces any earlier one held for that keyhash**
+[author, 2026-09-21]: it is state, not a transaction, advances no archive, and a
+holder keeps the newest by `not_before` alone.
 
 **Reach is a consequence of storage policy, not a separate mechanism.** A hop
 counter would encode the *sender's* horizon and impose it on every receiver, and
@@ -4171,18 +4309,25 @@ the disavowal carries no prejudice.
 
 #### 10.2.4 What a detecting node does
 
-**It disavows the direct subordinate that forwarded the memo to it**, once the
-memo is confirmed against its own records (above). Any edge breaks a cycle, and that is the
-one the detector has authority over (design §6.2.2). It requires no agreement with
-the other party, no tie-break rule and no clock.
+**It removes the direct subordinate that forwarded the memo to it**
+[author, 2026-09-21], once the memo is confirmed against its own records (above):
+the slot is emptied in the detector's own table and the vacancy memo goes rootward
+(§10.2), which is all the tree ever sees of any topology change. Any edge breaks a
+cycle, and that is the one the detector has authority over (design §6.2.2). It
+requires no agreement with the other party, no tie-break rule and no clock.
 
-**Reason code 5, without prejudice** (§4.3). Nothing adverse is alleged: a cycle is
-a structural accident, and design §6.2.5 already calls the bootstrap case "a likely
-accident rather than an attack."
+**A removal is not a disavowal.** No transaction is signed and no reason code is
+carried: a cycle is a structural accident, and design §6.2.5 already calls the
+bootstrap case "a likely accident rather than an attack." The removal is topology
+state under the node's own authority, made by the instance without its operator
+(design §23.3), and the removed subordinate learns of it from the vacancy memo and
+its next resolution rather than from anything addressed to it. *Disavow* once
+served here as a synonym for this removal; the word names §4.3's transaction, and
+this section no longer uses it for anything else.
 
 **Where both parties are present, the prompt is better and comes first.** design
 §6.2.5's disambiguation (*one of you must be the patron*) resolves the bootstrap
-case socially. Automatic disavowal is the fallback for cycles formed at a distance,
+case socially. Automatic removal is the fallback for cycles formed at a distance,
 which is the case the memo exists for.
 
 **The downward memo.** A node whose table shows the same occupant already held in
@@ -4202,7 +4347,7 @@ path (§7.7.2), the same mechanism as resolution.
 still holds that subordinate, and design §1.1 is why nothing further is said. **A node
 registered at two positions is not known to harm the network**: addressing is by
 anchor and path, never by lookup against a higher tier's table, so a stale entry
-misroutes nobody. What the memo achieves even where a patron declines to disavow is
+misroutes nobody. What the memo achieves even where a patron declines to act is
 that **the rest of the subnet's view reflects the most recent adoption**, to the
 extent its members run compliant clients. That is a convergence property of compliant
 behaviour, not a rule anyone enforces.
@@ -4404,7 +4549,7 @@ classical column applies only to session-layer traffic.
 | Peering | — | **~8 KB** |
 | Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65. Includes ~112 B of disclosure salts, **0.3%** (§4.5.1) |
 | Presence record (maximum signers) | ~5 KB | **~65 KB** — 18 logical signers × (64 + 3,309), plus 32 verifier responses at 2 classical signatures each |
-| Currency attestation | ~150 B | ~2.6 KB |
+| Currency attestation | ~150 B, plus field 8's hybrid delegation at 3,373 B where carried (§7.1) | ~2.6 KB, plus the same |
 | Anchor entry | ~60 B | ~60 B (hashes only) |
 
 **Selective disclosure does not reduce a presentation.** A minimised record replaces
@@ -4424,8 +4569,9 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 2. **Canonical test vectors.** A draft set exists at `test-vectors/` —
    spec-derived and generated, with every computed value now reproduced by a
    second harness in a different language over independent cryptographic
-   implementations (`test-vectors/runner-rs`, RustCrypto ML-DSA against the
-   generator's dilithium-py) [2026-09-03]. That is cross-language and
+   implementations (`rhtn-crypto`'s corpus test, RustCrypto ML-DSA against the
+   generator's dilithium-py) [2026-09-03; the standalone Rust runner it
+   descends from was retired 2026-09-22]. That is cross-language and
    cross-crypto validation, not independence: both sides share an author, so
    an interpretation both encode would pass both. The draft's README states
    every interpretation taken so that each is a review target rather than a

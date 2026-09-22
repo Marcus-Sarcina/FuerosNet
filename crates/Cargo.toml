@@ -2,7 +2,7 @@
 resolver = "3"
 # `mobile/` holds the Kotlin and Swift shells, which build with Gradle and
 # Xcode and are not Cargo members.
-members = ["acceptance", "adaptors", "archive", "cli", "client", "codec", "crypto", "daemon", "ffi", "node", "participant", "policy", "resources", "sim", "transport"]
+members = ["acceptance", "adaptors", "archive", "cli", "client", "codec", "conformance", "crypto", "daemon", "ffi", "node", "participant", "policy", "resources", "sim", "transport"]
 
 # Apache-2.0 on every crate, inherited rather than repeated fifteen times,
 # so the grant has one place to be correct.  The full text and the copyright

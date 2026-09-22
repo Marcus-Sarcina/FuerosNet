@@ -272,7 +272,7 @@ fn a_slot_held_at_or_after_the_memos_timestamp_is_not_forwarded() {
     assert_eq!(s2.n.memo_table[&(kh("carol"), 5)].occupant, Some(kh("w5")), "the later row stands");
 }
 
-// acceptance: PRP-12
+// owed: PRP-12 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn a_memo_naming_this_node_and_matching_its_row_is_a_confirmed_cycle() {
     let mut s = scene();

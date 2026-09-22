@@ -95,9 +95,10 @@ moving code between repositories.
 | `rhtn-ffi` | The one boundary the mobile shells bind to: the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross. No decision is taken at the boundary that is not taken below it | `light-client-requirements.md` §1.3 | The facade compiles against both shells' generated bindings |
 | `mobile/android`, `mobile/ios` | The light client application: the ceremony's channels and capture, the privacy choices, the warnings before anything irreversible, and encrypted backup. Kotlin and Swift, not Cargo members, not built by the gate | `light-client-requirements.md` §1.3, §5, §6; design §13.7.1 | PRD-01 to PRD-05 and PRD-07 to PRD-09 |
 
-**The runner is absorbed, then retired.** `rhtn-codec` grows from the runner's
-parser and takes `corpus.json` as its test suite. The runner stays until the crate
-passes every entry, then goes, so there is one strict decoder in the tree. The
+**The runner is absorbed, then retired** — retired 2026-09-22 [author], the
+files purged so that any dependency on them surfaces. `rhtn-codec` grew from the runner's
+parser and takes `corpus.json` as its test suite; the runner stayed until the crate
+passed every entry, then went, so there is one strict decoder in the tree. The
 Python generator and harness stay as the other side of the differential pair.
 
 ### 2.2 Citation discipline in code
@@ -503,7 +504,16 @@ binding for one platform and compile the facade against it.
 
 **Milestone 14, the shells** (`mobile/android`, `mobile/ios`). Exit: PRD-01
 to PRD-05 and PRD-07 to PRD-09 are marked, which first needs
-`acceptance/tools/catalogue.py`'s walk extended to `.kt` and `.swift`. That
+`acceptance/tools/catalogue.py`'s walk extended to `.kt` and `.swift`.
+
+**The first shell's order** [author, 2026-09-22]: payload first, because
+everything else requires it; then the ceremony, because there is no resource
+provision without adoption and no adoption without a ceremony; then infra
+provisioning, because there is no resource without infra; then the resource
+round trip. Any part may be taken up as it comes up during implementation:
+the four share functional primitives, and those are to be written aware of
+the whole system rather than revised several times and left to break their
+callers, to the extent that is possible. That
 extension is the milestone's first commit, not an afterthought: until it is
 made the catalogue cannot see the tier that closes its last entries.
 
@@ -585,7 +595,9 @@ self-anchors by definition, `Locator::root` is a constructor in
 
 **Order.** Milestones 11 and 12 are independent of each other and of 13; 13
 gates 14, and 13 and 15 finish together. None of them gates what the library still owes, and what it owed
-is now one item: PAY-13, which waits on the licence decision (section 7).
+was then one item, PAY-13, which waits on the licence decision (section 7);
+`Robot/outstanding-work-2026-09-21.md` section 6 lists what the survey of
+2026-09-21 found owed beyond it.
 
 **`rhtn-resources`, built (2026-09-13).** The sandbox and the daemon's
 hosting, in one commit each. `Sandbox::admit` compiles a component and
@@ -656,16 +668,15 @@ for.
   document.
 - ~~Whether the operator's view (PRD-06) is a terminal on the host or a page
   served to the operator alone~~ — **a terminal, and a page in the light
-  client** [author, 2026-09-16]. A terminal on the host is expected, but
-  most administration is a page in the light client, and the operator is a
-  premium tab rather than a second system to log into. Everyday
-  administration rides the authenticated session the operator's own key
-  already gives them, since their instance is one of their devices (design
-  §23.3); SSH and the provider's control-plane credential are for what that
-  session cannot reach — root on the host and actions on the hypervisor —
-  and are to be avoided where they can be. The frontend is the client's
-  rather than the daemon's, so `rhtn-daemon` grows no frontend dependencies
-  at all.
+  client** [author, 2026-09-16], as first ruled; the same day's later ruling
+  landed at `infra-client-requirements.md` §8.2 and §8.3 and governs: the
+  node develops and serves its own administration pages, the client ships
+  the provisioning pages and the frame they appear in, and administration is
+  out of band rather than a request type or the session, the channel being
+  unspecified by the document set. SSH and the provider's control-plane
+  credential remain for what only they reach. `rhtn-daemon` gains a page
+  server and no frontend dependency beyond it; the client's frame is a
+  sandbox isolated from its keys, archive and captures.
 - The payload library and its licence (section 3).
 - The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
   trait.

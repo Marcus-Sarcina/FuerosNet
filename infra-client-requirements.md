@@ -160,7 +160,11 @@ guarantee, which is a floor rather than a ceiling.
   `wire-format.md` §2.3 orders every series).
 - **Keep the topology store across a restart; it is your seen-set.** Forwarding is
   *forward if and only if you stored it* (`wire-format.md` §10.1), so duplicate
-  suppression is a property of the store rather than of a separate cache. A node
+  suppression is a property of the store rather than of a separate cache. What
+  it holds of another party's transaction is that you stored it and the table
+  it produced, not the transaction as a history: topology persists as the
+  updated topology, and only a signer's own archive keeps the act
+  [author, 2026-09-21]. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
 - **Keep the derived view too, and keep it beside the store** (design §15.1.1).
@@ -249,6 +253,13 @@ holding a subject's prekeys while that subject is offline. That someone is the
 serving node.
 
 - **Hold and serve prekey bundles for attached clients** (`wire-format.md` §7.8).
+- **A bundle, a pool and a queue per device, and a reply carrying every device's
+  bundle** [author, 2026-09-22]. A subject's devices attach as separate
+  sessions, each named by the key it presented (`wire-format.md` §8.2); a
+  publication, a deposit and a wake registration belong to the device on the
+  session they arrive on, and a publication naming another device is refused
+  (`wire-format.md` §7.10); a relay submission names the device its ciphertext
+  is for and is queued for that device (design §14.1.6).
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
   carries no intent signal (design §14.2.4).
@@ -309,13 +320,33 @@ serving node.
   (`wire-format.md` §8.2) and what you present in a handshake is the key that
   credential names. The key that signs as your operator stays on the device that
   performs ceremonies.
-- **Send the delegation with every attach you acknowledge, and refuse a session
-  whose delegation does not name the key the handshake presented.** A delegation
-  is public and travels on every handshake; that one check is the whole of what
-  stops a captured one being replayed onto another connection. Present encoding:
-  `AttachAck` field 6 (`wire-format.md` §8.2).
+- **Sign what you emit unattended under that same key, and push the credential
+  so your horizon can check it** [author, 2026-09-21]. A subtree acknowledgement
+  (`wire-format.md` §7.5) and a currency attestation (`wire-format.md` §7.1)
+  are topology state and yours to issue while your operator sleeps, so the
+  delegated key signs them; push each credential as it comes into force
+  (`wire-format.md` §10.1), and staple the current one to every attestation
+  (`wire-format.md` §7.1 field 8), whose relying party sits outside your
+  horizon. What advances an archive, a disavowal or a countersignature, is
+  your operator's act and never yours.
+- **Present your delegation before anything else on every connection you
+  accept, and refuse a session whose delegation does not name the key the
+  handshake presented.** A delegation is public and travels on every
+  connection; that one check is the whole of what stops a captured one being
+  replayed onto another. A party that reaches you by referral from outside
+  your horizon holds your key material and not your delegation, so the
+  delegation is the first thing it hears from you. Present encoding:
+  `AttachAck` field 6 on a session, control frame type 7 first on stream 0 on
+  a connection that opens none (`wire-format.md` §8.2) [author, 2026-09-21].
+- **Mint your own transport keypair, and send only its public half to be
+  signed** [author, 2026-09-21]. The private half never leaves you; your
+  operator's client signs every credential of the run over the one key, and
+  the key changes only when you are re-provisioned (`wire-format.md` §8.2).
 - **Hold the run you were given, and say so while it is still long.** A run is
-  **45 credentials of 48 hours each** [author, 2026-09-16], 90 days end to end.
+  **45 credentials of 48 hours each** [author, 2026-09-16], 90 days end to end,
+  contiguous: each credential's `not_before` is the previous one's `not_after`,
+  so there is no moment the run does not cover and no moment two credentials
+  are both current beyond a receiver's leeway.
   The party that signs your next credential is a device with a battery and an
   owner who sleeps, so an instance that waited for expiry to ask would go dark for reasons
   none of its subordinates can see. Holding forward-dated credentials is the

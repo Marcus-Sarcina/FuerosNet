@@ -280,9 +280,11 @@ job.
 - **Serve archive requests for your own archive** (`wire-format.md` §7.9). The
   subject holds their archive, so a patron evaluating you fetches from you — this
   is peer-to-peer payload, not something an infra node serves on your behalf.
-- **When fetching someone else's archive, verify the chain yourself.** Each
-  returned record's back-pointers must match the record following it, and the first
-  must match the head requested. **A holder cannot be trusted to have walked
+- **When fetching someone else's archive, verify the structure yourself.** Every
+  returned record must be named by the frontier you requested or by another
+  returned record's back-pointers, and every back-pointer naming nothing in the
+  batch must appear in the reply's frontier (`wire-format.md` §7.9); order is no
+  part of it. **A holder cannot be trusted to have walked
   correctly**, and the check is hash comparison over records already being parsed.
 - **Absence of data from a holder is never evidence about that data's existence.**
   A holder may refuse, rate-limit, or return less than asked for any reason; none
@@ -384,7 +386,14 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Publish your bundle and stock your pool as part of attaching**
   (`wire-format.md` §7.10 and `wire-format.md` §7.8). A node that holds neither cannot answer for
   you, and a peer that cannot fetch your material cannot open a session with
-  you at all.
+  you at all. Each of your devices does this for itself, on its own session:
+  the bundle it publishes carries material it generated and a signature your
+  ceremony device made over it, and the pool it stocks is its own
+  (design §23.3) [author, 2026-09-22].
+- **Open a session with each of a recipient's devices, and send to each.** A
+  fetch returns a bundle per device (`wire-format.md` §7.8), a session is with
+  a device, and a message sent to one of them reaches one of them; the
+  submission names the device (`wire-format.md` §7.10).
 - **Hand payload to your node rather than waiting for the recipient.** The
   answer says your node took it, not that it arrived; a recipient may be away
   for days, and that is what the mailbox is for (design §14.1.6).
@@ -393,11 +402,20 @@ session secrecy. The client implements them; it does not reinvent them.
   credential rather than its operator's seed (design §23.3), so the key it
   presents is not the keyhash you pinned and the delegation is what joins the
   two. One that names a different key is a replay, and a session built on it is a
-  session with whoever replayed it.
+  session with whoever replayed it. The same check binds any peer that presents
+  an unpinned key on any connection, a node you resolve through or fetch from
+  included: its delegation is one you already hold from the topology class or
+  the first thing it sends you (`wire-format.md` §9.1), and until one of those
+  holds you send it nothing.
 - **Cache a delegation you have verified, against the key it names.** It is
   hybrid, it arrives on every handshake, and its window runs to months, so
   checking it per connection pays that cost repeatedly for an answer that cannot
   have changed in between.
+- **Check a stapled attestation's delegation the same way** (`wire-format.md`
+  §7.1 field 8). The issuer's node signed under a delegated key, and the
+  delegation the staple carries is what joins that key to the issuer whose
+  material you hold; a staple whose delegation names a different key is
+  malformed, not merely stale.
 - **A wake endpoint is the user's choice and nobody else's** (design §14.1.5).
   Obtain it from a service they picked, hand it to your node with the key its
   body is encrypted to, and refresh it: an endpoint is stable while valid, not
@@ -433,6 +451,13 @@ session secrecy. The client implements them; it does not reinvent them.
 - **Keep it bounded by the horizon** (design §15.1). Nodes leave it, and a copy
   that only ever grew would hold topology about parties you no longer have a
   reason to know anything about.
+- **Hold the delegations of the parties in it, as a node does**
+  [author, 2026-09-21]. A `Delegation` pushed through your serving node whose
+  delegating keyhash falls within your horizon is stored, the newest by
+  `not_before` per keyhash and the rest dropped (`wire-format.md` §10.1.1). It
+  is what binds a delegated peer on a direct path without waiting for its
+  frame, a desktop under an identity you know being the ordinary case, and it
+  is current state like the rest of the view, never a history of keys.
 
 ---
 

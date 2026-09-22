@@ -1,0 +1,42 @@
+# The conformance-review harness: tests a reviewer wrote against the
+# specification without seeing this workspace's own tests or its working
+# files, moved into the workspace on 2026-09-22 [author] so that the gate runs
+# them on every change and a reviewer's reproduction of a finding stays a
+# regression test for good.
+#
+# THE RULE THAT KEEPS IT EVIDENCE: we repair what stops a reviewer's test
+# compiling, a fixture or a renamed field, and never what it asserts.  A
+# reviewer's assertion changes only when the reviewer changes it or the
+# author withdraws it.  The reviewer's reports and inventories at a commit
+# are not tooling and are not in the tree.
+[package]
+name = "rhtn-conformance-review"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license.workspace = true
+authors.workspace = true
+
+# The gate lints every member with warnings denied, and the reviewer's code
+# was written outside it.  A style lint is allowed here rather than repaired
+# in the tests, under the rule above: the code stays the reviewer's.  One
+# site trips one lint (2026-09-22); a new one is added here, never fixed there.
+[lints.clippy]
+field_reassign_with_default = "allow"
+
+[dependencies]
+rhtn-codec = { path = "../codec" }
+rhtn-crypto = { path = "../crypto" }
+rhtn-archive = { path = "../archive" }
+rhtn-node = { path = "../node" }
+rhtn-transport = { path = "../transport" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+rhtn-client = { path = "../client" }
+rhtn-adaptors = { path = "../adaptors" }
+
+rhtn-daemon = { path = "../daemon" }
+rhtn-cli = { path = "../cli" }
+rhtn-ffi = { path = "../ffi" }
+
+rhtn-policy = { path = "../policy" }

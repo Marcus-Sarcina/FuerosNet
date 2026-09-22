@@ -203,18 +203,17 @@ fn querying_witnessing_and_answering_ask_nobody() {
         }
     }
     assert!(s.prompts_asked("w1").is_empty() && s.prompts_asked("w2").is_empty() && s.prompts_asked("w3").is_empty(), "no witness was asked anything");
-    // the verifier's operator learns nothing of the ceremony: bob's notices
-    // in the last ceremony name no party and carry nothing but the
-    // standing disclosure
+    // the verifier's operator learns nothing of the ceremony: bob is told
+    // nothing at all (design §19.6 owes a verifier no warning), and the
+    // query that reached him was answered without him
     let bob = s.notices("bob");
     let during: Vec<&Notice> = bob.iter().filter(|(t, _)| *t >= s.last_start).map(|(_, n)| n).collect();
-    assert!(!during.is_empty(), "bob was queried");
-    assert!(during.iter().all(|n| matches!(n, Notice::RecordDisclosure { role: Role::Verifier })), "bob's operator was told only the disclosure, not the query: {during:?}");
+    assert!(during.is_empty(), "bob's operator was told something of a query answered in the background: {during:?}");
 }
 
 // acceptance: CER-26
 #[test]
-fn what_the_record_will_contain_is_disclosed_at_capture_and_at_the_moment_a_witness_or_verifier_is_asked() {
+fn what_the_record_will_contain_is_disclosed_at_capture_and_to_nobody_else() {
     let (s, _, _, _) = three_meetings(&[ChannelKind::Nfc]);
     let start = s.last_start;
     // participants: a disclosure before capture, which is before the first frame's time
@@ -224,17 +223,16 @@ fn what_the_record_will_contain_is_disclosed_at_capture_and_at_the_moment_a_witn
         let first_frame = s.handles[n].cam.first_capture_after(start).expect("{n} captured");
         assert!(disclosed <= first_frame, "{n} was told at {} ms, before its first frame at {} ms", disclosed - start, first_frame - start);
     }
-    // witnesses: at the moment each was asked
+    // witnesses and the verifier: asked and answering, and told nothing,
+    // since neither is a person acting (design §19.6)
     for w in ["w2", "w3"] {
-        let ns = s.notices(w);
-        assert!(ns.iter().any(|(t, x)| *t >= start && matches!(x, Notice::RecordDisclosure { role: Role::Witness })), "{w} was told");
         let asked = s.h.log.iter().position(|m| m.to == kh(w) && matches!(m.msg, Msg::WitnessRequest(_))).expect("asked");
         let answered = s.h.log.iter().position(|m| m.from == kh(w) && matches!(m.msg, Msg::WitnessAnswer(_))).expect("answered");
         assert!(asked < answered);
+        assert!(!s.notices(w).iter().any(|(t, x)| *t >= start && matches!(x, Notice::RecordDisclosure { .. })), "{w} was told");
     }
-    // the verifier: at the moment it was asked
     let bob = s.notices("bob");
-    assert!(bob.iter().any(|(t, x)| *t >= start && matches!(x, Notice::RecordDisclosure { role: Role::Verifier })), "bob was told when queried");
+    assert!(!bob.iter().any(|(t, x)| *t >= start && matches!(x, Notice::RecordDisclosure { .. })), "bob was told when queried");
 }
 
 #[test]

@@ -182,7 +182,7 @@ impl Net {
     }
 }
 
-// acceptance: PAY-01
+// owed: PAY-01 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -302,7 +302,7 @@ fn the_asynchronous_construction_is_used_leaf_to_leaf_only() {
     assert!(n.delivered[0].2.contains("to a leaf"));
 }
 
-// acceptance: PAY-12
+// owed: PAY-12 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
 #[test]
 fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);

@@ -1,7 +1,8 @@
 //! The test-vector corpus (`test-vectors/corpus.json`, rhtn-test-corpus/1)
 //! run through the codec and crypto crates: every bytes-class entry, deep
 //! verification of envelopes, presentations and standalone records, and the
-//! cross-entry bindings.  Descended from `test-vectors/runner-rs`.
+//! cross-entry bindings.  Descended from the standalone Rust corpus runner,
+//! retired on 2026-09-22 once this test carried every entry.
 
 use rhtn_codec::cbor::*;
 use rhtn_codec::cose::{self, aad};

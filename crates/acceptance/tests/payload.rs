@@ -2,6 +2,62 @@
 //! change the catalogue and regenerate.  Each stub is one acceptance test
 //! still owed for this area.
 
+/// Publish a signed prekey bundle and keep the one-time pool stocked
+///
+/// Spec: light-client-requirements.md §3; wire-format.md §7.8
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §3): "Publish a prekey bundle and keep it stocked."
+/// Rule (wire-format.md §7.8): "The bundle is opaque to this protocol"
+///
+/// Given: Client S attaches to serving node N. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.
+/// When: S completes its attach.
+/// Then: N holds a PrekeyBundle for S with field 2 equal to 1, field 5 equal to the key S's session presented, and a signature by S under the prekey tag over fields 1 to 5, and a non-empty one-time pool for that device of S.
+///
+/// Interpretation: Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands.
+#[test]
+#[ignore = "acceptance PAY-01: owed at milestone after-5"]
+fn pay_01_publish_a_signed_prekey_bundle_and_keep_the_one() {
+    todo!("PAY-01: Publish a signed prekey bundle and keep the one-time pool stocked")
+}
+
+/// Serve reusable material freely and consume nothing unless a one-time key is requested
+///
+/// Spec: infra-client-requirements.md §6; wire-format.md §7.8
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (infra-client-requirements.md §6): "Serve reusable material freely."
+/// Rule (wire-format.md §7.8): "The reusable material may be returned any number of times to anyone."
+///
+/// Given: N holds S's bundle and pool.
+/// When: Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.
+/// Then: Both replies carry S's bundles in field 2, one per device N holds for S, neither carries field 3, and every pool is unchanged.
+///
+/// Interpretation: Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands.
+#[test]
+#[ignore = "acceptance PAY-04: owed at milestone after-5"]
+fn pay_04_serve_reusable_material_freely_and_consume_nothi() {
+    todo!("PAY-04: Serve reusable material freely and consume nothing unless a one-time key is requested")
+}
+
+/// Open a session on reusable material alone when no one-time key remains
+///
+/// Spec: wire-format.md §7.8
+/// Milestone: after-5.  Kind: must-accept.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.8): "when none remain, field 3 is simply absent and the session proceeds on reusable material alone"
+///
+/// Given: T's one-time pool at N is empty.
+/// When: S requests a one-time key for T and then sends its first message.
+/// Then: The PrekeyReply carries T's bundle for the device named in field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.
+///
+/// Interpretation: Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands.
+#[test]
+#[ignore = "acceptance PAY-12: owed at milestone after-5"]
+fn pay_12_open_a_session_on_reusable_material_alone_when_n() {
+    todo!("PAY-12: Open a session on reusable material alone when no one-time key remains")
+}
+
 /// Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications
 ///
 /// Spec: design §14.2.4.2; design §14.2.4.3; design §14.2.4
@@ -20,4 +76,21 @@
 #[ignore = "acceptance PAY-13: owed at milestone after-5"]
 fn pay_13_instantiate_pqxdh_with_x25519_and_ml_kem_768_and() {
     todo!("PAY-13: Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications")
+}
+
+/// Fetch a bundle per device, open a session with each, and send to each
+///
+/// Spec: wire-format.md §7.8; light-client-requirements.md §4.1; design §14.2.4
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.8): "A reply therefore carries every device's bundle, an initiator opens one session against each and sends to each"
+/// Rule (light-client-requirements.md §4.1): "Open a session with each of a recipient's devices, and send to each."
+///
+/// Given: Subject T has two devices, d1 and d2, each with its own bundle at N; client S holds T's KeyMaterial.
+/// When: S fetches T's material with field 4 absent and sends T one message.
+/// Then: The reply's field 2 carries two bundles, one naming d1 and one d2, each verifying under T; S opens two sessions and submits two ciphertexts, one naming d1 and one d2; each device decrypts the one addressed to it and cannot decrypt the other.
+#[test]
+#[ignore = "acceptance PAY-20: owed at milestone after-5"]
+fn pay_20_fetch_a_bundle_per_device_open_a_session_with_ea() {
+    todo!("PAY-20: Fetch a bundle per device, open a session with each, and send to each")
 }

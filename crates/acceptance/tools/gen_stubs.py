@@ -35,7 +35,9 @@ for e in entries:
     body = [e["title"], "", "Spec: " + "; ".join(e["spec"]),
             f"Milestone: {e['milestone']}.  Kind: {e['kind']}.  Oracle: {e['oracle']}.", ""]
     for r in e["rule"]:
-        body.append(f"Rule ({r['where']}): \"{r['text']}\"")
+        # A quote may span lines in the catalogue; a doc comment line may not,
+        # so every run of whitespace is one space here [2026-09-22].
+        body.append(f"Rule ({r['where']}): \"{' '.join(r['text'].split())}\"")
     body += ["", "Given: " + e["given"], "When: " + e["when"], "Then: " + e["then"]]
     if e.get("interpretation"):
         body += ["", "Interpretation: " + e["interpretation"]]

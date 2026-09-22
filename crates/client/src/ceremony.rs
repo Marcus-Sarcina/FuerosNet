@@ -536,11 +536,10 @@ impl Client {
         self.verifier.take_grant(&cx, from, bytes, self.device.clock.now_ms())
     }
 
-    /// As verifier: a query from `from`.  The person is told, at this
-    /// moment, that answering records them in someone else's evidence
-    /// (design §19.6); they are not asked.
+    /// As verifier: a query from `from`.  The person is neither asked nor
+    /// told: answering is the client's background task, and design §19.6
+    /// owes a verifier no warning.
     pub fn take_query(&mut self, from: Keyhash, bytes: &[u8]) -> QueryOutcome {
-        self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Verifier });
         let cx = Verifying { me: &self.id, ids: &self.known, store: &self.store, matcher: self.device.engine.matcher() };
         self.verifier.take_query(&cx, from, bytes, self.device.clock.now_ms())
     }
@@ -593,7 +592,6 @@ impl Client {
     /// latency bound where a latency channel passed.
     pub fn take_witness_request(&mut self, req: &WitnessRequest) -> Option<u64> {
         witness_check(req.started_at, self.now_s(), self.cfg.clock_tolerance_s).ok()?;
-        self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Witness });
         let latency = req.channels.iter().any(|c| c.kind == ChannelKind::Latency && c.result == ChannelResult::Pass);
         self.witnessing = Some(req.clone());
         Some(3 | if latency { 4 } else { 0 })
@@ -733,7 +731,6 @@ impl Client {
         if !self.device.operator.ask(&format!("Do you recognise the person in front of you as the holder of {}?", hex8(&prior))) {
             return Err(Abort::NotRecognised);
         }
-        self.device.notifier.notify(Notice::RecordDisclosure { role: Role::Verifier });
         Ok(recovery_response_with_consent(&self.id, &subject, &q.query_id(), consent, &prior))
     }
 

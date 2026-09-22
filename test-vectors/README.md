@@ -48,7 +48,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `records.md` | One known-answer signature per **signing** context — complete 2026-09-02, each with its wrong-signer analogue |
 | `messages.md` | The unsigned message families (bar 9): every framed message's positive encoding, replies and transient payloads, and the session-trace table |
 | `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
-| `runner-rs/` | An independent Rust corpus runner: own strict-CBOR parser, identities re-derived from the seed recipe, every envelope/record/presentation signature verified through `ed25519-dalek` and RustCrypto `ml-dsa` — the fixtures' ML-DSA signatures were made by dilithium-py, so agreement is cross-implementation. 143 corpus entries pass; see its README |
+| *(the Rust corpus runner)* | Retired 2026-09-22 [author]. Its parser grew into `rhtn-codec`, and `crates/crypto/tests/corpus.rs` now carries every corpus entry through the workspace's own decoder and RustCrypto `ml-dsa`, against the generator's dilithium-py signatures: the cross-implementation check the runner made, without a second decoder to keep in step with the wire |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 

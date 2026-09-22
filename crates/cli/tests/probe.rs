@@ -130,7 +130,7 @@ fn the_command_line_refuses_what_it_will_not_send() {
     assert!(!ok && err.contains("Nothing here sends a request that changes state"), "{err}");
 }
 
-// acceptance: DMN-09
+// owed: DMN-09 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_archive_batch_that_is_not_a_chain_is_refused_rather_than_reported() {
     use rhtn_archive::chain::{ArchiveReply, ArchiveRequest};

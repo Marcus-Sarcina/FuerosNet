@@ -139,7 +139,7 @@ async fn delete_on_delivery_leaves_nothing_for_a_second_attach() {
     assert!(drain(&mut s2).await.is_empty());
 }
 
-// acceptance: QUE-05
+// owed: QUE-05 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
 #[tokio::test]
 async fn a_waiting_message_carries_the_minimum() {
     let mut cfg = node_cfg("alice");

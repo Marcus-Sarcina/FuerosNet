@@ -10394,3 +10394,144 @@ default.
 **Confirmed defenses** (reviewer's, agreed): unilateral exit (§6.2.1), locator
 authentication in isolation, the memo hint-rule (wire §10.2.3), the horizon outer
 gate.
+
+## The signing-authority rulings, applied (2026-09-21)
+
+Out of `Robot/outstanding-work-2026-09-21.md` section 8. The survey found the
+delegation surgery unspecified for what an instance signs unattended; the author
+ruled it in four exchanges the same day and the whole was applied in one pass.
+
+| Ruling [author, 2026-09-21] | Where it landed |
+|---|---|
+| Acknowledgement and attestation signed by the instance's delegated key; the memo is the session's; currency needs no change beyond that | wire §7.5, §7.1, §8.2 field 1; design §23.3; infra §7 |
+| Topology persists as updated topology, never as history; reason data stays within the horizon; a third party's flood enters no bystander's archive | infra §5's seen-set bullet; the store keeps txids and the fold (code owed) |
+| A cycle repair is not a disavowal: a removal, the vacancy memo, no transaction, no reason code; §10.2.4 reworded; *disavow* not used for it | wire §10.2.4, §4.3 code 5 tombstone; design §18's cycle-injection bound |
+| The delegation is a topology-class object, pushed as each credential comes into force, held as current state by `not_before` | wire §8.2, §10.1, §10.1.1 |
+| The staple carries the delegation | wire §7.1 field 8; lc §4.1; wire §12 size row |
+
+**Verified before applying**: every code site the survey and its review cited
+(`currency.rs` 345, `topology.rs` 565, `propagation.rs` 716, `prekey.rs` 38,
+`catalog.rs` 183, `resolution.rs` 641–682) signs as described; `TopologyMemo` carries
+no signature; the ack's chief verifier is the issuing node's own gateway
+(`resources.rs` 269); design §10's list is unchanged once a cycle repair is not a
+transaction.
+
+**Catalogue.** PRP-12 requoted and re-derived; ARC-08, ARC-09, ARC-11, DMN-09
+re-derived to the frontier (their quotes had moved on 09-17, their expectations had
+not); CER-26 and CER-17 re-derived to design §19.6's withdrawal. Six added: TOP-41,
+TOP-42, CUR-21, CUR-22, PRP-26, PRP-27. Five live tests unmarked, each holding the
+superseded rule (`chain.rs` ARC-08/09/11, `probe.rs` DMN-09, `propagation.rs`
+PRP-12); 405 → 400 of 415 → 421.
+
+**Code.** The reference client no longer notifies a witness or verifier
+(`ceremony.rs` three sites; `notice::Role` keeps `Participant` alone; the FFI and
+the terminal follow); CER-17's and CER-26's tests assert the absence.
+client, ffi, participant and acceptance: 104 passed, 0 failed, 24 ignored.
+
+**Models.** `wire-only/currency.spthy` and `models/README.md` restated: a staple
+confirms currency and selects no key.
+
+**Robot.** `app-requirements-notes.md` §2.1's *no propagation* decision of 09-16
+struck and superseded; its three-context count corrected to six; §2.1's *only other
+things the node signs* corrected. `implementation-plan.md` line 588's *one item* and
+section 7's PRD-06 bullet aligned with infra §8.2 and §8.3.
+
+**Counts.** refcheck 2,266 / 0; modelrefcheck 1,194 / 0; stalecheck 1 + 10 + 3;
+check.py 400 of 421, 0 flags; matrixcheck 87: 51 / 33 / 0 / 3, 0 flags; `crates/check.sh`
+CODE GATE PASSES, five fuzz targets with no crash.
+
+**The connection bind, ruled the same evening [author, 2026-09-21].** Of the
+two shapes offered for a dialler outside the instance's horizon, the delegation
+presented first on every connection (control frame type 7 where no session
+opens) over the referral carrying it. Applied: wire §8.0's table gains row 7,
+§8.2 the rule and its two encodings, §9.1 the three-way bind; infra §7 and lc
+§4.1 follow. RES-12, TRN-03 and TRN-04 requoted with their expectations
+unchanged; TRN-18, TRN-19 and TRN-20 added; 400 of 424, 0 flags, stubs in sync,
+clippy clean, the stub crate builds. Two quotes hit the 40-word limit on the
+first attempt and were trimmed to the binding clause; three new quotes carried
+line breaks into the generated stubs and were flattened, `gen_stubs.py` emitting
+them verbatim. The wire-only attach model now owes one rule for every
+connection mode rather than a per-path exclusion.
+
+**Three more, ruled and applied the same evening [author, 2026-09-21].** The
+window: a decoder enforces exactly 48 hours (172,800 seconds, epoch times),
+credentials finish-to-start, and the receiver's clock check carries a
+configurable leeway defaulting to 10 seconds, with a refused connection retried
+(wire §8.2; TRN-21, TRN-22). The keypair: minted on the instance, only the public
+half sent to be signed, one key for the run, the OpenSSH shape (wire §8.2, infra
+§7; DMN-23). The light client is a holder of delegations as §10.1.1 has a node be
+(lc §4.2; TOP-43). Two quotes for TRN-21 fell inside CDDL comment lines and
+`check.py` does not strip the comment markers, so the entry quotes the
+single-line fragments. 400 of 428, 0 flags, stubs in sync.
+
+**The prekey question, ruled 2026-09-22 [author]: own prekeys, the phone signs
+their public halves.** The reason given: even without direct point-to-point
+contact, duplex resource interaction is the desktop's main anticipated use, and
+a team intranet will carry resource types used chiefly from desktops. The three
+options were put as what each loses; the cold store loses messaging and the
+verifier role, shared keys part the ratchet at the first message, per-device
+keys cost a device dimension on the wire. Landed as principle in design §23.3
+and §14.2.4: a session is with a device, an identity has a bundle per device,
+an initiator opens one session per device and sends to each. **Not yet landed
+on the wire**, since the encoding turns on one choice the author has not made,
+the device's identifier: `PrekeyBundle`, `PrekeyReply`, `OneTimeDeposit`,
+`RelaySubmission` and `WakeRegistration` gain a device dimension, the queue of
+design §14.1.6 becomes per device, and an attach speaks for a device. The
+count of a subject's devices becomes visible to anyone who fetches its prekeys,
+which is a register item for §19.
+
+**The identifier, ruled and applied [author, 2026-09-22]: the device's transport
+key**, *necessary to allow multi-device on root nodes*. `wire-format.md` §7.8
+defines `device` as the 32-byte raw key a device presents in a handshake, the
+delegated key or the seed-holding device's classical component; `PrekeyBundle`
+carries it as field 5 under the signature, whose field is now 6; `PrekeyRequest`
+names one in field 4, required when a one-time key is asked for; `PrekeyReply`
+field 2 is an array of at most eight bundles. §7.10: `RelaySubmission` field 4
+names the recipient device; a publication whose device is not the session's key
+is refused; deposit and wake registration belong to the session's device. §8.2:
+an attach speaks for a device and a subject's devices attach as several sessions.
+Design §14.1.6: the queue is per device and the metadata names it. lc §4.1 and
+infra §6 carry the obligations. Six entries re-derived (PAY-01, PAY-04, PAY-06,
+PAY-12, SUB-02, QUE-05), five of their live tests unmarked (`payload.rs`,
+`prekeys.rs`, `submissions.rs`, `queue.rs`), four added (SUB-12, PAY-20, QUE-21,
+SES-26); 395 of 432, 0 flags. `gen_stubs.py` wrote a multi-line quote into a
+doc comment verbatim, which a demoted entry's old quote exposed; it now collapses
+whitespace. **Two numbers are the assistant's, pending the author**: eight as the
+reply's ceiling, chosen because design §23.3 holds the count near three, and the
+severity of the new register row, the device count a prekey fetch reveals, which
+§7.8 states and §19 does not yet price. The test-vector pins are staler by this
+pass and advance once, for the whole delta, per the note's section 3.
+
+**The five items off the wire, ruled 2026-09-22 [author].** Candidate order:
+*defer to the RFC*; design §14.1.1 says RFC 8445's order binds the
+implementation, TRV-11 holds it, `connect_direct` does not yet. The register's
+seven open rows: the reading offered stands, O-007 and O-013 before the API,
+O-015 during the first shell, the rest before release with O-012's optional
+paths and O-014's peer backup optional. `runner-rs`: retired and purged, its
+mentions in wire §13, the vectors' README, the corpus test and the plan
+rewritten; the workspace and the crypto tests build without it, so nothing
+depended on it. `functional_tests.md`: a root design document, the seventh,
+named in `CLAUDE.md` with its provenance and staged; `Robot/` is scratch and
+context and no part of the deliverable; `conformance-review/`'s placement was
+not reached and is asked. The first shell: payload, ceremony, provisioning,
+resource, in that order because each needs the one before, any part taken up as
+it comes up, the shared primitives written whole-system-aware. 395 of 433, 0
+flags.
+
+**`conformance-review/`, ruled the same day [author, 2026-09-22]: tooling, in
+`crates/`.** The harness moved to `crates/conformance/` as a workspace member,
+path dependencies one level up, its standalone lockfile dropped; the reviewer's
+reports and inventories at `4edfe52` stay out of the tree, being a report at a
+commit and not a tool. The one fixture that no longer compiled, `tests/daemon.rs`
+line 22's `Config`, gained `reconcile_secs: 900`, the daemon's own default, and
+nothing it asserts changed; **the rule, recorded in the crate's manifest and
+`crates/README.md`: we repair what stops a reviewer's test compiling and never
+what it asserts, an assertion changing only when the reviewer changes it or the
+author withdraws it.** 67 of 67 pass in the workspace; `modelrefcheck.py` sees
+1,217 citations across 259 files, 0 flags, the reviewer's `D §` and `W §` forms
+being ones it does not read as citations. `crates/README.md`'s duplicated `cli/`
+and `daemon/` rows removed. The first gate run over the moved harness failed on
+lint alone: the gate denies every clippy warning and the reviewer's code was
+written outside it, one site tripping `field_reassign_with_default`. Allowed in
+the crate's manifest with the reason, under the same rule, rather than repaired
+in the reviewer's test; a new lint is added there, never fixed here.

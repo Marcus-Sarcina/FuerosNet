@@ -91,7 +91,7 @@ async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
     assert!(node.view.lock().unwrap().prekeys.bundle(&carol.me).is_some(), "carol's is held");
 }
 
-// acceptance: SUB-02
+// owed: SUB-02 was re-derived on 2026-09-22 to the bundle-per-device shape and this test holds the rule it superseded until the code lands; it is not marked
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     let node = node_with("bob", |_, _| {});

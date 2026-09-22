@@ -19,7 +19,7 @@ and are cited from there; this file keeps the working state.
 | Infrastructure node | n/a | `rhtnd` exists; milestone 11 met. Operated as a tab in the light client, not as a separate system |
 | Android light client | yes | First to build. Retires CER-38/39 and most of PRD |
 | iOS light client | yes | Second. Re-uses the generator and the shell design |
-| Desktop graphical light client | **no** | A second device for an identity established elsewhere. CER-39 already says a desktop instrument keeps its seal in memory |
+| Desktop graphical light client | **no** | A second device for an identity established elsewhere, and a payload endpoint of its own with its own prekeys signed by the phone [author, 2026-09-22]: duplex resource interaction is its anticipated use. CER-39 already says a desktop instrument keeps its seal in memory |
 | CLI light client | no | Largely banked in `rhtn` and `rhtnp`. Claims no product entries — a command read from standard input is not a person |
 
 **The light client has two modes**, before an infra node is attached and after,
@@ -58,10 +58,12 @@ The expensive list. Each of these would move a base requirement.
 signing key, loaded directly as the TLS private key and authenticated as a raw
 public key against the keyhash the peer expects. Every inbound connection needs
 it live and hot — from up to 110 subordinates plus siblings, peers and attached
-clients. The only other things the node signs are endpoint records and the
-anchor entry; both are cached and re-signed only when the endpoint set or the
-subtree size changes, so both are rare and could be batched to the operator's
-client. **The transport is the sole reason the seed must be on the box.**
+clients. This paragraph counted the node's other signatures as endpoint records
+and the anchor entry, rare and batchable to the operator's client; the count
+built from the code on 2026-09-21 adds currency attestations, subtree
+acknowledgements and the cycle-repair transaction, all unattended, and the
+allocation is ruled in §2.1's last paragraph below. **The transport was the
+reason the seed had to be on the box; it was not the only signature there.**
 
 *Shape.* The node holds an ephemeral keypair. The operator's client signs a
 delegation binding that key to the operator's keyhash for a window. Peers verify
@@ -118,14 +120,19 @@ holds what a serving node queues. That is a metadata and availability exposure,
 not a trust one — it cannot sign an adoption, a disavowal or a recovery — but it
 should be written down rather than left implied.
 
-*Propagation — decided* [author, 2026-09-16]: **there is none, because the
-delegation is a handshake artefact rather than a record.** The question of who
-must see it dissolves: the delegation is *how* a party authenticates the node on
-a connection, so exactly the parties on its connections verify it and nobody
-else ever needs it. It is not stored, not forwarded, not replicated, and adds
-nothing to the topology. The node's endpoint records and anchor entries are
-still signed by the identity key and verify as they always did; the ephemeral
-key signs nothing any third party reads.
+~~*Propagation — decided* [author, 2026-09-16]: **there is none, because the
+delegation is a handshake artefact rather than a record.**~~ **Superseded
+[author, 2026-09-21].** The delegated key signs the topology state an instance
+emits unattended, a subtree acknowledgement and a currency attestation, so
+parties that never handshook with the instance verify its signatures; the
+delegation is therefore a topology-class object, pushed as each credential
+comes into force and held by the horizon as current state replaced by
+`not_before`, and a currency staple carries it to a relying party beyond the
+horizon (`wire-format.md` §8.2, §10.1, §7.1 field 8). What the delegated key
+never signs is a transaction that advances an archive: a disavowal, a
+countersignature, a departure stay on the ceremony device. A cycle repair is a
+removal, not a disavowal, and mints no transaction (`wire-format.md` §10.2.4).
+The endpoint record and the anchor entry are still signed by the identity key.
 
 The consequence to accept is that it rides **every** handshake. A verifier
 should cache a delegation it has checked, keyed by the ephemeral public key, so
@@ -185,11 +192,15 @@ they are three decisions, not one.
 
 - **Seeds — the PoP-capable device alone.** Everything else holds a delegation:
   the rented instance, the desktop, the CLI. What a light client signs with its
-  identity key is three contexts (`ENVELOPE`, `CONSENT`, `VERIFIER`), every call
-  site of them in the ceremony or the verifier-selection query, so a client that
-  cannot originate a relationship has almost no occasion to use the key. The
-  residue is departure and disavowal, which bounce to the PoP device — where
-  they belong anyway, being what a shared desktop should least be able to do.
+  identity key was counted here as three contexts (`ENVELOPE`, `CONSENT`,
+  `VERIFIER`); the count built from the code on 2026-09-21 is six, adding
+  `PREKEY`, `CATALOG` and `LOCATOR`, and a node has four of its own. The
+  allocation the count served is now ruled [author, 2026-09-21]: the true key
+  signs whatever advances an archive, and the delegated key signs the topology
+  state a node emits unattended (`wire-format.md` §8.2); a delegated device's
+  three contexts wait on the same flooded delegation. The residue is
+  departure and disavowal, which bounce to the PoP device — where they belong
+  anyway, being what a shared desktop should least be able to do.
 - **Deletion state follows the seed allocation and needs no separate answer.**
   Design §7.5.2 makes a capture decryptable only when the subject releases a key
   derived from a seed only they hold, so "which device holds deletion state" is

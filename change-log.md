@@ -10117,3 +10117,154 @@ that fakes custody is the §18.4 censor, already priced).
 
 **Counts checked.** 2,224 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; check.py 0 flags.
+
+### 2026-09-21 (the true key signs the archive; the delegated key signs the topology)
+
+**The delegation surgery of 2026-09-16 moved the seed off the instance and did not
+say what signs the objects an instance emits while its operator is away.** A survey
+of the workspace against the documents found the node signing four contexts with
+the seed it no longer holds: endpoint records and anchor entries, which the
+documents had already moved to the operator's device; currency attestations
+(`wire-format.md` §7.1, unattended by `infra-client-requirements.md` §3); subtree
+acknowledgements (`wire-format.md` §7.5, *issued by the grandpatron's node, not by
+its operator*); and the cycle-repair disavowal (`wire-format.md` §10.2.4), a hybrid
+transaction minted on a confirmed cycle. §8.2 had the delegated key *sign nothing
+beyond the handshake*. Any two of the three held; the code held all three by
+reading the seed.
+
+**Ruled [author, 2026-09-21].** The true key signs whatever advances an archive: an
+adoption's countersignature, a disavowal, a departure, a reissue, a presence
+record, each a person's act on the ceremony device. The delegated key signs the
+topology state an instance emits unattended: the subtree acknowledgement and the
+currency attestation, the rootward memo being the session's already. **A cycle
+repair is not a disavowal.** The detecting node removes the forwarding subordinate
+from its slot and sends the vacancy memo; no transaction is signed and no reason
+code is carried, and *disavow*, once a synonym for that removal, names §4.3's
+transaction alone. §4.3's reason code 5 is withdrawn and its number not reused.
+**Topology persists as the updated topology, never as a time series**: disavowal,
+departure and their reason data stay within the trust horizon, the rest of the
+tree sees the add and remove memos, and a third party's transaction flooding the
+horizon enters no non-involved member's archive. The archive is a node's own
+history alone.
+
+**The delegation is therefore a topology-class object.** A verifier of an
+acknowledgement or an attestation may never have handshaken with the instance, so
+the instance pushes each credential as it comes into force under §10.1's
+forwarding rule, and a holder keeps one per delegating keyhash, the newest by
+`not_before`, dropping the rest. A currency staple's relying party sits beyond the
+issuer's horizon by construction (§12.6.5), so the attestation carries the
+delegation itself: `CurrencyAttestation` field 8, outside the signature, present
+iff the signature is under a delegated key. §7.5 and §7.1 say which key signs and
+what a receiver checks it against; one holding no delegation for the keyhash
+defers as §10.1.1 has it defer for any missing key.
+
+**Two sentences the archive change of 2026-09-17 left behind.**
+`light-client-requirements.md` §2 and `wire-format.md` §3 still stated the head-first
+sequence rule; both now state reachability from the frontier. The staleness sweep
+cannot see this class, and the fix was found by search.
+
+**§18's stolen-device entry was written when the phone and the instance were one
+seed** and said §23.3 divided one role off that the two thefts did not feel. It now
+says which two roles are divided and that a stolen instance satisfies those for the
+credential's window and no durable one, which is §18.1's residual; §18.1 says so
+too. §23.3 states what an instance signs and what it never does.
+
+**Propagated.** The acceptance catalogue re-derives PRP-12 to the removal, ARC-08,
+ARC-09, ARC-11 and DMN-09 to the frontier, and CER-26 and CER-17 to design §19.6's
+withdrawal of the witness and verifier notice; six entries are added for the
+delegated signatures, the stapled delegation, the flooded delegation and the
+transaction a cycle repair does not mint (TOP-41, TOP-42, CUR-21, CUR-22, PRP-26,
+PRP-27). Five live tests that assert the superseded rules are unmarked until the
+code lands, and the reference client no longer tells a witness or verifier
+anything. The wire-only currency model's comment that a staple *decides which key
+to address* is restated to the 2026-09-18 ruling; its lemmas never asserted it.
+
+**The bind no longer depends on a session** [author, 2026-09-21]. `wire-format.md`
+§9.1 bound a presented key by the pinned classical member or *the attach that
+follows*, and four production paths never attach: request-only contact with an
+infra node, and the direct payload path dialled, accepted and on the serving
+socket. The direct path is inside the horizon (§12.6.3), where the peer's
+delegation is now held from the topology class, so a held delegation is the second
+of three binds. For a dialler outside the instance's horizon, holding its key
+material from a referral and no delegation, the delegated peer presents its
+delegation first on every connection: `Attach` field 4 and `AttachAck` field 6 on
+a session, and control frame type 7 first on stream 0 where no session opens. A
+dialler whose pinned check fails and who holds no delegation waits for that frame
+and refuses the connection on anything else; a server attributes a delegated
+client's requests to the keyhash it claims only after it. The referral carrying
+the delegation beside the key material was the alternative, three reply schemas
+against one frame, and was set aside.
+
+**The window is a decoder's constraint; the key serves the run; a light client holds
+delegations** [author, 2026-09-21]. A delegation's `not_after` is exactly 172,800
+seconds after its `not_before`, both against the Unix epoch, and a decoder refuses
+any other difference: a window an issuer could lengthen would put the seed back on
+the box under another name. A receiver's clock check carries a leeway of its own,
+10 seconds by default and configurable upward for high-latency links, and a
+connection refused on the window is retried, since credentials in a run are
+contiguous and the peer may have rolled over between the two checks. The instance
+mints its own transport keypair and sends only the public half to be signed, the
+OpenSSH shape; one key serves the whole run and the credentials rotate over it,
+the instance being trusted with it for the run, which is what makes a receiver's
+cache good for that length. And a light client holds the delegations of the parties
+in its horizon as a node does, which is what binds a delegated desktop on a direct
+path without waiting for its frame.
+
+**Counts checked.** 2,275 references across the five documents resolve with no flag;
+the staleness sweep reports its baseline; 1,194 citations across `models/` and the
+workspace resolve; check.py 400 of 428 implemented, 0 flags, stubs in sync; the
+control-frame table has seven rows and the domain-separation table is unchanged at
+fourteen; `crates/check.sh` passed on the signing pass, and the later passes
+changed no code beyond the generated stubs, which lint and build.
+
+### 2026-09-22 (a delegated device is a payload endpoint of its own)
+
+**A desktop holding only a delegation was a cold store for the archive and the
+captures; it is now also a live client for payload** [author, 2026-09-22]. The
+reason is the use the desktop is for: duplex interaction with resources, and the
+resource types a team's intranet will run chiefly from desktops. Of the three ways
+a second device could hold payload keys, sharing the phone's parts the ratchet at
+the first message and a device with none forfeits messaging and the verifier role;
+so each device generates its own material, the ceremony device signs the public
+halves as it signs the transport credential, the device publishes them under its
+own delegation, and a session is with a device and never with an identity, an
+initiator opening one against each device's bundle and sending to each. §23.3 and
+§14.2.4 say so.
+
+**A device is named by the key it presents** [author, 2026-09-22], the delegated
+transport key or, for the device that holds the seed, the identity's classical
+component: that key is what a delegation already binds and what a serving node
+already keys a session by, and a root's several devices have nothing else to be
+named by. `wire-format.md` §7.8 defines `device` and puts it under the bundle's
+signature, so a bundle cannot be re-attributed to another device of the same
+subject; a request may name a device and must when it asks for a one-time key; a
+reply carries every device's bundle, at most eight, a chosen ceiling beside
+§23.3's count of about three. §7.10 has a relay submission name the recipient
+device, since a session is with a device and the node cannot tell from the
+ciphertext, and has a publication, a deposit and a wake registration belong to
+the device on the session they arrive on, a publication naming another device
+being refused. §8.2 has an attach speak for a device and a subject's devices
+attach as several sessions; §14.1.6 has a queue per device and names the device
+in the queue's minimum. A consequence is stated where the mechanism is: a prekey
+fetch now reveals how many devices a subject has, which §19 has still to price.
+
+**The candidate order is RFC 8445's** [author, 2026-09-22]. §14.1.1's sentence had
+been hedged in cycle 3's factual pass to what ICE does and could be read as
+description; it is a rule, and this profile defers to the RFC's scheduling of
+checks rather than dialling every candidate at once. **The Rust corpus runner is
+retired** [author, 2026-09-22] and its files purged, `rhtn-codec` having grown from
+its parser and `rhtn-crypto`'s corpus test now carrying every entry against the
+generator's signatures; `wire-format.md` §13 names the crate as the second
+harness. **`functional_tests.md` is a design document** [author, 2026-09-22]: it
+was constructed by a reviewer from the five documents with the working files
+withheld, so that it summarises the design as written, and it is tracked in the
+root as the seventh; `CLAUDE.md` says so. **The reviewer's conformance harness is
+a workspace member** [author, 2026-09-22], `crates/conformance/`, so the gate runs
+its 67 tests on every change and a reproduced finding stays a regression; the rule
+that keeps it evidence is that its assertions are the reviewer's, and only what
+stops one compiling is ours to repair.
+
+**Counts checked.** 2,296 references across the five documents resolve with no flag;
+the staleness sweep reports its baseline; 1,194 citations across `models/` and the
+workspace resolve; check.py 395 of 433 implemented, 0 flags, stubs in sync; the
+workspace lints clean and the crates whose tests were unmarked pass.

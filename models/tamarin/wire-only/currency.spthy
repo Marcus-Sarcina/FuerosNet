@@ -243,8 +243,11 @@ rule Issue_Currency_Arbitrary:
     * the signature verifies (the Eq restriction, as in attach.spthy);
     * the epoch has NOT expired before this acceptance (the NotExpired
       restriction below).
-  Nothing the party then does waits on it: a staple decides which key to
-  address and gates no operation (design Section 12.6.5).
+  Nothing the party then does waits on it: a staple confirms that a key is
+  current and gates no operation; which key the party addresses is authored
+  by the participant, never by the staple (design Section 12.6.5,
+  wire-format Section 7.1 [author, 2026-09-18]).  `sk` below is the key the
+  attestation names as current, taken as accepted, not as a destination.
 */
 
 /*  ACCEPTANCE READS THE TIMESTAMPS FROM THE ATTESTATION, not from a registry.

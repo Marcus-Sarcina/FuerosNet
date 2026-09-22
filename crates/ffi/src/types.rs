@@ -160,8 +160,6 @@ impl Told {
             Notice::RecordDisclosure { role } => Told::RecordDisclosure {
                 role: match role {
                     Role::Participant => "participant".into(),
-                    Role::Witness => "witness".into(),
-                    Role::Verifier => "verifier".into(),
                 },
             },
             Notice::QuerySurfaced { verifier } => Told::QuerySurfaced { verifier: id_of(verifier) },

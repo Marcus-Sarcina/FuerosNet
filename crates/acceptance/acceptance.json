@@ -209,7 +209,7 @@
     "id": "ARC-08",
     "area": "archive",
     "gap": "archive",
-    "title": "Serve an archive fetch head-first in batches that continue from the previous reply's oldest record",
+    "title": "Serve an archive fetch in batches that continue from the previous reply's frontier",
     "milestone": 3,
     "kind": "positive",
     "spec": [
@@ -228,15 +228,15 @@
     ],
     "given": "Subject S holding an unbroken chain of R records rooted at genesis and serving its own archive; the requester asks for max_records m, 1 to 256, with R greater than m so that more than one batch is needed.",
     "when": "A requester sends ArchiveRequest {1: S, 2: S's head, 3: m, 5: nonce}, then re-requests with field 2 set to each reply's field 4 until a reply's field 3 is false.",
-    "then": "Every reply's field 1 equals its request's nonce. The first reply's first envelope has txid equal to the requested head. Within each reply, each record's back-pointer list for S names the record that follows it. Each non-final reply's field 4 is the txid of its oldest record. The batches concatenated are the whole chain, and only the last reply's field 3 is false.",
+    "then": "Every reply's field 1 equals its request's nonce. Every record in a reply is named by the request's frontier or by a back-pointer of another record in that reply, and every back-pointer naming nothing in the reply appears in its field 4; field 4 is present iff field 3 is true. Re-requesting with field 2 set to the previous reply's field 4 continues the walk, and the union of all replies reaches genesis.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9; the live test that held it asserts the superseded head-first sequence and is unmarked until the code lands."
   },
   {
     "id": "ARC-09",
     "area": "archive",
     "gap": "archive",
-    "title": "Reject an archive batch whose back-pointers do not match the records that follow",
+    "title": "Reject an archive batch that is not reachable from the requested frontier",
     "milestone": 3,
     "kind": "negative",
     "spec": [
@@ -251,9 +251,9 @@
     ],
     "given": "A holder answering for subject S, and a requester asking with field 2 set to S's head.",
     "when": "The holder returns a batch in which one middle record has been replaced by another record of S that the preceding record's back-pointer does not name; in a second run the batch's first record is not the requested head.",
-    "then": "In the first run the requester reports the batch as failing chain verification at the first mismatching record, and the records from that point on are not reported as a verified prefix. In the second run it fails at record one.",
+    "then": "In the first run the requester reports the batch as failing structure verification at the first record named neither by the requested frontier nor by another record's back-pointers, and the records from that point on are not reported as verified. In the second run it fails at record one. A batch whose unreturned back-pointers are absent from field 4 fails the same way.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-21: reachability, not order. The live test that held it is unmarked until the code lands."
   },
   {
     "id": "ARC-10",
@@ -301,9 +301,9 @@
     ],
     "given": "A client for S that has lost its archive and holds no head; a holder serving S's chain from a record the holder claims as newest.",
     "when": "The client sends ArchiveRequest with field 2 absent and fetches the chain to its end.",
-    "then": "The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a head-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.",
+    "then": "The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a frontier-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-21 to the frontier form; the live test that held it is unmarked until the code lands."
   },
   {
     "id": "ARC-12",
@@ -962,7 +962,7 @@
     "when": "The ceremony runs and its queries are answered.",
     "then": "Queries are issued and answered, and the hook records no prompt to any operator for querying, witnessing or answering; the verifier's operator receives no notification.",
     "oracle": "behaviour",
-    "interpretation": "design §7.3 (the verifier's operator is not told they were sampled) and design §19.6 (a verifier is told, at the moment they are asked, that answering records them in a third party's evidence) pull in opposite directions for the verifier. The reference client raises §19.6's disclosure as a notice carrying no ceremony, subject or querier, and asks nothing; this test reads 'no notification' as no prompt and no notice naming the ceremony. Which of the two the author intends is open."
+    "interpretation": "design §19.6 owes a witness or a verifier no warning [author, 2026-09-17]: neither is a person acting, and a per-query notice would convey who is meeting whom. The reference client tells the verifier's operator nothing; this test reads 'no notification' as no prompt and no notice of any kind."
   },
   {
     "id": "CER-18",
@@ -1200,7 +1200,7 @@
     "id": "CER-26",
     "area": "ceremony",
     "gap": "ceremony",
-    "title": "Disclose at capture time what the record will contain and who can read it",
+    "title": "Disclose at capture time what the record will contain and who can read it, and tell a witness or verifier nothing",
     "milestone": "after-5",
     "kind": "positive",
     "spec": [
@@ -1218,10 +1218,10 @@
       }
     ],
     "given": "A ceremony on the harness with a notification hook on the participants', witnesses' and verifiers' clients.",
-    "when": "The ceremony reaches capture and the witnesses and verifiers are asked.",
-    "then": "The hook records a disclosure to each participant before capture, and to each witness and verifier at the moment it is asked.",
+    "when": "The ceremony reaches capture, and the witnesses and verifiers are asked.",
+    "then": "The hook records a disclosure to each participant before capture, and no disclosure to any witness or verifier at any point.",
     "oracle": "behaviour",
-    "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing."
+    "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing. Re-derived 2026-09-21: design §19.6 owes a witness or verifier no warning [author, 2026-09-17]."
   },
   {
     "id": "CER-27",
@@ -2478,9 +2478,9 @@
     ],
     "given": "Client S attaches to serving node N. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
     "when": "S completes its attach.",
-    "then": "N holds a PrekeyBundle for S with field 2 equal to 1 and a signature by S under the prekey tag over fields 1 to 4, and a non-empty one-time pool for S.",
+    "then": "N holds a PrekeyBundle for S with field 2 equal to 1, field 5 equal to the key S's session presented, and a signature by S under the prekey tag over fields 1 to 5, and a non-empty one-time pool for that device of S.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
   },
   {
     "id": "PAY-02",
@@ -2563,9 +2563,9 @@
     ],
     "given": "N holds S's bundle and pool.",
     "when": "Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.",
-    "then": "Both replies carry S's bundle, neither carries field 3, and the pool is unchanged.",
+    "then": "Both replies carry S's bundles in field 2, one per device N holds for S, neither carries field 3, and every pool is unchanged.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
   },
   {
     "id": "PAY-05",
@@ -2612,9 +2612,9 @@
     ],
     "given": "S's pool at N is drained by requesters.",
     "when": "The last one-time key is served.",
-    "then": "S's client learns of the exhaustion and replenishes; the test observes the notice through S's client and the subsequent upload.",
+    "then": "S's client on the device whose pool was drained learns of the exhaustion and replenishes that device's pool; the test observes the notice through that client and the subsequent upload.",
     "oracle": "behaviour",
-    "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter."
+    "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter. Re-derived 2026-09-22: a pool is a device's."
   },
   {
     "id": "PAY-07",
@@ -2767,9 +2767,9 @@
     ],
     "given": "T's one-time pool at N is empty.",
     "when": "S requests a one-time key for T and then sends its first message.",
-    "then": "The PrekeyReply carries field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
+    "then": "The PrekeyReply carries T's bundle for the device named in field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
   },
   {
     "id": "PAY-13",
@@ -2854,7 +2854,7 @@
     "when": "One sends the other a message.",
     "then": "The direct candidates fail and the message is delivered through the serving node's relay; the recipient decrypts it.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
   },
   {
     "id": "PRD-01",
@@ -3396,7 +3396,7 @@
     "id": "PRP-12",
     "area": "propagation",
     "gap": "propagation",
-    "title": "Treat a memo naming you as a cycle, confirm it against your own row, and disavow the subordinate that forwarded it",
+    "title": "Treat a memo naming you as a cycle, confirm it against your own row, and remove the subordinate that forwarded it",
     "milestone": 4,
     "kind": "positive",
     "spec": [
@@ -3415,18 +3415,18 @@
       },
       {
         "where": "wire-format.md §10.2.4",
-        "text": "It disavows the direct subordinate that forwarded the memo to it"
+        "text": "It removes the direct subordinate that forwarded the memo to it"
       },
       {
         "where": "wire-format.md §10.2.4",
-        "text": "Reason code 5, without prejudice"
+        "text": "the slot is emptied in the detector's own table and the vacancy memo goes rootward"
       }
     ],
     "given": "Node N holds subordinate S in slot k and a row matching that. A cycle below S has formed, so a memo N originated for slot k returns to N on the session from S.",
     "when": "N receives the memo.",
-    "then": "No TopologyMemo is forwarded further. A disavowal transaction by N naming S with reason code 5 is observed, and N's slot k is empty afterwards.",
+    "then": "No TopologyMemo is forwarded further. N's slot k is empty afterwards, a vacancy memo for slot k goes rootward from N, and no transaction of any type is minted, stored or pushed.",
     "oracle": "model",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-21: a cycle repair is a removal, not a disavowal [author, 2026-09-21]. The live test that held this entry asserts the superseded disavowal and is unmarked until the code lands."
   },
   {
     "id": "PRP-13",
@@ -3714,7 +3714,7 @@
     "id": "QUE-05",
     "area": "queue",
     "gap": "queue",
-    "title": "Hold only ciphertext, recipient keyhash and arrival time while a message waits.",
+    "title": "Hold only ciphertext, recipient keyhash and device, and arrival time while a message waits.",
     "milestone": 3,
     "kind": "negative",
     "spec": [
@@ -3728,14 +3728,14 @@
       },
       {
         "where": "design §14.1.6",
-        "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time."
+        "text": "Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival time."
       }
     ],
     "given": "Sender X submitted one message addressed to C to N while C was not attached, and N accepted it; N exposes its queue store to the test.",
     "when": "The test inspects N's record of the waiting message.",
-    "then": "The record consists of the ciphertext, C's keyhash and an arrival time, and carries nothing further: in particular no identity or address of X.",
+    "then": "The record consists of the ciphertext, C's keyhash, the device the submission named and an arrival time, and carries nothing further: in particular no identity or address of X.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-22: the queue is per device, so the device the submission named is part of the minimum."
   },
   {
     "id": "QUE-06",
@@ -4031,7 +4031,7 @@
     "rule": [
       {
         "where": "design §14.1.6",
-        "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, arrival time."
+        "text": "Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival time."
       },
       {
         "where": "design §12.6.5",
@@ -5197,7 +5197,7 @@
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "either check binds it: the key is the classical member of the KeyMaterial pinned for that keyhash, or the attach that follows carries that keyhash's delegation naming it. A session on which neither holds is refused."
+        "text": "any of three binds it: the key is the classical member of the `KeyMaterial` pinned for that keyhash; a delegation from that keyhash naming it is already held from the topology class (§10.1); or the peer presents that delegation first"
       },
       {
         "where": "wire-format.md §7.7.3",
@@ -5208,7 +5208,7 @@
     "when": "The requester dials the listed endpoint.",
     "then": "The session is refused: the presented key is not the classical member of S's pinned KeyMaterial and nothing at the attach binds it to S, so no payload follows, and the result is reported as a failed contact with S, never as having reached S.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key."
   },
   {
     "id": "RES-13",
@@ -6918,7 +6918,7 @@
     "rule": [
       {
         "where": "wire-format.md §9.1",
-        "text": "either check binds it: the key is the classical member of the KeyMaterial pinned for that keyhash, or the attach that follows carries that keyhash's delegation naming it. A session on which neither holds is refused."
+        "text": "any of three binds it: the key is the classical member of the `KeyMaterial` pinned for that keyhash; a delegation from that keyhash naming it is already held from the topology class (§10.1); or the peer presents that delegation first"
       },
       {
         "where": "wire-format.md §9.1",
@@ -6933,7 +6933,7 @@
     "when": "The implementation dials the endpoint intending to reach K.",
     "then": "The connection never becomes a session with K: the implementation sends nothing beyond its Attach, accepts no session state or payload on it, abandons it once the AttachAck binds nothing, and reports the dial as a refused session rather than as a session with K.",
     "oracle": "model",
-    "interpretation": null
+    "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key."
   },
   {
     "id": "TRN-04",
@@ -6953,7 +6953,7 @@
       },
       {
         "where": "wire-format.md §9.1",
-        "text": "Present encoding: Attach field 1 names an identity whose classical member is the connection-authenticated key, or Attach field 4 carries that identity's delegation naming it (§8.2)."
+        "text": "Present encoding: `Attach` field 1 names an identity whose classical member is the connection-authenticated key, or `Attach` field 4 carries that identity's delegation naming it (§8.2)"
       },
       {
         "where": "wire-format.md §8.2",
@@ -6964,7 +6964,7 @@
     "when": "The test client sends a well-formed Attach whose field 1 is B, with a Capabilities map in field 3 and no field 4.",
     "then": "No AttachAck is issued on the connection, nothing queued for B is delivered on it, and S's queue for B is unchanged. No AttachNack or other refusal frame appears on stream 0.",
     "oracle": "model",
-    "interpretation": null
+    "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key."
   },
   {
     "id": "TRN-05",
@@ -8170,7 +8170,7 @@
     "when": "L1 sends payload to L2, first with endpoint-independent NATs and then with address-and-port-dependent ones.",
     "then": "With endpoint-independent NATs a connection completes on a candidate pair and the payload crosses it with neither serving node carrying the bytes; with address-and-port-dependent NATs the checks fail within the bound and the same payload is delivered through L2's serving node.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
   },
   {
     "id": "TRV-03",
@@ -8342,7 +8342,7 @@
     "when": "L1 (and N1) offers the direct path to its peer from its own client, then sends application payload; then offers the peer outside the horizon.",
     "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer outside the horizon gathers and sends nothing.",
     "oracle": "behaviour",
-    "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. A light client keeps no table, so whether the path may be direct is what the node beside it says of its horizon."
+    "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. A light client keeps no table, so whether the path may be direct is what the node beside it says of its horizon. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
   },
   {
     "id": "PAY-16",
@@ -9035,9 +9035,9 @@
     ],
     "given": "A node answering an archive fetch, serving first a connected two-record batch and then two individually valid records that both point at genesis.",
     "when": "The requester takes each reply.",
-    "then": "The connected batch is reported with its records, and says that newestness is the holder's claim because no head was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.",
+    "then": "The connected batch is reported with its records, and says that newestness is the holder's claim because no frontier was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.",
     "oracle": "behaviour",
-    "interpretation": "The subject's own back-pointer list is the one that must match: a record carries one per signer, and only the subject's continues the subject's chain. Newestness stays uncheckable where no head was named, and saying so is part of not overclaiming."
+    "interpretation": "Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence. The live test that held it is unmarked until the code lands."
   },
   {
     "id": "DMN-10",
@@ -9080,7 +9080,7 @@
     "rule": [
       {
         "where": "wire-format.md §7.10",
-        "text": "The node refuses a publication whose subject is not the authenticated requester."
+        "text": "The node refuses a publication whose subject is not the authenticated requester"
       },
       {
         "where": "infra-client-requirements.md §6.1",
@@ -9116,9 +9116,9 @@
     ],
     "given": "Client S is attached to node N over a session and N holds nothing for S.",
     "when": "S sends a type-9 publication of its own bundle and a type-10 deposit of k one-time keys.",
-    "then": "Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte and one of the deposited keys.",
+    "then": "Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte among S's bundles and, when the fetch names S's device, one of the deposited keys.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8); the live test that held it asserts the one-bundle shape and is unmarked until the code lands."
   },
   {
     "id": "SUB-03",
@@ -11785,5 +11785,465 @@
     "then": "The one inside takes everything; the one past takes the history without the likeness and is told how much was dropped rather than having it swallowed. A backup that does not open discards nothing, because nothing was opened. A client's own export reads back through its own import.",
     "oracle": "behaviour",
     "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on."
+  },
+  {
+    "id": "TOP-41",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Sign a subtree acknowledgement under the node's delegated key, and verify one against the delegation held from the topology class",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.5",
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.5",
+        "text": "The acknowledgement is topology state and not a person's act, so the key that authenticates the node signs it."
+      },
+      {
+        "where": "wire-format.md §7.5",
+        "text": "A receiver checks field 5 against the key the grandpatron's current delegation names, which it holds from the topology class"
+      }
+    ],
+    "given": "Infra node G runs as an instance holding a delegation D from its operator's identity for transport key k and no seed; sibling S holds D from a topology push.",
+    "when": "G's node verifies an adoption of N under its subordinate P and emits a SubtreeAck; S receives it.",
+    "then": "Field 5 verifies under k with external_aad rhtn/1:subtree-ack and under no key of G's identity; S accepts the acknowledgement, having matched field 2 to D's field 2 and the signing key to D's field 1.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TOP-42",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Defer an acknowledgement whose grandpatron's delegation you do not hold",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.5",
+      "wire-format.md §10.1.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.5",
+        "text": "one holding no delegation for that keyhash defers"
+      },
+      {
+        "where": "wire-format.md §10.1.1",
+        "text": "hold it, fetch the key, and let it enter storage and propagation when it verifies"
+      }
+    ],
+    "given": "Node S holds G's KeyMaterial and no delegation for G; a SubtreeAck by G's node under delegated key k arrives.",
+    "when": "S evaluates it.",
+    "then": "S neither accepts nor rejects it: it is held, not stored and not forwarded, and it enters storage when G's delegation naming k arrives and verifies.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "CUR-21",
+    "area": "currency",
+    "gap": "currency",
+    "title": "Staple the issuer's delegation to an attestation signed under a delegated key, and verify the signature against the key it names",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.1",
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.1",
+        "text": "A verifier checks field 7 against the key field 8 names, and field 8 against the issuer's own key material"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "Where the verifier sits outside the horizon, the object carries the delegation itself"
+      }
+    ],
+    "given": "Patron P runs as an instance under delegation D for key k; relying party R holds P's KeyMaterial and is outside P's horizon.",
+    "when": "P's node issues a CurrencyAttestation for subject A and it is stapled to an introduction R receives.",
+    "then": "Field 8 is present and equals D; field 7 verifies under k; R accepts the attestation as P's, having verified D under P's KeyMaterial and matched k to D's field 1, and addresses the key it holds for A by participant-authored evidence.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "CUR-22",
+    "area": "currency",
+    "gap": "currency",
+    "title": "Reject an attestation whose stapled delegation names a key other than the one that signed it",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.1",
+        "text": "an attestation whose field 8 names a key other than the one that signed field 7 is malformed"
+      }
+    ],
+    "given": "A CurrencyAttestation whose field 7 verifies under key k and whose field 8 is a valid delegation by the issuer naming key k'.",
+    "when": "A relying party evaluates it.",
+    "then": "The attestation is malformed: not accepted, not treated as absent, and no currency is taken from it.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "PRP-26",
+    "area": "propagation",
+    "gap": "propagation",
+    "title": "Store a pushed delegation that verifies under its delegating keyhash, keep the newest per keyhash, and forward it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §10.1.1",
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §10.1.1",
+        "text": "A `Delegation` is stored when its hybrid signature verifies under the delegating keyhash's material and replaces any earlier one held for that keyhash"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "A holder keeps one delegation per delegating keyhash, the newest by field 3, and drops the rest"
+      }
+    ],
+    "given": "Node S holds G's KeyMaterial, G within S's h_store, and a delegation D1 by G for key k1; a TopologyPush carrying delegation D2 by G for key k2 with a later not_before arrives from neighbour X.",
+    "when": "S receives it.",
+    "then": "S stores D2, no longer holds D1, forwards D2 to every adjacent node except X, and forwards a second copy of D2 to nobody.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "PRP-27",
+    "area": "propagation",
+    "gap": "propagation",
+    "title": "Mint no transaction on a confirmed cycle",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §10.2.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §10.2.4",
+        "text": "A removal is not a disavowal."
+      },
+      {
+        "where": "wire-format.md §10.2.4",
+        "text": "No transaction is signed and no reason code is carried"
+      }
+    ],
+    "given": "Node N confirms a memo naming itself against its own row for slot k held by S.",
+    "when": "N acts on it.",
+    "then": "N's store gains no transaction, no envelope by N is pushed to any neighbour, and no reason code appears anywhere; the slot is empty and the vacancy memo is the only thing sent.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRN-18",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Bind an unpinned presented key by a delegation already held from the topology class, with no attach",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §9.1",
+      "wire-format.md §10.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §9.1",
+        "text": "a delegation from that keyhash naming it is already held from the topology class (§10.1)"
+      }
+    ],
+    "given": "Node A holds B's KeyMaterial and, from a TopologyPush, B's current delegation naming transport key k; B is an instance presenting k.",
+    "when": "A opens a request-only connection to B for a resolution and B presents k in the handshake.",
+    "then": "A's pinned check fails, A binds k to B by the held delegation without waiting for any frame, sends its request, and accepts the unsigned reply as B's.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRN-19",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Read a delegated peer's delegation frame before sending anything on a connection that opens no session",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §8.2",
+      "wire-format.md §8.0"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "A dialler whose pinned check fails and who holds no delegation for the keyhash reads that frame before sending anything"
+      },
+      {
+        "where": "wire-format.md §8.0",
+        "text": "a delegated peer's first frame on a connection that opens no session"
+      }
+    ],
+    "given": "Node A holds B's KeyMaterial from a referral and no delegation for B; B is an instance presenting delegated key k.",
+    "when": "A opens a request-only connection to B.",
+    "then": "A sends nothing until B's first frame on stream 0, a control frame of type 7 carrying a delegation by B naming k within its window, arrives and verifies under B's KeyMaterial; A then sends its request, and B's delegation is cached against k so a second connection under k waits for no frame.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRN-20",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Refuse a connection whose unpinned presented key is bound by nothing, and attribute no request to a delegated client before its frame",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §9.1",
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §9.1",
+        "text": "A connection on which none holds is refused, whether or not it would have opened a session."
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "a server binds a delegated client's requests to the keyhash it claims only after the frame"
+      }
+    ],
+    "given": "Node A holds B's KeyMaterial and no delegation; B presents an unpinned key k and its first frame is a Heartbeat. Separately, delegated client C opens a connection to node N and sends a type-4 verifier query naming C in field 2 before any delegation frame.",
+    "when": "Each connection proceeds.",
+    "then": "A refuses the connection to B and sends no request on it. N does not attribute C's query to C: the query is rejected as from an unauthenticated requester, and no verifier answers it.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRN-21",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Refuse a delegation whose window is not exactly 48 hours as malformed",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "EXACTLY 48 HOURS after field 3: 172,800"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "the box under another name"
+      }
+    ],
+    "given": "Three delegations by a valid issuer over the presented key: field 4 equal to field 3 plus 172,799, plus 172,801, and plus 172,800.",
+    "when": "A receiver decodes each.",
+    "then": "The first two are malformed and bind nothing; the third decodes, and its window is then checked against the clock.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRN-22",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Accept a delegation whose window contains the receiver's clock within its leeway, and refuse one beyond it",
+    "milestone": "after-5",
+    "kind": "must-accept",
+    "spec": [
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "the leeway is configurable on the receiving side with a default of 10 seconds"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "A connection refused on the window is retried by the dialler"
+      }
+    ],
+    "given": "A receiver at default leeway whose clock reads T; delegations with not_before = T + 9, T + 11, and not_after = T - 9, T - 11, each otherwise valid; and the same receiver configured to a leeway of 60.",
+    "when": "Each is presented on a handshake.",
+    "then": "At the default the T + 9 and T - 9 windows bind and the T + 11 and T - 11 windows are refused, and the dialler retries a connection refused this way; at a leeway of 60 all four bind.",
+    "oracle": "behaviour",
+    "interpretation": "A must-accept and a negative in one entry, since the boundary is one number read from both sides."
+  },
+  {
+    "id": "DMN-23",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Mint the transport keypair on the instance, and serve a whole run of contiguous credentials over its one public key",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §7",
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §7",
+        "text": "Mint your own transport keypair, and send only its public half to be signed"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "The credentials rotate; the key does not until the instance is re-provisioned"
+      }
+    ],
+    "given": "An rhtnd started with no transport key and an operator's client able to sign.",
+    "when": "The daemon provisions and then runs across a credential boundary.",
+    "then": "The daemon generates the keypair, only the public half appears in what it sends the operator's client, the run it receives is 45 credentials over that key with each not_before equal to the previous not_after, and a session accepted after the boundary presents the same key under the next credential.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TOP-43",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Hold the delegations of the parties in a light client's horizon, and bind a direct-path peer by one",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §4.2",
+      "wire-format.md §10.1.1"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §4.2",
+        "text": "Hold the delegations of the parties in it, as a node does"
+      },
+      {
+        "where": "wire-format.md §10.1.1",
+        "text": "a holder keeps the newest by `not_before` alone"
+      }
+    ],
+    "given": "Light client A attached to node N; identity D within A's horizon runs a delegated desktop under key k; N pushes D's delegation, then a later one over the same key.",
+    "when": "A receives both and then dials D's desktop on a direct path.",
+    "then": "A's horizon view holds one delegation for D, the later one, and A binds the presented key k to D from it before any frame arrives on the connection.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "SUB-12",
+    "area": "submission",
+    "gap": "submission",
+    "title": "Refuse a publication whose device is not the key the session presented",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.10"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10",
+        "text": "and one whose device is not the key this session presented"
+      }
+    ],
+    "given": "Client S attached to N from device d1; a valid bundle by S naming device d2.",
+    "when": "S publishes it on d1's session.",
+    "then": "The reply echoes the nonce with code 1 and N holds no bundle for (S, d2) from it; the same bundle published on a session d2 presented is taken.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "PAY-20",
+    "area": "payload",
+    "gap": "payload",
+    "title": "Fetch a bundle per device, open a session with each, and send to each",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.8",
+      "light-client-requirements.md §4.1",
+      "design §14.2.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.8",
+        "text": "A reply therefore carries every device's bundle, an initiator opens one session against each and sends to each"
+      },
+      {
+        "where": "light-client-requirements.md §4.1",
+        "text": "Open a session with each of a recipient's devices, and send to each."
+      }
+    ],
+    "given": "Subject T has two devices, d1 and d2, each with its own bundle at N; client S holds T's KeyMaterial.",
+    "when": "S fetches T's material with field 4 absent and sends T one message.",
+    "then": "The reply's field 2 carries two bundles, one naming d1 and one d2, each verifying under T; S opens two sessions and submits two ciphertexts, one naming d1 and one d2; each device decrypts the one addressed to it and cannot decrypt the other.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "QUE-21",
+    "area": "queue",
+    "gap": "queue",
+    "title": "Queue a ciphertext for the device it names and deliver it to that device's session alone",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §14.1.6",
+      "wire-format.md §7.10"
+    ],
+    "rule": [
+      {
+        "where": "design §14.1.6",
+        "text": "The queue is per device"
+      },
+      {
+        "where": "wire-format.md §7.10",
+        "text": "the recipient's device this ciphertext is for"
+      }
+    ],
+    "given": "Subject T's devices d1 and d2 are both offline; N accepts a submission for T naming d1.",
+    "when": "d2 attaches, drains, and detaches; then d1 attaches.",
+    "then": "d2's AttachAck field 4 is 0 and d2 receives nothing; d1's AttachAck field 4 is 1 and d1 receives the ciphertext.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "SES-26",
+    "area": "session",
+    "gap": "session",
+    "title": "Attach a subject's several devices as several sessions, each named by the key it presented",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "An attach speaks for a device, and a subject's several devices attach as several sessions"
+      }
+    ],
+    "given": "Subject T's phone presents T's classical component and T's desktop presents a delegated key under T's delegation.",
+    "when": "Both attach to serving node N with field 1 = T.",
+    "then": "N holds two sessions for T, one per presented key, refuses neither, and binds each device's later publication, deposit and wake registration to the session it arrived on.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "TRV-11",
+    "area": "traversal",
+    "gap": "traversal",
+    "title": "Check candidate pairs in the order RFC 8445 schedules them, not all at once",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "design §14.1.1"
+    ],
+    "rule": [
+      {
+        "where": "design §14.1.1",
+        "text": "an implementation checks pairs as the RFC schedules them rather than dialling every candidate at once and keeping the first to complete"
+      }
+    ],
+    "given": "Two leaves with three candidate pairs each of distinct priority, on the path harness recording the order and time of every dial.",
+    "when": "The initiator runs its connectivity checks.",
+    "then": "The first dial is the highest-priority pair; a lower-priority pair is dialled only after the higher has completed, failed or reached the RFC's pacing interval; no two pairs are dialled in the same instant. An implementation that dials all three at once fails.",
+    "oracle": "behaviour",
+    "interpretation": "design §14.1.1 defers to RFC 8445's ordering [author, 2026-09-22]; the transport dials every candidate at once today, so this entry is owed and TRV-02, TRV-07 and PAY-15 keep their outcome assertions."
   }
 ]
