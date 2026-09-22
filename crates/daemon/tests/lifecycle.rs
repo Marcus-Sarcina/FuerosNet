@@ -98,6 +98,9 @@ fn start(l: &Layout) -> (Child, SocketAddr) {
         .1
         .parse()
         .expect("an address and port");
+    // the pipe stays open and drained: closed, the daemon's next print
+    // would be a broken pipe and its end
+    std::thread::spawn(move || for _ in out.lines().map_while(Result::ok) {});
     (child, addr)
 }
 

@@ -10372,6 +10372,13 @@ adoption itself; the code follows §10.1.1 and the question is recorded.
 stamped before the first step and run after the last, leaves one copy of
 every artifact where cargo had left every superseded test binary.
 
+**The daemon scenario's flake was the harness closing a pipe.** The process
+harness read the line naming the address and dropped its readers; the
+daemon's next print, on a closed stdout, panicked the process before the
+scenario's first attach, when it lost that race under load. The harness
+keeps and drains its pipes, and `rhtnd` drops a failed write to the
+operator rather than dying on it.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the

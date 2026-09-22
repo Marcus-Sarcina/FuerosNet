@@ -845,6 +845,10 @@ land on their own.
    DMN-17's daemon scenario's dial between two daemon processes does not
    complete inside the 120 s the scenario already allows: a stalled
    handshake under load, cause not found, a harness matter to run down.
+   **Found 2026-09-22**: the harness closed the daemon's stdout after its
+   first line, and the daemon's next print killed it on the broken pipe
+   when it lost that race under load; the harness now keeps its pipes and
+   the daemon survives a closed one.
    **In progress 2026-09-22.** Landed: the three-way bind in the transport
    on every connection mode, the credential and presenter, the request-only
    dial, the window and its leeway, the cache, the ticket clamp (TRN-03 and

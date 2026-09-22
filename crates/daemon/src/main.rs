@@ -27,33 +27,38 @@ async fn main() -> ExitCode {
         ),
         [c, p] => (PathBuf::from(c), PathBuf::from(p)),
         _ => {
-            eprint!("{USAGE}");
+            rhtn_daemon::say!("{USAGE}");
             return ExitCode::from(2);
         }
     };
     let cfg = match Config::read(&cfg_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("rhtnd: {}: {e}", cfg_path.display());
+            rhtn_daemon::say!("rhtnd: {}: {e}", cfg_path.display());
             return ExitCode::FAILURE;
         }
     };
     let service = match Service::start(&cfg, &peers_path).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("rhtnd: {e}");
+            rhtn_daemon::say!("rhtnd: {e}");
             return ExitCode::FAILURE;
         }
     };
     // the address it actually bound, which an operator needs when the
     // configuration named port 0, and a test needs to dial it
-    println!("rhtnd: serving on {}", service.node.addr);
-    // §8's disclosure, at the one moment an operator is certainly watching
-    print!("{}", service.exposure().render());
+    rhtn_daemon::tell!("rhtnd: serving on {}", service.node.addr);
+    // §8's disclosure, at the one moment an operator is certainly watching;
+    // a stdout that closed between the two lines ends nothing here
+    {
+        use std::io::Write as _;
+        let _ = write!(std::io::stdout(), "{}", service.exposure().render());
+        let _ = std::io::stdout().flush();
+    }
     match service.run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("rhtnd: writing state back: {e}");
+            rhtn_daemon::say!("rhtnd: writing state back: {e}");
             ExitCode::FAILURE
         }
     }

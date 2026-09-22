@@ -15,3 +15,24 @@ pub mod config;
 pub mod hosting;
 pub mod operator;
 pub mod service;
+
+/// A line to the operator on stderr.  **A closed pipe is not the daemon's
+/// end**: the operator's terminal going away, or a harness that stopped
+/// reading, is no reason for a serving node to stop, so a write that fails
+/// is dropped, where `eprintln!` would panic the process.
+#[macro_export]
+macro_rules! say {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
+/// A line to stdout, the same way.
+#[macro_export]
+macro_rules! tell {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stdout(), $($arg)*);
+    }};
+}

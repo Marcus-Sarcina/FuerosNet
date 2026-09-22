@@ -237,7 +237,7 @@ pub fn read_run(
             continue;
         };
         if let Err(e) = cred.add(std::slice::from_ref(operator), &bytes) {
-            eprintln!("rhtnd: {}: not taken into the run: {e}", p.display());
+            crate::say!("rhtnd: {}: not taken into the run: {e}", p.display());
         }
     }
     Ok(cred.issued().len())
@@ -289,7 +289,7 @@ impl Service {
                         break;
                     }
                     if !said {
-                        eprintln!(
+                        crate::say!(
                             "rhtnd: transport key {public_hex}; no credential in force: waiting for the run in {}",
                             dir.display()
                         );
@@ -373,7 +373,7 @@ impl Service {
             .and_then(|b| Snapshot::decode(&b));
         match view.restore_materialised(snap.as_ref(), &known) {
             Restored::Replayed { replayed } if snap.is_some() => {
-                eprintln!(
+                crate::say!(
                     "rhtnd: the derived state did not match the store; replayed {replayed} records"
                 );
             }
@@ -444,7 +444,7 @@ impl Service {
                     .map(|np| np.socket())
                     .collect();
                 if !named.contains(&cfg.listen) {
-                    eprintln!(
+                    crate::say!(
                         "rhtnd: the listen address {} is not one the endpoint record names; the address has moved and a new operator-signed record is owed",
                         cfg.listen
                     );
@@ -503,7 +503,7 @@ impl Service {
                     // fatal: the node still serves what it holds, and a
                     // later attach is the operator's to make
                     other => {
-                        eprintln!("rhtnd: upstream {}: {other:?}", hex8(patron));
+                        crate::say!("rhtnd: upstream {}: {other:?}", hex8(patron));
                         None
                     }
                 }
@@ -546,7 +546,7 @@ impl Service {
         if remaining <= NOTICE_AT_CREDENTIALS && *noticed != Some(remaining) {
             *noticed = Some(remaining);
             let end = cred.run_end().unwrap_or(now);
-            eprintln!(
+            crate::say!(
                 "rhtnd: {remaining} credential{} remain in the run, which ends at {end}: sign the next run",
                 if remaining == 1 { "" } else { "s" }
             );
@@ -614,7 +614,7 @@ impl Service {
                 _ = tick.tick() => {
                     self.mind_the_run();
                     for dry in self.maintain() {
-                        eprintln!("rhtnd: one-time pool exhausted for {}", hex8(&dry));
+                        crate::say!("rhtnd: one-time pool exhausted for {}", hex8(&dry));
                     }
                     // the store is written on the tick as well as on the
                     // way out, so a kill that never reaches the handler

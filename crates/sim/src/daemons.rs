@@ -22,6 +22,7 @@ use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// One running `rhtnd`, with the files it was started from.
@@ -33,6 +34,8 @@ pub struct Daemon {
     pub config: PathBuf,
     pub peers: PathBuf,
     child: Option<Child>,
+    /// The process's stderr, line by line, drained by a thread.
+    said: Arc<Mutex<Vec<String>>>,
 }
 
 impl Daemon {
@@ -48,6 +51,12 @@ impl Daemon {
 
     pub fn archive(&self) -> PathBuf {
         self.dir.join("archive")
+    }
+
+    /// What the process has said on stderr so far: the notices a scenario
+    /// may read, and what a failure needs to see.
+    pub fn said(&self) -> Vec<String> {
+        self.said.lock().unwrap().clone()
     }
 
     /// Whether the process is still up.
@@ -172,8 +181,9 @@ impl Daemons {
             config,
             peers: peers_path,
             child: None,
+            said: Arc::default(),
         };
-        d.addr = spawn(&self.exe, &d.config, &d.peers, &mut d.child);
+        d.addr = spawn(&self.exe, &d.config, &d.peers, &mut d.child, &d.said);
         let addr = d.addr;
         self.daemons.push(d);
         addr
@@ -244,7 +254,9 @@ impl Daemons {
             self.daemons[i].peers.clone(),
         );
         let mut child = None;
-        let addr = spawn(&self.exe, &config, &peers, &mut child);
+        let said = self.daemons[i].said.clone();
+        said.lock().unwrap().clear();
+        let addr = spawn(&self.exe, &config, &peers, &mut child, &said);
         self.daemons[i].child = child;
         self.daemons[i].addr = addr;
         addr
@@ -268,7 +280,21 @@ impl Drop for Daemons {
     }
 }
 
-fn spawn(exe: &Path, config: &Path, peers: &Path, slot: &mut Option<Child>) -> SocketAddr {
+/// Start a process and read the address it serves on.
+///
+/// **The pipes stay open for the life of the process, and are drained.**
+/// A reader dropped after the first line closes the daemon's stdout, and
+/// its next write, the exposure view that follows *serving on*, is then a
+/// broken pipe, on which Rust's `print!` panics and the process exits
+/// before the scenario's first attach.  Whether the daemon lost that race
+/// depended on the load: three of twelve full gate runs on 2026-09-22.
+fn spawn(
+    exe: &Path,
+    config: &Path,
+    peers: &Path,
+    slot: &mut Option<Child>,
+    said: &Arc<Mutex<Vec<String>>>,
+) -> SocketAddr {
     let mut child = Command::new(exe)
         .arg(config)
         .arg(peers)
@@ -277,7 +303,13 @@ fn spawn(exe: &Path, config: &Path, peers: &Path, slot: &mut Option<Child>) -> S
         .spawn()
         .unwrap_or_else(|e| panic!("{} starts: {e}", exe.display()));
     let mut out = BufReader::new(child.stdout.take().expect("stdout"));
-    let mut err = child.stderr.take().expect("stderr");
+    let err = child.stderr.take().expect("stderr");
+    let sink = said.clone();
+    std::thread::spawn(move || {
+        for line in BufReader::new(err).lines().map_while(Result::ok) {
+            sink.lock().unwrap().push(line);
+        }
+    });
     let mut line = String::new();
     out.read_line(&mut line)
         .expect("the daemon says where it is serving");
@@ -285,12 +317,15 @@ fn spawn(exe: &Path, config: &Path, peers: &Path, slot: &mut Option<Child>) -> S
     // and a harness that swallows that turns every configuration mistake
     // into the same unhelpful failure
     if line.trim().is_empty() {
-        use std::io::Read;
-        let mut said = String::new();
-        let _ = err.read_to_string(&mut said);
         let _ = child.wait();
-        panic!("the daemon did not start: {}", said.trim());
+        std::thread::sleep(Duration::from_millis(100));
+        panic!(
+            "the daemon did not start: {}",
+            said.lock().unwrap().join("\n")
+        );
     }
+    // the rest of what it prints is drained, never read and never closed
+    std::thread::spawn(move || for _ in out.lines().map_while(Result::ok) {});
     let addr = line
         .trim()
         .rsplit_once(' ')

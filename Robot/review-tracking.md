@@ -10920,3 +10920,32 @@ author's and untaken. That pass failed DMN-17's daemon scenario a third
 time, *carol attaches: dial timed out* at 125.88 s under the full run's
 load: three of the twelve full gate runs of the 22nd, always that scenario,
 always the dial between two daemon processes, never alone.
+
+## DMN-17's flake, found (2026-09-22)
+
+Three failures in twelve full gate runs, always *carol attaches: dial timed
+out* after 120 s, always the attach that follows a daemon's start or
+restart, never alone, nothing in any log. The harness (`sim/src/daemons.rs`,
+and `daemon/tests/lifecycle.rs` the same way) piped the daemon's stdout and
+stderr, read the one line naming the address, and then dropped both readers,
+closing the pipes. The daemon's next write is the exposure view it prints
+right after *serving on*; on a closed stdout Rust's `print!` panics with
+*failed printing to stdout: Broken pipe* and the process exits 101, which
+the experiment reproduced directly (stdout closed before the first print:
+exit 101, the panic on the closed stderr and so nowhere). Whether the daemon
+lost that race between its two writes depended on the load: a process at
+nice 19 on a saturated box, preempted between two consecutive syscalls
+while the harness ran. A dead UDP port answers nothing, and the client
+retransmits its Initial until its own 120 s deadline, which is the failure
+seen and the reason the 120 s of `connect_timeout` was never the point.
+
+Two fixes, either sufficient. The harness keeps both pipes open for the
+process's life, stdout drained by a thread and stderr collected line by
+line (`Daemon::said`, which a failing scenario can now show; `restart`
+clears it). The daemon writes to the operator through `say!` and `tell!`,
+which drop a failed write: a terminal going away, or a harness that stopped
+reading, is no reason for a serving node to stop. Four scenario runs under
+a concurrent node-and-transport suite passed, 8 to 9 s each; four passes
+against a one-in-four flake is weak evidence on its own, and the mechanism
+shown by the experiment is what settles it. The entry's own words stand;
+the harness was the defect.
