@@ -1,0 +1,3 @@
+# The reviewer harness is not the project's to format: its fixtures are repaired
+# only where they stop compiling (Robot/implementation-plan.md), never restyled.
+disable_all_formatting = true

@@ -10694,3 +10694,47 @@ frame_request 994,405 runs, no crash. `refcheck` 2,296 / 0; `modelrefcheck`
 1,264 / 0; stalecheck 1 + 10 + 3, its baseline. `implementation-plan.md`
 section 3's deny and code-pin bullets marked landed; the note's section 6 and
 step 4 updated.
+
+## The reformat (2026-09-22)
+
+The width is rustfmt's default, 100 columns [author, 2026-09-22], on the ground
+the rest of the project stands on: prior art, no configuration carried without a
+reason. Before it ran, two places it must not reach, found by running it: the
+reviewer harness (84 hunks over its 9 files) is repaired only where it stops
+compiling, so `crates/conformance/rustfmt.toml` sets `disable_all_formatting`,
+the one stable knob that does it; the generated stubs (32 hunks, every one a
+long `todo!` title) get the same file in `acceptance/tests/`, since a generator
+that must match rustfmt's wrapping at one width is a generator that breaks at
+the next; the generator first emitted `#![rustfmt::skip]`, which rustfmt honours
+and stable rustc refuses as an unstable inner attribute (E0658), caught by the
+gate's first run on the reformatted tree. Both counted to 0 before the reformat. Step 3a of the gate is
+`cargo fmt --all --check`, non-mutating; lint is 3b and deny 3c.
+
+`cargo fmt --all`: 186 of the 191 hand-written Rust files, 24,672 insertions
+against 5,024 deletions, 50,135 lines to 69,753. The growth is the dense
+single-line style, struct literals, `else { continue }` bodies and long
+signatures, spread vertically as rustfmt lays them; 2,738 lines had exceeded the
+width. The largest growth is in the node's test scenes (`tests/resources.rs`
++1,092 −195). No behavioural change: the commit is the reformat alone, the gate
+green at the commit before it and at it. After it lands, a
+`.git-blame-ignore-revs` naming the commit, so blame reads through it.
+
+The gate on the reformatted tree, three full runs: the first failed compiling
+the stubs on the unstable inner attribute (above); the second passed its tests
+and then broke on its own script, edited while bash was still reading it (a
+lesson: nothing in the tree is touched while the gate runs); the third failed
+DMN-17's daemon scenario a second time, *carol attaches: dial timed out* at
+124.53 s under the full run's load, passing alone in the same minute, with the
+fuzz smoke clean (parse_all 21,703, body 204,910, envelope 28,293,
+frame_control 502,450, frame_request 1,006,009 runs, no crash). Two flakes in
+four full runs on two days is a pattern now, not an incident. It is not a
+tight deadline: the scenario already allows 120 s to connect
+(`daemon/tests/scenarios.rs` line 63, against the daemon's own 5 s), so a dial
+that has not completed in 120 s under load is a stalled handshake between two
+daemon processes, cause not yet found. On the step 5 list as a harness item
+to run down, not a protocol one. The third and a fourth run also failed step 2
+without my reading it: `diff -r` against the regenerated stubs saw the new
+`tests/rustfmt.toml` on one side only, and my grep of the gate's output had
+not been asked for that line. The step now excludes the file, which is the
+tree's and not the generator's. The lesson is the one in `CLAUDE.md` already:
+a summary that filters the output is a claim about the lines it kept.

@@ -129,7 +129,7 @@ Kept to what earns its place:
   untrusted surface.
 - **`cargo-deny`** for licences and advisories. The natural PQXDH and Triple Ratchet
   source, libsignal, is AGPL, which is a decision (section 7) before design §24
-  step 9. Landed 2026-09-22 as the gate's step 3b against `crates/deny.toml`:
+  step 9. Landed 2026-09-22 as the gate's step 3c against `crates/deny.toml`:
   an allow-list of the twelve permissive licences the tree carries, copyleft
   refused by absence, sources pinned to crates.io, advisories failing the gate.
 - **`wasmtime`** for the component-model sandbox when `rhtn-resources` arrives
@@ -150,8 +150,9 @@ Kept to what earns its place:
   `crates/tools/pincheck.py`: the six root documents against
   `crates/spec-pins.json`, rewritten only by `--accept`; and the vector pin's
   documents, tools and outputs read and compared, never rewritten. The format
-  step is the one bullet of the gate's list still absent: `rustfmt` is
-  installed and the width is the author's.
+  step landed the same day as step 3a, rustfmt at its default width [author,
+  2026-09-22], the reviewer harness and the generated stubs outside its reach;
+  the gate's list is complete.
 - **Every long job is fenced** as the prover now is: a core cap and a heap ceiling
   under `nice`. A fuzzer or a full build on 32 cores reproduces the 2026-09-08
   lock-up otherwise.

@@ -7,8 +7,10 @@
 #     gap coverage (tools/check.py; exit 1 on any flag).
 #  2. The generated stubs are in sync with the catalogue: regenerate into a
 #     temporary directory and diff.  A hand edit to tests/ fails here.
-#  3a. Every crate lints clean under clippy, all targets, warnings as errors.
-#  3b. Licences and advisories under cargo-deny, against deny.toml.
+#  3a. Every crate is rustfmt-clean at the default width, non-mutating; the
+#      reviewer harness and the generated stubs are outside its reach.
+#  3b. Every crate lints clean under clippy, all targets, warnings as errors.
+#  3c. Licences and advisories under cargo-deny, against deny.toml.
 #  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
 #     are not run: they are the tests still owed, and `cargo test -- --ignored`
 #     lists them by failing each one.
@@ -39,14 +41,26 @@ if python3 "$HERE/acceptance/tools/check.py"; then :; else fail=1; fi
 echo "=== 2. Generated stubs in sync ==="
 tmp="$(mktemp -d)"
 python3 "$HERE/acceptance/tools/gen_stubs.py" "$tmp" > /dev/null
-if diff -r "$tmp" "$HERE/acceptance/tests" > /dev/null; then
+# The generator owns the .rs files there; tests/rustfmt.toml is the tree's.
+if diff -r -x rustfmt.toml "$tmp" "$HERE/acceptance/tests" > /dev/null; then
   echo "  tests/ matches the catalogue"
 else
   echo "  tests/ DIFFERS from the catalogue: regenerate with tools/gen_stubs.py"; fail=1
 fi
 rm -rf "$tmp"
 
-echo "=== 3a. Lint ==="
+echo "=== 3a. Format ==="
+# rustfmt at its default width [author, 2026-09-22], checked and never applied
+# here.  conformance/rustfmt.toml turns formatting off for the reviewer
+# harness (repaired only where it stops compiling), and acceptance/tests/rustfmt.toml
+# for the generated stubs; the inner skip attribute is unstable on stable rustc.
+if (cd "$HERE" && cargo fmt --all --check > /dev/null 2>&1); then
+  echo "  cargo fmt: clean"
+else
+  echo "  cargo fmt: FAILED ($(cd "$HERE" && cargo fmt --all --check 2>/dev/null | grep -c '^Diff in') hunks; run cargo fmt --all)"; fail=1
+fi
+
+echo "=== 3b. Lint ==="
 # Every crate, every target, and a warning is a failure: clippy runs on the
 # stable toolchain the workspace builds with.
 if (cd "$HERE" && nice -n 19 cargo clippy -j 8 --workspace --all-targets --quiet -- -D warnings 2>&1 | tail -20); then
@@ -55,7 +69,7 @@ else
   echo "  cargo clippy: WARNINGS"; fail=1
 fi
 
-echo "=== 3b. Licences and advisories ==="
+echo "=== 3c. Licences and advisories ==="
 # cargo-deny against deny.toml: the allow-list is what the dependency tree
 # carries, all permissive; copyleft fails by absence from it, and the
 # advisory database is checked.  Absence of the tool is a failure, not a

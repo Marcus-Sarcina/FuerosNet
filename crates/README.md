@@ -26,10 +26,16 @@ Crates arrived in the plan's milestone order, `rhtn-codec` and `rhtn-crypto`
 first.  Each one implements catalogue entries and marks them
 `// acceptance: XXX-NN`; the stub count falls as the implemented count rises.
 
-**The gate is `./check.sh`.**  It checks the catalogue, checks that the generated
-stubs match it, and builds and tests the workspace.  It is separate from
-`models/run-all.sh`, which runs on a different cadence, and it fences cargo the
-same way that script fences the prover.
+**The gate is `./check.sh`.**  It compares the specification pins (the code's
+own, `spec-pins.json`, advanced only by `tools/pincheck.py --accept`, and the
+vectors'), checks the catalogue, checks that the generated stubs match it,
+checks the format at rustfmt's default width, lints, checks licences and
+advisories against `deny.toml`, and builds and tests the workspace.  It is
+separate from `models/run-all.sh`, which runs on a different cadence, and it
+fences cargo the same way that script fences the prover.  The reformat of
+2026-09-22 is listed in `.git-blame-ignore-revs` at the repository root; set
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` once and blame reads
+through it.
 
 **Robustness.** The gate runs DEC-01 and DEC-02: every proper prefix of every
 accepted fixture, and 48 seeded mutations per fixture. The hours-long run is

@@ -10303,9 +10303,12 @@ outputs read and compared, never rewritten. Step 3b runs `cargo-deny` against
 `crates/deny.toml`: the twelve permissive licences the tree carries as the
 allow-list, copyleft refused by absence, sources pinned to crates.io, an advisory
 failing the gate. Its first run found one, RUSTSEC-2026-0285 in `rustls`
-0.23.44, closed by the lockfile advancing to 0.23.45. The format step is not
-landed: `rustfmt` is installed, the tree was never formatted, and the column
-width is the author's; the reformat is one commit of its own once chosen.
+0.23.44, closed by the lockfile advancing to 0.23.45. **The format step follows
+at rustfmt's default width** [author, 2026-09-22], a non-mutating check; the
+reformat itself is one commit with no behavioural change, 186 files and the
+tree grown from 50,135 to 69,753 lines as the single-line style spreads. The
+reviewer harness is not formatted, being repaired only where it stops
+compiling, and the generated stubs carry a skip from their generator.
 
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the

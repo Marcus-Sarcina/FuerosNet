@@ -459,11 +459,14 @@ never rewritten; 19 hashes checked. `cargo-deny` 0.20.2 is step 3b against
 every one permissive, copyleft refused by absence, sources pinned to
 crates.io, advisories failing the gate; its first run found one, RUSTSEC-2026-0285
 in `rustls` 0.23.44, closed by the lockfile advancing to 0.23.45. **The format
-step is not landed**: `rustfmt` 1.9.0 is installed and the tree was never
-formatted, and the width is the author's; `cargo fmt --check` counts 3,395
-diff hunks at the default 100 columns, 2,677 at 120, 1,705 at 160, 1,187 at
-200, 995 at 240. A reformat at any width is one commit touching most files,
-to be made on its own so no behavioural diff hides in it.
+step landed the same day at rustfmt's default width** [author, 2026-09-22]:
+step 3a, `cargo fmt --all --check`, non-mutating; the reviewer harness turned
+off by `crates/conformance/rustfmt.toml` (repaired only where it stops
+compiling, never restyled) and the generated stubs by a second such file in
+their directory. The reformat is one commit of its own: 186 files, 50,135
+lines to 69,753, the dense single-line style spread vertically, no behavioural
+change, the gate green before and after. A `.git-blame-ignore-revs` naming
+that commit follows it.
 
 **Also owed:**
 
@@ -820,14 +823,18 @@ land on their own.
    courier's relay to the serving node itself carrying an all-zero device
    until the node's own device reaches it (QUE-21).
 4. **The gate** (section 6): the freshness check, so step 3 cannot go stale
-   silently again; the format step; `cargo-deny`. **Done 2026-09-22 but for
-   the format step**: step 0 pins, step 3b deny; the width is the author's
-   (section 6), and the reformat is its own commit once chosen.
+   silently again; the format step; `cargo-deny`. **Done 2026-09-22**: step 0
+   pins, step 3a format at the default width, step 3c deny; the reformat is
+   its own commit (section 6).
 5. **Behavioural code per mechanism**, each against its entries: archive,
    node, client and `probe` for `wire-format.md` §7.9; transport, node,
    daemon, client and FFI for the delegation, on the signing table as decided;
    the design §19.6 notices removed; the no-history audit; section 2.6's
-   confirmations as tests.
+   confirmations as tests. Also the harness item the gate raised twice
+   (2026-09-22, both times under the full run's load, passing alone):
+   DMN-17's daemon scenario's dial between two daemon processes does not
+   complete inside the 120 s the scenario already allows: a stalled
+   handshake under load, cause not found, a harness matter to run down.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

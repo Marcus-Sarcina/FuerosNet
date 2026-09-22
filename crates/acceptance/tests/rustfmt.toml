@@ -1,0 +1,4 @@
+# Generated stubs (tools/gen_stubs.py): the titles are the catalogue's, not
+# hand-laid code, and a generator made to match rustfmt's wrapping at one width
+# breaks at the next.  The inner skip attribute is unstable on stable rustc.
+disable_all_formatting = true
