@@ -22,7 +22,7 @@ use rhtn_archive::record::Record;
 use rhtn_crypto::{Identity, SigningIdentity};
 use rhtn_node::resolution::{REQUEST_RESOLVE, ResolveReply, ResolveRequest};
 use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, Session, attach};
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -57,8 +57,9 @@ pub async fn attached(
         pins.pin_identity(id);
     }
     let cfg = ClientConfig {
-        identity: Arc::new(me),
+        me: Party::of(Arc::new(me)),
         pins,
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

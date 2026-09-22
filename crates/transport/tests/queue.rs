@@ -8,7 +8,7 @@ use rhtn_archive::{Keyhash, genesis};
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_transport::queue::{Queued, Refusal};
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -40,8 +40,9 @@ fn node_cfg(name: &str) -> NodeConfig {
 
 fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(test_identity(name)),
+        me: Party::of(Arc::new(test_identity(name))),
         pins: pins(),
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,
@@ -55,7 +56,7 @@ fn client_cfg(name: &str) -> ClientConfig {
 }
 
 fn spawn_node(cfg: NodeConfig) -> (Arc<Node>, SocketAddr, quinn::Endpoint) {
-    let ep = tls::server_endpoint(&cfg.identity, loopback()).unwrap();
+    let ep = tls::server_endpoint(cfg.presenter(), loopback()).unwrap();
     let addr = ep.local_addr().unwrap();
     let node = Node::new(cfg);
     tokio::spawn(node.clone().serve(ep.clone()));

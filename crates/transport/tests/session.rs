@@ -7,7 +7,7 @@ use rhtn_codec::encode::*;
 use rhtn_codec::frame::{self, Stream};
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -41,8 +41,9 @@ fn node_cfg(name: &str, interval: u64) -> NodeConfig {
 
 fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(test_identity(name)),
+        me: Party::of(Arc::new(test_identity(name))),
         pins: pins_for(&["alice", "bob", "carol", "c1", "c2", "w1"]),
+        bind: Default::default(),
         capabilities: BTreeMap::from([(
             capability_id("rhtn/core:max-archive-batch"),
             vec![0x00, 0x40],
@@ -60,7 +61,7 @@ fn client_cfg(name: &str) -> ClientConfig {
 
 /// A serving node on loopback; returns it with its address.
 fn spawn_node(cfg: NodeConfig) -> (Arc<Node>, SocketAddr) {
-    let ep = tls::server_endpoint(&cfg.identity, loopback()).unwrap();
+    let ep = tls::server_endpoint(cfg.presenter(), loopback()).unwrap();
     let addr = ep.local_addr().unwrap();
     let node = Node::new(cfg);
     tokio::spawn(node.clone().serve(ep));
@@ -105,6 +106,7 @@ fn ack_body(interval: u64) -> Vec<u8> {
         interval,
         queued: 0,
         capabilities: BTreeMap::new(),
+        delegation: None,
     }
     .encode()
 }
@@ -132,14 +134,8 @@ fn heartbeat_counter(frame: &[u8]) -> Option<u64> {
 async fn ses_01_primary_mode_for_a_client_under_this_node() {
     let (node, addr) = spawn_node(node_cfg("bob", 7));
     let cfg = client_cfg("alice");
-    let AttachOutcome::Attached(s) = attach(
-        &cfg,
-        &client_ep(),
-        node.cfg.identity.public.keyhash,
-        addr,
-        false,
-    )
-    .await
+    let AttachOutcome::Attached(s) =
+        attach(&cfg, &client_ep(), node.cfg.me.keyhash, addr, false).await
     else {
         panic!("attached")
     };
@@ -156,15 +152,7 @@ async fn ses_02_accepts_a_client_whose_patron_is_a_light_client() {
     cfg.in_subtree = Arc::new(move |kh| *kh == c);
     let (node, addr) = spawn_node(cfg);
     let ccfg = client_cfg("c1");
-    match attach(
-        &ccfg,
-        &client_ep(),
-        node.cfg.identity.public.keyhash,
-        addr,
-        false,
-    )
-    .await
-    {
+    match attach(&ccfg, &client_ep(), node.cfg.me.keyhash, addr, false).await {
         AttachOutcome::Attached(s) => assert_eq!(s.ack.mode, 0),
         other => panic!("walk-up client was not attached: {other:?}"),
     }
@@ -177,7 +165,7 @@ async fn trn_04_attach_naming_another_identity_gets_no_ack_and_no_delivery() {
     let b = test_identity("carol").public.keyhash;
     node.enqueue(b, b"for carol".to_vec()).unwrap();
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    let body = encode_attach(&b, None, &BTreeMap::new());
+    let body = encode_attach(&b, None, &BTreeMap::new(), None);
     send.write_all(&control_frame(FRAME_ATTACH, &body))
         .await
         .unwrap();
@@ -242,7 +230,8 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let ap = &ack_fx[4..];
     let aparts = array_item_ranges(ap, 0).unwrap();
     let ack_body_fx = &ap[aparts[1].clone()];
-    let ack_fx_decoded = AttachAck::decode(ack_body_fx, &parse_all(ack_body_fx).unwrap()).unwrap();
+    let ack_fx_decoded =
+        AttachAck::decode(ack_body_fx, 0, &parse_all(ack_body_fx).unwrap()).unwrap();
     let mut ncfg = node_cfg("bob", ack_fx_decoded.interval);
     ncfg.siblings = {
         let list = ack_fx_decoded.siblings.clone();
@@ -307,7 +296,7 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     assert_eq!(as_uint(&a[0]), Some(2));
     let aranges = array_item_ranges(&ack[4..], 0).unwrap();
     let strip_ack = |body: &[u8]| -> Vec<u8> {
-        let mut d = AttachAck::decode(body, &parse_all(body).unwrap()).unwrap();
+        let mut d = AttachAck::decode(body, 0, &parse_all(body).unwrap()).unwrap();
         d.capabilities.retain(|k, _| *k == named);
         d.encode()
     };
@@ -332,7 +321,7 @@ fn unknown_frame_at_bound() -> Vec<u8> {
 #[tokio::test]
 async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_session() {
     // as client: a raw server sends the unknown frame, then a valid ack
-    let sep = tls::server_endpoint(&test_identity("bob"), loopback()).unwrap();
+    let sep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
     let saddr = sep.local_addr().unwrap();
     let server = tokio::spawn(async move {
         let (_c, mut s, mut r) = raw_accept(&sep).await;
@@ -373,6 +362,7 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
             &test_identity("alice").public.keyhash,
             None,
             &BTreeMap::new(),
+            None,
         ),
     ))
     .await
@@ -432,7 +422,7 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
 #[tokio::test]
 async fn trn_08_declared_length_over_the_bound_ends_the_session() {
     // as client
-    let sep = tls::server_endpoint(&test_identity("bob"), loopback()).unwrap();
+    let sep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
     let saddr = sep.local_addr().unwrap();
     let server = tokio::spawn(async move {
         let (c, mut s, mut r) = raw_accept(&sep).await;
@@ -478,6 +468,7 @@ async fn trn_08_declared_length_over_the_bound_ends_the_session() {
             &test_identity("alice").public.keyhash,
             None,
             &BTreeMap::new(),
+            None,
         ),
     ))
     .await
@@ -516,7 +507,7 @@ fn sibling(name: &str, port: u16) -> SiblingRef {
 async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_applies() {
     let l1 = vec![sibling("carol", 4001)];
     let l2 = vec![sibling("c1", 4002), sibling("c2", 4003)];
-    let sep = tls::server_endpoint(&test_identity("bob"), loopback()).unwrap();
+    let sep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
     let saddr = sep.local_addr().unwrap();
     let l1s = l1.clone();
     let l2s = l2.clone();
@@ -531,6 +522,7 @@ async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_app
             interval: 30,
             queued: 0,
             capabilities: BTreeMap::new(),
+            delegation: None,
         };
         s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode()))
             .await
@@ -581,7 +573,7 @@ async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_app
 }
 
 async fn client_attaches_on_raw_ack(ack: AttachAck) -> Session {
-    let sep = tls::server_endpoint(&test_identity("bob"), loopback()).unwrap();
+    let sep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
     let saddr = sep.local_addr().unwrap();
     tokio::spawn(async move {
         let (_c, mut s, mut r) = raw_accept(&sep).await;
@@ -613,7 +605,7 @@ async fn node_acks_raw_attach(caps: BTreeMap<u64, Vec<u8>>) -> Arc<Node> {
     let (_conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&test_identity("alice").public.keyhash, None, &caps),
+        &encode_attach(&test_identity("alice").public.keyhash, None, &caps, None),
     ))
     .await
     .unwrap();
@@ -637,6 +629,7 @@ async fn trn_10_unrecognised_capability_id_is_tolerated_in_both_roles() {
         interval: 30,
         queued: 0,
         capabilities: unknown.clone(),
+        delegation: None,
     })
     .await;
     assert!(s.conn.close_reason().is_none());
@@ -653,6 +646,7 @@ async fn trn_11_empty_capabilities_and_no_grease_still_attach_in_both_roles() {
         interval: 30,
         queued: 0,
         capabilities: BTreeMap::new(),
+        delegation: None,
     })
     .await;
     assert!(s.conn.close_reason().is_none());
@@ -718,7 +712,7 @@ async fn trn_13_refusal_is_close_code_1_with_no_frame() {
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&alice, None, &BTreeMap::new()),
+        &encode_attach(&alice, None, &BTreeMap::new(), None),
     ))
     .await
     .unwrap();
@@ -748,7 +742,7 @@ async fn trn_14_close_code_1_ends_the_attempt_without_trying_other_endpoints_or_
     let mut extra_addrs = Vec::new();
     let mut tasks = Vec::new();
     for name in ["bob", "carol"] {
-        let ep = tls::server_endpoint(&test_identity(name), loopback()).unwrap();
+        let ep = tls::server_endpoint(test_identity(name), loopback()).unwrap();
         extra_addrs.push(ep.local_addr().unwrap());
         let c = count.clone();
         tasks.push(tokio::spawn(async move {
@@ -1137,7 +1131,7 @@ async fn a_frame_half_received_when_an_outbound_frame_goes_is_finished_not_lost(
     let (conn, mut send, mut recv) = raw_dial("bob", "alice", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&kh("bob"), None, &Default::default()),
+        &encode_attach(&kh("bob"), None, &Default::default(), None),
     ))
     .await
     .unwrap();

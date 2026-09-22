@@ -42,6 +42,19 @@ struct UpstreamSession {
 /// A handle into each session this node holds upstream, by peer.
 type Upstream = Arc<Mutex<HashMap<Keyhash, UpstreamSession>>>;
 
+/// The topology store as what the transport binds by: one delegation per
+/// keyhash, the newest (`wire-format.md` §10.1.1).
+struct HeldInStore(Arc<Mutex<NodeView>>);
+
+impl rhtn_transport::bind::Held for HeldInStore {
+    fn delegation(&self, keyhash: &[u8; 32]) -> Option<rhtn_crypto::verify::Delegation> {
+        self.0.lock().unwrap().store.delegation(keyhash).cloned()
+    }
+    fn by_key(&self, key: &[u8; 32]) -> Option<rhtn_crypto::verify::Delegation> {
+        self.0.lock().unwrap().store.delegation_by_key(key).cloned()
+    }
+}
+
 /// Where the reply to a request this node sent goes: the peer that
 /// answered, the request type, and the reply body.
 pub type ReplyHandler = Arc<dyn Fn(Keyhash, u64, Vec<u8>) + Send + Sync>;
@@ -318,7 +331,13 @@ impl LiveNode {
         // one clock for the node: the configuration's, read by every
         // decision the view takes from here on
         view.clock = cfg.clock.clone();
+        // the credential the transport presents is the one the view signs
+        // under and pushes (design §23.3)
+        view.credential = cfg.bind.credential.clone();
         let view = Arc::new(Mutex::new(view));
+        // the delegations the store holds are what bind a delegated peer
+        // with no frame (`wire-format.md` §9.1)
+        cfg.bind = cfg.bind.with_held(Arc::new(HeldInStore(view.clone())));
         let currency = Arc::new(Mutex::new(CurrencyState::default()));
         let anchors = Arc::new(Mutex::new(anchors));
         let ids = Arc::new(Mutex::new(ids));
@@ -449,7 +468,7 @@ impl LiveNode {
             anchors.clone(),
             slot.clone(),
         );
-        let identity = cfg.identity.clone();
+        let identity = cfg.me.clone();
         // the detector's verdicts on the sessions this node serves feed the
         // ladder, stamped with the node's own clock (design §12.6.5.1), and
         // then go wherever the operator sent them
@@ -630,7 +649,7 @@ impl LiveNode {
             .expect("traversal socket");
         let endpoint = {
             let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(
-                &cfg.identity,
+                cfg.presenter(),
             ))
             .expect("quinn accepts the profile");
             let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
@@ -689,7 +708,7 @@ impl LiveNode {
     }
 
     pub fn me(&self) -> Keyhash {
-        self.node.cfg.identity.public.keyhash
+        self.node.cfg.me.keyhash
     }
 
     /// Attach upstream, to this node's patron or serving node, and carry
@@ -804,11 +823,12 @@ impl LiveNode {
         if !permits_direct(&self.view, &peer) {
             return false;
         }
-        let me = self.node.cfg.identity.clone();
+        let me = self.node.cfg.presenter();
         let conn = rhtn_transport::traversal::connect_direct(
             &self.endpoint,
             &me,
             pins,
+            &self.node.cfg.bind,
             &peer,
             candidates,
             self.dial_timeout,
@@ -918,13 +938,14 @@ impl LiveNode {
 async fn drive(
     mut r: Resolution,
     ep: &quinn::Endpoint,
-    me: &Arc<rhtn_crypto::SigningIdentity>,
+    me: &rhtn_transport::tls::Party,
     node: &Node,
     per_endpoint: Duration,
 ) -> (Resolution, Option<ResolveReply>) {
     let cfg = ClientConfig {
-        identity: me.clone(),
+        me: me.clone(),
         pins: node.cfg.pins.clone(),
+        bind: Default::default(),
         capabilities: Default::default(),
         attestation: None,
         filter: None,

@@ -1,6 +1,5 @@
 //! Scripted multi-node scenarios over loopback.
 
-use rhtn_crypto::SigningIdentity;
 use rhtn_transport::session::{Node, NodeConfig};
 use rhtn_transport::tls;
 use rhtn_transport::traversal::{self, TraversalSocket};
@@ -24,7 +23,7 @@ impl Running {
         let socket = TraversalSocket::bind("127.0.0.1:0".parse().unwrap(), cfg.nat).unwrap();
         let addr = socket.addr().unwrap();
         let crypto =
-            quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&cfg.identity))
+            quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(cfg.presenter()))
                 .expect("quinn accepts the profile");
         let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
         qcfg.transport_config(Arc::new(tls::transport_config()));
@@ -44,7 +43,7 @@ impl Running {
         self.endpoint.close(0u32.into(), b"dark");
     }
 
-    pub fn identity(&self) -> Arc<SigningIdentity> {
-        self.node.cfg.identity.clone()
+    pub fn party(&self) -> rhtn_transport::tls::Party {
+        self.node.cfg.me.clone()
     }
 }

@@ -513,9 +513,9 @@ fn a_slot_held_at_or_after_the_memos_timestamp_is_not_forwarded() {
     );
 }
 
-// owed: PRP-12 was re-derived on 2026-09-21 and this test holds the rule it superseded until the code lands; it is not marked
+// acceptance: PRP-12
 #[test]
-fn a_memo_naming_this_node_and_matching_its_row_is_a_confirmed_cycle() {
+fn a_memo_naming_this_node_and_matching_its_row_removes_the_forwarding_subordinate() {
     let mut s = scene();
     let t = s.w.clock;
     s.n.set_slot(0, Some(kh("carol")), t);
@@ -527,51 +527,55 @@ fn a_memo_naming_this_node_and_matching_its_row_is_a_confirmed_cycle() {
     assert_eq!(
         out,
         MemoOutcome::CycleConfirmed {
-            disavowed: kh("carol")
+            removed: Some(kh("carol"))
         }
     );
     let memos = s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO);
     assert!(!memos.contains(&bytes), "the memo is not forwarded further");
-    // what does travel rootward is N's own memo for the slot it emptied:
-    // a disavowal produces a memo like any other (§10.2.2)
+    // what travels rootward is N's own vacancy memo for the slot it emptied
     assert_eq!(memos.len(), 1);
     let emptied = Memo::decode(&memos[0]).unwrap();
     assert_eq!(
         (emptied.patron, emptied.slot, emptied.occupant),
         (kh("bob"), 0, None)
     );
-    // the disavowal is observed, naming S with reason code 5
-    let pushed: Vec<Vec<u8>> = s
-        .fab
-        .frames()
-        .into_iter()
-        .filter(|f| f.frame_type == FRAME_TOPOLOGY_PUSH)
-        .map(|f| f.body)
-        .collect();
-    assert!(!pushed.is_empty());
-    let (kind, obj) = decode_push(&pushed[0]).unwrap();
-    assert_eq!(kind, KIND_TRANSACTION);
-    let rec = rhtn_archive::record::Record::parse(&obj).unwrap();
-    assert_eq!(rec.tx_type, rhtn_archive::tx::TYPE_DISAVOWAL);
-    assert_eq!(rec.field_hash(1), Some(kh("bob")));
-    assert_eq!(rec.field_hash(2), Some(kh("carol")));
-    assert_eq!(
-        rec.field_uint(4),
-        Some(5),
-        "reason code 5, without prejudice"
-    );
     assert_eq!(
         s.n.slots[&0].occupant, None,
         "N's slot 0 is empty afterwards"
     );
-    assert!(
-        s.n.store.holds_txid(&rec.txid),
-        "and N holds its own disavowal"
+    assert_eq!(
+        s.fab.count(FRAME_TOPOLOGY_PUSH),
+        0,
+        "no transaction of any type is pushed"
     );
-    assert!(
-        !s.n.table.subordinates(&kh("bob")).contains(&kh("carol")),
-        "and its table ended the binding"
+}
+
+// acceptance: PRP-27
+#[test]
+fn a_confirmed_cycle_mints_no_transaction() {
+    let mut s = scene();
+    let t = s.w.clock;
+    s.n.set_slot(0, Some(kh("carol")), t);
+    let (stored, archived) = (s.n.store.len(), s.n.archive.len());
+    s.fab.clear();
+    let m = memo("bob", "alice", 0, t, Some("carol"));
+    assert!(matches!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &m.encode()),
+        MemoOutcome::CycleConfirmed { .. }
+    ));
+    assert_eq!(s.n.store.len(), stored, "the store gains no transaction");
+    assert_eq!(
+        s.n.archive.len(),
+        archived,
+        "the archive advances by nothing"
     );
+    let frames = s.fab.frames();
+    assert!(
+        frames.iter().all(|f| f.frame_type == FRAME_TOPOLOGY_MEMO),
+        "no envelope by N is pushed to any neighbour; no reason code appears anywhere"
+    );
+    assert_eq!(frames.len(), 1, "the vacancy memo is the only thing sent");
+    assert_eq!(s.n.slots[&0].occupant, None);
 }
 
 // acceptance: PRP-13
@@ -901,25 +905,10 @@ fn a_cycle_memo_about_an_emptied_slot_is_confirmed_by_the_empty_row() {
     // N's own memo for that slot returns from below
     let m = memo("bob", "alice", 0, t, None);
     let out = s.n.receive_memo(&*s.fab, &kh("carol"), &m.encode());
-    assert_eq!(
-        out,
-        MemoOutcome::CycleConfirmed {
-            disavowed: kh("carol")
-        }
-    );
-    let pushed: Vec<Vec<u8>> = s
-        .fab
-        .frames()
-        .into_iter()
-        .filter(|f| f.frame_type == FRAME_TOPOLOGY_PUSH)
-        .map(|f| f.body)
-        .collect();
-    let (_, obj) = decode_push(&pushed[0]).unwrap();
-    let rec = rhtn_archive::record::Record::parse(&obj).unwrap();
-    assert_eq!(
-        (rec.tx_type, rec.field_hash(2), rec.field_uint(4)),
-        (rhtn_archive::tx::TYPE_DISAVOWAL, Some(kh("carol")), Some(5))
-    );
+    // confirmed by the empty row; the forwarder holds no slot any more, so
+    // nothing is removed, nothing is minted and nothing is sent
+    assert_eq!(out, MemoOutcome::CycleConfirmed { removed: None });
+    assert_eq!(s.fab.frames().len(), 0);
     // a slot that never held a row confirms nothing
     let mut s2 = scene();
     s2.fab.clear();
@@ -1297,7 +1286,7 @@ async fn a_running_node_learns_who_is_attached_to_it_and_forwards_to_them() {
     use rhtn_node::resolution::{AnchorTable, Ingestion};
     use rhtn_node::runtime::LiveNode;
     use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, NodeConfig, attach};
-    use rhtn_transport::tls::{self, Pins};
+    use rhtn_transport::tls::{self, Party, Pins};
     use std::collections::BTreeMap;
     use std::sync::Mutex;
     use std::time::Duration;
@@ -1323,8 +1312,9 @@ async fn a_running_node_learns_who_is_attached_to_it_and_forwards_to_them() {
     );
 
     let ccfg = ClientConfig {
-        identity: Arc::new(id("carol")),
+        me: Party::of(Arc::new(id("carol"))),
         pins,
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

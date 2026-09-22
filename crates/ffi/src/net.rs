@@ -20,7 +20,7 @@ use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::Dispatched;
 use rhtn_crypto::SigningIdentity;
 use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, Session, attach_any};
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -170,8 +170,9 @@ impl Net {
         population: Vec<Keyhash>,
     ) -> Result<Attached, Refused> {
         let cfg = ClientConfig {
-            identity: self.me.clone(),
+            me: Party::of(self.me.clone()),
             pins: self.pins.clone(),
+            bind: Default::default(),
             capabilities: BTreeMap::new(),
             attestation: None,
             filter: None,
@@ -190,6 +191,9 @@ impl Net {
                 AttachOutcome::Attached(s) => s,
                 AttachOutcome::Refused => {
                     return Err(Refused::new("the serving node refused this client"));
+                }
+                AttachOutcome::Unbound(why) => {
+                    return Err(Refused::new(format!("no session: {why}")));
                 }
                 AttachOutcome::EndpointFailure(e) => {
                     return Err(Refused::new(format!("no session: {e}")));

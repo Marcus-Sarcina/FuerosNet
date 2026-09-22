@@ -108,6 +108,7 @@ fn light(
     let direct = LightDirect::bind(
         Arc::new(id(name)),
         pins(),
+        Default::default(),
         loopback(),
         None,
         None,
@@ -136,6 +137,7 @@ fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inbo
     let direct = LightDirect::bind(
         Arc::new(id(name)),
         pins(),
+        Default::default(),
         loopback(),
         None,
         None,

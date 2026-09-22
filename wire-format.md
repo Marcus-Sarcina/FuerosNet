@@ -3715,7 +3715,8 @@ SiblingUpdate = {
 
 TopologyPush = {
   1: uint,             ; body kind: 0 = signed transaction envelope,
-                       ;            1 = EndpointRecord (§7.6)
+                       ;            1 = EndpointRecord (§7.6),
+                       ;            2 = Delegation (§8.2)
   2: bstr              ; the object, byte-for-byte as received. NOT re-encoded:
                        ;   it is already canonical (§1) and re-serialising risks
                        ;   changing bytes a signature covers
@@ -4093,12 +4094,13 @@ hold it.
 it.** The store the node keeps anyway is the seen-set. A horizon contains cycles
 once peering exists (design §6.3); the second arrival is a duplicate and dies there.
 
-**Identity differs by body kind, and both are already defined:**
+**Identity differs by body kind, and all three are already defined:**
 
 | Kind | Identity | Duplicate when |
 |---|---|---|
 | Signed transaction | `txid` (§1) | the `txid` is already held |
 | `EndpointRecord` | `(subject keyhash, seqno)` | the held `seqno` is greater than or equal (§2.3) |
+| `Delegation` | the delegating keyhash (§8.2, field 2) | the held `not_before` is greater than or equal (§8.2) |
 
 **An `EndpointRecord` therefore supersedes rather than accumulating**, which is what a
 current-address record should do, and §2.3's strictly-greater rule already governs it.

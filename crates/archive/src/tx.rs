@@ -7,6 +7,7 @@ use crate::{Keyhash, Txid};
 use rhtn_codec::cose::aad;
 use rhtn_codec::encode::*;
 use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::signer::Sign1;
 
 pub const TYPE_ADOPTION: u64 = 1;
 pub const TYPE_DEPARTURE: u64 = 2;
@@ -595,10 +596,12 @@ pub fn envelope_from_entries(tx_type: u64, body: &[u8], entries: &[(Keyhash, Vec
     out
 }
 
-/// A `SubtreeAck` (`wire-format.md` §7.5): the grandpatron's classical
-/// signature over fields 1-4 with `external_aad = "rhtn/1:subtree-ack"`.
-pub fn subtree_ack(
-    grandpatron: &SigningIdentity,
+/// A `SubtreeAck` (`wire-format.md` §7.5): the grandpatron's node's
+/// classical signature over fields 1-4 with `external_aad =
+/// "rhtn/1:subtree-ack"`, under the key it delegated where it runs as an
+/// instance [author, 2026-09-21].
+pub fn subtree_ack<S: Sign1 + ?Sized>(
+    grandpatron: &S,
     adoption: &Txid,
     node: &Keyhash,
     timestamp: u64,
@@ -608,7 +611,7 @@ pub fn subtree_ack(
     emit_uint(&mut payload, 1);
     emit_bstr(&mut payload, adoption);
     emit_uint(&mut payload, 2);
-    emit_bstr(&mut payload, &grandpatron.public.keyhash);
+    emit_bstr(&mut payload, &grandpatron.keyhash());
     emit_uint(&mut payload, 3);
     emit_bstr(&mut payload, node);
     emit_uint(&mut payload, 4);
@@ -624,13 +627,49 @@ pub fn subtree_ack(
 
 /// A currency attestation (`wire-format.md` §7.1) by `issuer` about
 /// `subject`, naming `current` as its current key.
-pub fn currency_attestation(
-    issuer: &SigningIdentity,
+pub fn currency_attestation<S: Sign1 + ?Sized>(
+    issuer: &S,
     subject: &Keyhash,
     current: &Keyhash,
     issued_at: u64,
     expires_at: u64,
     role: u64,
+) -> Vec<u8> {
+    currency_attestation_with(issuer, subject, current, issued_at, expires_at, role, None)
+}
+
+/// An attestation signed under the issuer's delegated key, with the
+/// delegation stapled as field 8, outside the signature: the relying party
+/// sits beyond the issuer's horizon and holds no flooded delegation for it
+/// (`wire-format.md` §7.1) [author, 2026-09-21].
+pub fn currency_attestation_stapled<S: Sign1 + ?Sized>(
+    issuer: &S,
+    subject: &Keyhash,
+    current: &Keyhash,
+    issued_at: u64,
+    expires_at: u64,
+    role: u64,
+    delegation: &[u8],
+) -> Vec<u8> {
+    currency_attestation_with(
+        issuer,
+        subject,
+        current,
+        issued_at,
+        expires_at,
+        role,
+        Some(delegation),
+    )
+}
+
+fn currency_attestation_with<S: Sign1 + ?Sized>(
+    issuer: &S,
+    subject: &Keyhash,
+    current: &Keyhash,
+    issued_at: u64,
+    expires_at: u64,
+    role: u64,
+    delegation: Option<&[u8]>,
 ) -> Vec<u8> {
     let mut payload = Vec::new();
     emit_map_head(&mut payload, 6);
@@ -645,12 +684,16 @@ pub fn currency_attestation(
     emit_uint(&mut payload, 5);
     emit_uint(&mut payload, role);
     emit_uint(&mut payload, 6);
-    emit_bstr(&mut payload, &issuer.public.keyhash);
+    emit_bstr(&mut payload, &issuer.keyhash());
     let sig = issuer.sign1_ed_unnamed(aad::CURRENCY, &payload);
     let mut out = Vec::new();
-    emit_map_head(&mut out, 7);
+    emit_map_head(&mut out, 7 + delegation.is_some() as usize);
     out.extend_from_slice(&payload[1..]);
     emit_uint(&mut out, 7);
     out.extend_from_slice(&sig);
+    if let Some(d) = delegation {
+        emit_uint(&mut out, 8);
+        out.extend_from_slice(d);
+    }
     out
 }

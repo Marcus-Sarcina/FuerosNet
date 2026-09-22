@@ -7,7 +7,7 @@ use rhtn_codec::bounds;
 use rhtn_codec::schema::Family;
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant, sleep};
@@ -22,8 +22,9 @@ fn pins_for(names: &[&str]) -> Pins {
 
 fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(test_identity(name)),
+        me: Party::of(Arc::new(test_identity(name))),
         pins: pins_for(&["alice", "bob"]),
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,
@@ -64,7 +65,7 @@ async fn a_resource_request_is_never_processed_from_early_data_and_a_stream_carr
             }
         })
     }));
-    let ep = tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let ep = tls::server_endpoint(cfg.presenter(), "127.0.0.1:0".parse().unwrap()).unwrap();
     let addr = ep.local_addr().unwrap();
     let node = Node::new(cfg);
     tokio::spawn(node.clone().serve(ep));
@@ -85,7 +86,7 @@ async fn a_resource_request_is_never_processed_from_early_data_and_a_stream_carr
     let (mut s0, _r0) = conn.open_bi().await.unwrap();
     s0.write_all(&control_frame(
         1,
-        &encode_attach(&ccfg.identity.public.keyhash, None, &ccfg.capabilities),
+        &encode_attach(&ccfg.me.keyhash, None, &ccfg.capabilities, None),
     ))
     .await
     .unwrap();
@@ -175,7 +176,7 @@ async fn a_malformed_resource_body_is_answered_status_three_and_a_malformed_fram
             }
         })
     }));
-    let ep = tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let ep = tls::server_endpoint(cfg.presenter(), "127.0.0.1:0".parse().unwrap()).unwrap();
     let addr = ep.local_addr().unwrap();
     let node = Node::new(cfg);
     tokio::spawn(node.clone().serve(ep));

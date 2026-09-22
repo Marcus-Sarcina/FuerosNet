@@ -72,7 +72,11 @@ impl EndpointRecord {
         match verify::record(ids, "EndpointRecord", &self.bytes) {
             Ok(()) => Some(true),
             Err(verify::Failure::MissingKey(_)) => None,
-            Err(verify::Failure::Invalid(_)) => Some(false),
+            // an endpoint record is never signed under a delegated key
+            // (§7.6), so this arm is unreachable in fact; it is a failure
+            Err(verify::Failure::MissingDelegation(_)) | Err(verify::Failure::Invalid(_)) => {
+                Some(false)
+            }
         }
     }
 }

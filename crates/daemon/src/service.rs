@@ -150,6 +150,103 @@ pub struct Service {
     /// The upstream session, held for as long as the daemon runs: dropping
     /// it ends the attachment.
     _upstream: Option<rhtn_transport::session::Session>,
+    /// The credential an instance runs under, and where its run is read
+    /// from; none for a node holding its seed.
+    credential: Option<(Arc<rhtn_transport::tls::Credential>, std::path::PathBuf)>,
+    /// The count last noticed to the operator, so a notice is raised once
+    /// per count.
+    noticed: std::sync::Mutex<Option<usize>>,
+}
+
+/// The operator is told while this many credentials or fewer remain in
+/// the run: two weeks of 48-hour credentials, well before the last one
+/// (`infra-client-requirements.md` §7).  A default, not a rule.
+pub const NOTICE_AT_CREDENTIALS: usize = 7;
+
+/// How often an instance waiting for its first credential looks again.
+const PROVISIONING_POLL: Duration = Duration::from_secs(1);
+
+/// The operator's `KeyMaterial` from a hex file: the identity an instance
+/// speaks as.
+pub fn read_operator(path: &Path) -> Result<Identity, Startup> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+    let bytes = hex_bytes(text.trim())
+        .ok_or_else(|| Startup::Identity(format!("{}: not hex", path.display())))?;
+    Identity::from_key_material(&bytes).ok_or_else(|| {
+        Startup::Identity(format!(
+            "{}: not a KeyMaterial (`wire-format.md` §2.2)",
+            path.display()
+        ))
+    })
+}
+
+/// The instance's transport keypair: read from `path`, or minted there
+/// when absent, with the public half written beside it as `.pub` for the
+/// operator's client to sign over.  Only that half leaves the instance
+/// (`infra-client-requirements.md` §7) [author, 2026-09-21].
+pub fn transport_credential(
+    path: &Path,
+    operator: &Identity,
+) -> Result<Arc<rhtn_transport::tls::Credential>, Startup> {
+    use rhtn_transport::tls::Credential;
+    let cred = match std::fs::read(path) {
+        Ok(bytes) => {
+            let seed: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+                Startup::Identity(format!("{}: a transport key is 32 bytes", path.display()))
+            })?;
+            Credential::from_seed(&seed, operator.keyhash)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let seed = rhtn_transport::tls::random_bytes::<32>();
+            std::fs::write(path, seed)
+                .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+            }
+            Credential::from_seed(&seed, operator.keyhash)
+        }
+        Err(e) => return Err(Startup::Identity(format!("{}: {e}", path.display()))),
+    };
+    let public: String = cred.public().iter().map(|b| format!("{b:02x}")).collect();
+    let pub_path = path.with_extension("pub");
+    std::fs::write(&pub_path, format!("{public}\n"))
+        .map_err(|e| Startup::Identity(format!("{}: {e}", pub_path.display())))?;
+    Ok(Arc::new(cred))
+}
+
+/// Take every credential in `dir` into the run, verified under the
+/// operator; one that is not the operator's, not over this key, or not a
+/// delegation is reported and left.  Returns how many the run holds.
+pub fn read_run(
+    dir: &Path,
+    cred: &rhtn_transport::tls::Credential,
+    operator: &Identity,
+) -> Result<usize, Startup> {
+    std::fs::create_dir_all(dir).map_err(|e| Startup::State(format!("{}: {e}", dir.display())))?;
+    let mut names: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| Startup::State(format!("{}: {e}", dir.display())))?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    names.sort();
+    for p in names {
+        let Ok(bytes) = std::fs::read(&p) else {
+            continue;
+        };
+        if let Err(e) = cred.add(std::slice::from_ref(operator), &bytes) {
+            eprintln!("rhtnd: {}: not taken into the run: {e}", p.display());
+        }
+    }
+    Ok(cred.issued().len())
+}
+
+/// How many credentials of the run are still ahead of `now`, the one in
+/// force included.
+fn credentials_remaining(cred: &rhtn_transport::tls::Credential, now: u64) -> usize {
+    cred.issued().iter().filter(|i| i.not_after > now).count()
 }
 
 impl Service {
@@ -162,20 +259,70 @@ impl Service {
     /// its topology store replays a forwarding wave into every cycle in
     /// its horizon (`infra-client-requirements.md` §4.3).
     pub async fn start(cfg: &Config, peers: &Path) -> Result<Service, Startup> {
-        let me = Arc::new(read_identity(&cfg.identity)?);
+        // the seed, or the credential an instance holds instead of it
+        // (design §23.3)
+        let (public, signer, credential) = match (&cfg.identity, &cfg.operator) {
+            (Some(path), _) => {
+                let me = Arc::new(read_identity(path)?);
+                (me.public.clone(), Some(me), None)
+            }
+            (None, Some(op)) => {
+                let operator = read_operator(op)?;
+                let key = cfg
+                    .transport_key
+                    .as_ref()
+                    .ok_or_else(|| Startup::Identity("an instance names `transport-key`".into()))?;
+                let dir = cfg
+                    .delegations
+                    .as_ref()
+                    .ok_or_else(|| Startup::Identity("an instance names `delegations`".into()))?;
+                let cred = transport_credential(key, &operator)?;
+                // provisioning: the public half is out, and the run arrives
+                // when the operator's client has signed it.  An instance
+                // serves nothing before a credential is in force, and one
+                // whose run has lapsed is the same case
+                let public_hex: String = cred.public().iter().map(|b| format!("{b:02x}")).collect();
+                let mut said = false;
+                loop {
+                    read_run(dir, &cred, &operator)?;
+                    if cred.remaining().is_some_and(|r| r > 0) {
+                        break;
+                    }
+                    if !said {
+                        eprintln!(
+                            "rhtnd: transport key {public_hex}; no credential in force: waiting for the run in {}",
+                            dir.display()
+                        );
+                        said = true;
+                    }
+                    tokio::time::sleep(PROVISIONING_POLL).await;
+                }
+                (operator, None, Some((cred, dir.clone())))
+            }
+            (None, None) => {
+                return Err(Startup::Identity(
+                    "neither a seed nor an operator to run delegated for".into(),
+                ));
+            }
+        };
         // This node's own public key is in the lookup, and not because the
         // peers file listed it: a node countersigns adoptions of its own
         // subordinates, and one that cannot verify its own signature holds
         // those records unverifiable for want of a key it is holding
         // (`wire-format.md` §3.4).  Asking an operator to list themselves
         // would make a working configuration depend on remembering to.
-        let mut known = vec![me.public.clone()];
+        let mut known = vec![public.clone()];
         known.extend(read_peers(peers)?);
         let pins = Pins::new();
-        pins.pin_identity(&me.public);
+        pins.pin_identity(&public);
         for id in &known {
             pins.pin_identity(id);
         }
+        let me_keyhash = public.keyhash;
+        let party = match &credential {
+            Some((c, _)) => rhtn_transport::tls::Party::of(c.clone()),
+            None => rhtn_transport::tls::Party::of(signer.clone().expect("a seed or a credential")),
+        };
         // consumable state first, and its absence is a first start rather
         // than a failure: a directory that is not there yet is empty
         // kept at its directory rather than snapshotted into it: a
@@ -192,10 +339,16 @@ impl Service {
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.queue.display())))?;
         let queue = Arc::new(rhtn_node::queue::DirStore::new(&cfg.queue));
 
-        let archive = rhtn_archive::chain::Archive::load(&cfg.archive, me.public.keyhash)
+        let archive = rhtn_archive::chain::Archive::load(&cfg.archive, me_keyhash)
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.archive.display())))?;
 
-        let mut view = NodeView::new(me.clone(), position_of(&me.public.keyhash));
+        let mut view = match (&signer, &credential) {
+            (Some(me), _) => NodeView::new(me.clone(), position_of(&me_keyhash)),
+            (None, Some((c, _))) => {
+                NodeView::delegated(public.clone(), c.clone(), position_of(&me_keyhash))
+            }
+            (None, None) => unreachable!("settled above"),
+        };
         view.store = store;
         view.prekeys = prekeys;
         // this key's own signed history, kept apart from the seen-set: the
@@ -244,7 +397,8 @@ impl Service {
             }
         };
 
-        let mut node_cfg = NodeConfig::defaults(me.clone(), pins.clone(), cfg.heartbeat_secs);
+        let mut node_cfg =
+            NodeConfig::defaults_for(party.clone(), pins.clone(), cfg.heartbeat_secs);
         node_cfg.listen = Some(cfg.listen);
         node_cfg.queue = queue;
         node_cfg.queue_cap = cfg.queue_cap;
@@ -258,8 +412,65 @@ impl Service {
         });
         let (count, window) = cfg.request_allowance;
         let limits = RateLimit::new(count, Duration::from_secs(window));
-        let anchors = AnchorTable::new(0, cfg.ingestion);
+        let mut anchors = AnchorTable::new(0, cfg.ingestion);
+        // the operator-signed records an instance serves in place of any
+        // it would mint (`infra-client-requirements.md` §4.4): each must
+        // verify under the operator's identity, and neither ever under the
+        // delegated key
+        let given_record = match &cfg.endpoint_record {
+            None => None,
+            Some(p) => {
+                let bytes = std::fs::read(p)
+                    .map_err(|e| Startup::State(format!("{}: {e}", p.display())))?;
+                let er = rhtn_node::store::EndpointRecord::parse(&bytes)
+                    .map_err(|e| Startup::State(format!("{}: {e}", p.display())))?;
+                if er.node != me_keyhash || er.signature_checks(&known) != Some(true) {
+                    return Err(Startup::State(format!(
+                        "{}: not this node's endpoint record signed by its operator",
+                        p.display()
+                    )));
+                }
+                // the address the record names against the one served on
+                let named: Vec<std::net::SocketAddr> = er
+                    .endpoints
+                    .iter()
+                    .filter_map(|b| rhtn_node::resolution::NetworkPoint::decode_bytes(b).ok())
+                    .map(|np| np.socket())
+                    .collect();
+                if !named.contains(&cfg.listen) {
+                    eprintln!(
+                        "rhtnd: the listen address {} is not one the endpoint record names; the address has moved and a new operator-signed record is owed",
+                        cfg.listen
+                    );
+                }
+                Some(bytes)
+            }
+        };
+        if let Some(p) = &cfg.anchor_entry {
+            let bytes =
+                std::fs::read(p).map_err(|e| Startup::State(format!("{}: {e}", p.display())))?;
+            let entry = rhtn_node::resolution::AnchorEntry::parse(&bytes)
+                .map_err(|e| Startup::State(format!("{}: {e}", p.display())))?;
+            if entry.anchor != me_keyhash || !anchors.offer(entry, &known) {
+                return Err(Startup::State(format!(
+                    "{}: not this node's anchor entry signed by its operator",
+                    p.display()
+                )));
+            }
+        }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
+        if let Some(bytes) = &given_record {
+            node.originate(rhtn_node::store::KIND_ENDPOINT_RECORD, bytes);
+        }
+        // an instance's credential in force goes to its horizon at once
+        // (`wire-format.md` §8.2, §10.1)
+        if credential.is_some() {
+            let ids = node.ids.lock().unwrap().clone();
+            node.view
+                .lock()
+                .unwrap()
+                .push_credential(&node.adjacency, ids.as_slice());
+        }
 
         // **§10.1.3's second repair path**, started here because its
         // interval is the operator's number.  A new adjacency is the
@@ -279,7 +490,7 @@ impl Service {
         let upstream = match &cfg.upstream {
             None => None,
             Some((patron, addrs)) => {
-                let ccfg = client_config(me.clone(), pins, addrs, patron);
+                let ccfg = client_config(party.clone(), pins, addrs, patron);
                 match node.attach_upstream(&ccfg, *patron).await {
                     rhtn_transport::session::AttachOutcome::Attached(s) => Some(s),
                     // an upstream that will not have us is reported and not
@@ -292,14 +503,48 @@ impl Service {
                 }
             }
         };
-        Ok(Service {
+        let service = Service {
             node,
             prekeys: cfg.prekeys.clone(),
             topology: cfg.topology.clone(),
             archive: cfg.archive.clone(),
             hosts_resources,
             _upstream: upstream,
-        })
+            credential,
+            noticed: std::sync::Mutex::new(None),
+        };
+        service.mind_the_run();
+        Ok(service)
+    }
+
+    /// An instance's run, looked at: new credentials taken from the
+    /// directory, the one now in force pushed if it was not, and the
+    /// operator told while more than one remains
+    /// (`infra-client-requirements.md` §7).  Nothing for a node holding
+    /// its seed.
+    pub fn mind_the_run(&self) {
+        let Some((cred, dir)) = &self.credential else {
+            return;
+        };
+        let operator = self.node.view.lock().unwrap().public.clone();
+        let _ = read_run(dir, cred, &operator);
+        let ids = self.node.ids.lock().unwrap().clone();
+        self.node
+            .view
+            .lock()
+            .unwrap()
+            .push_credential(&self.node.adjacency, ids.as_slice());
+        let now = self.node.view.lock().unwrap().now();
+        let remaining = credentials_remaining(cred, now);
+        let mut noticed = self.noticed.lock().unwrap();
+        if remaining <= NOTICE_AT_CREDENTIALS && *noticed != Some(remaining) {
+            *noticed = Some(remaining);
+            let end = cred.run_end().unwrap_or(now);
+            eprintln!(
+                "rhtnd: {remaining} credential{} remain in the run, which ends at {end}: sign the next run",
+                if remaining == 1 { "" } else { "s" }
+            );
+        }
     }
 
     /// What this node's configuration exposes the identities below it to
@@ -361,6 +606,7 @@ impl Service {
                 _ = tokio::signal::ctrl_c() => break,
                 _ = term.recv() => break,
                 _ = tick.tick() => {
+                    self.mind_the_run();
                     for dry in self.maintain() {
                         eprintln!("rhtnd: one-time pool exhausted for {}", hex8(&dry));
                     }
@@ -391,16 +637,21 @@ fn position_of(me: &Keyhash) -> rhtn_archive::tx::Locator {
 }
 
 fn client_config(
-    me: Arc<SigningIdentity>,
+    me: rhtn_transport::tls::Party,
     pins: Pins,
     addrs: &[std::net::SocketAddr],
     patron: &Keyhash,
 ) -> rhtn_transport::session::ClientConfig {
     let book: std::collections::HashMap<[u8; 32], Vec<std::net::SocketAddr>> =
         std::collections::HashMap::from([(*patron, addrs.to_vec())]);
+    let mut bind = rhtn_transport::bind::Binding::default();
+    if let Some(c) = me.credential() {
+        bind = bind.with_credential(c.clone());
+    }
     rhtn_transport::session::ClientConfig {
-        identity: me,
+        me,
         pins,
+        bind,
         capabilities: Default::default(),
         attestation: None,
         filter: None,

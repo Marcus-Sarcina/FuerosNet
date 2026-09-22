@@ -19,7 +19,7 @@ use rhtn_node::resolution::{AnchorTable, Ingestion, Path};
 use rhtn_node::runtime::LiveNode;
 use rhtn_node::view::NodeView;
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::rc::Rc;
@@ -54,8 +54,9 @@ pub fn loopback() -> SocketAddr {
 
 pub fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(id(name)),
+        me: Party::of(Arc::new(id(name))),
         pins: pins(),
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

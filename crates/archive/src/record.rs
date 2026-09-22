@@ -128,6 +128,11 @@ impl Record {
                     SigStatus::Invalid("a signer named by a value that is not a keyhash".into())
                 }
             },
+            // an envelope is signed by identities and never under a
+            // delegated key (design §10): a delegation stands in for nothing
+            Err(verify::Failure::MissingDelegation(_)) => {
+                SigStatus::Invalid("an envelope signature under a delegated key".into())
+            }
             Err(verify::Failure::Invalid(e)) => SigStatus::Invalid(e),
         }
     }

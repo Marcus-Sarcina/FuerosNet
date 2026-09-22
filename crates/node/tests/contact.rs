@@ -5,8 +5,10 @@ mod common;
 
 use common::*;
 use rhtn_node::resolution::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::session::ClientConfig;
+use rhtn_transport::tls::{self, Party, Pins};
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn loopback() -> SocketAddr {
@@ -21,9 +23,28 @@ fn pins_for(names: &[&str]) -> Pins {
     p
 }
 
+/// The requester's configuration: `me`, holding `pins`, waiting
+/// `per_endpoint` on each address.
+fn requester(me: &str, pins: Pins, per_endpoint: Duration) -> ClientConfig {
+    ClientConfig {
+        me: Party::of(Arc::new(id(me))),
+        pins,
+        bind: Default::default(),
+        capabilities: Default::default(),
+        attestation: None,
+        filter: None,
+        sibling_cache: Arc::new(Mutex::new(Vec::new())),
+        addresses: Arc::new(Mutex::new(Default::default())),
+        tls: Arc::new(Mutex::new(Default::default())),
+        connect_timeout: per_endpoint,
+        on_reachability: None,
+        log: rhtn_transport::session::Log::recording(),
+    }
+}
+
 /// A server that answers as `name`, and the address it listens on.
 fn serve(name: &str) -> (quinn::Endpoint, SocketAddr) {
-    let ep = tls::server_endpoint(&id(name), loopback()).unwrap();
+    let ep = tls::server_endpoint(id(name), loopback()).unwrap();
     let addr = ep.local_addr().unwrap();
     let listening = ep.clone();
     tokio::spawn(async move {
@@ -45,7 +66,7 @@ fn as_point(addr: SocketAddr) -> NetworkPoint {
 
 // acceptance: RES-12
 #[tokio::test]
-async fn a_wrong_address_fails_the_handshake_and_never_names_the_subject() {
+async fn a_wrong_address_fails_the_bind_and_never_names_the_subject() {
     // the requester means to reach S (bob) and holds S's KeyMaterial
     let (_y_ep, y_addr) = serve("carol"); // Y answers here, with Y's own key
     let pins = pins_for(&["bob"]);
@@ -67,25 +88,33 @@ async fn a_wrong_address_fails_the_handshake_and_never_names_the_subject() {
         panic!()
     };
     let client = tls::client_endpoint(loopback()).unwrap();
-    let out = contact(
-        &serving.endpoints,
-        &client,
-        &id("alice"),
-        &pins,
-        &serving.node,
-        Duration::from_secs(3),
-    )
-    .await;
+    let cfg = requester("alice", pins, Duration::from_secs(2));
+    let out = contact(&serving.endpoints, &client, &cfg, &serving.node).await;
     match out {
         Contact::Failed { target, attempts } => {
             assert_eq!(target, kh("bob"), "reported as a failed contact with S");
             assert_eq!(attempts.len(), 1);
-            assert!(!attempts[0].why.is_empty());
+            // the handshake completed under Y's key; nothing bound it to S:
+            // not the pin, nothing held, and no delegation frame arrived
+            assert!(
+                attempts[0].why.starts_with("unbound"),
+                "refused as unbound, got {}",
+                attempts[0].why
+            );
         }
         Contact::Reached(_) => {
             panic!("the presented key is not the classical member of S's pinned KeyMaterial")
         }
     }
+    // nothing was sent on the connection: the requester's log shows no
+    // frame out, and no request
+    assert!(
+        !cfg.log
+            .events()
+            .iter()
+            .any(|(_, e)| matches!(e, rhtn_transport::session::Event::Sent { .. })),
+        "nothing is sent to a peer nothing binds"
+    );
 }
 
 // acceptance: RES-13
@@ -102,15 +131,8 @@ async fn the_second_endpoint_is_tried_when_the_first_does_not_answer() {
     let endpoints = vec![as_point(dead), as_point(live)];
     let pins = pins_for(&["bob"]);
     let client = tls::client_endpoint(loopback()).unwrap();
-    let out = contact(
-        &endpoints,
-        &client,
-        &id("alice"),
-        &pins,
-        &kh("bob"),
-        Duration::from_millis(700),
-    )
-    .await;
+    let cfg = requester("alice", pins.clone(), Duration::from_millis(700));
+    let out = contact(&endpoints, &client, &cfg, &kh("bob")).await;
     match out {
         Contact::Reached(conn) => {
             assert_eq!(tls::negotiated_alpn(&conn).as_deref(), Some(&b"rhtn/1"[..]));

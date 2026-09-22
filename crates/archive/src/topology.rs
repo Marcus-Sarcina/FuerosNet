@@ -8,7 +8,7 @@ use crate::walk::Fetch;
 use crate::{Keyhash, Txid};
 use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
 use rhtn_codec::encode::*;
-use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::signer::Sign1;
 use rhtn_crypto::verify::{self, Lookup};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -176,10 +176,30 @@ pub struct Outcome {
 pub type AckPolicy = Arc<dyn Fn(&Keyhash, &Keyhash) -> bool + Send + Sync>;
 
 pub struct AckIssuer {
-    pub identity: Arc<SigningIdentity>,
+    /// The node's signer: its delegated key where it runs as an instance
+    /// (`wire-format.md` §7.5) [author, 2026-09-21], its identity's own
+    /// classical member otherwise.
+    pub signer: Arc<dyn Sign1 + Send + Sync>,
     pub policy: AckPolicy,
     pub now: u64,
 }
+
+/// What became of a received `SubtreeAck` (`wire-format.md` §7.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AckTaken {
+    /// Verified and held against an open binding.
+    Taken,
+    /// Verified, but no open binding is acknowledged by it: nothing held.
+    NoOpenBinding,
+    /// Signed by a node whose delegation this holder does not keep: held
+    /// aside, neither stored nor forwarded, until that keyhash's
+    /// delegation arrives (§10.1.1).
+    Deferred(Keyhash),
+}
+
+/// How many acknowledgements wait on a delegation at once: a bound on
+/// what an unverifiable sender can make a holder keep.
+const DEFERRED_ACKS_CAP: usize = 64;
 
 /// A patron preference for competing recovery claims (design §9.0.2):
 /// which of two patrons this node trusts more.
@@ -200,6 +220,9 @@ pub struct Table {
     nodes: BTreeSet<Keyhash>,
     held: BTreeSet<Txid>,
     acks: Vec<Ack>,
+    /// Acknowledgements awaiting their signer's delegation, by that
+    /// keyhash (`AckTaken::Deferred`).
+    deferred_acks: Vec<(Keyhash, Vec<u8>)>,
     infra: BTreeSet<Keyhash>,
     attached: BTreeMap<Keyhash, Vec<Keyhash>>,
     /// prior key -> (successor, its patron), every recovery seen
@@ -235,6 +258,7 @@ impl Table {
             nodes: self.nodes.clone(),
             held: self.held.clone(),
             acks: self.acks.clone(),
+            deferred_acks: Vec::new(),
             infra: self.infra.clone(),
             attached: BTreeMap::new(),
             lineage: self.lineage.clone(),
@@ -680,7 +704,7 @@ impl Table {
                     && self.subordinates(&me).contains(&patron)
                     && (iss.policy)(&patron, &node)
                 {
-                    let bytes = subtree_ack(&iss.identity, &rec.txid, &node, iss.now);
+                    let bytes = subtree_ack(iss.signer.as_ref(), &rec.txid, &node, iss.now);
                     self.acks.push(Ack {
                         adoption: rec.txid,
                         grandpatron: me,
@@ -938,15 +962,13 @@ impl Table {
     /// Take a received `SubtreeAck` (`wire-format.md` §7.5): verify it
     /// under the grandpatron it names, hold it when the adoption it
     /// acknowledges is held, and never create a binding from it.
-    pub fn take_ack<L: Lookup + ?Sized>(&mut self, ids: &L, bytes: &[u8]) -> Result<bool, String> {
+    pub fn take_ack<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Result<AckTaken, String> {
         let item = rhtn_codec::cbor::parse_all(bytes).map_err(|e| e.0)?;
         rhtn_codec::schema::check_kind(bytes, "SubtreeAck", &item).map_err(|e| e.0)?;
-        if verify::record(ids, "SubtreeAck", bytes)
-            .map_err(|e| e.to_string())
-            .is_err()
-        {
-            return Err("grandpatron signature fails".into());
-        }
         let rhtn_codec::cbor::Item::Map(m) = &item else {
             return Err("map".into());
         };
@@ -959,12 +981,26 @@ impl Table {
         let adoption: Txid = kh(1).ok_or("field 1")?;
         let grandpatron: Keyhash = kh(2).ok_or("field 2")?;
         let node: Keyhash = kh(3).ok_or("field 3")?;
+        match verify::record(ids, "SubtreeAck", bytes) {
+            Ok(()) => {}
+            // signed under a key the grandpatron delegated and this holder
+            // does not keep: held aside until the delegation arrives
+            Err(verify::Failure::MissingDelegation(_)) => {
+                if !self.deferred_acks.iter().any(|(_, b)| b == bytes)
+                    && self.deferred_acks.len() < DEFERRED_ACKS_CAP
+                {
+                    self.deferred_acks.push((grandpatron, bytes.to_vec()));
+                }
+                return Ok(AckTaken::Deferred(grandpatron));
+            }
+            Err(_) => return Err("grandpatron signature fails".into()),
+        }
         if !self
             .bindings
             .iter()
             .any(|b| b.adoption == adoption && b.open())
         {
-            return Ok(false);
+            return Ok(AckTaken::NoOpenBinding);
         }
         self.acks.push(Ack {
             adoption,
@@ -973,7 +1009,24 @@ impl Table {
             bytes: bytes.to_vec(),
         });
         self.lapse_acks();
-        Ok(true)
+        Ok(AckTaken::Taken)
+    }
+
+    /// Re-take the acknowledgements deferred for a delegation `ids` now
+    /// answers: what a holder does when a delegation enters its store.
+    pub fn release_deferred_acks<L: Lookup + ?Sized>(&mut self, ids: &L) -> Vec<AckTaken> {
+        let (ready, still): (Vec<_>, Vec<_>) = std::mem::take(&mut self.deferred_acks)
+            .into_iter()
+            .partition(|(kh, _)| ids.delegated_key(kh).is_some());
+        self.deferred_acks = still;
+        ready
+            .into_iter()
+            .filter_map(|(_, bytes)| self.take_ack(ids, &bytes).ok())
+            .collect()
+    }
+
+    pub fn deferred_acks(&self) -> usize {
+        self.deferred_acks.len()
     }
 }
 

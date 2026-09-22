@@ -10310,6 +10310,39 @@ tree grown from 50,135 to 69,753 lines as the single-line style spreads. The
 reviewer harness is not formatted, being repaired only where it stops
 compiling, and the generated stubs carry a skip from their generator.
 
+**The wire's push wrapper names its third kind.** §10.1 has carried a
+`Delegation` in the topology class since the 21st, in prose; its CDDL listed
+body kinds 0 and 1 and its identity table two rows, so a receiver had no
+number to put in field 1. Kind 2 is now stated, with its identity (the
+delegating keyhash) and its duplicate rule (the held `not_before` is greater
+or equal), as the assistant's number pending the author. The vectors carry a
+kind-2 push of an instance's delegation and the enumeration negative moved to
+kind 3.
+
+**The code binds the way §9.1 says, and the node holds delegations.** The
+transport admits any Ed25519 key in the handshake and binds it afterwards by
+the pin, by a delegation held from the topology class, or by the one the peer
+presents first on the connection, on sessions and on connections that open
+none; an instance's credential is a minted keypair and a run of delegations,
+presented in every `AttachAck` and pushed as each comes into force; the node's
+store keeps one delegation per keyhash, the newest, and verifies subtree
+acknowledgements and attestations under the key it names, deferring an
+acknowledgement whose signer's delegation it lacks; an attestation an instance
+issues staples its delegation. Twenty-three catalogue entries are implemented
+by it.
+
+**A node runs without its seed, and a cycle repair mints nothing.** The
+transport's configurations name a party, a keyhash and what it presents, in
+place of an identity; the node's view signs only where it holds the seed,
+an endpoint record, an anchor entry, a countersignature and a disavowal
+being the operator's acts; `rhtnd` runs as an instance from the operator's
+material, a transport key it mints, a directory of credentials the
+operator's client signs, and the operator-signed endpoint record and anchor
+entry it serves in place of any of its own, telling the operator while
+seven or fewer credentials remain. A memo confirming a cycle now empties the
+slot and sends the vacancy memo, and no transaction is minted, stored or
+pushed [author, 2026-09-21].
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the

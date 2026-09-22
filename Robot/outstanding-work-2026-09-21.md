@@ -785,10 +785,12 @@ land on their own.
    attach speaks for a device), design §14.1.6 (a queue per device),
    `light-client-requirements.md` §4.1 and `infra-client-requirements.md` §6.
    PAY-01, PAY-04, PAY-06, PAY-12, SUB-02 and QUE-05 re-derived and five of
-   their tests unmarked; SUB-12, PAY-20, QUE-21 and SES-26 added. Two numbers
-   in it are the assistant's pending the author: the ceiling of eight
-   bundles per reply, and the register row for a fetch revealing a subject's
-   device count, stated in §7.8 and not yet priced in design §19.
+   their tests unmarked; SUB-12, PAY-20, QUE-21 and SES-26 added. Three numbers
+   are the assistant's pending the author: the ceiling of eight bundles per
+   reply; the register row for a fetch revealing a subject's device count,
+   stated in §7.8 and not yet priced in design §19; and, from step 5
+   (2026-09-22), `TopologyPush` body kind 2 for a `Delegation`, which §10.1's
+   prose carried since 09-21 while its CDDL and identity table stopped at 1.
 1. **Models** (section 4). The delegated bind, the non-attach modes covered or
    excluded by name, the mutant, the currency premise restated, `run-all.sh`
    rerun. A gap found here goes back to step 0.
@@ -835,6 +837,20 @@ land on their own.
    DMN-17's daemon scenario's dial between two daemon processes does not
    complete inside the 120 s the scenario already allows: a stalled
    handshake under load, cause not found, a harness matter to run down.
+   **In progress 2026-09-22.** Landed: the three-way bind in the transport
+   on every connection mode, the credential and presenter, the request-only
+   dial, the window and its leeway, the cache, the ticket clamp (TRN-03 and
+   RES-12 rewritten, TRN-18 to TRN-27, SES-27); the node's delegations in
+   the store, the deferred acknowledgement, the delegated signers and the
+   staple (PRP-26, PRP-28, TOP-41, TOP-42, CUR-21, CUR-22, DEC-35); the
+   push wrapper's kind 2 in the wire, the vectors and the codec; the
+   seedless node and daemon (DMN-23 to DMN-26), the identity replaced by a
+   party in the transport's configurations and by a public half and an
+   optional signer in the view; the cycle repair as a removal (PRP-12,
+   PRP-27). Next: the queue and sessions per device (SES-26, QUE-05,
+   QUE-21, PAY-20, SUB-12); TOP-43; TOP-44; TRV-11; the no-history audit
+   (RSC-41, RSC-42, SUB-13); section 2.6's confirmations; the light client
+   and FFI holding a delegation and no seed.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

@@ -39,11 +39,32 @@ use toml::Spanned;
 /// stated as choices (`infra-client-requirements.md` §1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    /// Where the node's signing identity is read from.  It is never
-    /// generated on start: a node that mints a key when the file is
-    /// missing serves under an identity nobody has adopted, and its
-    /// operator would not know.
-    pub identity: PathBuf,
+    /// Where the node's signing identity is read from, where the node
+    /// holds its seed.  It is never generated on start: a node that mints
+    /// a key when the file is missing serves under an identity nobody has
+    /// adopted, and its operator would not know.  **Absent for an
+    /// instance** (design §23.3), which holds a delegated credential and
+    /// no seed: then `operator`, `transport_key` and `delegations` are
+    /// what it runs on.
+    pub identity: Option<PathBuf>,
+    /// The operator's `KeyMaterial`, hex, where the node runs delegated:
+    /// the identity it speaks as, and what its credentials verify under.
+    pub operator: Option<PathBuf>,
+    /// Where the instance's own transport keypair is kept (the 32-byte
+    /// seed, and its public half beside it as `.pub`).  Minted on the
+    /// instance when absent, and only the public half ever leaves it
+    /// (`infra-client-requirements.md` §7).
+    pub transport_key: Option<PathBuf>,
+    /// A directory of credentials the operator's client signed over that
+    /// key, one delegation per file, read at start and on every tick: the
+    /// run (`wire-format.md` §8.2).
+    pub delegations: Option<PathBuf>,
+    /// This node's endpoint record, signed by the operator's identity on
+    /// the operator's client, given as configuration since an instance
+    /// mints none (`infra-client-requirements.md` §4.4).
+    pub endpoint_record: Option<PathBuf>,
+    /// This node's anchor entry, likewise operator-signed.
+    pub anchor_entry: Option<PathBuf>,
     /// The address the node serves QUIC on and answers STUN Binding
     /// requests at (`infra-client-requirements.md` §7, design §14.1.1).
     pub listen: SocketAddr,
@@ -158,7 +179,15 @@ fn keyhash(s: &str) -> Option<Keyhash> {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct File {
-    identity: PathBuf,
+    identity: Option<PathBuf>,
+    operator: Option<PathBuf>,
+    #[serde(rename = "transport-key")]
+    transport_key: Option<PathBuf>,
+    delegations: Option<PathBuf>,
+    #[serde(rename = "endpoint-record")]
+    endpoint_record: Option<PathBuf>,
+    #[serde(rename = "anchor-entry")]
+    anchor_entry: Option<PathBuf>,
     listen: Spanned<String>,
     queue: PathBuf,
     prekeys: PathBuf,
@@ -299,8 +328,31 @@ impl Config {
             }
         };
 
+        // the seed, or the whole of what an instance runs on instead
+        match (&f.identity, &f.operator, &f.transport_key, &f.delegations) {
+            (Some(_), None, None, None) => {}
+            (None, Some(_), Some(_), Some(_)) => {}
+            (Some(_), _, _, _) => {
+                return Err(at(
+                    0,
+                    "`identity` names a seed; an instance names `operator`, `transport-key` and `delegations` instead, never both",
+                ));
+            }
+            _ => {
+                return Err(at(
+                    0,
+                    "`identity` has no default: a node holding its seed names it, and an instance names `operator`, `transport-key` and `delegations` in its place",
+                ));
+            }
+        }
+
         Ok(Config {
             identity: f.identity,
+            operator: f.operator,
+            transport_key: f.transport_key,
+            delegations: f.delegations,
+            endpoint_record: f.endpoint_record,
+            anchor_entry: f.anchor_entry,
             listen,
             upstream,
             queue: f.queue,

@@ -257,7 +257,7 @@ async fn an_archive_batch_that_is_not_a_chain_is_refused_rather_than_reported() 
             )
         })
     }));
-    let ep = rhtn_transport::tls::server_endpoint(&cfg.identity, "127.0.0.1:0".parse().unwrap())
+    let ep = rhtn_transport::tls::server_endpoint(cfg.presenter(), "127.0.0.1:0".parse().unwrap())
         .unwrap();
     let addr = ep.local_addr().unwrap();
     tokio::spawn(Node::new(cfg).serve(ep));

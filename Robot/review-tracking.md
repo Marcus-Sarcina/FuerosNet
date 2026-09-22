@@ -10738,3 +10738,98 @@ without my reading it: `diff -r` against the regenerated stubs saw the new
 not been asked for that line. The step now excludes the file, which is the
 tree's and not the generator's. The lesson is the one in `CLAUDE.md` already:
 a summary that filters the output is a claim about the lines it kept.
+
+## Step 5, first two mechanisms: the bind on the wire, and the node's delegations (2026-09-22)
+
+**The three-way bind (`wire-format.md` §9.1), in `rhtn-transport`.** The TLS
+verifiers admit any well-formed Ed25519 raw key on both sides; what it speaks
+as is decided after the handshake by `bind::Binding`: the pinned classical
+member, a delegation held from the topology class (`bind::Held`, answered by
+the node's store through `runtime::HeldInStore`, by a harness map otherwise),
+or the delegation the peer presents (`Attach` field 4, `AttachAck` field 6,
+control frame 7). `tls::Credential` is the instance's minted keypair and its
+run of issued delegations, choosing the one in force by its clock;
+`tls::Presenter` is what a handshake offers, the identity's member or the
+credential's key, and every `dial`, `server_endpoint` and `client_config`
+takes one. A delegated server presents frame 7 on a stream it opens itself,
+before reading anything, since a dialler that must read it before sending
+has opened no stream for it to arrive on: the wire's *stream 0* read as the
+control stream, and noted here as the one reading the wire's words did not
+force. `session::connect_request_only` is the request-only dial the wire
+describes, and `resolution::contact` is now over it; a delegated dialler's
+own frame 7 goes first on stream 0. The serving side serves request streams
+with no session for a peer bound by frame 7, by the pin or by a held
+delegation (`Node::serve_requests`), and refuses a first frame nothing binds.
+Window and leeway (`DEFAULT_LEEWAY_SECONDS` 10, configurable), the retry once
+on a window refusal in `attach_any`, the cache by transport key with a
+verification count, and resumption tickets clamped to the credential's
+remaining validity (`tls::ClampedTicketer`) are all in. Nested fields are
+read at the body's offset in the frame payload (`field_bytes`), the first
+run of the tests having found both sides reading them from offset 0.
+
+**Decoded but not read: the wire's push kind.** §10.1's prose carried a
+`Delegation` in the topology class since 09-21; its CDDL listed kinds 0 and
+1 and its identity table two rows. Kind 2 is the assistant's number pending
+the author, entered in the note beside the other two; the wire's CDDL and
+table now say it, the generator carries a kind-2 push of bob's delegation
+(239 entries, 101 checks, ALL CHECKS PASS, the vector pin advanced under
+`--accept-spec-change` for that one CDDL line and row), the enum negative
+moved to kind 3, and the codec admits 2. A sweep for every statement of the
+kinds found two rows of `functional_tests.md` behind: TOP-011 listed kinds 0
+and 1, and SCH-021 listed control types 1 to 6, frame 7 missing there since
+the 21st; both brought current [author, 2026-09-22]. The design, the
+light-client and infra documents and the models state no kind list.
+
+**The node's delegations (`rhtn-node`).** `store::KIND_DELEGATION`: stored
+when its hybrid signature verifies under material within `h_store`, one per
+delegating keyhash, the newest by `not_before`, a duplicate otherwise, held
+for the key where the identity is unknown; persisted under `deleg/`, rewritten
+whole. `store::Known` is the lookup that answers `delegated_key` from the
+store, which is what `verify::record` consults for a subtree acknowledgement
+or an attestation; a record so signed by a keyhash whose delegation the
+holder lacks is `Failure::MissingDelegation`, and `Table::take_ack` defers it
+(`AckTaken::Deferred`, capped at 64) until `release_deferred_acks` runs when a
+delegation enters the store. `crypto::signer::Sign1` is the record signer,
+implemented by the identity and by `DelegatedSigner`, and `subtree_ack` and
+`currency_attestation` take either; `currency_attestation_stapled` adds field
+8, which `NodeView::issue_currency` uses whenever the view holds a credential.
+`NodeView::push_credential` pushes the credential in force once, as it comes
+into force. Tests: TRN-03 rewritten as a refused session after a completed
+handshake (the deferral the note said would rewrite it), RES-12 the same,
+TRN-18 to TRN-27, SES-27, PRP-26, PRP-28, TOP-41, TOP-42, CUR-21, CUR-22 and
+DEC-35 marked: 421 of 455 implemented, 0 flags; the workspace 568 passed, 0
+failed, 37 ignored (548 / 55 before: twenty tests added, eighteen stubs
+retired); clippy clean; `refcheck` 2,299 / 0, `modelrefcheck` 1,316 / 0,
+stalecheck at baseline.
+
+**The seedless node, the same day.** A `SigningIdentity` cannot be built
+without the seed, so the transport's `NodeConfig` and `ClientConfig` carry
+`me: tls::Party` (keyhash and presenter) in place of `identity`, every
+configuration literal in the workspace swept; `NodeView` carries its
+`public: Identity` and `signer: Option<Arc<SigningIdentity>>`, with
+`NodeView::delegated` for an instance, and signs only where it holds the
+signer: an endpoint record, an anchor entry, a countersignature and a
+disavowal are the operator's acts and yield nothing on an instance
+(`publish_endpoints` is now an `Option`). **A cycle repair is a removal**
+[author, 2026-09-21], landed with it: `cycle_check` empties the slot and
+sends the vacancy memo and mints nothing, `MemoOutcome::CycleConfirmed`
+carrying what was removed; PRP-12's unmarked test rewritten and marked,
+PRP-27 added. `rhtnd`: `identity` is optional and an instance names
+`operator` (the operator's `KeyMaterial`), `transport-key` (minted on the
+instance when absent, 0600, the public half beside it as `.pub` and on
+stderr) and `delegations` (a directory read at start and on every tick); it
+serves nothing before a credential is in force, polling the directory once a
+second while provisioning; pushes the credential in force as each comes
+into force; and tells the operator once per count while
+`NOTICE_AT_CREDENTIALS` (7, a default and not a rule) or fewer remain.
+`endpoint-record` and `anchor-entry` are operator-signed files, verified
+under the operator at start, the record pushed in the topology class, the
+entry offered to the anchor table, a mismatch with `listen` reported as an
+address that has moved. DMN-23 to DMN-26 are process tests of the binary.
+427 of 455 implemented, 0 flags.
+
+**Still to come in step 5.** SES-26 and the queue per device (QUE-05,
+QUE-21, PAY-20, SUB-12), TOP-43 in the light client's horizon view, TOP-44's
+runtime acknowledgement, TRV-11, the no-history audit (RSC-41, RSC-42,
+SUB-13), section 2.6's confirmations, the light client and FFI holding a
+delegation and no seed, and the DMN-17 flake.

@@ -105,13 +105,15 @@ fn a_new_root_s_peering_propagates_through_its_peer_into_an_existing_subnet() {
     let (mut w, mut alice, mut bob, mut carol) = subnet();
     let mut r = new_root("w9");
     // R publishes its endpoint record into its own store
-    let er = r.publish_endpoints(
-        &[point(9, 7009)],
-        Seqno {
-            series: 1,
-            counter: 1,
-        },
-    );
+    let er = r
+        .publish_endpoints(
+            &[point(9, 7009)],
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+        )
+        .unwrap();
     let rfab = Fabric::with(&[kh("bob")]);
     assert_eq!(
         r.take_object(&*rfab, &kh("w9"), KIND_ENDPOINT_RECORD, &er, &ids()),
@@ -203,13 +205,15 @@ fn a_new_root_s_peering_propagates_through_its_peer_into_an_existing_subnet() {
 fn an_existing_node_reaches_a_new_root_through_its_anchor_table() {
     let (_w, _alice, bob, _carol) = subnet();
     let mut r = new_root("w9");
-    let er = r.publish_endpoints(
-        &[point(9, 7009)],
-        Seqno {
-            series: 1,
-            counter: 1,
-        },
-    );
+    let er = r
+        .publish_endpoints(
+            &[point(9, 7009)],
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+        )
+        .unwrap();
     r.take_object(
         &*Fabric::with(&[]),
         &kh("w9"),

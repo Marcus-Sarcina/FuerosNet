@@ -606,7 +606,7 @@ e2e = section_blocks('End-to-end payloads')
 check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
       'messages: every fixture block belongs to a named section')
 
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -657,6 +657,12 @@ push_body = frame_objs[EXPECT_FRAMES.index(5)][1]
 adopt_env_hex = re.search(r'#### Envelope bytes — final, all four signatures real.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 check(push_body[2] == adopt_env_hex.group(1).replace('\n', ''),
       'TopologyPush carries the first adoption envelope byte-for-byte')
+# the push of a delegation (kind 2, §10.1): the control frames are listed
+# first, so the second frame of type 5 is it, and it carries frame 7's body
+push_deleg = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 5][1]][1]
+deleg_frame_body = frame_objs[EXPECT_FRAMES.index(7)][1]
+check(push_deleg[1] == 2 and push_deleg[2] == enc(deleg_frame_body).hex(),
+      'TopologyPush kind 2 carries the delegation byte-for-byte, as frame 7 carries it')
 srv = canonical(bytes.fromhex(replies[0].replace('\n', '')))
 check(H(bytes.fromhex(srv[3][4])).hex() == srv[3][1]
       if isinstance(srv[3][4], str) else H(enc(srv[3][4])).hex() == srv[3][1],

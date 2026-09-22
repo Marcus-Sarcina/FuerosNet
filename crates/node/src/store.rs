@@ -8,12 +8,34 @@ pub use rhtn_archive::endpoint::{EndpointRecord, Line};
 use rhtn_archive::record::{Record, SigStatus};
 use rhtn_archive::tx::*;
 use rhtn_archive::{Keyhash, Txid};
-use rhtn_crypto::verify::Lookup;
+use rhtn_crypto::Identity;
+use rhtn_crypto::verify::{self, Delegation, Failure, Lookup};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// `TopologyPush` field 1 (`wire-format.md` §10.1): the one wrapper field.
 pub const KIND_TRANSACTION: u64 = 0;
 pub const KIND_ENDPOINT_RECORD: u64 = 1;
+/// A `Delegation` (`wire-format.md` §8.2): current state, one per
+/// delegating keyhash, the newest by `not_before` [author, 2026-09-21].
+pub const KIND_DELEGATION: u64 = 2;
+
+/// The identities a holder pins, and the delegations its store keeps: the
+/// lookup a record signed under a delegated key is verified against
+/// (`wire-format.md` §7.5, §7.1).
+pub struct Known<'a, L: Lookup + ?Sized> {
+    pub ids: &'a L,
+    pub store: &'a TopologyStore,
+}
+
+impl<L: Lookup + ?Sized> Lookup for Known<'_, L> {
+    fn identity(&self, keyhash: &[u8]) -> Option<&Identity> {
+        self.ids.identity(keyhash)
+    }
+    fn delegated_key(&self, keyhash: &[u8]) -> Option<[u8; 32]> {
+        let kh: [u8; 32] = keyhash.try_into().ok()?;
+        self.store.delegation(&kh).map(|d| d.key)
+    }
+}
 
 /// The receiver's own view of distance, which is the only thing the
 /// storage rule consults (`wire-format.md` §10.1.1, design §15.1).
@@ -115,6 +137,14 @@ pub struct HeldEndpoint {
     pub record: EndpointRecord,
 }
 
+/// A delegation held from the topology class, with the bytes it
+/// arrived in, forwarded byte-for-byte.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldDelegation {
+    pub delegation: Delegation,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Default)]
 pub struct TopologyStore {
     transactions: BTreeMap<Txid, Record>,
@@ -129,6 +159,9 @@ pub struct TopologyStore {
     proved_series: BTreeSet<(Keyhash, u32)>,
     /// Presence records, which the topology class does not carry.
     presence: BTreeMap<Txid, Vec<u8>>,
+    /// One delegation per delegating keyhash, the newest by `not_before`
+    /// (`wire-format.md` §10.1.1): current state, never a history of keys.
+    delegations: BTreeMap<Keyhash, HeldDelegation>,
 }
 
 impl TopologyStore {
@@ -249,7 +282,31 @@ impl TopologyStore {
                 .values()
                 .map(|h| (KIND_ENDPOINT_RECORD, h.record.bytes.clone())),
         );
+        out.extend(
+            self.delegations
+                .values()
+                .map(|h| (KIND_DELEGATION, h.bytes.clone())),
+        );
         out
+    }
+
+    /// The delegation held for a keyhash: what its acknowledgements and
+    /// attestations are verified under, and what binds its instance's
+    /// presented key with no frame (`wire-format.md` §9.1).
+    pub fn delegation(&self, keyhash: &Keyhash) -> Option<&Delegation> {
+        self.delegations.get(keyhash).map(|h| &h.delegation)
+    }
+
+    /// The held delegation naming transport key `key`.
+    pub fn delegation_by_key(&self, key: &[u8; 32]) -> Option<&Delegation> {
+        self.delegations
+            .values()
+            .map(|h| &h.delegation)
+            .find(|d| d.key == *key)
+    }
+
+    pub fn delegations(&self) -> Vec<&Delegation> {
+        self.delegations.values().map(|h| &h.delegation).collect()
     }
 
     /// Decide an arriving object against this node's own view.  `in_store`
@@ -266,8 +323,62 @@ impl TopologyStore {
         match kind {
             KIND_TRANSACTION => self.accept_transaction(bytes, from, ids, hz),
             KIND_ENDPOINT_RECORD => self.accept_endpoint(bytes, from, ids, hz),
+            KIND_DELEGATION => self.accept_delegation(bytes, from, ids, hz),
             _ => Decision::Malformed("unknown body kind".into()),
         }
+    }
+
+    /// A delegation (`wire-format.md` §10.1.1): stored when its hybrid
+    /// signature verifies under the delegating keyhash's material, which
+    /// must lie within this node's `h_store`; a duplicate when one at
+    /// least as new is held; held for the key where the delegating
+    /// identity's material is not yet known.
+    fn accept_delegation<L: Lookup + ?Sized>(
+        &mut self,
+        bytes: &[u8],
+        from: &Keyhash,
+        ids: &L,
+        hz: &dyn Horizon,
+    ) -> Decision {
+        let fields = match verify::delegation_fields(bytes) {
+            Ok(d) => d,
+            Err(e) => return Decision::Malformed(e.to_string()),
+        };
+        if !hz.within(&fields.keyhash, 2) {
+            return Decision::OutOfStore;
+        }
+        if self
+            .delegations
+            .get(&fields.keyhash)
+            .is_some_and(|h| h.delegation.not_before >= fields.not_before)
+        {
+            return Decision::Duplicate;
+        }
+        let d = match verify::delegation(ids, bytes) {
+            Ok(d) => d,
+            Err(Failure::MissingKey(k)) => {
+                let p = Pending {
+                    kind: KIND_DELEGATION,
+                    bytes: bytes.to_vec(),
+                    from: *from,
+                    missing_key: k.try_into().ok(),
+                    unproved_series: None,
+                };
+                if !self.pending.contains(&p) {
+                    self.pending.push(p.clone());
+                }
+                return Decision::Held(p);
+            }
+            Err(e) => return Decision::Malformed(e.to_string()),
+        };
+        self.delegations.insert(
+            d.keyhash,
+            HeldDelegation {
+                delegation: d,
+                bytes: bytes.to_vec(),
+            },
+        );
+        Decision::Stored
     }
 
     fn accept_transaction<L: Lookup + ?Sized>(
@@ -411,7 +522,7 @@ impl TopologyStore {
     /// replays a forwarding wave into every cycle in the horizon
     /// (`infra-client-requirements.md` §4.3).
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
-        for sub in ["tx", "ep", "presence"] {
+        for sub in ["tx", "ep", "presence", "deleg"] {
             std::fs::create_dir_all(dir.join(sub))?;
         }
         for (t, r) in &self.transactions {
@@ -433,6 +544,16 @@ impl TopologyStore {
         }
         for (t, b) in &self.presence {
             std::fs::write(dir.join("presence").join(hex(t)), b)?;
+        }
+        // rewritten whole, like the endpoint records: a delegation
+        // replaced by a newer one must not outlive it on disk
+        if let Ok(rd) = std::fs::read_dir(dir.join("deleg")) {
+            for e in rd.flatten() {
+                std::fs::remove_file(e.path())?;
+            }
+        }
+        for (kh, h) in &self.delegations {
+            std::fs::write(dir.join("deleg").join(hex(kh)), &h.bytes)?;
         }
         let proved: Vec<String> = self
             .proved_series
@@ -474,6 +595,21 @@ impl TopologyStore {
                 let name = e.file_name().to_string_lossy().to_string();
                 if let Some(t) = unhex(&name).and_then(|v| <[u8; 32]>::try_from(v).ok()) {
                     st.presence.insert(t, std::fs::read(e.path())?);
+                }
+            }
+        }
+        if let Ok(rd) = std::fs::read_dir(dir.join("deleg")) {
+            for e in rd.flatten() {
+                let bytes = std::fs::read(e.path())?;
+                // verified when it was stored; read back by its fields
+                if let Ok(d) = verify::delegation_fields(&bytes) {
+                    st.delegations.insert(
+                        d.keyhash,
+                        HeldDelegation {
+                            delegation: d,
+                            bytes,
+                        },
+                    );
                 }
             }
         }

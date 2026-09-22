@@ -9,8 +9,9 @@
 //! on the path: dropping a beat, replacing one with a malformed frame, or
 //! blackholing a direction.
 
+use crate::bind::{Binding, Bound, Refusal};
 use crate::queue::{self, QueueStore, Queued};
-use crate::tls::{self, Pins};
+use crate::tls::{self, Party, Pins, Presenter};
 use quinn::{Connection, RecvStream, SendStream, VarInt};
 use rhtn_archive::topology::Supersession;
 use rhtn_codec::bounds;
@@ -28,6 +29,9 @@ use tokio::time::{Duration, Instant, sleep_until};
 pub const CLOSE_REFUSED: u32 = 1;
 pub const FRAME_ATTACH: u64 = 1;
 pub const FRAME_ATTACH_ACK: u64 = 2;
+/// A delegated peer's first frame on a connection that opens no session
+/// (`wire-format.md` §8.0, §8.2).
+pub const FRAME_DELEGATION: u64 = 7;
 pub const FRAME_HEARTBEAT: u64 = 3;
 pub const FRAME_SIBLING_UPDATE: u64 = 4;
 
@@ -346,12 +350,18 @@ pub struct AttachAck {
     pub interval: u64,
     pub queued: u64,
     pub capabilities: BTreeMap<u64, Vec<u8>>,
+    /// Field 6: the serving node's own delegation, present whenever the
+    /// key it presented is a delegated one (`wire-format.md` §8.2).
+    pub delegation: Option<Vec<u8>>,
 }
 
 impl AttachAck {
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 4 + !self.siblings.is_empty() as usize);
+        emit_map_head(
+            &mut out,
+            4 + !self.siblings.is_empty() as usize + self.delegation.is_some() as usize,
+        );
         emit_uint(&mut out, 1);
         emit_uint(&mut out, self.mode);
         encode_sibling_list(&mut out, 2, &self.siblings);
@@ -361,9 +371,15 @@ impl AttachAck {
         emit_uint(&mut out, self.queued);
         emit_uint(&mut out, 5);
         out.extend_from_slice(&encode_capabilities(&self.capabilities));
+        if let Some(d) = &self.delegation {
+            emit_uint(&mut out, 6);
+            out.extend_from_slice(d);
+        }
         out
     }
-    pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
+    /// Decode the map at `at` in `b`, whose parsed item is `it`: the
+    /// body's offset within a frame payload, or 0 for the body alone.
+    pub fn decode(b: &[u8], at: usize, it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
         Some(AttachAck {
             mode: map_get(m, 1).and_then(as_uint)?,
@@ -371,17 +387,31 @@ impl AttachAck {
             interval: map_get(m, 3).and_then(as_uint)?,
             queued: map_get(m, 4).and_then(as_uint)?,
             capabilities: decode_capabilities(b, map_get(m, 5)?),
+            delegation: field_bytes(b, at, 6),
         })
     }
 }
 
+/// The encoded value of integer `key` in the map at `at` in `b`, whole:
+/// how a nested signed object such as a delegation is carried through
+/// untouched.
+fn field_bytes(b: &[u8], at: usize, key: u64) -> Option<Vec<u8>> {
+    value_slice_at(b, at, key).map(|r| b[r].to_vec())
+}
+
+/// An `Attach` (`wire-format.md` §8.2): field 4 carries the client's own
+/// delegation where the key it presented is a delegated one.
 pub fn encode_attach(
     keyhash: &[u8; 32],
     attestation: Option<&[u8]>,
     caps: &BTreeMap<u64, Vec<u8>>,
+    delegation: Option<&[u8]>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_map_head(&mut out, 2 + attestation.is_some() as usize);
+    emit_map_head(
+        &mut out,
+        2 + attestation.is_some() as usize + delegation.is_some() as usize,
+    );
     emit_uint(&mut out, 1);
     emit_bstr(&mut out, keyhash);
     if let Some(a) = attestation {
@@ -390,6 +420,10 @@ pub fn encode_attach(
     }
     emit_uint(&mut out, 3);
     out.extend_from_slice(&encode_capabilities(caps));
+    if let Some(d) = delegation {
+        emit_uint(&mut out, 4);
+        out.extend_from_slice(d);
+    }
     out
 }
 
@@ -462,6 +496,20 @@ pub enum Event {
     /// An attach under a credential this node has verified superseded: no
     /// AttachAck, nothing delivered (design §12.6.5).
     Superseded,
+    /// The peer's presented key was bound to the keyhash meant, this way
+    /// (`wire-format.md` §9.1).
+    Bound {
+        how: Bound,
+    },
+    /// Nothing bound the presented key; the connection was refused.
+    Unbound {
+        why: Refusal,
+    },
+    /// This side presented its own delegation first on the connection
+    /// (`wire-format.md` §8.2).
+    DelegationPresented,
+    /// A request-only connection, served with no session (§8.2).
+    RequestOnly,
 }
 
 /// Session events, for a test that reads what a session did.  Off by
@@ -521,6 +569,14 @@ struct Sender {
 }
 
 impl Sender {
+    fn detached(send: SendStream) -> Self {
+        Sender {
+            send,
+            filter: None,
+            log: Log::default(),
+        }
+    }
+
     async fn frame(&mut self, frame_type: u64, body: &[u8]) -> Result<(), quinn::WriteError> {
         let bytes = control_frame(frame_type, body);
         let bytes = match &self.filter {
@@ -676,8 +732,15 @@ pub type RequestHandler = Arc<
 >;
 
 pub struct NodeConfig {
-    pub identity: Arc<SigningIdentity>,
+    /// Who this node speaks as and what it presents: its identity's
+    /// classical member, or the delegated credential an instance holds in
+    /// place of the seed (design §23.3).
+    pub me: Party,
     pub pins: Pins,
+    /// §9.1's bind: what this node holds from the topology class, its
+    /// leeway and clock, and its own delegated credential where it is an
+    /// instance (design §23.3).
+    pub bind: Binding,
     /// Seconds, 1..=3600; unset by design §21.1, chosen by the operator.
     pub interval_secs: u64,
     /// The siblings this node names to a client attaching to it
@@ -745,9 +808,20 @@ pub struct NodeConfig {
 impl NodeConfig {
     /// A configuration with an in-memory queue, no cap and the system clock.
     pub fn defaults(identity: Arc<SigningIdentity>, pins: Pins, interval_secs: u64) -> Self {
+        Self::defaults_for(Party::of(identity), pins, interval_secs)
+    }
+
+    /// `defaults` for any party, a delegated one included.
+    pub fn defaults_for(me: Party, pins: Pins, interval_secs: u64) -> Self {
+        let clock: tls::Clock = tls::system_clock();
+        let mut bind = Binding::default().with_clock(clock.clone());
+        if let Some(c) = me.credential() {
+            bind = bind.with_credential(c.clone());
+        }
         NodeConfig {
-            identity,
+            me,
             pins,
+            bind,
             interval_secs,
             siblings: Arc::new(Vec::new),
             capabilities: BTreeMap::new(),
@@ -765,14 +839,24 @@ impl NodeConfig {
             on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
-            clock: Arc::new(|| {
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0)
-            }),
+            clock,
             log: Log::default(),
         }
+    }
+
+    /// What this node presents in the handshake.
+    pub fn presenter(&self) -> Presenter {
+        self.me.presenter.clone()
+    }
+
+    /// Run under a delegated credential for the same keyhash: the key
+    /// presented becomes the credential's, every AttachAck carries its
+    /// delegation, and the identity's seed is needed for nothing the
+    /// transport does.
+    pub fn with_credential(mut self, c: Arc<tls::Credential>) -> Self {
+        self.me = Party::of(c.clone());
+        self.bind = self.bind.with_credential(c);
+        self
     }
 }
 
@@ -983,8 +1067,24 @@ impl Node {
         // 0-RTT early data is deferred to this point and never processed
         // early (§8.2, §9.2).
         let conn = incoming.await.map_err(|e| e.to_string())?;
-        let spki = tls::peer_spki(&conn).ok_or("no peer key")?;
-        let authenticated = self.cfg.pins.keyhash_for_spki(&spki);
+        let presented = tls::peer_key(&conn).ok_or("no peer key")?;
+        // the pinned classical member binds at once; a delegated key binds
+        // at the attach, by its frame, or by a delegation already held
+        let authenticated = self.cfg.pins.keyhash_for_key(&presented);
+        // a delegated node presents its delegation before anything else on
+        // every connection (§8.2): on a stream of its own, since a dialler
+        // that must read it before sending anything has opened none
+        if let Some(raw) = self.cfg.bind.own_delegation() {
+            let c = conn.clone();
+            let log = self.log.clone();
+            tokio::spawn(async move {
+                if let Ok((mut s, _)) = c.open_bi().await {
+                    let _ = s.write_all(&control_frame(FRAME_DELEGATION, &raw)).await;
+                    let _ = s.finish();
+                    log.push(Event::DelegationPresented);
+                }
+            });
+        }
         // a session opens stream 0 with an Attach; a direct payload path
         // (design §14.1.1) opens no session and delivers on unidirectional
         // streams alone, so whichever arrives first says which this is
@@ -992,9 +1092,18 @@ impl Node {
             bi = conn.accept_bi() => bi.map_err(|e| e.to_string())?,
             uni = conn.accept_uni() => {
                 let first = uni.map_err(|e| e.to_string())?;
-                let (Some(peer), Some(handler)) = (authenticated, self.cfg.on_direct.clone()) else {
+                // the direct path is inside the horizon, where the peer's
+                // delegation is held from the topology class: the pin or a
+                // held delegation binds it, with no frame (design §12.6.3)
+                let peer = authenticated.or_else(|| {
+                    self.cfg.bind.held.by_key(&presented)
+                        .filter(|d| self.cfg.bind.in_window(d))
+                        .map(|d| d.keyhash)
+                });
+                let (Some(peer), Some(handler)) = (peer, self.cfg.on_direct.clone()) else {
+                    self.log.push(Event::Unbound { why: Refusal::Unbound });
                     conn.close(VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
-                    return Err("direct path from an unpinned peer or with no handler".into());
+                    return Err("direct path from an unbound peer or with no handler".into());
                 };
                 if !(self.cfg.accepts_direct)(&peer) {
                     conn.close(VarInt::from_u32(CLOSE_REFUSED), b"no direct path");
@@ -1020,8 +1129,12 @@ impl Node {
             filter: self.cfg.filter.clone(),
             log: self.log.clone(),
         };
-        // the first known frame must be Attach; unknown ones are skipped
-        let (attach_bytes, attach_item) = loop {
+        // the first known frame is an Attach, or a delegated client's
+        // delegation on a connection that opens no session (§8.2); unknown
+        // ones are skipped, and a request frame from a peer already bound
+        // makes this a request-only connection from a pinned peer, whose
+        // first stream is a request stream and never stream 0
+        let (attach_bytes, attach_body, attach_item) = loop {
             match read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES).await {
                 FrameRead::Closed(_) => return Err("closed before attach".into()),
                 FrameRead::OverBound(_) => {
@@ -1030,15 +1143,55 @@ impl Node {
                     return Err("over bound".into());
                 }
                 FrameRead::Payload(p) => match classify(&p) {
-                    Control::Known(Family::Attach, b, _, it) => break (b, it),
-                    Control::Unknown(t) => self.log.push(Event::Skipped { frame_type: t }),
-                    Control::Malformed => self.log.push(Event::Discarded),
+                    Control::Known(Family::Attach, b, body, it) => break (b, body, it),
+                    Control::Known(Family::Delegation, b, body, _) => {
+                        if authenticated.is_some() {
+                            // a pinned peer owes no frame; one it sends is skipped
+                            self.log.push(Event::Skipped {
+                                frame_type: FRAME_DELEGATION,
+                            });
+                            continue;
+                        }
+                        let raw = &b[body];
+                        let (peer, how) =
+                            match self
+                                .cfg
+                                .bind
+                                .server(&self.cfg.pins, None, &presented, Some(raw))
+                            {
+                                Ok(x) => x,
+                                Err(why) => return self.refuse_unbound(&conn, why),
+                            };
+                        self.log.push(Event::Bound { how });
+                        return self.serve_requests(conn, peer, sender, recv, None).await;
+                    }
                     Control::Known(..) => {
                         conn.close(
                             VarInt::from_u32(CLOSE_REFUSED),
                             b"known frame before attach",
                         );
                         return Err("known frame before attach".into());
+                    }
+                    other => {
+                        if let Some(peer) = self.bound_without_frame(&presented)
+                            && frame::parse_payload(Stream::Request, &p).is_ok()
+                        {
+                            self.log.push(Event::Bound {
+                                how: if authenticated.is_some() {
+                                    Bound::Pinned
+                                } else {
+                                    Bound::Held
+                                },
+                            });
+                            let Sender { send, .. } = sender;
+                            return self
+                                .serve_requests(conn, peer, Sender::detached(send), recv, Some(p))
+                                .await;
+                        }
+                        match other {
+                            Control::Unknown(t) => self.log.push(Event::Skipped { frame_type: t }),
+                            _ => self.log.push(Event::Discarded),
+                        }
                     }
                 },
             }
@@ -1053,13 +1206,22 @@ impl Node {
             Some(Item::Bytes(r)) => attach_bytes[r.clone()].try_into().unwrap(),
             _ => unreachable!("schema checked"),
         };
-        // §9.1: field 1 MUST equal the connection-authenticated identity.  A
-        // mismatch is answered with no frame; the close code the wire assigns
-        // to refusal is used, since no other is defined.
-        if authenticated != Some(claimed) {
-            conn.close(VarInt::from_u32(CLOSE_REFUSED), b"identity mismatch");
-            return Err("attach identity mismatch".into());
-        }
+        // §9.1: field 1 names an identity whose classical member is the
+        // key presented, or field 4 carries that identity's delegation
+        // naming it, or one is held from the topology class.  A mismatch
+        // is answered with no frame; the close code the wire assigns to
+        // refusal is used, since no other is defined.
+        let field4 = field_bytes(&attach_bytes, attach_body.start, 4);
+        let how = match self.cfg.bind.server(
+            &self.cfg.pins,
+            Some(&claimed),
+            &presented,
+            field4.as_deref(),
+        ) {
+            Ok((_, how)) => how,
+            Err(why) => return self.refuse_unbound(&conn, why),
+        };
+        self.log.push(Event::Bound { how });
         if self.is_superseded(&claimed) {
             self.log.push(Event::Superseded);
             conn.close(VarInt::from_u32(CLOSE_REFUSED), b"superseded");
@@ -1086,6 +1248,7 @@ impl Node {
             interval: self.cfg.interval_secs,
             queued,
             capabilities: caps,
+            delegation: self.cfg.bind.own_delegation(),
         };
         sender
             .frame(FRAME_ATTACH_ACK, &ack.encode())
@@ -1166,6 +1329,73 @@ impl Node {
     }
 }
 
+impl Node {
+    /// Refuse a connection nothing binds (§9.1): no frame in reply, the
+    /// refusal close code, and the reason where the dialler acts on it,
+    /// a window refusal being the one it retries (§8.2).
+    fn refuse_unbound(&self, conn: &Connection, why: Refusal) -> Result<(), String> {
+        let reason: &[u8] = match why {
+            Refusal::Window => b"window",
+            Refusal::WrongKeyhash => b"identity mismatch",
+            _ => b"unbound",
+        };
+        self.log.push(Event::Unbound { why: why.clone() });
+        conn.close(VarInt::from_u32(CLOSE_REFUSED), reason);
+        Err(format!("refused: {why}"))
+    }
+
+    /// The keyhash `presented` speaks as with no frame read: the pin, or a
+    /// delegation held from the topology class naming it, in window.
+    fn bound_without_frame(&self, presented: &[u8; 32]) -> Option<[u8; 32]> {
+        self.cfg.pins.keyhash_for_key(presented).or_else(|| {
+            self.cfg
+                .bind
+                .held
+                .by_key(presented)
+                .filter(|d| self.cfg.bind.in_window(d))
+                .map(|d| d.keyhash)
+        })
+    }
+
+    /// A connection that opens no session (§8.2): every request stream is
+    /// answered as `peer`'s until the connection closes.  Nothing is
+    /// queued, drained or replicated for it, and the control stream, if
+    /// the peer opened one, is held and read for nothing further.  `first`
+    /// is a request already read from what turned out to be a request
+    /// stream, answered on it.
+    async fn serve_requests(
+        self: Arc<Self>,
+        conn: Connection,
+        peer: [u8; 32],
+        control: Sender,
+        control_recv: RecvStream,
+        first: Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        self.log.push(Event::RequestOnly);
+        let handler = self.cfg.on_request.clone();
+        let mut control_recv = Some(control_recv);
+        if let Some(p) = first {
+            let Sender { send, .. } = control;
+            let _ = control_recv.take();
+            tokio::spawn(answer_payload(send, p, peer, handler.clone()));
+        } else {
+            // held open until the connection ends: closing it would tell
+            // the peer to stop sending on a stream the wire leaves to it
+            let c = conn.clone();
+            tokio::spawn(async move {
+                let _control = control;
+                let _recv = control_recv;
+                c.closed().await;
+            });
+        }
+        while let Ok((send, recv)) = conn.accept_bi().await {
+            tokio::spawn(answer_request(send, recv, peer, handler.clone()));
+        }
+        self.log.push(Event::Closed);
+        Ok(())
+    }
+}
+
 /// Deliver one message on a fresh unidirectional stream and wait for the
 /// peer to take it: the stream written, finished, and every byte
 /// acknowledged received.  Anything short of that is no delivery, and the
@@ -1201,7 +1431,7 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], conn: Connection) {
 /// installed; otherwise a currency request gets `cannot issue` (§7.1) and
 /// anything else fails the stream (§9.2).
 async fn answer_request(
-    mut send: SendStream,
+    send: SendStream,
     mut recv: RecvStream,
     peer: [u8; 32],
     handler: Option<RequestHandler>,
@@ -1209,6 +1439,16 @@ async fn answer_request(
     let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else {
         return;
     };
+    answer_payload(send, p, peer, handler).await
+}
+
+/// Answer one request whose payload is already read, on `send`.
+async fn answer_payload(
+    mut send: SendStream,
+    p: Vec<u8>,
+    peer: [u8; 32],
+    handler: Option<RequestHandler>,
+) {
     let f = match frame::parse_payload(Stream::Request, &p) {
         Ok(f) => f,
         // A resource request whose body does not decode is answered code 3
@@ -1265,8 +1505,14 @@ async fn answer_request(
 
 #[derive(Clone)]
 pub struct ClientConfig {
-    pub identity: Arc<SigningIdentity>,
+    /// Who this client speaks as and what it presents: the identity's own
+    /// classical member on the ceremony device, or the delegated key of a
+    /// desktop that holds no seed (design §23.3).
+    pub me: Party,
     pub pins: Pins,
+    /// §9.1's bind on the dialling side, and this client's own delegated
+    /// credential where it is a delegated device (design §23.3).
+    pub bind: Binding,
     pub capabilities: BTreeMap<u64, Vec<u8>>,
     pub attestation: Option<Vec<u8>>,
     pub filter: Option<OutboundFilter>,
@@ -1296,9 +1542,22 @@ impl ClientConfig {
         if let Some(c) = map.get(target) {
             return Some(c.clone());
         }
-        let c = tls::client_config(&self.identity, &self.pins, target)?;
+        let c = tls::client_config(self.presenter(), &self.pins, target)?;
         map.insert(*target, c.clone());
         Some(c)
+    }
+
+    /// What this client presents in the handshake.
+    pub fn presenter(&self) -> Presenter {
+        self.me.presenter.clone()
+    }
+
+    /// Run as a delegated device: what is presented becomes the
+    /// credential's key, and the Attach carries its delegation.
+    pub fn with_credential(mut self, c: Arc<tls::Credential>) -> Self {
+        self.me = Party::of(c.clone());
+        self.bind = self.bind.with_credential(c);
+        self
     }
 }
 
@@ -1321,6 +1580,10 @@ pub enum AttachOutcome {
     Attached(Session),
     /// Close code 1: the node's answer, not the endpoint's (§8.2).
     Refused,
+    /// The handshake completed but nothing bound the key it presented to
+    /// the keyhash meant (§9.1): a refused session, never a session with
+    /// that keyhash.  `Window` is retried once by `attach_any`.
+    Unbound(Refusal),
     EndpointFailure(String),
 }
 
@@ -1337,6 +1600,13 @@ impl std::fmt::Debug for Session {
 fn close_code(e: &quinn::ConnectionError) -> Option<u64> {
     match e {
         quinn::ConnectionError::ApplicationClosed(ac) => Some(ac.error_code.into_inner()),
+        _ => None,
+    }
+}
+
+fn close_reason(e: &quinn::ConnectionError) -> Option<&[u8]> {
+    match e {
+        quinn::ConnectionError::ApplicationClosed(ac) => Some(ac.reason.as_ref()),
         _ => None,
     }
 }
@@ -1393,10 +1663,15 @@ pub async fn attach(
             Err(_) => return AttachOutcome::EndpointFailure("dial timed out".into()),
         }
     };
-    attach_on(cfg, conn, log).await
+    attach_on(cfg, conn, log, target).await
 }
 
-async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutcome {
+async fn attach_on(
+    cfg: &ClientConfig,
+    conn: Connection,
+    log: Log,
+    target: [u8; 32],
+) -> AttachOutcome {
     let (send, mut recv) = match conn.open_bi().await {
         Ok(s) => s,
         Err(e) => return AttachOutcome::EndpointFailure(e.to_string()),
@@ -1410,10 +1685,12 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     let known: Vec<u64> = caps.keys().copied().collect();
     let (gid, gval) = grease(&known);
     caps.insert(gid, gval);
+    let own = cfg.bind.own_delegation();
     let body = encode_attach(
-        &cfg.identity.public.keyhash,
+        &cfg.me.keyhash,
         cfg.attestation.as_deref(),
         &caps,
+        own.as_deref(),
     );
     if let Err(e) = sender.frame(FRAME_ATTACH, &body).await {
         return AttachOutcome::EndpointFailure(e.to_string());
@@ -1422,6 +1699,14 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     let ack = loop {
         match read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES).await {
             FrameRead::Closed(Some(e)) if close_code(&e) == Some(CLOSE_REFUSED as u64) => {
+                // the node's refusal of the bind on its side, named so the
+                // dialler retries a window refusal (§8.2)
+                if close_reason(&e) == Some(b"window") {
+                    log.push(Event::Unbound {
+                        why: Refusal::Window,
+                    });
+                    return AttachOutcome::Unbound(Refusal::Window);
+                }
                 log.push(Event::Refused);
                 return AttachOutcome::Refused;
             }
@@ -1433,11 +1718,26 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
                 return AttachOutcome::EndpointFailure("over-bound frame".into());
             }
             FrameRead::Payload(p) => match classify(&p) {
-                Control::Known(Family::AttachAck, b, _, it) => match AttachAck::decode(&b, &it) {
-                    Some(a) if (1..=3600).contains(&a.interval) => break a,
-                    _ => log.push(Event::Discarded),
-                },
+                Control::Known(Family::AttachAck, b, body, it) => {
+                    match AttachAck::decode(&b, body.start, &it) {
+                        Some(a) if (1..=3600).contains(&a.interval) => break a,
+                        _ => log.push(Event::Discarded),
+                    }
+                }
                 Control::Unknown(t) => log.push(Event::Skipped { frame_type: t }),
+                // an acknowledgement that does not decode binds nothing,
+                // and a delegation the codec refuses (classical-only, or a
+                // window not exactly 48 hours) is what makes one not
+                // decode: the session is refused, not waited on (§8.2)
+                Control::Malformed
+                    if frame::parse_outer(Stream::Control, &p)
+                        .is_ok_and(|f| f.frame_type == FRAME_ATTACH_ACK) =>
+                {
+                    let why = Refusal::Malformed("AttachAck does not decode".into());
+                    log.push(Event::Unbound { why: why.clone() });
+                    conn.close(VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+                    return AttachOutcome::Unbound(why);
+                }
                 Control::Malformed => log.push(Event::Discarded),
                 Control::Known(..) => {
                     return AttachOutcome::EndpointFailure("known frame before ack".into());
@@ -1448,6 +1748,26 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     log.push(Event::Received {
         frame_type: FRAME_ATTACH_ACK,
     });
+    // §9.1: the key the handshake presented is bound to the keyhash meant
+    // by the pin, by a held delegation, or by AttachAck field 6; nothing
+    // beyond the Attach was sent, and a session nothing binds is refused.
+    // The key is read here and not before: an Attach in 0-RTT early data
+    // goes out before the handshake completes, and the acknowledgement
+    // arrives only after it has (§8.2)
+    let Some(presented) = tls::peer_key(&conn) else {
+        return AttachOutcome::EndpointFailure("no peer key".into());
+    };
+    match cfg
+        .bind
+        .dialler(&cfg.pins, &target, &presented, ack.delegation.as_deref())
+    {
+        Ok(how) => log.push(Event::Bound { how }),
+        Err(why) => {
+            log.push(Event::Unbound { why: why.clone() });
+            conn.close(VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+            return AttachOutcome::Unbound(why);
+        }
+    }
     log.push(Event::Attached { mode: ack.mode });
     *cfg.sibling_cache.lock().unwrap() = ack.siblings.clone();
     let (dtx, drx) = mpsc::unbounded_channel();
@@ -1466,7 +1786,7 @@ async fn attach_on(cfg: &ClientConfig, conn: Connection, log: Log) -> AttachOutc
     let reach = Arc::new(Mutex::new(Reachability::Reachable));
     let interval = Duration::from_secs(ack.interval);
     let cache = cfg.sibling_cache.clone();
-    let me = cfg.identity.public.keyhash;
+    let me = cfg.me.keyhash;
     let loop_log = log.clone();
     let loop_reach = reach.clone();
     let on_reachability = cfg.on_reachability.clone();
@@ -1568,13 +1888,109 @@ pub async fn attach_any(
 ) -> AttachOutcome {
     let mut last = AttachOutcome::EndpointFailure("no endpoints".into());
     for addr in addrs {
-        match attach(cfg, endpoint, target, *addr, early).await {
+        let mut outcome = attach(cfg, endpoint, target, *addr, early).await;
+        // a window refusal is retried once at the same endpoint: the peer
+        // may have rolled to its next credential between the two checks
+        // (`wire-format.md` §8.2)
+        if matches!(outcome, AttachOutcome::Unbound(Refusal::Window)) {
+            outcome = attach(cfg, endpoint, target, *addr, early).await;
+        }
+        match outcome {
             AttachOutcome::Attached(s) => return AttachOutcome::Attached(s),
             AttachOutcome::Refused => return AttachOutcome::Refused,
             other => last = other,
         }
     }
     last
+}
+
+/// Dial `target` for requests alone, with no session (`wire-format.md`
+/// §8.2, §9.1): the pin or a held delegation binds the presented key with
+/// no frame; otherwise nothing is sent until the peer's delegation frame,
+/// the first on a stream it opens, verifies and names that key, and the
+/// connection is refused if the first frame is anything else.  A
+/// delegated dialler presents its own delegation first, on stream 0.
+pub async fn connect_request_only(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+) -> Result<(Connection, Bound), String> {
+    let tls_cfg = cfg.tls_for(&target).ok_or("NotPinned")?;
+    let connecting = tls::dial_with(endpoint, tls_cfg, addr).map_err(|e| format!("{e:?}"))?;
+    let conn = match tokio::time::timeout(cfg.connect_timeout, connecting).await {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => return Err(e.to_string()),
+        Err(_) => return Err("dial timed out".into()),
+    };
+    // recorded into the caller's log: there is no session to carry one
+    let log = cfg.log.clone();
+    let presented = tls::peer_key(&conn).ok_or("no peer key")?;
+    let how = match cfg.bind.without_frame(&cfg.pins, &target, &presented) {
+        Ok(Some(how)) => how,
+        Ok(None) | Err(Refusal::Window) => {
+            // the peer's frame, read before anything is sent
+            let frame = async {
+                let (_, mut recv) = conn.accept_bi().await.map_err(|e| e.to_string())?;
+                match read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES).await {
+                    FrameRead::Payload(p) => Ok(p),
+                    other => Err(format!("no frame: {other:?}")),
+                }
+            };
+            let p = match tokio::time::timeout(cfg.connect_timeout, frame).await {
+                Ok(Ok(p)) => p,
+                Ok(Err(e)) => return refuse(&conn, &log, Refusal::Unbound, e),
+                Err(_) => return refuse(&conn, &log, Refusal::Unbound, "no first frame".into()),
+            };
+            let raw = match classify(&p) {
+                Control::Known(Family::Delegation, b, body, _) => b[body].to_vec(),
+                _ => {
+                    return refuse(
+                        &conn,
+                        &log,
+                        Refusal::Unbound,
+                        "first frame is not a delegation".into(),
+                    );
+                }
+            };
+            log.push(Event::Received {
+                frame_type: FRAME_DELEGATION,
+            });
+            match cfg
+                .bind
+                .verify_presented(&cfg.pins, Some(&target), &presented, &raw)
+            {
+                Ok(_) => Bound::Presented,
+                Err(why) => return refuse(&conn, &log, why.clone(), why.to_string()),
+            }
+        }
+        Err(why) => return refuse(&conn, &log, why.clone(), why.to_string()),
+    };
+    log.push(Event::Bound { how });
+    // a delegated dialler's own delegation, first on stream 0, before any
+    // request stream opens
+    if let Some(raw) = cfg.bind.own_delegation() {
+        let (mut s, _r) = conn.open_bi().await.map_err(|e| e.to_string())?;
+        s.write_all(&control_frame(FRAME_DELEGATION, &raw))
+            .await
+            .map_err(|e| e.to_string())?;
+        log.push(Event::DelegationPresented);
+        // held open for the connection's life: a finished stream 0 is not
+        // what the peer expects to read from
+        let c = conn.clone();
+        tokio::spawn(async move {
+            let _s = s;
+            let _r = _r;
+            c.closed().await;
+        });
+    }
+    Ok((conn, how))
+}
+
+fn refuse<T>(conn: &Connection, log: &Log, why: Refusal, detail: String) -> Result<T, String> {
+    log.push(Event::Unbound { why });
+    conn.close(VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+    Err(format!("unbound: {detail}"))
 }
 
 /// A fresh attach: the client's actual serving node first, and its cached

@@ -413,7 +413,7 @@ impl AnchorEntry {
         // malformed under a key this holder has is a failure
         match verify::record(ids, "AnchorEntry", &self.bytes) {
             Ok(()) => Some(true),
-            Err(verify::Failure::MissingKey(_)) => None,
+            Err(verify::Failure::MissingKey(_) | verify::Failure::MissingDelegation(_)) => None,
             Err(verify::Failure::Invalid(_)) => Some(false),
         }
     }
@@ -745,7 +745,7 @@ impl NodeView {
                 node: self.me(),
                 endpoints,
                 residual,
-                key_material: Some(self.identity.public.key_material()),
+                key_material: Some(self.public.key_material()),
             },
         }
     }
@@ -803,20 +803,29 @@ impl NodeView {
         } else if let Some(p) = self.positions.get_mut(anchor) {
             p.seqno = seqno;
         }
-        Some(endpoint_record(&self.identity, endpoints, seqno))
+        // an instance mints no record of its own (`infra-client-
+        // requirements.md` §4.4): it serves the operator-signed one it was
+        // given, and reports when that no longer names its address
+        let signer = self.signer.clone()?;
+        Some(endpoint_record(&signer, endpoints, seqno))
     }
 
     /// Publish this node's own endpoint record for a series
     /// (`wire-format.md` §7.6).  Republishing an unchanged list replays the
     /// record already held rather than consuming a number.
-    pub fn publish_endpoints(&mut self, endpoints: &[NetworkPoint], seqno: Seqno) -> Vec<u8> {
+    pub fn publish_endpoints(
+        &mut self,
+        endpoints: &[NetworkPoint],
+        seqno: Seqno,
+    ) -> Option<Vec<u8>> {
         let me = self.me();
         let points: Vec<Vec<u8>> = endpoints.iter().map(|p| p.encode_bytes()).collect();
         if let Some(held) = self.store.endpoint_in(&me, seqno.series)
             && held.endpoints == points
         {
-            return held.bytes.clone();
+            return Some(held.bytes.clone());
         }
+        let signer = self.signer.clone()?;
         let mut payload = Vec::new();
         emit_map_head(&mut payload, 3);
         emit_uint(&mut payload, 1);
@@ -825,15 +834,13 @@ impl NodeView {
         emit_points(&mut payload, endpoints);
         emit_uint(&mut payload, 3);
         seqno.emit(&mut payload);
-        let sig = self
-            .identity
-            .sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
+        let sig = signer.sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
         let mut out = Vec::new();
         emit_map_head(&mut out, 4);
         out.extend_from_slice(&payload[1..]);
         emit_uint(&mut out, 4);
         out.extend_from_slice(&sig);
-        out
+        Some(out)
     }
 }
 
@@ -1159,39 +1166,26 @@ pub enum Contact {
 }
 
 /// Try a published endpoint list as alternatives, in the publisher's
-/// preference order, and stop at the first that authenticates as `target`.
-/// An implementation MUST try others on failure, or a single unreachable
-/// first entry becomes a permanent outage for that peer
-/// (`wire-format.md` §7.7.3).  How long to wait is local policy.
+/// preference order, and stop at the first whose presented key binds to
+/// `target` (`wire-format.md` §9.1): the pinned member, a delegation held
+/// from the topology class, or the delegation the peer presents first on
+/// the connection, read before anything is sent.  An implementation MUST
+/// try others on failure, or a single unreachable first entry becomes a
+/// permanent outage for that peer (`wire-format.md` §7.7.3).  How long to
+/// wait is local policy: `cfg.connect_timeout` per endpoint.
 pub async fn contact(
     endpoints: &[NetworkPoint],
     ep: &quinn::Endpoint,
-    me: &rhtn_crypto::SigningIdentity,
-    pins: &rhtn_transport::tls::Pins,
+    cfg: &rhtn_transport::session::ClientConfig,
     target: &Keyhash,
-    per_endpoint: std::time::Duration,
 ) -> Contact {
     let mut attempts = Vec::new();
     for e in endpoints {
-        let connecting = match rhtn_transport::tls::dial(ep, me, pins, target, e.socket()) {
-            Ok(c) => c,
-            Err(err) => {
-                attempts.push(EndpointFailure {
-                    endpoint: e.clone(),
-                    why: format!("{err:?}"),
-                });
-                continue;
-            }
-        };
-        match tokio::time::timeout(per_endpoint, connecting).await {
-            Ok(Ok(conn)) => return Contact::Reached(conn),
-            Ok(Err(err)) => attempts.push(EndpointFailure {
+        match rhtn_transport::session::connect_request_only(cfg, ep, *target, e.socket()).await {
+            Ok((conn, _)) => return Contact::Reached(conn),
+            Err(why) => attempts.push(EndpointFailure {
                 endpoint: e.clone(),
-                why: format!("{err}"),
-            }),
-            Err(_) => attempts.push(EndpointFailure {
-                endpoint: e.clone(),
-                why: "no answer".into(),
+                why,
             }),
         }
     }

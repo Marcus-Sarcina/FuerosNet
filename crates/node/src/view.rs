@@ -7,7 +7,7 @@ use crate::Keyhash;
 use rhtn_archive::chain::Archive;
 use rhtn_archive::topology::Table;
 use rhtn_archive::tx::Locator;
-use rhtn_crypto::SigningIdentity;
+use rhtn_crypto::{Identity, SigningIdentity};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -29,7 +29,22 @@ pub struct Slot {
 pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
 
 pub struct NodeView {
-    pub identity: Arc<SigningIdentity>,
+    /// This node's own identity, the public half: what it is named by and
+    /// what its `KeyMaterial` is.
+    pub public: Identity,
+    /// The seed, where this node holds it.  An instance holds none (design
+    /// §23.3): what advances its operator's archive, a countersignature or
+    /// a disavowal, is signed on the operator's device and never here, and
+    /// its endpoint record and anchor entry arrive operator-signed as
+    /// configuration.
+    pub signer: Option<Arc<SigningIdentity>>,
+    /// The delegated credential this node runs under, where it is an
+    /// instance (design §23.3): what signs its acknowledgements and
+    /// attestations, and what it pushes as each credential comes into
+    /// force (`wire-format.md` §8.2, §10.1).
+    pub credential: Option<Arc<rhtn_transport::tls::Credential>>,
+    /// The `not_before` of the credential last pushed, so each is pushed once.
+    pub pushed_credential: Option<u64>,
     /// This node's own position in its primary subnet; its anchor names
     /// the subnet a memo may travel in (`wire-format.md` §10.2).
     pub position: Locator,
@@ -94,11 +109,34 @@ pub struct NodeView {
 
 impl NodeView {
     pub fn new(identity: Arc<SigningIdentity>, position: Locator) -> Self {
-        let me = identity.public.keyhash;
+        let public = identity.public.clone();
+        Self::build(public, Some(identity), None, position)
+    }
+
+    /// A node running under a delegated credential and no seed (design
+    /// §23.3).
+    pub fn delegated(
+        public: Identity,
+        credential: Arc<rhtn_transport::tls::Credential>,
+        position: Locator,
+    ) -> Self {
+        Self::build(public, None, Some(credential), position)
+    }
+
+    fn build(
+        public: Identity,
+        signer: Option<Arc<SigningIdentity>>,
+        credential: Option<Arc<rhtn_transport::tls::Credential>>,
+        position: Locator,
+    ) -> Self {
+        let me = public.keyhash;
         let mut table = Table::with_me(me);
         table.mark_infra(me);
         NodeView {
-            identity,
+            public,
+            signer,
+            credential,
+            pushed_credential: None,
             position,
             positions: BTreeMap::new(),
             table,
@@ -136,7 +174,7 @@ impl NodeView {
     }
 
     pub fn me(&self) -> Keyhash {
-        self.identity.public.keyhash
+        self.public.keyhash
     }
 
     /// The subnet this node sits in: its own locator's anchor.

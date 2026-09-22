@@ -12,7 +12,7 @@ use std::time::Duration;
 
 fn server_config(name: &str) -> quinn::ServerConfig {
     let crypto =
-        quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&test_identity(name)))
+        quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(test_identity(name)))
             .unwrap();
     quinn::ServerConfig::with_crypto(Arc::new(crypto))
 }

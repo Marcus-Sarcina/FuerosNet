@@ -11,8 +11,10 @@
 //! the signatures over them; `verify::envelope` is the complete check of a
 //! transaction envelope including embedded evidence.
 
+pub mod delegation;
 pub mod identity;
 pub mod pqxdh;
+pub mod signer;
 pub mod verify;
 
 pub use identity::{Identity, SigningIdentity};

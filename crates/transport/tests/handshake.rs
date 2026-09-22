@@ -1,5 +1,6 @@
-//! Transport acceptance entries that need only the handshake: TRN-01, TRN-02,
-//! TRN-03 and TRN-05.  Two real QUIC endpoints on loopback.
+//! Transport acceptance entries that need only the handshake: TRN-01, TRN-02
+//! and TRN-05.  TRN-03 is in `delegation.rs`, since the bind it refuses is
+//! made after the handshake (`wire-format.md` §9.1).  Two real QUIC endpoints on loopback.
 //!
 //! On observation: TRN-01 and TRN-02 describe reading the ClientHello.  Here
 //! the same facts are established from the outcomes: a peer configured with a
@@ -101,11 +102,7 @@ async fn trn_02_completes_no_handshake_with_a_classical_only_client() {
     let sep = tls::server_endpoint(&server, loopback()).unwrap();
     let cep = tls::client_endpoint(loopback()).unwrap();
     let addr = sep.local_addr().unwrap();
-    let classical = tls::client_config_with(
-        &client,
-        &server.public.ed.to_bytes(),
-        vec![kx_group::X25519, kx_group::SECP256R1],
-    );
+    let classical = tls::client_config_with(&client, vec![kx_group::X25519, kx_group::SECP256R1]);
     let (s, c) = tokio::join!(accept_once(&sep), async {
         tls::dial_with(&cep, classical, addr).unwrap().await
     });
@@ -114,36 +111,4 @@ async fn trn_02_completes_no_handshake_with_a_classical_only_client() {
         "a client offering only X25519 and secp256r1 must be refused"
     );
     assert!(s.is_err(), "no session is established on the serving node");
-}
-
-// acceptance: TRN-03
-#[tokio::test]
-async fn trn_03_abandons_the_dial_when_the_raw_key_is_not_the_pinned_member() {
-    let bob = test_identity("bob");
-    let carol = test_identity("carol");
-    let client = test_identity("alice");
-    let pins = Pins::new();
-    pins.pin_identity(&bob.public);
-    // the endpoint advertised for bob's keyhash is answered by carol's key
-    let sep = tls::server_endpoint(&carol, loopback()).unwrap();
-    let cep = tls::client_endpoint(loopback()).unwrap();
-    let addr = sep.local_addr().unwrap();
-    let (s, c) = tokio::join!(accept_once(&sep), async {
-        tls::dial(&cep, &client, &pins, &bob.public.keyhash, addr)
-            .unwrap()
-            .await
-    });
-    assert!(
-        c.is_err(),
-        "a valid Ed25519 key that is not the pinned member must fail the handshake"
-    );
-    assert!(
-        s.is_err(),
-        "the server side never reaches a completed connection either"
-    );
-    // no pin at all is refused before dialling
-    assert_eq!(
-        tls::dial(&cep, &client, &Pins::new(), &bob.public.keyhash, addr).err(),
-        Some(tls::DialError::NotPinned)
-    );
 }

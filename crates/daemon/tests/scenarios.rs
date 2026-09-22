@@ -15,7 +15,7 @@ use rhtn_node::propagation::encode_push;
 use rhtn_node::store::KIND_TRANSACTION;
 use rhtn_sim::daemons::{Daemons, hex};
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -44,8 +44,9 @@ fn pins() -> Pins {
 
 fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(id(name)),
+        me: Party::of(Arc::new(id(name))),
         pins: pins(),
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

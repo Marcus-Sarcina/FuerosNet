@@ -262,7 +262,7 @@ fn a_grandpatron_acknowledges_under_standing_policy() {
         apply(&mut t, &w, r);
     }
     let issuer = AckIssuer {
-        identity: Arc::new(rhtn_crypto::identity::testkit::test_identity("alice")),
+        signer: Arc::new(rhtn_crypto::identity::testkit::test_identity("alice")),
         policy: Arc::new(|_patron, _node| true),
         now: w.clock + 1,
     };
@@ -324,7 +324,7 @@ fn an_acknowledgement_lapses_with_the_relationship_it_describes() {
         for r in [&f, &a, &pop, &adoption] {
             apply(&mut h, &w, r);
         }
-        assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(true));
+        assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(AckTaken::Taken));
         assert_eq!(h.acks().len(), 1);
         let ending = if run == 0 {
             w.depart(
@@ -365,7 +365,7 @@ fn an_acknowledgement_alone_creates_no_binding() {
         Ok(()),
         "the signature verifies"
     );
-    assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(false));
+    assert_eq!(h.take_ack(&w.lookup(), &ack), Ok(AckTaken::NoOpenBinding));
     assert_eq!(h.patrons(&w.kh("carol")), set(&[]));
     assert!(!h.subordinates(&w.kh("bob")).contains(&w.kh("carol")));
     assert!(h.acks().is_empty());

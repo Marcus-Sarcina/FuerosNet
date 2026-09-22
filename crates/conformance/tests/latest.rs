@@ -45,7 +45,7 @@ async fn c01_archive_probe_must_reject_a_disconnected_batch() {
         let records=if req.nonce==[1;16] {vec![good.clone(),first.clone()]} else {vec![second.clone(),first.clone()]};
         Box::pin(async move {Some(ArchiveReply {nonce:req.nonce,records,more:false,frontier:Vec::new()}.encode())})
     }));
-    let ep=tls::server_endpoint(&cfg.identity,"127.0.0.1:0".parse().unwrap()).unwrap();let addr=ep.local_addr().unwrap();
+    let ep=tls::server_endpoint(cfg.presenter(),"127.0.0.1:0".parse().unwrap()).unwrap();let addr=ep.local_addr().unwrap();
     let task=tokio::spawn(Node::new(cfg).serve(ep.clone()));
     let (session,_client)=probe::attached(a,&ids,b.public.keyhash,addr).await.unwrap();
     let ask=Ask::Archive {subject:b.public.keyhash,max_records:2};

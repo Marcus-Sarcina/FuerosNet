@@ -13,6 +13,11 @@ use rhtn_codec::envelope;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
     MissingKey(Vec<u8>),
+    /// A record a delegated key may sign (`wire-format.md` §7.5, §7.1)
+    /// verifies under neither the identity's own key nor any delegation
+    /// this holder keeps for it: unverifiable until that keyhash's
+    /// delegation arrives, as §10.1.1 defers for a missing key.
+    MissingDelegation(Vec<u8>),
     Invalid(String),
 }
 
@@ -22,6 +27,11 @@ impl std::fmt::Display for Failure {
             Failure::MissingKey(k) => write!(
                 f,
                 "missing key for signer {}",
+                k.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            ),
+            Failure::MissingDelegation(k) => write!(
+                f,
+                "no delegation held for signer {}",
                 k.iter().map(|b| format!("{b:02x}")).collect::<String>()
             ),
             Failure::Invalid(s) => f.write_str(s),
@@ -360,6 +370,21 @@ pub struct Delegation {
 }
 
 pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation, Failure> {
+    let d = delegation_fields(raw)?;
+    let id = ids
+        .identity(&d.keyhash)
+        .ok_or_else(|| Failure::MissingKey(d.keyhash.to_vec()))?;
+    let payload = map_without_key(raw, 5).ok_or("payload")?;
+    let r5 = value_slice(raw, 5).ok_or("signature")?;
+    verify_sign_block(id, &raw[r5], aad::DELEGATION, &payload)
+        .map_err(|e| Failure::Invalid(format!("delegation: {e}")))?;
+    Ok(d)
+}
+
+/// A delegation's fields with its shape checked and its signature not
+/// verified: what a holder reads to know whose it is and whether it is
+/// worth verifying, and what it reads back from its own store.
+pub fn delegation_fields(raw: &[u8]) -> Result<Delegation, Failure> {
     let item = parse_all(raw).map_err(|_| "cbor")?;
     rhtn_codec::schema::check_kind(raw, "Delegation", &item)
         .map_err(|e| Failure::Invalid(e.0.into()))?;
@@ -372,22 +397,11 @@ pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation,
             _ => None,
         }
     };
-    let key = b32(1).ok_or("field 1")?;
-    let keyhash = b32(2).ok_or("field 2")?;
-    let not_before = map_get(m, 3).and_then(as_uint).ok_or("field 3")?;
-    let not_after = map_get(m, 4).and_then(as_uint).ok_or("field 4")?;
-    let id = ids
-        .identity(&keyhash)
-        .ok_or_else(|| Failure::MissingKey(keyhash.to_vec()))?;
-    let payload = map_without_key(raw, 5).ok_or("payload")?;
-    let r5 = value_slice(raw, 5).ok_or("signature")?;
-    verify_sign_block(id, &raw[r5], aad::DELEGATION, &payload)
-        .map_err(|e| Failure::Invalid(format!("delegation: {e}")))?;
     Ok(Delegation {
-        key,
-        keyhash,
-        not_before,
-        not_after,
+        key: b32(1).ok_or("field 1")?,
+        keyhash: b32(2).ok_or("field 2")?,
+        not_before: map_get(m, 3).and_then(as_uint).ok_or("field 3")?,
+        not_after: map_get(m, 4).and_then(as_uint).ok_or("field 4")?,
     })
 }
 
@@ -481,11 +495,16 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     if id.verify_ed(&sig, &tbs) {
         return Ok(());
     }
-    if matches!(kind, "SubtreeAck" | "CurrencyAttestation")
-        && let Some(k) = ids.delegated_key(&signer)
-        && verify_ed_raw(&k, &sig, &tbs)
-    {
-        return Ok(());
+    // a subtree acknowledgement or an attestation is signed under the key
+    // the issuer's node delegated, normally (§7.5, §7.1); a holder keeping
+    // no delegation for that keyhash cannot tell a delegated signature
+    // from a wrong one, and defers (§10.1.1)
+    if matches!(kind, "SubtreeAck" | "CurrencyAttestation") {
+        return match ids.delegated_key(&signer) {
+            Some(k) if verify_ed_raw(&k, &sig, &tbs) => Ok(()),
+            Some(_) => Err("the standalone signature verifies under neither the key the object names nor the key it delegated".into()),
+            None => Err(Failure::MissingDelegation(signer)),
+        };
     }
     Err("the standalone signature does not verify under the key the object names".into())
 }

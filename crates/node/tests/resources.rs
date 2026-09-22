@@ -525,7 +525,7 @@ fn ack(sc: &mut Scene, node: &str) {
     let rec = sc.w.bytes(&adoption);
     let rec = rhtn_archive::record::Record::parse(&rec).unwrap();
     let issuer = AckIssuer {
-        identity: Arc::new(id("alice")),
+        signer: Arc::new(id("alice")),
         policy: Arc::new(|_, _| true),
         now: sc.w.clock,
     };
@@ -994,7 +994,7 @@ fn a_subtree_is_acknowledged_under_policy_without_a_prompt_and_lapses_with_the_r
     let prompts = Arc::new(AtomicU64::new(0));
     let asked = prompts.clone();
     let issuer = AckIssuer {
-        identity: Arc::new(id("alice")),
+        signer: Arc::new(id("alice")),
         policy: Arc::new(move |_, _| {
             let _ = &asked;
             true

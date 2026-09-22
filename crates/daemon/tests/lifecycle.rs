@@ -6,7 +6,7 @@ use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_node::queue::DirStore;
 use rhtn_transport::queue::{QueueStore, Queued};
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
@@ -135,8 +135,9 @@ fn client_cfg(name: &str, target: [u8; 32], addr: SocketAddr) -> ClientConfig {
     pins.pin_identity(&test_identity("bob").public);
     let book = std::collections::HashMap::from([(target, vec![addr])]);
     ClientConfig {
-        identity: Arc::new(test_identity(name)),
+        me: Party::of(Arc::new(test_identity(name))),
         pins,
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

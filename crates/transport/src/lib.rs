@@ -11,6 +11,7 @@
 //!
 //! Section references are to `wire-format.md` unless prefixed `design`.
 
+pub mod bind;
 pub mod queue;
 pub mod session;
 pub mod stun;

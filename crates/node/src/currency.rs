@@ -390,8 +390,24 @@ impl NodeView {
     pub fn issue_currency(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
         let rung = self.rung_for(cur, subject)?;
         let current = self.table.current_key(subject);
+        // an instance signs under its delegated key and staples the
+        // delegation, the relying party being beyond its horizon
+        // (`wire-format.md` §7.1) [author, 2026-09-21]
+        if let Some(c) = &self.credential {
+            let issued = c.current()?;
+            return Some(rhtn_archive::tx::currency_attestation_stapled(
+                &c.signer(),
+                subject,
+                &current,
+                self.now(),
+                self.now() + cur.lifetime,
+                rung.role(),
+                &issued.raw,
+            ));
+        }
+        let signer = self.signer.as_ref()?;
         Some(currency_attestation(
-            &self.identity,
+            signer.as_ref(),
             subject,
             &current,
             self.now(),
@@ -674,10 +690,14 @@ impl NodeView {
             return None;
         }
         rhtn_crypto::verify::adoption_evidence(ids, body).ok()?;
+        // a countersignature advances the archive: the operator's act,
+        // signed on the device holding the seed and never on an instance
+        // (`infra-client-requirements.md` §7)
+        let signer = self.signer.clone()?;
         let env = rhtn_archive::tx::envelope(
             rhtn_archive::tx::TYPE_ADOPTION,
             body,
-            &[subject_signer, &self.identity],
+            &[subject_signer, signer.as_ref()],
         );
         let rec = rhtn_archive::record::Record::parse(&env).ok()?;
         self.archive.append(rec.clone()).ok()?;

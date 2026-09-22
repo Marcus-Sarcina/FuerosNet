@@ -7,6 +7,7 @@ use rhtn_archive::Keyhash;
 use rhtn_client::device::DirectPath;
 use rhtn_crypto::SigningIdentity;
 use rhtn_node::runtime::LiveNode;
+use rhtn_transport::bind::Binding;
 use rhtn_transport::session::{CLOSE_REFUSED, deliver};
 use rhtn_transport::tls::{self, Pins};
 use rhtn_transport::traversal::{Candidate, TraversalSocket, connect_direct, endpoint};
@@ -85,6 +86,10 @@ impl Direct for NoDirect {
 struct Light {
     id: Arc<SigningIdentity>,
     pins: Pins,
+    /// §9.1's bind for a peer known by the key it presented: the pin, or
+    /// a delegation held in the client's horizon view (`light-client-
+    /// requirements.md` §4.2).
+    bind: Binding,
     socket: Arc<TraversalSocket>,
     endpoint: quinn::Endpoint,
     stun: Option<SocketAddr>,
@@ -105,9 +110,11 @@ impl LightDirect {
     /// Bind at `addr`, behind `nat` on a harness, asking `stun` for the
     /// reflexive address where one is given.  What arrives from a peer
     /// goes to `inbound`.
+    #[allow(clippy::too_many_arguments)]
     pub fn bind(
         id: Arc<SigningIdentity>,
         pins: Pins,
+        bind: Binding,
         addr: SocketAddr,
         nat: Option<SocketAddr>,
         stun: Option<SocketAddr>,
@@ -115,14 +122,20 @@ impl LightDirect {
         inbound: Inbound,
     ) -> io::Result<LightDirect> {
         let socket = TraversalSocket::bind(addr, nat)?;
-        let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&id))
-            .map_err(|e| io::Error::other(e.to_string()))?;
+        let presenter = match &bind.credential {
+            Some(c) => tls::Presenter::Delegated(c.clone()),
+            None => tls::Presenter::own(&id),
+        };
+        let crypto =
+            quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&presenter))
+                .map_err(|e| io::Error::other(e.to_string()))?;
         let mut qcfg = quinn::ServerConfig::with_crypto(Arc::new(crypto));
         qcfg.transport_config(Arc::new(tls::transport_config()));
         let endpoint = endpoint(socket.clone(), Some(qcfg))?;
         let light = LightDirect(Arc::new(Light {
             id,
             pins,
+            bind,
             socket,
             endpoint: endpoint.clone(),
             stun,
@@ -152,11 +165,21 @@ impl LightDirect {
     }
 
     /// Hold `conn` under the peer it authenticates and read what it
-    /// delivers until it closes.  An unpinned peer is closed unheld.
+    /// delivers until it closes.  The presented key is bound by the pin
+    /// or by a delegation held in the horizon view, with no frame
+    /// (`wire-format.md` §9.1); a peer bound by neither is closed unheld.
     fn hold(&self, conn: quinn::Connection) -> bool {
-        let Some(peer) = tls::peer_spki(&conn).and_then(|s| self.0.pins.keyhash_for_spki(&s))
-        else {
-            conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unpinned");
+        let Some(peer) = tls::peer_key(&conn).and_then(|k| {
+            self.0.pins.keyhash_for_key(&k).or_else(|| {
+                self.0
+                    .bind
+                    .held
+                    .by_key(&k)
+                    .filter(|d| self.0.bind.in_window(d))
+                    .map(|d| d.keyhash)
+            })
+        }) else {
+            conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unbound");
             return false;
         };
         // A connection this side would not have dialled is not one it
@@ -218,10 +241,15 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return false;
             }
+            let me = match &self.0.bind.credential {
+                Some(c) => tls::Presenter::Delegated(c.clone()),
+                None => tls::Presenter::own(&self.0.id),
+            };
             match connect_direct(
                 &self.0.endpoint,
-                &self.0.id,
+                &me,
                 &self.0.pins,
+                &self.0.bind,
                 &peer,
                 &candidates,
                 self.0.dial_timeout,

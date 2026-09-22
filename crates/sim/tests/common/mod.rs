@@ -6,7 +6,7 @@
 use rhtn_crypto::SigningIdentity;
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Pins};
+use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -58,8 +58,9 @@ pub fn node_cfg(name: &str, interval: u64) -> NodeConfig {
 
 pub fn client_cfg(name: &str) -> ClientConfig {
     ClientConfig {
-        identity: Arc::new(id(name)),
+        me: Party::of(Arc::new(id(name))),
         pins: pins(),
+        bind: Default::default(),
         capabilities: BTreeMap::new(),
         attestation: None,
         filter: None,

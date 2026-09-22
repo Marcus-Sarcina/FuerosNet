@@ -7,7 +7,10 @@
 //! reads one.
 
 use crate::resolution::Path;
-use crate::store::{Decision, EndpointRecord, Horizon, KIND_ENDPOINT_RECORD, KIND_TRANSACTION};
+use crate::store::{
+    Decision, EndpointRecord, Horizon, KIND_DELEGATION, KIND_ENDPOINT_RECORD, KIND_TRANSACTION,
+    Known,
+};
 use crate::view::{NodeView, Slot};
 use crate::{Adjacency, Keyhash, Txid};
 use rhtn_archive::record::Record;
@@ -162,8 +165,14 @@ pub enum MemoOutcome {
     /// This node holds that slot at or after the memo's timestamp.
     AlreadyPassed,
     /// Field 1 is this node and its own row confirms the memo: a cycle.
+    /// The subordinate that forwarded it is removed from its slot, and a
+    /// vacancy memo goes rootward; no transaction is minted [author,
+    /// 2026-09-21].
     CycleConfirmed {
-        disavowed: Keyhash,
+        /// The subordinate emptied from its slot; none where the forwarder
+        /// held no slot any more, as with a memo about a slot already
+        /// emptied, when the row confirms and nothing changes.
+        removed: Option<Keyhash>,
     },
     /// Field 1 is this node and its own row does not confirm the memo.
     Unconfirmed,
@@ -211,6 +220,23 @@ impl NodeView {
     ) -> Decision {
         let me = self.me();
         self.take_object(adj, &me, kind, object, ids)
+    }
+
+    /// Push this node's own credential as it comes into force
+    /// (`wire-format.md` §8.2, §10.1): once per credential, to every
+    /// adjacency, entering this node's own store first.  Nothing where the
+    /// node holds no credential or the current one is already pushed.
+    pub fn push_credential<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+    ) -> Option<Decision> {
+        let current = self.credential.as_ref()?.current()?;
+        if self.pushed_credential == Some(current.not_before) {
+            return None;
+        }
+        self.pushed_credential = Some(current.not_before);
+        Some(self.originate_push(adj, KIND_DELEGATION, &current.raw, ids))
     }
 
     /// The sessions this node holds by virtue of a topology relationship,
@@ -317,6 +343,15 @@ impl NodeView {
                     && let Ok(er) = EndpointRecord::parse(object)
                 {
                     self.table.mark_infra(er.node);
+                }
+                // a delegation that just entered is what an acknowledgement
+                // held aside for it was waiting on (`wire-format.md` §7.5)
+                if kind == KIND_DELEGATION {
+                    let known = Known {
+                        ids,
+                        store: &self.store,
+                    };
+                    self.table.release_deferred_acks(&known);
                 }
             }
             Decision::Conflict { subject, .. } => {
@@ -885,25 +920,25 @@ impl NodeView {
             // no disavowal, no fetch, no forward, rows unchanged
             return MemoOutcome::Unconfirmed;
         }
-        // disavow the direct subordinate that forwarded the memo, reason
-        // code 5, without prejudice (§10.2.4); the disavowal enters this
-        // node's own store and table, empties the slot, and floods
-        let Some(dis) = self.disavow(from, Some(5)) else {
-            return MemoOutcome::Unconfirmed;
-        };
-        let ids: Vec<rhtn_crypto::Identity> = vec![self.identity.public.clone()];
-        self.originate_push(adj, KIND_TRANSACTION, &dis.bytes, &ids);
-        if let Some(slot) = self.slot_of(from) {
+        // a cycle repair is a removal, not a disavowal (§10.2.4) [author,
+        // 2026-09-21]: the subordinate that forwarded the memo leaves its
+        // slot, the vacancy memo goes rootward, and no transaction is
+        // minted, stored or pushed; topology is state, not history
+        let removed = self.slot_of(from).map(|slot| {
             self.set_slot(slot, None, self.now());
-        }
-        MemoOutcome::CycleConfirmed { disavowed: *from }
+            self.originate_memo(adj, slot);
+            *from
+        });
+        MemoOutcome::CycleConfirmed { removed }
     }
 
-    /// Sign a disavowal of `node` by this node, advancing its own chain.
+    /// Sign a disavowal of `node` by this node, advancing its own chain: the
+    /// operator's act, so only a node holding its seed can.
     pub fn disavow(&mut self, node: &Keyhash, code: Option<u64>) -> Option<Record> {
+        let signer = self.signer.clone()?;
         let back = self.archive.next_back_pointers();
         let body = tx::disavowal_body(&back, &self.me(), node, self.now(), code);
-        let env = tx::envelope(tx::TYPE_DISAVOWAL, &body, &[&self.identity]);
+        let env = tx::envelope(tx::TYPE_DISAVOWAL, &body, &[signer.as_ref()]);
         let rec = Record::parse(&env).ok()?;
         self.archive.append(rec.clone()).ok()?;
         Some(rec)

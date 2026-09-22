@@ -320,7 +320,7 @@ async fn n06_fragmented_control_frame_survives_an_outbound_event() {
         let client=tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
         let conn=tls::dial(&client,&n,&pins,&p.public.keyhash,addr).unwrap().await.unwrap();
         let (mut send,mut recv)=conn.open_bi().await.unwrap();
-        send.write_all(&control_frame(FRAME_ATTACH,&encode_attach(&n.public.keyhash,None,&Default::default()))).await.unwrap();
+        send.write_all(&control_frame(FRAME_ATTACH,&encode_attach(&n.public.keyhash,None,&Default::default(), None))).await.unwrap();
         assert!(matches!(read_frame(&mut recv,1_000_000).await,FrameRead::Payload(_)));
         send.write_all(&control_frame(FRAME_HEARTBEAT,&encode_heartbeat(0,100))).await.unwrap();
         sleep(Duration::from_millis(80)).await;

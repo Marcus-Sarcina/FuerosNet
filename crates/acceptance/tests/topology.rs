@@ -3,40 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Sign a subtree acknowledgement under the node's delegated key, and verify one against the delegation held from the topology class
-///
-/// Spec: wire-format.md §7.5; wire-format.md §8.2
-/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.5): "The acknowledgement is topology state and not a person's act, so the key that authenticates the node signs it."
-/// Rule (wire-format.md §7.5): "A receiver checks field 5 against the key the grandpatron's current delegation names, which it holds from the topology class"
-///
-/// Given: Infra node G runs as an instance holding a delegation D from its operator's identity for transport key k and no seed; sibling S holds D from a topology push.
-/// When: G's node verifies an adoption of N under its subordinate P and emits a SubtreeAck; S receives it.
-/// Then: Field 5 verifies under k with external_aad rhtn/1:subtree-ack and under no key of G's identity; S accepts the acknowledgement, having matched field 2 to D's field 2 and the signing key to D's field 1.
-#[test]
-#[ignore = "acceptance TOP-41: owed at milestone after-5"]
-fn top_41_sign_a_subtree_acknowledgement_under_the_node_s() {
-    todo!("TOP-41: Sign a subtree acknowledgement under the node's delegated key, and verify one against the delegation held from the topology class")
-}
-
-/// Defer an acknowledgement whose grandpatron's delegation you do not hold
-///
-/// Spec: wire-format.md §7.5; wire-format.md §10.1.1
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (wire-format.md §7.5): "one holding no delegation for that keyhash defers"
-/// Rule (wire-format.md §10.1.1): "hold it, fetch the key, and let it enter storage and propagation when it verifies"
-///
-/// Given: Node S holds G's KeyMaterial and no delegation for G; a SubtreeAck by G's node under delegated key k arrives.
-/// When: S evaluates it.
-/// Then: S neither accepts nor rejects it: it is held, not stored and not forwarded, and it enters storage when G's delegation naming k arrives and verifies.
-#[test]
-#[ignore = "acceptance TOP-42: owed at milestone after-5"]
-fn top_42_defer_an_acknowledgement_whose_grandpatron_s_del() {
-    todo!("TOP-42: Defer an acknowledgement whose grandpatron's delegation you do not hold")
-}
-
 /// Hold the delegations of the parties in a light client's horizon, and bind a direct-path peer by one
 ///
 /// Spec: light-client-requirements.md §4.2; wire-format.md §10.1.1

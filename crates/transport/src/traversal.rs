@@ -450,21 +450,38 @@ impl TraversalSocket {
 
 /// The connectivity check and the connection in one (RFC 8445 §7, with
 /// QUIC's handshake as the check): dial every candidate of the peer at
-/// once, authenticating as `me` against the pinned key for `peer`, and
-/// keep the first handshake that completes.  `None` within `timeout` is
-/// the direct path failing, and the relay is next.
+/// once, authenticating as `me`, and keep the first handshake that
+/// completes *and binds* to `peer`: by the pin, or by a delegation held
+/// from the topology class, the direct path being inside the horizon
+/// where that is held (design §12.6.3, `wire-format.md` §9.1).  A
+/// completed handshake nothing binds is closed and counts as no path.
+/// `None` within `timeout` is the direct path failing, and the relay is
+/// next.
 pub async fn connect_direct(
     endpoint: &quinn::Endpoint,
-    me: &rhtn_crypto::SigningIdentity,
+    me: impl Into<crate::tls::Presenter>,
     pins: &crate::tls::Pins,
+    bind: &crate::bind::Binding,
     peer: &[u8; 32],
     candidates: &[Candidate],
     timeout: std::time::Duration,
 ) -> Option<quinn::Connection> {
+    let me = me.into();
     let mut attempts = Vec::new();
     for c in candidates {
-        if let Ok(connecting) = crate::tls::dial(endpoint, me, pins, peer, c.addr) {
-            attempts.push(Box::pin(async move { connecting.await.ok() }));
+        if let Ok(connecting) = crate::tls::dial(endpoint, &me, pins, peer, c.addr) {
+            let (pins, bind, peer) = (pins.clone(), bind.clone(), *peer);
+            attempts.push(Box::pin(async move {
+                let conn = connecting.await.ok()?;
+                let presented = crate::tls::peer_key(&conn)?;
+                match bind.without_frame(&pins, &peer, &presented) {
+                    Ok(Some(_)) => Some(conn),
+                    _ => {
+                        conn.close(quinn::VarInt::from_u32(1), b"unbound");
+                        None
+                    }
+                }
+            }));
         }
     }
     if attempts.is_empty() {

@@ -735,7 +735,9 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     }
                 }
                 Family::TopologyPush => {
-                    if map_get(m, 1).and_then(as_uint).unwrap_or(9) > 1 {
+                    // 0 a signed transaction, 1 an EndpointRecord, 2 a
+                    // Delegation (§10.1)
+                    if map_get(m, 1).and_then(as_uint).unwrap_or(9) > 2 {
                         return Err(Error("body kind out of range"));
                     }
                 }
