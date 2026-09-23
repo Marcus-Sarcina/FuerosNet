@@ -10390,6 +10390,12 @@ row and one provenance mark that goes with it (and a member's row can now be
 removed outright), the service holds one bundle and one pool per device with
 no prior bundle and no time of deposit: 438 of 455.
 
+**Five readings confirmed by test.** Pruning refused except at a series
+reissue beyond the window; a row set for a party outside the horizon
+granting nothing and dropped at the next refresh; a presence record with no
+verifier response weighed like any other; and, already tested, a running
+request completing on a role change and a memo conflict never fetched.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the

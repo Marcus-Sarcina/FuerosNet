@@ -11008,3 +11008,31 @@ class by class:
   here and none is added.
 
 438 of 455.
+
+## Section 2.6's confirmations (2026-09-22)
+
+Five statements the note asked to confirm by test rather than by reading:
+
+- **design §10.1, pruning anchored to the reissue.** `Archive::prune` refuses
+  any checkpoint that is not a series reissue and any reissue still inside
+  the 730-day window, and leaves the chain whole either time; a test in
+  `archive/tests/chain.rs` says so beside ARC-16, which prunes.
+- **design §11.4, a running request completes.** RSC-18's test already has
+  an in-flight request delivered under the state it started with and the
+  transport session left alone; nothing to add.
+- **design §11.4, permission past the horizon refused, scope or grant
+  alike.** The gate at `resources.rs` sits before the row is read, so a row
+  set by name for a party outside the owner's horizon grants nothing, and
+  the next refresh drops it; a test in `node/tests/resources.rs`. The note's
+  worry, that such a row may stand until the refresh, is true of the row
+  and false of the permission.
+- **design §6.4, verifier responses never required.** The reference
+  metric reads structure (§16.1): a presence record carrying no response is
+  weighed like any other, shown in `policy/tests/archive.rs` beside MET-03,
+  whose every fixture record carries none.
+- **design §15.2, a memo conflict never fetched.** PRP-13's test asserts
+  *no disavowal, no fetch, no forward*; nothing to add.
+
+`resource-requirements.md` §7.2.1's absolute-rank displacement remains
+section 6's, unbuilt. No catalogue entry is owed to any of the five; the
+tests are unmarked confirmations. 438 of 455.

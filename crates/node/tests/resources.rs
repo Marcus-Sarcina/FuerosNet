@@ -1780,3 +1780,37 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
     // from the operator's hosting file, which carries the current grants
     // and nothing of what they were (`infra-client-requirements.md` §10.2)
 }
+
+/// Permission past the horizon is refused, scope or grant alike (design
+/// §11.4): a row an operator set by name for a party outside the owner's
+/// horizon grants nothing, since §11.2's gate sits before the row is
+/// read; and the next refresh drops the row.  Section 2.6 of the note
+/// asked for this by test.
+#[test]
+fn a_named_row_for_a_party_outside_the_horizon_grants_nothing() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    // w2 is a stranger to alice's horizon, as RSC-12 has it
+    assert!(!sc.table.horizon(&kh("alice"), 2).contains(&kh("w2")));
+    g.set_row(
+        R1,
+        kh("w2"),
+        Row {
+            roles: BTreeSet::new(),
+            connect: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        g.serve(&kh("alice"), &sc.table, &kh("w2"), &request(R1, OK_GET))
+            .status,
+        STATUS_REFUSED,
+        "the gate comes before the row"
+    );
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
+    // the row stood until membership was next re-evaluated, and goes then
+    assert!(g.row(&R1, &kh("w2")).is_some());
+    g.refresh(&sc.table.clone_for(kh("alice")));
+    assert!(g.row(&R1, &kh("w2")).is_none(), "dropped at the refresh");
+}

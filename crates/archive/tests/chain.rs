@@ -797,3 +797,43 @@ fn appending_a_record_already_held_changes_nothing() {
     assert_eq!(ar.next_back_pointers(), vec![d.txid]);
     assert_eq!(ar.len(), 3);
 }
+
+/// Pruning is anchored to the patron-countersigned reissue and to the
+/// window (design §10.1): at any other record, or inside the window, the
+/// chain is left whole.  Section 2.6 of the note asked for this by test.
+#[test]
+fn pruning_is_refused_except_at_a_series_reissue_beyond_the_window() {
+    let mut w = World::new(&["alice", "bob"]);
+    let f1 = w.meet("alice", "bob");
+    w.adopt("bob", "alice", f1.txid, 5);
+    let r_c = w.reissue(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 0,
+        },
+        6,
+    );
+    let held = w.archive("bob").len();
+    // a presence record is not a checkpoint
+    assert_eq!(
+        w.archive_mut("bob")
+            .prune(&f1.txid, r_c.effective + WINDOW_SECONDS + 1),
+        Err("not a series reissue".to_string())
+    );
+    // the reissue is, but not inside the window
+    assert_eq!(
+        w.archive_mut("bob").prune(&r_c.txid, r_c.effective + 1),
+        Err("inside the 730-day window".to_string())
+    );
+    assert_eq!(w.archive("bob").len(), held, "nothing pruned either time");
+    assert!(w.archive("bob").checkpoint().is_none());
+    // beyond it, at the reissue: pruned
+    assert!(
+        w.archive_mut("bob")
+            .prune(&r_c.txid, r_c.effective + WINDOW_SECONDS + 1)
+            .is_ok()
+    );
+    assert_eq!(w.archive("bob").checkpoint(), Some(r_c.txid));
+}

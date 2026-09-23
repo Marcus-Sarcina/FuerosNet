@@ -246,7 +246,7 @@ retention; a check that the row provenance added for G01 on 09-15
 (`resources.rs`) is provenance and not row history; and positive/negative
 pairs for each newly named class.
 
-### 2.6 Confirmations, low cost
+### 2.6 Confirmations, low cost — **confirmed 2026-09-22**, three by new tests, two by tests already there
 
 - design §10.1's pruning is anchored to the patron-countersigned reissue
   (`ad675f7`). `crates/archive/src/chain.rs` line 125 already prunes only at a
@@ -864,9 +864,9 @@ land on their own.
    3; the light client's held delegations (TOP-43); acknowledgements
    travelling as kind 3, issued and taken in a running node (TOP-44); the
    direct path's checks in RFC 8445's order and at its pace (TRV-11);
-   the no-history audit of section 2.5 (RSC-41, RSC-42, SUB-13). Next:
-   section 2.6's confirmations; the light client and FFI holding a
-   delegation and no seed.
+   the no-history audit of section 2.5 (RSC-41, RSC-42, SUB-13); section
+   2.6's five confirmations. Next: the light client and FFI holding a
+   delegation and no seed, which is the last of step 5.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

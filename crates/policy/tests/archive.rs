@@ -119,3 +119,30 @@ fn only_the_intersection_with_known_identities_is_weighed() {
     let nothing = evaluate_archive(&m, &ev, &subject, &strangers);
     assert_eq!((nothing.weighed.len(), nothing.total), (0, 0.0));
 }
+
+/// Verifier responses are sought, and their absence is something an
+/// evaluator weighs, never a requirement (design §6.4): a presence record
+/// carrying no response at all is evidence, weighed by the observer's
+/// graph like any other, and the reference metric reads structure and not
+/// responses (design §16.1).  Section 2.6 of the note asked for this by
+/// test; every record `presence` builds here carries no response.
+#[test]
+fn a_presence_record_with_no_verifier_response_is_still_weighed() {
+    let m = ReferenceMetric::default();
+    let (p, h, k, subject) = (kh("p"), kh("h"), kh("k"), kh("subject"));
+    let mut ev = Evidence::new(p);
+    ev.adopt(p, h);
+    ev.meet(h, k);
+    let none = presence(subject, k, 1_800_000_000);
+    // the body is the envelope's field 3; a normal record's responses
+    // would be its key 5, absent here
+    let body = rhtn_codec::cbor::value_slice(&none.bytes, 3).expect("a body");
+    assert!(
+        rhtn_codec::cbor::value_slice_at(&none.bytes, body.start, 5).is_none(),
+        "the record carries no verifier response"
+    );
+    let read = evaluate_archive(&m, &ev, &subject, std::slice::from_ref(&none));
+    assert_eq!(read.weighed.len(), 1, "weighed, not refused");
+    assert!(read.total > 0.0, "and confers standing");
+    assert_eq!(read.ignored, 0);
+}
