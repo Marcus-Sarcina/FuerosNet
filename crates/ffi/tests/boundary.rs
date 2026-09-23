@@ -22,6 +22,20 @@ struct Shell {
     /// is checked by the serving node on its own clock, so a device that
     /// presents one must agree with it about the time.
     real_time: bool,
+    /// What the kernel wrote through the storage seam, by name: the
+    /// app-private storage a phone would give it, kept here so a second
+    /// process can start from what the first wrote.
+    store: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+}
+
+impl Storage for Shell {
+    fn read(&self, name: String) -> Option<Vec<u8>> {
+        self.store.lock().unwrap().get(&name).cloned()
+    }
+    fn write(&self, name: String, bytes: Vec<u8>) -> bool {
+        self.store.lock().unwrap().insert(name, bytes);
+        true
+    }
 }
 
 impl Proximity for Shell {
@@ -65,14 +79,19 @@ impl Clock for Shell {
 impl Random for Shell {
     fn fill(&self, n: u32) -> Vec<u8> {
         // a platform that returns short measure is refused, not padded
-        vec![
-            9u8;
-            if self.short {
-                (n as usize).saturating_sub(1)
-            } else {
-                n as usize
-            }
-        ]
+        let want = if self.short {
+            (n as usize).saturating_sub(1)
+        } else {
+            n as usize
+        };
+        // real randomness: two shells drawing the same constant would
+        // derive the same ratchet keys and read as one party to each other
+        let mut out = Vec::with_capacity(want);
+        while out.len() < want {
+            out.extend_from_slice(&rhtn_transport::tls::random_bytes::<64>());
+        }
+        out.truncate(want);
+        out
     }
 }
 
@@ -96,7 +115,8 @@ fn platform_of(shell: Arc<Shell>) -> Platform {
         clock: shell.clone(),
         random: shell.clone(),
         operator: shell.clone(),
-        notices: shell,
+        notices: shell.clone(),
+        storage: shell,
     }
 }
 
@@ -249,6 +269,11 @@ fn serving_with(name: &str, tweak: impl FnOnce(&mut NodeConfig)) -> Arc<LiveNode
             },
         },
     );
+    // alice and carol are bob's own light clients: in its subtree, so
+    // its sessions with them are primary (`wire-format.md` §8.2)
+    let mut view = view;
+    view.set_slot(0, Some(sid("alice").public.keyhash), 1_800_000_000);
+    view.set_slot(1, Some(sid("carol").public.keyhash), 1_800_000_000);
     let mut cfg = NodeConfig::defaults(me, pins, 30);
     cfg.log = Log::recording();
     tweak(&mut cfg);
@@ -282,6 +307,11 @@ fn serving(name: &str) -> Arc<LiveNode> {
             },
         },
     );
+    // alice and carol are bob's own light clients: in its subtree, so
+    // its sessions with them are primary (`wire-format.md` §8.2)
+    let mut view = view;
+    view.set_slot(0, Some(sid("alice").public.keyhash), 1_800_000_000);
+    view.set_slot(1, Some(sid("carol").public.keyhash), 1_800_000_000);
     let mut cfg = NodeConfig::defaults(me, pins, 30);
     cfg.log = Log::recording();
     LiveNode::start(
@@ -769,4 +799,189 @@ async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_wh
         assert_eq!(parsed.device, presented);
         assert_eq!(parsed.subject, sid("alice").public.keyhash);
     }
+}
+
+/// A process restart with an established payload session and messages
+/// queued meanwhile: the kernel starts from what it wrote through the
+/// storage seam, the queued message opens on the restored ratchet, and the
+/// reply continues the same session.  State that does not open refuses
+/// the start; a backup made here restores into an empty kernel.
+// acceptance: DMN-13
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_intact() {
+    let node = serving("bob");
+    let addr = node.addr.to_string();
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
+        .iter()
+        .map(|n| material(n))
+        .collect();
+    let carol_shell = Arc::new(Shell::default());
+    let start = |name: &'static str, shell: Arc<Shell>| {
+        let known = known.clone();
+        tokio::task::spawn_blocking(move || {
+            Participant::start(seeds(name), known, platform_of(shell)).expect("starts")
+        })
+    };
+    let alice = Arc::new(start("alice", Arc::new(Shell::default())).await.unwrap());
+    let carol = Arc::new(start("carol", carol_shell.clone()).await.unwrap());
+    assert!(
+        carol_shell.read("client".into()).is_none(),
+        "nothing written before anything happened"
+    );
+    let attach = |p: Arc<Participant>, pop: Vec<Vec<u8>>| {
+        let addr = addr.clone();
+        tokio::task::spawn_blocking(move || p.attach(id("bob"), vec![addr], pop))
+    };
+    attach(carol.clone(), vec![])
+        .await
+        .unwrap()
+        .expect("carol attaches");
+    attach(alice.clone(), vec![id("carol")])
+        .await
+        .unwrap()
+        .expect("alice attaches");
+    attach(carol.clone(), vec![id("alice")])
+        .await
+        .unwrap()
+        .expect("carol sweeps");
+    assert!(
+        carol_shell.read("client".into()).is_some(),
+        "an attach writes the state"
+    );
+
+    // a session both ways
+    let send = |p: Arc<Participant>, to: Vec<u8>, what: &'static [u8]| {
+        tokio::task::spawn_blocking(move || p.send(to, KIND_APPLICATION, what.to_vec()))
+    };
+    let next = |p: Arc<Participant>| tokio::task::spawn_blocking(move || p.next_event(5000));
+    send(alice.clone(), id("carol"), b"first")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(carol.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("alice"),
+            bytes: b"first".to_vec()
+        })
+    );
+    send(carol.clone(), id("alice"), b"second")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(alice.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("carol"),
+            bytes: b"second".to_vec()
+        })
+    );
+    let written = carol_shell.read("client".into()).unwrap();
+
+    // carol's process ends: detached cleanly, then gone
+    {
+        let q = carol.clone();
+        tokio::task::spawn_blocking(move || q.detach())
+            .await
+            .unwrap()
+            .expect("detaches");
+    }
+    assert!(!carol.attached());
+    drop(carol);
+    // meanwhile alice sends: the node queues it for carol's device
+    let before = node.node.queued(&sid("carol").public.keyhash);
+    send(alice.clone(), id("carol"), b"third")
+        .await
+        .unwrap()
+        .expect("queued at the node");
+    assert_eq!(
+        node.node.queued(&sid("carol").public.keyhash),
+        before + 1,
+        "queued for the device that is away"
+    );
+
+    // a new process from the same storage: the session is there, the
+    // queued message opens on it, and the reply continues it
+    let carol2 = Arc::new(start("carol", carol_shell.clone()).await.unwrap());
+    assert_eq!(
+        carol_shell.read("client".into()).unwrap(),
+        written,
+        "starting rewrote nothing"
+    );
+    let a = attach(carol2.clone(), vec![])
+        .await
+        .unwrap()
+        .expect("carol attaches again");
+    assert_eq!(a.queued, 1, "the node says one is waiting");
+    assert_eq!(
+        next(carol2.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("alice"),
+            bytes: b"third".to_vec()
+        }),
+        "decrypted on the ratchet the first process wrote"
+    );
+    send(carol2.clone(), id("alice"), b"fourth")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(alice.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("carol"),
+            bytes: b"fourth".to_vec()
+        }),
+        "the same session, continued"
+    );
+
+    // state that does not open refuses the start rather than starting
+    // fresh over it
+    let broken = Arc::new(Shell::default());
+    broken.write("client".into(), b"not a state".to_vec());
+    let e = {
+        let known = known.clone();
+        tokio::task::spawn_blocking(move || {
+            Participant::start(seeds("carol"), known, platform_of(broken)).err()
+        })
+        .await
+        .unwrap()
+        .expect("refused")
+    };
+    assert!(e.reason.contains("does not open"), "{e}");
+
+    // a backup made by alice restores into an empty kernel and is written
+    // to its storage; into one that has records it would be refused, which
+    // the client's own tests show
+    let blob = {
+        let q = alice.clone();
+        tokio::task::spawn_blocking(move || q.export_backup(b"pw".to_vec()))
+            .await
+            .unwrap()
+            .expect("exports")
+    };
+    let empty_shell = Arc::new(Shell::default());
+    let alice2 = Arc::new(start("alice", empty_shell.clone()).await.unwrap());
+    let r = {
+        let (q, blob) = (alice2.clone(), blob.clone());
+        tokio::task::spawn_blocking(move || q.restore_backup(blob, b"pw".to_vec()))
+            .await
+            .unwrap()
+            .expect("restores")
+    };
+    assert_eq!(
+        r,
+        rhtn_ffi::client::Restored {
+            records: 0,
+            discarded: 0
+        }
+    );
+    assert!(empty_shell.read("client".into()).is_some());
+    let e = {
+        let q = alice2.clone();
+        tokio::task::spawn_blocking(move || q.restore_backup(blob, b"wrong".to_vec()))
+            .await
+            .unwrap()
+            .expect_err("a wrong passphrase opens nothing")
+    };
+    assert!(e.reason.contains("Secret"), "{e}");
 }

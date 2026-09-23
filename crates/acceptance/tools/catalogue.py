@@ -109,7 +109,9 @@ def implemented_ids():
         if os.path.abspath(dirpath).startswith(os.path.abspath(TESTS_DIR)):
             continue
         for fn in filenames:
-            if fn.endswith(".rs"):
+            # the shells' sources count too: a product entry closes on a
+            # screen, and its marker sits beside the screen's test
+            if fn.endswith((".rs", ".kt", ".swift")):
                 p = os.path.join(dirpath, fn)
                 for m in MARKER_RE.finditer(open(p, encoding="utf-8").read()):
                     found.setdefault(m.group(1), os.path.relpath(p, WORKSPACE))

@@ -273,6 +273,58 @@ impl Ratchet {
         self.cks = Some(cks);
     }
 
+    /// The state as it goes to the device's own storage (`crate::durable`).
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::durable::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 10);
+        emit_bstr(&mut out, &self.dhs.to_bytes());
+        emit_opt_bstr(&mut out, self.dhr.as_ref().map(|p| &p.0[..]));
+        emit_bstr(&mut out, &self.rk);
+        emit_opt_bstr(&mut out, self.cks.as_ref().map(|k| &k[..]));
+        emit_opt_bstr(&mut out, self.ckr.as_ref().map(|k| &k[..]));
+        emit_uint(&mut out, self.ns as u64);
+        emit_uint(&mut out, self.nr as u64);
+        emit_uint(&mut out, self.pn as u64);
+        emit_array_head(&mut out, self.skipped.len());
+        for ((pk, n), mk) in &self.skipped {
+            emit_array_head(&mut out, 3);
+            emit_bstr(&mut out, pk);
+            emit_uint(&mut out, *n as u64);
+            emit_bstr(&mut out, mk);
+        }
+        emit_bstr(&mut out, &self.ad);
+        out
+    }
+
+    /// One back, whole or not at all.
+    pub fn decode(b: &[u8]) -> Option<Ratchet> {
+        use crate::durable::*;
+        let (_, f) = parse_array(b, 10)?;
+        let mut skipped = BTreeMap::new();
+        for s in array(&f[8])? {
+            let [pk, n, mk] = array(s)?.as_slice() else {
+                return None;
+            };
+            skipped.insert((fixed::<32>(b, pk)?, uint(n)? as u32), fixed::<32>(b, mk)?);
+        }
+        if skipped.len() > MAX_SKIPPED_KEYS {
+            return None;
+        }
+        Some(Ratchet {
+            dhs: DhSecret::from_seed(fixed::<32>(b, &f[0])?),
+            dhr: optional(&f[1], |it| fixed::<32>(b, it).map(DhPublic))?,
+            rk: fixed::<32>(b, &f[2])?,
+            cks: optional(&f[3], |it| fixed::<32>(b, it))?,
+            ckr: optional(&f[4], |it| fixed::<32>(b, it))?,
+            ns: uint(&f[5])? as u32,
+            nr: uint(&f[6])? as u32,
+            pn: uint(&f[7])? as u32,
+            skipped,
+            ad: bytes(b, &f[9])?,
+        })
+    }
+
     /// Whether this party can send yet: the responder cannot until it has
     /// received the initiator's first message.
     pub fn can_send(&self) -> bool {

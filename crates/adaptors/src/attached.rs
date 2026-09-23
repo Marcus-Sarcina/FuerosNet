@@ -127,6 +127,13 @@ impl Serving for AttachedNode {
         Box::pin(async move { self.ask(REQUEST_PREKEY, body.to_vec()).await })
     }
 
+    fn catalog<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            self.ask(rhtn_archive::catalog::REQUEST_CATALOG_QUERY, body.to_vec())
+                .await
+        })
+    }
+
     fn relay<'a>(
         &'a self,
         _from: Keyhash,

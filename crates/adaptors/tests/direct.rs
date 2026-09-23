@@ -59,6 +59,9 @@ impl Serving for Counting {
     fn serves(&self, client: &Keyhash) -> bool {
         self.inner.serves(client)
     }
+    fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        self.inner.catalog(from, body)
+    }
     fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
         self.inner.publish(bytes)
     }
@@ -109,9 +112,10 @@ fn light(
         })
     };
     let direct = LightDirect::bind(
-        Arc::new(id(name)),
+        rhtn_transport::tls::Party::of(Arc::new(id(name))),
         pins(),
         Default::default(),
+        Reachable::default(),
         loopback(),
         None,
         None,
@@ -138,9 +142,10 @@ fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inbo
     let inlet = Inlet::default();
     let gate: Gate = Arc::new(|_| false);
     let direct = LightDirect::bind(
-        Arc::new(id(name)),
+        rhtn_transport::tls::Party::of(Arc::new(id(name))),
         pins(),
         Default::default(),
+        Reachable::default(),
         loopback(),
         None,
         None,
@@ -426,9 +431,10 @@ fn light_holding(
         binding = binding.with_credential(c.clone());
     }
     let direct = LightDirect::bind(
-        Arc::new(id(name)),
+        rhtn_transport::tls::Party::of(Arc::new(id(name))),
         pins(),
         binding,
+        Reachable::default(),
         loopback(),
         None,
         None,

@@ -34,6 +34,13 @@ impl DhSecret {
         DhSecret(StaticSecret::from(seed))
     }
 
+    /// The scalar as it goes to a device's own storage: what
+    /// [`DhSecret::from_seed`] made of the seed, and what makes the same
+    /// key again.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+
     pub fn public(&self) -> DhPublic {
         DhPublic(*PublicKey::from(&self.0).as_bytes())
     }
@@ -51,7 +58,13 @@ impl std::fmt::Debug for DhSecret {
 
 /// An ML-KEM-768 decapsulation key.
 #[derive(Clone)]
-pub struct KemSecret(DecapsulationKey<MlKem768>);
+pub struct KemSecret {
+    key: DecapsulationKey<MlKem768>,
+    /// The seed the key was derived from, kept because it is the key's
+    /// storage form (FIPS 203's seed form): what a device writes to its
+    /// own storage and derives the key from again.
+    seed: [u8; 64],
+}
 
 /// An ML-KEM-768 encapsulation key, encoded.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -59,16 +72,24 @@ pub struct KemPublic(pub Vec<u8>);
 
 impl KemSecret {
     pub fn from_seed(seed: [u8; 64]) -> Self {
-        KemSecret(DecapsulationKey::<MlKem768>::from_seed(Seed::from(seed)))
+        KemSecret {
+            key: DecapsulationKey::<MlKem768>::from_seed(Seed::from(seed)),
+            seed,
+        }
+    }
+
+    /// The seed, as the key goes to a device's own storage.
+    pub fn seed(&self) -> [u8; 64] {
+        self.seed
     }
 
     pub fn public(&self) -> KemPublic {
-        KemPublic(self.0.encapsulation_key().to_bytes().to_vec())
+        KemPublic(self.key.encapsulation_key().to_bytes().to_vec())
     }
 
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<[u8; 32], String> {
         let ss = self
-            .0
+            .key
             .decapsulate_slice(ciphertext)
             .map_err(|_| "ciphertext length")?;
         Ok(ss.into())

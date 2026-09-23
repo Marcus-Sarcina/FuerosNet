@@ -441,6 +441,32 @@ impl LiveNode {
         // `SiblingRef` one to eight `NetworkPoint`s and no way to say
         // none, which is the wire agreeing that a failover target nobody
         // can reach is not one.
+        // **the mode is this node's determination from its own topology**
+        // (`wire-format.md` §8.2): a client is in failover iff it is not in
+        // this node's subtree.  In it: a slot's occupant, this node itself,
+        // or a party whose patron chain in the table reaches this node.
+        let iv = view.clone();
+        cfg.in_subtree = Arc::new(move |k| {
+            let v = iv.lock().unwrap();
+            let me = v.me();
+            if *k == me || v.slot_of(k).is_some() {
+                return true;
+            }
+            let mut frontier: Vec<Keyhash> = vec![*k];
+            let mut seen = std::collections::BTreeSet::new();
+            while let Some(n) = frontier.pop() {
+                if !seen.insert(n) {
+                    continue;
+                }
+                for p in v.table.patrons(&n) {
+                    if p == me {
+                        return true;
+                    }
+                    frontier.push(p);
+                }
+            }
+            false
+        });
         let (sv, si) = (view.clone(), ids.clone());
         cfg.siblings = Arc::new(move || {
             let v = sv.lock().unwrap();

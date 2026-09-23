@@ -41,6 +41,7 @@ pub mod backup;
 pub mod catalog;
 pub mod ceremony;
 pub mod device;
+pub mod durable;
 pub mod horizon;
 pub mod keys;
 pub mod notice;

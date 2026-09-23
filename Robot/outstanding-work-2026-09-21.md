@@ -505,7 +505,13 @@ The gap is not a list of missing exports. It is that the running kernel a
 shell would bind to does not yet do several things the components beneath it
 do in tests.
 
-- **Durable operation is more than a backup slot.** `Participant::start`
+- ~~**Durable operation is more than a backup slot.**~~ **Done 2026-09-22**:
+  `Storage` among the platform objects, `Client::durable` and
+  `restore_durable` (payload state, sessions, horizon and delegations
+  included), `Client::install` for a complete restore, the allocation of
+  live secrets stated in `review-tracking.md` for the author to confirm,
+  and a restart with an established session and a queued message tested
+  through the boundary. As found: `Participant::start`
   (`crates/ffi/src/client.rs` line 273) builds `Client::new`, and
   `start_delegated` (2026-09-22) `Client::delegated`, either with no
   open-or-save lifecycle and no storage callback among the platform's six
@@ -523,7 +529,12 @@ do in tests.
   payload session and queued messages, an interrupted restore, and the
   specified import scan. Which live secrets belong in a portable backup is an
   allocation to state, not assume.
-- **The FFI client does not fail over and keeps no session cache.**
+- ~~**The FFI client does not fail over and keeps no session cache.**~~
+  **Done 2026-09-22**: one configuration kept, the cold-start fallback, the
+  watcher that fails over inside the kernel, `Status` and
+  `Event::Connection`, the sibling list persisted, `MAINTAIN_EVERY` as the
+  scheduling contract; the live node's mode and its drain repaired
+  (`review-tracking.md`). As found:
   `Net::attach` (`crates/ffi/src/net.rs` line 134) builds an empty sibling cache
   and TLS cache on every call, calls `attach_any` for the one node named, and
   never reaches `Session::failover` (`crates/transport/src/session.rs` line
@@ -538,7 +549,11 @@ do in tests.
   through `Participant`, and a scheduling contract for maintenance and prekey
   refresh, since `serve_archive`'s reply (section 2.2) and every other outbox
   item waits on a `maintain` call the FFI exposes and nothing drives.
-- **The FFI client always relays.** `start` installs `NoDirectPath`
+- ~~**The FFI client always relays.**~~ **Done 2026-09-22**: `LightDirect`
+  bound behind the boundary with `PathPolicy` in both directions, the offer
+  on the first send, a bounded direct delivery, delegated presentation from
+  the credential; tested over a live node in `sim/tests/kernel.rs`. As
+  found: `start` installs `NoDirectPath`
   (`crates/ffi/src/client.rs` line 299) and `attach` installs `NoDirect`
   (`crates/ffi/src/net.rs` line 164); `LightDirect` exists and is not joined
   here. PRD-01's override in both directions cannot be built on this entry
@@ -546,7 +561,10 @@ do in tests.
   and override policy; successful direct use, forced relay, forced direct and
   fallback exercised through the boundary; section 2.4's reading settled
   first; delegated authentication on the direct path per section 2.1.
-- **Catalog and resources have no transport behind the facade.** `browse`
+- **Catalog and resources have no transport behind the facade.** *The
+  catalog sweep has one since 2026-09-22* (`Serving::catalog`, the courier's
+  branch, `Participant::browse` and `catalog`); registration, access and
+  roles wait on the matrix. As found: `browse`
   emits `Msg::CatalogQuery` (`crates/client/src/ceremony.rs` line 1093) and the
   courier (`crates/adaptors/src/courier.rs` line 174, `carry`) has no branch
   for it, returning it in `Carried::left`. The facade has no resource
@@ -567,8 +585,8 @@ do in tests.
   The remaining half of milestone 13 is one generated binding compiling
   against the facade, and a real round trip through it rather than
   compilation alone.
-- **`acceptance/tools/catalogue.py`** extended to `.kt` and `.swift`,
-  milestone 14's first commit.
+- ~~**`acceptance/tools/catalogue.py`** extended to `.kt` and `.swift`,
+  milestone 14's first commit.~~ **Done 2026-09-22.**
 - **The administration channel.** `infra-client-requirements.md` §8.2 and
   `infra-client-requirements.md` §8.3: the node serves its own pages, the
   client ships only provisioning pages in a frame isolated from its keys,
@@ -870,7 +888,15 @@ land on their own.
    holding a delegation and no seed, with the backup's provider slot
    (ARC-28). **Step 5 is complete 2026-09-22** but for what waits on the
    author: kind 2, the ceiling of eight, the §19 row, and the reach of
-   §11.2.1 against §10.1.1. Next: step 6.
+   §11.2.1 against §10.1.1. **Step 6 in progress**: the durable lifecycle
+   and the storage seam; failover, status and the maintenance contract
+   inside the kernel; the direct path joined with its override; the
+   catalog branch, the capability matrix (`Robot/capability-matrix.md`) and
+   the `.kt`/`.swift` walk, all landed 2026-09-22. `uniffi` waits on a
+   machine with a Kotlin or Swift toolchain (MPL-2.0 is on `deny.toml`'s
+   allow-list, as ruled 2026-09-16); the administration channel is the
+   author's.
+   Next: step 7.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

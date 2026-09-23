@@ -64,8 +64,8 @@ async fn r04_direct_open_must_honor_the_local_privacy_gate() {
     use rhtn_transport::{tls::Pins,traversal::{Candidate,CandidateKind}};
     let (a,b)=(Arc::new(test_identity("alice")),Arc::new(test_identity("bob")));
     let pins=Pins::new();pins.pin_identity(&a.public);pins.pin_identity(&b.public);
-    let a_socket=LightDirect::bind(a.clone(),pins.clone(),Default::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|false),Arc::new(|_,_|{})).unwrap();
-    let b_socket=LightDirect::bind(b.clone(),pins,Default::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|true),Arc::new(|_,_|{})).unwrap();
+    let a_socket=LightDirect::bind(rhtn_transport::tls::Party::of(a.clone()),pins.clone(),Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|false),Arc::new(|_,_|{})).unwrap();
+    let b_socket=LightDirect::bind(rhtn_transport::tls::Party::of(b.clone()),pins,Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|true),Arc::new(|_,_|{})).unwrap();
     assert!(a_socket.gather(b.public.keyhash).await.is_none(),"control: policy prohibits direct contact");
     let candidate=Candidate{kind:CandidateKind::Host,addr:b_socket.addr().unwrap()};
     assert!(!a_socket.open(b.public.keyhash,vec![candidate]).await,"design §12.6.3: receiving candidates cannot bypass the local direct-path policy");

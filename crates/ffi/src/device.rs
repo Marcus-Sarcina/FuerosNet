@@ -69,6 +69,20 @@ pub trait Operator: Send + Sync {
 }
 
 /// Where notices go.  They are raised as they occur and never polled for.
+/// Where the client's own state lives between runs (design §23.3:
+/// archives, sealed captures and caches go where the storage is).  The
+/// shell owns the place, app-private storage on a phone; the kernel owns
+/// what is written there, one opaque blob under a name, and reads it back
+/// at the next start.  **The seed is never written through this**: it is
+/// the platform's key storage's, and the shell supplies it at every start.
+pub trait Storage: Send + Sync {
+    /// The bytes last written under `name`, or nothing.
+    fn read(&self, name: String) -> Option<Vec<u8>>;
+    /// Write `bytes` under `name`, replacing what was there; false where the
+    /// write did not land, which the kernel reports rather than assumes.
+    fn write(&self, name: String, bytes: Vec<u8>) -> bool;
+}
+
 pub trait Notices: Send + Sync {
     fn told(&self, notice: Told);
 }
@@ -82,6 +96,7 @@ pub struct Platform {
     pub random: Arc<dyn Random>,
     pub operator: Arc<dyn Operator>,
     pub notices: Arc<dyn Notices>,
+    pub storage: Arc<dyn Storage>,
 }
 
 impl Platform {

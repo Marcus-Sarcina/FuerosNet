@@ -10409,8 +10409,33 @@ signed, and the calls that carry the delegation and the bundle's signature
 either way. The backup's contents carry an operator's provider credential and
 the archive never does (`light-client-requirements.md` §2).
 
+**The kernel opens durable state, restarts with its sessions, and fails over
+by itself.** A storage object joins the platform's six; the client writes
+everything a restart would otherwise lose and reads it back whole or not at
+all; a blob that does not open refuses the start.  The portable backup
+carries the identity, the records, the capture store and the provider
+credential, and never the payload material or the sessions, which are a
+device's own (design §23.3).  The kernel keeps its sibling cache across
+sessions and restarts, dials the serving node first and the cached siblings
+where it is dark, watches for three missed intervals and moves to a sibling
+itself, and tells the shell as a status and an event.  Maintenance runs on
+its own clock every sixty seconds while a session is held.  Two node-side
+gaps closed on the way: the ack's mode is now the node's determination from
+its topology (`wire-format.md` §8.2), and a delivery ends with its session.
+
+**The direct path is joined behind the boundary, and the catalog sweep rides
+the session.** The kernel binds a socket of its own on the interface its
+session uses, gathers candidates with the serving node as its STUN server,
+offers them to a peer on the first send and dials the peer's, gated to the
+horizon and to the person's override in both directions
+(`light-client-requirements.md` §5); a direct delivery that does not
+complete in a dial's time demotes the path and the relay carries the
+message.  The courier carries a catalog query and the client takes each
+reply; the shell sweeps and reads the entries with the node that served
+them.
+
 **Counts checked.** 2,305 references across the five documents resolve with no flag;
-the staleness sweep reports its baseline; 1,396 citations across `models/` and the
+the staleness sweep reports its baseline; 1,424 citations across `models/` and the
 workspace resolve; check.py 439 of 455 implemented, 0 flags, stubs in sync; the
 test-vector pins are current on all three documents; the gate's 19 hashes match,
 `cargo deny` clean.

@@ -1342,3 +1342,83 @@ fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receiv
     }
     assert!(delivered);
 }
+
+/// A restart with an established session: what the device wrote is what
+/// it starts from, the ratchet continues in both directions, and a blob
+/// that does not open leaves the client as it was.
+#[test]
+fn a_client_restarts_from_its_own_storage_with_its_sessions_intact() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("alice");
+    n.sweep("bob");
+    n.sweep("alice");
+    // one message each way: a session is established on both sides
+    n.send("alice", "bob", "first");
+    n.send("bob", "alice", "second");
+    assert!(
+        n.delivered
+            .iter()
+            .any(|(_, _, m)| m == "Application(first)")
+    );
+    assert!(
+        n.delivered
+            .iter()
+            .any(|(_, _, m)| m == "Application(second)")
+    );
+
+    // alice's process ends: what it wrote is all that survives
+    let blob = n.s.client("alice").durable();
+    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 91, 0);
+    let mut alice2 = Client::new(id("alice"), ids(), Config::default(), dev);
+    let restored = alice2.restore_durable(&blob).expect("opens whole");
+    assert_eq!(restored.sessions, 1, "the session with bob's one device");
+    assert_eq!(restored.horizon, rhtn_client::horizon::Woke::Current);
+    assert_eq!(
+        alice2.durable(),
+        blob,
+        "what it wrote is what a restored client writes again"
+    );
+
+    // bob's next message opens on the restored ratchet, and alice's reply
+    // on the same session reaches bob
+    let msgs =
+        n.s.client("bob")
+            .send_payload(kh("alice"), KIND_APPLICATION, b"third")
+            .unwrap();
+    let mut got = None;
+    for m in msgs {
+        if let Msg::Relay { to, bytes, .. } | Msg::Payload { to, bytes, .. } = m {
+            assert_eq!(to, kh("alice"));
+            got = Some(
+                alice2
+                    .receive_payload(kh("bob"), &bytes)
+                    .expect("decrypts after restart"),
+            );
+        }
+    }
+    assert_eq!(describe(&got.unwrap()), "Application(third)");
+    let back = alice2
+        .send_payload(kh("bob"), KIND_APPLICATION, b"fourth")
+        .unwrap();
+    let mut delivered = false;
+    for m in back {
+        if let Msg::Relay { to, bytes, .. } | Msg::Payload { to, bytes, .. } = m {
+            assert_eq!(to, kh("bob"));
+            let g =
+                n.s.client("bob")
+                    .receive_payload(kh("alice"), &bytes)
+                    .unwrap();
+            assert_eq!(describe(&g), "Application(fourth)");
+            delivered = true;
+        }
+    }
+    assert!(delivered);
+
+    // a blob cut short, or one that is not a state at all, is refused and
+    // nothing of the client changes
+    let before = alice2.durable();
+    assert!(alice2.restore_durable(&blob[..blob.len() / 2]).is_err());
+    assert!(alice2.restore_durable(b"not a state").is_err());
+    assert_eq!(alice2.durable(), before);
+}

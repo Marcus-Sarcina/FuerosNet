@@ -68,6 +68,14 @@ pub struct Courier {
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
     offered: Mutex<HashSet<Keyhash>>,
+    /// Whether the relay carries what the direct path does not.  Off when
+    /// the person chose the direct path alone (`light-client-requirements.md`
+    /// §5): a message with no direct path is then unsent, and said so.
+    relay_allowed: std::sync::atomic::AtomicBool,
+    /// Whether a held direct path carries payload.  Off when the person
+    /// chose the relay alone: what is held is not used, and nothing new is
+    /// gathered, which the gate decides.
+    direct_allowed: std::sync::atomic::AtomicBool,
 }
 
 impl Courier {
@@ -86,6 +94,8 @@ impl Courier {
                 direct,
                 app,
                 verifiers: Mutex::new(None),
+                relay_allowed: std::sync::atomic::AtomicBool::new(true),
+                direct_allowed: std::sync::atomic::AtomicBool::new(true),
                 offered: Mutex::new(HashSet::new()),
             }),
             rx,
@@ -98,6 +108,35 @@ impl Courier {
 
     pub fn me(&self) -> Keyhash {
         self.handle.me()
+    }
+
+    /// Whether the relay may carry payload: the person's override, in the
+    /// direction that forbids the serving node the communication graph.
+    pub fn set_relay_allowed(&self, allowed: bool) {
+        self.relay_allowed
+            .store(allowed, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn relay_allowed(&self) -> bool {
+        self.relay_allowed
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether a held direct path may carry payload: the person's override
+    /// in the direction that keeps this device's address from a peer.
+    pub fn set_direct_allowed(&self, allowed: bool) {
+        self.direct_allowed
+            .store(allowed, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn direct_allowed(&self) -> bool {
+        self.direct_allowed
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether `peer` has been offered the direct path from here.
+    pub fn offered(&self, peer: &Keyhash) -> bool {
+        self.offered.lock().unwrap().contains(peer)
     }
 
     /// This client's inbound side, for a socket or a node to call with
@@ -172,7 +211,7 @@ impl Courier {
             return false;
         };
         self.offered.lock().unwrap().insert(peer);
-        self.send(peer, KIND_CANDIDATES, encode_candidates(&cands))
+        self.send_now(peer, KIND_CANDIDATES, encode_candidates(&cands))
             .await
             .is_ok()
     }
@@ -180,6 +219,22 @@ impl Courier {
     /// Send `bytes` of `kind` to `to` from the client, and carry what the
     /// client says out.  What the adaptors do not carry comes back.
     pub async fn send(
+        self: &Arc<Self>,
+        to: Keyhash,
+        kind: u64,
+        bytes: Vec<u8>,
+    ) -> Result<Carried, String> {
+        // the direct path is attempted first and the relay on failure
+        // (design §14.1.1): a peer not yet offered candidates is offered
+        // them on the first send, where the path may be direct at all
+        if !self.offered(&to) {
+            self.offer(to).await;
+        }
+        self.send_now(to, kind, bytes).await
+    }
+
+    /// Send with no offer first: what an offer itself rides on.
+    async fn send_now(
         self: &Arc<Self>,
         to: Keyhash,
         kind: u64,
@@ -234,18 +289,33 @@ impl Courier {
                     Msg::Payload { to, bytes, device } => {
                         // a delivery short of complete leaves the message
                         // with the sender, and the relay carries it (design
-                        // §14.1.1)
-                        if !me.direct.deliver(to, bytes.clone()).await
-                            && !me.serving.relay(me.me(), to, bytes.clone(), device).await
+                        // §14.1.1), unless the person forbade the relay
+                        if !(me.direct_allowed() && me.direct.deliver(to, bytes.clone()).await)
+                            && !(me.relay_allowed()
+                                && me.serving.relay(me.me(), to, bytes.clone(), device).await)
                         {
                             out.refused.push(Msg::Payload { to, bytes, device });
                         }
                     }
                     Msg::Relay { to, bytes, device } => {
-                        if !me.serving.relay(me.me(), to, bytes.clone(), device).await {
+                        if !(me.relay_allowed()
+                            && me.serving.relay(me.me(), to, bytes.clone(), device).await)
+                        {
                             out.refused.push(Msg::Relay { to, bytes, device });
                         }
                     }
+                    // a sweep of the serving node's catalog: each reply
+                    // taken by the client, which says whether to ask again
+                    // (`light-client-requirements.md` §8)
+                    Msg::CatalogQuery(b) => match me.serving.catalog(me.me(), &b).await {
+                        Some(reply) => {
+                            let more = me.handle.with(move |c| c.take_catalog_reply(&reply)).await;
+                            if let Ok((_, more)) = more {
+                                out.absorb(me.carry(more).await);
+                            }
+                        }
+                        None => out.refused.push(Msg::CatalogQuery(b)),
+                    },
                     // **a client originates and does not forward.** The
                     // records it makes are its own, and the one party that
                     // can put them into the flood is the node serving it

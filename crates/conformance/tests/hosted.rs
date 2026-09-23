@@ -27,6 +27,7 @@ impl Serving for ServingStub {
         [0; 32]
     }
     fn propagate<'a>(&'a self,_:Vec<u8>)->Answer<'a,bool> { Box::pin(async {false}) }
+    fn catalog<'a>(&'a self,_:Keyhash,_:&'a [u8])->Answer<'a,Option<Vec<u8>>> { Box::pin(async {None}) }
     fn me(&self)->Keyhash { [1;32] }
     fn holds(&self,_:&Keyhash)->bool { false }
     fn serves(&self,_:&Keyhash)->bool { false }

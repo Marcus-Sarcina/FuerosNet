@@ -49,7 +49,13 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
     // and carol must then sweep alice in turn, because a recipient
     // attributes an initial message only under a binding it already holds
     // (`wire-format.md` §7.8, design §14.2.4).
-    let attached = format!("attached serving={} primary=true queued=0", hex(&kh("bob")));
+    // **degraded, by the node's own determination** (`wire-format.md`
+    // §8.2): the daemon holds no adoption placing either client in its
+    // subtree, so it names them in failover; payload flows all the same
+    let attached = format!(
+        "attached serving={} primary=false queued=0",
+        hex(&kh("bob"))
+    );
     let node = hex(&kh("bob"));
     assert_eq!(
         set.get("carol").must(&format!("attach {node} {addr}")),

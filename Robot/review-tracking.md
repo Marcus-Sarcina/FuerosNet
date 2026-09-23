@@ -11099,3 +11099,174 @@ test whose window a live node checks on its own clock.
 No catalogue row names the seedless light client itself; the row the
 outstanding-work table said was needed still is, and is the author's to
 add. 439 of 455.
+
+## Step 6, first two items: the durable lifecycle, and failover inside the kernel (2026-09-22)
+
+Section 7's first two bullets, in the order milestone A's exit names them:
+a shell opens durable state, attaches with the supported credential,
+observes its connection status, survives a process restart with an
+established payload session and queued messages.
+
+**The durable lifecycle.**
+
+- **What survives a restart is the device's own state, and it is written
+  through the platform.** `Storage` is the seventh platform object
+  (`crates/ffi/src/device.rs`): one opaque blob under a name, read at the
+  next start.  The client's `durable()` carries the archive's records, the
+  store, the payload state (material as seeds and scalars, sessions as
+  ratchets and held bundles, the device, the signed bundle, what waits for
+  a session, the pool count; requests in flight are not written), the
+  horizon's records, snapshot and delegations, and the provider
+  credential.  `restore_durable` takes it whole or not at all, re-derives
+  positions and wakes the horizon from its snapshot: the first caller of
+  `Horizon::materialise` and `wake`, which nothing ran before.
+- **The allocation, stated rather than assumed** (section 7 asked): the
+  portable backup carries the identity's seeds where the device holds
+  them, the records, the capture store and the provider credential; the
+  payload material and the sessions never travel, because a session is
+  with a device (design §23.3) and material moved to another device parts
+  the ratchet at the first message.  The seed is never written through
+  the storage seam: it is the platform's key storage's, and the shell
+  supplies it at every start.  **For the author to confirm.**
+- **A blob that does not open refuses the start.** A client begun fresh
+  over state it could not read would publish new material and lose every
+  message queued for the old, silently.  `Participant::start` and
+  `start_delegated` restore before returning; `save` writes after every
+  step that changes what a restart would need (attach, send, an event
+  taken, maintenance, a record finalized or taken, a signed bundle taken)
+  and on `detach`, which a shell calls before it is suspended.
+- **Restore from a backup is complete.** `Client::install` appends the
+  records in order, takes the store and the credential, and is refused on
+  a client that already holds an archive; `Participant::restore_backup`
+  opens, scans, installs and writes, and `export_backup` is the other
+  half.  The key secrets gained their byte forms (`DhSecret::to_bytes`,
+  `KemSecret::seed`) so they re-derive.
+- **Two hazards the restart test found, both real.** The test shell's
+  randomness was a constant, so two shells derived the same ratchet keys
+  and read as one party to each other: the reverse direction of a payload
+  exchange had never been exercised through the boundary.  And a process
+  that closed its session and ended its runtime in the same breath left
+  the close frame unsent: the node believed the session live, its delivery
+  hung on a stream nobody would acknowledge, and the device's queue waited
+  behind it.  `detach` now waits for the close to leave.
+
+**Failover inside the kernel, and the status a screen reads.**
+
+- **One configuration, kept.** `Net` holds one `ClientConfig` whose
+  sibling cache, address book and TLS resumption store outlive the session
+  they were filled on; an attach dials the serving node first and, where it
+  is unreachable, the cached siblings in order (the cold-start fallback
+  `light-client-requirements.md` §4 requires and the running client never
+  made); a watcher task waits for the three missed intervals and tries the
+  cached siblings itself, swapping the session under the courier so
+  nothing above it is rebuilt.
+- **`Status`** (`Detached`, `Attached { serving, primary }`,
+  `Reconnecting`, `Lost`) is read on demand and arrives as
+  `Event::Connection` on the one event stream.  `primary` false is the
+  degraded kind, told to the person as §4 asks.
+- **The list is persisted** under its own name, whole or not at all: a
+  list that does not load is no list, and an attach with the serving node
+  dark then says *no cached siblings* rather than failing over on
+  uncertain data.
+- **The maintenance contract** is `MAINTAIN_EVERY`, sixty seconds on the
+  kernel's own clock while a session is held, a chosen value; the shell
+  calls `maintain` besides when granted background time.  What a round
+  carries is written afterwards.
+- **Two node-side findings.** The live node never set the ack's mode:
+  `in_subtree` stayed the transport's default and every session was
+  primary.  It is now the node's determination from its own topology, as
+  `wire-format.md` §8.2 has it: a slot's occupant, the node itself, or a
+  party whose patron chain reaches it.  And a delivery in flight on a
+  session judged unreachable held that device's drain lock until QUIC's
+  idle timer, hours away, so a device returning on a new session got no
+  queued mail; a drain now ends with its session.  DMN-13's serving node
+  places its light clients in slots, which is what the test always meant.
+
+Tests: `client/tests/payload.rs` (restart on the harness: sessions
+intact both ways, a cut and a foreign blob refused with the client
+unchanged), `client/tests/backup.rs` (install into an empty client, refused
+into one with an archive), `ffi/tests/boundary.rs` (a kernel restarted
+from the storage seam with a message queued meanwhile, state that does not
+open refusing the start, a backup restored across the boundary),
+`sim/tests/kernel.rs` (a live node whose topology places a sibling beside
+it: failover inside the kernel seen as events and status, the degraded
+session carrying maintenance, a cold start from the persisted list with the
+serving node dark, a damaged list refused).  `rhtn-ffi` is the simulator's
+dev-dependency for it.
+
+**The direct path, joined behind the boundary** (section 7's third bullet).
+
+- **A socket of the client's own, bound at attach.** `LightDirect` now
+  takes a presenting `Party` (a delegated device presents its credential)
+  and a shared `Reachable` that the client's own route reads; the kernel
+  binds it on the interface the session uses, learned by a probe socket
+  connected toward the serving node, since a socket on the unspecified
+  address gathers a host candidate nobody can dial.  The serving node's
+  socket is the STUN server (design §14.1.1).  The held delegations of the
+  client's horizon bind a delegated peer through the actor's `Held`.
+- **The gate is the horizon and the person's override.** `PathPolicy`
+  (`Auto`, `RelayOnly`, `DirectOnly`; PRD-01, `light-client-requirements.md`
+  §5): the gate reads the client's horizon through the handle and the
+  policy at each gather; the courier gained two switches, one for the
+  relay and one for a held path, set together by the policy.  The two
+  disclosures are the shell's text.
+- **The offer goes on the first send.** The courier offers candidates to a
+  peer not yet offered, on the path that exists then, and the peer offers
+  back on receiving them; the adaptor-level test that drove `offer` by hand
+  still passes.  A direct delivery is bounded by the dial timeout and
+  demotes the peer on failure, because the direct path has no heartbeat
+  and a departed peer leaves a stream nobody acknowledges: the same hazard
+  the node's drain had, on the client's side.
+- **Not done: a light client behind a NAT.** The kernel gathers host and
+  reflexive candidates and dials; the harness exercises loopback.  Section
+  2.4's candidate-pair reading is ruled (RFC 8445's order, TRV-11).
+
+**The catalog branch** (section 7's fourth bullet, in part).  `Serving`
+gained `catalog`, answered by the attached node on request type 5 and by
+the local node from its own table; the courier carries a `CatalogQuery`
+and hands each reply to the client, which says whether to ask again.
+`Participant::browse` sweeps and `catalog` shows the entries with the node
+that served each and whether that node's portion is truncated or stale.
+Registration, resource access and roles through the boundary remain owed
+to the capability matrix.
+
+**Node-side, found by the same test:** a live node's relay submissions are
+now counted (`Node::relayed`), which is how a test says whether payload
+went through the node or around it.
+
+**The mode fix reached the daemon.** `rhtnp`'s two-process scenario
+expected a primary session from a daemon holding no adoption for either
+client; under `wire-format.md` §8.2 that session is degraded, and the
+expectation encoded the transport's old default.  The expectation now
+says `primary=false` with the rule cited; payload flows as before.  A
+daemon that should serve its own light clients as primary needs the
+adoptions in its store, which is what the sim's kernel tests give theirs.
+
+Tests: `sim/tests/kernel.rs` (two light clients under one live node open
+the path from their first send and the node relays none of what follows;
+relay-only sends through the node though the path is held; direct-only to a
+held path goes around it and, once the peer has left, is unsent and says
+so; the fallback relays and queues once allowed again; the catalog swept
+and shown).
+
+**The capability matrix** is `Robot/capability-matrix.md`: every screen
+or action against the kernel operation, the adaptor, what comes back and
+the entry, with the owed rows named (settings, the biometric matcher,
+registration, resource access and roles, recovery, departure, standing,
+the mode query).  **The `.kt`/`.swift` walk**: `catalogue.py` counts
+markers in the shells' sources as it does in Rust; 439 of 455 unchanged,
+there being no shell yet.
+
+**`uniffi` is not attempted here.** The milestone's remaining half is one
+generated binding compiling and a round trip through it; this environment
+has no Kotlin, Java or Swift toolchain (`kotlinc`, `java`, `swiftc` absent),
+so a binding could be generated and never compiled, and a round trip could
+not run.  Adding the dependency and the annotations without the compile
+would claim the half without doing it.  `crates/deny.toml`'s allow-list now
+carries MPL-2.0, which `uniffi` is: the author allowed it on 2026-09-16 when
+adopting the generator and restated it on 2026-09-23, its copyleft reaching
+modifications to its own files and not what links them; the assistant had
+recorded that ruling and missed it.
+
+Still owed from section 7: `uniffi` on a machine with the toolchains, and
+the administration-channel decision, which is the author's.

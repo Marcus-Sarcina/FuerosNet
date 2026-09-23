@@ -11,7 +11,7 @@
 //! or the hardware did.
 
 use crate::device::Platform;
-use crate::net::{Attached, Event, Net, Wake, pins_for};
+use crate::net::{Attached, Event, Net, PathPolicy, Status, Wake, pins_for};
 use crate::types::{Answer, Channel, ChannelOutcome, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
@@ -29,6 +29,51 @@ use std::sync::Arc;
 pub struct Participant {
     handle: Handle,
     net: Net,
+    /// Where the client's state goes between runs, under [`STATE`].
+    storage: Arc<dyn crate::device::Storage>,
+    /// The seeds this device holds, for the backup: on the ceremony
+    /// device alone.
+    seeds: Option<[[u8; 32]; 2]>,
+}
+
+/// The name the client's durable state is written under.
+pub const STATE: &str = "client";
+/// The name the cached sibling list is written under
+/// (`light-client-requirements.md` §4: persisted across restarts).
+pub const SIBLINGS: &str = "siblings";
+/// **The maintenance contract.**  While the process runs and a session is
+/// held, the kernel rotates a prekey whose interval has elapsed, replenishes
+/// a pool that has fallen low and asks for bindings it wants, every this
+/// often on its own clock; a shell calls [`Participant::maintain`] besides
+/// when the platform grants it background time, since a suspended process
+/// runs no clock.  Sixty seconds is a chosen value: the work is nothing
+/// unless something is due, and a pool at its floor waits at most this long.
+pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// One catalog entry as this client holds it (`wire-format.md` §6.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogItem {
+    /// The node that served it.
+    pub node: Id,
+    pub resource: Id,
+    pub owner: Id,
+    pub service_type: String,
+    pub instance: String,
+    pub endpoint: Vec<u8>,
+    pub data_practice: Option<u64>,
+    /// The serving node held more than one page carries for some type.
+    pub truncated: bool,
+    /// The serving node could not be reached on the last sweep.
+    pub stale: bool,
+}
+
+/// What a restore from a backup did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Restored {
+    pub records: u64,
+    /// Sealed captures the import scan discarded as past their retention
+    /// (design §13.7.1), which the person is told rather than not.
+    pub discarded: u64,
 }
 
 /// What a proximity run achieved, as the shell is shown it.
@@ -378,14 +423,164 @@ impl Participant {
         });
         let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
         let known = ids.clone();
+        let storage = platform.storage.clone();
+        let reachable = net.reachable();
         let handle = Handle::spawn(move || {
             let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
-            let direct: std::rc::Rc<dyn DirectPath> =
-                std::rc::Rc::new(rhtn_client::device::NoDirectPath);
+            // the client's route reads the same set the direct socket fills
+            let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
             Client::new(me, known, Config::default(), platform.device(direct))
         })
         .map_err(Refused::new)?;
-        Ok(Participant { handle, net })
+        let p = Participant {
+            handle,
+            net,
+            storage,
+            seeds: Some([ed, pq]),
+        };
+        p.open()?;
+        p.schedule();
+        Ok(p)
+    }
+
+    /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
+    fn schedule(&self) {
+        let (h, st) = (self.handle.clone(), self.storage.clone());
+        let after: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            let bytes = h.with_blocking(|c| c.durable());
+            let _ = st.write(STATE.into(), bytes);
+        });
+        self.net
+            .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
+    }
+
+    /// The connection as a screen shows it: detached, attached to the
+    /// serving node or degraded on a sibling, reconnecting, or lost.
+    /// Changes also arrive as [`Event::Connection`].
+    #[must_use]
+    pub fn status(&self) -> Status {
+        self.net.status()
+    }
+
+    /// Direct versus relayed payload, as the person set it (PRD-01).  The
+    /// setting's two disclosures are the shell's text; this side applies
+    /// the choice.
+    pub fn set_path(&self, policy: PathPolicy) {
+        self.net.set_path(policy);
+    }
+
+    #[must_use]
+    pub fn path(&self) -> PathPolicy {
+        self.net.path()
+    }
+
+    /// Whether a direct path to `peer` is held now.
+    #[must_use]
+    pub fn direct_to(&self, peer: Id) -> bool {
+        keyhash(&peer).is_some_and(|k| self.net.direct_to(&k))
+    }
+
+    /// Sweep the serving node's catalog (`light-client-requirements.md`
+    /// §8) and keep what it served; [`Participant::catalog`] shows it.
+    pub fn browse(&self) -> Result<(), Refused> {
+        self.net.browse(&self.handle)?;
+        self.save()
+    }
+
+    /// The catalog as this client holds it: every entry served, with the
+    /// node that served it and whether that node's portion is known
+    /// incomplete or stale.
+    #[must_use]
+    pub fn catalog(&self) -> Vec<CatalogItem> {
+        self.handle.with_blocking(|c| {
+            c.catalog
+                .portions
+                .iter()
+                .flat_map(|(node, p)| {
+                    p.entries.values().filter_map(move |b| {
+                        let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
+                        Some(CatalogItem {
+                            node: id_of(node),
+                            resource: id_of(&e.resource),
+                            owner: id_of(&e.owner),
+                            service_type: e.service_type,
+                            instance: e.instance,
+                            endpoint: e.endpoint,
+                            data_practice: e.data_practice,
+                            truncated: p.truncated,
+                            stale: p.stale,
+                        })
+                    })
+                })
+                .collect()
+        })
+    }
+
+    /// Restore what the last run wrote, if anything.  **A blob that does
+    /// not open refuses the start**: a client begun fresh over state it
+    /// could not read would publish new material and lose every message
+    /// queued for the old, silently.
+    fn open(&self) -> Result<(), Refused> {
+        // the sibling list, whole or not at all: a partial list is no list
+        if let Some(bytes) = self.storage.read(SIBLINGS.into()) {
+            self.net.restore_siblings(&bytes);
+        }
+        let Some(bytes) = self.storage.read(STATE.into()) else {
+            return Ok(());
+        };
+        self.handle
+            .with_blocking(move |c| c.restore_durable(&bytes))
+            .map(|_| ())
+            .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))
+    }
+
+    /// Write the client's state to the platform's storage.  Called by the
+    /// kernel after every step that changes what a restart would need,
+    /// and by a shell at any point it is about to be suspended.
+    pub fn save(&self) -> Result<(), Refused> {
+        let bytes = self.handle.with_blocking(|c| c.durable());
+        let took = self.storage.write(STATE.into(), bytes)
+            && self.storage.write(SIBLINGS.into(), self.net.siblings());
+        if took {
+            Ok(())
+        } else {
+            Err(Refused::new(
+                "the platform's storage did not take the state",
+            ))
+        }
+    }
+
+    /// Everything a device loss would take away, enveloped under a key
+    /// derived from `secret` (design §13.7.1): the seeds where this device
+    /// holds them, the records, the capture store and the provider
+    /// credential.  The payload material and the sessions are this
+    /// device's own and do not travel.
+    pub fn export_backup(&self, secret: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        let seeds = self.seeds;
+        self.handle
+            .with_blocking(move |c| c.export(seeds, rhtn_client::backup::Cost::default(), &secret))
+            .map_err(|e| Refused::new(format!("{e:?}")))
+    }
+
+    /// Open a backup, scan it, and install it into a client that holds
+    /// nothing yet; then write the result to storage.  Refused where this
+    /// client already has an archive, or where the backup does not
+    /// authenticate whole.
+    pub fn restore_backup(&self, blob: Vec<u8>, secret: Vec<u8>) -> Result<Restored, Refused> {
+        let r = self
+            .handle
+            .with_blocking(move |c| {
+                let (contents, discarded) =
+                    c.import(&blob, &secret).map_err(|e| format!("{e:?}"))?;
+                let records = c.install(contents)?;
+                Ok::<_, String>(Restored {
+                    records: records as u64,
+                    discarded: (discarded.captures + discarded.seeds) as u64,
+                })
+            })
+            .map_err(Refused::new)?;
+        self.save()?;
+        Ok(r)
     }
 
     /// Start as a device that holds no seed (design §23.3): a desktop or a
@@ -447,9 +642,10 @@ impl Participant {
         });
         let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
         let known = ids.clone();
+        let storage = platform.storage.clone();
+        let reachable = net.reachable();
         let handle = Handle::spawn(move || {
-            let direct: std::rc::Rc<dyn DirectPath> =
-                std::rc::Rc::new(rhtn_client::device::NoDirectPath);
+            let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
             Client::delegated(
                 public,
                 presented,
@@ -459,7 +655,15 @@ impl Participant {
             )
         })
         .map_err(Refused::new)?;
-        Ok(Participant { handle, net })
+        let p = Participant {
+            handle,
+            net,
+            storage,
+            seeds: None,
+        };
+        p.open()?;
+        p.schedule();
+        Ok(p)
     }
 
     /// Whether this device holds the seed.
@@ -521,10 +725,10 @@ impl Participant {
             .handle
             .with_blocking(move |c| c.take_signed_bundle(&signed))
             .map_err(|e| Refused::new(format!("{e:?}")))?;
-        match msg {
-            Some(m) => self.net.carry(vec![m]),
-            None => Ok(()),
+        if let Some(m) = msg {
+            self.net.carry(vec![m])?;
         }
+        self.save()
     }
 
     /// This client's own identity.
@@ -658,7 +862,19 @@ impl Participant {
         if addrs.is_empty() {
             return Err(Refused::new("a serving node needs at least one address"));
         }
-        self.net.attach(&self.handle, node, &addrs, pop)
+        let a = self.net.attach(&self.handle, node, &addrs, pop)?;
+        self.save()?;
+        Ok(a)
+    }
+
+    /// Close the session cleanly and keep everything else: what a shell
+    /// does when it is about to be suspended, so the serving node queues
+    /// for this device from now rather than after three missed intervals.
+    /// The state is written first.
+    pub fn detach(&self) -> Result<(), Refused> {
+        self.save()?;
+        self.net.detach();
+        Ok(())
     }
 
     /// Routine maintenance: rotate a prekey whose interval has elapsed,
@@ -669,7 +885,8 @@ impl Participant {
     /// Refused where nothing is attached: maintenance is a conversation
     /// with a node, and there is no node.
     pub fn maintain(&self) -> Result<(), Refused> {
-        self.net.maintain(&self.handle)
+        self.net.maintain(&self.handle)?;
+        self.save()
     }
 
     /// Send `bytes` of `kind` to `to`, over the direct path where one is
@@ -680,7 +897,10 @@ impl Participant {
     /// without a shell seeing them (design §14.2.4.6).
     pub fn send(&self, to: Id, kind: u64, bytes: Vec<u8>) -> Result<(), Refused> {
         let peer = keyhash(&to).ok_or_else(|| Refused::new("a recipient is 32 bytes"))?;
-        self.net.send(peer, kind, bytes)
+        self.net.send(peer, kind, bytes)?;
+        // the ratchet advanced: a restart that lost this could not read
+        // the reply
+        self.save()
     }
 
     /// Where this client asks to be rung when something is waiting
@@ -697,7 +917,12 @@ impl Participant {
     /// **What crosses outward is what to draw.** Payload has already been
     /// decrypted here and the ciphertext never leaves.
     pub fn next_event(&self, timeout_ms: u64) -> Option<Event> {
-        self.net.next_event(timeout_ms)
+        let e = self.net.next_event(timeout_ms)?;
+        // what arrived advanced a ratchet; the event is the shell's either
+        // way, and a storage that did not take the state is reported at
+        // the next call that can carry a refusal
+        let _ = self.save();
+        Some(e)
     }
 
     /// What this client holds of its own neighbourhood, and what it can
@@ -1079,6 +1304,7 @@ impl Participant {
                 .map_err(|e| Refused::new(format!("{e:?}")))
         })?;
         self.net.carry_outbox(&self.handle)?;
+        self.save()?;
         Ok(t)
     }
 
@@ -1098,6 +1324,7 @@ impl Participant {
         // ended in a record nobody else will ever see did the work and
         // none of the good.
         self.net.carry_outbox(&self.handle)?;
+        self.save()?;
         Ok(t)
     }
 }
@@ -1161,6 +1388,7 @@ pub fn platform(
     random: Arc<dyn crate::device::Random>,
     operator: Arc<dyn crate::device::Operator>,
     notices: Arc<dyn crate::device::Notices>,
+    storage: Arc<dyn crate::device::Storage>,
 ) -> Platform {
     Platform {
         proximity,
@@ -1169,5 +1397,6 @@ pub fn platform(
         random,
         operator,
         notices,
+        storage,
     }
 }

@@ -447,3 +447,30 @@ fn an_operators_provider_credential_rides_in_the_envelope_and_never_in_the_archi
     let blob = client.export(None, cheap(), b"pw").unwrap();
     assert_eq!(client.import(&blob, b"pw").unwrap().0.provider, None);
 }
+
+/// A backup is installed into a client that holds nothing: the records
+/// appended in order, the store and the credential taken, the positions
+/// derived; and refused into one that already has an archive.
+#[test]
+fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archive() {
+    let mut w = World::new();
+    let (mut c, t) = contents(&mut w);
+    c.provider = Some(b"provider".to_vec());
+    let blob = rhtn_client::backup::export(&c, &Wrap::passphrase(cheap()), b"pw").unwrap();
+
+    let mut fresh_alice = fresh("alice", 1_790_000_000_000);
+    let (got, discarded) = fresh_alice.import(&blob, b"pw").unwrap();
+    assert_eq!(discarded, backup::Discarded::default());
+    assert_eq!(fresh_alice.install(got).unwrap(), 1);
+    assert!(fresh_alice.archive.records().any(|r| r.txid == t));
+    assert_eq!(fresh_alice.store.records.len(), 1);
+    assert_eq!(
+        fresh_alice.provider_credential.as_deref(),
+        Some(&b"provider"[..])
+    );
+
+    // a second install would replace an intact identity: refused
+    let (got, _) = fresh_alice.import(&blob, b"pw").unwrap();
+    assert!(fresh_alice.install(got).is_err());
+    assert_eq!(fresh_alice.archive.len(), 1, "and nothing changed");
+}

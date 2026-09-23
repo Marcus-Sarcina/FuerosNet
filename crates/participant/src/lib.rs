@@ -91,6 +91,7 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
             shell.clone(),
+            shell.clone(),
         );
         let client = Participant::start(seeds, known, p).map_err(|e| e.reason)?;
         Ok(Instrument { client, shell })
@@ -510,6 +511,22 @@ impl Instrument {
         let mut out = Vec::new();
         while let Some(e) = self.client.next_event(ms) {
             out.push(match e {
+                rhtn_ffi::net::Event::Connection(status) => {
+                    use rhtn_ffi::net::Status;
+                    match status {
+                        Status::Detached => "connection detached".into(),
+                        Status::Attached { serving, primary } => format!(
+                            "connection attached serving={} primary={primary}",
+                            hex(&serving)
+                        ),
+                        Status::Reconnecting { from } => {
+                            format!("connection reconnecting from={}", hex(&from))
+                        }
+                        Status::Lost { from, reason } => {
+                            format!("connection lost from={} reason={reason}", hex(&from))
+                        }
+                    }
+                }
                 rhtn_ffi::net::Event::Payload { from, bytes } => {
                     format!("payload from={} bytes={}", hex(&from), hex(&bytes))
                 }

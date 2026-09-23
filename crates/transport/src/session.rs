@@ -437,6 +437,25 @@ pub fn encode_heartbeat(counter: u64, timestamp: u64) -> Vec<u8> {
     out
 }
 
+/// One back from [`encode_sibling_update`]: what a client persisted of its
+/// cached sibling list (`light-client-requirements.md` §4).  **Nothing
+/// partial**: a list that does not decode whole is no list, since failing
+/// over on uncertain data is worse than reporting disconnection.
+pub fn decode_sibling_update(b: &[u8]) -> Option<Vec<SiblingRef>> {
+    let item = parse_all(b).ok()?;
+    let Item::Map(m) = &item else {
+        return None;
+    };
+    if m.len() > 1 {
+        return None;
+    }
+    let list = decode_sibling_list(b, map_get(m, 1))?;
+    if !valid_sibling_list(&list, &[0u8; 32]) {
+        return None;
+    }
+    Some(list)
+}
+
 pub fn encode_sibling_update(refs: &[SiblingRef]) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, !refs.is_empty() as usize);
@@ -905,6 +924,9 @@ pub struct Node {
     /// submissions cannot both see the room for one (design §14.1.6).
     queue_gate: Mutex<()>,
     pub log: Log,
+    /// Relay submissions taken, delivered or queued: what a test reads to
+    /// say whether payload went through this node or around it.
+    relayed: std::sync::atomic::AtomicUsize,
 }
 
 impl Node {
@@ -915,7 +937,13 @@ impl Node {
             state: Mutex::new(NodeState::default()),
             queue_gate: Mutex::new(()),
             log,
+            relayed: std::sync::atomic::AtomicUsize::new(0),
         })
+    }
+
+    /// How many relay submissions this node took.
+    pub fn relayed(&self) -> usize {
+        self.relayed.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Accept material for a client: delivered now on a unidirectional
@@ -992,10 +1020,36 @@ impl Node {
             device,
             arrival: (self.cfg.clock)(),
         });
+        self.relayed
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if let Some(((_, d), conn)) = conn {
             tokio::spawn(drain(self.clone(), keyhash, d, conn));
         }
         Ok(())
+    }
+
+    /// Resolves once `conn` is no longer the live session for `peer`: the
+    /// detector judged the peer unreachable, or another session replaced
+    /// it.  Polled, because neither is a wake-up the connection gives.
+    async fn until_stale(&self, peer: &Peer, conn: &Connection) {
+        loop {
+            let stale = {
+                let st = self.state.lock().unwrap();
+                let unreachable = st
+                    .reach
+                    .get(peer)
+                    .is_some_and(|r| *r.lock().unwrap() == Reachability::Unreachable);
+                let replaced = st
+                    .sessions
+                    .get(peer)
+                    .is_none_or(|c| c.stable_id() != conn.stable_id());
+                unreachable || replaced
+            };
+            if stale {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     fn drain_lock(&self, peer: &Peer) -> Arc<tokio::sync::Mutex<()>> {
@@ -1544,10 +1598,22 @@ pub async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
 /// per recipient at a time; a failed delivery ends the drain, and the rest
 /// waits for the next session.
 async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Connection) {
-    let lock = node.drain_lock(&(recipient, device));
+    let peer = (recipient, device);
+    let lock = node.drain_lock(&peer);
     let _running = lock.lock().await;
     while let Some(item) = node.cfg.queue.peek_oldest_for(&recipient, &device) {
-        if !deliver(&conn, item.ciphertext.clone()).await {
+        // **a delivery ends with its session.** A peer that went silent is
+        // judged unreachable after three intervals and never acknowledges
+        // the stream, and QUIC's idle timer is hours away (design §14.1.2
+        // has the heartbeat decide liveness); a drain that waited on it
+        // would hold this device's lock past the device's return on a new
+        // session, and what is queued would wait behind a delivery that
+        // cannot end
+        let delivered = tokio::select! {
+            ok = deliver(&conn, item.ciphertext.clone()) => ok,
+            _ = node.until_stale(&peer, &conn) => false,
+        };
+        if !delivered {
             return;
         }
         node.cfg.queue.remove(&recipient, &item);

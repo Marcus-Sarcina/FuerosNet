@@ -5,7 +5,6 @@
 use crate::serving::Inbound;
 use rhtn_archive::Keyhash;
 use rhtn_client::device::DirectPath;
-use rhtn_crypto::SigningIdentity;
 use rhtn_node::runtime::LiveNode;
 use rhtn_transport::bind::Binding;
 use rhtn_transport::session::{CLOSE_REFUSED, deliver};
@@ -84,7 +83,9 @@ impl Direct for NoDirect {
 }
 
 struct Light {
-    id: Arc<SigningIdentity>,
+    /// What this side presents when it dials: its own classical member, or
+    /// the delegated key of a device that holds no seed (design §23.3).
+    presenter: tls::Presenter,
     pins: Pins,
     /// §9.1's bind for a peer known by the key it presented: the pin, or
     /// a delegation held in the client's horizon view (`light-client-
@@ -114,9 +115,10 @@ impl LightDirect {
     /// goes to `inbound`.
     #[allow(clippy::too_many_arguments)]
     pub fn bind(
-        id: Arc<SigningIdentity>,
+        me: tls::Party,
         pins: Pins,
         bind: Binding,
+        reachable: Reachable,
         addr: SocketAddr,
         nat: Option<SocketAddr>,
         stun: Option<SocketAddr>,
@@ -126,7 +128,7 @@ impl LightDirect {
         let socket = TraversalSocket::bind(addr, nat)?;
         let presenter = match &bind.credential {
             Some(c) => tls::Presenter::Delegated(c.clone()),
-            None => tls::Presenter::own(&id),
+            None => me.presenter.clone(),
         };
         let crypto =
             quinn::crypto::rustls::QuicServerConfig::try_from(tls::server_config(&presenter))
@@ -135,7 +137,7 @@ impl LightDirect {
         qcfg.transport_config(Arc::new(tls::transport_config()));
         let endpoint = endpoint(socket.clone(), Some(qcfg))?;
         let light = LightDirect(Arc::new(Light {
-            id,
+            presenter: presenter.clone(),
             pins,
             bind,
             socket,
@@ -144,7 +146,7 @@ impl LightDirect {
             gate,
             inbound,
             conns: Mutex::new(HashMap::new()),
-            reachable: Reachable::default(),
+            reachable,
             dial_timeout: Duration::from_secs(3),
             log: rhtn_transport::session::Log::default(),
         }));
@@ -244,10 +246,7 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return false;
             }
-            let me = match &self.0.bind.credential {
-                Some(c) => tls::Presenter::Delegated(c.clone()),
-                None => tls::Presenter::own(&self.0.id),
-            };
+            let me = self.0.presenter.clone();
             match connect_direct(
                 &self.0.endpoint,
                 &me,
@@ -269,10 +268,24 @@ impl Direct for LightDirect {
     fn deliver(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, bool> {
         Box::pin(async move {
             let conn = self.0.conns.lock().unwrap().get(&peer).cloned();
-            match conn {
-                Some(c) => deliver(&c, bytes).await,
-                None => false,
+            let Some(c) = conn else {
+                return false;
+            };
+            // **a delivery is bounded by the dial's own timeout.** The
+            // direct path has no heartbeat: a peer that went away leaves a
+            // connection nothing closes until QUIC's idle timer, and a
+            // stream it will never acknowledge.  A delivery that does not
+            // complete in the time a dial gets is a path no longer held,
+            // and the message goes to the relay (design §14.1.1)
+            let ok = tokio::time::timeout(self.0.dial_timeout, deliver(&c, bytes))
+                .await
+                .unwrap_or(false);
+            if !ok {
+                self.0.conns.lock().unwrap().remove(&peer);
+                self.0.reachable.set(peer, false);
+                c.close(quinn::VarInt::from_u32(0), b"path lost");
             }
+            ok
         })
     }
 }

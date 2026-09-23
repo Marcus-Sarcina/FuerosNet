@@ -71,6 +71,9 @@ pub trait Serving: Send + Sync {
     /// deposit, which a bound may refuse whole.
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool>;
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
+    /// A `CatalogQuery` from `from` (`wire-format.md` §6.4): the node's
+    /// reply, or nothing where it answers none.
+    fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// Carry `bytes` from `from` to `to`; whether anything took them.
     /// `device`: the recipient's device the ciphertext is for
     /// (`wire-format.md` §7.10 field 4).
@@ -178,6 +181,18 @@ impl Serving for LocalNode {
                 ),
                 rhtn_node::store::Decision::Stored | rhtn_node::store::Decision::Duplicate
             )
+        })
+    }
+
+    fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            let view = self.node.view.lock().unwrap();
+            let me = view.me();
+            let scopes = rhtn_node::catalog::TableScopes {
+                table: &view.table,
+                me,
+            };
+            view.catalog.answer(&from, body, &scopes)
         })
     }
 

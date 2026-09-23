@@ -119,6 +119,14 @@ pub enum Abort {
     PatronRefused(String),
 }
 
+/// What a restore from the device's own storage found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Restored {
+    pub records: usize,
+    pub sessions: usize,
+    pub horizon: crate::horizon::Woke,
+}
+
 /// What one party says to another on the direct channel, or to a verifier
 /// on a request stream.  `Grant` and `Query` are the only two that travel
 /// to a verifier; everything else stays between the participants and
@@ -1266,7 +1274,9 @@ impl Client {
     /// the aggregation design §13.7.1 spends its length avoiding.
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
         self.archive.save(dir)?;
-        self.store.save(dir)
+        self.store.save(dir)?;
+        std::fs::create_dir_all(dir)?;
+        std::fs::write(dir.join("durable"), self.durable())
     }
 
     /// Start from what is at `dir` under the identity given, or from
@@ -1285,10 +1295,142 @@ impl Client {
     ) -> std::io::Result<Client> {
         let kh = id.public.keyhash;
         let mut c = Client::new(id, known, cfg, device);
+        // the durable blob carries what the two directories do and the
+        // payload and horizon besides; where it exists it is the state,
+        // and a blob that does not open is an error and not a fresh start
+        match std::fs::read(dir.join("durable")) {
+            Ok(b) => {
+                c.restore_durable(&b).map_err(std::io::Error::other)?;
+                return Ok(c);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
         c.archive = Archive::load(dir, kh)?;
         c.store = ClientStore::load(dir)?;
         c.adopt_own_positions();
         Ok(c)
+    }
+
+    /// Everything this device keeps for its next start (`crate::durable`):
+    /// the archive's records, the store, the payload state, the horizon's
+    /// records, snapshot and delegations, and the provider credential.
+    /// The seed is not here: it is the platform's key storage's, and the
+    /// shell supplies it at every start.
+    pub fn durable(&self) -> Vec<u8> {
+        use rhtn_codec::encode::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 7);
+        let records: Vec<&Vec<u8>> = self.archive.records().map(|r| &r.bytes).collect();
+        emit_array_head(&mut out, records.len());
+        for r in records {
+            emit_bstr(&mut out, r);
+        }
+        emit_bstr(&mut out, &self.store.encode());
+        emit_bstr(&mut out, &self.payload.encode());
+        let held: Vec<&Vec<u8>> = self.horizon.stored().map(|(_, b)| b).collect();
+        emit_array_head(&mut out, held.len());
+        for r in held {
+            emit_bstr(&mut out, r);
+        }
+        emit_bstr(&mut out, &self.horizon.materialise().encode());
+        emit_bstr(&mut out, &self.horizon.delegations_held());
+        crate::durable::emit_opt_bstr(&mut out, self.provider_credential.as_deref());
+        out
+    }
+
+    /// Start from what [`Client::durable`] wrote, whole or not at all: a
+    /// blob that does not open leaves this client as it was and says so,
+    /// because a client that restored half its state would hold sessions
+    /// it cannot advance.  Positions are re-derived from the archive, and
+    /// the horizon wakes from its snapshot, replaying where the snapshot
+    /// cannot account for the records held.
+    pub fn restore_durable(&mut self, b: &[u8]) -> Result<Restored, String> {
+        use crate::durable::*;
+        let (_, f) = parse_array(b, 7).ok_or("not a durable state")?;
+        let recs: Vec<Vec<u8>> = array(&f[0])
+            .ok_or("records")?
+            .iter()
+            .map(|x| bytes(b, x))
+            .collect::<Option<_>>()
+            .ok_or("records")?;
+        let store = ClientStore::decode(&bytes(b, &f[1]).ok_or("store")?).ok_or("store")?;
+        let payload =
+            PayloadState::decode(self.cfg.payload.clone(), &bytes(b, &f[2]).ok_or("payload")?)
+                .ok_or("payload")?;
+        let held: Vec<Vec<u8>> = array(&f[3])
+            .ok_or("horizon")?
+            .iter()
+            .map(|x| bytes(b, x))
+            .collect::<Option<_>>()
+            .ok_or("horizon")?;
+        let snap = rhtn_archive::topology::Snapshot::decode(&bytes(b, &f[4]).ok_or("snapshot")?)
+            .ok_or("snapshot")?;
+        let delegations = bytes(b, &f[5]).ok_or("delegations")?;
+        let provider = optional(&f[6], |it| bytes(b, it)).ok_or("provider")?;
+        // everything parsed: nothing below can fail halfway
+        let kh = self.public.keyhash;
+        let mut archive = Archive::new(kh);
+        let mut parsed: Vec<Record> = recs
+            .iter()
+            .map(|r| Record::parse(r))
+            .collect::<Result<_, _>>()
+            .map_err(|e| format!("record: {e}"))?;
+        parsed.sort_by_key(|r| (r.effective, r.txid));
+        let mut records = 0;
+        for rec in parsed {
+            archive.append(rec).map_err(|e| format!("record: {e}"))?;
+            records += 1;
+        }
+        self.archive = archive;
+        self.store = store;
+        self.payload = payload;
+        let mut horizon = Horizon::new(kh);
+        for r in held {
+            horizon.restore_record(r);
+        }
+        let woke = horizon.wake(Some(&snap), &self.known);
+        horizon
+            .restore_delegations(&delegations)
+            .ok_or("delegations")?;
+        self.horizon = horizon;
+        self.provider_credential = provider;
+        self.positions.clear();
+        self.adopt_own_positions();
+        Ok(Restored {
+            records,
+            sessions: self.payload.sessions.ratchets.len(),
+            horizon: woke,
+        })
+    }
+
+    /// Take a backup's contents into a client that holds nothing yet: the
+    /// records appended in order, the store and the provider credential
+    /// installed, positions re-derived.  **Refused on a client with an
+    /// archive**: what a client does with contents that would replace an
+    /// intact identity is a decision, not a side effect of opening a file.
+    pub fn install(&mut self, contents: backup::Contents) -> Result<usize, String> {
+        if !self.archive.is_empty() {
+            return Err("this client already holds an archive".into());
+        }
+        let mut parsed: Vec<Record> = contents
+            .records
+            .iter()
+            .map(|r| Record::parse(r))
+            .collect::<Result<_, _>>()
+            .map_err(|e| format!("record: {e}"))?;
+        parsed.sort_by_key(|r| (r.effective, r.txid));
+        let mut archive = Archive::new(self.public.keyhash);
+        for rec in parsed {
+            archive.append(rec).map_err(|e| format!("record: {e}"))?;
+        }
+        let n = archive.len();
+        self.archive = archive;
+        self.store = contents.store;
+        self.provider_credential = contents.provider;
+        self.positions.clear();
+        self.adopt_own_positions();
+        Ok(n)
     }
 
     /// Everything a device loss would take away, enveloped under a key

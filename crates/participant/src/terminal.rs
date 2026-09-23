@@ -1,10 +1,10 @@
 //! The platform, where the platform is a terminal.
 //!
-//! `rhtn-ffi` takes six objects from a shell (design §14.1.0's boundary as
+//! `rhtn-ffi` takes seven objects from a shell (design §14.1.0's boundary as
 //! the author restated it): the proximity hardware, the camera, the clock,
-//! randomness, the person and the notifier.  A phone has all six.  A
-//! terminal has two of them outright, one by asking, and the rest only
-//! because somebody says what they are.
+//! randomness, the person, the notifier and the storage.  A phone has all
+//! seven.  A terminal has three of them outright, one by asking, and the
+//! rest only because somebody says what they are.
 //!
 //! **So this one is told rather than measured, and never pretends
 //! otherwise.** `light-client-requirements.md` §1.3 asks a client to
@@ -16,7 +16,7 @@
 //! scenario, not about hardware — and that is the whole difference between
 //! an instrument and a client.
 
-use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Proximity, Random};
+use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Proximity, Random, Storage};
 use rhtn_ffi::types::{Ask, Channel, ChannelOutcome, Told};
 use std::sync::Mutex;
 
@@ -34,6 +34,20 @@ pub struct Terminal {
     /// Raised as they occur, drained after each command, so a transcript
     /// stays in the order a reader expects.
     said: Mutex<Vec<String>>,
+    /// The client's state for this process alone: an instrument keeps
+    /// nothing between runs, and a script that wants continuity starts
+    /// the same process again.
+    kept: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+}
+
+impl Storage for Terminal {
+    fn read(&self, name: String) -> Option<Vec<u8>> {
+        self.kept.lock().unwrap().get(&name).cloned()
+    }
+    fn write(&self, name: String, bytes: Vec<u8>) -> bool {
+        self.kept.lock().unwrap().insert(name, bytes);
+        true
+    }
 }
 
 impl Terminal {

@@ -85,7 +85,92 @@ pub struct PayloadKeys {
     pub published_at: Option<u64>,
 }
 
+impl OneTimePair {
+    fn encode(&self, out: &mut Vec<u8>) {
+        emit_array_head(out, 3);
+        emit_uint(out, self.id as u64);
+        emit_bstr(out, &self.dh.to_bytes());
+        emit_bstr(out, &self.kem.seed());
+    }
+
+    fn decode(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<OneTimePair> {
+        use crate::durable::*;
+        let [id, dh, kem] = array(it)?.as_slice() else {
+            return None;
+        };
+        Some(OneTimePair {
+            id: uint(id)? as u32,
+            dh: DhSecret::from_seed(fixed::<32>(b, dh)?),
+            kem: KemSecret::from_seed(fixed::<64>(b, kem)?),
+        })
+    }
+}
+
 impl PayloadKeys {
+    /// The material as it goes to the device's own storage
+    /// (`crate::durable`): the seeds and scalars, never the public halves,
+    /// which derive.
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::durable::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 10);
+        emit_bstr(&mut out, &self.ik.to_bytes());
+        emit_uint(&mut out, self.spk_id as u64);
+        emit_bstr(&mut out, &self.spk.to_bytes());
+        emit_uint(&mut out, self.spk_since);
+        emit_uint(&mut out, self.pqspk_id as u64);
+        emit_bstr(&mut out, &self.pqspk.seed());
+        emit_array_head(&mut out, self.retired.len());
+        for (id, (dh, kem)) in &self.retired {
+            emit_array_head(&mut out, 3);
+            emit_uint(&mut out, *id as u64);
+            emit_bstr(&mut out, &dh.to_bytes());
+            emit_bstr(&mut out, &kem.seed());
+        }
+        emit_array_head(&mut out, self.one_time.len());
+        for pair in self.one_time.values() {
+            pair.encode(&mut out);
+        }
+        emit_uint(&mut out, self.next_id as u64);
+        emit_opt_uint(&mut out, self.published_at);
+        out
+    }
+
+    pub fn decode(b: &[u8]) -> Option<PayloadKeys> {
+        use crate::durable::*;
+        let (_, f) = parse_array(b, 10)?;
+        let mut retired = BTreeMap::new();
+        for r in array(&f[6])? {
+            let [id, dh, kem] = array(r)?.as_slice() else {
+                return None;
+            };
+            retired.insert(
+                uint(id)? as u32,
+                (
+                    DhSecret::from_seed(fixed::<32>(b, dh)?),
+                    KemSecret::from_seed(fixed::<64>(b, kem)?),
+                ),
+            );
+        }
+        let mut one_time = BTreeMap::new();
+        for p in array(&f[7])? {
+            let pair = OneTimePair::decode(b, p)?;
+            one_time.insert(pair.id, pair);
+        }
+        Some(PayloadKeys {
+            ik: DhSecret::from_seed(fixed::<32>(b, &f[0])?),
+            spk_id: uint(&f[1])? as u32,
+            spk: DhSecret::from_seed(fixed::<32>(b, &f[2])?),
+            spk_since: uint(&f[3])?,
+            pqspk_id: uint(&f[4])? as u32,
+            pqspk: KemSecret::from_seed(fixed::<64>(b, &f[5])?),
+            retired,
+            one_time,
+            next_id: uint(&f[8])? as u32,
+            published_at: optional(&f[9], uint)?,
+        })
+    }
+
     pub fn generate(fresh: Fresh, now: u64) -> Self {
         PayloadKeys {
             ik: DhSecret::from_seed(seed32(fresh)),
@@ -315,6 +400,29 @@ pub struct Prefetched {
     /// The device this material belongs to (`wire-format.md` §7.8): what a
     /// one-time key is asked for and a relay submission is addressed to.
     pub device: [u8; 32],
+}
+
+impl Prefetched {
+    fn encode(&self, out: &mut Vec<u8>) {
+        emit_array_head(out, 4);
+        emit_bstr(out, &self.subject);
+        emit_uint(out, self.published_at);
+        emit_bstr(out, &self.blob.encode());
+        emit_bstr(out, &self.device);
+    }
+
+    fn decode(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<Prefetched> {
+        use crate::durable::*;
+        let [s, at, blob, d] = array(it)?.as_slice() else {
+            return None;
+        };
+        Some(Prefetched {
+            subject: fixed::<32>(b, s)?,
+            published_at: uint(at)?,
+            blob: Blob::decode(&bytes(b, blob)?).ok()?,
+            device: fixed::<32>(b, d)?,
+        })
+    }
 }
 
 /// Read a bundle a serving node handed over: signed by the subject it
@@ -553,6 +661,49 @@ pub struct Sessions {
 }
 
 impl Sessions {
+    /// The sessions as they go to the device's own storage: every ratchet
+    /// and every bundle held.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 2);
+        emit_array_head(&mut out, self.ratchets.len());
+        for ((kh, dev), r) in &self.ratchets {
+            emit_array_head(&mut out, 3);
+            emit_bstr(&mut out, kh);
+            emit_bstr(&mut out, dev);
+            emit_bstr(&mut out, &r.encode());
+        }
+        emit_array_head(&mut out, self.prefetched.len());
+        for p in self.prefetched.values() {
+            p.encode(&mut out);
+        }
+        out
+    }
+
+    pub fn decode(b: &[u8]) -> Option<Sessions> {
+        use crate::durable::*;
+        let (_, f) = parse_array(b, 2)?;
+        let mut ratchets = BTreeMap::new();
+        for r in array(&f[0])? {
+            let [kh, dev, bytes_] = array(r)?.as_slice() else {
+                return None;
+            };
+            ratchets.insert(
+                (fixed::<32>(b, kh)?, fixed::<32>(b, dev)?),
+                Ratchet::decode(&bytes(b, bytes_)?)?,
+            );
+        }
+        let mut prefetched = BTreeMap::new();
+        for p in array(&f[1])? {
+            let p = Prefetched::decode(b, p)?;
+            prefetched.insert((p.subject, p.device), p);
+        }
+        Some(Sessions {
+            ratchets,
+            prefetched,
+        })
+    }
+
     /// Keep a bundle under the device it names.
     pub fn prefetch(&mut self, p: Prefetched) {
         self.prefetched.insert((p.subject, p.device), p);
@@ -789,6 +940,79 @@ pub struct PayloadState {
 }
 
 impl PayloadState {
+    /// Everything of this state that a restart would otherwise lose: the
+    /// material, the sessions, the device, the signed bundle, what waits
+    /// for a session, and what the node was told of the pool.  Requests
+    /// in flight are not written: a reply to one never arrives at a new
+    /// process, and what it asked for is asked for again.
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::durable::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 7);
+        emit_bstr(&mut out, &self.keys.encode());
+        emit_bstr(&mut out, &self.sessions.encode());
+        emit_opt_bstr(&mut out, self.serving.as_ref().map(|k| &k[..]));
+        emit_bstr(&mut out, &self.device);
+        match &self.signed_bundle {
+            Some((over, signed)) => {
+                emit_array_head(&mut out, 2);
+                emit_bstr(&mut out, over);
+                emit_bstr(&mut out, signed);
+            }
+            None => emit_null(&mut out),
+        }
+        emit_array_head(&mut out, self.pending.len());
+        for ((kh, dev), plains) in &self.pending {
+            emit_array_head(&mut out, 3);
+            emit_bstr(&mut out, kh);
+            emit_bstr(&mut out, dev);
+            emit_array_head(&mut out, plains.len());
+            for p in plains {
+                emit_bstr(&mut out, p);
+            }
+        }
+        emit_uint(&mut out, self.pool_reported as u64);
+        out
+    }
+
+    /// The state back under `cfg`, whole or not at all.
+    pub fn decode(cfg: PayloadConfig, b: &[u8]) -> Option<PayloadState> {
+        use crate::durable::*;
+        let (_, f) = parse_array(b, 7)?;
+        let signed_bundle = match &f[4] {
+            rhtn_codec::cbor::Item::Null => None,
+            it => {
+                let [over, signed] = array(it)?.as_slice() else {
+                    return None;
+                };
+                Some((bytes(b, over)?, bytes(b, signed)?))
+            }
+        };
+        let mut pending = BTreeMap::new();
+        for p in array(&f[5])? {
+            let [kh, dev, plains] = array(p)?.as_slice() else {
+                return None;
+            };
+            let plains: Vec<Vec<u8>> = array(plains)?
+                .iter()
+                .map(|x| bytes(b, x))
+                .collect::<Option<_>>()?;
+            pending.insert((fixed::<32>(b, kh)?, fixed::<32>(b, dev)?), plains);
+        }
+        Some(PayloadState {
+            cfg,
+            keys: PayloadKeys::decode(&bytes(b, &f[0])?)?,
+            sessions: Sessions::decode(&bytes(b, &f[1])?)?,
+            serving: optional(&f[2], |it| fixed::<32>(b, it))?,
+            device: fixed::<32>(b, &f[3])?,
+            signed_bundle,
+            pending,
+            outstanding: BTreeMap::new(),
+            pool_reported: uint(&f[6])? as usize,
+            wanted: BTreeSet::new(),
+        })
+    }
+
     pub fn new(cfg: PayloadConfig, fresh: Fresh, now: u64) -> Self {
         PayloadState {
             keys: PayloadKeys::generate(fresh, now),

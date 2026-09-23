@@ -196,6 +196,45 @@ impl Horizon {
         Took::Applied
     }
 
+    /// The delegations held, as they go to the device's own storage
+    /// beside the snapshot: current state this client verified when it
+    /// took them, and not a history.
+    pub fn delegations_held(&self) -> Vec<u8> {
+        use rhtn_codec::encode::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, self.delegations.len());
+        for d in self.delegations.values() {
+            emit_array_head(&mut out, 4);
+            emit_bstr(&mut out, &d.key);
+            emit_bstr(&mut out, &d.keyhash);
+            emit_uint(&mut out, d.not_before);
+            emit_uint(&mut out, d.not_after);
+        }
+        out
+    }
+
+    /// Put held delegations back, whole or not at all.
+    pub fn restore_delegations(&mut self, b: &[u8]) -> Option<usize> {
+        use crate::durable::*;
+        let item = rhtn_codec::cbor::parse_all(b).ok()?;
+        let mut held = BTreeMap::new();
+        for d in array(&item)? {
+            let [key, keyhash, nb, na] = array(d)?.as_slice() else {
+                return None;
+            };
+            let d = Delegation {
+                key: fixed::<32>(b, key)?,
+                keyhash: fixed::<32>(b, keyhash)?,
+                not_before: uint(nb)?,
+                not_after: uint(na)?,
+            };
+            held.insert(d.keyhash, d);
+        }
+        let n = held.len();
+        self.delegations = held;
+        Some(n)
+    }
+
     /// The delegation held for a party in the horizon.
     pub fn delegation(&self, keyhash: &Keyhash) -> Option<&Delegation> {
         self.delegations.get(keyhash)
