@@ -10949,3 +10949,24 @@ a concurrent node-and-transport suite passed, 8 to 9 s each; four passes
 against a one-in-four flake is weak evidence on its own, and the mechanism
 shown by the experiment is what settles it. The entry's own words stand;
 the harness was the defect.
+
+## TRV-11: the checks in the RFC's order (2026-09-22)
+
+`connect_direct` dialled every candidate at once and kept the first
+handshake, which design §14.1.1 had not asked for since the 21st: the order
+is RFC 8445's [author, 2026-09-22]. Now `Candidate::priority` is §5.1.2.1's
+(host 126, server-reflexive 100, one local preference, one component),
+`check_list` is §6.1.2's order over the peer's candidates, each address
+once, ties as offered, the pair order reducing to the remote order since
+this socket is the one local candidate in every pair; and the checks run
+one per `TA` (50 ms, §14.2) unless the one before has ended, the first
+handshake that completes and binds kept and the rest abandoned. Every dial
+and its end is an event (`Event::Dialled`, `Event::DialDone`, at
+milliseconds since the checks began), which is the path harness TRV-11
+asks for; `connect_direct` takes the log. Two tests over real sockets, one
+with two black holes and a live host (order, the 50 ms before the second
+dial, the reflexive candidate never dialled once the live one connected),
+one with a closed port whose refusal lets the next start early. The three
+ICE entries the note listed as stale wording (TRV-02, TRV-07, PAY-15) name
+no order in their given, when or then, so nothing there is re-derived. 435
+of 455.

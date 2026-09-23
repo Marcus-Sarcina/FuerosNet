@@ -510,6 +510,18 @@ pub enum Event {
     DelegationPresented,
     /// A request-only connection, served with no session (§8.2).
     RequestOnly,
+    /// A connectivity check began: one candidate of the peer dialled, at
+    /// `at_ms` since the checks started (RFC 8445 §6.1.4.2; design §14.1.1).
+    Dialled {
+        addr: std::net::SocketAddr,
+        at_ms: u64,
+    },
+    /// That check ended, in a handshake that bound or not.
+    DialDone {
+        addr: std::net::SocketAddr,
+        at_ms: u64,
+        ok: bool,
+    },
 }
 
 /// Session events, for a test that reads what a session did.  Off by

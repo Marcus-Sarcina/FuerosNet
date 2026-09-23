@@ -448,15 +448,54 @@ impl TraversalSocket {
     }
 }
 
-/// The connectivity check and the connection in one (RFC 8445 §7, with
-/// QUIC's handshake as the check): dial every candidate of the peer at
-/// once, authenticating as `me`, and keep the first handshake that
-/// completes *and binds* to `peer`: by the pin, or by a delegation held
-/// from the topology class, the direct path being inside the horizon
-/// where that is held (design §12.6.3, `wire-format.md` §9.1).  A
-/// completed handshake nothing binds is closed and counts as no path.
-/// `None` within `timeout` is the direct path failing, and the relay is
-/// next.
+/// One connectivity check in flight: the address dialled, and the bound
+/// connection if the handshake completed and bound.
+type Check =
+    Pin<Box<dyn std::future::Future<Output = (SocketAddr, Option<quinn::Connection>)> + Send>>;
+
+/// RFC 8445 §14.2's pacing: one connectivity check is started per `Ta`,
+/// 50 ms, unless the one before it has already ended.
+pub const TA: std::time::Duration = std::time::Duration::from_millis(50);
+
+impl Candidate {
+    /// The candidate's priority (RFC 8445 §5.1.2.1): the type preference
+    /// the RFC recommends, host 126 and server-reflexive 100, one local
+    /// preference since this socket is the one interface, one component.
+    pub fn priority(&self) -> u32 {
+        let type_pref: u32 = match self.kind {
+            CandidateKind::Host => 126,
+            CandidateKind::ServerReflexive => 100,
+        };
+        (type_pref << 24) + (65_535 << 8) + (256 - 1)
+    }
+}
+
+/// The check list (RFC 8445 §6.1.2): the peer's candidates in descending
+/// pair priority, one address once.  This socket is the one local
+/// candidate in every pair, so the pair order is the remote candidates'
+/// own priority order, ties kept in the order the peer offered them.
+pub fn check_list(candidates: &[Candidate]) -> Vec<Candidate> {
+    let mut list: Vec<Candidate> = Vec::new();
+    for c in candidates {
+        if !list.iter().any(|l| l.addr == c.addr) {
+            list.push(*c);
+        }
+    }
+    list.sort_by_key(|c| std::cmp::Reverse(c.priority()));
+    list
+}
+
+/// The connectivity checks and the connection in one (RFC 8445 §6.1.4.2,
+/// §7, with QUIC's handshake as the check): the peer's candidates dialled
+/// in the order the check list schedules them, the next started when the
+/// one before has ended or `TA` has passed, never two in one instant, and
+/// the first handshake kept that completes *and binds* to `peer`: by the
+/// pin, or by a delegation held from the topology class, the direct path
+/// being inside the horizon where that is held (design §12.6.3,
+/// `wire-format.md` §9.1).  A completed handshake nothing binds is closed
+/// and counts as no path.  `None` within `timeout` is the direct path
+/// failing, and the relay is next.  Every dial and its end go to `log`.
+#[allow(clippy::too_many_arguments)]
 pub async fn connect_direct(
     endpoint: &quinn::Endpoint,
     me: impl Into<crate::tls::Presenter>,
@@ -465,70 +504,117 @@ pub async fn connect_direct(
     peer: &[u8; 32],
     candidates: &[Candidate],
     timeout: std::time::Duration,
+    log: &crate::session::Log,
 ) -> Option<quinn::Connection> {
+    use crate::session::Event;
     let me = me.into();
-    let mut attempts = Vec::new();
-    for c in candidates {
-        if let Ok(connecting) = crate::tls::dial(endpoint, &me, pins, peer, c.addr) {
-            let (pins, bind, peer) = (pins.clone(), bind.clone(), *peer);
-            attempts.push(Box::pin(async move {
-                let conn = connecting.await.ok()?;
-                let presented = crate::tls::peer_key(&conn)?;
-                match bind.without_frame(&pins, &peer, &presented) {
-                    Ok(Some(_)) => Some(conn),
-                    _ => {
-                        conn.close(quinn::VarInt::from_u32(1), b"unbound");
-                        None
-                    }
-                }
-            }));
-        }
-    }
-    if attempts.is_empty() {
+    let list = check_list(candidates);
+    if list.is_empty() {
         return None;
     }
-    let race = async move {
-        let mut pending = attempts;
-        while !pending.is_empty() {
-            let (result, _, rest) = futures_select(pending).await;
-            if let Some(conn) = result {
-                return Some(conn);
+    let began = tokio::time::Instant::now();
+    let since = move || began.elapsed().as_millis() as u64;
+    let checks = async {
+        let mut pending: Vec<Check> = Vec::new();
+        let mut next = list.into_iter();
+        // the first check now; each later one when the one before it has
+        // ended or Ta has passed, whichever is first
+        let mut due = tokio::time::Instant::now();
+        loop {
+            if tokio::time::Instant::now() >= due
+                && let Some(c) = next.next()
+            {
+                if let Ok(connecting) = crate::tls::dial(endpoint, &me, pins, peer, c.addr) {
+                    log.push(Event::Dialled {
+                        addr: c.addr,
+                        at_ms: since(),
+                    });
+                    let (pins, bind, peer, addr) = (pins.clone(), bind.clone(), *peer, c.addr);
+                    pending.push(Box::pin(async move {
+                        let Ok(conn) = connecting.await else {
+                            return (addr, None);
+                        };
+                        let Some(presented) = crate::tls::peer_key(&conn) else {
+                            return (addr, None);
+                        };
+                        match bind.without_frame(&pins, &peer, &presented) {
+                            Ok(Some(_)) => (addr, Some(conn)),
+                            _ => {
+                                conn.close(quinn::VarInt::from_u32(1), b"unbound");
+                                (addr, None)
+                            }
+                        }
+                    }));
+                }
+                due = tokio::time::Instant::now() + TA;
+                continue;
             }
-            pending = rest;
+            if pending.is_empty() {
+                return None;
+            }
+            let taken = std::mem::take(&mut pending);
+            let mut select = SelectAll::new(taken);
+            let ended = tokio::select! {
+                r = &mut select => Some(r),
+                _ = tokio::time::sleep_until(due) => None,
+            };
+            match ended {
+                Some(((addr, result), _, rest)) => {
+                    pending = rest;
+                    log.push(Event::DialDone {
+                        addr,
+                        at_ms: since(),
+                        ok: result.is_some(),
+                    });
+                    if let Some(conn) = result {
+                        return Some(conn);
+                    }
+                    // the check ended: the next may start at once
+                    due = tokio::time::Instant::now();
+                }
+                // Ta passed with none ended: the checks still run, and
+                // the next starts beside them
+                None => pending = select.into_pending(),
+            }
         }
-        None
     };
-    tokio::time::timeout(timeout, race).await.ok().flatten()
+    tokio::time::timeout(timeout, checks).await.ok().flatten()
 }
 
-/// `select_all` without the crate: poll every future, return the first
-/// ready one with the rest.
-async fn futures_select<F, T>(futs: Vec<Pin<Box<F>>>) -> (T, usize, Vec<Pin<Box<F>>>)
-where
-    F: std::future::Future<Output = T> + ?Sized,
-{
-    struct Select<F: ?Sized, T> {
-        futs: Vec<Pin<Box<F>>>,
-        _t: std::marker::PhantomData<T>,
-    }
-    impl<F: ?Sized, T> Unpin for Select<F, T> {}
-    impl<F: std::future::Future<Output = T> + ?Sized, T> std::future::Future for Select<F, T> {
-        type Output = (T, usize, Vec<Pin<Box<F>>>);
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let this = self.get_mut();
-            for i in 0..this.futs.len() {
-                if let Poll::Ready(v) = this.futs[i].as_mut().poll(cx) {
-                    let mut rest = std::mem::take(&mut this.futs);
-                    rest.remove(i);
-                    return Poll::Ready((v, i, rest));
-                }
-            }
-            Poll::Pending
+/// `select_all` without the crate: poll every future, and resolve to the
+/// first ready one with the rest.  The rest are recoverable when the
+/// select is abandoned before any is ready.
+struct SelectAll<F: ?Sized, T> {
+    futs: Vec<Pin<Box<F>>>,
+    _t: std::marker::PhantomData<T>,
+}
+
+impl<F: ?Sized, T> Unpin for SelectAll<F, T> {}
+
+impl<F: ?Sized, T> SelectAll<F, T> {
+    fn new(futs: Vec<Pin<Box<F>>>) -> Self {
+        SelectAll {
+            futs,
+            _t: std::marker::PhantomData,
         }
     }
-    Select {
-        futs,
-        _t: std::marker::PhantomData,
+    /// The futures still pending, for a caller that stopped waiting.
+    fn into_pending(self) -> Vec<Pin<Box<F>>> {
+        self.futs
     }
-    .await
+}
+
+impl<F: std::future::Future<Output = T> + ?Sized, T> std::future::Future for SelectAll<F, T> {
+    type Output = (T, usize, Vec<Pin<Box<F>>>);
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        for i in 0..this.futs.len() {
+            if let Poll::Ready(v) = this.futs[i].as_mut().poll(cx) {
+                let mut rest = std::mem::take(&mut this.futs);
+                rest.remove(i);
+                return Poll::Ready((v, i, rest));
+            }
+        }
+        Poll::Pending
+    }
 }

@@ -847,6 +847,7 @@ impl LiveNode {
             &peer,
             candidates,
             self.dial_timeout,
+            &self.node.log,
         )
         .await;
         let mut d = self.direct.lock().unwrap();

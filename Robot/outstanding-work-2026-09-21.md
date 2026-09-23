@@ -862,10 +862,11 @@ land on their own.
    PRP-27); the queue and sessions per device (SES-26, QUE-05, QUE-21,
    PAY-20, SUB-12), which closes the three plumbed-not-done items of step
    3; the light client's held delegations (TOP-43); acknowledgements
-   travelling as kind 3, issued and taken in a running node (TOP-44).
-   Next: TRV-11; the no-history audit (RSC-41, RSC-42, SUB-13); section
-   2.6's confirmations; the light client and FFI holding a delegation and
-   no seed.
+   travelling as kind 3, issued and taken in a running node (TOP-44); the
+   direct path's checks in RFC 8445's order and at its pace (TRV-11).
+   Next: the no-history audit (RSC-41, RSC-42, SUB-13); section 2.6's
+   confirmations; the light client and FFI holding a delegation and no
+   seed.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

@@ -98,6 +98,8 @@ struct Light {
     conns: Mutex<HashMap<Keyhash, quinn::Connection>>,
     reachable: Reachable,
     dial_timeout: Duration,
+    /// Where the checks' events go: nowhere by default.
+    log: rhtn_transport::session::Log,
 }
 
 /// A light client's own socket: candidates gathered on it, the peer's
@@ -144,6 +146,7 @@ impl LightDirect {
             conns: Mutex::new(HashMap::new()),
             reachable: Reachable::default(),
             dial_timeout: Duration::from_secs(3),
+            log: rhtn_transport::session::Log::default(),
         }));
         // what a peer opens toward this socket
         let accepting = light.clone();
@@ -253,6 +256,7 @@ impl Direct for LightDirect {
                 &peer,
                 &candidates,
                 self.0.dial_timeout,
+                &self.0.log,
             )
             .await
             {

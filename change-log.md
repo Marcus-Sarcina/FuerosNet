@@ -10379,6 +10379,10 @@ scenario's first attach, when it lost that race under load. The harness
 keeps and drains its pipes, and `rhtnd` drops a failed write to the
 operator rather than dying on it.
 
+**The direct path's checks run in RFC 8445's order and at its pace**, one
+per 50 ms unless the one before has ended, the first that completes and
+binds kept, where the code had dialled every candidate at once: 435 of 455.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the
