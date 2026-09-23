@@ -1693,3 +1693,90 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         "an unchanged grant disturbs no row"
     );
 }
+
+// acceptance: RSC-41
+#[test]
+fn rsc_41_a_catalog_query_leaves_no_record_at_the_node() {
+    let sc = scene();
+    let mut n = view("alice", sc.table.clone_for(kh("alice")), "alice", &[]);
+    // the catalog and the registrations are the state
+    let e = entry("alice", R1, "rhtn-forum", b"forum.internal");
+    assert_eq!(
+        register(&mut n.catalog, "alice", &e, None, 1),
+        REGISTRATION_RECORDED
+    );
+    let before_catalog = format!("{:?}", n.catalog);
+    let before_derived = n.materialise().encode();
+    // C asks, filtered, and is answered: the entry's discover scope is the
+    // owner's own by default, so the owner is the asker who sees it
+    let scopes = TableScopes {
+        table: &n.table,
+        me: kh("alice"),
+    };
+    let reply = query(&n.catalog, &scopes, "alice", Some("rhtn-forum")).expect("answered");
+    assert_eq!(reply.entries.len(), 1);
+    // nothing records that C asked, what filter it used or when: the
+    // answer is made from state it does not touch (`answer` takes the
+    // service by shared reference), and what the node writes back is
+    // what it was before
+    assert_eq!(format!("{:?}", n.catalog), before_catalog);
+    assert_eq!(n.materialise().encode(), before_derived);
+    let again = query(&n.catalog, &scopes, "alice", None).expect("answered again");
+    assert_eq!(again.entries.len(), 1);
+    assert_eq!(format!("{:?}", n.catalog), before_catalog);
+    let _ = sc;
+}
+
+// acceptance: RSC-42
+#[test]
+fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("bob"),
+            authority: "r1.internal".into(),
+            backend: Some(Arc::new(Fake::new())),
+            declared_roles: ["reader", "editor"].into_iter().map(String::from).collect(),
+        },
+    );
+    let row = |roles: &[&str]| Row {
+        roles: roles.iter().map(|s| s.to_string()).collect(),
+        connect: true,
+    };
+    let m = kh("carol");
+    // reader, then editor: only the current row is held at each step
+    g.set_row(R1, m, row(&["reader"])).unwrap();
+    assert_eq!(g.row(&R1, &m), Some(&row(&["reader"])));
+    assert_eq!(g.rows().len(), 1);
+    g.set_row(R1, m, row(&["editor"])).unwrap();
+    assert_eq!(g.row(&R1, &m), Some(&row(&["editor"])));
+    assert_eq!(g.rows().len(), 1, "one row, the current one");
+    assert!(
+        !format!("{:?}", g.rows()).contains("reader"),
+        "nothing says what the roles used to be"
+    );
+    assert!(!g.is_derived(&R1, &m), "set by name: no provenance mark");
+    // then removed: nothing in the table, its marks or its sessions
+    g.clear_row(R1, m);
+    assert_eq!(g.row(&R1, &m), None);
+    assert!(g.rows().is_empty());
+    assert!(!g.is_derived(&R1, &m));
+    assert_eq!(g.hosted_sessions(), 0);
+    // a standing grant's rows carry the one mark, which goes with the row
+    g.stand(R1, row(&["reader"])).unwrap();
+    let sc = scene();
+    g.refresh(&sc.table.clone_for(kh("bob")));
+    let derived: Vec<_> = g
+        .rows()
+        .into_iter()
+        .filter(|((r, mm), _)| *r == R1 && g.is_derived(r, mm))
+        .collect();
+    assert!(!derived.is_empty(), "the grant wrote rows");
+    let ((_, who), _) = derived[0].clone();
+    g.clear_row(R1, who);
+    assert!(!g.is_derived(&R1, &who), "the mark went with the row");
+    // and there is no store of rows to restart from: the table is rebuilt
+    // from the operator's hosting file, which carries the current grants
+    // and nothing of what they were (`infra-client-requirements.md` §10.2)
+}

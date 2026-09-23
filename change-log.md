@@ -10383,6 +10383,13 @@ operator rather than dying on it.
 per 50 ms unless the one before has ended, the first that completes and
 binds kept, where the code had dialled every candidate at once: 435 of 455.
 
+**The no-history audit.** A catalog query, a role table and the prekey
+service keep what §1 and §10.2 of the infra requirements allow and nothing
+else, now asserted: the query records nothing, the table holds the current
+row and one provenance mark that goes with it (and a member's row can now be
+removed outright), the service holds one bundle and one pool per device with
+no prior bundle and no time of deposit: 438 of 455.
+
 **Counts checked.** 2,296 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,264 citations across `models/` and the
 workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the

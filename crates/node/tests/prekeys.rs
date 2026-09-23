@@ -750,3 +750,71 @@ fn an_upgrade_removes_the_requester_subject_log_an_earlier_version_left_behind()
     assert!(!root.join("issued").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// acceptance: SUB-13
+#[test]
+fn sub_13_a_node_holds_the_current_bundle_and_pool_and_no_history_of_them() {
+    let dir = std::env::temp_dir().join(format!("rhtn-prekey-nohistory-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut svc = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+    let inspect = |svc: &PrekeyService, bundle: &[u8], pool: usize, note: &str| {
+        assert_eq!(
+            svc.bundle(&kh("alice")).map(|b| b.as_slice()),
+            Some(bundle),
+            "{note}: the current bundle"
+        );
+        assert_eq!(
+            svc.bundles_of(&kh("alice")).len(),
+            1,
+            "{note}: no prior bundle"
+        );
+        assert_eq!(
+            svc.pool_size(&kh("alice")),
+            pool,
+            "{note}: the current pool"
+        );
+        // on disk: the bundle and the keys, named by order and never by time
+        let d = dir
+            .join("prekeys")
+            .join(
+                kh("alice")
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>(),
+            )
+            .join("any");
+        let mut names: Vec<String> = std::fs::read_dir(&d)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names.iter().filter(|n| *n == "bundle").count(),
+            1,
+            "{note}: one bundle file"
+        );
+        assert_eq!(
+            names.iter().filter(|n| n.starts_with("otk-")).count(),
+            pool,
+            "{note}: one file per key held"
+        );
+        assert!(
+            names.iter().all(|n| n == "bundle" || n.starts_with("otk-")),
+            "{note}: nothing else: {names:?}"
+        );
+    };
+    let b1 = bundle_for("alice", b"first material", 1_800_000_000);
+    svc.publish(&ids(), &b1).unwrap();
+    assert!(svc.stock(kh("alice"), vec![b"k1".to_vec()]));
+    inspect(&svc, &b1, 1, "after the first publication and deposit");
+    let b2 = bundle_for("alice", b"second material", 1_800_003_600);
+    svc.publish(&ids(), &b2).unwrap();
+    assert!(svc.stock(kh("alice"), vec![b"k2".to_vec()]));
+    inspect(&svc, &b2, 2, "after the second");
+    // after a save and a restart, the same and nothing more
+    svc.save(&dir).unwrap();
+    let again = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
+    inspect(&again, &b2, 2, "after a restart");
+    let _ = std::fs::remove_dir_all(&dir);
+}

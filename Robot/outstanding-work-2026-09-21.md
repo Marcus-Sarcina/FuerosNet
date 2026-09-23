@@ -234,7 +234,7 @@ Whether it is a description of ICE or a requirement on this implementation is
 a reading for the author (section 8); re-deriving the entries without settling
 it would quote a rule the code does not follow.
 
-### 2.5 The no-history rule for every request class
+### 2.5 The no-history rule for every request class — **audited 2026-09-22**
 
 `infra-client-requirements.md` §1 (`31c39d0`, 2026-09-18) states process-and-discard
 once for every request class, naming catalog queries, currency fallbacks,
@@ -863,10 +863,10 @@ land on their own.
    PAY-20, SUB-12), which closes the three plumbed-not-done items of step
    3; the light client's held delegations (TOP-43); acknowledgements
    travelling as kind 3, issued and taken in a running node (TOP-44); the
-   direct path's checks in RFC 8445's order and at its pace (TRV-11).
-   Next: the no-history audit (RSC-41, RSC-42, SUB-13); section 2.6's
-   confirmations; the light client and FFI holding a delegation and no
-   seed.
+   direct path's checks in RFC 8445's order and at its pace (TRV-11);
+   the no-history audit of section 2.5 (RSC-41, RSC-42, SUB-13). Next:
+   section 2.6's confirmations; the light client and FFI holding a
+   delegation and no seed.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

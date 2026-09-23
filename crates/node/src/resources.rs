@@ -151,6 +151,33 @@ impl Gateway {
         self.rows.get(&(*resource, *member))
     }
 
+    /// Remove a member's row for a resource: the row, its provenance mark
+    /// and the member's hosted session go together, and nothing says what
+    /// the row used to be (`infra-client-requirements.md` §10.2: the table
+    /// keeps no history of replaced rows).
+    pub fn clear_row(&mut self, resource: Keyhash, member: Keyhash) {
+        self.rows.remove(&(resource, member));
+        self.derived.remove(&(resource, member));
+        self.sessions.remove(&(member, resource));
+    }
+
+    /// Whether the row for this pair was written by a standing grant
+    /// rather than set for the member by name: the one provenance mark the
+    /// table keeps, and it exists only while the row does.
+    pub fn is_derived(&self, resource: &Keyhash, member: &Keyhash) -> bool {
+        self.derived.contains(&(*resource, *member))
+    }
+
+    /// Every row held, for an inspection that the table holds the current
+    /// rows and nothing else.
+    pub fn rows(&self) -> Vec<((Keyhash, Keyhash), Row)> {
+        self.rows.iter().map(|(k, r)| (*k, r.clone())).collect()
+    }
+
+    pub fn hosted_sessions(&self) -> usize {
+        self.sessions.len()
+    }
+
     /// A grant standing over every member of the owner's trust horizon.
     ///
     /// **This is the simplest predicate there is** — the one

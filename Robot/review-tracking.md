@@ -10970,3 +10970,41 @@ one with a closed port whose refusal lets the next start early. The three
 ICE entries the note listed as stale wording (TRV-02, TRV-07, PAY-15) name
 no order in their given, when or then, so nothing there is re-derived. 435
 of 455.
+
+## The no-history audit (2026-09-22)
+
+Section 2.5 of the note: `infra-client-requirements.md` §1 states
+process-and-discard for every request class and §10.2 has the role table
+keep no history of replaced rows; the code predated the wording. Read
+class by class:
+
+- **Catalog queries.** `CatalogService::answer` takes the service by shared
+  reference and can record nothing; the only state is the entries and the
+  reports a resource files for its owner. RSC-41 asserts the service's
+  state and the node's written-back derived view unchanged across two
+  queries.
+- **Role tables.** `Gateway` holds `rows` keyed by (resource, member), the
+  current row alone, and `derived`, the one provenance mark, which says a
+  row came from a standing grant and exists only while the row does; the
+  table has no store of its own, being rebuilt at start from the hosting
+  file. `clear_row` is new: removal took a grant's rewrite before, and
+  the operator's own path had no way to remove a member. RSC-42 sets
+  reader, then editor, then removes, and finds one row, then none, and no
+  mark. `Gateway::attempts`, a count of handoffs per resource kept in
+  memory for a test to count, names no member and no request, and is the
+  one number in the gateway that is not a row; noted, not removed.
+- **Publications and deposits.** The prekey service holds one bundle and
+  one pool per device; a publication replaces the bundle in memory and on
+  disk, a deposit adds to the pool, and the key files are named by a
+  stocking counter, never by time. SUB-13 publishes and deposits twice
+  and finds, in memory, on disk and after a restart, the second bundle and
+  the two keys and nothing else. The stocking counter survives in the
+  names so a served key's name is never reused; it counts keys stocked,
+  not publications, and carries no time.
+- **Currency.** `NodeView::asks` holds this node's own outstanding
+  fallback queries by nonce and drops each on its reply; `CurrencyState::
+  unreachable` is the ladder's own state per subject (design §12.6.5.1),
+  not a record of who asked; issuance keeps nothing. No entry was owed
+  here and none is added.
+
+438 of 455.

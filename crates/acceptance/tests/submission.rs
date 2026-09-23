@@ -3,22 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Keep no history of publications and deposits beyond the bundle and the pool they produced
-///
-/// Spec: infra-client-requirements.md §1
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §1): "a publication or deposit that it is making itself reachable"
-///
-/// Given: Node N; client S publishes a bundle, deposits keys, publishes again with a new bundle and deposits again.
-/// When: N's state is inspected after each, and after a save and restart.
-/// Then: N holds S's current bundle and its current pool and nothing else: no prior bundle, no count of publications, no times of deposit.
-#[test]
-#[ignore = "acceptance SUB-13: owed at milestone after-5"]
-fn sub_13_keep_no_history_of_publications_and_deposits_bey() {
-    todo!("SUB-13: Keep no history of publications and deposits beyond the bundle and the pool they produced")
-}
-
 /// Post a content-free doorbell to the registered endpoint when a message arrives for an offline client, and log nothing
 ///
 /// Spec: infra-client-requirements.md §6.1
