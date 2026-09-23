@@ -70,8 +70,8 @@ impl Storage for Shell {
     }
 }
 
-fn platform_of(s: Arc<Shell>) -> Platform {
-    Platform {
+fn platform_of(s: Arc<Shell>) -> Arc<Platform> {
+    Arc::new(Platform {
         proximity: s.clone(),
         camera: s.clone(),
         clock: s.clone(),
@@ -79,7 +79,7 @@ fn platform_of(s: Arc<Shell>) -> Platform {
         operator: s.clone(),
         notices: s.clone(),
         storage: s,
-    }
+    })
 }
 
 /// No sessions at all: for a view that is only being set up.
@@ -321,7 +321,7 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
         .unwrap()
         .expect_err("nothing to fail over to")
     };
-    assert!(e.reason.contains("no cached siblings"), "{e}");
+    assert!(e.reason().contains("no cached siblings"), "{e}");
     assert_eq!(alice3.status(), Status::Detached);
     let _ = (n, s);
 }
@@ -544,7 +544,7 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         .await
         .unwrap()
         .expect_err("no path and no relay");
-    assert!(e.reason.contains("unsent"), "{e}");
+    assert!(e.reason().contains("unsent"), "{e}");
     assert_eq!(n.node.relayed(), relayed + 1, "and bob saw nothing");
     // the fallback, once allowed again: through bob, queued for carol
     alice.set_path(PathPolicy::Auto);

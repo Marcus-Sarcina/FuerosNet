@@ -1,0 +1,31 @@
+# The gate, as GitLab runs it.  Lives under crates/ because the repository's
+# root holds the design documents alone; the project's CI/CD setting "CI/CD
+# configuration file" must point at `crates/.gitlab-ci.yml`.
+#
+# The job needs a runner that can run Docker images (a shared runner, or
+# `gitlab-runner` registered on a machine with Docker).  The Kotlin step
+# needs a JDK and the Kotlin compiler; both are installed below, so the gate
+# runs its round trip here rather than skipping it.
+gate:
+  image: rust:1-bookworm
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    KOTLIN_VERSION: "2.4.20"
+    JNA_VERSION: "5.17.0"
+  cache:
+    key: gate
+    paths:
+      - .cargo/
+      - crates/target/
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
+    - rustup component add rustfmt clippy
+    - cargo install cargo-deny cargo-sweep --locked
+    - mkdir -p "$HOME/opt/downloads" && cd "$HOME/opt"
+    - curl -sSL -o kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip" && unzip -q kotlin.zip
+    - curl -sSL -o "downloads/jna-$JNA_VERSION.jar" "https://repo1.maven.org/maven2/net/java/dev/jna/jna/$JNA_VERSION/jna-$JNA_VERSION.jar"
+    - cd "$CI_PROJECT_DIR"
+  script:
+    - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 RHTN_JNA_JAR="$HOME/opt/downloads/jna-$JNA_VERSION.jar"
+    - export PATH="$HOME/opt/kotlinc/bin:$PATH"
+    - cd crates && ./check.sh

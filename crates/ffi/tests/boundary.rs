@@ -108,8 +108,8 @@ impl Notices for Shell {
     }
 }
 
-fn platform_of(shell: Arc<Shell>) -> Platform {
-    Platform {
+fn platform_of(shell: Arc<Shell>) -> Arc<Platform> {
+    Arc::new(Platform {
         proximity: shell.clone(),
         camera: shell.clone(),
         clock: shell.clone(),
@@ -117,7 +117,7 @@ fn platform_of(shell: Arc<Shell>) -> Platform {
         operator: shell.clone(),
         notices: shell.clone(),
         storage: shell,
-    }
+    })
 }
 
 fn seeds(name: &str) -> Vec<u8> {
@@ -208,11 +208,11 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
     let e = p.begin(vec![1, 2, 3], vec![], true).unwrap_err();
-    assert!(e.reason.contains("32 bytes"), "{e}");
+    assert!(e.reason().contains("32 bytes"), "{e}");
     let Err(e) = Participant::start(vec![0; 10], vec![], platform_of(shell)) else {
         panic!("ten bytes is not an identity")
     };
-    assert!(e.reason.contains("64 bytes of seed"), "{e}");
+    assert!(e.reason().contains("64 bytes of seed"), "{e}");
 }
 
 // acceptance: DMN-10
@@ -231,7 +231,7 @@ fn randomness_of_short_measure_is_refused_and_the_shell_is_told() {
         panic!("short measure was accepted")
     };
     // and it reaches the shell as a value, not as a process that vanished
-    assert!(e.reason.contains("could not be built"), "{e}");
+    assert!(e.reason().contains("could not be built"), "{e}");
 }
 
 // ------------------------------------- the kernel's own side of the wire
@@ -510,7 +510,7 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
         .await
         .unwrap()
         .unwrap_err();
-    assert!(e.reason.contains("no serving node is attached"), "{e}");
+    assert!(e.reason().contains("no serving node is attached"), "{e}");
 
     // an address that is not one is a refusal carrying its reason, and an
     // attach with none is refused before anything is dialled
@@ -521,13 +521,13 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     .await
     .unwrap()
     .unwrap_err();
-    assert!(e.reason.contains("is not an address"), "{e}");
+    assert!(e.reason().contains("is not an address"), "{e}");
     let q = p.clone();
     let e = tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![], vec![]))
         .await
         .unwrap()
         .unwrap_err();
-    assert!(e.reason.contains("at least one address"), "{e}");
+    assert!(e.reason().contains("at least one address"), "{e}");
 
     // nothing arrived for this client, and asking says so rather than
     // blocking forever
@@ -619,7 +619,7 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
     .unwrap()
     .expect_err("the node refused it, and the application is told");
     assert!(
-        e.reason.contains("unsent"),
+        e.reason().contains("unsent"),
         "the reason says the work was not done: {e}"
     );
     assert_eq!(
@@ -634,7 +634,7 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
 /// delegated over it; it attaches under the delegation, its bundle is
 /// signed on the phone and published under its own device, and what her
 /// key signs is refused on it.
-// acceptance: DMN-13
+// acceptance: DMN-27
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_what_the_phone_signed()
  {
@@ -947,7 +947,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         .unwrap()
         .expect("refused")
     };
-    assert!(e.reason.contains("does not open"), "{e}");
+    assert!(e.reason().contains("does not open"), "{e}");
 
     // a backup made by alice restores into an empty kernel and is written
     // to its storage; into one that has records it would be refused, which
@@ -983,5 +983,5 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             .unwrap()
             .expect_err("a wrong passphrase opens nothing")
     };
-    assert!(e.reason.contains("Secret"), "{e}");
+    assert!(e.reason().contains("Secret"), "{e}");
 }

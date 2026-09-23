@@ -10434,8 +10434,34 @@ message.  The courier carries a catalog query and the client takes each
 reply; the shell sweeps and reads the entries with the node that served
 them.
 
+**The third conformance run is commissioned.** The reviewer's harness stands
+at 67 of 67 in the gate at `dbeaecd`, where the pins are green; a brief for
+the run names the kernel paths the last run could not reach, the two node
+rules that work exposed, and the decisions still the author's. MPL-2.0 joins
+the licence allow-list as ruled on 2026-09-16.
+
+**Four readings ruled** [author, 2026-09-23]. Push kind 2 for a delegation,
+the number the wire, the vectors and the codec have carried since the 22nd.
+The ceiling of eight bundles per prekey reply. The device count a prekey
+fetch reveals, priced in §19 as P39. And the acknowledgement's acceptors,
+read within its storage reach: §11.2.1.1 names the nodes within two edges
+of the acknowledged node, the patron's siblings in practice, where it named
+the grandpatron's siblings and the great-grandpatron, who never hold it.
+
+**`functional_tests.md` is a shared document** [author, 2026-09-23]: rows are
+added whenever the base documents define new functionality, the reviewer
+reviews and adds what they discover, and removal needs the author's approval.
+APP-010 and MAIL-012 join it for the device holding a delegation and no seed.
+
+**The Kotlin binding exists and is driven.** The facade carries `uniffi`'s
+annotations, the generated Kotlin compiles, and a Kotlin shell starts two
+participants against a real node, attaches, and sends and receives through
+the binding; the gate runs that trip where a JDK and the Kotlin compiler are
+found. Four boundary shapes changed for the generator: the refusal is an enum,
+tuples became records, the platform crosses by reference.
+
 **Counts checked.** 2,305 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,424 citations across `models/` and the
-workspace resolve; check.py 439 of 455 implemented, 0 flags, stubs in sync; the
+workspace resolve; check.py 441 of 457 implemented, 0 flags, stubs in sync; the
 test-vector pins are current on all three documents; the gate's 19 hashes match,
 `cargo deny` clean.

@@ -581,10 +581,14 @@ do in tests.
   departure, or standing and evaluation**; `rhtn-client` has 5, 6, 8, 1 and 1
   public functions for those respectively. Milestone 13's exit criterion
   names recovery. Add delegation issuance and import (section 2.1).
-- **`uniffi`** was decided on 2026-09-16 and is absent from `crates/ffi/Cargo.toml`.
+- ~~**`uniffi`** was decided on 2026-09-16 and is absent from `crates/ffi/Cargo.toml`.
   The remaining half of milestone 13 is one generated binding compiling
   against the facade, and a real round trip through it rather than
-  compilation alone.
+  compilation alone.~~ **Done 2026-09-23** on this machine: `uniffi` 0.32
+  in the facade, the Kotlin binding generated and compiled, and a round trip
+  from Kotlin against a real node as the gate's step 4b (`review-tracking.md`).
+  CI is written (`crates/.gitlab-ci.yml`) and waits on a runner and the
+  project's configuration path, both the author's.
 - ~~**`acceptance/tools/catalogue.py`** extended to `.kt` and `.swift`,
   milestone 14's first commit.~~ **Done 2026-09-22.**
 - **The administration channel.** `infra-client-requirements.md` §8.2 and
@@ -593,7 +597,14 @@ do in tests.
   archive and captures, and *this document set does not specify the channel*.
   `app-requirements-notes.md` section 5 still holds *what state does it read,
   at what rate, and over which stream* open. Decide before `rhtn-daemon`
-  grows a page server.
+  grows a page server. **The author's description [2026-09-23]**: a frame in
+  the light client holding a graphical administration page served by the
+  node, so infra and light client share neither a version nor a vendor and a
+  node's further features are not constrained by the protocol; opened over
+  the same remote administration channel the light client uses to reach the
+  node's host, TLS or the like, not over the `rhtn/1` session. What the page
+  reads and at what rate are then the node's page's own business. Whether
+  this closes the question is the author's to say.
 - **The two client modes** (before and after an instance) and their
   state-keyed notices (`app-requirements-notes.md` section 1).
 - **Provider ordering** (`light-client-requirements.md` §6) needs the peering
@@ -804,13 +815,12 @@ land on their own.
    attach speaks for a device), design §14.1.6 (a queue per device),
    `light-client-requirements.md` §4.1 and `infra-client-requirements.md` §6.
    PAY-01, PAY-04, PAY-06, PAY-12, SUB-02 and QUE-05 re-derived and five of
-   their tests unmarked; SUB-12, PAY-20, QUE-21 and SES-26 added. Three numbers
-   are the assistant's pending the author: the ceiling of eight bundles per
-   reply; the register row for a fetch revealing a subject's device count,
-   stated in §7.8 and not yet priced in design §19; and, from step 5
-   (2026-09-22), `TopologyPush` body kind 2 for a `Delegation`, which §10.1's
-   prose carried since 09-21 while its CDDL and identity table stopped at 1.
-   Kind 3 for a `SubtreeAck` was the author's [2026-09-22]. **One reading
+   their tests unmarked; SUB-12, PAY-20, QUE-21 and SES-26 added. The three
+   numbers entered as the assistant's on the 22nd **are the author's
+   [2026-09-23]**: the ceiling of eight bundles per reply; the register row
+   for a fetch revealing a subject's device count, now design §19 P39; and
+   `TopologyPush` body kind 2 for a `Delegation`. Kind 3 for a `SubtreeAck`
+   was the author's [2026-09-22]. **One reading
    is the author's too**: design §11.2.1 names the grandpatron's siblings
    and the great-grandpatron as the parties who may accept an
    acknowledgement, and §10.1.1 carries it only as far as the acknowledged
@@ -887,15 +897,16 @@ land on their own.
    2.6's five confirmations; the light client and the boundary on a device
    holding a delegation and no seed, with the backup's provider slot
    (ARC-28). **Step 5 is complete 2026-09-22** but for what waits on the
-   author: kind 2, the ceiling of eight, the §19 row, and the reach of
-   §11.2.1 against §10.1.1. **Step 6 in progress**: the durable lifecycle
+   author, all four ruled 2026-09-23: kind 2, the ceiling of eight, the
+   §19 row (P39), and the reach of §11.2.1 read within §10.1.1's storage
+   reach (design §11.2.1.1 reworded; TOP-44 re-derived). **Step 6 in progress**: the durable lifecycle
    and the storage seam; failover, status and the maintenance contract
    inside the kernel; the direct path joined with its override; the
    catalog branch, the capability matrix (`Robot/capability-matrix.md`) and
-   the `.kt`/`.swift` walk, all landed 2026-09-22. `uniffi` waits on a
-   machine with a Kotlin or Swift toolchain (MPL-2.0 is on `deny.toml`'s
-   allow-list, as ruled 2026-09-16); the administration channel is the
-   author's.
+   the `.kt`/`.swift` walk, all landed 2026-09-22. `uniffi` landed
+   2026-09-23 with the Kotlin round trip in the gate; the administration
+   channel is described by the author and awaits his word that the
+   description closes it.
    Next: step 7.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
@@ -908,7 +919,11 @@ land on their own.
    resource paths for a resource-first one.
 7. **The reviewer harness** (section 5): the one initializer, the status
    files, and a third conformance run at a commit where the pins are green,
-   reaching the paths step 6 integrated.
+   reaching the paths step 6 integrated. **This side's part done
+   2026-09-23**: the initializer repaired on the 22nd, the status files
+   superseded by the gate's run of the harness (67 of 67 at `dbeaecd`), the
+   commit green and the brief at `Robot/conformance-run-3-brief.md`; the
+   run itself is the reviewer's, commissioned by the author. **Ruled [author, 2026-09-23]: within storage reach**; design §11.2.1.1 now names the acceptors as the nodes within the acknowledgement's own reach, the patron's siblings in practice.
 
 **Exit for milestone A, through generated bindings**: a shell opens durable
 state, attaches with the supported credential, observes its connection status,

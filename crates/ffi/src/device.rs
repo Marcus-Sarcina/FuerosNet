@@ -26,6 +26,7 @@ use std::sync::Arc;
 /// **A channel the hardware lacks is not listed**, and one that failed is
 /// reported as failed: nothing is promoted, and the strongest that passed
 /// is the client's to decide (`light-client-requirements.md` §1.3).
+#[uniffi::export(with_foreign)]
 pub trait Proximity: Send + Sync {
     fn supported(&self) -> Vec<Channel>;
     fn run(&self, channel: Channel, peer: Vec<u8>) -> ChannelOutcome;
@@ -39,6 +40,7 @@ pub trait Proximity: Send + Sync {
 /// to the frame, location among it, does not come inward
 /// (`light-client-requirements.md` §1.3): the shell hands over the image
 /// and nothing beside it.
+#[uniffi::export(with_foreign)]
 pub trait Camera: Send + Sync {
     fn capture(&self, ask: Ask) -> Vec<u8>;
 }
@@ -49,12 +51,14 @@ pub trait Camera: Send + Sync {
 /// witness's tolerance check without saying so
 /// (`light-client-requirements.md` §1.2), so what the platform reports is
 /// what the ceremony reads.
+#[uniffi::export(with_foreign)]
 pub trait Clock: Send + Sync {
     fn now_ms(&self) -> u64;
     fn wait_ms(&self, ms: u64);
 }
 
 /// The platform's randomness.
+#[uniffi::export(with_foreign)]
 pub trait Random: Send + Sync {
     fn fill(&self, n: u32) -> Vec<u8>;
 }
@@ -64,6 +68,7 @@ pub trait Random: Send + Sync {
 /// **The one party a client may ask a question**, and only where the
 /// documents say to ask rather than tell: witnessing, querying and
 /// answering ask none (design Appendix A.3).
+#[uniffi::export(with_foreign)]
 pub trait Operator: Send + Sync {
     fn ask(&self, question: String) -> bool;
 }
@@ -75,6 +80,7 @@ pub trait Operator: Send + Sync {
 /// what is written there, one opaque blob under a name, and reads it back
 /// at the next start.  **The seed is never written through this**: it is
 /// the platform's key storage's, and the shell supplies it at every start.
+#[uniffi::export(with_foreign)]
 pub trait Storage: Send + Sync {
     /// The bytes last written under `name`, or nothing.
     fn read(&self, name: String) -> Option<Vec<u8>>;
@@ -83,12 +89,13 @@ pub trait Storage: Send + Sync {
     fn write(&self, name: String, bytes: Vec<u8>) -> bool;
 }
 
+#[uniffi::export(with_foreign)]
 pub trait Notices: Send + Sync {
     fn told(&self, notice: Told);
 }
 
 /// Everything a shell supplies, in one object it hands over once.
-#[derive(Clone)]
+#[derive(Clone, uniffi::Object)]
 pub struct Platform {
     pub proximity: Arc<dyn Proximity>,
     pub camera: Arc<dyn Camera>,

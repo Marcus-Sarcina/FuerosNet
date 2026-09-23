@@ -270,7 +270,7 @@ pub fn take_back(s: &str) -> Result<Vec<Vec<Vec<u8>>>, String> {
 }
 
 /// One signer and what it signed.
-pub type Entry = (Vec<u8>, Vec<u8>);
+pub type Entry = rhtn_ffi::client::SignedEntries;
 
 /// `<keyhash>:<signature>` pairs, one per signer, in signer order.
 pub fn take_entries(s: &str) -> Result<Vec<Entry>, String> {
@@ -278,10 +278,10 @@ pub fn take_entries(s: &str) -> Result<Vec<Entry>, String> {
         .iter()
         .map(|one| {
             let p: Vec<&str> = one.split(':').collect();
-            Ok((
-                bytes(field(&p, 0, "an entry")?, "a signer")?,
-                bytes(field(&p, 1, "an entry")?, "a signature")?,
-            ))
+            Ok(rhtn_ffi::client::SignedEntries {
+                signer: bytes(field(&p, 0, "an entry")?, "a signer")?,
+                entries: bytes(field(&p, 1, "an entry")?, "a signature")?,
+            })
         })
         .collect()
 }

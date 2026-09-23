@@ -311,6 +311,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | MAIL-009 | C | Preserve ciphertext unchanged across serving nodes, queue and RelayedPayload. The peer/key hint is a routing hint, not authenticated authorship; use end-to-end authentication for the delivered sender identity. | W §§7.10, 8.2; D §14.2 |
 | MAIL-010 | S | SubmissionReply echoes the request nonce and exactly the defined codes 0 accepted, 1 refused, 2 unknown. Do not append invented explanatory fields to unsigned replies or report storage failure as accepted. | W §7.10 |
 | MAIL-011 | E | Persist one-time consumption/custody before acknowledging success; inject failure between validation, durable write and reply. Retrying after an ambiguous reply may not disclose the same one-time prekey twice or lose acknowledged stored ciphertext. | I §§2, 6; W §§7.8, 7.10 |
+| MAIL-012 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
 
 ### Mailbox retention, delivery and external wake
 
@@ -607,6 +608,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | APP-007 | C | Accept a user-selected external wake endpoint/key through the platform into the kernel; acquisition and service account ownership stay outside it. Do not secretly register with a vendor merely because the participant started. | L §§4.1, 9; D §14.1.5 |
 | APP-008 | C | On mobile suspension/offline termination retain the persistent identity, archive and obligations needed for later reconnect; perform background work only within OS capabilities. Foreground operation remains useful with no push permission. | D §§14.1.0, 14.1.4–14.1.6; L §§2, 4 |
 | APP-009 | O | Supply Android camera/radio/keystore/lifecycle and iOS equivalents plus generated bindings, then test on actual supported devices. Rust facade/instrument tests cannot satisfy product consent, camera, OS wake or durable backup claims. | L §§1, 2, 4, 9–10; D §§14.1.4, 24 |
+| APP-010 | C | A device holding a delegation and no seed starts from the identity's key material, a transport seed of its own and the run the ceremony device signed; it attaches under the delegation, is a payload endpoint of its own with material it generated, and refuses by name every act of the identity key: consent, a verifier's answer, a body, witness and departure signatures, a recovery response, and delegation issuance. Refuse a start with no delegation or with a delegation by another identity. | D §23.3; W §§7.8, 8.2; L §§3, 4.2 |
 
 ### Human authorization, privacy choices and warnings
 

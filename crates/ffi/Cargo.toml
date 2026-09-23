@@ -6,7 +6,26 @@ license.workspace = true
 authors.workspace = true
 description = "The boundary the mobile shells bind to: one facade over rhtn-client and rhtn-adaptors, and the platform's devices passed inward"
 
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[features]
+# the binding generator's command line, for `cargo run --features cli --bin uniffi-bindgen`
+cli = ["uniffi/cli"]
+# a serving node and test identities exported to a binding's round trip;
+# never in a shell's build
+harness = ["dep:rhtn-node", "dep:rhtn-codec"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
+
 [dependencies]
+# MPL-2.0, allowed for the binding generator [author, 2026-09-16]
+uniffi = "0.32"
+rhtn-node = { path = "../node", optional = true }
+rhtn-codec = { path = "../codec", optional = true }
 rhtn-adaptors = { path = "../adaptors" }
 rhtn-archive = { path = "../archive" }
 rhtn-client = { path = "../client" }

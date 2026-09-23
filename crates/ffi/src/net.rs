@@ -30,7 +30,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 /// What an attach achieved, as a screen shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Attached {
     pub serving: Id,
     /// False on a sibling: the session holds the replicated state but not
@@ -45,7 +45,7 @@ pub struct Attached {
 
 /// Where a client asks to be rung (design §14.1.5), as the shell hands it
 /// over.  **The shell obtains it; this side never does.**
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Wake {
     pub url: String,
     /// What the posted body is encrypted to.
@@ -59,7 +59,7 @@ pub struct Wake {
 /// the shell's to state**: direct reveals this device's address to a peer
 /// inside the horizon; relayed reveals the communication graph to the
 /// serving node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum PathPolicy {
     /// The direct path where a peer inside the horizon answers, the relay
     /// otherwise (design §14.1.1).
@@ -72,7 +72,7 @@ pub enum PathPolicy {
 
 /// The connection as a screen shows it (`light-client-requirements.md`
 /// §4: the user is told when attachment is degraded, and when it is gone).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Status {
     /// No session: never attached, or detached on purpose.
     Detached,
@@ -90,7 +90,7 @@ pub enum Status {
 }
 
 /// Something that arrived, already decrypted; or the connection changing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Event {
     /// The connection changed: a failover began, landed on a sibling, or
     /// found none.

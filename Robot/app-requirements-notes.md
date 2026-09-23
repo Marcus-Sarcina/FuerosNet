@@ -314,6 +314,10 @@ gets an answer.
   for §2.1.
 - **The administration page.** What state does it read, at what rate, and over
   which stream? §8.1 bounds it to what to draw — a count, a keyhash, a time.
+  *Described [author, 2026-09-23]*: a frame in the light client holding a
+  graphical page the node serves, opened over the remote administration channel
+  the client uses to reach the node's host (TLS or the like), never the
+  `rhtn/1` session; what the page reads and how often is the node's own.
 - ~~**Custody on the phone.**~~ **Decided** [author, 2026-09-16]: **the
   control-plane credential is persisted inside design §13.7.1's backup
   envelope.** Encrypted under a passphrase and held on a controlled device it is

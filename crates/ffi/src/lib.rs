@@ -24,7 +24,11 @@
 //! choice is the author's. Until it is made the facade is plain Rust, which
 //! is what a generator would read anyway.
 
+uniffi::setup_scaffolding!();
+
 pub mod client;
 pub mod device;
+#[cfg(feature = "harness")]
+pub mod harness;
 pub mod net;
 pub mod types;

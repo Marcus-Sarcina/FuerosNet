@@ -128,6 +128,15 @@ else
   echo "  nightly toolchain or cargo-fuzz absent: smoke skipped (seeded runs above still ran)"
 fi
 
+echo "=== 4b. The Kotlin binding, generated, compiled and driven (skipped where no JDK or kotlinc) ==="
+# milestone 13's second half: one generated binding compiling and one round
+# trip through it, against a real node, from Kotlin.  Absent toolchains skip
+# and say so; a failure fails the gate.
+"$HERE/tools/kotlin-roundtrip.sh"; rc=$?
+if [ "$rc" -eq 0 ]; then echo "  kotlin round trip: ok"
+elif [ "$rc" -eq 3 ]; then :
+else echo "  kotlin round trip: FAILED"; fail=1; fi
+
 echo "=== 5. Build cache ==="
 # whatever this pass did not build is stale; the fuzz build under codec/
 # has a target of its own and is small

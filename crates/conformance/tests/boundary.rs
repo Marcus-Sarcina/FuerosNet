@@ -14,7 +14,7 @@ impl Random for Shell {fn fill(&self,n:u32)->Vec<u8>{vec![19;n as usize]}}
 impl Operator for Shell {fn ask(&self,_:String)->bool {true}}
 impl Notices for Shell {fn told(&self,_:Told){}}
 impl Storage for Shell {fn read(&self,_:String)->Option<Vec<u8>>{None} fn write(&self,_:String,_:Vec<u8>)->bool{true}}
-fn platform()->Platform {let s=Arc::new(Shell);Platform {proximity:s.clone(),camera:s.clone(),clock:s.clone(),random:s.clone(),operator:s.clone(),notices:s.clone(),storage:s}}
+fn platform()->Arc<Platform> {let s=Arc::new(Shell);Arc::new(Platform {proximity:s.clone(),camera:s.clone(),clock:s.clone(),random:s.clone(),operator:s.clone(),notices:s.clone(),storage:s})}
 fn seeds(n:&str)->Vec<u8> {let mut b=rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{n}:ed25519-seed").as_bytes()).to_vec();b.extend(rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{n}:ml-dsa-65-seed").as_bytes()));b}
 
 #[tokio::test(flavor="multi_thread",worker_threads=4)]

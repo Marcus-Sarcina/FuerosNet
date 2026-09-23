@@ -93,7 +93,8 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
         );
-        let client = Participant::start(seeds, known, p).map_err(|e| e.reason)?;
+        let client =
+            Participant::start(seeds, known, Arc::new(p)).map_err(|e| e.reason().to_string())?;
         Ok(Instrument { client, shell })
     }
 
@@ -136,7 +137,7 @@ impl Instrument {
                 let a = self
                     .client
                     .attach(node, addrs, pop?)
-                    .map_err(|e| e.reason)?;
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!(
                     "attached serving={} primary={} queued={}",
                     hex(&a.serving),
@@ -146,7 +147,7 @@ impl Instrument {
             }
 
             ["maintain"] => {
-                self.client.maintain().map_err(|e| e.reason)?;
+                self.client.maintain().map_err(|e| e.reason().to_string())?;
                 Ok(vec!["maintained".into()])
             }
 
@@ -155,12 +156,14 @@ impl Instrument {
                     .parse()
                     .map_err(|_| format!("`{kind}` is not a payload kind"))?;
                 let bytes = unhex(body).ok_or_else(|| format!("`{body}` is not hex"))?;
-                self.client.send(id(to)?, k, bytes).map_err(|e| e.reason)?;
+                self.client
+                    .send(id(to)?, k, bytes)
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["sent".into()])
             }
 
             ["wake", "off"] => {
-                self.client.wake(None).map_err(|e| e.reason)?;
+                self.client.wake(None).map_err(|e| e.reason().to_string())?;
                 Ok(vec!["wake off".into()])
             }
             ["wake", url, key, rest @ ..] => {
@@ -179,7 +182,7 @@ impl Instrument {
                         key,
                         lapses_at,
                     }))
-                    .map_err(|e| e.reason)?;
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["wake set".into()])
             }
 
@@ -205,7 +208,8 @@ impl Instrument {
                 .client
                 .reachable()
                 .iter()
-                .map(|(n, a)| {
+                .map(|r| {
+                    let (n, a) = (&r.node, &r.addresses);
                     format!(
                         "reachable {} at={}",
                         hex(n),
@@ -298,12 +302,14 @@ impl Instrument {
                 };
                 let i = c
                     .begin(id(counterparty)?, nominees, initiator)
-                    .map_err(|e| e.reason)?;
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!("intent {}", carry::pack_intent(&i))])
             }
             ["intent", from, blob] => {
                 let i = carry::take_intent(blob)?;
-                let id = c.take_intent(id(from)?, i).map_err(|e| e.reason)?;
+                let id = c
+                    .take_intent(id(from)?, i)
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!("ceremony {}", hex(&id))])
             }
             ["ceremony"] => {
@@ -313,40 +319,43 @@ impl Instrument {
             }
 
             ["proximity"] => {
-                let a = c.proximity().map_err(|e| e.reason)?;
+                let a = c.proximity().map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!("channels {}", carry::pack_channels(&a))])
             }
             ["take-channels", blob] => {
                 c.take_channels(carry::take_channels(blob)?)
-                    .map_err(|e| e.reason)?;
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["channels taken".into()])
             }
 
             ["capture-key"] => Ok(vec![format!(
                 "capture-key {}",
-                hex(&c.capture_key().map_err(|e| e.reason)?)
+                hex(&c.capture_key().map_err(|e| e.reason().to_string())?)
             )]),
             ["capture", key] => {
-                c.capture(bytes(key)?).map_err(|e| e.reason)?;
+                c.capture(bytes(key)?).map_err(|e| e.reason().to_string())?;
                 Ok(vec!["captured".into()])
             }
 
             ["verifiers"] => Ok(c
                 .select_verifiers()
-                .map_err(|e| e.reason)?
+                .map_err(|e| e.reason().to_string())?
                 .iter()
                 .map(|s| format!("verifier {} basis={}", hex(&s.verifier), s.basis))
                 .collect()),
             ["query", verifier] => Ok(vec![format!(
                 "query {}",
-                hex(&c.query_for(id(verifier)?).map_err(|e| e.reason)?)
+                hex(&c
+                    .query_for(id(verifier)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
-            ["consent", query] => Ok(vec![
-                match c.consent(bytes(query)?).map_err(|e| e.reason)? {
-                    None => "consent none".into(),
-                    Some(s) => format!("consent {}", hex(&s)),
-                },
-            ]),
+            ["consent", query] => Ok(vec![match c
+                .consent(bytes(query)?)
+                .map_err(|e| e.reason().to_string())?
+            {
+                None => "consent none".into(),
+                Some(s) => format!("consent {}", hex(&s)),
+            }]),
             ["request", query, consent, basis] => {
                 let b: u32 = basis
                     .parse()
@@ -355,19 +364,20 @@ impl Instrument {
                     "request {}",
                     hex(&c
                         .request(bytes(query)?, bytes(consent)?, b)
-                        .map_err(|e| e.reason)?)
+                        .map_err(|e| e.reason().to_string())?)
                 )])
             }
             ["take-query", from, blob] => Ok(vec![answered(
                 c.take_query(id(from)?, bytes(blob)?)
-                    .map_err(|e| e.reason)?,
+                    .map_err(|e| e.reason().to_string())?,
             )]),
             ["take-grant", from, blob] => Ok(vec![answered(
                 c.take_grant(id(from)?, bytes(blob)?)
-                    .map_err(|e| e.reason)?,
+                    .map_err(|e| e.reason().to_string())?,
             )]),
             ["take-response", blob] => {
-                c.take_response(bytes(blob)?).map_err(|e| e.reason)?;
+                c.take_response(bytes(blob)?)
+                    .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["response taken".into()])
             }
             ["gathered"] => Ok(vec![format!("gathered {}", joined(&c.gathered()))]),
@@ -385,7 +395,8 @@ impl Instrument {
                 .collect()),
 
             ["nominees"] => {
-                let (mine, theirs) = c.nominees();
+                let n = c.nominees();
+                let (mine, theirs) = (n.mine, n.theirs);
                 Ok(vec![format!(
                     "nominees mine={} theirs={}",
                     joined(&mine),
@@ -394,7 +405,7 @@ impl Instrument {
             }
             ["witness-ask"] => Ok(vec![format!(
                 "witness-ask {}",
-                carry::pack_ask(&c.witness_ask().map_err(|e| e.reason)?)
+                carry::pack_ask(&c.witness_ask().map_err(|e| e.reason().to_string())?)
             )]),
             ["take-witness-ask", blob] => {
                 Ok(vec![match c.take_witness_ask(carry::take_ask(blob)?) {
@@ -411,7 +422,8 @@ impl Instrument {
                 let theirs: Result<Vec<Vec<u8>>, String> =
                     carry_list(theirs).iter().map(|x| bytes(x)).collect();
                 let w = carry::take_witnesses(witnesses)?;
-                let (p, set) = c.propose(theirs?, w).map_err(|e| e.reason)?;
+                let proposal = c.propose(theirs?, w).map_err(|e| e.reason().to_string())?;
+                let (p, set) = (proposal.proposed, proposal.revealed);
                 Ok(vec![
                     format!("proposed {}", carry::pack_proposed(&p)),
                     format!("disclosures {}", carry::pack_revealed(&set)),
@@ -425,7 +437,7 @@ impl Instrument {
                 "body {}",
                 hex(&c
                     .body(carry::take_proposed(proposed)?, carry::take_back(back)?)
-                    .map_err(|e| e.reason)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["review-and-sign", proposed, set, back] => Ok(vec![format!(
                 "signed {}",
@@ -435,13 +447,13 @@ impl Instrument {
                         carry::take_revealed(set)?,
                         carry::take_back(back)?
                     )
-                    .map_err(|e| e.reason)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["witness-sign", proposed, back] => Ok(vec![format!(
                 "signed {}",
                 hex(&c
                     .witness_sign(carry::take_proposed(proposed)?, carry::take_back(back)?)
-                    .map_err(|e| e.reason)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["envelope", body, entries] => Ok(vec![format!(
                 "envelope {}",
@@ -471,12 +483,14 @@ impl Instrument {
                     "adoption {}",
                     hex(&c
                         .propose_adoption(id(anchor)?, id(node)?, id(presence)?, s, back?)
-                        .map_err(|e| e.reason)?)
+                        .map_err(|e| e.reason().to_string())?)
                 )])
             }
             ["sign", body] => Ok(vec![format!(
                 "signed {}",
-                hex(&c.sign_body(bytes(body)?).map_err(|e| e.reason)?)
+                hex(&c
+                    .sign_body(bytes(body)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["adoption-envelope", body, entries] => Ok(vec![format!(
                 "envelope {}",
@@ -487,17 +501,21 @@ impl Instrument {
             )]),
             ["take-adoption", envelope] => Ok(vec![format!(
                 "adopted {}",
-                hex(&c.take_adoption(bytes(envelope)?).map_err(|e| e.reason)?)
+                hex(&c
+                    .take_adoption(bytes(envelope)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["finalize", envelope] => Ok(vec![format!(
                 "finalized {}",
-                hex(&c.finalize(bytes(envelope)?, None).map_err(|e| e.reason)?)
+                hex(&c
+                    .finalize(bytes(envelope)?, None)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
             ["finalize", envelope, set] => Ok(vec![format!(
                 "finalized {}",
                 hex(&c
                     .finalize(bytes(envelope)?, Some(carry::take_revealed(set)?))
-                    .map_err(|e| e.reason)?)
+                    .map_err(|e| e.reason().to_string())?)
             )]),
 
             _ => Err(format!(
@@ -573,8 +591,11 @@ fn answered(a: Option<rhtn_ffi::client::Answered>) -> String {
             "answered query={} querier={} subject={}",
             hex(&a.query),
             hex(&a.to_querier),
-            a.to_subject
-                .map_or("-".into(), |(k, b)| format!("{}:{}", hex(&k), hex(&b)))
+            a.to_subject.map_or("-".into(), |c| format!(
+                "{}:{}",
+                hex(&c.subject),
+                hex(&c.bytes)
+            ))
         ),
     }
 }

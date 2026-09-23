@@ -19,7 +19,7 @@ Read `network-design.md` §1 first — it states what the network is for — and
 | `light-client-requirements.md` | Participant client obligations |
 | `infra-client-requirements.md` | Operator obligations |
 | `resource-requirements.md` | Resource package obligations |
-| `functional_tests.md` | The functional requirements and test specification, a summation of the design as written: authored by the reviewer from the five documents above with `Robot/` and `change-log.md` withheld, so that nothing in it comes from drafting history or assistant notes. Tracked and treated as a core design document [author, 2026-09-22] |
+| `functional_tests.md` | The functional requirements and test specification, a summation of the design as written: authored by the reviewer from the five documents above with `Robot/` and `change-log.md` withheld, so that nothing in it comes from drafting history or assistant notes. Tracked and treated as a core design document [author, 2026-09-22]. **A shared document**: rows are added whenever the base documents define new functionality, by whoever lands it; the reviewer reviews and adds what they discover; removing a row needs the author's approval [author, 2026-09-23] |
 | `Robot/authoring-conventions.md` | How to write and review these. **Read this.** |
 | `Robot/review-plan.md` | The staged external review programme |
 | `Robot/review-tracking.md` | Assistant scratchpad: per-finding dispositions and working queues. References are as-of-filing and are not remapped. **Nothing in the root may cite it** |

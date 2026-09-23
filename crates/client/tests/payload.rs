@@ -1141,6 +1141,7 @@ fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
 /// signed on the phone and published under its own device; a session with
 /// it is a session with a device, and the phone cannot read what it was
 /// sent.
+// acceptance: PAY-21
 #[test]
 fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receives_on_it() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);

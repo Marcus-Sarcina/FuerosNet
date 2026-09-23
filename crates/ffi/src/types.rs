@@ -31,7 +31,7 @@ pub fn keyhash(id: &[u8]) -> Option<Keyhash> {
 }
 
 /// A proximity channel, as the shell knows it (`light-client-requirements.md` §1.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Channel {
     Uwb,
     Nfc,
@@ -63,7 +63,7 @@ impl Channel {
 /// unavailable and never a failure**, and nothing is promoted: the
 /// distinction is the shell's to report and the client's to weigh
 /// (`light-client-requirements.md` §1.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ChannelOutcome {
     Pass,
     Fail,
@@ -81,7 +81,7 @@ impl ChannelOutcome {
 }
 
 /// What the capture asks the counterparty to do (design §7.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Ask {
     TurnLeft,
     TurnRight,
@@ -109,7 +109,7 @@ impl Ask {
 }
 
 /// A verifier's answer about a subject (`wire-format.md` §5.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Answer {
     Match,
     NoMatch,
@@ -134,7 +134,7 @@ impl Answer {
 /// something**, so the set is versioned rather than open: a new one is a
 /// new variant here and a shell that has not been rebuilt renders
 /// [`Told::Unknown`] with its text rather than nothing (design §19.6).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Told {
     /// What the record will contain and who can read it, at capture.
     RecordDisclosure { role: String },
@@ -189,22 +189,32 @@ impl Told {
 /// **Every one of these is something the person is owed an explanation
 /// for**, so none of them crosses as a bare failure: the reason is carried
 /// and the shell decides how to say it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Refused {
-    pub reason: String,
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Error)]
+pub enum Refused {
+    /// The one shape a refusal takes: its reason, in words a screen can
+    /// show.  An enum because the binding generator throws enums, and a
+    /// variant named apart from the enum because the generated Kotlin
+    /// nests one in the other.
+    Reason { reason: String },
 }
 
 impl Refused {
     pub fn new(reason: impl Into<String>) -> Refused {
-        Refused {
+        Refused::Reason {
             reason: reason.into(),
+        }
+    }
+
+    pub fn reason(&self) -> &str {
+        match self {
+            Refused::Reason { reason } => reason,
         }
     }
 }
 
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.reason)
+        f.write_str(self.reason())
     }
 }
 
@@ -218,3 +228,10 @@ impl std::error::Error for Refused {}
 pub const KIND_APPLICATION: u64 = rhtn_client::payload::KIND_APPLICATION;
 pub const KIND_KEY_GRANT: u64 = rhtn_client::payload::KIND_KEY_GRANT;
 pub const KIND_LATE_RESPONSE: u64 = rhtn_client::payload::KIND_LATE_RESPONSE;
+
+/// The payload kind a shell's own traffic carries, for a binding that
+/// cannot read a constant.
+#[uniffi::export]
+pub fn kind_application() -> u64 {
+    KIND_APPLICATION
+}

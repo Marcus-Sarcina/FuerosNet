@@ -11270,3 +11270,114 @@ recorded that ruling and missed it.
 
 Still owed from section 7: `uniffi` on a machine with the toolchains, and
 the administration-channel decision, which is the author's.
+
+## Step 7: the harness's standing, and the brief for the third run (2026-09-23)
+
+Section 5's three items.  **The one initializer** was repaired on
+2026-09-22 with the move into the workspace.  **The status files** at
+`conformance-review/` report 59 passed and 8 failed at `4edfe52` and cite
+`rhtn/` paths; they are the reviewer's reports at that commit, out of the
+tree by the author's ruling, and superseded as a statement of the
+harness's standing by the gate, which runs the harness on every change:
+67 passed, 0 failed at `dbeaecd`.  Nothing in that directory is edited.
+**The third run** is the reviewer's to perform; what this side owes it is
+a commit where the pins are green and a brief that says where to reach.
+`dbeaecd` is that commit (19 pins, 0 stale; 439 of 455; the gate green),
+and `Robot/conformance-run-3-brief.md` is the brief, for the author to
+hand over since the reviewer disregards `Robot/`.  It names the kernel
+paths step 6 integrated, the two node-side rules that work exposed, the
+half-stale M1 and the current D3 on the previous run's blocked list, and
+the four decisions still the author's.
+
+**Kind 2 is the author's** [2026-09-23]: `TopologyPush` body kind 2 for a
+`Delegation`, as the wire, the vectors and the codec have carried it since
+the 22nd.  The brief had also misnamed the register item: it is design
+§19's row for the device count a prekey fetch reveals, not a catalogue row
+for the seedless device, which is a separate open item.  Both corrected.
+
+**The other three, ruled the same day** [author, 2026-09-23].  The
+ceiling of eight bundles per reply stands as `wire-format.md` §7.8 has it.
+The device count a prekey fetch reveals is priced: design §19 P39, Low,
+the audience being the horizon that could open a session at all and the
+count near three by construction; the severity is the assistant's
+proposal under the author's ruling that the row exist, and is his to
+change.  The acknowledgement's acceptors are read within its storage
+reach: design §11.2.1.1 no longer names the grandpatron's siblings and the
+great-grandpatron, who never hold the acknowledgement, but the nodes within
+two edges of the acknowledged node, the patron's siblings in practice;
+TOP-44's `given` now places its accepting sibling beside the patron, which
+is where its test always put it.  The design edit moved the code pin and
+the vector pin; the vectors regenerated under `--accept-spec-change` with
+only their pin lines changed, `ALL CHECKS PASS`, and the code pin accepted;
+19 pins, 0 stale.
+
+Milestone A's programme is at its end on this side: steps 0 to 6 landed,
+step 7's run commissioned.  Open for the author: the administration
+channel, `uniffi` on a machine with a toolchain, the seedless device's
+catalogue row, and the backup allocation stated on 2026-09-22.
+
+## The functional document is shared, and two rows join it (2026-09-23)
+
+**Ruled [author]**: `functional_tests.md` is a shared document.  Rows are
+added whenever the base documents define new functionality, by whoever lands
+it; the reviewer reviews and adds what they discover; removing a row needs
+the author's approval.  Recorded in `CLAUDE.md`.  Under that rule, two rows
+for the device holding no seed, whose tests have stood unmarked since the
+22nd: APP-010 (the device itself: its start, its attach under the
+delegation, the identity-key acts it refuses by name) and MAIL-012 (its
+bundle, made over its own material and signed on the ceremony device, with
+what each side refuses).  The acceptance catalogue's entries for them are
+PAY-21 and DMN-27, and their tests are marked: 441 of 457, 0 flags.
+
+**The administration channel, as the author described it** [2026-09-23]: a
+frame in the light client holding a graphical page the node serves, over
+the remote administration channel the client uses to reach the node's
+host, TLS or the like, not the session; what the page reads and how often
+is the node's own.  Recorded in the note and the application notes; whether
+it closes the question is his to say.
+
+## The Kotlin binding: generated, compiled and driven (2026-09-23)
+
+Milestone 13's second half, on the author's instruction to install what it
+needed.  **Installed under `~/opt`, nothing system-wide**: Android Studio
+2026.1.4.8 as its tarball (1.5 GB, `edgedl.me.gvt1.com`), whose bundled
+JDK (`jbr`, OpenJDK 25) is the Java used; the standalone Kotlin compiler
+2.4.20 (90 MB, GitHub releases); JNA 5.17.0 (2 MB, Maven Central).  The
+Studio wizard has not run: it needs a display, and the SDK it fetches is
+for the shell, not the binding.
+
+**The facade under `uniffi` 0.32.1** (MPL-2.0, on the allow-list), by
+proc-macro alone: `setup_scaffolding!`, every crossing struct a `Record`,
+every enum an `Enum`, `Participant` and `Platform` as `Object`s with their
+constructors, the seven platform traits `export(with_foreign)` so a shell
+implements them, the two envelope builders and the payload kind exported
+as functions.  Four shapes changed because the generator has no tuples and
+throws enums: `Refused` is a one-variant enum (`Reason { reason }`, named
+apart from the enum because the generated Kotlin nests one in the other)
+with a `reason()` accessor, forty call sites following; `nominees`,
+`reachable`, `propose`, `Answered.to_subject` and the envelope entries
+carry records (`Nominees`, `ReachableNode`, `Proposal`, `SubjectCopy`,
+`SignedEntries`); the platform crosses as `Arc<Platform>`.  The reviewer
+harness was repaired in one line for the last.  A `harness` feature exports
+a `TestNode` on loopback and `test_identity`, for a binding's own round
+trip and never a shell's build; `cli` carries the generator's binary.
+
+**The binding** is generated in library mode from the cdylib
+(`target/uniffi/kotlin`, 8,982 lines), compiles with `kotlinc` against JNA
+into a 522 KB jar, and `ffi/kotlin/RoundTrip.kt` drives it: a Kotlin shell
+implementing the seven interfaces, a test node serving alice and carol,
+two participants started from Kotlin, both attached, one message sent and
+received as `Event.Payload`, a bad recipient refused as `Refused.Reason`
+with its text.  `KOTLIN ROUND TRIP OK` in 34 s.  `tools/kotlin-roundtrip.sh`
+is the gate's step 4b, skipped with a line where no JDK or `kotlinc` is
+found and failing the gate where the trip fails.
+
+**CI**: `crates/.gitlab-ci.yml` runs the gate on a Rust image with a JDK,
+the Kotlin compiler and JNA installed, so the round trip runs there rather
+than skipping.  It sits under `crates/` because the root holds the design
+alone; the project's CI/CD configuration path must name it, and a runner
+must exist.  Both are the author's to do on the GitLab side, and neither
+has been done.
+
+Milestone 13 is met on this machine and unmet in CI until the runner
+exists.

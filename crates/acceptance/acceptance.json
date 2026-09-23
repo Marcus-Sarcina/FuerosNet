@@ -12176,6 +12176,34 @@
     "interpretation": null
   },
   {
+    "id": "PAY-21",
+    "area": "payload",
+    "gap": "payload",
+    "title": "Publish a device's bundle only once the ceremony device has signed it, and refuse a signature over another subject or other material",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.8",
+      "design §23.3",
+      "light-client-requirements.md §4.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.8",
+        "text": "Each device generates its own material and the identity signs it on the ceremony device"
+      },
+      {
+        "where": "light-client-requirements.md §4.1",
+        "text": "the bundle it publishes carries material it generated and a signature your ceremony device made over it"
+      }
+    ],
+    "given": "Subject T's phone holds the seed and a desktop D2 holds a delegation and no seed; both are served by node W; S is another client of W.",
+    "when": "D2 attaches, offers its unsigned bundle payload, and takes back what the phone signed; S then fetches T's material and sends.",
+    "then": "D2's attach publishes no bundle; the payload names T and D2; another identity's phone refuses to sign it; a signature by another identity, or one over material D2 does not hold, is refused by D2; the phone's signature is published under D2 and republished on a later attach; S sends to both devices and only D2 opens the ciphertext addressed to it.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
     "id": "QUE-21",
     "area": "queue",
     "gap": "queue",
@@ -12429,6 +12457,34 @@
     "given": "An endpoint record and an anchor entry signed by the operator's identity on the operator's client, given to the daemon as configuration.",
     "when": "The daemon starts.",
     "then": "It pushes that endpoint record in the topology class and answers resolutions with that anchor entry, each verifying under the operator's identity and neither under the delegated key.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "DMN-27",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Start a device holding a delegation and no seed through the boundary, attach it under the delegation, and refuse the identity key's acts on it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §23.3",
+      "wire-format.md §8.2",
+      "light-client-requirements.md §4.1"
+    ],
+    "rule": [
+      {
+        "where": "design §23.3",
+        "text": "Seeds sit on the device that performs ceremonies and nowhere else"
+      },
+      {
+        "where": "light-client-requirements.md §4.1",
+        "text": "the bundle it publishes carries material it generated and a signature your ceremony device made over it"
+      }
+    ],
+    "given": "Alice's phone started from her seeds; a transport seed for a desktop; a serving node that pins alice.",
+    "when": "The phone delegates a run over the desktop's public key; the desktop starts from alice's key material, the transport seed and the run, attaches, and its bundle payload is signed on the phone.",
+    "then": "A start with no delegation, or with a delegation by another identity, is refused; the desktop presents the delegated key where the phone presents the classical member; signing a body on the desktop is refused; the attach binds under the delegation with the pool stocked and no bundle until the phone's signature is taken, after which the node holds the bundle under the desktop's device.",
     "oracle": "behaviour",
     "interpretation": null
   },

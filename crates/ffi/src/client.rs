@@ -26,6 +26,7 @@ use std::sync::Arc;
 /// Every method is blocking and short: the work happens on the client's
 /// thread and the answer comes back. A shell calls these from wherever it
 /// likes.
+#[derive(uniffi::Object)]
 pub struct Participant {
     handle: Handle,
     net: Net,
@@ -51,7 +52,7 @@ pub const SIBLINGS: &str = "siblings";
 pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// One catalog entry as this client holds it (`wire-format.md` §6.1).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CatalogItem {
     /// The node that served it.
     pub node: Id,
@@ -68,7 +69,7 @@ pub struct CatalogItem {
 }
 
 /// What a restore from a backup did.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Restored {
     pub records: u64,
     /// Sealed captures the import scan discarded as past their retention
@@ -77,7 +78,7 @@ pub struct Restored {
 }
 
 /// What a proximity run achieved, as the shell is shown it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Achieved {
     pub channel: Channel,
     pub outcome: ChannelOutcome,
@@ -91,7 +92,7 @@ pub struct Achieved {
 /// channel they have, and no document fixes an encoding for it. It crosses
 /// as fields so the shell can carry it however the two devices manage, and
 /// reconstruct it on the other side.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Intent {
     pub contribution: Vec<u8>,
     pub nominees: Vec<Id>,
@@ -132,7 +133,7 @@ impl Intent {
 }
 
 /// A verifier the client selected, and why it was eligible.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Selected {
     pub verifier: Id,
     /// 0 met, 1 in the horizon, 2 reachable, 3 discretionary
@@ -141,7 +142,7 @@ pub struct Selected {
 }
 
 /// A response about the counterparty, as a screen shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Response {
     pub verifier: Id,
     pub subject: Id,
@@ -149,7 +150,7 @@ pub struct Response {
 }
 
 /// A witness's place on a record (`wire-format.md` §4.5 field 4).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Witnessing {
     pub witness: Id,
     pub nominated_by: Id,
@@ -161,7 +162,7 @@ pub struct Witnessing {
 /// Like [`Intent`], the wire does not carry this: a nominee is asked over
 /// whatever the three devices have between them, and no document fixes an
 /// encoding for the asking.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WitnessAsk {
     pub ceremony: Id,
     pub participants: Vec<Id>,
@@ -170,7 +171,7 @@ pub struct WitnessAsk {
 }
 
 /// The record two parties are proposing, before anybody has signed it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Proposed {
     pub started_at: u64,
     pub finalized_at: u64,
@@ -184,7 +185,7 @@ pub struct Proposed {
 /// One of the seven values a record discloses, with the salt it is hashed
 /// under (`wire-format.md` §4.5.1.1).  The seven arrive in label order and
 /// the label is carried so a shell can show which is which.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Revealed {
     pub label: String,
     pub salt: Vec<u8>,
@@ -193,11 +194,48 @@ pub struct Revealed {
 
 /// A verifier's answer: the copy for the querier, and the copy for the
 /// subject where one is owed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Answered {
     pub query: Id,
     pub to_querier: Vec<u8>,
-    pub to_subject: Option<(Id, Vec<u8>)>,
+    pub to_subject: Option<SubjectCopy>,
+}
+
+/// The subject's copy of an answer: whom it goes to and the bytes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SubjectCopy {
+    pub subject: Id,
+    pub bytes: Vec<u8>,
+}
+
+/// The two nominee lists a ceremony holds: this side's and the other's.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Nominees {
+    pub mine: Vec<Id>,
+    pub theirs: Vec<Id>,
+}
+
+/// An infrastructure node this client can reach directly, with the
+/// addresses it holds for it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ReachableNode {
+    pub node: Id,
+    pub addresses: Vec<String>,
+}
+
+/// What a proposer holds after proposing: the record as every signer is
+/// shown it, and the seven disclosures it commits to.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Proposal {
+    pub proposed: Proposed,
+    pub revealed: Vec<Revealed>,
+}
+
+/// One signer's entries on a record body.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SignedEntries {
+    pub signer: Id,
+    pub entries: Vec<u8>,
 }
 
 impl Witnessing {
@@ -360,7 +398,10 @@ fn answered_of(a: &rhtn_client::verifier::Answer) -> Answered {
     Answered {
         query: a.query_id.to_vec(),
         to_querier: a.to_querier.clone(),
-        to_subject: Some((id_of(&a.to_subject.0), a.to_subject.1.clone())),
+        to_subject: Some(SubjectCopy {
+            subject: id_of(&a.to_subject.0),
+            bytes: a.to_subject.1.clone(),
+        }),
     }
 }
 
@@ -379,16 +420,51 @@ fn back_inward(back: &[Vec<Vec<u8>>]) -> Result<Vec<Vec<rhtn_archive::Txid>>, Re
 }
 
 impl Participant {
+    /// Restore what the last run wrote, if anything.  **A blob that does
+    /// not open refuses the start**: a client begun fresh over state it
+    /// could not read would publish new material and lose every message
+    /// queued for the old, silently.
+    fn open(&self) -> Result<(), Refused> {
+        // the sibling list, whole or not at all: a partial list is no list
+        if let Some(bytes) = self.storage.read(SIBLINGS.into()) {
+            self.net.restore_siblings(&bytes);
+        }
+        let Some(bytes) = self.storage.read(STATE.into()) else {
+            return Ok(());
+        };
+        self.handle
+            .with_blocking(move |c| c.restore_durable(&bytes))
+            .map(|_| ())
+            .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))
+    }
+}
+
+impl Participant {
+    /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
+    fn schedule(&self) {
+        let (h, st) = (self.handle.clone(), self.storage.clone());
+        let after: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            let bytes = h.with_blocking(|c| c.durable());
+            let _ = st.write(STATE.into(), bytes);
+        });
+        self.net
+            .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
+    }
+}
+
+#[uniffi::export]
+impl Participant {
     /// Start a client on a thread of its own.
     ///
     /// The identity is the two seeds it is derived from, as every other
     /// reader of one takes them. The platform's objects are wrapped inside
     /// that thread, which is the only place the client's own device may be
     /// built.
+    #[uniffi::constructor]
     pub fn start(
         seeds: Vec<u8>,
         known: Vec<Vec<u8>>,
-        platform: Platform,
+        platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
         if seeds.len() != 64 {
             return Err(Refused::new(format!(
@@ -441,17 +517,6 @@ impl Participant {
         p.open()?;
         p.schedule();
         Ok(p)
-    }
-
-    /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
-    fn schedule(&self) {
-        let (h, st) = (self.handle.clone(), self.storage.clone());
-        let after: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-            let bytes = h.with_blocking(|c| c.durable());
-            let _ = st.write(STATE.into(), bytes);
-        });
-        self.net
-            .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
     }
 
     /// The connection as a screen shows it: detached, attached to the
@@ -516,24 +581,6 @@ impl Participant {
         })
     }
 
-    /// Restore what the last run wrote, if anything.  **A blob that does
-    /// not open refuses the start**: a client begun fresh over state it
-    /// could not read would publish new material and lose every message
-    /// queued for the old, silently.
-    fn open(&self) -> Result<(), Refused> {
-        // the sibling list, whole or not at all: a partial list is no list
-        if let Some(bytes) = self.storage.read(SIBLINGS.into()) {
-            self.net.restore_siblings(&bytes);
-        }
-        let Some(bytes) = self.storage.read(STATE.into()) else {
-            return Ok(());
-        };
-        self.handle
-            .with_blocking(move |c| c.restore_durable(&bytes))
-            .map(|_| ())
-            .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))
-    }
-
     /// Write the client's state to the platform's storage.  Called by the
     /// kernel after every step that changes what a restart would need,
     /// and by a shell at any point it is about to be suspended.
@@ -593,12 +640,13 @@ impl Participant {
     /// is refused here: consent, a verifier's answer, a body, a departure.
     /// The device's prekey bundle is signed on the ceremony device through
     /// [`Participant::bundle_to_sign`] and [`Participant::take_signed_bundle`].
+    #[uniffi::constructor]
     pub fn start_delegated(
         key_material: Vec<u8>,
         transport_seed: Vec<u8>,
         delegations: Vec<Vec<u8>>,
         known: Vec<Vec<u8>>,
-        platform: Platform,
+        platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
         let public = rhtn_crypto::Identity::from_key_material(&key_material)
             .ok_or_else(|| Refused::new("the identity is not a KeyMaterial array"))?;
@@ -962,7 +1010,7 @@ impl Participant {
     /// its patron where the alternatives are cannot use them when the
     /// patron is what is down (`light-client-requirements.md` §4.2).
     #[must_use]
-    pub fn reachable(&self) -> Vec<(Id, Vec<String>)> {
+    pub fn reachable(&self) -> Vec<ReachableNode> {
         self.handle.with_blocking(|c| {
             c.horizon
                 .reachable_infra()
@@ -973,7 +1021,10 @@ impl Participant {
                         .filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok())
                         .map(|p| p.socket().to_string())
                         .collect();
-                    (id_of(&n), addrs)
+                    ReachableNode {
+                        node: id_of(&n),
+                        addresses: addrs,
+                    }
                 })
                 .collect()
         })
@@ -1133,13 +1184,13 @@ impl Participant {
 
     /// Who each side nominated: this client's, then the counterparty's.
     #[must_use]
-    pub fn nominees(&self) -> (Vec<Id>, Vec<Id>) {
+    pub fn nominees(&self) -> Nominees {
         self.handle.with_blocking(|c| {
             let (mine, theirs) = c.nominees();
-            (
-                mine.iter().map(id_of).collect(),
-                theirs.iter().map(id_of).collect(),
-            )
+            Nominees {
+                mine: mine.iter().map(id_of).collect(),
+                theirs: theirs.iter().map(id_of).collect(),
+            }
         })
     }
 
@@ -1176,12 +1227,15 @@ impl Participant {
         &self,
         theirs: Vec<Vec<u8>>,
         witnesses: Vec<Witnessing>,
-    ) -> Result<(Proposed, Vec<Revealed>), Refused> {
+    ) -> Result<Proposal, Refused> {
         let w: Result<Vec<_>, Refused> = witnesses.iter().map(|x| x.inward()).collect();
         let w = w?;
         self.handle.with_blocking(move |c| {
             c.propose(theirs, w)
-                .map(|(p, set)| (Proposed::of(&p), revealed_of(&set)))
+                .map(|(p, set)| Proposal {
+                    proposed: Proposed::of(&p),
+                    revealed: revealed_of(&set),
+                })
                 .map_err(|a| Refused::new(format!("{a:?}")))
         })
     }
@@ -1331,7 +1385,7 @@ impl Participant {
 
 /// Where a party sits, as a shell is shown it: one of these per subnet
 /// they are in.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Placed {
     pub node: Id,
     pub anchor: Id,
@@ -1342,20 +1396,22 @@ pub struct Placed {
 /// The envelope a presence record travels in, from the body every signer
 /// signed and each signer's entry (`wire-format.md` §3.2).
 #[must_use]
-pub fn presence_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
+#[uniffi::export]
+pub fn presence_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Vec<u8> {
     let e: Vec<(Keyhash, Vec<u8>)> = entries
         .into_iter()
-        .filter_map(|(k, v)| keyhash(&k).map(|k| (k, v)))
+        .filter_map(|s| keyhash(&s.signer).map(|k| (k, s.entries)))
         .collect();
     rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_PRESENCE, &body, &e)
 }
 
 /// The envelope an adoption travels in.
 #[must_use]
-pub fn adoption_envelope(body: Vec<u8>, entries: Vec<(Id, Vec<u8>)>) -> Vec<u8> {
+#[uniffi::export]
+pub fn adoption_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Vec<u8> {
     let e: Vec<(Keyhash, Vec<u8>)> = entries
         .into_iter()
-        .filter_map(|(k, v)| keyhash(&k).map(|k| (k, v)))
+        .filter_map(|s| keyhash(&s.signer).map(|k| (k, s.entries)))
         .collect();
     rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_ADOPTION, &body, &e)
 }
@@ -1377,6 +1433,24 @@ fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
         rhtn_client::device::ChannelResult::Pass => ChannelOutcome::Pass,
         rhtn_client::device::ChannelResult::Fail => ChannelOutcome::Fail,
         rhtn_client::device::ChannelResult::Unavailable => ChannelOutcome::Unavailable,
+    }
+}
+
+#[uniffi::export]
+impl Platform {
+    /// The platform's seven objects, handed over once.
+    #[uniffi::constructor]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        proximity: Arc<dyn crate::device::Proximity>,
+        camera: Arc<dyn crate::device::Camera>,
+        clock: Arc<dyn crate::device::Clock>,
+        random: Arc<dyn crate::device::Random>,
+        operator: Arc<dyn crate::device::Operator>,
+        notices: Arc<dyn crate::device::Notices>,
+        storage: Arc<dyn crate::device::Storage>,
+    ) -> Platform {
+        platform(proximity, camera, clock, random, operator, notices, storage)
     }
 }
 
