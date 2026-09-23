@@ -123,6 +123,19 @@ impl PayloadKeys {
         PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now, device)
     }
 
+    /// The same bundle unsigned, for a device that holds no seed: the
+    /// ceremony device signs it and the device publishes what comes back
+    /// (design §23.3).
+    pub fn bundle_payload(&self, subject: &Keyhash, device: &[u8; 32], now: u64) -> Vec<u8> {
+        PrekeyBundle::payload(
+            subject,
+            CONSTRUCTION_PQXDH,
+            &self.blob().encode(),
+            now,
+            device,
+        )
+    }
+
     /// Mint `n` one-time pairs and return their public halves, as uploaded.
     pub fn one_time_keys(&mut self, n: usize, fresh: Fresh) -> Vec<Vec<u8>> {
         let mut out = Vec::new();
@@ -757,6 +770,11 @@ pub struct PayloadState {
     /// its bundle names and what its messages say they are from.  The
     /// identity's classical member until a device says otherwise.
     pub device: [u8; 32],
+    /// On a device that holds no seed, the bundle the ceremony device
+    /// signed over this device's material, with the blob it was signed
+    /// over: published while the material is what it names, and made
+    /// again when the material rotates.
+    pub signed_bundle: Option<(Vec<u8>, Vec<u8>)>,
     /// Plaintexts waiting for a session with one of a peer's devices.
     pub pending: BTreeMap<PeerDevice, Vec<Vec<u8>>>,
     /// One-time requests in flight, by nonce: the peer device asked for.
@@ -778,6 +796,7 @@ impl PayloadState {
             sessions: Sessions::default(),
             serving: None,
             device: [0; 32],
+            signed_bundle: None,
             pending: BTreeMap::new(),
             outstanding: BTreeMap::new(),
             pool_reported: 0,

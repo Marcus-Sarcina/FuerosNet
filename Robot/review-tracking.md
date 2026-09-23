@@ -11036,3 +11036,66 @@ Five statements the note asked to confirm by test rather than by reading:
 `resource-requirements.md` §7.2.1's absolute-rank displacement remains
 section 6's, unbuilt. No catalogue entry is owed to any of the five; the
 tests are unmarked confirmations. 438 of 455.
+
+## The seedless light client and the boundary (2026-09-22)
+
+The last of step 5: the client on a device that holds no seed, and the
+boundary a shell binds it through. Design §23.3 settles which device holds
+what, and `wire-format.md` §8.2's `Delegation` says what a delegated key
+signs and what it never does; the code now follows both rather than
+assuming every client holds the seed.
+
+- **`Client` holds a public half and an optional signer.** `Client::new`
+  is unchanged for the device that performs ceremonies; `Client::delegated`
+  takes the identity's public half and the key the device presents, and
+  names its payload device by it (§7.8). Every act the signing table gives
+  the identity key goes through `signer()` and returns `Abort::NoSeed` on a
+  delegated device: a body, a witness signature, a departure, a recovery
+  response. As subject it gives no consent and takes no response copy; as
+  verifier it closes a query and rejects a grant, each saying why, and
+  fabricates no answer. `sign_body` now returns a result, which reached the
+  FFI and `rhtnp`.
+- **The bundle is signed on the ceremony device.** `PrekeyBundle::build`
+  is split into `payload` (fields 1 to 5) and `sign`; a delegated device
+  offers `bundle_to_sign` over its current material, the ceremony device
+  signs it with `sign_device_bundle` after checking the payload names it,
+  and `take_signed_bundle` verifies the result under the identity, against
+  this device and this material, keeps it, and publishes it where a node
+  is attached. Attaching on a delegated device stocks the pool and sweeps
+  but publishes nothing until the signature exists; a rotation makes the
+  material unsigned again. The carriage between the two devices is a
+  provisioning channel the documents do not encode, as the instance's is
+  (`infra-client-requirements.md` §7); the shell carries the bytes.
+- **Delegations are issued on the ceremony device.** `delegate` and
+  `delegate_run` wrap `rhtn_crypto::delegation`; a delegated device refuses
+  both.
+- **The boundary.** `Participant::start_delegated(key_material,
+  transport_seed, delegations, known, platform)` builds the credential on
+  the platform's clock, refuses an empty run and a delegation by another
+  identity, and starts `Client::delegated`; `Net` now holds a `Party` and
+  binds under the credential on attach. `delegate`, `presented_key`,
+  `bundle_to_sign`, `sign_device_bundle` and `take_signed_bundle` cross the
+  boundary as values.
+- **The backup's slot (ARC-28).** `backup::Contents.provider` is an opaque
+  optional byte string, a fourth field of the contents array; the client
+  holds it as `provider_credential` and exports it. The archive stub file
+  for ARC-28 is gone with the row implemented, the last owed in its area.
+
+Tests: `client/tests/delegated.rs` (the refusals by name; a delegation
+verifying hybrid under the identity, naming the key, taken by a credential,
+one by another identity refused, a run contiguous); `client/tests/payload.rs`
+(a desktop holding no seed on the harness beside PAY-20: no bundle before
+the signature, a forged and an over-other-material signature refused, the
+signed one published and republished, one ciphertext per device, the phone
+unable to read the desktop's and the desktop answering as its device);
+`client/tests/backup.rs` (ARC-28); `ffi/tests/boundary.rs` (a delegated
+participant against a live serving node: attaches under its delegation,
+pool stocked and no bundle, the payload signed on the phone and the node
+holding it under the desktop's device; the phone's key is the classical
+member, the desktop's the delegated one; an empty run and bob's delegation
+refused at start). The test shell gained a real-time clock for the one
+test whose window a live node checks on its own clock.
+
+No catalogue row names the seedless light client itself; the row the
+outstanding-work table said was needed still is, and is the author's to
+add. 439 of 455.

@@ -17,6 +17,7 @@ use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
 use rhtn_client::ceremony::{Client, Config};
 use rhtn_client::device::DirectPath;
+use rhtn_transport::tls::Party;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -375,7 +376,7 @@ impl Participant {
             n[..take].copy_from_slice(&drawn[..take]);
             n
         });
-        let net = Net::new(me, pins_for(&ids), nonce)?;
+        let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
         let known = ids.clone();
         let handle = Handle::spawn(move || {
             let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
@@ -385,6 +386,145 @@ impl Participant {
         })
         .map_err(Refused::new)?;
         Ok(Participant { handle, net })
+    }
+
+    /// Start as a device that holds no seed (design §23.3): a desktop or a
+    /// terminal instrument.  `key_material` is the identity's own
+    /// `KeyMaterial` array, `transport_seed` the 32-byte seed of the
+    /// transport keypair this device minted, and `delegations` the run the
+    /// ceremony device signed over its public half ([`Participant::delegate`]).
+    ///
+    /// The identity key is nowhere on this device, so what that key signs
+    /// is refused here: consent, a verifier's answer, a body, a departure.
+    /// The device's prekey bundle is signed on the ceremony device through
+    /// [`Participant::bundle_to_sign`] and [`Participant::take_signed_bundle`].
+    pub fn start_delegated(
+        key_material: Vec<u8>,
+        transport_seed: Vec<u8>,
+        delegations: Vec<Vec<u8>>,
+        known: Vec<Vec<u8>>,
+        platform: Platform,
+    ) -> Result<Participant, Refused> {
+        let public = rhtn_crypto::Identity::from_key_material(&key_material)
+            .ok_or_else(|| Refused::new("the identity is not a KeyMaterial array"))?;
+        let seed: [u8; 32] = transport_seed
+            .as_slice()
+            .try_into()
+            .map_err(|_| Refused::new("a transport key is 32 bytes of seed"))?;
+        let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
+            .iter()
+            .map(|k| {
+                rhtn_crypto::Identity::from_key_material(k)
+                    .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+            })
+            .collect();
+        let mut ids = ids?;
+        if !ids.iter().any(|i| i.keyhash == public.keyhash) {
+            ids.push(public.clone());
+        }
+        let clock = platform.clock.clone();
+        let credential = rhtn_transport::tls::Credential::from_seed(&seed, public.keyhash)
+            .with_clock(Arc::new(move || clock.now_ms() / 1000));
+        if delegations.is_empty() {
+            return Err(Refused::new(
+                "a delegated device starts with at least one delegation",
+            ));
+        }
+        for d in &delegations {
+            credential
+                .add(&ids, d)
+                .map_err(|e| Refused::new(format!("delegation refused: {e}")))?;
+        }
+        let credential = Arc::new(credential);
+        let presented = credential.public();
+        let random = platform.random.clone();
+        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> = Arc::new(move || {
+            let mut n = [0u8; 16];
+            let drawn = random.fill(16);
+            let take = drawn.len().min(16);
+            n[..take].copy_from_slice(&drawn[..take]);
+            n
+        });
+        let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
+        let known = ids.clone();
+        let handle = Handle::spawn(move || {
+            let direct: std::rc::Rc<dyn DirectPath> =
+                std::rc::Rc::new(rhtn_client::device::NoDirectPath);
+            Client::delegated(
+                public,
+                presented,
+                known,
+                Config::default(),
+                platform.device(direct),
+            )
+        })
+        .map_err(Refused::new)?;
+        Ok(Participant { handle, net })
+    }
+
+    /// Whether this device holds the seed.
+    #[must_use]
+    pub fn holds_seed(&self) -> bool {
+        self.handle.with_blocking(|c| c.holds_seed())
+    }
+
+    /// On the ceremony device: a run of `count` contiguous 48-hour
+    /// delegations from `not_before` over the transport key another
+    /// device of this identity minted (`wire-format.md` §8.2).
+    pub fn delegate(
+        &self,
+        transport_key: Vec<u8>,
+        not_before: u64,
+        count: u32,
+    ) -> Result<Vec<Vec<u8>>, Refused> {
+        let key: [u8; 32] = transport_key
+            .as_slice()
+            .try_into()
+            .map_err(|_| Refused::new("a transport key is 32 bytes"))?;
+        if count == 0 {
+            return Err(Refused::new("a run is at least one delegation"));
+        }
+        self.handle
+            .with_blocking(move |c| c.delegate_run(&key, not_before, count as usize))
+            .map_err(|e| Refused::new(format!("{e:?}")))
+    }
+
+    /// The transport key this device presents: the public half the
+    /// ceremony device delegates to.  On a device holding the seed it is
+    /// the identity's classical member.
+    #[must_use]
+    pub fn presented_key(&self) -> Vec<u8> {
+        self.net.presented_key().to_vec()
+    }
+
+    /// On a device holding no seed: the unsigned bundle over its own
+    /// payload material, for the ceremony device to sign.  Nothing where
+    /// the material it holds is already signed over, or where this device
+    /// holds the seed.
+    #[must_use]
+    pub fn bundle_to_sign(&self) -> Option<Vec<u8>> {
+        self.handle.with_blocking(|c| c.bundle_to_sign())
+    }
+
+    /// On the ceremony device: sign a bundle payload another device of
+    /// this identity made.
+    pub fn sign_device_bundle(&self, payload: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(move |c| c.sign_device_bundle(&payload))
+            .map_err(|e| Refused::new(format!("{e:?}")))
+    }
+
+    /// On a device holding no seed: take the bundle the ceremony device
+    /// signed, and publish it where a serving node is attached.
+    pub fn take_signed_bundle(&self, signed: Vec<u8>) -> Result<(), Refused> {
+        let msg = self
+            .handle
+            .with_blocking(move |c| c.take_signed_bundle(&signed))
+            .map_err(|e| Refused::new(format!("{e:?}")))?;
+        match msg {
+            Some(m) => self.net.carry(vec![m]),
+            None => Ok(()),
+        }
     }
 
     /// This client's own identity.
@@ -923,9 +1063,10 @@ impl Participant {
 
     /// Sign a body this client proposed or was shown, as its subject or
     /// its patron.
-    #[must_use]
-    pub fn sign_body(&self, body: Vec<u8>) -> Vec<u8> {
-        self.handle.with_blocking(move |c| c.sign_body(&body))
+    pub fn sign_body(&self, body: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(move |c| c.sign_body(&body))
+            .map_err(|e| Refused::new(format!("{e:?}")))
     }
 
     /// Take a finalized adoption this client signed.  Where it is an

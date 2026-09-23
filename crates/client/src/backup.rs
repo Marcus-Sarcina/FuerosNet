@@ -111,6 +111,11 @@ pub struct Contents {
     /// The archive's records, as bytes.
     pub records: Vec<Vec<u8>>,
     pub store: ClientStore,
+    /// An operator's provider credential, opaque to this network
+    /// (`light-client-requirements.md` §2): carried here, under the
+    /// passphrase, and never in the archive siblings replicate.  What it
+    /// is is between the operator and their provider.
+    pub provider: Option<Vec<u8>>,
 }
 
 /// Why a backup did not open.  **Each names which step failed**, because
@@ -304,7 +309,7 @@ fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
 
 fn encode_contents(c: &Contents) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 3);
+    emit_array_head(&mut out, 4);
     match &c.seeds {
         Some([a, b]) => {
             emit_array_head(&mut out, 2);
@@ -318,13 +323,17 @@ fn encode_contents(c: &Contents) -> Vec<u8> {
         emit_bstr(&mut out, r);
     }
     emit_bstr(&mut out, &c.store.encode());
+    match &c.provider {
+        Some(p) => emit_bstr(&mut out, p),
+        None => emit_array_head(&mut out, 0),
+    }
     out
 }
 
 fn decode_contents(b: &[u8]) -> Option<Contents> {
     let item = parse_all(b).ok()?;
     let Item::Array(f) = &item else { return None };
-    let [s, r, st] = f.as_slice() else {
+    let [s, r, st, p] = f.as_slice() else {
         return None;
     };
     let Item::Array(sa) = s else { return None };
@@ -338,10 +347,16 @@ fn decode_contents(b: &[u8]) -> Option<Contents> {
     };
     let Item::Array(ra) = r else { return None };
     let records: Vec<Vec<u8>> = ra.iter().map(|x| raw(b, x).ok()).collect::<Option<_>>()?;
+    let provider = match p {
+        Item::Array(a) if a.is_empty() => None,
+        Item::Bytes(_) => Some(raw(b, p).ok()?),
+        _ => return None,
+    };
     Some(Contents {
         seeds,
         records,
         store: ClientStore::decode(&raw(b, st).ok()?)?,
+        provider,
     })
 }
 

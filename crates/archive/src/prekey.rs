@@ -47,10 +47,30 @@ impl PrekeyBundle {
         published_at: u64,
         device: &[u8; 32],
     ) -> Vec<u8> {
+        let payload = Self::payload(
+            &subject.public.keyhash,
+            construction,
+            blob,
+            published_at,
+            device,
+        );
+        Self::sign(subject, &payload)
+    }
+
+    /// Fields 1 to 5 unsigned: what a device that holds no seed makes over
+    /// its own material and carries to the ceremony device to sign
+    /// (design §23.3).
+    pub fn payload(
+        subject: &Keyhash,
+        construction: u64,
+        blob: &[u8],
+        published_at: u64,
+        device: &[u8; 32],
+    ) -> Vec<u8> {
         let mut payload = Vec::new();
         emit_map_head(&mut payload, 5);
         emit_uint(&mut payload, 1);
-        emit_bstr(&mut payload, &subject.public.keyhash);
+        emit_bstr(&mut payload, subject);
         emit_uint(&mut payload, 2);
         emit_uint(&mut payload, construction);
         emit_uint(&mut payload, 3);
@@ -59,13 +79,47 @@ impl PrekeyBundle {
         emit_uint(&mut payload, published_at);
         emit_uint(&mut payload, 5);
         emit_bstr(&mut payload, device);
-        let sig = subject.sign1_ed_unnamed(rhtn_codec::cose::aad::PREKEY, &payload);
+        payload
+    }
+
+    /// The signed bundle over a payload [`PrekeyBundle::payload`] made:
+    /// the identity's classical signature under the prekey tag, on the
+    /// ceremony device.  The payload is not inspected here; the signer
+    /// checks it names them before signing (`Client::sign_device_bundle`).
+    pub fn sign(subject: &rhtn_crypto::SigningIdentity, payload: &[u8]) -> Vec<u8> {
+        let sig = subject.sign1_ed_unnamed(rhtn_codec::cose::aad::PREKEY, payload);
         let mut out = Vec::new();
         emit_map_head(&mut out, 6);
         out.extend_from_slice(&payload[1..]);
         emit_uint(&mut out, 6);
         out.extend_from_slice(&sig);
         out
+    }
+
+    /// Who an unsigned payload names, subject and device: what a signer
+    /// checks before putting its signature over material another device
+    /// made.
+    pub fn payload_names(payload: &[u8]) -> Result<(Keyhash, [u8; 32]), String> {
+        let item = parse_all(payload).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        if m.len() != 5 {
+            return Err("a bundle payload is five fields".into());
+        }
+        let subject = match map_get(m, 1) {
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&payload[r.clone()]).map_err(|_| "subject")?
+            }
+            _ => return Err("field 1".into()),
+        };
+        let device = match map_get(m, 5) {
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                <[u8; 32]>::try_from(&payload[r.clone()]).map_err(|_| "device")?
+            }
+            _ => return Err("field 5".into()),
+        };
+        Ok((subject, device))
     }
 
     /// Parse the fields the network reads; the blob stays bytes.

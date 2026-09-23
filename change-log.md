@@ -10396,8 +10396,21 @@ granting nothing and dropped at the next refresh; a presence record with no
 verifier response weighed like any other; and, already tested, a running
 request completing on a role change and a memo conflict never fetched.
 
-**Counts checked.** 2,296 references across the five documents resolve with no flag;
-the staleness sweep reports its baseline; 1,264 citations across `models/` and the
-workspace resolve; check.py 403 of 455 implemented, 0 flags, stubs in sync; the
+**The light client on a device holding no seed, and the boundary that starts
+one.** A client now carries the identity's public half and, on the ceremony
+device alone, the signer; every act the signing table gives the identity key
+is refused by name on a delegated device, and nothing is fabricated in its
+place. A delegated device's prekey bundle is made unsigned over its own
+material, signed on the ceremony device and published under the device's own
+key, as design §23.3 and `wire-format.md` §7.8 have it; delegations are issued
+on the ceremony device. The boundary gains a constructor for such a device from
+the identity's material, a transport seed and the run its ceremony device
+signed, and the calls that carry the delegation and the bundle's signature
+either way. The backup's contents carry an operator's provider credential and
+the archive never does (`light-client-requirements.md` §2).
+
+**Counts checked.** 2,305 references across the five documents resolve with no flag;
+the staleness sweep reports its baseline; 1,396 citations across `models/` and the
+workspace resolve; check.py 439 of 455 implemented, 0 flags, stubs in sync; the
 test-vector pins are current on all three documents; the gate's 19 hashes match,
 `cargo deny` clean.

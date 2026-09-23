@@ -1136,3 +1136,209 @@ fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
         );
     }
 }
+
+/// A desktop that holds no seed (design §23.3): its own payload material,
+/// signed on the phone and published under its own device; a session with
+/// it is a session with a device, and the phone cannot read what it was
+/// sent.
+#[test]
+fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receives_on_it() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    let d1 = *id("bob").public.ed.as_bytes();
+    // the desktop presents a delegated transport key and holds no seed
+    let d2 = [0x42u8; 32];
+    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let mut desktop = Client::delegated(id("bob").public, d2, ids(), Config::default(), dev);
+    assert!(!desktop.holds_seed());
+    assert_eq!(desktop.keyhash(), kh("bob"));
+
+    // attaching stocks the pool and sweeps, but publishes no bundle: there
+    // is no signature over the material yet
+    let pop = n.population();
+    let attach = desktop.attach(kh("w1"), &pop);
+    assert!(
+        !attach.iter().any(|m| matches!(m, Msg::PublishBundle(_))),
+        "nothing to publish before the ceremony device signs"
+    );
+    for m in attach {
+        if let Msg::StockOneTime(keys) = m {
+            assert!(
+                n.nodes
+                    .get_mut("w1")
+                    .unwrap()
+                    .prekeys
+                    .stock_for(kh("bob"), d2, keys)
+            );
+        }
+    }
+    assert!(n.nodes["w1"].prekeys.bundle_for(&kh("bob"), &d2).is_none());
+
+    // the unsigned payload names bob and the desktop; alice's phone will
+    // not sign it, bob's does
+    let payload = desktop
+        .bundle_to_sign()
+        .expect("material awaiting a signature");
+    assert_eq!(
+        PrekeyBundle::payload_names(&payload).unwrap(),
+        (kh("bob"), d2)
+    );
+    assert_eq!(
+        n.s.client("alice")
+            .sign_device_bundle(&payload)
+            .unwrap_err(),
+        Abort::NotMine("another subject")
+    );
+    assert!(
+        n.s.client("bob").bundle_to_sign().is_none(),
+        "a device holding the seed signs its own"
+    );
+    let signed = n.s.client("bob").sign_device_bundle(&payload).unwrap();
+
+    // alice's signature over it would not be bob's; a bundle over other
+    // material is not this device's; the right one is published
+    let forged = PrekeyBundle::sign(&id("alice"), &payload);
+    assert_eq!(
+        desktop.take_signed_bundle(&forged).unwrap_err(),
+        Abort::NotMine("does not verify under me")
+    );
+    let now = n.now();
+    let other_material =
+        n.s.client("bob")
+            .sign_device_bundle(&PrekeyBundle::payload(
+                &kh("bob"),
+                CONSTRUCTION_PQXDH,
+                b"not this blob",
+                now,
+                &d2,
+            ))
+            .unwrap();
+    assert_eq!(
+        desktop.take_signed_bundle(&other_material).unwrap_err(),
+        Abort::NotMine("not this device's current material")
+    );
+    let Some(Msg::PublishBundle(b)) = desktop.take_signed_bundle(&signed).unwrap() else {
+        panic!("attached, so the signed bundle is the publication")
+    };
+    let parsed = PrekeyBundle::parse(&b).unwrap();
+    assert_eq!(parsed.device, d2);
+    assert_eq!(parsed.verify(&ids()), Ok(()), "bob's identity signed it");
+    n.nodes
+        .get_mut("w1")
+        .unwrap()
+        .prekeys
+        .publish(&ids(), &b)
+        .unwrap();
+    assert!(
+        desktop.bundle_to_sign().is_none(),
+        "the material held is signed over: nothing more to sign"
+    );
+    // a later attach republishes the signed bundle as the material stands
+    assert!(
+        desktop
+            .attach(kh("w1"), &pop)
+            .iter()
+            .any(|m| matches!(m, Msg::PublishBundle(x) if *x == b)),
+        "the same signed bundle goes up again"
+    );
+
+    // alice's fetch sees two devices and sends to each; only the desktop
+    // reads what was addressed to it
+    let now = n.now();
+    let req = PrekeyRequest::One {
+        subject: kh("bob"),
+        one_time: false,
+        nonce: [3; 16],
+        device: None,
+    }
+    .encode();
+    let reply = n
+        .nodes
+        .get_mut("w1")
+        .unwrap()
+        .prekeys
+        .answer(&kh("alice"), &req, now)
+        .unwrap();
+    n.s.client("alice").take_prekey_reply(&reply).unwrap();
+    n.attach("alice");
+    for m in desktop.sweep(&pop) {
+        if let Msg::PrekeyRequest(req) = m {
+            let now = n.now();
+            let reply = n
+                .nodes
+                .get_mut("w1")
+                .unwrap()
+                .prekeys
+                .answer(&kh("bob"), &req, now)
+                .unwrap();
+            desktop.take_prekey_reply(&reply).unwrap();
+        }
+    }
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_APPLICATION, b"to the desktop too")
+            .unwrap();
+    let mut ciphertexts: Vec<([u8; 32], Vec<u8>)> = Vec::new();
+    for m in msgs {
+        let Msg::PrekeyRequest(req) = m else {
+            panic!("{m:?}")
+        };
+        let now = n.now();
+        let reply = n
+            .nodes
+            .get_mut("w1")
+            .unwrap()
+            .prekeys
+            .answer(&kh("alice"), &req, now)
+            .unwrap();
+        for out in n.s.client("alice").take_prekey_reply(&reply).unwrap() {
+            match out {
+                Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } => {
+                    assert_eq!(to, kh("bob"));
+                    ciphertexts.push((device, bytes));
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+    let mut devices: Vec<[u8; 32]> = ciphertexts.iter().map(|(d, _)| *d).collect();
+    devices.sort();
+    let mut expected = vec![d1, d2];
+    expected.sort();
+    assert_eq!(devices, expected, "one ciphertext per device");
+    let (_, to_desktop) = ciphertexts.iter().find(|(d, _)| *d == d2).unwrap();
+    assert!(
+        n.s.client("bob")
+            .receive_payload(kh("alice"), to_desktop)
+            .is_err(),
+        "the phone cannot read the desktop's"
+    );
+    let got = desktop
+        .receive_payload(kh("alice"), to_desktop)
+        .expect("the desktop decrypts its own");
+    assert_eq!(describe(&got), "Application(to the desktop too)");
+
+    // the desktop's reply travels as its device, on a session the phone
+    // does not hold
+    let back = desktop
+        .send_payload(kh("alice"), KIND_APPLICATION, b"from the desktop")
+        .unwrap();
+    let mut delivered = false;
+    for m in back {
+        if let Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } = m {
+            assert_eq!(to, kh("alice"));
+            assert_eq!(
+                device,
+                *id("alice").public.ed.as_bytes(),
+                "alice's one device"
+            );
+            let got =
+                n.s.client("alice")
+                    .receive_payload(kh("bob"), &bytes)
+                    .unwrap();
+            assert_eq!(describe(&got), "Application(from the desktop)");
+            delivered = true;
+        }
+    }
+    assert!(delivered);
+}

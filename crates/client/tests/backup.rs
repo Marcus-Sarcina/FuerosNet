@@ -90,6 +90,7 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
             seeds: Some([[1; 32], [2; 32]]),
             records: vec![rec.bytes.clone()],
             store,
+            provider: None,
         },
         rec.txid,
     )
@@ -396,4 +397,53 @@ fn fresh(name: &str, at_ms: u64) -> rhtn_client::ceremony::Client {
     let clock = std::rc::Rc::new(std::cell::Cell::new(at_ms));
     let (device, _) = common::harness::device(vec![], clock, 7, 0);
     rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
+}
+
+// acceptance: ARC-28
+#[test]
+fn an_operators_provider_credential_rides_in_the_envelope_and_never_in_the_archive() {
+    let mut w = World::new();
+    let (mut c, _t) = contents(&mut w);
+    let credential = b"provider-account:token-7f3a9c:region-eu".to_vec();
+    c.provider = Some(credential.clone());
+    let wrap = Wrap::passphrase(cheap());
+    let blob = rhtn_client::backup::export(&c, &wrap, b"correct horse").unwrap();
+
+    // under the passphrase it comes back whole; under another it does not
+    // come back at all
+    let back = rhtn_client::backup::import(&blob, b"correct horse").unwrap();
+    assert_eq!(back.provider.as_deref(), Some(credential.as_slice()));
+    assert_eq!(back, c);
+    assert_eq!(
+        rhtn_client::backup::import(&blob, b"wrong").unwrap_err(),
+        Failure::Secret,
+        "the credential opens only under the passphrase"
+    );
+    assert!(
+        !find(&blob, &credential),
+        "no byte of it is in the clear in the envelope"
+    );
+
+    // the archive a sibling replicates is the records, and they hold no
+    // byte of it: the credential is the operator's business, not the
+    // network's
+    for r in &c.records {
+        assert!(!find(r, &credential), "a record carries none of it");
+    }
+    let store = c.store.encode();
+    assert!(
+        !find(&store, &credential),
+        "nor does the store the client writes"
+    );
+
+    // a client holding one exports it, and one holding none exports the
+    // slot empty rather than absent
+    let mut client = fresh("alice", 1_790_000_000_000);
+    client.provider_credential = Some(credential.clone());
+    let blob = client.export(None, cheap(), b"pw").unwrap();
+    let (got, _) = client.import(&blob, b"pw").unwrap();
+    assert_eq!(got.provider, Some(credential));
+    client.provider_credential = None;
+    let blob = client.export(None, cheap(), b"pw").unwrap();
+    assert_eq!(client.import(&blob, b"pw").unwrap().0.provider, None);
 }

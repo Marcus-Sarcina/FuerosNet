@@ -18,6 +18,10 @@ struct Shell {
     questions: Mutex<Vec<String>>,
     /// Bytes the platform's randomness returns for each call, in order.
     short: bool,
+    /// The system clock rather than a fixed instant: a delegation's window
+    /// is checked by the serving node on its own clock, so a device that
+    /// presents one must agree with it about the time.
+    real_time: bool,
 }
 
 impl Proximity for Shell {
@@ -47,6 +51,12 @@ impl Camera for Shell {
 
 impl Clock for Shell {
     fn now_ms(&self) -> u64 {
+        if self.real_time {
+            return std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+        }
         1_800_000_000_000
     }
     fn wait_ms(&self, _ms: u64) {}
@@ -587,4 +597,176 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
         before,
         "and nothing was queued"
     );
+}
+
+/// A desktop of alice's that holds no seed (design §23.3): started from
+/// her key material, a transport seed of its own and the run her phone
+/// delegated over it; it attaches under the delegation, its bundle is
+/// signed on the phone and published under its own device, and what her
+/// key signs is refused on it.
+// acceptance: DMN-13
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_what_the_phone_signed()
+ {
+    let node = serving("bob");
+    let addr = node.addr.to_string();
+    let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
+        .iter()
+        .map(|n| material(n))
+        .collect();
+    let shell = || {
+        platform_of(Arc::new(Shell {
+            has: vec![Channel::Nfc],
+            real_time: true,
+            ..Default::default()
+        }))
+    };
+
+    // the phone holds the seed; the desktop mints a transport key and the
+    // phone delegates over its public half, as a provisioning channel
+    // would carry it
+    let phone = Arc::new({
+        let known = known.clone();
+        tokio::task::spawn_blocking(move || Participant::start(seeds("alice"), known, shell()))
+            .await
+            .unwrap()
+            .expect("the phone starts")
+    });
+    assert!(phone.holds_seed());
+    let transport_seed = vec![0x51u8; 32];
+    let presented = rhtn_transport::tls::Credential::from_seed(
+        transport_seed.as_slice().try_into().unwrap(),
+        sid("alice").public.keyhash,
+    )
+    .public();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let run = {
+        let (q, key) = (phone.clone(), presented.to_vec());
+        tokio::task::spawn_blocking(move || q.delegate(key, now - 60, 2))
+            .await
+            .unwrap()
+            .expect("a run of two")
+    };
+    assert_eq!(run.len(), 2);
+    assert!(
+        phone.delegate(vec![1; 31], now, 1).is_err(),
+        "a transport key is 32 bytes"
+    );
+
+    // no delegation, no device: the constructor refuses rather than
+    // starting something that could bind to nothing
+    assert!(
+        Participant::start_delegated(
+            material("alice"),
+            transport_seed.clone(),
+            vec![],
+            known.clone(),
+            shell()
+        )
+        .is_err()
+    );
+    // a delegation by bob over this key is not alice's device's to hold
+    let bobs = {
+        let known = known.clone();
+        let bob =
+            tokio::task::spawn_blocking(move || Participant::start(seeds("bob"), known, shell()))
+                .await
+                .unwrap()
+                .unwrap();
+        bob.delegate(presented.to_vec(), now - 60, 1).unwrap()
+    };
+    assert!(
+        Participant::start_delegated(
+            material("alice"),
+            transport_seed.clone(),
+            bobs,
+            known.clone(),
+            shell()
+        )
+        .is_err()
+    );
+
+    let desktop = Arc::new({
+        let (known, run, seed) = (known.clone(), run.clone(), transport_seed.clone());
+        tokio::task::spawn_blocking(move || {
+            Participant::start_delegated(material("alice"), seed, run, known, shell())
+        })
+        .await
+        .unwrap()
+        .expect("the desktop starts")
+    });
+    assert!(!desktop.holds_seed());
+    assert_eq!(desktop.presented_key(), presented.to_vec());
+    assert_eq!(
+        phone.presented_key(),
+        sid("alice").public.ed.as_bytes().to_vec(),
+        "the phone presents the identity's classical member"
+    );
+    assert!(
+        desktop.sign_body(b"a body".to_vec()).is_err(),
+        "the identity key is not here"
+    );
+    assert!(
+        phone.bundle_to_sign().is_none(),
+        "the phone signs its own bundle"
+    );
+
+    // the attach binds under the delegation: the node pinned alice, and
+    // the key presented is the one the delegation names
+    let a = {
+        let (q, addr) = (desktop.clone(), addr.clone());
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")]))
+            .await
+            .unwrap()
+            .expect("attaches under the delegation")
+    };
+    assert_eq!(a.serving, id("bob"));
+    assert!(desktop.attached());
+    {
+        let view = node.view.lock().unwrap();
+        assert!(
+            view.prekeys
+                .bundle_for(&sid("alice").public.keyhash, &presented)
+                .is_none(),
+            "no bundle yet: nothing signed it"
+        );
+        assert!(
+            view.prekeys
+                .pool_size_for(&sid("alice").public.keyhash, &presented)
+                > 0,
+            "the pool is the device's own and is stocked"
+        );
+    }
+
+    // the unsigned bundle crosses to the phone and the signed one back,
+    // and the node then holds it under the desktop's device
+    let payload = desktop
+        .bundle_to_sign()
+        .expect("material awaiting a signature");
+    let signed = phone
+        .sign_device_bundle(payload)
+        .expect("the phone signs its own device's");
+    {
+        let (q, signed) = (desktop.clone(), signed.clone());
+        tokio::task::spawn_blocking(move || q.take_signed_bundle(signed))
+            .await
+            .unwrap()
+            .expect("published");
+    }
+    assert!(desktop.bundle_to_sign().is_none());
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    {
+        let view = node.view.lock().unwrap();
+        let b = view
+            .prekeys
+            .bundle_for(&sid("alice").public.keyhash, &presented)
+            .expect("the node holds the desktop's bundle");
+        assert_eq!(b, &signed);
+        let parsed = rhtn_archive::prekey::PrekeyBundle::parse(b).unwrap();
+        assert_eq!(parsed.device, presented);
+        assert_eq!(parsed.subject, sid("alice").public.keyhash);
+    }
 }

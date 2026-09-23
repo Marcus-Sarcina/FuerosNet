@@ -156,8 +156,8 @@ By crate, once section 8's decisions are made:
 | `rhtn-transport` | The three-way bind on both sides (pinned member; a delegation held from the topology class; the delegation presented first on the connection, as control frame 7 where no session opens), on every connection mode including `contact`, `connect_direct`, `hold` and the serving socket's direct branch. A verified-delegation cache keyed by transport key. **A resumption ticket clamped to the delegation's remaining validity** (design §14.1.3), which needs a lifecycle that keeps and uses resumption state (section 7). TRN-03, TRN-04 and RES-12 were re-derived on 09-17 (`fd306c5`) and pass today only because the code fails at the stricter branch; they are rewritten when the deferral exists |
 | `rhtn-node` | Present the delegation on every `AttachAck`; verify a client's on `Attach`; flood its own delegation on issuance and hold others' as current state in the topology store, replaced by `not_before`; verify acknowledgements and attestations against a held delegation; cycle repair as a slot removal and a vacancy memo, not a type-3 envelope; a currency staple carrying the issuer's delegation; the seen-set as txids with the fold as the state |
 | `rhtn-daemon` | The identity file becomes what section 8 decides the instance holds, plus a forward-dated run of 45 × 48 h (`infra-client-requirements.md` §7); the *say so while it is still long* notice to the operator; refuse to serve on a lapsed credential; operator-signed objects as configuration |
-| `rhtn-client` | Issue delegations; verify and cache the node's delegation on attach (`light-client-requirements.md` §4.1); sign what the table assigns to the ceremony device; `backup::Contents` (`crates/client/src/backup.rs` line 95) gains the provider-credential slot `light-client-requirements.md` §2 requires |
-| `rhtn-ffi` | Delegation issuance and import across the boundary, and a constructor for a device that holds a delegation and no seed (`crates/ffi/src/client.rs` line 273 takes 64 bytes of seed and nothing else) |
+| `rhtn-client` | Issue delegations; verify and cache the node's delegation on attach (`light-client-requirements.md` §4.1); sign what the table assigns to the ceremony device; `backup::Contents` (`crates/client/src/backup.rs` line 95) gains the provider-credential slot `light-client-requirements.md` §2 requires. **Done 2026-09-22**: `Client::delegated` holds a public half and no signer, every act of the identity key returns `Abort::NoSeed`, the bundle is signed on the ceremony device (`bundle_to_sign`, `sign_device_bundle`, `take_signed_bundle`), `delegate` and `delegate_run` issue, and `Contents.provider` carries the credential (ARC-28) |
+| `rhtn-ffi` | Delegation issuance and import across the boundary, and a constructor for a device that holds a delegation and no seed (`crates/ffi/src/client.rs` line 273 takes 64 bytes of seed and nothing else). **Done 2026-09-22**: `Participant::start_delegated`, `delegate`, `presented_key`, `bundle_to_sign`, `sign_device_bundle`, `take_signed_bundle`; `Net` holds a `Party` and binds under the credential |
 | `rhtn-participant` | Whatever mode section 8 gives an instrument |
 | `rhtn-cli` | `inspect` decodes a `Delegation`; `keys` may mint a transport keypair |
 | acceptance | No entry exists. Needed: issue, present, verify; negatives for a delegation naming a key other than the one presented (the replay), one outside its window, one by a different keyhash, one with a classical-only signature; the cache hit; a ticket outliving the delegation refused; `AttachAck` field 6 present from an instance; the run held and the notice raised; one entry per non-attach path as decided |
@@ -506,7 +506,8 @@ shell would bind to does not yet do several things the components beneath it
 do in tests.
 
 - **Durable operation is more than a backup slot.** `Participant::start`
-  (`crates/ffi/src/client.rs` line 273) always builds `Client::new`, with no
+  (`crates/ffi/src/client.rs` line 273) builds `Client::new`, and
+  `start_delegated` (2026-09-22) `Client::delegated`, either with no
   open-or-save lifecycle and no storage callback among the platform's six
   objects (`crates/ffi/src/device.rs` line 87, no key storage; CER-39 stays
   ignored). `Client::save` (`crates/client/src/ceremony.rs` line 865) writes
@@ -865,8 +866,11 @@ land on their own.
    travelling as kind 3, issued and taken in a running node (TOP-44); the
    direct path's checks in RFC 8445's order and at its pace (TRV-11);
    the no-history audit of section 2.5 (RSC-41, RSC-42, SUB-13); section
-   2.6's five confirmations. Next: the light client and FFI holding a
-   delegation and no seed, which is the last of step 5.
+   2.6's five confirmations; the light client and the boundary on a device
+   holding a delegation and no seed, with the backup's provider slot
+   (ARC-28). **Step 5 is complete 2026-09-22** but for what waits on the
+   author: kind 2, the ceiling of eight, the §19 row, and the reach of
+   §11.2.1 against §10.1.1. Next: step 6.
 6. **The kernel a shell binds to** (section 7): the durable lifecycle and
    storage seam, failover and status inside the kernel, the maintenance
    contract, the direct path joined, the catalog branch in the courier, the

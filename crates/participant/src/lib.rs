@@ -473,7 +473,10 @@ impl Instrument {
                         .map_err(|e| e.reason)?)
                 )])
             }
-            ["sign", body] => Ok(vec![format!("signed {}", hex(&c.sign_body(bytes(body)?)))]),
+            ["sign", body] => Ok(vec![format!(
+                "signed {}",
+                hex(&c.sign_body(bytes(body)?).map_err(|e| e.reason)?)
+            )]),
             ["adoption-envelope", body, entries] => Ok(vec![format!(
                 "envelope {}",
                 hex(&rhtn_ffi::client::adoption_envelope(

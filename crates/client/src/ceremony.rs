@@ -99,6 +99,12 @@ pub enum Abort {
     Record(String),
     /// The recovering subject holds no prior key to rotate from.
     NoPriorKey,
+    /// This device holds no seed: the act belongs to the ceremony device
+    /// (design §23.3).
+    NoSeed,
+    /// The bundle payload names another subject, or the signed bundle is
+    /// not over this device's current material.
+    NotMine(&'static str),
     /// This client's archive shows no relationship with that patron, so
     /// there is nothing for it to leave.
     NoRelationship(Keyhash),
@@ -290,9 +296,19 @@ struct Active {
 /// A participant client: its identity, archive and store, its two query
 /// roles, whom it recognises, and the device it runs on.
 pub struct Client {
-    /// Boxed: a signing identity carries its expanded post-quantum key
-    /// inline, and a client is moved around a harness by value.
-    pub id: Box<SigningIdentity>,
+    /// Whom this client is: the identity it speaks as on every device.
+    pub public: Identity,
+    /// The seed, on the device that performs ceremonies and nowhere else
+    /// (design §23.3).  A delegated device holds none, and every act the
+    /// signing table gives the identity key is refused on it with
+    /// [`Abort::NoSeed`].  Boxed: a signing identity carries its expanded
+    /// post-quantum key inline, and a client is moved around a harness by
+    /// value.
+    signer: Option<Box<SigningIdentity>>,
+    /// An operator's provider credential, opaque here
+    /// (`light-client-requirements.md` §2): held for the backup and never
+    /// written to the archive.
+    pub provider_credential: Option<Vec<u8>>,
     pub known: Vec<Identity>,
     pub archive: Archive,
     pub store: ClientStore,
@@ -379,13 +395,16 @@ pub enum Dispatched {
     Fetched(Result<usize, String>),
 }
 
+/// The refusal a device holding no seed gives to an act of the identity
+/// key.
+const NO_SEED: &str = "this device holds no seed";
+
 fn hex8(k: &Keyhash) -> String {
     k[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl Client {
     pub fn new(id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> Self {
-        let kh = id.public.keyhash;
         let now = device.clock.now_ms() / 1000;
         let random = device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
@@ -393,8 +412,50 @@ impl Client {
         // this device holds the seed, so it is named by the identity's
         // classical member (`wire-format.md` §7.8) until told otherwise
         payload.device = *id.public.ed.as_bytes();
+        Self::with_signer(
+            id.public.clone(),
+            Some(Box::new(id)),
+            payload,
+            known,
+            cfg,
+            device,
+        )
+    }
+
+    /// A client on a device that holds no seed: a desktop or a terminal
+    /// instrument carrying a delegated transport credential (design
+    /// §23.3), named by the key that credential presents.  It is a payload
+    /// endpoint of its own and a holder of what the network pushes it;
+    /// what the identity key signs is done on the ceremony device and
+    /// refused here.
+    pub fn delegated(
+        public: Identity,
+        presented: [u8; 32],
+        known: Vec<Identity>,
+        cfg: Config,
+        device: Device,
+    ) -> Self {
+        let now = device.clock.now_ms() / 1000;
+        let random = device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let mut payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
+        payload.device = presented;
+        Self::with_signer(public, None, payload, known, cfg, device)
+    }
+
+    fn with_signer(
+        public: Identity,
+        signer: Option<Box<SigningIdentity>>,
+        payload: PayloadState,
+        known: Vec<Identity>,
+        cfg: Config,
+        device: Device,
+    ) -> Self {
+        let kh = public.keyhash;
         Client {
-            id: Box::new(id),
+            public,
+            signer,
+            provider_credential: None,
             known,
             archive: Archive::new(kh),
             store: ClientStore::default(),
@@ -418,7 +479,17 @@ impl Client {
     }
 
     pub fn keyhash(&self) -> Keyhash {
-        self.id.public.keyhash
+        self.public.keyhash
+    }
+
+    /// Whether this device holds the seed, and so performs ceremonies.
+    pub fn holds_seed(&self) -> bool {
+        self.signer.is_some()
+    }
+
+    /// The identity key, where this device holds it.
+    pub fn signer(&self) -> Result<&SigningIdentity, Abort> {
+        self.signer.as_deref().ok_or(Abort::NoSeed)
     }
 
     fn now_s(&self) -> u64 {
@@ -664,24 +735,28 @@ impl Client {
     /// Step 6, as subject: consent to a query about me, or not; and where I
     /// consent, the grant for its verifier, which goes to that verifier
     /// directly and to nobody else.
+    ///
+    /// Consent is the subject's act under the identity key, so a device
+    /// holding no seed gives none: the query is answered on the ceremony
+    /// device or not at all.
     pub fn consent(&mut self, q: &VerificationQuery) -> Option<(Vec<u8>, Option<KeyGrant>)> {
+        let me = self.signer.as_deref()?;
         let consent = self
             .subject
-            .consent_to(&self.id, q, self.device.notifier.as_ref())?;
-        let grant = self.subject.grant_for(
-            &self.id,
-            &self.store,
-            &q.verifier,
-            q.query_id(),
-            self.now_s(),
-        );
+            .consent_to(me, q, self.device.notifier.as_ref())?;
+        let grant =
+            self.subject
+                .grant_for(me, &self.store, &q.verifier, q.query_id(), self.now_s());
         Some((consent, grant))
     }
 
     /// As verifier: a grant from `from`.
     pub fn take_grant(&mut self, from: Keyhash, bytes: &[u8]) -> GrantOutcome {
+        let Some(me) = self.signer.as_deref() else {
+            return GrantOutcome::Rejected(NO_SEED);
+        };
         let cx = Verifying {
-            me: &self.id,
+            me,
             ids: &self.known,
             store: &self.store,
             matcher: self.device.engine.matcher(),
@@ -694,8 +769,11 @@ impl Client {
     /// told: answering is the client's background task, and design §19.6
     /// owes a verifier no warning.
     pub fn take_query(&mut self, from: Keyhash, bytes: &[u8]) -> QueryOutcome {
+        let Some(me) = self.signer.as_deref() else {
+            return QueryOutcome::Closed(NO_SEED);
+        };
         let cx = Verifying {
-            me: &self.id,
+            me,
             ids: &self.known,
             store: &self.store,
             matcher: self.device.engine.matcher(),
@@ -708,8 +786,11 @@ impl Client {
     /// never came within the buffer is answered `unavailable`; a grant
     /// whose query never came is dropped unopened.
     pub fn expire(&mut self) -> Vec<crate::verifier::Answer> {
+        let Some(me) = self.signer.as_deref() else {
+            return Vec::new();
+        };
         let cx = Verifying {
-            me: &self.id,
+            me,
             ids: &self.known,
             store: &self.store,
             matcher: self.device.engine.matcher(),
@@ -732,8 +813,8 @@ impl Client {
 
     /// As subject: the copy of a response about me.
     pub fn take_response_copy(&mut self, bytes: &[u8]) -> Result<[u8; 32], String> {
-        self.subject
-            .take_response_copy(&self.id, &self.known, bytes)
+        let me = self.signer.as_deref().ok_or(NO_SEED)?;
+        self.subject.take_response_copy(me, &self.known, bytes)
     }
 
     /// The responses I gathered about the counterparty.
@@ -859,7 +940,9 @@ impl Client {
             .unwrap_or_default();
         participant_check(&me, proposal, &mine, &held, self.device.notifier.as_ref())
             .map_err(Abort::Refused)?;
-        Ok(self.id.sign_entries(aad::ENVELOPE, &proposal.body(back)))
+        Ok(self
+            .signer()?
+            .sign_entries(aad::ENVELOPE, &proposal.body(back)))
     }
 
     /// As witness: sign the ceremony I accepted, and only that one.
@@ -873,7 +956,9 @@ impl Client {
             return Err(Abort::NotActive);
         }
         self.check_back(proposal, back)?;
-        Ok(self.id.sign_entries(aad::ENVELOPE, &proposal.body(back)))
+        Ok(self
+            .signer()?
+            .sign_entries(aad::ENVELOPE, &proposal.body(back)))
     }
 
     fn check_back(&self, proposal: &Proposal, back: &[Vec<Txid>]) -> Result<(), Abort> {
@@ -978,7 +1063,7 @@ impl Client {
             return Err(Abort::NotRecognised);
         }
         Ok(recovery_response_with_consent(
-            &self.id,
+            self.signer()?,
             &subject,
             &q.query_id(),
             consent,
@@ -1155,8 +1240,8 @@ impl Client {
     }
 
     /// Sign a body I proposed or was shown, as its subject or its patron.
-    pub fn sign_body(&self, body: &[u8]) -> Vec<u8> {
-        self.id.sign_entries(aad::ENVELOPE, body)
+    pub fn sign_body(&self, body: &[u8]) -> Result<Vec<u8>, Abort> {
+        Ok(self.signer()?.sign_entries(aad::ENVELOPE, body))
     }
 
     /// Take a finalized adoption I signed: appended, kept, and — where it
@@ -1223,6 +1308,7 @@ impl Client {
             seeds,
             records: self.archive.records().map(|r| r.bytes.clone()).collect(),
             store: self.store.clone(),
+            provider: self.provider_credential.clone(),
         };
         backup::export(&contents, &backup::Wrap::passphrase(cost), secret)
     }
@@ -1291,7 +1377,7 @@ impl Client {
             self.now_s(),
             reason,
         );
-        let env = envelope(TYPE_DEPARTURE, &body, &[&self.id]);
+        let env = envelope(TYPE_DEPARTURE, &body, &[self.signer()?]);
         let rec = Record::parse(&env).map_err(Abort::Record)?;
         let t = rec.txid;
         self.archive.append(rec).map_err(Abort::Record)?;
@@ -1421,14 +1507,11 @@ impl Client {
         let now = self.now_s();
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let bundle = self
-            .payload
-            .keys
-            .bundle(&self.id, &self.payload.device, now);
         let n = self.payload.cfg.pool_target;
         let keys = self.payload.keys.one_time_keys(n, &mut fresh);
         self.payload.pool_reported = n;
-        let mut out = vec![Msg::PublishBundle(bundle), Msg::StockOneTime(keys)];
+        let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
+        out.push(Msg::StockOneTime(keys));
         out.extend(self.sweep(population));
         out
     }
@@ -1624,11 +1707,7 @@ impl Client {
             let random = self.device.random.clone();
             let mut fresh = |out: &mut [u8]| random.fill(out);
             self.payload.keys.rotate_signed_prekey(now, &mut fresh);
-            out.push(Msg::PublishBundle(self.payload.keys.bundle(
-                &self.id,
-                &self.payload.device,
-                now,
-            )));
+            out.extend(self.bundle_to_publish(now));
         }
         if self.payload.pool_reported < self.payload.cfg.replenish_below {
             out.extend(self.restock());
@@ -1849,6 +1928,113 @@ impl Client {
     /// transport key it presents, and its messages say they are from it.
     pub fn as_device(&mut self, key: [u8; 32]) {
         self.payload.device = key;
+    }
+
+    /// The bundle to publish now, if this device can: signed here where
+    /// the seed is here, or the one the ceremony device signed over the
+    /// material currently held.  A delegated device whose material has no
+    /// signature yet publishes nothing and offers [`Client::bundle_to_sign`].
+    fn bundle_to_publish(&mut self, now: u64) -> Option<Msg> {
+        if let Some(me) = self.signer.as_deref() {
+            return Some(Msg::PublishBundle(self.payload.keys.bundle(
+                me,
+                &self.payload.device,
+                now,
+            )));
+        }
+        let blob = self.payload.keys.blob().encode();
+        match &self.payload.signed_bundle {
+            Some((over, signed)) if *over == blob => Some(Msg::PublishBundle(signed.clone())),
+            _ => None,
+        }
+    }
+
+    /// On a device holding no seed: the unsigned bundle over this device's
+    /// current material, for the ceremony device to sign
+    /// (`wire-format.md` §7.8, design §23.3).  Nothing where this device
+    /// holds the seed, or where the material held is already signed over.
+    pub fn bundle_to_sign(&self) -> Option<Vec<u8>> {
+        if self.signer.is_some() {
+            return None;
+        }
+        let blob = self.payload.keys.blob().encode();
+        if matches!(&self.payload.signed_bundle, Some((over, _)) if *over == blob) {
+            return None;
+        }
+        let now = self.now_s();
+        Some(
+            self.payload
+                .keys
+                .bundle_payload(&self.public.keyhash, &self.payload.device, now),
+        )
+    }
+
+    /// On the ceremony device: sign a bundle payload another device of
+    /// mine made over its own material.  Refused where the payload names
+    /// another subject; the device it names is that device's to say.
+    pub fn sign_device_bundle(&self, payload: &[u8]) -> Result<Vec<u8>, Abort> {
+        let me = self.signer()?;
+        let (subject, _device) = rhtn_archive::prekey::PrekeyBundle::payload_names(payload)
+            .map_err(|_| Abort::NotMine("not a payload"))?;
+        if subject != self.public.keyhash {
+            return Err(Abort::NotMine("another subject"));
+        }
+        Ok(rhtn_archive::prekey::PrekeyBundle::sign(me, payload))
+    }
+
+    /// On a device holding no seed: take the bundle the ceremony device
+    /// signed.  It must verify under my identity, name this device, and be
+    /// over the material this device holds now; what comes back is the
+    /// publication for the serving node, where one is attached.
+    pub fn take_signed_bundle(&mut self, signed: &[u8]) -> Result<Option<Msg>, Abort> {
+        let b = rhtn_archive::prekey::PrekeyBundle::parse(signed)
+            .map_err(|_| Abort::NotMine("does not parse"))?;
+        b.verify(std::slice::from_ref(&self.public))
+            .map_err(|_| Abort::NotMine("does not verify under me"))?;
+        if b.subject != self.public.keyhash {
+            return Err(Abort::NotMine("another subject"));
+        }
+        if b.device != self.payload.device {
+            return Err(Abort::NotMine("another device"));
+        }
+        let blob = self.payload.keys.blob().encode();
+        if b.blob != blob {
+            return Err(Abort::NotMine("not this device's current material"));
+        }
+        self.payload.signed_bundle = Some((blob, signed.to_vec()));
+        self.payload.keys.published_at = Some(b.published_at);
+        Ok(self
+            .payload
+            .serving
+            .map(|_| Msg::PublishBundle(signed.to_vec())))
+    }
+
+    /// On the ceremony device: delegate to a transport key another device
+    /// of mine minted, for one 48-hour window from `not_before`
+    /// (`wire-format.md` §8.2).
+    pub fn delegate(&self, key: &[u8; 32], not_before: u64) -> Result<Vec<u8>, Abort> {
+        Ok(rhtn_crypto::delegation::issue(
+            self.signer()?,
+            key,
+            not_before,
+        ))
+    }
+
+    /// A run of `count` contiguous delegations from `start`: what an
+    /// instance or a desktop is provisioned with
+    /// (`infra-client-requirements.md` §7).
+    pub fn delegate_run(
+        &self,
+        key: &[u8; 32],
+        start: u64,
+        count: usize,
+    ) -> Result<Vec<Vec<u8>>, Abort> {
+        Ok(rhtn_crypto::delegation::issue_run(
+            self.signer()?,
+            key,
+            start,
+            count,
+        ))
     }
 
     /// What arrived on the end-to-end channel from `from`: decrypted on the
@@ -2104,9 +2290,9 @@ impl Harness {
         let Msg::AdoptionBody(body) = m else {
             unreachable!()
         };
-        let n_entries = self.client(&node).sign_body(&body);
+        let n_entries = self.client(&node).sign_body(&body).unwrap();
         self.send(node, patron, Msg::Signed(Ok(n_entries.clone())));
-        let p_entries = self.client(&patron).sign_body(&body);
+        let p_entries = self.client(&patron).sign_body(&body).unwrap();
         let envelope = envelope_from_entries(
             TYPE_ADOPTION,
             &body,
@@ -2217,7 +2403,7 @@ impl Harness {
             unreachable!()
         };
         let node_back = self.client(&subject).back_pointers();
-        let km = self.client(&subject).id.public.key_material();
+        let km = self.client(&subject).public.key_material();
         let body = self.client(&patron).propose_adoption(
             subject,
             &node_back,
@@ -2232,9 +2418,9 @@ impl Harness {
         let Msg::AdoptionBody(body) = m else {
             unreachable!()
         };
-        let s_entries = self.client(&subject).sign_body(&body);
+        let s_entries = self.client(&subject).sign_body(&body).unwrap();
         self.send(subject, patron, Msg::Signed(Ok(s_entries.clone())));
-        let p_entries = self.client(&patron).sign_body(&body);
+        let p_entries = self.client(&patron).sign_body(&body).unwrap();
         let envelope = envelope_from_entries(
             TYPE_ADOPTION,
             &body,
@@ -2313,8 +2499,11 @@ impl Client {
     /// Let a query that will get no grant in this ceremony be answered
     /// now, `unavailable`: the harness has no later.
     fn expire_now(&mut self) -> Vec<crate::verifier::Answer> {
+        let Some(me) = self.signer.as_deref() else {
+            return Vec::new();
+        };
         let cx = Verifying {
-            me: &self.id,
+            me,
             ids: &self.known,
             store: &self.store,
             matcher: self.device.engine.matcher(),

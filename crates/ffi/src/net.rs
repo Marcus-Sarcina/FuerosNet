@@ -18,7 +18,6 @@ use rhtn_adaptors::direct::{NoDirect, Reachable};
 use rhtn_archive::Keyhash;
 use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::Dispatched;
-use rhtn_crypto::SigningIdentity;
 use rhtn_transport::session::{AttachOutcome, ClientConfig, Log, Session, attach_any};
 use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::{BTreeMap, HashMap};
@@ -96,10 +95,11 @@ pub(crate) struct Net {
     rt: Option<tokio::runtime::Runtime>,
     endpoint: quinn::Endpoint,
     pins: Pins,
-    /// This client's own key, held here as well as on the client's thread.
-    /// Both are built from the same seeds, so they are the same key; the
-    /// transport needs one and the client never leaves its thread.
-    me: Arc<SigningIdentity>,
+    /// What this client presents in a handshake: its own classical member,
+    /// held here as well as on the client's thread from the same seeds; or
+    /// the delegated transport credential of a device that holds no seed
+    /// (design §23.3), which the transport alone needs.
+    me: Party,
     live: Mutex<Option<Live>>,
     events: Mutex<Option<UnboundedReceiver<(Keyhash, Dispatched)>>>,
     /// Nonces for what this client hands its node: the platform's random
@@ -114,7 +114,7 @@ impl Net {
     /// light client dials and is never dialled, so nothing depends on which
     /// port it got.
     pub(crate) fn new(
-        me: Arc<SigningIdentity>,
+        me: Party,
         pins: Pins,
         nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
     ) -> Result<Net, Refused> {
@@ -137,6 +137,10 @@ impl Net {
             events: Mutex::new(None),
             nonce,
         })
+    }
+
+    pub(crate) fn presented_key(&self) -> [u8; 32] {
+        self.me.presenter.presented_key()
     }
 
     fn rt(&self) -> &tokio::runtime::Runtime {
@@ -169,10 +173,14 @@ impl Net {
         addrs: &[SocketAddr],
         population: Vec<Keyhash>,
     ) -> Result<Attached, Refused> {
+        let bind = match self.me.presenter.credential() {
+            Some(c) => rhtn_transport::bind::Binding::default().with_credential(c.clone()),
+            None => Default::default(),
+        };
         let cfg = ClientConfig {
-            me: Party::of(self.me.clone()),
+            me: self.me.clone(),
             pins: self.pins.clone(),
-            bind: Default::default(),
+            bind,
             capabilities: BTreeMap::new(),
             attestation: None,
             filter: None,
@@ -280,6 +288,17 @@ impl Net {
             return Err(Refused::new(
                 "the serving node would not take the record: it is unpropagated",
             ));
+        }
+        Ok(())
+    }
+
+    /// Carry messages the client made outside its outbox: a bundle the
+    /// ceremony device signed for this one, once it is attached.
+    pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
+        let courier = self.courier()?;
+        let carried = self.rt().block_on(async move { courier.carry(msgs).await });
+        if !carried.refused.is_empty() {
+            return Err(Refused::new("the serving node refused the publication"));
         }
         Ok(())
     }
