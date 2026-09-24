@@ -12,11 +12,11 @@ gate:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
     KOTLIN_VERSION: "2.4.20"
     JNA_VERSION: "5.17.0"
-  cache:
-    key: gate
-    paths:
-      - .cargo/
-      - crates/target/
+    # The checkout cleaner spares the two build directories, which live in
+    # the runner's per-project build volume between jobs; this is the whole
+    # caching arrangement, faster than packing a multi-gigabyte target/
+    # into GitLab's cache archive and back out.
+    GIT_CLEAN_FLAGS: -ffdx -e .cargo/ -e crates/target/
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
     - rustup component add rustfmt clippy
