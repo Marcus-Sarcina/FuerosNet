@@ -817,6 +817,18 @@ impl Participant {
         id_of(&self.handle.me())
     }
 
+    /// This client's own public identity as `KeyMaterial`
+    /// (`wire-format.md` §2.2).
+    ///
+    /// The keyhash [`Self::me`] returns names an identity to somebody who
+    /// already holds its keys; this carries the keys themselves, and is
+    /// what a participant hands to whoever must pin it — the hash of what
+    /// this returns being that keyhash (`wire-format.md` §3.4). Public in
+    /// its entirety: it is the half of the identity meant to travel.
+    pub fn material(&self) -> Vec<u8> {
+        self.handle.with_blocking(|c| c.public.key_material())
+    }
+
     /// Begin a ceremony with `counterparty`, nominating witnesses from
     /// their neighbourhood (`light-client-requirements.md` §1.1).
     ///

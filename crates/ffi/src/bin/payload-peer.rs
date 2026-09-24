@@ -4,11 +4,18 @@
 //! on stdout the provisioning the phone needs until the ceremony exists
 //! to replace it.
 //!
-//!     cargo run -p rhtn-ffi --features harness --bin payload-peer
+//!     cargo run -p rhtn-ffi --features harness --bin payload-peer -- <material-hex>
 //!
-//! The printed provision names the node at `10.0.2.2`, which is how the
-//! Android emulator reaches its host; pass a different host with the
-//! first argument for a phone on the same network.
+//! **No seed crosses this boundary.** The phone mints its own identity and
+//! shows its public half; that half is this driver's argument, the node
+//! admits it, and the provision sent back names only public things -- the
+//! node, where it serves, the peer, and the key material of each. A blob
+//! carrying seeds would drive the screen just as well, and would be a
+//! shape worth nobody's trouble to imitate.
+//!
+//! The node binds loopback by default, which an Android emulator reaches
+//! at `10.0.2.2`; pass a second argument to bind an interface a separate
+//! machine can route to.
 
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Platform, Proximity, Random, Storage};
@@ -81,24 +88,51 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+fn unhex(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok())
+        .collect()
+}
+
 fn main() {
-    let host = std::env::args().nth(1).unwrap_or("10.0.2.2".into());
+    let Some(arg) = std::env::args().nth(1) else {
+        eprintln!(
+            "usage: payload-peer <phone-key-material-hex> [bind-addr]\n\n\
+             An unprovisioned phone prints its key material to logcat under\n\
+             the `fueros` tag:\n\n    \
+             adb logcat -d -s fueros | grep material\n"
+        );
+        std::process::exit(2);
+    };
+    let Some(phone) = unhex(&arg) else {
+        eprintln!("the first argument is the phone's key material in hex");
+        std::process::exit(2);
+    };
+    let Some(phone_id) = rhtn_crypto::Identity::from_key_material(&phone) else {
+        eprintln!("that hex is not a KeyMaterial array");
+        std::process::exit(2);
+    };
+    // Loopback by default: an emulator reaches its host's loopback at
+    // 10.0.2.2, so nothing need listen past this machine for the ordinary
+    // case.  A second machine needs an interface it can route to, and has
+    // to say so.
+    let bind = std::env::args().nth(2).unwrap_or("127.0.0.1:0".into());
+
     let node = TestNode::start_on(
         "bob".into(),
-        vec!["alice".into(), "carol".into()],
-        "0.0.0.0:0".into(),
+        vec!["carol".into()],
+        vec![phone.clone()],
+        bind.clone(),
     );
     let port = node.address().rsplit(':').next().unwrap().to_string();
-    let (alice, bob, carol) = (
-        test_identity("alice".into()),
-        test_identity("bob".into()),
-        test_identity("carol".into()),
-    );
-    let known = vec![
-        alice.material.clone(),
-        bob.material.clone(),
-        carol.material.clone(),
-    ];
+    let host = match bind.split(':').next() {
+        Some("127.0.0.1" | "localhost" | "0.0.0.0") | None => "10.0.2.2".to_string(),
+        Some(ip) => ip.to_string(),
+    };
+    let (bob, carol) = (test_identity("bob".into()), test_identity("carol".into()));
 
     let s = Arc::new(Shell {
         store: Mutex::default(),
@@ -112,27 +146,27 @@ fn main() {
         notices: s.clone(),
         storage: s,
     });
-    let me =
-        Participant::start(carol.seeds.clone(), known.clone(), platform).expect("carol starts");
+    let known = vec![bob.material.clone(), carol.material.clone(), phone.clone()];
+    let me = Participant::start(carol.seeds.clone(), known, platform).expect("carol starts");
     me.attach(
         bob.id.clone(),
         vec![format!("127.0.0.1:{port}")],
-        vec![alice.id.clone()],
+        vec![phone_id.keyhash.to_vec()],
     )
     .expect("carol attaches");
 
-    // What the phone needs, one JSON object on one line.
+    // Public in every field: two keyhashes, three key materials and an
+    // address.  The phone keeps the only copy of its seeds.
     let provision = format!(
-        r#"{{"seeds":"{}","known":["{}","{}","{}"],"node":"{}","addr":"{host}:{port}","peer":"{}","peer_name":"carol"}}"#,
-        hex(&alice.seeds),
-        hex(&alice.material),
+        r#"{{"known":["{}","{}","{}"],"node":"{}","addr":"{host}:{port}","peer":"{}","peer_name":"carol"}}"#,
         hex(&bob.material),
         hex(&carol.material),
+        hex(&phone),
         hex(&bob.id),
         hex(&carol.id),
     );
     println!("PROVISION {provision}");
-    eprintln!("node bob serves on 0.0.0.0:{port}; carol is attached and echoes; ctrl-c ends it");
+    eprintln!("node bob serves on {bind} (port {port}); carol echoes; ctrl-c ends it");
 
     loop {
         match me.next_event(1000) {

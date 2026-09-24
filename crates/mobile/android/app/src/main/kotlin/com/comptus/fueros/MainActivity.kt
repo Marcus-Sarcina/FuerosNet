@@ -20,11 +20,19 @@ import uniffi.rhtn_ffi.kindApplication
 
 /**
  * The payload screen: the kernel's status, what arrived, and a box to
- * send from.  Identity and addresses come from a provision blob — the
- * `provision` intent extra, kept once seen — which is the ceremony's
- * stand-in and nothing more: seeds minted here belong to a participant
- * nobody knows, so without a provision the screen starts the kernel,
- * shows what it presents, and can reach no one.
+ * send from.
+ *
+ * **This device mints its own identity and keeps it.**  The seeds are made
+ * here on first launch and never leave; what travels is the public half,
+ * printed for whoever must admit this device.  A provision blob — the
+ * `provision` intent extra, or a file of the same name in the kernel's
+ * storage — then names the node, where it serves, and the peer to talk to,
+ * every field of it public.  Until one arrives the screen starts the
+ * kernel, shows what it presents, and can reach no one.
+ *
+ * All of this is the ceremony's stand-in.  The ceremony is how two devices
+ * are actually introduced; this is a hand-carried substitute for it while
+ * the payload path is what is being built.
  */
 class MainActivity : Activity() {
 
@@ -103,31 +111,44 @@ class MainActivity : Activity() {
         val provision = shell.read("provision")?.let {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }
+        // the identity is this device's own, whether or not anybody has
+        // been told about it yet
+        val known = provision?.getJSONArray("known")
+            ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
+            ?: listOf()
         val p: Participant
         try {
-            if (provision != null) {
-                val known = provision.getJSONArray("known")
-                    .let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
-                p = Participant.start(unhex(provision.getString("seeds")), known, platformOf(this))
-                participant = p
-                peer = unhex(provision.getString("peer"))
-                peerName = provision.optString("peer_name", "peer")
-                show(p, Status.Detached)
-                val a = p.attach(
-                    unhex(provision.getString("node")),
-                    listOf(provision.getString("addr")),
-                    listOf(peer!!),
-                )
-                show(p, Status.Attached(unhex(provision.getString("node")), a.primary))
-            } else {
-                p = Participant.start(mintedSeeds(), listOf(), platformOf(this))
-                participant = p
-                show(p, Status.Detached)
-                runOnUiThread { say("· unprovisioned: run payload-peer on the workstation and relaunch with its PROVISION line as the `provision` extra") }
-                return
-            }
+            p = Participant.start(mintedSeeds(), known, platformOf(this))
+            participant = p
+            show(p, Status.Detached)
         } catch (e: Refused.Reason) {
             runOnUiThread { status.text = "kernel refused: ${e.reason}" }
+            return
+        }
+
+        // the public half, for whoever must admit this device
+        val material = p.material().joinToString("") { "%02x".format(it) }
+        android.util.Log.i("fueros", "material $material")
+
+        if (provision == null) {
+            runOnUiThread {
+                say("· unprovisioned. On the workstation:")
+                say("    adb logcat -d -s fueros | grep material")
+                say("    cargo run -p rhtn-ffi --features harness \\")
+                say("      --bin payload-peer -- <that material>")
+                say("· then hand its PROVISION line back as the `provision` extra.")
+            }
+            return
+        }
+
+        try {
+            peer = unhex(provision.getString("peer"))
+            peerName = provision.optString("peer_name", "peer")
+            val node = unhex(provision.getString("node"))
+            val a = p.attach(node, listOf(provision.getString("addr")), listOf(peer!!))
+            show(p, Status.Attached(node, a.primary))
+        } catch (e: Refused.Reason) {
+            runOnUiThread { status.text = "attach refused: ${e.reason}" }
             return
         }
         while (true) {

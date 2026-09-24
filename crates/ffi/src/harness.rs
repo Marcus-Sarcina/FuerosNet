@@ -51,15 +51,25 @@ pub struct TestNode {
 impl TestNode {
     #[uniffi::constructor]
     pub fn start(name: String, clients: Vec<String>) -> Arc<TestNode> {
-        Self::started(name, clients, None)
+        Self::started(name, clients, vec![], None)
     }
 
-    /// `start`, serving on the given address instead of loopback: what a
-    /// driver on a workstation needs so an emulator or a second machine
-    /// can reach the node.
+    /// `start`, serving where it is told and admitting identities minted
+    /// elsewhere.
+    ///
+    /// `admitted` carries the **public** key material of clients this node
+    /// has no seeds for, which is what lets a device that minted its own
+    /// identity attach without anybody moving a seed to reach it. The
+    /// listen address is given because a node on loopback is unreachable
+    /// from an emulator or a second machine.
     #[uniffi::constructor]
-    pub fn start_on(name: String, clients: Vec<String>, listen: String) -> Arc<TestNode> {
-        Self::started(name, clients, listen.parse().ok())
+    pub fn start_on(
+        name: String,
+        clients: Vec<String>,
+        admitted: Vec<Vec<u8>>,
+        listen: String,
+    ) -> Arc<TestNode> {
+        Self::started(name, clients, admitted, listen.parse().ok())
     }
 
     /// Where it serves.
@@ -77,6 +87,7 @@ impl TestNode {
     fn started(
         name: String,
         clients: Vec<String>,
+        admitted: Vec<Vec<u8>>,
         listen: Option<std::net::SocketAddr>,
     ) -> Arc<TestNode> {
         let rt = tokio::runtime::Builder::new_multi_thread()
@@ -101,11 +112,24 @@ impl TestNode {
                 },
             },
         );
-        for (slot, c) in clients.iter().enumerate() {
+        let mut slot = 0u64;
+        for c in clients.iter() {
             let id = rhtn_crypto::identity::testkit::test_identity(c);
             pins.pin_identity(&id.public);
-            view.set_slot(slot as u64, Some(id.public.keyhash), 1_800_000_000);
+            view.set_slot(slot, Some(id.public.keyhash), 1_800_000_000);
             known.push(id.public);
+            slot += 1;
+        }
+        // an identity this node holds no seeds for: pinned and slotted from
+        // its public half alone, exactly as the named ones are
+        for km in admitted.iter() {
+            let Some(id) = rhtn_crypto::Identity::from_key_material(km) else {
+                continue;
+            };
+            pins.pin_identity(&id);
+            view.set_slot(slot, Some(id.keyhash), 1_800_000_000);
+            known.push(id);
+            slot += 1;
         }
         let mut cfg = NodeConfig::defaults(me, pins, 30);
         cfg.log = Log::default();
