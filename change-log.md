@@ -10514,3 +10514,15 @@ baseline; 1,451 citations across `models/` and the workspace resolve; check.py
 bytes; the test-vector pins are current on all three documents; the gate's 19
 hashes match, `cargo deny` clean, 616 tests pass with the 19 owed stubs
 ignored, and the Kotlin round trip runs inside the gate.
+
+### 2026-09-24 (the gate runs where root ignores a permission bit)
+
+**The gate runs on GitLab CI**, on the author's runner, from
+`crates/.gitlab-ci.yml`. Its first run failed on one test: PAY-19's
+refused deposit made the pool directory read-only, and the container the
+job runs in is root, which no permission bit refuses. The test now
+occupies the second key's on-disk name with a directory, which refuses
+the write whoever runs it, and exercises the unlink of the first key
+where the old arrangement failed before anything was written. 13 of 13
+in the container as root and on the workstation unprivileged; nothing in
+the service changed.

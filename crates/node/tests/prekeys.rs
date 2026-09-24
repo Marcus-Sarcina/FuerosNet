@@ -659,7 +659,6 @@ fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
 // acceptance: PAY-19
 #[test]
 fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
-    use std::os::unix::fs::PermissionsExt;
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-unwritable-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut svc = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
@@ -673,9 +672,12 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
         "a writable pool takes a deposit"
     );
 
-    // the pool's directory stops accepting new files, which is the
-    // deterministic form of a node that cannot store what it was handed;
-    // a pool stocked for any device sits under `any`
+    // the name the deposit's second key would land under is occupied by a
+    // directory, so that write fails whoever runs the test: a read-only
+    // pool directory would not refuse root, and a CI container runs the
+    // gate as root.  Failing on the second key also makes the service
+    // unlink the first, which a pool that refuses every write never asks
+    // of it.  A pool stocked for any device sits under `any`.
     let subject = dir
         .join("prekeys")
         .join(
@@ -685,7 +687,18 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
                 .collect::<String>(),
         )
         .join("any");
-    std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let next = std::fs::read_dir(&subject)
+        .unwrap()
+        .flatten()
+        .filter_map(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .strip_prefix("otk-")
+                .and_then(|n| n.parse::<u64>().ok())
+        })
+        .max()
+        .map_or(0, |n| n + 1);
+    std::fs::create_dir(subject.join(format!("otk-{:012}", next + 1))).unwrap();
     let held = svc.pool_size(&kh("alice"));
 
     assert!(
@@ -700,10 +713,10 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
 
     // what the deposit did write before failing is gone, so the pool and
     // the answer agree
-    std::fs::set_permissions(&subject, std::fs::Permissions::from_mode(0o700)).unwrap();
     let names: Vec<String> = std::fs::read_dir(&subject)
         .unwrap()
         .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
         .map(|e| e.file_name().to_string_lossy().to_string())
         .filter(|n| n.starts_with("otk-"))
         .collect();

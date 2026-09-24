@@ -11591,3 +11591,22 @@ moves.  The change-log also gains the `### 2026-09-23` heading its last
 day's work was filed without, and its closing counts paragraph is restated
 at the entry's end state (2,318 references; 1,451 citations; 442 of 458;
 464 families across 26 prefixes; 616 tests, 19 ignored).
+
+## The gate meets root (2026-09-24)
+
+The first CI run (GitLab, the author's runner, `crates/.gitlab-ci.yml`)
+failed on PAY-19's refusal test alone: the test made the pool directory
+mode 0500 and the job's container runs the gate as root, which
+`CAP_DAC_OVERRIDE` lets through every permission bit.  Reproduced by
+replaying the job byte-for-byte in the same image; every other step
+passed, including the Kotlin round trip under the container's JDK 17.
+The repair is in the test's mechanism, not the service: the second key's
+sequential on-disk name (`otk-{seq:012}`) is occupied by a directory
+beforehand, so the write fails with EISDIR for any uid, and the rollback
+unlink of the first key runs, which the all-writes-refused arrangement
+never exercised.  The on-disk count at the end now counts files only,
+the blocking directory being no key.  Swept `set_permissions` across the
+tests: the daemon's and participant's 0644 cases assert the service's
+own mode *check* (a metadata comparison, root-safe, and green in the
+container); no other test leans on the kernel refusing the test's own
+uid.
